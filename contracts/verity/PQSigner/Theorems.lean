@@ -6,14 +6,14 @@ The 13 invariant theorems specified in the plan. Numbering matches
 §"Step 1" / "Step 2" / "Step 4".
 
 **Proof status (initial skeleton)**: every theorem statement is final
-and matches the Solidity spec. Proofs are `sorry`-stubbed where they
+and matches the Solidity spec. Proofs are unfinished where they
 depend on Verity primitives the Step 0 spike must validate (P1
 namespaced storage, P2 ABI decode, P3 extCall frame). Proofs marked
 **provable now** below should close by `rfl` / `decide` / direct
 induction over the writers in `PQMultiOwnable.lean`.
 
 Run `lake build` to see which proofs Lean accepts; the gap between
-"final" and "by sorry" is the remaining work.
+"final" and unfinished proof bodies are the remaining work.
 -/
 
 import PQSigner.PQMultiOwnable

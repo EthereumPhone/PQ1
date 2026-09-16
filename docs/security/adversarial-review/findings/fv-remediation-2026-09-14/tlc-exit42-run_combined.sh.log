@@ -1,0 +1,154 @@
+  [FAIL] cb_onchain_cap: expected completed success; process status 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 73 and seed 192894898572916932 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255655] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/CombinedBudget.tla
+Parsing file /tmp/tlc-17522603669117096785/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-17522603669117096785/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Parsing file /tmp/tlc-17522603669117096785/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-17522603669117096785/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module CombinedBudget
+Linting of module CombinedBudget
+Starting... (2026-09-14 16:36:23)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:23.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 6.3E-14
+2497 states generated, 625 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 21.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 5 and the 95th percentile is 3).
+Finished in 00s at (2026-09-14 16:36:23)
+
+  [FAIL] cb_margin_noreset: expected completed success; process status 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 76 and seed 4184647601588128270 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255692] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/CombinedBudget.tla
+Parsing file /tmp/tlc-14090632375834306104/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-14090632375834306104/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Parsing file /tmp/tlc-14090632375834306104/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-14090632375834306104/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module CombinedBudget
+Linting of module CombinedBudget
+Starting... (2026-09-14 16:36:24)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:24.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 1.4E-17
+33 states generated, 14 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 5.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 2 and the 95th percentile is 2).
+Finished in 00s at (2026-09-14 16:36:24)
+
+  [FAIL] cb_margin_reset: expected only INV_MARGIN_BOUNDED violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 30 and seed 1862783463058579505 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255729] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/CombinedBudget.tla
+Parsing file /tmp/tlc-7314829093563178122/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-7314829093563178122/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Parsing file /tmp/tlc-7314829093563178122/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-7314829093563178122/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module CombinedBudget
+Linting of module CombinedBudget
+Starting... (2026-09-14 16:36:24)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:24.
+Error: Invariant INV_MARGIN_BOUNDED is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ margin = 0
+/\ cSlot = 0
+/\ reg = FALSE
+/\ lLast = 0
+/\ lOff = 0
+/\ lSigs = 0
+/\ cOff = 0
+
+State 2: <Type1Register line 66, col 5 to line 71, col 60 of module CombinedBudget>
+/\ margin = 0
+/\ cSlot = 0
+/\ reg = TRUE
+/\ lLast = 0
+/\ lOff = 0
+/\ lSigs = 0
+/\ cOff = 0
+
+State 3: <SignOffchain line 86, col 5 to line 92, col 51 of module CombinedBudget>
+/\ margin = 1
+/\ cSlot = 0
+/\ reg = TRUE
+/\ lLast = 0
+/\ lOff = 1
+/\ lSigs = 0
+/\ cOff = 0
+
+State 4: <SignOffchain line 86, col 5 to line 92, col 51 of module CombinedBudget>
+/\ margin = 2
+/\ cSlot = 0
+/\ reg = TRUE
+/\ lLast = 0
+/\ lOff = 2
+/\ lSigs = 0
+/\ cOff = 0
+
+State 5: <SignUserop line 98, col 5 to line 117, col 20 of module CombinedBudget>
+/\ margin = 3
+/\ cSlot = 1
+/\ reg = TRUE
+/\ lLast = 2
+/\ lOff = 2
+/\ lSigs = 1
+/\ cOff = 2
+
+State 6: <TornReset line 122, col 5 to line 124, col 40 of module CombinedBudget>
+/\ margin = 3
+/\ cSlot = 1
+/\ reg = FALSE
+/\ lLast = 0
+/\ lOff = 0
+/\ lSigs = 0
+/\ cOff = 2
+
+State 7: <Type1Register line 66, col 5 to line 71, col 60 of module CombinedBudget>
+/\ margin = 3
+/\ cSlot = 1
+/\ reg = TRUE
+/\ lLast = 0
+/\ lOff = 0
+/\ lSigs = 0
+/\ cOff = 2
+
+State 8: <SignOffchain line 86, col 5 to line 92, col 51 of module CombinedBudget>
+/\ margin = 4
+/\ cSlot = 1
+/\ reg = TRUE
+/\ lLast = 0
+/\ lOff = 1
+/\ lSigs = 0
+/\ cOff = 2
+
+116 states generated, 62 distinct states found, 24 states left on queue.
+The depth of the complete state graph search is 8.
+Finished in 00s at (2026-09-14 16:36:24)
+
+=== MISMATCH ===

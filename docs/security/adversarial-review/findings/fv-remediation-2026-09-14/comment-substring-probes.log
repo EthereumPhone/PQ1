@@ -1,0 +1,36 @@
+lean axiom 0 0 0 1
+lean axiom 1 0 0 1
+lean axiom 2 0 0 1
+lean axiom 3 0 0 1
+lean axiom 4 0 0 1
+lean hole 0 0 0 1
+lean hole 1 0 0 1
+lean hole 2 0 0 1
+lean hole 3 0 0 1
+extracted axiom 0 0 0 1
+extracted axiom 1 0 0 1
+extracted axiom 2 0 0 1
+extracted axiom 3 0 0 1
+extracted axiom 4 0 0 1
+extracted hole 0 0 0 1
+extracted hole 1 0 0 1
+extracted hole 2 0 0 1
+extracted hole 3 0 0 1
+comment-before-axiom-0 0
+comment-before-axiom-1 0
+comment-before-axiom-2 0
+comment-before-axiom-3 0
+comment-before-axiom-4 0
+comment-before-hole-0 0
+comment-before-hole-1 0
+comment-before-hole-2 0
+comment-before-hole-3 0
+comment-after-axiom-0 1
+comment-after-axiom-1 1
+comment-after-axiom-2 1
+comment-after-axiom-3 1
+comment-after-axiom-4 1
+comment-after-hole-0 2
+comment-after-hole-1 2
+comment-after-hole-2 2
+comment-after-hole-3 2

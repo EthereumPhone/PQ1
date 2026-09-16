@@ -1,0 +1,13 @@
+require Abstract. exit 0
+[-] [0002] 100.0% (-1.0B / [frag -1.0B])
+[\] [0002] 100.0% (-1.0B / [frag -1.0B])
+                                                   
+
+require import Abstract. exit 1
+[-] [0002] 100.0% (-1.0B / [frag -1.0B])
+                                                   
+                                                   
+[critical] [/tmp/tmpqym9le60/Probe.ec: line 1 (0-24)] cannot import an abstract theory
+[\] [0002] 100.0% (-1.0B / [frag -1.0B])
+[|] [0002] 100.0% (-1.0B / [frag -1.0B])
+

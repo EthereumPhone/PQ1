@@ -1,0 +1,352 @@
+{
+  "axiom_inventories": [
+    {
+      "project": "lean",
+      "source_before": {
+        "SphincsCVerify/Bridge/Refinement.lean": {
+          "sha256": "0df9bedb0ab466884e8c9850ec1a2e33046fe9341cf0357a6f02e6d7d3360adc",
+          "axiom_mentions": 8
+        },
+        "SphincsCVerify/Crypto/Assumptions.lean": {
+          "sha256": "eff7bc6ab3afbe335b7c353fbe0ff3f55167cfa8012d0e7ad6a4d620b95ae490",
+          "axiom_mentions": 4
+        },
+        "SphincsCVerify/Crypto/EUFCMA.lean": {
+          "sha256": "3af2ca905c2456bb784a62fab864d9a079bcf5173736539fd20f4b38e6ee7b50",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Wallet/OffchainBinding.lean": {
+          "sha256": "12fe61a2f1cb5b2db0787673fac42e3a2aa25d49d321df71e0f5197f4442c495",
+          "axiom_mentions": 1
+        }
+      },
+      "source_after": {
+        "SphincsCVerify/Bridge/EntryPoint.lean": {
+          "sha256": "251429dbaf135f2d9558a420fbc819078b9ddedf6dae0cced829ce0e4eebc492",
+          "axiom_mentions": 11
+        },
+        "SphincsCVerify/Bridge/Refinement.lean": {
+          "sha256": "0df9bedb0ab466884e8c9850ec1a2e33046fe9341cf0357a6f02e6d7d3360adc",
+          "axiom_mentions": 36
+        },
+        "SphincsCVerify/Bridge/SolidityVerifier.lean": {
+          "sha256": "de4a00dcd3be1881c599f5026d200beda554613a857e720aab40b85d3d02c5f7",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Crypto/Assumptions.lean": {
+          "sha256": "eff7bc6ab3afbe335b7c353fbe0ff3f55167cfa8012d0e7ad6a4d620b95ae490",
+          "axiom_mentions": 19
+        },
+        "SphincsCVerify/Crypto/EUFCMA.lean": {
+          "sha256": "3af2ca905c2456bb784a62fab864d9a079bcf5173736539fd20f4b38e6ee7b50",
+          "axiom_mentions": 12
+        },
+        "SphincsCVerify/Crypto/Quantitative.lean": {
+          "sha256": "17db8547199681a7ed8ccce5d2f8fbe64232c0bc4f69175e562ac290a32d0aa9",
+          "axiom_mentions": 2
+        },
+        "SphincsCVerify/Interpreter/C10Parse.lean": {
+          "sha256": "2ad073b800cf72424a656c20d5353b9574ece9b15e0efa7194012ac4fee158fa",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Interpreter/C10Program.lean": {
+          "sha256": "031db8f780a5d233c05a839b479738a86427f60472fa2ee73e72e755f968fdc5",
+          "axiom_mentions": 4
+        },
+        "SphincsCVerify/Interpreter/C10Source.lean": {
+          "sha256": "7a042cd2f098ada2a9a7054b3daa3681fcf9fc84a8ba8d8b171f1048ede5fbe2",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Interpreter/Climb.lean": {
+          "sha256": "0fe536bcc33a101f828022aa348d24a2511b9f007fcb7297bc6d6f9a751cee96",
+          "axiom_mentions": 2
+        },
+        "SphincsCVerify/Interpreter/ClimbLoop.lean": {
+          "sha256": "687f820d0a643c9cccf594942137c3690cc5e9c1843e086e61396bab1af4dea5",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Interpreter/Memory.lean": {
+          "sha256": "22c9d1532e3d1bf4bd215897c95832bf290c1c7946764b62433092cb20eae84f",
+          "axiom_mentions": 3
+        },
+        "SphincsCVerify/Interpreter/Phases.lean": {
+          "sha256": "31791ea7d3f53187850d9fc680f89047966e4112805f0ea817c64f1667208400",
+          "axiom_mentions": 2
+        },
+        "SphincsCVerify/Interpreter/Sha256Bridge.lean": {
+          "sha256": "6e361c3fc006c7a114081af120ed7df942181d98c80ecf73b8e97386094a0904",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Interpreter/Yul.lean": {
+          "sha256": "6c8a81f20b826e1ae0e4124ad0c7996b95edb2bbe4ea479c0d32a8aa846b865a",
+          "axiom_mentions": 2
+        },
+        "SphincsCVerify/Interpreter/YulParse.lean": {
+          "sha256": "215a19eb4fb9f66e63db3d856643424f03b6015521450684d9f09bbc6bc081fd",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Spec/Hash.lean": {
+          "sha256": "08a5b6abfe95f82acb985d99cfe74be50f67a19e05b99efeb5641b3efeaed695",
+          "axiom_mentions": 6
+        },
+        "SphincsCVerify/Spec/Sha256Impl.lean": {
+          "sha256": "4caf8a66b84a0981264bda8c57d65df91bfdb00f925006275ad8c9aee26badbc",
+          "axiom_mentions": 2
+        },
+        "SphincsCVerify/Spec/Theorems.lean": {
+          "sha256": "164fe5825909317dc362f07e1262ff55bcaa145b066678f7edadb04ae5ea2853",
+          "axiom_mentions": 41
+        },
+        "SphincsCVerify/Verifier/Equivalence.lean": {
+          "sha256": "6a2bedef2aff2669bb1bf57932bb91546d98e4466b07f51412a3842a4934f18b",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Wallet/CreditLedger.lean": {
+          "sha256": "4a9a6f71af55264eace1c89bba478e515fa477fcf23184c45b4a4345447788e4",
+          "axiom_mentions": 2
+        },
+        "SphincsCVerify/Wallet/Invariants.lean": {
+          "sha256": "d97a8b3c7f0a2f8773ab9ccbdbcffd1595be879addaa44ff05585b80d2be847e",
+          "axiom_mentions": 6
+        },
+        "SphincsCVerify/Wallet/OffchainBinding.lean": {
+          "sha256": "12fe61a2f1cb5b2db0787673fac42e3a2aa25d49d321df71e0f5197f4442c495",
+          "axiom_mentions": 6
+        },
+        "SphincsCVerify/Wallet/SphincsDigestSpec.lean": {
+          "sha256": "c3a008f2f4d9b00ee77c66c9c602292cd14436d069bd644d1a14761dd5c5830b",
+          "axiom_mentions": 1
+        },
+        "SphincsCVerify/Wallet/UpgradeSafety.lean": {
+          "sha256": "513d4e4074bb05452b787a3ae93c35be0480b3db392b77478c5c5762cb5071f1",
+          "axiom_mentions": 2
+        },
+        "SphincsCVerify.lean": {
+          "sha256": "7bc63e62a3cd69d75121c8b239ba1e9bb08728166678606f88f9666d479f9cf8",
+          "axiom_mentions": 2
+        }
+      },
+      "elaborated_unchanged": true
+    },
+    {
+      "project": "extracted",
+      "source_before": {
+        "Extracted/AxiomCheck.lean": {
+          "sha256": "263629c3569e3f8f3125f7f9b7585798cd43ec08dc44f5e3ce138de823b4764e",
+          "axiom_mentions": 66
+        },
+        "Extracted/AxiomCheckFormatDecimal.lean": {
+          "sha256": "e79c14b72dab3f2e77833edafabbd5b333ff671def875ee6beca4216c354aabc",
+          "axiom_mentions": 3
+        },
+        "Extracted/AxiomCheckNegativeControl.lean": {
+          "sha256": "8846e829cea89e95fd18cbaa6fdfb686df6918d34bba469031c132f7a08c9db5",
+          "axiom_mentions": 2
+        },
+        "Extracted/SlotKdf/FunsExternal.lean": {
+          "sha256": "4b9ac21ca5aa0b88ccb0539d84aa754407ef6ce6e7884a3f1231b6e5b075492f",
+          "axiom_mentions": 2
+        },
+        "Extracted/UserOp/FunsExternal.lean": {
+          "sha256": "03c0c8f5a3c94285348b83fd826206cdc35153011934b78f75f69349250f80dd",
+          "axiom_mentions": 1
+        }
+      },
+      "source_after": {
+        "Extracted/AxiomCheck.lean": {
+          "sha256": "263629c3569e3f8f3125f7f9b7585798cd43ec08dc44f5e3ce138de823b4764e",
+          "axiom_mentions": 78
+        },
+        "Extracted/AxiomCheckFormatDecimal.lean": {
+          "sha256": "e79c14b72dab3f2e77833edafabbd5b333ff671def875ee6beca4216c354aabc",
+          "axiom_mentions": 4
+        },
+        "Extracted/AxiomCheckNegativeControl.lean": {
+          "sha256": "8846e829cea89e95fd18cbaa6fdfb686df6918d34bba469031c132f7a08c9db5",
+          "axiom_mentions": 10
+        },
+        "Extracted/Bip39RoundtripSpec.lean": {
+          "sha256": "6fe490458be0e01b6d6d30b0558795ed05fc48f0d097debeb2ec1da0e2cfacdd",
+          "axiom_mentions": 1
+        },
+        "Extracted/Bits.lean": {
+          "sha256": "356a3e8fd41a9a15c01b9d16384aa3cdaa86b649698054e8ff6917184c737bd7",
+          "axiom_mentions": 1
+        },
+        "Extracted/Decode/FunsExternal.lean": {
+          "sha256": "5f7100dc15c9f5ed33a0123f86623ec586fd7734842b35ed0c85145a4bbf22c7",
+          "axiom_mentions": 2
+        },
+        "Extracted/DecodeItemSpec.lean": {
+          "sha256": "270058dc51f65f7794a8f7b059b7e4cc997471b5dd6ffb720b82229096a94c30",
+          "axiom_mentions": 2
+        },
+        "Extracted/Eip1271/FunsExternal.lean": {
+          "sha256": "5f67bcedee9481ff7c6b3d11bfc082e6c0e0b7562f3702d3072f30205de6a3a2",
+          "axiom_mentions": 2
+        },
+        "Extracted/FormatDecimal/Div10Spec.lean": {
+          "sha256": "aebfd6589de169fc2f5bad37a0dc8b9288a4f1e1f0e4a0ffa59ed1ca57c3c312",
+          "axiom_mentions": 2
+        },
+        "Extracted/FormatDecimal/EmitSpec.lean": {
+          "sha256": "21d9709f7c1bb1a16abb4debfff0f008aead568ae67049eb8a99802369a72b4a",
+          "axiom_mentions": 2
+        },
+        "Extracted/FormatDecimal/ExtractDigitsSpec.lean": {
+          "sha256": "cdf70f33b508a9ffab24cb75765ffa949f3a36064056fca2b762b70fb6d5ef62",
+          "axiom_mentions": 2
+        },
+        "Extracted/FormatDecimal/FormatDecimalSpec.lean": {
+          "sha256": "33d00999afd8ed1f2a4082f42b3fbd9b3e5707e815aa48ba19c0b5f6d36df098",
+          "axiom_mentions": 2
+        },
+        "Extracted/FormatDecimal/RoundCarrySpec.lean": {
+          "sha256": "f25ab5fadf3a686eb732853c2d33c90c05a3dcf40e9bc783c070c4b3a5c13e32",
+          "axiom_mentions": 2
+        },
+        "Extracted/FormatDecimal/TrimFracSpec.lean": {
+          "sha256": "66018fe746152c7e0c02706014a395df0e2370e51f5aebe5b76b96af9f27a752",
+          "axiom_mentions": 2
+        },
+        "Extracted/FwManifestSpec.lean": {
+          "sha256": "e8eabfd99772466c48fdd92cac84eae301b805a2f2640b6c1249be896d9dadf0",
+          "axiom_mentions": 1
+        },
+        "Extracted/Hash/FunsExternal.lean": {
+          "sha256": "8968274b785d536340924fc7f1344fdecfaee2c170cbdb87c3db4164a36e0bfe",
+          "axiom_mentions": 3
+        },
+        "Extracted/HashPure.lean": {
+          "sha256": "750a69f7e57e38298a41caf90b593ba925867246b7f54d2a6c689bdcc8018870",
+          "axiom_mentions": 2
+        },
+        "Extracted/HashSpecs/ChainHash.lean": {
+          "sha256": "b5bc8e80170c3b94233f672bee5011d5e2d67278b721b04f3cc5658fdaa2956d",
+          "axiom_mentions": 1
+        },
+        "Extracted/HashSpecs/Th.lean": {
+          "sha256": "beebfacb679ca09df285271b6b78bbde2800d3c28f170a5fcce1fad3f679f395",
+          "axiom_mentions": 1
+        },
+        "Extracted/HashSpecs/ThMulti.lean": {
+          "sha256": "4c5661995c204f1d93f2c4eb25594c9a19ff88b0c7dbd17f22423ceb22fba5bd",
+          "axiom_mentions": 1
+        },
+        "Extracted/HashSpecs/ThPair.lean": {
+          "sha256": "5fe467ae20bf082dc7ed0a811f3fcf0b18b46a18509b887521536aa0455a24ae",
+          "axiom_mentions": 1
+        },
+        "Extracted/HashSpecs/Truncate.lean": {
+          "sha256": "a5823d0b2b538ec11e47de81bc589794272d67754ae9aae5ba301163ce425689",
+          "axiom_mentions": 1
+        },
+        "Extracted/HashSpecs/WotsDigest.lean": {
+          "sha256": "08129d5d5e36a0b87e9234d9a76879f273a2caf48a066511b435e78cdbc03da5",
+          "axiom_mentions": 1
+        },
+        "Extracted/HashSpecs.lean": {
+          "sha256": "d4ba843cc9d1c3bbce9c8cb393a7ae5741d264459e362cb4dc02ba2a9051aa8c",
+          "axiom_mentions": 2
+        },
+        "Extracted/Merkle/FunsExternal.lean": {
+          "sha256": "8c437e7c07ec58a81e03dc3be0e6feed532cdf48f3af945bcbe1022bc32fccad",
+          "axiom_mentions": 1
+        },
+        "Extracted/PinState/FunsExternal.lean": {
+          "sha256": "6fc451e06019763fec178ce00aaea040a62b7b35249bf37d3cf548170ca7cdfa",
+          "axiom_mentions": 1
+        },
+        "Extracted/PinState/TypesExternal.lean": {
+          "sha256": "9644edb552d15adedb08b5f470e08457d26be2981d71bde8b98d362c9c2cb29b",
+          "axiom_mentions": 4
+        },
+        "Extracted/PkFromSig/FunsExternal.lean": {
+          "sha256": "60562c2c0eef84e5ea156cedf835de8e95230cb18bcc0364e90647a090b638d5",
+          "axiom_mentions": 1
+        },
+        "Extracted/Rlp/FunsExternal.lean": {
+          "sha256": "6d73a90a480ca6ed1d9bc2de8d44378d28d92880c9c3004b14cffc58989635e5",
+          "axiom_mentions": 2
+        },
+        "Extracted/SetSliceLemmas.lean": {
+          "sha256": "4d1bf238e3dd21c5cec17387e0dd851d867b5c4f4b27868c279e6c64be50dc7c",
+          "axiom_mentions": 1
+        },
+        "Extracted/Sha256Pure.lean": {
+          "sha256": "2d7a63e698118eb840db49e0da56f2d5a21510d1ec38b2dfe4114d262fec2aa7",
+          "axiom_mentions": 4
+        },
+        "Extracted/Sha256Vendored.lean": {
+          "sha256": "64a4208942c71ccca9d5e3f2d576b6bc036fed7f81a8f6f343ac371fc67a3a61",
+          "axiom_mentions": 2
+        },
+        "Extracted/SlotKdf/FunsExternal.lean": {
+          "sha256": "4b9ac21ca5aa0b88ccb0539d84aa754407ef6ce6e7884a3f1231b6e5b075492f",
+          "axiom_mentions": 5
+        },
+        "Extracted/SlotKdf/SlotKdfSpec.lean": {
+          "sha256": "0debaa69e2d15dc3f83258316321dba6c14fe2313ab40ed8d9a22e24d928e91f",
+          "axiom_mentions": 1
+        },
+        "Extracted/TxMerkle/FunsExternal.lean": {
+          "sha256": "714d3f4834e9371a2d5cc74a025eaa507040febc8b82ecbe1bc6fd251e35f5b0",
+          "axiom_mentions": 1
+        },
+        "Extracted/UserOp/FunsExternal.lean": {
+          "sha256": "03c0c8f5a3c94285348b83fd826206cdc35153011934b78f75f69349250f80dd",
+          "axiom_mentions": 4
+        },
+        "Extracted/UserOpEquiv.lean": {
+          "sha256": "06c8667f575abea995907908d2e57535cd11b7e13ed0ccabf33b17c77273ef36",
+          "axiom_mentions": 1
+        },
+        "Extracted/UserOpEquivByteLayout.lean": {
+          "sha256": "d26ce34702a278b179fcf2aa50418d22596324b7afc29f150b234976214eb4e3",
+          "axiom_mentions": 1
+        },
+        "Extracted.lean": {
+          "sha256": "9e856c60e109984dd90a0a07ecb1ae8fc87a32522016344ac5dd9f22f986e452",
+          "axiom_mentions": 1
+        }
+      },
+      "elaborated_unchanged": true
+    }
+  ],
+  "verity_baseline_unchanged": {
+    "PQSigner/Theorems.lean": 11,
+    "PQSigner/Verifier/Merkle.lean": 1
+  },
+  "verity_comment_only_edits": {
+    "contracts/verity/PQSigner/Theorems.lean": [
+      [
+        "Proofs are `sorry`-stubbed where they",
+        "Proofs are unfinished where they"
+      ],
+      [
+        "\"final\" and \"by sorry\" is the remaining work.",
+        "\"final\" and unfinished proof bodies are the remaining work."
+      ]
+    ],
+    "contracts/verity/PQSigner/Verifier/Top.lean": [
+      [
+        "3 closed + 1 sorry (",
+        "3 closed + 1 open proof ("
+      ],
+      [
+        "plus 11 `sorry`-stubbed bodies",
+        "plus 11 unfinished bodies"
+      ],
+      [
+        "old zero-sorry CI gate",
+        "old zero-hole CI gate"
+      ]
+    ],
+    "contracts/verity/PQSigner/Verifier/Hypertree.lean": [
+      [
+        "it was never a `sorry` either",
+        "it never had an unfinished proof body either"
+      ]
+    ]
+  }
+}

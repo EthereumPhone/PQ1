@@ -1,0 +1,27 @@
+{
+  "identity": {
+    "commit": "fdabe5eb9b953706681b1276eba3d3c48db12c2e",
+    "tree": "839e6bf8d646c34048ff90b1c5211c8b68ad764e",
+    "base": "ebb590d0ffd2b84b2b07939c85fd31af8e0b8412"
+  },
+  "reviewers": [
+    {
+      "reviewer": "claude",
+      "seconds": 406.775,
+      "words": 58,
+      "report_sha256": "5137778730497310a365441940215d7beec7c3c5b8e900defb3c2444e98d79df"
+    },
+    {
+      "reviewer": "kimi",
+      "seconds": 543.565,
+      "words": 330,
+      "report_sha256": "b84817c3bd14f27705ab7b9361f229d3848d3a216d5393b5a92fc7c38b9cff09"
+    },
+    {
+      "reviewer": "codex",
+      "seconds": 715.519,
+      "words": 10,
+      "report_sha256": "4a5ac1961861c65d98070176b69cdf093a60ebe2af9e5afc1985aace0fa20421"
+    }
+  ]
+}

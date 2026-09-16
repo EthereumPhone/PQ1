@@ -1,0 +1,7 @@
+commit 775133e8abd3452bca952336bc8e31e452a7f7f5
+tree 2766afb8829e5f38935718c01f8365e4758e9153
+parent b969690e628407635673db11b2ba376cd1cfd838
+author Nicola-Matia Ceornea <43230854+Nicola-Ceornea@users.noreply.github.com> 1789563822 +0200
+committer Nicola-Matia Ceornea <43230854+Nicola-Ceornea@users.noreply.github.com> 1789563822 +0200
+
+    fix(fv): reject fatal Kani diagnostics and provision the nightly gate

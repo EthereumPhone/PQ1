@@ -1,0 +1,109 @@
+[
+  {
+    "label": "fv-lints",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-fv-lints"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/fv-lints.log"
+  },
+  {
+    "label": "extracted",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-extracted"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/extracted.log"
+  },
+  {
+    "label": "tla",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-tla"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/tla.log"
+  },
+  {
+    "label": "protocol-selftest",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "scripts/check_protocol_models.py",
+      "--self-test"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/protocol-selftest.log"
+  },
+  {
+    "label": "verity-ci",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/verity-ci.log"
+  },
+  {
+    "label": "gate-enforcement",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "scripts/check_gate_enforcement.py"
+    ],
+    "status": 2,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/gate-enforcement.log"
+  },
+  {
+    "label": "axiom-lint",
+    "command": [
+      "bash",
+      "contracts/verification/scripts/lint_axioms.sh"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/axiom-lint.log"
+  },
+  {
+    "label": "ledger-authoritative",
+    "command": [
+      "/usr/bin/bash",
+      "-c",
+      "[[ ${UID} -ne 0 && -u /usr/bin/sudo && -x /usr/bin/sudo ]] && /usr/bin/sudo -n -u \"#${UID}\" -- /usr/bin/env -i /usr/bin/bash --noprofile --norc -p contracts/verification/scripts/run_authoritative_make.sh make -C contracts/verification verify-ledger-consistency"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/ledger-authoritative.log"
+  },
+  {
+    "label": "cryptoverif",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "scripts/check_protocol_models.py"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/cryptoverif.log"
+  },
+  {
+    "label": "gate-enforcement-with-pyyaml",
+    "command": [
+      "python3",
+      "scripts/check_gate_enforcement.py"
+    ],
+    "status": 0,
+    "log": "/tmp/pq-fv-fixes-20260914-iddnxo7n/logs/gate-enforcement-with-pyyaml.log",
+    "replaces": "gate-enforcement: -S disabled the required installed PyYAML dependency"
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "awk_rc": 0,
+  "census": "0",
+  "lean_rc": 0,
+  "lean_output": "/tmp/pq-fv-review-20260914-gx635_x9/logs/VerityAdmit.lean:1:8: warning: declaration uses 'sorry'\n"
+}

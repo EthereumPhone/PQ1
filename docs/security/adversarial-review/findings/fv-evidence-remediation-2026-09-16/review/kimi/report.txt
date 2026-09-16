@@ -1,0 +1,13 @@
+All focus areas verified source-first against the diff, with every fast gate re-executed live just now:
+
+- `scripts/check_kani_mutations.py:126` — `classify_kani` binds one fully qualified `--exact` harness to exactly one verdict/totals/returncode; `apply_and_test` requires a passing unmodified baseline before the mutated run, and the `finally` restore verifies the original bytes (scripts/check_kani_mutations.py:207). `validate_manifest` enforces unique ids, one canary, fq-path consistency, and restricts `z_flags` to `--features` only.
+- Heavy tier is non-cumulative, local-only, and absent from every workflow; the census feature check (`kani_census.py:131`) normalizes multiline attributes and fails closed on complex cfgs. Live: `kani_census.py --check` green, lock matches 173/27.
+- `split_contract.py` enforces the exact pinned 45-file cone (incl. `.eca`), dependency-first order, 1077 unique resolvable pins, census/coverage/taint; `cert_gate_split.sh` compiles and cli-runs every target directly, with require-probe and `split_proof_controls.py` controls for broken-dependency/import/EOF classes. Live: static contract OK, identity `d7baf671282ba725121f24d59962191c` matches the committed value.
+- Toolchain/image identities are checked before any proof execution; `run_easycrypt_split.py` pins the image by digest, mounts the source read-only, and executes on a disposable copy with failure propagation.
+- Per-PR (`lean-fv.yml`, paths include `easycrypt/**`) and nightly split jobs enrolled with complete `required_context` contracts; `check_gate_enforcement.py` green on all 67 gates.
+- `FV_SURFACE_MAP.md` row 9 and the gate notes correctly delimit current split vs historical drafts, the remaining `FORS_C_TreePort.extract_op` admit, conditional reductions, and the firmware-refinement boundary.
+
+VERDICT: GO
+TARGET: cd43416cea0f0eb387ad8c47137f1a9c2dd6cdbe / 6e1b7906481a44d41d6daa2da84b9488bba38043
+FINDINGS: none
+GAPS: full EasyCrypt proof replay receipt on input identity d7baf671282ba725121f24d59962191c still pending; coordinator must record its green result before landing.

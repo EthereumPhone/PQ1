@@ -37,19 +37,17 @@ is false.
 
 * **Lean.** `Bridge/EntryPoint.lean::entrypoint_honest`
 * **Two distinct statements — keep them separate.**
-  * **(In-Lean) `entrypoint_honest` is a TAUTOLOGY over the ~10-line
+  * **(In-Lean) `entrypoint_honest` is a proved theorem over the
     model `handleOp`.** Its conclusion ("a wallet-balance decrement
     implies `validateSignature` returned success, with the resulting
     storage as post-state") is *provable from the definition of
     `handleOp`*: the failure branch returns `σ` unchanged (so no
     balance decrease is possible), and the success branch sets
     `walletStorage` to exactly the `validateSignature` post-state. It
-    is declared as an `axiom` (not a `theorem`) only so it surfaces in
-    `theft_free`'s `#print axioms` closure as the named A2 marker — it
-    constrains nothing about the *real* contract and is **not** a
-    load-bearing cryptographic premise consumed by the proof. Removing
-    it would not create a logical gap that a genuine assumption fills;
-    the model `handleOp` already entails it.
+    was demoted from an axiom to a theorem on 2026-08-20. Its proof uses
+    only the kernel premises and it no longer appears as an A2 axiom in
+    `theft_free`'s `#print axioms` closure. The theorem constrains nothing
+    about the *real* contract: the model `handleOp` already entails it.
   * **(Cited-TCB) The genuine assumption is that the DEPLOYED
     EntryPoint v0.6 bytecode at
     `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789` actually behaves like
@@ -64,9 +62,8 @@ is false.
 * **Elimination path.** Model EntryPoint v0.6's real bytecode in Lean
   and discharge the deployed-matches-`handleOp` assumption against KEVM
   (Kontrol). This is the **separate** 8-12 month engagement; it
-  targets the cited-TCB statement above, **not** the tautological
-  in-Lean axiom (which proves nothing about the real contract and so
-  cannot be "discharged"). Out of current scope.
+  targets the cited-TCB statement above. The in-Lean theorem is already
+  proved and supplies no deployment-faithfulness evidence. Out of current scope.
 
 > **`entrypoint_no_replay` — REMOVED 2026-06-14 (phantom).** A prior
 > A2-noreplay axiom (`(sender, nonce)` uniqueness) was deleted from the
@@ -211,7 +208,7 @@ per-claim corollaries unprovable.
 
 | Claim | Axioms cited in `#print axioms` of the corollary |
 |-------|--------------------------------------------------|
-| 1. Signature-to-execution binding | A6 (kernel) + `sha256_collision_resistance` (the A5-injective reduction). The full `theft_free` closure adds A1, A2, A3.1, A4, A5 (4 sub-axioms). **Scope of the in-kernel content:** the corollary binds the *signed digest* to the op's `callData` **field** (digest-uniqueness) and the `ownerIndex` (per-index transient credit) — it does NOT in-kernel prove that the bytes *executed* equal the bytes *signed*. That executed-call ⇄ signed-calldata binding rests on cited-TCB **A2** (deployed EntryPoint v0.6 relays `op.callData` verbatim to the wallet) + **A4** (the EVM forwards those bytes to the target). |
+| 1. Signature-to-execution binding | A6 (kernel) + `sha256_collision_resistance` (the A5-injective reduction). The full `theft_free` closure adds A1, A3.1, A4, A5 (4 sub-axioms); A2 is an external deployment assumption, not a closure axiom. **Scope of the in-kernel content:** the corollary binds the *signed digest* to the op's `callData` **field** (digest-uniqueness) and the `ownerIndex` (per-index transient credit) — it does NOT in-kernel prove that the bytes *executed* equal the bytes *signed*. That executed-call ⇄ signed-calldata binding rests on cited-TCB **A2** (deployed EntryPoint v0.6 relays `op.callData` verbatim to the wallet) + **A4** (the EVM forwards those bytes to the target). |
 | 2. Owner-set integrity + init atomicity | A6 only (`initialize_called_exactly_once` and `owner_set_nonempty_after_init` are purely structural). For bytecode-level enforcement, A3.4 (MultiOwnable) + A3.2 (Wallet) + A3.3 (Factory) are discharged by Halmos (see A3.* — the prior Certora rule-sets are superseded/alternative paths). |
 | 3. Execution faithfulness + value flow | A6 only (`executeBatch_faithful` is purely operational over the `Execute` model's `(targets, values, datas)` arguments). For bytecode-level enforcement, A3.2 (Wallet) is discharged by Halmos against pinned `PQSmartWallet` codehash. **Scope:** the in-kernel theorem proves the model dispatches its arguments faithfully and in order; that those arguments equal the *signed* batch (and reach the real callee) rests on cited-TCB A2 + A4, not on the kernel. |
 

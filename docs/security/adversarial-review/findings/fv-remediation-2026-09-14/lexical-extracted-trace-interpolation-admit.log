@@ -1,0 +1,2 @@
+/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:51: warning: declaration uses `sorry`
+'Hidden' depends on axioms: [sorryAx]

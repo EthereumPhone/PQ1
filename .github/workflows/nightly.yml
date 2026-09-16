@@ -382,3 +382,32 @@ jobs:
         run: |
           eval "$(opam env)"
           make verify-protocol-models PROTOCOL_MODELS=proverif,tamarin
+
+  easycrypt-split:
+    name: EasyCrypt current split proof replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      # The shared FV Makefile requires the pinned elan shim even for non-Lean gates.
+      - name: install elan (toolchain pinned by lean-toolchain)
+        run: |
+          # Pinned + verified, not `curl | sh` from a moving branch. `master`
+          # is mutable: whoever controls that ref controls the toolchain
+          # installer on every FV runner, which is the trust root the
+          # verification Makefile builds on. Pin the commit, check the bytes,
+          # and only then execute. (#562)
+          set -euo pipefail
+          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
+          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
+            -o elan-init.sh
+          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          rm -f elan-init.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: verify-easycrypt-split (pinned toolchain, complete dependency closure)
+        run: make -C contracts/verification verify-easycrypt-split

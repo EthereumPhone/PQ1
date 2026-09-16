@@ -1,0 +1,42 @@
+[
+  {
+    "case": "scheduled gate cadence",
+    "schedule": [],
+    "checker_exit": 0,
+    "actionlint_exit": 1,
+    "actionlint_output": "../../fv-gate-control-08b6q9lz/.github/workflows/nightly.yml:251:13: \"schedule\" section should not be empty [syntax-check]\n    |\n251 |   schedule: []\n    |             ^~\n"
+  },
+  {
+    "case": "scheduled gate cadence",
+    "schedule": [
+      {
+        "cron": "0 0 1 1 *"
+      }
+    ],
+    "checker_exit": 0,
+    "actionlint_exit": 0,
+    "actionlint_output": ""
+  },
+  {
+    "case": "protected branch grammar mismatch",
+    "filter": "branches-ignore",
+    "pattern": "master+",
+    "checker_exit": 0,
+    "actionlint_exit": 0
+  },
+  {
+    "case": "protected branch grammar mismatch",
+    "filter": "branches",
+    "pattern": "maste?",
+    "checker_exit": 0,
+    "actionlint_exit": 0
+  },
+  {
+    "case": "future target discovery limitation",
+    "match": [
+      "verify-a"
+    ],
+    "existing_manifest_policy": "all 65 current IDs independently pinned; no unregistered live second target identified by reviewer",
+    "disposition": "NOTE: future discovery coverage, defer with #509"
+  }
+]

@@ -29,8 +29,10 @@ opaque-equality shape (the `DeployedBytecode.SHA256_precompile` symbol
 (`evm_bytecode_executes_correctly`) intentionally stays as a `True`
 TCB marker per user decision: it represents the universal-Ethereum
 trust statement (KEVM as the formal EVM-semantics referent). A2
-(`Bridge.EntryPoint.entrypoint_honest`) is unchanged per user decision
-(cited-TCB: ERC-4337 v0.6 + OZ/ChainSecurity/Spearbit audits).
+(`Bridge.EntryPoint.entrypoint_honest`) was PROVED kernel-only from the
+`handleOp` definition on 2026-08-20 and is no longer an axiom; the
+ERC-4337 v0.6 + OZ/ChainSecurity/Spearbit audit citation now backs only
+the `handleOp` model's faithfulness.
 
 ## Chain of refinement (post-refactor)
 

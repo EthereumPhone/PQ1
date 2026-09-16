@@ -1,0 +1,5 @@
+VERDICT: FIX
+TARGET: 1fb541057aa0244e8a6ce526de6e35fd16de0b2a / ba33e1143822f0bf36676539b723e8d14a668077
+FINDINGS:
+- BLOCKER contracts/verification/scripts/lean_source.py:58 — `/-` and `--` receive only comment interpretations, but escaped custom ASCII atoms can consume those characters, making the following axiom/proof hole real code; both pinned Lean versions compile escaped-token probes containing `x/-axiom Hidden : False -/` and `x--theorem Hidden : False := by sorry`, while `keyword_count` returns 0, allowing an unimported axiom to evade `source_inventory` and a Verity hole to evade its 11+1 ratchet; retain a code-token interpretation alongside both comment branches and add these probes as regressions.
+GAPS: none

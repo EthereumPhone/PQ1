@@ -38,6 +38,11 @@ on:
       # in an extracted rank merged unscanned (extracted-F2, V10, 2026-07-02). The build
       # leg stays lean/-only; the lints scan the extracted sources as files.
       - 'contracts/verification/extracted/Extracted/**'
+      # EasyCrypt pin-ledger surface: verify-easycrypt-pins is toolchain-free and
+      # wired into this workflow (2026-08-20, #664) — the gate must FIRE on edits
+      # to the .ec files / axiom_pins.txt it polices (the F1 class: it ran in NO
+      # workflow while ~15 straight master commits touched easycrypt/**).
+      - 'contracts/verification/easycrypt/**'
   pull_request:
     paths:
       - 'contracts/verification/lean/**'
@@ -48,6 +53,8 @@ on:
       - '.github/workflows/lean-fv.yml'
       # Extracted §33 escape-hatch scan (extracted-F2) — see the push trigger above.
       - 'contracts/verification/extracted/Extracted/**'
+      # EasyCrypt pin-ledger surface (verify-easycrypt-pins, #664) — see above.
+      - 'contracts/verification/easycrypt/**'
 
 permissions:
   contents: read
@@ -119,3 +126,13 @@ jobs:
         # mutators; a new resetter added to Storage.lean would type-check green
         # beside them. No other gate (closures/ledger/proof-mutation) can catch it.
         run: make -C contracts/verification verify-storage-mutators
+      - name: verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)
+        # Wired 2026-08-20 (#664): the pin ledger (admit/axiom COUNT + SEMANTIC
+        # name->statement pin) is toolchain-free — no EasyCrypt container, ~2 s —
+        # yet ran in NO workflow while ~15 straight master commits were EasyCrypt
+        # pin work. The make target asserts its own negative control first (a
+        # dmkey_ll:false weakening MUST fire), then the dry-run pin check.
+        # easycrypt/** added to this workflow's paths filter the same day.
+        run: make -C contracts/verification verify-easycrypt-pins
+      - name: verify-easycrypt-split-pins (current vendored split integrity)
+        run: make -C contracts/verification verify-easycrypt-split-pins

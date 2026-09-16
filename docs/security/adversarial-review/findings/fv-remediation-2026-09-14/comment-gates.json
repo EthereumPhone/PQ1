@@ -1,0 +1,35 @@
+[
+  {
+    "label": "fv-lints",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-fv-lints"
+    ],
+    "status": 0,
+    "log": "comment-fv-lints.log"
+  },
+  {
+    "label": "extracted",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-extracted"
+    ],
+    "status": 0,
+    "log": "comment-extracted.log"
+  },
+  {
+    "label": "verity-ci",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "log": "comment-verity-ci.log"
+  }
+]

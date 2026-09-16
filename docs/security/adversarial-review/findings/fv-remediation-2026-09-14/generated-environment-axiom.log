@@ -1,0 +1,208 @@
+⚠ [28/60] Replayed SphincsCVerify.Interpreter.Phases
+warning: SphincsCVerify/Interpreter/Phases.lean:335:5: unused variable `hShapeS`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:336:5: unused variable `hShapeR`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:1237:5: unused variable `hseedw`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3211:5: unused variable `hhtbv`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3294:5: unused variable `hv0dig`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3984:14: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hseedw, hwa, hcn, hcount, hOUT,
+  ̵  ̵ ̵ ̵ite_true, i̵t̵e̵_̵f̵a̵l̵s̵e̵,̵ ̵String.reduceEq]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3984:25: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hseedw, hwa, hcn, hcount, hOUT, ite_true, i̵t̵e̵_̵f̵a̵l̵s̵e̵,̵ ̵S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵]̵i̲t̲e̲_̲f̲a̲l̲s̲e̲]̲
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:4407:57: This simp argument is unused:
+  hOUT
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hd, hwptr, hwa, hN, hO̵U̵T̵,̵ ̵h̵ival, ite_true, ite_false,
+  ̲  ̲ ̲ ̲String.reduceEq]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:4964:29: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, s̵e̵t̵V̵a̵r̵,̵ ̵hseedw, hOUT]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:6120:83: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval,̵ ̵s̵e̵t̵V̵a̵r̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:6158:45: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval,̵ ̵s̵e̵t̵V̵a̵r̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [30/60] Replayed SphincsCVerify.Interpreter.HypertreePhase
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:436:5: unused variable `hpathSize`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:715:17: This simp argument is unused:
+  hwe
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵w̵e̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:775:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:775:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:782:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:782:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:799:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:808:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:814:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:814:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:898:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:906:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:906:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:946:52: This simp argument is unused:
+  hp
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵p̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:955:52: This simp argument is unused:
+  hp
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵p̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [31/60] Replayed SphincsCVerify.Interpreter.C10Refine
+warning: SphincsCVerify/Interpreter/C10Refine.lean:603:45: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_true, hLcn', hLroot, mload32_mstore32_self]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [37/60] Replayed SphincsCVerify.Wallet.Invariants
+warning: SphincsCVerify/Wallet/Invariants.lean:1203:31: This simp argument is unused:
+  if_pos rfl
+
+Hint: Omit it from the simp argument list.
+  simp only [bumpForOwner, i̵f̵_̵p̵o̵s̵ ̵r̵f̵l̵,̵ ̵Storage.bumpBootstrap, hboot]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [42/60] Replayed SphincsCVerify.Spec.SignerPost
+warning: SphincsCVerify/Spec/SignerPost.lean:28:24: This simp argument is unused:
+  hx
+
+Hint: Omit it from the simp argument list.
+  simp [̵h̵x̵]̵ ̵at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Spec/SignerPost.lean:53:24: This simp argument is unused:
+  hx
+
+Hint: Omit it from the simp argument list.
+  simp [̵h̵x̵]̵ ̵at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [47/60] Replayed SphincsCVerify.Verifier.HonestConsistent
+warning: SphincsCVerify/Verifier/HonestConsistent.lean:95:52: This simp argument is unused:
+  Fin.val_mk
+
+Hint: Omit it from the simp argument list.
+  simp only [extractDigits, ofFn_getElem! _ i hi,̵ ̵F̵i̵n̵.̵v̵a̵l̵_̵m̵k̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+ℹ [58/60] Built SphincsCVerify.CensusRegression
+info: SphincsCVerify/CensusRegression.lean:6:0: EnvironmentProbe.hidden : False
+✔ [59/60] Built SphincsCVerify
+Build completed successfully.
+AXIOM INVENTORY FAILURE: elaborated inventory drift
+expected: [{"levels": ["u"], "module": "Init.Prelude", "name": "Classical.choice", "type_sha256": "b397a38f2e3297ccf1ef8ab5ecffc761be2a059068208d290ea54b8f9de6cac9", "unsafe": false}, {"levels": [], "module": "Init.Core", "name": "Lean.ofReduceBool", "type_sha256": "8fd9ef600b8f58fa2c8df3101069e81af5b59b93ac4c6d8d80a22600d0adc36d", "unsafe": false}, {"levels": [], "module": "Init.Core", "name": "Lean.ofReduceNat", "type_sha256": "d29a0f4dcb3bbf104e289e510282be1db58ac21e1bc1ab27e300555d0cfcc2a3", "unsafe": false}, {"levels": [], "module": "Init.Core", "name": "Lean.trustCompiler", "type_sha256": "f5d8a8840f30c2d0e5b651a20789cb4c8d616d4ba312057d224114a13a157b90", "unsafe": false}, {"levels": ["u"], "module": "Init.Prelude", "name": "Quot.lcInv", "type_sha256": "8d50e2d6b794e0ad75932c0e315a6c85c579986534a1ca847f227758496c00c3", "unsafe": true}, {"levels": ["u"], "module": "Init.Core", "name": "Quot.sound", "type_sha256": "4e6f4679e517ad3442b0203e5f20654a37e1a8485a0afeeb7a13842b4e741181", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.evm_bytecode_executes_correctly", "type_sha256": "e44350f63d0d65146569a38d406d5d3c37be875fb2fcc556bd2e1dddc79b3f40", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4", "type_sha256": "ba6a62fe4f4f3b931869fa08d51acb35c571c6126d9501940c391e15cd121bc2", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityFactory_compiles_correctly", "type_sha256": "1346aec74df11e6691e2cb1c95a915232456ce067b4d76f3dd7b07c93c37e828", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityMultiOwnable_compiles_correctly", "type_sha256": "925939fc45876e79cba872e07deed0d848faa4b1d5bd11e8b3a9eba6edc0c083", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityVerifier_compiles_correctly", "type_sha256": "6801dd6058ae0d9df6d736144f6dcf969f3a4b293f8b5f86512170b4dcf132fc", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityWalletExecuteBatch_compiles_correctly", "type_sha256": "3483b90e1b9af1447cf4b356bb4c45818fcb70322867099a84f874615ef5a2ee", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityWalletExecute_compiles_correctly", "type_sha256": "da68a3a9a5d4ff1b8eb14407e959afea0f6dbb2cd6a9aac7f87bfaae4d7a713c", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityWallet_compiles_correctly", "type_sha256": "0aa76ee145979f54735124d5eab041e16753f3ee1d1c3767262dd69b54ffb9cd", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.EUFCMA", "name": "SphincsCVerify.Crypto.EUF_CMA_SPHINCSplusC", "type_sha256": "b66e7e5ac21f8d537259349cf7bb9ddfe656dd60c8a334f73827c01d1b13fff7", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.Assumptions", "name": "SphincsCVerify.Crypto.ITSR_F", "type_sha256": "96a9c3b3899462da8367cca3ef744d5c0d60cb375d66f91965db8da048fae3d3", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.Assumptions", "name": "SphincsCVerify.Crypto.SM_DT_TCR_F", "type_sha256": "b88d9e4a9734735cfad4842379a4967599ec9144f786fab5561936d47693f997", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.Assumptions", "name": "SphincsCVerify.Crypto.hMsg_random_oracle", "type_sha256": "05ce3290966c72eb64288fbe7184bcc35a2584f636f5392cfdc2e515ce25e79b", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.Assumptions", "name": "SphincsCVerify.Crypto.sha256_collision_resistance", "type_sha256": "624b004dad056cbecfb0bab03fb8e0d0b8c5efae0ffa0942a6fa98078b40b739", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Wallet.OffchainBinding", "name": "SphincsCVerify.Wallet.OffchainBinding.keccak_sha256_cross_separation", "type_sha256": "27ff9f5f7e59f94c6b26c267194199a48acf50c3e5647e0f748f608f53a9c086", "unsafe": false}, {"levels": [], "module": "Init.Prelude", "name": "lcAny", "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05", "unsafe": true}, {"levels": ["u", "v"], "module": "Init.Prelude", "name": "lcCast", "type_sha256": "2cc1a2f7e096f80576058e7994e73ba09479a02e58e5253f44a03ad1ae715d19", "unsafe": true}, {"levels": [], "module": "Init.Prelude", "name": "lcErased", "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05", "unsafe": true}, {"levels": [], "module": "Init.Prelude", "name": "lcProof", "type_sha256": "86aee7e35e1fd308b56be1d77d552090a4204b25ca11239583a45683a6644b5d", "unsafe": true}, {"levels": ["u"], "module": "Init.Prelude", "name": "lcUnreachable", "type_sha256": "0c692a112a79532741c643618c94942e0463234fa6dae869bd342f6c597b6bfd", "unsafe": true}, {"levels": [], "module": "Init.Core", "name": "propext", "type_sha256": "6dd2fb585e097c2daca28461895349b3b7f30de6620363a0d18f1a71943a9a83", "unsafe": false}, {"levels": ["u"], "module": "Init.Prelude", "name": "sorryAx", "type_sha256": "5c15e0102ef885b4a3b583f4c396ee59d8b470ab16311833b4b5f24ace13a826", "unsafe": false}]
+actual: [{"levels": ["u"], "module": "Init.Prelude", "name": "Classical.choice", "type_sha256": "b397a38f2e3297ccf1ef8ab5ecffc761be2a059068208d290ea54b8f9de6cac9", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.CensusRegression", "name": "EnvironmentProbe.hidden", "type_sha256": "60e335d985a24e16439acf4497bf438125a4c9401d179635e0486267b2199628", "unsafe": false}, {"levels": [], "module": "Init.Core", "name": "Lean.ofReduceBool", "type_sha256": "8fd9ef600b8f58fa2c8df3101069e81af5b59b93ac4c6d8d80a22600d0adc36d", "unsafe": false}, {"levels": [], "module": "Init.Core", "name": "Lean.ofReduceNat", "type_sha256": "d29a0f4dcb3bbf104e289e510282be1db58ac21e1bc1ab27e300555d0cfcc2a3", "unsafe": false}, {"levels": [], "module": "Init.Core", "name": "Lean.trustCompiler", "type_sha256": "f5d8a8840f30c2d0e5b651a20789cb4c8d616d4ba312057d224114a13a157b90", "unsafe": false}, {"levels": ["u"], "module": "Init.Prelude", "name": "Quot.lcInv", "type_sha256": "8d50e2d6b794e0ad75932c0e315a6c85c579986534a1ca847f227758496c00c3", "unsafe": true}, {"levels": ["u"], "module": "Init.Core", "name": "Quot.sound", "type_sha256": "4e6f4679e517ad3442b0203e5f20654a37e1a8485a0afeeb7a13842b4e741181", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.evm_bytecode_executes_correctly", "type_sha256": "e44350f63d0d65146569a38d406d5d3c37be875fb2fcc556bd2e1dddc79b3f40", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4", "type_sha256": "ba6a62fe4f4f3b931869fa08d51acb35c571c6126d9501940c391e15cd121bc2", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityFactory_compiles_correctly", "type_sha256": "1346aec74df11e6691e2cb1c95a915232456ce067b4d76f3dd7b07c93c37e828", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityMultiOwnable_compiles_correctly", "type_sha256": "925939fc45876e79cba872e07deed0d848faa4b1d5bd11e8b3a9eba6edc0c083", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityVerifier_compiles_correctly", "type_sha256": "6801dd6058ae0d9df6d736144f6dcf969f3a4b293f8b5f86512170b4dcf132fc", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityWalletExecuteBatch_compiles_correctly", "type_sha256": "3483b90e1b9af1447cf4b356bb4c45818fcb70322867099a84f874615ef5a2ee", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityWalletExecute_compiles_correctly", "type_sha256": "da68a3a9a5d4ff1b8eb14407e959afea0f6dbb2cd6a9aac7f87bfaae4d7a713c", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Bridge.Refinement", "name": "SphincsCVerify.Bridge.solidityWallet_compiles_correctly", "type_sha256": "0aa76ee145979f54735124d5eab041e16753f3ee1d1c3767262dd69b54ffb9cd", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.EUFCMA", "name": "SphincsCVerify.Crypto.EUF_CMA_SPHINCSplusC", "type_sha256": "b66e7e5ac21f8d537259349cf7bb9ddfe656dd60c8a334f73827c01d1b13fff7", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.Assumptions", "name": "SphincsCVerify.Crypto.ITSR_F", "type_sha256": "96a9c3b3899462da8367cca3ef744d5c0d60cb375d66f91965db8da048fae3d3", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.Assumptions", "name": "SphincsCVerify.Crypto.SM_DT_TCR_F", "type_sha256": "b88d9e4a9734735cfad4842379a4967599ec9144f786fab5561936d47693f997", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.Assumptions", "name": "SphincsCVerify.Crypto.hMsg_random_oracle", "type_sha256": "05ce3290966c72eb64288fbe7184bcc35a2584f636f5392cfdc2e515ce25e79b", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Crypto.Assumptions", "name": "SphincsCVerify.Crypto.sha256_collision_resistance", "type_sha256": "624b004dad056cbecfb0bab03fb8e0d0b8c5efae0ffa0942a6fa98078b40b739", "unsafe": false}, {"levels": [], "module": "SphincsCVerify.Wallet.OffchainBinding", "name": "SphincsCVerify.Wallet.OffchainBinding.keccak_sha256_cross_separation", "type_sha256": "27ff9f5f7e59f94c6b26c267194199a48acf50c3e5647e0f748f608f53a9c086", "unsafe": false}, {"levels": [], "module": "Init.Prelude", "name": "lcAny", "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05", "unsafe": true}, {"levels": ["u", "v"], "module": "Init.Prelude", "name": "lcCast", "type_sha256": "2cc1a2f7e096f80576058e7994e73ba09479a02e58e5253f44a03ad1ae715d19", "unsafe": true}, {"levels": [], "module": "Init.Prelude", "name": "lcErased", "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05", "unsafe": true}, {"levels": [], "module": "Init.Prelude", "name": "lcProof", "type_sha256": "86aee7e35e1fd308b56be1d77d552090a4204b25ca11239583a45683a6644b5d", "unsafe": true}, {"levels": ["u"], "module": "Init.Prelude", "name": "lcUnreachable", "type_sha256": "0c692a112a79532741c643618c94942e0463234fa6dae869bd342f6c597b6bfd", "unsafe": true}, {"levels": [], "module": "Init.Core", "name": "propext", "type_sha256": "6dd2fb585e097c2daca28461895349b3b7f30de6620363a0d18f1a71943a9a83", "unsafe": false}, {"levels": ["u"], "module": "Init.Prelude", "name": "sorryAx", "type_sha256": "5c15e0102ef885b4a3b583f4c396ee59d8b470ab16311833b4b5f24ace13a826", "unsafe": false}]

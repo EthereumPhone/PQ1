@@ -1,0 +1,107 @@
+ M .github/workflows/ci.yml
+ M .github/workflows/lean-fv.yml
+ M aa/tests/negative_assumptions.rs
+ M contracts/smart-wallet/test/PinnedCodehashes.t.sol
+ M contracts/verification/Makefile
+ M contracts/verification/docs/AXIOM_STATUS.json
+ M contracts/verification/docs/DEPLOYED_BYTECODE_PIN_CAVEAT.md
+ M contracts/verification/docs/FV_SURFACE_MAP.md
+ M contracts/verification/docs/HW_ASSUMPTIONS.json
+ M contracts/verification/docs/KONTROL_SCOPING.md
+ M contracts/verification/docs/PINNED_CODEHASHES.md
+ M contracts/verification/docs/REVIEW_PROVENANCE.md
+ M contracts/verification/docs/THE_CLAIM.md
+ M contracts/verification/extraction_registry.json
+ M contracts/verification/lean/README.md
+ M contracts/verification/lean/SphincsCVerify/Bridge/EntryPoint.lean
+ M contracts/verification/lean/SphincsCVerify/Bridge/Refinement.lean
+ M contracts/verification/lean/SphincsCVerify/Spec/Theorems.lean
+ M contracts/verification/lean/scripts/dump_axiom_types.lean
+ M contracts/verification/lean/scripts/dump_axioms.lean
+ M contracts/verification/lean/scripts/proof_mutations.json
+ M contracts/verification/scripts/check_c10_transcription.py
+ M contracts/verification/scripts/check_extraction_freshness.py
+ M contracts/verification/scripts/check_hw_assumptions.py
+ M contracts/verification/scripts/check_ledger_consistency.py
+ M contracts/verification/scripts/known_true_axioms.txt
+ M contracts/verification/scripts/lint_fv_invariants.sh
+ M contracts/verification/tla/README.md
+ M contracts/verification/tla/run.sh
+ M contracts/verification/tla/run_combined.sh
+ M contracts/verification/tla/run_pin.sh
+ M contracts/verity/Makefile
+ M contracts/verity/PQSigner/Verifier/Top.lean
+ M contracts/verity/TRUST_ASSUMPTIONS.md
+ M docs/STATUS.md
+ M docs/security/adversarial-review/findings/README.md
+ M docs/security/production-security.md
+ M docs/tooling-and-systems.md
+ M fuzz/Cargo.lock
+ M fuzz/Cargo.toml
+ M fuzz/README.md
+ M fuzz/tests/parser_smoke.rs
+ M fwsign/src/main.rs
+ M fwsign/src/subcommands/inspect.rs
+ M fwsign/src/subcommands/sign.rs
+ M pqsigner-erc7730/src/abi.rs
+ M pqsigner-fi/src/lib.rs
+ M reports/tests/secure-optiga.md
+ M scripts/check_gate_enforcement.py
+ M scripts/check_kani_mutations.py
+ M scripts/check_protocol_models.py
+ M scripts/gate_enforcement.json
+ M scripts/kani_census.lock.json
+ M scripts/kani_census.py
+ M scripts/kani_mutations.json
+ M scripts/test_kani_census.py
+ M secure/data/erc7730/curations/manifest.json
+ M secure/src/hw/consumption_mask.rs
+ M secure/src/hw_io_under_test/mod.rs
+ M secure/src/hw_platform_under_test/pure_tests.rs
+ M secure/src/optiga_under_test/mod.rs
+ M secure/src/secure_crypto_glue_under_test/pure_tests.rs
+ M secure/src/secure_element.rs
+ M secure/src/tx/eip712/cowswap/test_vectors.rs
+ M tx/tests/common/mod.rs
+?? 2026-07-21-183319-this-session-is-being-continued-from-a-previous-c.txt
+?? 2026-07-21-230737-this-session-is-being-continued-from-a-previous-c.txt
+?? PQ1-Security-Research-Complete-Context.md
+?? aa/tests/offchain_header_frames.rs
+?? contracts/verification/crux/ns_ptr_diversity/Cargo.lock
+?? contracts/verification/scripts/lint_extracted_axiom_census.sh
+?? contracts/verification/tla/cfg_pins.sha256
+?? contracts/verification/verus/Cargo.lock
+?? dbgen/tests/display_projection_uniqueness.rs
+?? docs/security/adversarial-review/findings/fv-2026-09-14/
+?? docs/security/adversarial-review/findings/fv-adversarial-review-2026-09-14.md
+?? fuzz/corpus/optiga_response_parse/
+?? fuzz/fuzz_targets/optiga_response_parse.rs
+?? fuzz/src/
+?? fwsign/tests/cli_devtools.rs
+?? fwsign/tests/cli_keygen_pubkey.rs
+?? fwsign/tests/cli_release_lifecycle.rs
+?? fwsign/tests/cli_sign_refusals.rs
+?? fwsign/tests/cli_verify.rs
+?? fwsign/tests/cli_verify_artifact_keys.rs
+?? fwsign/tests/cli_verify_release.rs
+?? fwsign/tests/common/
+?? kimi-debug-session_-20260717-170027.zip
+?? kimi-export-session_-20260724-094028.md
+?? reports/tests/secure-lockout-wipe-fi.md
+?? scripts/check_fi_ir.sh
+?? secure-miri-tests/
+?? secure/src/optiga_under_test/prl_peer.rs
+?? secure/src/optiga_under_test/prl_tests.rs
+?? secure/src/secure_lockout_wipe_fi_pure_tests.rs
+?? tools/bench/
+?? tools/ob-configurator/Cargo.lock
+?? tx/tests/negative_cowswap_order.rs
+?? tx/tests/negative_multisend.rs
+?? tx/tests/negative_safe_tx.rs
+?? tx/tests/negative_typed_call_abi.rs
+?? tx/tests/negative_typed_call_parser.rs
+?? tx/tests/positive_cowswap_order.rs
+?? tx/tests/positive_multisend.rs
+?? tx/tests/positive_safe_tx.rs
+?? tx/tests/positive_typed_call_abi.rs
+?? tx/tests/positive_typed_call_parser.rs

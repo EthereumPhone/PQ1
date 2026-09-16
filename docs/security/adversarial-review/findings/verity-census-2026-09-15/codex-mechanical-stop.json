@@ -1,0 +1,5 @@
+{
+  "pid": 669010,
+  "reason": "All 8 completed source commands failed before execution with nested Bubblewrap namespace error; stop mechanically unavailable leg before one permitted retry.",
+  "clock_boottime": 90958.772756265
+}

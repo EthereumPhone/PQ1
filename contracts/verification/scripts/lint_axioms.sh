@@ -37,6 +37,9 @@ unset LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH
 LAKE="${FV_HOME}/.elan/bin/lake"
 FV_PYTHON3="/usr/bin/python3 -E -S"
 
+# The placeholder allowlist is not an axiom inventory. Enforce both.
+${FV_PYTHON3} "${SCRIPT_DIR}/check_axiom_inventory.py" lean || exit 1
+
 err() {
   printf 'lint_axioms.sh: %s\n' "$*" >&2
 }

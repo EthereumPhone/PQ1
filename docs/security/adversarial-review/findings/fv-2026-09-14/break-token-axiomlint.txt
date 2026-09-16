@@ -1,0 +1,7 @@
+==> [lint_axioms] dumping axiom types from elaborated SphincsCVerify
+==> [lint_axioms] scanning source for True-typed theorem + axiom placeholders
+
+==> [lint_axioms] PASS
+    True-typed axioms (allowlisted):       0
+    Trivial theorem placeholders (allowed): 0
+    See contracts/verification/docs/AXIOM_STATUS.json for discharge plan.

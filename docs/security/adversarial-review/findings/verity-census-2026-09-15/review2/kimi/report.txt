@@ -1,0 +1,19 @@
+VERDICT: GO
+
+TARGET: 6096de0b6620a55a52da98298d155620dc5d51db / 47b7c15cc76d12eb474ceef69520d08867822575
+
+FINDINGS: none
+
+GAPS: Did not execute `test-census` (unittest suite) end-to-end or recompute the 15 axiom type-sha256 pins from first principles; those rest on the independently reproduced green census plus source reading of the negative controls.
+
+Notes behind the verdict (within the five focus points):
+
+1. **Fresh build / replay / census** — `check_verity_inventory.py:101-131` snapshots source bytes, builds all 8 Part B modules in a tempdir with the absolute pinned toolchain path (`~/.elan/toolchains/leanprover--lean4---v4.22.0/bin/lean`, githash-verified at line 114), a fully replaced env (PATH/HOME/LEAN_PATH/LANG only — no ELAN_TOOLCHAIN, LD_*, or inherited LEAN_PATH), per-command CPU/output limits, and a post-run re-read of both the target tree (line 198) and the collector/replay scripts (line 129). I reproduced `make -C contracts/verity verify-verity-census` green on this host in 13.8s with the exact claimed numbers (8 modules, 213 declarations, 208 kernel-rechecked, 15 axioms, 2 project axioms, 1 admitted, 5 quarantined).
+
+2. **Replay rejection** — vendored replay sends every non-unsafe/non-partial candidate through `Kernel.Environment.addDeclCore` (`VerityCensusReplay.lean:64-67,163-176`), with ctor/recursor identity checks against kernel-generated metadata (135-151); partials are skipped there but exact-list-pinned in Python (`check_verity_inventory.py:170-171`), and any unsafe project declaration fails at line 171. Stdlib-override guard compares full `ConstantInfo` equality before replay (`dump_verity_inventory.lean:21-42`). The unchecked-`False` negative control (`test_verity_inventory.py:88-105`) asserts the specific kernel type-mismatch rejection.
+
+3. **Exact pins** — axiom census is set-equality on name/module/levels/unsafe/partial/type-sha256 (`check_verity_inventory.py:163-165`); the admitted `yul_swap_selector_in_known_set` is pinned by name, type hash, and body hash (181-185), and transitive dependents of `sorryAx` fail via per-declaration closure gating (176-180). New/private/generated/admit-keywordless holes each have a failing control.
+
+4. **Quarantine** — exact source-coverage set with symlink rejection (50-78); I independently recomputed all five Part A sha256 values and they match `assurance_inventory.json` byte-for-byte, including `PQSmartWalletFactory.lean` carrying the CREATE2 axiom; the raw hole ratchet independently passes (12 = 11 Part A + 1 Merkle). `TRUST_ASSUMPTIONS.md` states the Part-A-unverified boundary and the CREATE2 assumption accurately.
+
+5. **Toolchain/CI/claims** — `verity-fv.yml` is per-PR blocking with path triggers matching the new `gate_enforcement.json` entry (`verify-verity-census`, `per_pr_blocking`), pinned checkout SHA, hash-pinned elan installer, pinned toolchain, read-only permissions, 20-minute timeout. Cache independence is structural (tempdir build; `.lake` excluded from coverage).

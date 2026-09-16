@@ -7,10 +7,11 @@
 > refactor its bridge axioms carry real propositional content (A1 and
 > the A3.x axioms are opaque-equality shapes equating the
 > deployed-bytecode symbols to the Lean model; A4 is a content-bearing
-> opaque-predicate marker), but the trust base still rests on cited-TCB
-> axioms — notably A2 (`entrypoint_honest`), which states a property of
-> the Lean `Bridge.EntryPoint.handleOp` model rather than the deployed
-> EntryPoint v0.6. The proof in its present form is
+> opaque-predicate marker), and the former A2 (`entrypoint_honest`) is
+> since 2026-08-20 a **proved kernel-only theorem** — it follows from
+> the `handleOp` definition alone, so the trust base no longer carries
+> it as an axiom (what remains cited is the `handleOp` model's
+> faithfulness to the deployed EntryPoint v0.6). The proof in its present form is
 > a model-level sanity check, not yet a mathematical guarantee about
 > the deployed bytecode. See
 > [`../docs/AXIOM_STATUS.json`](../docs/AXIOM_STATUS.json) for the
@@ -52,7 +53,7 @@ SphincsCVerify/
 │   └── Invariants.lean     -- I-1 through I-8
 ├── Bridge/
 │   ├── SolidityVerifier.lean -- Yul-level model of SPHINCsC10Asm
-│   ├── EntryPoint.lean       -- EntryPoint v0.6 contract model (axiom A2)
+│   ├── EntryPoint.lean       -- EntryPoint v0.6 contract model (A2, proved theorem since 2026-08-20)
 │   └── Refinement.lean       -- Lean ↔ Solidity ↔ EVM bridge (axioms A1, A3, A4)
 ├── Crypto/
 │   ├── Assumptions.lean   -- SHA-256 SM-TCR / ITSR / ROM axioms
@@ -87,11 +88,12 @@ the audit script fails on any uncovered occurrence.
 The single headline theorem `SphincsCVerify.Spec.Theorems.theft_free`
 is kernel-checked, and its dependency closure matches the documented
 set. **But** the link to the deployed contracts still rests on
-cited-TCB axioms rather than in-kernel discharge: one "MISLEADING"
-axiom (A2, about a Lean fiction, not the deployed contract), plus the
+cited-TCB axioms rather than in-kernel discharge: the
 bridge axioms (A1/A3.x/A4 — content-bearing, discharged against pinned
 bytecode or cited as Ethereum TCB) and the cited EUF-CMA crypto layer
-(A5). So the theorem reads:
+(A5). (The former "MISLEADING" A2 about the Lean `handleOp` fiction was
+proved kernel-only and demoted to a theorem on 2026-08-20 — no longer
+part of the trust base.) So the theorem reads:
 
 > *Under the Lean state-transition model of EntryPoint v0.6 + the Lean
 > model of PQSmartWallet + Solidity-selectors-modelled-as-placeholders
@@ -143,11 +145,13 @@ Plus the cryptographic content:
 * `Crypto.SM_DT_TCR_F`, `Crypto.ITSR_F`, `Crypto.hMsg_random_oracle` —
   `True`-typed shape preconditions.
 
-And the EntryPoint v0.6 axiom:
+And the EntryPoint v0.6 premise (PROVED 2026-08-20, no longer an axiom):
 
-* `Bridge.EntryPoint.entrypoint_honest` — real propositional content,
-  but states a property of the **Lean** `handleOp` function, not the
-  deployed EntryPoint v0.6 contract at
+* `Bridge.EntryPoint.entrypoint_honest` — now a kernel-checked
+  **theorem** over the **Lean** `handleOp` model (its conclusion follows
+  from `handleOp`'s own definition; closure = the kernel triple). The
+  cited-TCB content that remains is the faithfulness of `handleOp` to
+  the deployed EntryPoint v0.6 contract at
   `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789`.
 
 Plus the Lean kernel built-ins (`propext`, `Classical.choice`,
@@ -179,6 +183,7 @@ A5 citation, plus the universal Ethereum TCB items A1/A4.
 
 * Firmware-secret-key secrecy (out of scope — separate effort).
 * Gas / DoS / griefing bounds.
-* EntryPoint v0.6 contract correctness (assumed via A2).
+* EntryPoint v0.6 contract correctness (the `handleOp` model's
+  faithfulness is cited-TCB; the in-model A2 premise is a proved theorem).
 * `solc` / EVM / SHA-256 precompile correctness (assumed via A1, A3, A4).
 * Side-channel security of firmware signing.

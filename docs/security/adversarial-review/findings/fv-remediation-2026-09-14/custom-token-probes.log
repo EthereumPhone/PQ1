@@ -1,0 +1,40 @@
+lean axiom 0 0 0 1
+lean axiom 1 0 0 1
+lean axiom 2 0 0 1
+lean axiom 3 0 0 1
+lean axiom 4 0 0 1
+lean axiom 5 0 0 1
+lean hole 0 0 0 1
+lean hole 1 0 0 1
+lean hole 2 0 0 1
+lean hole 3 0 0 1
+extracted axiom 0 0 0 1
+extracted axiom 1 0 0 1
+extracted axiom 2 0 0 1
+extracted axiom 3 0 0 1
+extracted axiom 4 0 0 1
+extracted axiom 5 0 0 1
+extracted hole 0 0 0 1
+extracted hole 1 0 0 1
+extracted hole 2 0 0 1
+extracted hole 3 0 0 1
+custom-before-axiom-0 0
+custom-before-axiom-1 0
+custom-before-axiom-2 0
+custom-before-axiom-3 0
+custom-before-axiom-4 0
+custom-before-axiom-5 0
+custom-before-hole-0 0
+custom-before-hole-1 0
+custom-before-hole-2 0
+custom-before-hole-3 0
+custom-after-axiom-0 1
+custom-after-axiom-1 1
+custom-after-axiom-2 1
+custom-after-axiom-3 1
+custom-after-axiom-4 1
+custom-after-axiom-5 1
+custom-after-hole-0 2
+custom-after-hole-1 2
+custom-after-hole-2 2
+custom-after-hole-3 2

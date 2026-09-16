@@ -1,0 +1,5 @@
+VERDICT: FIX
+TARGET: 6096de0b6620a55a52da98298d155620dc5d51db / 47b7c15cc76d12eb474ceef69520d08867822575
+FINDINGS:
+- HIGH contracts/verification/scripts/dump_verity_inventory.lean:35 — importing all roots into one environment coalesces same-name declarations before replay/census; Lean 4.22 permits a theorem to subsume a same-name/type axiom, so adding an axiom duplicate of `Merkle.auth_path_depth_eq_SUBTREE_H` to sibling `Wots.lean` leaves only the theorem in the aggregate map while `Wots.olean` exports an unlisted axiom, and the raw-hole gate ignores `axiom`; inspect each module’s own private `ModuleData`, reject cross-module duplicate names, census their union, and add this negative control.
+GAPS: Fresh `make ci` could not run because the reviewer sandbox denied temporary-directory creation before Lean started; source inspection and the supplied green evidence were used.

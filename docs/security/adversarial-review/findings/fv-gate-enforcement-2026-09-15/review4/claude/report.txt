@@ -1,0 +1,10 @@
+VERDICT: FIX
+TARGET: 9200e83d199dfa6a43423de67cbd0cc33326a693 / 38ceabb2dff6ce00b115c900d91222834c2b642b
+FINDINGS:
+- HIGH scripts/check_gate_enforcement.py:525 — The `branches-ignore` check misses some patterns that exclude `master`, which breaks requirement 7 (`master` coverage must hold for both allow and ignore lists).
+  - **Mechanism:** the check uses `fnmatch.fnmatchcase`, and there `**/master` needs a real `/`, so it never matches `master`. On GitHub, `**/` also matches zero directories. The checker's own `_covers` treats it that way: its test asserts `**/Cargo.toml` covers `Cargo.toml`.
+  - **Why nothing else catches it:** `**/master` and `**/**` pass the branch-name check at :504 (`[A-Za-z0-9_./*-]+`). No other rule rejects them.
+  - **Consequence:** a workflow edit adding `pull_request.branches-ignore: ['**/master']` would stop per-PR gates firing on PRs into master, and the checker would still report green.
+  - **Evidence:** I copied the checker inputs to a temp directory and added `branches-ignore: ['**/master']` to `pull_request` in both `ci.yml` and `lean-fv.yml`. `python3 scripts/check_gate_enforcement.py` exited 0 with all 37 blocking gates `[ok]` and "OK: all 65 gates…". Calling `_per_pr_trigger_failures` directly accepted `['**/master']` and `['**/**']`, and rejected `['*']` and `['**']`, for both `miri` and `verify-ledger-consistency`. `test_branch_filter_grammar_is_bounded` has no slash or `**/` case.
+  - **Smallest fix:** remove `/` from the allowed branch-pattern characters at :504. Every live branch filter is the literal `[master]`, so nothing breaks. Alternatively, also match with `**/` treated as optional before calling `fnmatch`. Either way, add `**/master` to the `branches-ignore` cases in `test_branch_filter_grammar_is_bounded`.
+GAPS: I read GitHub's `**/` zero-directory behaviour from the checker's own `_covers` model and did not re-check it against GitHub; I did not run `make verify-gate-enforcement` or the unittest suite myself.

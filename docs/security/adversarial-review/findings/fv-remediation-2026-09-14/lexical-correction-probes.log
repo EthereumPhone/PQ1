@@ -1,0 +1,40 @@
+lean leading-parser axiom 0 1 0
+lean leading-parser admit 0 1 0
+lean refine-apostrophe axiom 0 1 0
+lean refine-apostrophe admit 0 1 0
+lean interpolation-space axiom 0 1 0
+lean interpolation-space admit 0 1 0
+lean interpolation-comment axiom 0 1 0
+lean interpolation-comment admit 0 1 0
+lean interpolation-newline axiom 0 1 0
+lean interpolation-newline admit 0 1 0
+lean trace-interpolation axiom 0 1 0
+lean trace-interpolation admit 0 1 0
+extracted leading-parser axiom 0 1 0
+extracted leading-parser admit 0 1 0
+extracted refine-apostrophe axiom 0 1 0
+extracted refine-apostrophe admit 0 1 0
+extracted interpolation-space axiom 0 1 0
+extracted interpolation-space admit 0 1 0
+extracted interpolation-comment axiom 0 1 0
+extracted interpolation-comment admit 0 1 0
+extracted interpolation-newline axiom 0 1 0
+extracted interpolation-newline admit 0 1 0
+extracted trace-interpolation axiom 0 1 0
+extracted trace-interpolation admit 0 1 0
+lexical-before-extracted-leading-parser 0
+lexical-before-verity-leading-parser 0
+lexical-before-extracted-refine-apostrophe 0
+lexical-before-verity-refine-apostrophe 0
+lexical-before-extracted-interpolation-comment 0
+lexical-before-verity-interpolation-comment 0
+lexical-before-extracted-trace-interpolation 0
+lexical-before-verity-trace-interpolation 0
+lexical-after-extracted-leading-parser 1
+lexical-after-verity-leading-parser 2
+lexical-after-extracted-refine-apostrophe 1
+lexical-after-verity-refine-apostrophe 2
+lexical-after-extracted-interpolation-comment 1
+lexical-after-verity-interpolation-comment 2
+lexical-after-extracted-trace-interpolation 1
+lexical-after-verity-trace-interpolation 2

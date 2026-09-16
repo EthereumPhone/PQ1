@@ -1,0 +1,14 @@
+All checks green. Working tree matches the target tree id and is clean; the diff touches exactly the three stated files.
+
+Review summary (source-first):
+
+**1. Scanner (`lean_source.py`)** — The rewrite replaces single-parse guessing with an NFA over (position, mode-stack) that forks *both* interpretations at every ambiguity point: each `"` in code spawns ordinary + interpolated string states (`lean_source.py:78-81`); `r"`/`'` keep the code fall-through alongside the raw/char literal reading (`:84-100`). Retention is union-based via a difference array — text is erased only when *every* live interpretation treats it as comment; a keyword cannot be hidden by a wrong string guess. Unterminated comment/string/quoted-identifier and ambiguity overflow (`MAX_STATES`/`MAX_STACK`) raise `ValueError` — fail closed, never silent. I traced the elaboration-verified traps live (`leading_parser"\" -- "`, `refine'"'`, `s!"{ "--" }"` variants): each retains the trailing `axiom`/`sorry` exactly once via the string/escape path even though the raw/char path mis-erases it. The `keyword_count` raw-source shortcut is sound: blanking only inserts spaces, and any post-comment keyword is preceded by `/` or newline (non-word), so a raw match is necessary for a post-scan match.
+
+**2. Source inventory (`check_axiom_inventory.py:50-58`)** — Coverage unchanged: `os.walk` over the whole root tree counts unimported/unbuilt modules (test asserts `CensusProbe.lean` detected). The quarantine shortcut is sound: `AxiomCheckNegativeControl` is a single identifier token — no comment/whitespace can occur inside it, and the quoted form `«AxiomCheckNegativeControl»` still contains the raw substring, so any reference-forming file trips the full lex. Verified both real-tree inventories byte-match the pinned manifests. Elaborated inventory, closure checks, and Makefile wiring untouched.
+
+**3. Verity `ci`** — `ci: build` + `check_verity_holes.py` (`contracts/verity/Makefile:60-62`); baseline still `{Theorems.lean: 11, Merkle.lean: 1}`, default 0, walk covers unbuilt scaffold; new tests plant each lexical trap with both `sorry` and `admit` and require rejection. Unit suite: 5/5 pass in 12s. Diff is confined to the three files; manifests, default/heavy split, and other gates untouched; no budget increase.
+
+VERDICT: GO
+TARGET: 98446edc2b37cc5874f54cfe1091264ddc44eb3f / 01e56934a227bf3969e35c46b3e7b6f19fd5c39e
+FINDINGS: none
+GAPS: did not re-run lake-build-dependent gates (elaborated inventory, Verity `ci` build, closure controls); verified scanner semantics, source-inventory/manifest equality on both real trees, quarantine short-circuit soundness, and the 5-test regression suite locally.

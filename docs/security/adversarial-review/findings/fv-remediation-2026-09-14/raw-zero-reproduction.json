@@ -1,0 +1,30 @@
+[
+  {
+    "project": "lean",
+    "source": "def a := r\"\\\" def b := \"--\" axiom X : False\n#print axioms X\n",
+    "count": 0,
+    "lean_status": 0,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "source": "def a := r\"\\\" def b := \"--\" axiom X : False\n#print axioms X\n",
+    "count": 0,
+    "lean_status": 0,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "source": "def a := r\"\\\" def b := \"--\" theorem X : False := by admit\n#print axioms X\n",
+    "count": 0,
+    "lean_status": 0,
+    "output": "<stdin>:1:36: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "source": "def a := r\"\\\" def b := \"--\" theorem X : False := by admit\n#print axioms X\n",
+    "count": 0,
+    "lean_status": 0,
+    "output": "<stdin>:1:36: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  }
+]

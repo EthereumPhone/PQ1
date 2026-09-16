@@ -1,0 +1,48 @@
+name: Verity assurance census
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'contracts/verity/**'
+      - 'contracts/verification/scripts/**'
+      - '.github/workflows/verity-fv.yml'
+      - 'scripts/gate_enforcement.json'
+  pull_request:
+    paths:
+      - 'contracts/verity/**'
+      - 'contracts/verification/scripts/**'
+      - '.github/workflows/verity-fv.yml'
+      - 'scripts/gate_enforcement.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verity-fv-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Lean toolchain
+        run: |
+          set -euo pipefail
+          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
+          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
+            -o elan-init.sh
+          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          rm -f elan-init.sh
+          "$HOME/.elan/bin/elan" toolchain install leanprover/lean4:v4.22.0
+      - name: Fresh semantic census and source quarantine
+        run: make -C contracts/verity verify-verity-census
+      - name: Executable census regression controls
+        run: make -C contracts/verity test-census

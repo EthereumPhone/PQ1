@@ -1,0 +1,244 @@
+[
+  {
+    "label": "custom-before-axiom-0",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-axiom-1",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-axiom-2",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-axiom-3",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-axiom-4",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-axiom-5",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-hole-0",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-hole-1",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-hole-2",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-before-hole-3",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "custom-after-axiom-0",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-axiom-1",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-axiom-2",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-axiom-3",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-axiom-4",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-axiom-5",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-hole-0",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-hole-1",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-hole-2",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  },
+  {
+    "label": "custom-after-hole-3",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": "nonzero",
+    "implementation": "raw mentions, no exceptions"
+  }
+]

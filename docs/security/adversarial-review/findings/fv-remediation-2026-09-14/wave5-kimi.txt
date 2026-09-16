@@ -1,0 +1,11 @@
+All checks complete. Verification performed source-first against the live tree:
+
+1. **Raw counting**: `lean_source.py` is now `re.finditer(words, source)` with zero comment/boundary/literal handling — no erasure path exists. All prior callers (`check_axiom_inventory.py:28`, `check_verity_holes.py:7`, tests) import only `keyword_count`; no remaining `without_comments` references repo-wide.
+2. **Pins**: I recomputed `source_inventory` for both projects from the live tree — both match the pinned JSONs exactly (lean: 26 modules, extracted: 39, sha256+counts). The `elaborated` sections are byte-identical between 1fb54105 and b616e22d (27 rows each). Quarantine rejection at `check_axiom_inventory.py:54` now fires on any raw `AxiomCheckNegativeControl` mention outside the control module; grep confirms no such mention in scanned trees.
+3. **Verity**: live raw census of `contracts/verity/PQSigner` = exactly `{Theorems.lean: 11, Merkle.lean: 1}`, total 12, zero elsewhere; `BASELINE` unchanged at `check_verity_holes.py:10`. The six rewordings across three Lean files are doc-comment prose only — the sole keyword-looking diff line is removed prose (`"by sorry"` in a comment); no statement/body touched, no new hole substrings introduced.
+4. **Structure**: `ci: build` split preserved (`contracts/verity/Makefile:61`); verification Makefile gates untouched; counter is a fixed-pattern linear scan; inventory compare is fail-closed with no auto-update path. The removed MAX_STATES/MAX_STACK budget guarded the deleted ambiguity scanner, which no longer exists by design.
+
+VERDICT: GO
+TARGET: b616e22d11ef0aa3689bc574a96fe24b7d63cca7 / ef385c4516afcc67429bb71ee124a9c767b153b0
+FINDINGS: none
+GAPS: none

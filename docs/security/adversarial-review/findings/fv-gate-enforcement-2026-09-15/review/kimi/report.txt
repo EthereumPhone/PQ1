@@ -1,0 +1,18 @@
+VERDICT: GO
+TARGET: 711080e35f13ef7d764d377eba7951be5c51d3ec / 9d224a17e50da55d26e3723d5794b7b08d220854
+FINDINGS: none
+GAPS: none
+
+Verification summary (all checks reproduced independently, read-only):
+
+1. **Registration policy (claim 1)** — `ENFORCEMENT_POLICY` (scripts/check_gate_enforcement.py:81) pins exactly 64 identities; I verified programmatically it equals the manifest's id→enforcement map (27 per-PR, 10 nightly, 27 local). Deletion, duplicate id, demotion, and `_completeness_waived != {}` each hit `POLICY:` failures in `registration_failures` (scripts/check_gate_enforcement.py:860) before any gate runs; duplicate JSON keys fail closed at load. The new unittest suite (scripts/test_gate_enforcement.py) exercises all four classes per-gate.
+
+2. **Blocking-step contract (claim 2)** — all 37 blocking gates carry `required_context` with a complete parsed step, uniform `job_absent` = {container, continue-on-error, defaults, env, if, needs, strategy}, `job_equals` runner pin, and workflow env/defaults comparison (`workflow_context`, non-empty for invisible-unicode). I confirmed outside the checker that every pinned step occurs verbatim in its live workflow. Printed/skipped/masked/similarly-named commands fail via exact step-dict equality plus the new line-wise, quote-aware comment-stripped invocation match with lookbehind/lookahead target-name boundaries (`miri` ≠ `miri-heavy`); `||`, statically-false `if:`, coe and dispatch gating are flagged on both tiers. Prod expected-failure wrappers (`prod-check-ship`, `prod-erc7730-provenance-check`) retain their exact `if output="$(make …)"` pinned text.
+
+3. **Enforcement coverage (claim 3)** — nightly→schedule and per-PR→PR-trigger consistency verified for all 37; path-coverage logic (`_per_pr_trigger_failures`) unchanged; ledger authoritative-context self-tests intact (log: "exact authoritative ledger runner/step/context suppression controls verified").
+
+4. **Added registrations (claim 4)** — 31 added (30 + the separately-called-out verify-easycrypt-pins, matching the claim's phrasing); all 27 local-only gates resolve to real Makefile targets; easycrypt gate polices `easycrypt/**` + its script + lean-fv.yml, whose push/PR paths now include that surface; `make -C contracts/verification verify-easycrypt-pins` ran green in 6.7s (negative control + dry-run ledger, no proof compilation); `actionlint .github/workflows/lean-fv.yml` clean.
+
+5. **Executable controls (claim 5)** — `make verify-gate-enforcement` exit 0: self-test (10 per-PR + 4 nightly suppression controls), 10 unittest groups, and the live 64-gate check; the checker's own ci.yml step is pinned and mutation-tested; Kani/extraction reverse checks preserved (all three reverse gaps caught in self-test).
+
+Fail-direction audit: the naive `||` substring test and per-line quote tracking can only over-flag (false FAIL), never under-flag; blocking-gate acceptance is anchored on exact step equality, so the context-free text scan (used only for local-gate metadata hygiene, of which none currently declare `runs_in`) cannot be abused for demotion.

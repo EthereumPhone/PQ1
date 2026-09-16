@@ -1,0 +1,4 @@
+/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verity/PQSigner/AdmitRegression.lean:1:8: warning: declaration uses 'sorry'
+info: pqsigner-verity: no previous manifest, creating one from scratch
+info: verity: checking out revision 'caac8a6831cdda8f7d09035cd92c8dcc84cf6e51'
+info: toolchain not updated; already up-to-date

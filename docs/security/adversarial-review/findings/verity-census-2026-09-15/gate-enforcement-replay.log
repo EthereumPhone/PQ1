@@ -1,0 +1,38 @@
+=== verify-gate-enforcement (33 gates) ===
+    G1: does each soundness gate actually RUN on the diff it polices?
+
+    [ok]   classical-crypto-boundary  per-PR blocking, no-path-filter
+    [ok]   verify-ledger-consistency  per-PR blocking, paths cover policed surface
+    [ok]   verify-fv-lints            per-PR blocking, paths cover policed surface
+    [ok]   verify-audit               per-PR blocking, paths cover policed surface
+    [ok]   verify-storage-mutators    per-PR blocking, paths cover policed surface
+    [ok]   verify-proof-mutation      nightly, paths cover policed surface
+    [ok]   miri                       per-PR blocking, no-path-filter
+    [ok]   kani                       nightly, paths cover policed surface
+    [ok]   verify-kani-mutation       nightly, paths cover policed surface
+    [ok]   verify-protocol-models     nightly, paths cover policed surface
+    [ok]   verify-repro               nightly, paths cover policed surface
+    [note] checkct                    local-only (not CI-gated): the `checkct` job is workflow_dispatch-only + continue-on-error (WIP): the opam-
+    [ok]   verify-transcription       per-PR blocking, paths cover policed surface
+    [ok]   verify-extracted           per-PR blocking, paths cover policed surface
+    [ok]   verify-extract-differential nightly, paths cover policed surface
+    [ok]   verify-extraction-freshness per-PR blocking, paths cover policed surface
+    [note] verify-extraction-regen    local-only (not CI-gated): F1 (2026-07-16): the REAL regen check — re-runs charon->aeneas + diff for every 
+    [note] verify-lean4checker        local-only (not CI-gated): Independent kernel/environment replay (~40-60 min per sweep; manual pre-release 
+    [ok]   verify-spec-vendored-fidelity nightly, paths cover policed surface
+    [note] verify-extracted-heavy     local-only (not CI-gated): FormatDecimalSpec kernel type-checking needs about 42 GB RSS. It is deliberately
+    [note] verify-bytecode            local-only (not CI-gated): the Halmos+z3 symbolic discharge of A3.2/A3.3/A3.4 needs the patched halmos tool
+    [ok]   verify-kani-census         per-PR blocking, no-path-filter
+    [note] verify-easycrypt           local-only (not CI-gated): F5 (2026-07-16) enrolls the EasyCrypt +C port gate — previously the ONLY formal-
+    [note] verify-three-claims        local-only (not CI-gated): a LOCAL end-to-end convenience bundle (kernel + audit + lints + forge + Halmos/C
+    [ok]   verify-hw-assumptions      per-PR blocking, no-path-filter
+    [note] verify-mmio-addresses      local-only (not CI-gated): diffs the hand-transcribed MMIO bases against ST's own CMSIS stm32u585xx.h, whic
+    [ok]   prod-check-ship            per-PR blocking, no-path-filter
+    [ok]   verify-rollback-freeze-pin per-PR blocking, no-path-filter
+    [ok]   prod-erc7730-provenance-check per-PR blocking, no-path-filter
+    [ok]   e2e                        per-PR blocking, no-path-filter
+    [ok]   invisible-unicode          per-PR blocking, paths cover policed surface
+    [note] kani-heavy                 local-only (not CI-gated): The three 100-byte-symbolic multiSend harnesses (per_record_page_bound 12.71 GiB
+    [ok]   verify-verity-census       per-PR blocking, paths cover policed surface
+
+OK: all 33 gates fire on the surface they police (or are documented local-only).

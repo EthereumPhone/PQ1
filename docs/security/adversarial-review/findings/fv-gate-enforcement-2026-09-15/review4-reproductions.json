@@ -1,0 +1,42 @@
+[
+  {
+    "case": "malformed PR payload",
+    "value": false,
+    "checker_exit": 0,
+    "actionlint_exit": 1
+  },
+  {
+    "case": "malformed PR payload",
+    "value": true,
+    "checker_exit": 0,
+    "actionlint_exit": 1
+  },
+  {
+    "case": "malformed PR payload",
+    "value": [],
+    "checker_exit": 0,
+    "actionlint_exit": 1
+  },
+  {
+    "case": "malformed PR payload",
+    "value": [
+      "opened"
+    ],
+    "checker_exit": 0,
+    "actionlint_exit": 1
+  },
+  {
+    "case": "unmodelled zero-directory branch globstar",
+    "pattern": "**/master",
+    "checker_exit": 0,
+    "actionlint_exit": 0,
+    "semantic_boundary": "GitHub filter reference documents zero-directory **/ patterns; branch applicability inferred from shared filter grammar, no hosted trigger experiment"
+  },
+  {
+    "case": "unmodelled zero-directory branch globstar",
+    "pattern": "**/**",
+    "checker_exit": 0,
+    "actionlint_exit": 0,
+    "semantic_boundary": "GitHub filter reference documents zero-directory **/ patterns; branch applicability inferred from shared filter grammar, no hosted trigger experiment"
+  }
+]

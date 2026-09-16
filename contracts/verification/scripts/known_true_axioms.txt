@@ -19,12 +19,15 @@
 #     faithfully delivers every emitted CALL's (target,value,data);
 #     KEVM / consensus-client conformance is the cited external
 #     discharge). It is still a cited universal-Ethereum TCB axiom and
-#     still in `theft_free`'s 11-name closure, but it is no longer a
+#     still in `theft_free`'s 10-name closure (11-name before A2's
+#     demotion), but it is no longer a
 #     `True`-typed placeholder, so it must NOT be on this allowlist.
-#   - A2 (`entrypoint_honest`) — `_Shape`-typed (Prop carries content
-#     about the Lean `handleOp` fiction) but the user explicitly opted
-#     to keep this as-is rather than discharge against deployed
-#     EntryPoint v0.6 bytecode.
+#   - A2 (`entrypoint_honest`) — DEMOTED 2026-08-20: found PROVABLE
+#     kernel-only from the `handleOp` definition (the failure arm never
+#     moves the balance, so a decrease forces the success arm). It is
+#     now a `theorem` in Bridge/EntryPoint.lean with closure
+#     {propext, Classical.choice, Quot.sound} — no longer an axiom at
+#     all, so it appears in NO `#print axioms` closure and no allowlist.
 #   - The three crypto-shape axioms (SM_DT_TCR_F, ITSR_F,
 #     hMsg_random_oracle) — REMOVED from this allowlist 2026-06-26 (P15):
 #     they were upgraded 2026-06-14 from `: True` / `∀_, True` placeholders

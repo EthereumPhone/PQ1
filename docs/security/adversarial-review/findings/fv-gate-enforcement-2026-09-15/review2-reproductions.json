@@ -1,0 +1,27 @@
+[
+  {
+    "case": "Miri child-file PR exclusion",
+    "ignore": "secure/src/nsc/mod.rs",
+    "per_gate_failures": [],
+    "checker_exit": 1,
+    "actionlint_exit": 0,
+    "diagnostics": [
+      "  - prod-check-ship: ci.yml `pull_request.paths-ignore` EXCLUDES policed `secure/src/nsc/mod.rs` (the F1 class \u2014 a push touching only that surface is skipped).",
+      "  - prod-erc7730-provenance-check: ci.yml `pull_request.paths-ignore` EXCLUDES policed `secure/src/nsc/mod.rs` (the F1 class \u2014 a push touching only that surface is skipped)."
+    ]
+  },
+  {
+    "case": "Miri child-file PR exclusion",
+    "ignore": "secure/src/nsc/ns_ptr.rs",
+    "per_gate_failures": [],
+    "checker_exit": 0,
+    "actionlint_exit": 0,
+    "diagnostics": []
+  },
+  {
+    "case": "EasyCrypt model surface removed from manifest and triggers",
+    "checker_exit": 0,
+    "actionlint_exit": 0,
+    "diagnostic": "    [ok]   verify-easycrypt-pins      per-PR blocking, paths cover policed surface"
+  }
+]

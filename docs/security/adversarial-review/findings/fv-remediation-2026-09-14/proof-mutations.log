@@ -1,0 +1,22 @@
+=== verify-proof-mutation (tier=default, 8 mutations) ===
+    proof-side cargo-mutants: delete/weaken a claim, expect the build to react.
+    Each mutation rebuilds the full library (~1-5 min) then reverts.
+
+--> canary                       (SphincsCVerify/Spec/Theorems.lean)  expect=build_fails
+    [ok ] outcome=build_fails expect=build_fails  (0s)
+--> A3.1-load-bearing            (SphincsCVerify/Bridge/Refinement.lean)  expect=build_fails
+    [ok ] outcome=build_fails expect=build_fails  (0s)
+--> A2-load-bearing              (SphincsCVerify/Bridge/EntryPoint.lean)  expect=build_fails
+    [ok ] outcome=build_fails expect=build_fails  (1s)
+--> A5-EUFCMA-load-bearing       (SphincsCVerify/Crypto/EUFCMA.lean)  expect=build_fails
+    [ok ] outcome=build_fails expect=build_fails  (0s)
+--> P1-reachable-load-bearing    (SphincsCVerify/Wallet/Invariants.lean)  expect=build_fails
+    [ok ] outcome=build_fails expect=build_fails  (2s)
+--> A4-marker-closure-drop       (SphincsCVerify/Spec/Theorems.lean)  expect=build_passes
+    [ok ] outcome=build_passes expect=build_passes [closure dropped to exactly 9 as advertised]  (10s)
+--> A1-marker-closure-drop       (SphincsCVerify/Spec/Theorems.lean)  expect=build_passes
+    [ok ] outcome=build_passes expect=build_passes [closure dropped to exactly 9 as advertised]  (9s)
+--> A3.4-non-load-bearing        (SphincsCVerify/Bridge/Refinement.lean)  expect=build_passes
+    [ok ] outcome=build_passes expect=build_passes  (6s)
+
+OK: all 8 mutations behaved as advertised (load-bearing claims break on deletion; markers/zero-consumers stay green with the exact closure drop).

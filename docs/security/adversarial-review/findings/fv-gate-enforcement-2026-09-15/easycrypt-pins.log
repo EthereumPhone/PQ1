@@ -1,0 +1,16 @@
+make: Entering directory '/tmp/pq-fv-gates-20260915-u0_8a4pb/target/contracts/verification'
+=== check_easycrypt --self-test (negative control for the semantic axiom pin) ===
+  ok: clean copy MATCHES the pin (not always-firing)
+  ok: dmkey_ll:false weakening CAUGHT by the semantic pin (count still 7)
+  ok: delete-good_pos+add-benign (count preserved) CAUGHT by the semantic pin
+
+=== self-test PASS ===
+=== verify-easycrypt (mode: dry) ===
+
+[pins] comment-stripped admit/axiom sweep + semantic axiom pin
+  axioms: 8 (matches count ledger)
+  admits: pinned to 2 orphaned file(s)
+  semantic axiom pin: exact (name -> statement) set matches axiom_pins.txt
+
+=== PINS OK (dry-run; proofs NOT compiled) ===
+make: Leaving directory '/tmp/pq-fv-gates-20260915-u0_8a4pb/target/contracts/verification'

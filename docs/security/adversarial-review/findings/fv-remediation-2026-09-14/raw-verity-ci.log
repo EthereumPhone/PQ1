@@ -1,0 +1,8 @@
+make: Entering directory '/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verity'
+lake build
+⚠ [6/10] Replayed PQSigner.Verifier.Merkle
+warning: PQSigner/Verifier/Merkle.lean:130:8: declaration uses 'sorry'
+✔ [9/10] Built PQSigner.Verifier.Top
+Build completed successfully.
+PASS: Verity sorry/admit ratchet (12 accounted holes, baseline 12)
+make: Leaving directory '/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verity'

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
+# Historical drafts only. Current split: make verify-easycrypt-split[-pins].
 # verify-easycrypt -- compile the SPHINCS+C EasyCrypt port and assert its ledger.
 #
 # WHY THIS EXISTS
@@ -41,10 +42,9 @@
 #      does. Both axiom-bearing files (FORS_C10.ec, STCR_C.ec) are stdlib-only, so
 #      this runs toolchain-free in --dry-run.
 #
-# NOT RUN IN CI. It needs an opam switch with EasyCrypt r2026.02 + Alt-Ergo 2.6.0
-# (see ../easycrypt/PROVENANCE.md). Treat it like `verify-kontrol`: a local /
-# nightly gate. `--dry-run` checks the pins (counts + semantics) without a
-# toolchain. Enrolled in scripts/gate_enforcement.json as `local_documented`.
+# Compilation remains local: it needs the pinned EasyCrypt/prover setup
+# (see ../easycrypt/PROVENANCE.md). The toolchain-free --self-test and --dry-run
+# pin checks ARE run per PR by verify-easycrypt-pins in lean-fv.yml (#664).
 #
 # TOOLCHAIN CAVEAT (verified 2026-07-10). The STDLIB-ONLY +C chain compiles as a
 # target with Alt-Ergo 2.6.0 ALONE. The MM45-CHAIN drafts `require import
@@ -245,6 +245,8 @@ echo "[compile] every .ec as a TARGET (require does NOT re-verify)"
 find "$DRAFTS" -name '*.eco' -delete 2>/dev/null
 skipped=0
 compiled=0
+require_tmp=$(mktemp -d) || exit 1
+trap 'rm -rf "$require_tmp"' EXIT
 for f in "$DRAFTS"/*.ec; do
   b="$(basename "$f")"
   bn="${b%.ec}"
@@ -259,7 +261,17 @@ for f in "$DRAFTS"/*.ec; do
     timeout 1800 easycrypt compile "${INC[@]}" "$f" >/dev/null 2>&1
   fi
   rc=$?
-  if [ "$rc" != 0 ]; then bad "$b does not compile (exit $rc)"; else note "ok  $b"; compiled=$(( compiled + 1 )); fi
+  if [ "$rc" != 0 ]; then
+    bad "$b does not compile (exit $rc)"
+  else
+    # compile alone accepts EOF inside an unfinished proof on r2026.02.
+    printf 'require import %s.\n' "$bn" > "$require_tmp/RequireProbe.ec"
+    if timeout 1800 bash "$EC_SH" compile -no-eco "${INC[@]}" "$require_tmp/RequireProbe.ec" >/dev/null 2>&1; then
+      note "ok  $b (compiled and required)"; compiled=$(( compiled + 1 ))
+    else
+      bad "$b cannot be required (possibly an unfinished proof at EOF)"
+    fi
+  fi
 done
 find "$DRAFTS" -name '*.eco' -delete 2>/dev/null
 [ "$skipped" != 0 ] && note "SKIPPED $skipped MM45-chain file(s) -- need z3 4.13.x / prebuilt SPHINCS_PLUS.eco (see header); NOT verified here"

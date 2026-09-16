@@ -1,0 +1,280 @@
+{
+  "base": "ebb590d0ffd2b84b2b07939c85fd31af8e0b8412",
+  "created_at": "2026-09-15T13:48:11.734313+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "d81396a668eb76fbddb49a2a5841f1b5d7af96b4c1f6500ced92f2c988f5bcd4",
+      "version": "2.1.272 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    },
+    "kimi": {
+      "path": "/home/nicola/.kimi-code/bin/kimi",
+      "sha256": "e1d5003ae182200ecc3c0631aba7e7eaeba1601a0cf690770aa0184b59227bb7",
+      "version": "0.40.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/tmp/pq-verity-census-20260915-ld01keqz/target",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.000931,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-5.6-sol",
+      "status": "passed"
+    },
+    "kimi": {
+      "authentication": "provider_configured",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "max",
+      "requested_model": "kimi-code/k3",
+      "resolved_model": "k3",
+      "resolved_provider": "managed:kimi-code",
+      "status": "passed",
+      "supported_efforts": [
+        "low",
+        "high",
+        "max"
+      ]
+    }
+  },
+  "prompt_source": {
+    "path": "/tmp/pq-verity-census-20260915-ld01keqz/review3-prompt.txt",
+    "sha256": "1583ad6c84eb98210c674a3306c580c47e32326b305afb0e91e20b412c7eb17d"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 2995,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 406.775,
+      "ended_at": "2026-09-15T13:45:54.723891+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "1583ad6c84eb98210c674a3306c580c47e32326b305afb0e91e20b412c7eb17d",
+        "report_sha256": "5137778730497310a365441940215d7beec7c3c5b8e900defb3c2444e98d79df",
+        "runtime_sha256": "00340130e009c0daab7e6807e9a63481393a1198b879684d17653baff4dfc68b",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/tmp/pq-verity-census-20260915-ld01keqz/review3/claude",
+        "prompt": "/tmp/pq-verity-census-20260915-ld01keqz/review3/claude/prompt.txt",
+        "report": "/tmp/pq-verity-census-20260915-ld01keqz/review3/claude/report.txt",
+        "stderr": "/tmp/pq-verity-census-20260915-ld01keqz/review3/claude/stderr.txt"
+      },
+      "report_words": 58,
+      "started_at": "2026-09-15T13:39:07.948423+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 31940,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "-o",
+        "/tmp/pq-verity-census-20260915-ld01keqz/review3/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 61.45,
+      "ended_at": "2026-09-15T13:40:09.397763+00:00",
+      "environment_overrides": {},
+      "exit_code": -15,
+      "extraction_error": "Codex did not create report.txt",
+      "hashes": {
+        "prompt_sha256": "1583ad6c84eb98210c674a3306c580c47e32326b305afb0e91e20b412c7eb17d",
+        "report_sha256": null,
+        "runtime_sha256": "04c52dff8de65b77f00124b21c5dad384c7d2eefbe94a5d5d0257c211ba3f315",
+        "stderr_sha256": "2564b4566663e53fb706273af5a14f922324d4704032409f820bd33c537987b4"
+      },
+      "paths": {
+        "directory": "/tmp/pq-verity-census-20260915-ld01keqz/review3/codex",
+        "prompt": "/tmp/pq-verity-census-20260915-ld01keqz/review3/codex/prompt.txt",
+        "report": "/tmp/pq-verity-census-20260915-ld01keqz/review3/codex/report.txt",
+        "stderr": "/tmp/pq-verity-census-20260915-ld01keqz/review3/codex/stderr.txt"
+      },
+      "report_words": null,
+      "started_at": "2026-09-15T13:39:07.947874+00:00",
+      "status": "failed"
+    },
+    "kimi": {
+      "artifact_bytes": 102649,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--",
+        "/home/nicola/.kimi-code/bin/kimi",
+        "--model",
+        "kimi-code/k3",
+        "--output-format",
+        "stream-json",
+        "--prompt",
+        "<PROMPT_FROM_REVIEWER_DIR>"
+      ],
+      "duration_seconds": 543.565,
+      "ended_at": "2026-09-15T13:48:11.513371+00:00",
+      "environment_overrides": {
+        "KIMI_MODEL_THINKING_EFFORT": "max"
+      },
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "1583ad6c84eb98210c674a3306c580c47e32326b305afb0e91e20b412c7eb17d",
+        "report_sha256": "b84817c3bd14f27705ab7b9361f229d3848d3a216d5393b5a92fc7c38b9cff09",
+        "runtime_sha256": "1699e2d03f084e867f242ff3404aaf4790359cef1143d2b813107b8ff57e9c4c",
+        "stderr_sha256": "f4e523b77b287415e5ded0ebf9a120a0594e3323cb5b28bca93615de63598e41"
+      },
+      "paths": {
+        "directory": "/tmp/pq-verity-census-20260915-ld01keqz/review3/kimi",
+        "prompt": "/tmp/pq-verity-census-20260915-ld01keqz/review3/kimi/prompt.txt",
+        "report": "/tmp/pq-verity-census-20260915-ld01keqz/review3/kimi/report.txt",
+        "stderr": "/tmp/pq-verity-census-20260915-ld01keqz/review3/kimi/stderr.txt"
+      },
+      "report_words": 330,
+      "started_at": "2026-09-15T13:39:07.948802+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "Verity assurance census",
+  "target": {
+    "commit_after": "fdabe5eb9b953706681b1276eba3d3c48db12c2e",
+    "commit_before": "fdabe5eb9b953706681b1276eba3d3c48db12c2e",
+    "drift": false,
+    "path": "/tmp/pq-verity-census-20260915-ld01keqz/target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "839e6bf8d646c34048ff90b1c5211c8b68ad764e",
+    "tree_before": "839e6bf8d646c34048ff90b1c5211c8b68ad764e"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.272 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      },
+      "kimi": {
+        "expected": "0.31.1",
+        "observed": "0.40.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0",
+      "kimi": "0.31.1"
+    }
+  },
+  "wave_started_at": "2026-09-15T13:39:07.947815+00:00"
+}

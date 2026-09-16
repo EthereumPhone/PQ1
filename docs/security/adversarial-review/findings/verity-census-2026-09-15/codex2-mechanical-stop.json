@@ -1,0 +1,5 @@
+{
+  "pid": 708274,
+  "reason": "Both completed source commands failed before execution with nested Bubblewrap namespace errors; stop before one documented mechanical retry.",
+  "clock_boottime": 92706.428214062
+}

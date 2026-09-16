@@ -1,0 +1,162 @@
+{
+  "identity": {
+    "target": "/tmp/pq-fv-fixes-20260914-iddnxo7n/raw-target",
+    "commit": "b616e22d11ef0aa3689bc574a96fe24b7d63cca7",
+    "tree": "ef385c4516afcc67429bb71ee124a9c767b153b0",
+    "base": "1fb541057aa0244e8a6ce526de6e35fd16de0b2a",
+    "original_base": "aab89656690cf4b15a543b21e58a3ad4f918ec16",
+    "paths": [
+      "contracts/verification/Makefile",
+      "contracts/verification/docs/ASSURANCE_CASE.md",
+      "contracts/verification/docs/TRUST_ASSUMPTIONS.md",
+      "contracts/verification/scripts/axiom_inventory_extracted.json",
+      "contracts/verification/scripts/axiom_inventory_lean.json",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "contracts/verification/scripts/check_proof_mutations.py",
+      "contracts/verification/scripts/check_verity_holes.py",
+      "contracts/verification/scripts/dump_axiom_inventory.lean",
+      "contracts/verification/scripts/lean_source.py",
+      "contracts/verification/scripts/lint_axioms.sh",
+      "contracts/verification/scripts/lint_extracted_axiom_census.sh",
+      "contracts/verification/scripts/lint_fv_invariants.sh",
+      "contracts/verification/scripts/test_axiom_inventory.py",
+      "contracts/verification/tla/check_tlc.py",
+      "contracts/verification/tla/run.sh",
+      "contracts/verification/tla/run_combined.sh",
+      "contracts/verification/tla/run_pin.sh",
+      "contracts/verity/Makefile",
+      "contracts/verity/PQSigner/Theorems.lean",
+      "contracts/verity/PQSigner/Verifier/Hypertree.lean",
+      "contracts/verity/PQSigner/Verifier/Top.lean",
+      "scripts/check_protocol_models.py"
+    ],
+    "correction_paths": [
+      "contracts/verification/scripts/lean_source.py",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "contracts/verification/scripts/test_axiom_inventory.py",
+      "contracts/verification/scripts/axiom_inventory_lean.json",
+      "contracts/verification/scripts/axiom_inventory_extracted.json",
+      "contracts/verification/scripts/check_verity_holes.py",
+      "contracts/verity/Makefile",
+      "contracts/verity/PQSigner/Theorems.lean",
+      "contracts/verity/PQSigner/Verifier/Top.lean",
+      "contracts/verity/PQSigner/Verifier/Hypertree.lean"
+    ],
+    "stage": "implementation",
+    "surface": "FV evidence acceptance"
+  },
+  "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+  "reviewers": [
+    {
+      "reviewer": "sol-initial-gap",
+      "verdict": "GAP",
+      "launcher_status": "completed",
+      "seconds_including_suspend": 19.032,
+      "utc_elapsed_seconds": 19.032018,
+      "started_at": "2026-09-15T10:32:33.988394+00:00",
+      "ended_at": "2026-09-15T10:32:53.020412+00:00",
+      "words": 27,
+      "hashes": {
+        "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+        "report_sha256": "bdd64c350780c8c34175ce4c0a62c60c78f9b83c3a088ed160b8cc47365b7b03",
+        "runtime_sha256": "c27f51fc2e43ee0249dab8af52d34ad484cefc1350b780022e4bb2c2ae3852f8",
+        "stderr_sha256": "c97851fa617b6fb8d13a49bdd812574cf9a2e0fa0a5095ccc6c6dc881ecffdb3"
+      },
+      "report": "wave6-sol-initial-gap.txt",
+      "gaps": "GAPS: Source-read command execution failed because the sandbox could not create its required namespace; no source inspection was possible."
+    },
+    {
+      "reviewer": "opus",
+      "verdict": "GO",
+      "launcher_status": "completed",
+      "seconds_including_suspend": 267.024,
+      "utc_elapsed_seconds": 265.657786,
+      "started_at": "2026-09-15T10:32:33.988907+00:00",
+      "ended_at": "2026-09-15T10:36:59.646693+00:00",
+      "words": 591,
+      "hashes": {
+        "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+        "report_sha256": "a7e05592510d02c018ad43a3151c6322a470312f93c519ac47cd1a82061fb9a9",
+        "runtime_sha256": "8b0a18cf7ebfc8bfdbad4252dff54b9f3d5336db0d41e5849fb78484f2e071e7",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "report": "wave6-opus.txt",
+      "gaps": "GAPS: I did not rerun Lean builds, unittest or `make` gates (read-only review); `by stop` (Lean 4.22 `Init/Tactics.lean:1144`) and `mkSorry`-style constructors create holes with no raw substring, but that pre-dates this diff and is outside the stated raw-mention contract."
+    },
+    {
+      "reviewer": "kimi",
+      "verdict": "GO",
+      "launcher_status": "completed",
+      "seconds_including_suspend": 314.286,
+      "utc_elapsed_seconds": 312.919831,
+      "started_at": "2026-09-15T10:32:33.989209+00:00",
+      "ended_at": "2026-09-15T10:37:46.909040+00:00",
+      "words": 281,
+      "hashes": {
+        "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+        "report_sha256": "de861b6cdb3190e2756750a55b6474275232d1e37441cd069c06a3f9cab537b7",
+        "runtime_sha256": "79f38bce1e5b183c9f9df3ccc6526fd62717f4a60e9a4b142b43707fc2b18664",
+        "stderr_sha256": "811065c2f967beb276f5e12f112cf437c98e42890c6177f9a13260cc512e8823"
+      },
+      "report": "wave6-kimi.txt",
+      "gaps": "GAPS: none"
+    },
+    {
+      "reviewer": "sol",
+      "verdict": "GO",
+      "launcher_status": "completed",
+      "seconds_including_suspend": 401.554,
+      "utc_elapsed_seconds": 400.188564,
+      "started_at": "2026-09-15T10:33:17.870693+00:00",
+      "ended_at": "2026-09-15T10:39:58.059257+00:00",
+      "words": 10,
+      "hashes": {
+        "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+        "report_sha256": "4e3ab3e2b593484774fa56889f9756cdfcc4678515462ae5d4a02596f276cc4e",
+        "runtime_sha256": "8740bc1b6607d15a1bd44dc0e146a4340db7857b0a063655d93108ee1985c17f",
+        "stderr_sha256": "db4f25b889ec00b28ae7640a78d930d29d4cac9dee86afd6fa9b35ce32a71620"
+      },
+      "report": "wave6-sol.txt",
+      "gaps": "GAPS: none"
+    }
+  ],
+  "coordinator_status": "SOURCE_REMEDIATION_ACCEPTED",
+  "canonical_matches_frozen_product_files": 23,
+  "owner_inputs_unchanged": 6,
+  "combined_patch_sha256": "5c47d3e7ff0d55dba3eab81b3578b5774f1e1aa4f216deea67141aebb5970c73",
+  "elapsed_clock": "Linux CLOCK_BOOTTIME (includes suspension), independently validated against UTC",
+  "resumption_record": "review6-resumption.json",
+  "previous_interrupted_receipt": "wave5-receipt.json",
+  "gate_receipts": [
+    "raw-gates.json",
+    "final-gates.json",
+    "proof-mutations.log",
+    "negative-probes.json",
+    "lexical-compiler-probes.json",
+    "lexical-gate-probes.json",
+    "comment-compiler-probes.json",
+    "comment-gate-probes.json",
+    "custom-compiler-probes.json",
+    "custom-gate-probes.json"
+  ],
+  "scope": "source implementation acceptance; no merge, hardware or shipment authority",
+  "deferred_playbook_issue": "https://github.com/EthereumPhone/PQ1/issues/509",
+  "accepted_blockers": [],
+  "mandatory_review_gaps": [],
+  "decision": "Eight retained remediation slices implemented. Fresh authorized three-reviewer wave completed within bounds; all GO. Required executable evidence remains valid for unchanged source. No source change after freeze.",
+  "nonblocking_residuals": [
+    {
+      "issue": 673,
+      "note": "Verity census covers the stated raw sorry/admit/sorryAx/proof_wanted forms; it is not a complete elaborated-hole census. Pinned Lean 4.22 Init/Tactics.lean defines stop via repeat sorry, and metaprogrammatic constructors can introduce holes without these raw mentions. This pre-existing research-scaffold limitation is outside the final correction contract; no such new hole is present in the candidate. Broader census work remains open in #673."
+    },
+    {
+      "issue": 673,
+      "note": "Two Makefile source-comment references are stale; editorial follow-up, no gate behavior change."
+    },
+    {
+      "issue": 509,
+      "note": "Broader combined FV playbook assurance remains deferred to an owner-triggered session."
+    }
+  ],
+  "next_step": "Hand off the reviewed local changes; main-worktree changes are uncommitted and issues remain open for landing/broader obligations."
+}

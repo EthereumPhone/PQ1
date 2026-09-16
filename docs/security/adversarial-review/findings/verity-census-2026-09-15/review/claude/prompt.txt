@@ -1,0 +1,22 @@
+You are one independent reviewer in an owner-authorized defensive code review. Do not launch agents or other models.
+Review PQSigner OS for MERGE.
+Target: /tmp/pq-verity-census-20260915-ld01keqz/target
+Commit: 789b8e1ff35110590a0cc5c9177de9869e3464f6
+Tree: 4f07e82949f7a6f5962807736db637727211f011
+Compare: ebb590d0ffd2b84b2b07939c85fd31af8e0b8412..789b8e1ff35110590a0cc5c9177de9869e3464f6
+Focus only on the Verity assurance census (#673):
+1. Fresh, complete Part B compilation and exported-declaration axiom/admission census.
+2. Exact identity/type/body handling for the existing admitted obligation; reject new, private, macro-generated or transitive admissions and changed axiom identities/types.
+3. Exact source coverage and honest quarantine of the five unbuildable Part A files, including their CREATE2 assumption.
+4. Cache independence, pinned toolchain, malformed input and drift fail-closed behavior.
+5. Blocking CI invocation, trigger coverage, executable controls and accurate build/trust claims.
+Evidence already green: make -C contracts/verity ci (fresh 8-module census: 213 declarations, 15 environment axioms, 2 Part B axioms, 1 admitted declaration; 6 raw-regression groups and 9 semantic groups with actual Lean negative controls), gate-enforcement all 33 entries plus self-test, and actionlint for the new workflow.
+Non-goals: discharging existing proof obligations, porting unavailable Verity APIs, firmware/contract behavior, implementation equivalence, hardware or shipment assurance. The installed pinned Lean distribution and reviewed census baseline are trusted.
+Inspect the exact diff and affected callers source-first for concrete security or correctness blockers. Keep the target immutable. Use read-only commands only; focused tests may use temporary output outside the target. No edits to the target, hardware, external writes, prior reports, status prose, playbook catalogs, or follow-up model turns. Ignore style and optional hardening. You have 15 minutes and 800 words.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 789b8e1ff35110590a0cc5c9177de9869e3464f6 / 4f07e82949f7a6f5962807736db637727211f011
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+Use at most three findings. FIX requires a source anchor, mechanism, consequence and falsifiable evidence. If there are no findings, write FINDINGS: none.

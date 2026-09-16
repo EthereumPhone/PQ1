@@ -16,9 +16,11 @@
 #       excluded — they are programs, not proofs.
 #
 #   (b) BreaksHash FIREWALL — no non-comment `¬ BreaksHash`,
-#       `Not BreaksHash`, or `BreaksHash → False`.  Assuming the opaque
-#       SHA-256 hardness-break token false re-detonates the EUF_CMA
-#       inconsistency the 2026-06-14 fix removed.
+#       `Not BreaksHash`, `BreaksHash →/-> ANYTHING` (BreaksHash as an
+#       antecedent, any target), or a `(h : BreaksHash)`-style binder
+#       (2026-08-20 widening, issue #675: previously only `→ False` was
+#       caught).  Assuming the opaque SHA-256 hardness-break token false
+#       re-detonates the EUF_CMA inconsistency the 2026-06-14 fix removed.
 #
 #   (c) GAP-3 CLOSURE TRIPWIRE — runs `lake env lean --run
 #       scripts/dump_axioms.lean` and asserts:
@@ -27,7 +29,8 @@
 #           Gap-3 `True ∨ BreaksHash` tautology mutation, which would drop
 #           that axiom from the closure, fails CI), AND
 #         * `theft_free`'s closure contains exactly the expected named
-#           premises (A1/A2/A3.1/A4/A5 + kernel triple).
+#           premises (A1/A3.1/A4/A5 + kernel triple; A2 proved
+#           kernel-only 2026-08-20, no longer an axiom).
 #
 #   (d) OPAQUE-GUARD — asserts `trivial` / `True.intro` does NOT inhabit
 #       `Bridge.evmDeliversCall (default : Wallet.Execute.Call)` by
@@ -88,6 +91,9 @@ require /usr/bin/python3
 # corpus empty and every escape-hatch/closure grep would pass vacuously
 # (wave-4 Opus 5 HIGH, reviewer-reproduced).  Pin it like the Makefile does.
 FV_PYTHON3="/usr/bin/python3 -E -S"
+
+# F4/#675: reject every undisclosed axiom, even outside headline closures.
+${FV_PYTHON3} "${SCRIPT_DIR}/check_axiom_inventory.py" lean || exit 1
 
 for d in "${LEAN_DIR}" "${EXTRACTED_DIR}"; do
   if [ ! -d "$d" ]; then
@@ -276,10 +282,48 @@ fi
 ###############################################################################
 printf '==> [lint_fv] (b) BreaksHash firewall (no `¬ BreaksHash`)\n'
 
-# Match (comment-stripped):  ¬ BreaksHash | Not BreaksHash | BreaksHash → False
-# Allow whitespace variants around the negation/arrow.
+# Match (comment-stripped):
+#   ¬ BreaksHash | Not BreaksHash                       (negation forms)
+#   BreaksHash (→|->) ANYTHING                          (BreaksHash as an
+#     ANTECEDENT — not only the old `→ False`: any `BreaksHash → X` lets
+#     the EUF-CMA `isForgery → BreaksHash` reduction conclude `X` vacuously)
+#   (h : BreaksHash) / {h : BreaksHash} / [h : BreaksHash]
+#     — a BINDER whose type is exactly the break token (same attack written
+#     as a hypothesis; dotted prefixes like `Crypto.BreaksHash` included).
+# Deliberately NOT matched (legit shipped shapes, verified green on the
+# tree 2026-08-20): the `opaque BreaksHash : Prop` declaration, axioms
+# CONCLUDING `… → BreaksHash` or `… ∨ BreaksHash` (the reduction form),
+# and theorems PROVING `… : BreaksHash := …` from an `isForgery` hyp.
+BREAKSHASH_RE='(¬[[:space:]]*BreaksHash|\bNot[[:space:]]+BreaksHash|\bBreaksHash[[:space:]]*(→|->)|[({[][[:space:]]*[^:]*:[[:space:]]*([A-Za-z0-9_]+\.)*BreaksHash[[:space:]]*[])}])'
 BREAKSHASH_HITS="$(printf '%s\n' "${STRIPPED}" \
-  | { grep -nE '(¬[[:space:]]*BreaksHash|\bNot[[:space:]]+BreaksHash|BreaksHash[[:space:]]*(→|->)[[:space:]]*False)' || true; })"
+  | { grep -nE "${BREAKSHASH_RE}" || true; })"
+
+# Second pass over a declaration-JOINED view, so a line-wrapped signature
+# (`axiom x : BreaksHash` newline `→ False`, or `(h :` newline
+# `BreaksHash)`) cannot evade the line-based patterns. A new declaration
+# starts at a top-level keyword; continuation lines fold into it.
+BREAKSHASH_JOINED="$(printf '%s\n' "${STRIPPED}" | awk '
+  function flush() { if (buf != "") print buf; buf = "" }
+  {
+    line = $0
+    rest = line
+    sub(/^[^:]*:[0-9]*:/, "", rest)
+    if (rest ~ /^[[:space:]]*(@\[|axiom[[:space:]]|theorem[[:space:]]|lemma[[:space:]]|def[[:space:]]|abbrev[[:space:]]|instance[[:space:]]|opaque[[:space:]]|structure[[:space:]]|inductive[[:space:]]|namespace[[:space:]]|end([[:space:]]|$)|open[[:space:]]|section([[:space:]]|$)|import[[:space:]]|#)/) {
+      flush()
+      buf = line
+    } else if (buf != "") {
+      gsub(/^[[:space:]]+/, " ", rest)
+      buf = buf rest
+    } else {
+      print line
+    }
+  }
+  END { flush() }')"
+BREAKSHASH_HITS_ML="$(printf '%s\n' "${BREAKSHASH_JOINED}" \
+  | { grep -nE "${BREAKSHASH_RE}" || true; })"
+if [ -n "${BREAKSHASH_HITS_ML//[[:space:]]/}" ]; then
+  BREAKSHASH_HITS="${BREAKSHASH_HITS}${BREAKSHASH_HITS_ML}"
+fi
 
 if [ -n "${BREAKSHASH_HITS//[[:space:]]/}" ]; then
   err ""
@@ -287,11 +331,12 @@ if [ -n "${BREAKSHASH_HITS//[[:space:]]/}" ]; then
   printf '%s\n' "${BREAKSHASH_HITS}" | sed 's/^/    /' >&2
   err ""
   err "\`BreaksHash\` is the opaque SHA-256 hardness-break token. Assuming it"
-  err "false (¬ BreaksHash / BreaksHash → False) collapses the EUF_CMA"
-  err "reduction back to the inconsistency removed on 2026-06-14. Forbidden."
+  err "false (¬ BreaksHash / BreaksHash → X / a (h : BreaksHash) binder)"
+  err "collapses the EUF_CMA reduction back to the inconsistency removed on"
+  err "2026-06-14. Forbidden."
   OVERALL_EXIT=1
 else
-  printf '    PASS — no `¬ BreaksHash` / `BreaksHash → False` on any source path\n'
+  printf '    PASS — no `¬ BreaksHash` / `BreaksHash → …` / `(h : BreaksHash)` on any source path\n'
 fi
 
 ###############################################################################
@@ -396,6 +441,8 @@ THEFT_LINE="$(printf '%s\n' "${COLLAPSED_DUMP}" \
 
 # Expected named (non-kernel) premises in theft_free's closure. The kernel
 # triple {propext, Classical.choice, Quot.sound} is checked separately.
+# A2 (`entrypoint_honest`) was PROVED kernel-only 2026-08-20 — demoted
+# from axiom to theorem, so it no longer appears in any closure.
 THEFT_EXPECTED=(
   "SphincsCVerify.Bridge.evm_bytecode_executes_correctly"        # A4
   "SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4"          # A1
@@ -404,7 +451,6 @@ THEFT_EXPECTED=(
   "SphincsCVerify.Crypto.ITSR_F"                                 # A5
   "SphincsCVerify.Crypto.SM_DT_TCR_F"                            # A5
   "SphincsCVerify.Crypto.hMsg_random_oracle"                     # A5
-  "SphincsCVerify.Bridge.EntryPoint.entrypoint_honest"           # A2
 )
 THEFT_KERNEL=( "propext" "Classical.choice" "Quot.sound" )
 
@@ -473,7 +519,7 @@ else
       err "add it to THEFT_EXPECTED with a justification; otherwise it is a regression."
       C_EXIT=1
     else
-      printf '    PASS (c.2) — theft_free closure = EXACTLY expected A1/A2/A3.1/A4/A5 + kernel triple (no missing, no extra)\n'
+      printf '    PASS (c.2) — theft_free closure = EXACTLY expected A1/A3.1/A4/A5 + kernel triple (no missing, no extra; A2 proved kernel-only 2026-08-20, no longer an axiom)\n'
     fi
   fi
 fi
@@ -552,8 +598,12 @@ rm -f /tmp/lint_fv_guard.out
 # forbidding EVERYWHERE -- there is no tree in which `axiom X : True` is
 # legitimate.
 #
-# SCOPE, STATED HONESTLY.  This matches the LITERAL `: True` conclusion of an
-# axiom declaration across a wrapped signature, ignoring `--` comments.  It does
+# SCOPE, STATED HONESTLY.  This matches the literal `True` CONCLUSION of an
+# axiom declaration across a wrapped signature, ignoring `--` comments —
+# conclusion taken after the final depth-0 `:`, past the end of the arrow
+# chain, with balanced outer parens stripped, so `: True`, `: (True)`,
+# `: ((True))`, and `: … → True` are all caught (widened 2026-08-20, issue
+# #675; the first three evaded the original suffix match).  It does
 # NOT unfold aliases (`abbrev MyTrue : Prop := True` then `axiom Y : MyTrue`),
 # does NOT catch compound vacuities (`: True /\ True`), and by construction does
 # NOT cover the sibling shape `theorem X : True := trivial`.  It is a cheap
@@ -634,9 +684,43 @@ for path, entries in per_file.items():
                 break
             parts.append(content2)
         decl = re.sub(r'\s+', ' ', ' '.join(x.strip() for x in parts)).strip()
-        # conclusion = text after the final top-level ':'
-        tm = re.search(r':\s*([A-Za-z0-9_.\s]+)$', decl)
-        if tm and tm.group(1).strip() == 'True':
+        # conclusion = text after the final depth-0 ':' (binder colons sit
+        # inside parens/brackets), then past the END of the arrow chain,
+        # with balanced outer parens stripped — so `(True)`, `((True))`,
+        # and `Hyp → True` (an axiom that CONCLUDES True is vacuous
+        # however many hypotheses it carries) are all caught, not just the
+        # literal `: True` suffix (2026-08-20 widening, issue #675).
+        depth = 0
+        last_colon = -1
+        for i, ch in enumerate(decl):
+            if ch in '([{':
+                depth += 1
+            elif ch in ')]}':
+                depth -= 1
+            elif ch == ':' and depth == 0:
+                last_colon = i
+        concl = decl[last_colon + 1:].strip() if last_colon >= 0 else ''
+
+        def _strip_outer_parens(s):
+            while len(s) >= 2 and s[0] == '(' and s[-1] == ')':
+                d = 0
+                wraps = True
+                for i, ch in enumerate(s):
+                    if ch == '(':
+                        d += 1
+                    elif ch == ')':
+                        d -= 1
+                    if d == 0 and i < len(s) - 1:
+                        wraps = False
+                        break
+                if not wraps:
+                    break
+                s = s[1:-1].strip()
+            return s
+
+        concl = _strip_outer_parens(concl)
+        concl = _strip_outer_parens(re.split(r'→|->', concl)[-1].strip())
+        if concl == 'True':
             hits.append('%s:%d: %s' % (path, lineno, decl[:110]))
 
 for h in hits:

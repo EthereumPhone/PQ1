@@ -128,6 +128,63 @@ def generate() -> dict:
     }
 
 
+_FEATURE_REF = re.compile(r'\bfeature\s*=\s*"([^"]+)"')
+
+
+def _harness_cfg_features(source: str, harness: str) -> list[str]:
+    """``feature = "..."`` names from ``#[cfg(...)]`` attributes attached to
+    ``fn <harness>`` (walking up over the contiguous attribute/comment/blank
+    block above each same-named fn, unioned).
+
+    A cfg-gated harness (e.g. ``#[cfg(feature = "kani-heavy")]``) is compiled
+    OUT unless ``cargo kani`` gets a matching ``--features`` flag — without it
+    kani produces no VERIFICATION verdict and the mutation lane dies with a
+    HarnessError (issue #662). Only per-harness ``cfg`` attributes are seen;
+    a gate on an enclosing ``mod`` is not (none exist today).
+    """
+    fn_decl = re.compile(
+        r"^[ \t]*(?:(?:pub(?:\([^)]*\))?)[ \t]+)?"
+        r"(?:unsafe[ \t]+)?(?:async[ \t]+)?fn[ \t]+" + re.escape(harness) + r"\b"
+    )
+    # Normalize complete attributes first, so layout never hides a cfg gate.
+    source = re.sub(r"#\[[^\]]*\]", lambda m: " ".join(m.group().split()), source)
+    lines = source.splitlines()
+    features: list[str] = []
+    for i, line in enumerate(lines):
+        if not fn_decl.match(line):
+            continue
+        j = i - 1
+        while j >= 0:
+            s = lines[j].strip()
+            if not s or s.startswith("//"):
+                j -= 1
+                continue
+            if s.startswith("#["):
+                if re.match(r"#\[cfg(?:_attr)?\b", s) and _FEATURE_REF.search(s):
+                    if not re.fullmatch(r'#\[cfg\(\s*feature\s*=\s*"[^"]+"\s*\)\]', s):
+                        raise ValueError(f"unsupported feature cfg on {harness}: {s}")
+                    features.extend(_FEATURE_REF.findall(s))
+                j -= 1
+                continue
+            break
+    return sorted(set(features))
+
+
+def _z_flag_features(entry: dict) -> list[str]:
+    """Feature names an entry's ``z_flags`` passes via ``--features`` (both the
+    ``["--features", "a,b"]`` and ``["--features=a,b"]`` forms)."""
+    z_flags = entry.get("z_flags", [])
+    feats: list[str] = []
+    if not isinstance(z_flags, list):
+        return feats
+    for k, flag in enumerate(z_flags):
+        if flag == "--features" and k + 1 < len(z_flags):
+            feats.extend(x.strip() for x in str(z_flags[k + 1]).split(","))
+        elif isinstance(flag, str) and flag.startswith("--features="):
+            feats.extend(x.strip() for x in flag.split("=", 1)[1].split(","))
+    return [f for f in feats if f]
+
+
 def manifest_rot(
     census: dict,
     *,
@@ -140,6 +197,14 @@ def manifest_rot(
     its file/harness disappeared, its find string is empty/absent/ambiguous, or
     its replacement is a no-op. Otherwise a dead mutation can remain enrolled
     in the published anti-vacuity count while never changing production code.
+
+    The harness may live in a DIFFERENT file than the mutation target (a shared
+    pure helper mutated where it is defined, pinned by a caller's harness —
+    e.g. ``native_amount_exactness_helper_gate_dropped``); it is only required
+    to exist in SOME git-tracked source. When the harness is cfg-gated
+    (``#[cfg(feature = "...")]``), the entry's ``z_flags`` must enable every
+    gating feature, else the slow lane compiles the harness out and dies with
+    a HarnessError instead of a verdict (issue #662).
 
     ``manifest`` and ``repo_root`` are injectable only for the offline unit
     tests; normal callers read the committed manifest under :data:`REPO_ROOT`.
@@ -164,10 +229,14 @@ def manifest_rot(
         if not path.exists():
             fails.append(f"manifest `{mutation_id}`: file {f} does not exist (deleted/renamed).")
             continue
-        if h not in fh.get(f, []):
+        harness_file = f if h in fh.get(f, []) else next(
+            (hf for hf, hs in fh.items() if h in hs), None
+        )
+        if harness_file is None:
             fails.append(
-                f"manifest `{mutation_id}`: no `#[kani::proof] fn {h}` in {f} "
-                f"(renamed/deleted harness — the mutation would misfire before Kani runs)."
+                f"manifest `{mutation_id}`: no `#[kani::proof] fn {h}` in {f} or any "
+                "other git-tracked source (renamed/deleted harness — the mutation "
+                "would misfire before Kani runs)."
             )
 
         find = m.get("find")
@@ -192,6 +261,33 @@ def manifest_rot(
                 f"manifest `{mutation_id}`: find string occurs {occurrences}x in {f}; "
                 "expected exactly once."
             )
+
+        # cfg-gate feature check (issue #662 class): a harness compiled out for
+        # lack of a `--features` flag yields no VERIFICATION verdict, so the
+        # slow lane dies with a HarnessError. Catch it statically here.
+        if harness_file is not None:
+            hsource = source
+            if harness_file != f:
+                try:
+                    hsource = (repo_root / harness_file).read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                except OSError:
+                    hsource = ""
+            try:
+                required = _harness_cfg_features(hsource, h)
+            except ValueError as exc:
+                fails.append(f"manifest `{mutation_id}`: {exc}")
+                continue
+            missing = [feat for feat in required if feat not in _z_flag_features(m)]
+            if missing:
+                fails.append(
+                    f"manifest `{mutation_id}`: harness {h} is cfg-gated on "
+                    f"feature(s) {required} in {harness_file} but the entry's z_flags "
+                    f"do not enable {missing} — `cargo kani` would compile the harness "
+                    f"OUT (no VERIFICATION verdict, the #662 nightly-lane death). Add "
+                    f'e.g. ["--features", "{missing[0]}"] to the entry\'s z_flags.'
+                )
     return fails
 
 

@@ -1,0 +1,17 @@
+[
+  {
+    "variant": "baseline",
+    "rc": 0,
+    "output": "=== P1.5 combined budget-lifetime composition ===\n  [ok  ] cb_onchain_cap       expect=HOLD      got=HOLD\n  [ok  ] cb_margin_noreset    expect=HOLD      got=HOLD\n  [ok  ] cb_margin_reset      expect=VIOLATED  got=VIOLATED\n\n=== all 3 expected outcomes matched ===\n"
+  },
+  {
+    "variant": "deleted-invariant-control",
+    "rc": 2,
+    "output": "CFG PIN FAILURE \u2014 a .cfg drifted from cfg_pins.sha256, is missing, or is un-pinned:\ncb_onchain_cap.cfg: FAILED\nsha256sum: WARNING: 1 computed checksum did NOT match\nIf the change is deliberate: (cd contracts/verification/tla && sha256sum *.cfg > cfg_pins.sha256)\n"
+  },
+  {
+    "variant": "deleted-invariant-duplicate-pin",
+    "rc": 0,
+    "output": "=== P1.5 combined budget-lifetime composition ===\n  [ok  ] cb_onchain_cap       expect=HOLD      got=HOLD\n  [ok  ] cb_margin_noreset    expect=HOLD      got=HOLD\n  [ok  ] cb_margin_reset      expect=VIOLATED  got=VIOLATED\n\n=== all 3 expected outcomes matched ===\n"
+  }
+]

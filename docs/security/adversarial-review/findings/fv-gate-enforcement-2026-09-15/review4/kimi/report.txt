@@ -1,0 +1,16 @@
+VERDICT: GO
+TARGET: 9200e83d199dfa6a43423de67cbd0cc33326a693 / 38ceabb2dff6ce00b115c900d91222834c2b642b
+FINDINGS: none
+GAPS: none
+
+Verification summary (source-first, all evidence independently reproduced on the immutable tree):
+
+- Registration/level pinning: `registration_failures` (scripts/check_gate_enforcement.py:901) requires exact dict equality with `ENFORCEMENT_POLICY` (65 identities: 27 per_pr_blocking, 10 nightly, 28 local_documented = the "37 blocking"); duplicate JSON keys rejected at load, `_completeness_waived` must be the empty dict (absent key also fails). Unittests exercise deletion of each of 65 rows, demotion of each blocking row, duplication, and waiver injection.
+- Step contract: every non-local gate must carry `required_context`; `invokes_target` (line 330) demands exact parsed-step dict equality plus job_equals/job_absent plus workflow `defaults`/`env` pinning, so printed, commented (`true # make x` — quote-aware comment stripping), `||`-short-circuited, `if:false`, dispatch-gated, containerized, or similarly named (`verify-easycrypt` vs `-pins` via `[A-Za-z0-9_-]` lookarounds) forms all fail. Production expected-failure wrappers (prod-check-ship, prod-erc7730-provenance-check) are pinned verbatim with their `set -euo pipefail` + grep quarantine shells and pass.
+- Triggers: pull_request required with opened/synchronize/reopened superset; push/PR path allowlists must cover policed paths via the conservative `_covers` (literal dir and `dir/*` provably do not cover `dir/**`; tested); nonempty `paths-ignore` rejected outright; branch grammar bounded to `[A-Za-z0-9_./*-]+`; master coverage enforced on both `branches` and `branches-ignore`.
+- Schedules: `SCHEDULE_POLICY` exact-matches nightly.yml `27 4 * * *`, lean-extracted.yml `30 4 * * *` (two daily), erc7730-proxy-drift.yml `43 5 * * 1` (weekly); cadence-mutation tests green.
+- Protocol scope: nightly step pinned to `PROTOCOL_MODELS=proverif,tamarin`; explicit guard fails if the symbolic gate's polices_paths cover the CryptoVerif model; `verify-cryptoverif` local-only wrapper confirmed via `make -n` in the test.
+- EasyCrypt: pins gate is per_pr_blocking in lean-fv.yml with `easycrypt/**` added to both push and PR paths; reverse check requires model dir + check_easycrypt.sh + ec_sweep/ec_axioms + Makefile + workflow. `verify-easycrypt-pins` runs its negative control (dmkey_ll:false weakening and count-preserving delete/add both CAUGHT) then the dry-run ledger — exit 0.
+- Self-enforcement: `verify-gate-enforcement` is itself registered per_pr_blocking in ci.yml with its exact two-line step; `test_checker_checks_its_own_ci_step` proves a `run: true` swap fails. Makefile runs `--self-test`, then `test_gate_enforcement.py`, then the main check.
+
+Reproduced green: `make verify-gate-enforcement` (self-test OK; 17 unittest groups in 74.089s; "OK: all 65 gates"); `make -C contracts/verification verify-easycrypt-pins` (negative controls fire, pins OK, no proof compilation); `actionlint .github/workflows/lean-fv.yml` clean. Diff touches only CI tooling/workflows/manifest/comments/review artifacts — no proof or firmware behavior changes; Kani/extraction protected inventories unchanged and reverse-checked.

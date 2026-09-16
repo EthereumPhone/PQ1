@@ -1,0 +1,259 @@
+make: Entering directory '/tmp/pq-fv-landing-20260915-jt2g76ic/target/contracts/verification'
+⚠ [28/59] Replayed SphincsCVerify.Interpreter.Phases
+warning: SphincsCVerify/Interpreter/Phases.lean:335:5: unused variable `hShapeS`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:336:5: unused variable `hShapeR`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:1237:5: unused variable `hseedw`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3211:5: unused variable `hhtbv`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3294:5: unused variable `hv0dig`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3984:14: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hseedw, hwa, hcn, hcount, hOUT,
+  ̵  ̵ ̵ ̵ite_true, i̵t̵e̵_̵f̵a̵l̵s̵e̵,̵ ̵String.reduceEq]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3984:25: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hseedw, hwa, hcn, hcount, hOUT, ite_true, i̵t̵e̵_̵f̵a̵l̵s̵e̵,̵ ̵S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵]̵i̲t̲e̲_̲f̲a̲l̲s̲e̲]̲
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:4407:57: This simp argument is unused:
+  hOUT
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hd, hwptr, hwa, hN, hO̵U̵T̵,̵ ̵h̵ival, ite_true, ite_false,
+  ̲  ̲ ̲ ̲String.reduceEq]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:4964:29: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, s̵e̵t̵V̵a̵r̵,̵ ̵hseedw, hOUT]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:6120:83: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval,̵ ̵s̵e̵t̵V̵a̵r̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:6158:45: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval,̵ ̵s̵e̵t̵V̵a̵r̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [30/59] Replayed SphincsCVerify.Interpreter.HypertreePhase
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:436:5: unused variable `hpathSize`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:715:17: This simp argument is unused:
+  hwe
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵w̵e̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:775:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:775:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:782:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:782:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:799:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:808:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:814:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:814:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:898:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:906:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:906:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:946:52: This simp argument is unused:
+  hp
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵p̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:955:52: This simp argument is unused:
+  hp
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵p̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [31/59] Replayed SphincsCVerify.Interpreter.C10Refine
+warning: SphincsCVerify/Interpreter/C10Refine.lean:603:45: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_true, hLcn', hLroot, mload32_mstore32_self]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [37/59] Replayed SphincsCVerify.Wallet.Invariants
+warning: SphincsCVerify/Wallet/Invariants.lean:1203:31: This simp argument is unused:
+  if_pos rfl
+
+Hint: Omit it from the simp argument list.
+  simp only [bumpForOwner, i̵f̵_̵p̵o̵s̵ ̵r̵f̵l̵,̵ ̵Storage.bumpBootstrap, hboot]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [42/59] Replayed SphincsCVerify.Spec.SignerPost
+warning: SphincsCVerify/Spec/SignerPost.lean:28:24: This simp argument is unused:
+  hx
+
+Hint: Omit it from the simp argument list.
+  simp [̵h̵x̵]̵ ̵at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Spec/SignerPost.lean:53:24: This simp argument is unused:
+  hx
+
+Hint: Omit it from the simp argument list.
+  simp [̵h̵x̵]̵ ̵at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [47/59] Replayed SphincsCVerify.Verifier.HonestConsistent
+warning: SphincsCVerify/Verifier/HonestConsistent.lean:95:52: This simp argument is unused:
+  Fin.val_mk
+
+Hint: Omit it from the simp argument list.
+  simp only [extractDigits, ofFn_getElem! _ i hi,̵ ̵F̵i̵n̵.̵v̵a̵l̵_̵m̵k̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Build completed successfully.
+=== check_ledger_consistency --self-test (negative control) ===
+  ok: `C1 missing` caught (C1 SphincsCVerify.Spec.Theorems.theft_free: advertised closure != live…)
+  ok: `C1 extra` caught (C1 SphincsCVerify.Spec.Theorems.theft_free: advertised closure != live…)
+  ok: `C3` caught (C3 axiom `Foo.undocumented` appears in the live closure of SphincsCVer…)
+  ok: `C4` caught (C4 ledger axiom A3.1 (`SphincsCVerify.Bridge.solidityVerifier_compiles…)
+  ok: `C5` caught (C5 summary.discharged_bytecode = 99 but actual tally = 1 (the hand-mai…)
+  ok: `C5 unknown status` caught (C5 unknown axioms[].status value(s): ['discharged']; allowed=['cited-t…)
+  ok: `C5 missing summary field` caught (C5 summary is missing required count field(s): ['discharged_bytecode']…)
+  ok: `C6 no-artifact` caught (C6 axiom X marked `discharged-bytecode` but carries no discharge artif…)
+  ok: `C6 unknown status` caught (C6 axiom U (`n`) has unknown status 'discharged'; allowed=['cited-tcb'…)
+  ok: `C6 placeholder` caught (C6 axiom P (`n`) has status `placeholder` — the ledger advertises 0 pl…)
+  ok: `C7 hash` caught (C7 SphincsCVerify.Spec.Theorems.theft_free: statement-hash DRIFT — pin…)
+  ok: `C7 forbidden` caught (C7 SphincsCVerify.Spec.Theorems.theft_free: statement must NOT contain…)
+  ok: `C8` caught (C8 sorryAx present in a tracked closure — a proof is incomplete.…)
+  ok: `C10 verifyYulModel-revert` caught (C10 A3.1 axiom solidityVerifier_compiles_correctly RHS: must be `execC…)
+  ok: `C9 missing` caught (C9 witness `Foo.cap_witness` (for cap) is NOT in the live dump — the h…)
+  ok: `C9 rogue` caught (C9 witness `Foo.cap_witness` closure carries non-kernel axiom(s) ['Som…)
+  ok: `C0 closures deleted` caught (C0 mandatory collection `closures` is EMPTY or ABSENT — a whole eviden…)
+  ok: `C0 flagship closure dropped` caught (C0 mandatory closure `SphincsCVerify.Spec.Theorems.theft_free` absent …)
+  ok: `C0 signature_pins deleted` caught (C0 mandatory collection `signature_pins` is EMPTY or ABSENT — a whole …)
+  ok: `C0 witness_coverage deleted` caught (C0 mandatory collection `witness_coverage` is EMPTY or ABSENT — a whol…)
+  ok: `C0 axioms deleted` caught (C0 mandatory collection `axioms` is EMPTY or ABSENT — a whole evidence…)
+  ok: `C0 claim_corollaries deleted` caught (C0 mandatory collection `claim_corollaries` is EMPTY or ABSENT — a who…)
+  ok: `C0 headline_theorem mutated` caught (C0 headline_theorem = 'X.evil', expected 'SphincsCVerify.Spec.Theorems…)
+  ok: `C0 flagship axiom pruned` caught (C0 mandatory flagship axiom `SphincsCVerify.Crypto.EUF_CMA_SPHINCSplus…)
+  ok: `C11 non-mandatory closure deleted` caught (C11 closures identity drift (17 keys, expected 18) — DELETED SphincsCV…)
+  ok: `C11 unpinned closure added` caught (C11 closures identity drift (19 keys, expected 18) — UNPINNED-NEW X.ev…)
+  ok: `C13 duplicate dump record` caught (duplicate dump record rejected…)
+  ok: `C14 duplicate closures-list axiom` caught (C14 SphincsCVerify.Spec.Theorems.theft_free: duplicate axiom identity …)
+  ok: `C14 duplicate axioms[].id` caught (C14 duplicate `axioms[].id` ['A5'] — each documented axiom must record…)
+  ok: `C14 duplicate axioms[].name` caught (C14 duplicate `axioms[].name` ['X.dup'] — the same logical axiom under…)
+  ok: `C14 duplicate witness` caught (C14 duplicate `witness_coverage[].witness` ['W.one'] — each non-vacuit…)
+  ok: `C14 duplicate claim_corollaries` caught (C14 duplicate `claim_corollaries` ['X.one'] — each claim corollary mus…)
+  ok: `C15 duplicate ledger object key` caught (duplicate ledger object key rejected…)
+  ok: `C16 extra axiom field` caught (C16 exact full-ledger value drift: sha256=4bb01844e8a8392b165e9a49f3c9…)
+  ok: `C16 missing axiom field` caught (C16 exact full-ledger value drift: sha256=c5777c76a81c395b65006de9e8ca…)
+  ok: `C16 fabricated artifact method` caught (C16 exact full-ledger value drift: sha256=3968139ec052664e2e7541ff1a3f…)
+  ok: `C16 null pinned codehash` caught (C16 exact full-ledger value drift: sha256=f84d92897d238c568c3f1a37f2e9…)
+  ok: `C16 swapped axiom ID/name binding` caught (C16 exact full-ledger value drift: sha256=efb8e536683fcb0ab2ccc42f67f2…)
+  ok: `C16 substituted artifact value` caught (C16 exact full-ledger value drift: sha256=85f528a21f469b6d6dca39dbb90e…)
+  ok: `C16 duplicate artifact value` caught (C16 exact full-ledger value drift: sha256=4cc417158e8fec2970a97eb7566a…)
+  ok: `C16 appended claim corollary` caught (C16 exact full-ledger value drift: sha256=0aa87fb080c443dec1030df5fa86…)
+  ok: `C16 substituted witness construct` caught (C16 exact full-ledger value drift: sha256=7ec0aeeb2b0ae0176942db614031…)
+  ok: `C16 substituted assurance headline` caught (C16 exact full-ledger value drift: sha256=f05589caa8fff49cd6052ada37af…)
+  ok: `C16 extra top-level field` caught (C16 exact top-level ledger schema drift: missing=[], extra=['reviewer_…)
+  ok: clean closure produced no failure (not always-firing)
+=== self-test PASS ===
+  ok: the live axiom dump ignores a PATH-planted lake
+  ok: the live axiom dump ignores a planted ELAN_HOME toolchain
+=== verify-ledger-consistency (advertised AXIOM_STATUS.json vs live Lean truth) ===
+  closures tracked: 18 | axioms documented: 16 | signature pins: 5 | witnesses: 5
+  NOTE: live source is `#print axioms` (under-reports in lean v4.22.0); verify-lean4checker is NOT a completeness backstop: it replays the SAME version-matched C++ kernel and cannot see the #8840 omission shape (corrected 2026-08-11; see run_lean4checker.sh:28-33). The allowlist backstop is TRACKED AND NOT IMPLEMENTED.
+
+OK: every advertised closure, exact full-ledger/row/artifact schema and value, count, status/method tally, and headline-statement pin matches the live Lean truth.
+make: Leaving directory '/tmp/pq-fv-landing-20260915-jt2g76ic/target/contracts/verification'
+OK: authoritative verify-ledger-consistency completion receipt matched

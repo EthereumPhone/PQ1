@@ -1,0 +1,2277 @@
+diff --git a/.github/workflows/lean-fv.yml b/.github/workflows/lean-fv.yml
+index db34de9a..6e7127b5 100644
+--- a/.github/workflows/lean-fv.yml
++++ b/.github/workflows/lean-fv.yml
+@@ -134,3 +134,5 @@ jobs:
+         # dmkey_ll:false weakening MUST fire), then the dry-run pin check.
+         # easycrypt/** added to this workflow's paths filter the same day.
+         run: make -C contracts/verification verify-easycrypt-pins
++      - name: verify-easycrypt-split-pins (current vendored split integrity)
++        run: make -C contracts/verification verify-easycrypt-split-pins
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index e0497bf3..ff68549b 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -414,3 +414,32 @@ jobs:
+         run: |
+           eval "$(opam env)"
+           make verify-protocol-models PROTOCOL_MODELS=proverif,tamarin
++
++  easycrypt-split:
++    name: EasyCrypt current split proof replay
++    runs-on: ubuntu-latest
++    timeout-minutes: 240
++    steps:
++      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
++        with:
++          persist-credentials: false
++      # The shared FV Makefile requires the pinned elan shim even for non-Lean gates.
++      - name: install elan (toolchain pinned by lean-toolchain)
++        run: |
++          # Pinned + verified, not `curl | sh` from a moving branch. `master`
++          # is mutable: whoever controls that ref controls the toolchain
++          # installer on every FV runner, which is the trust root the
++          # verification Makefile builds on. Pin the commit, check the bytes,
++          # and only then execute. (#562)
++          set -euo pipefail
++          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
++          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
++          curl --proto '=https' --tlsv1.2 -fsSL \
++            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
++            -o elan-init.sh
++          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
++          sh elan-init.sh -y --default-toolchain none
++          rm -f elan-init.sh
++          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
++      - name: verify-easycrypt-split (pinned toolchain, complete dependency closure)
++        run: make -C contracts/verification verify-easycrypt-split
+diff --git a/Makefile b/Makefile
+index 297a77be..3186260b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4377,7 +4377,7 @@ kani: ## Bounded model-checking on firmware decoders/counters
+ 	@echo "==> Kani: domain recovery parser (deserialize_pin_state)"
+ 	cargo kani -p pqsigner-domain --harness deserialize_pin_state_panic_free
+ 	@echo "==> Kani: ERC-20 calldata decoder (panic-free + transfer no-misdecode)"
+-	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + page-budget classification: per-record page bound + no-hidden-value WYSIWYS + CoW-first precedence [records_pages_total panic-freedom compositional] + accept/reject controls)"
++	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + classification accept/reject controls; three kani-heavy proofs run separately via make kani-heavy)"
+ 	@echo "         + CoW GPv2Order canonical decode (decode-soundness: accept<=>enum-in-range, verbatim field offsets + accept/reject controls)"
+ 	@echo "         + typed-call ABI walker (no-read-past-end soundness + accept/reject controls)"
+ 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
+@@ -4445,6 +4445,7 @@ verify-kani-mutation-heavy: ## anti-vacuity for the cfg(kani-heavy)-gated harnes
+ .PHONY: verify-kani-census
+ verify-kani-census: ## source-generated Kani harness census vs kani_census.lock.json (fast, no Kani toolchain)
+ 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_census.py
++	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_mutations.py
+ 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/kani_census.py --check
+ 
+ miri: ## Miri UB check on host crates
+diff --git a/contracts/verification/Makefile b/contracts/verification/Makefile
+index f46cc7f4..3a66a63a 100644
+--- a/contracts/verification/Makefile
++++ b/contracts/verification/Makefile
+@@ -295,7 +295,7 @@ override _FV_EVIDENCE_TARGETS := \
+ 	verify verify-storage-mutators verify-lean-proto-domain verify-fv-lints \
+ 	verify-ledger-consistency verify-hw-assumptions verify-tla verify-linker-map \
+ 	verify-verus verify-crux-ns-ptr verify-easycrypt verify-easycrypt-full \
+-	verify-easycrypt-pins verify-easycrypt-docker verify-forsc-margin \
++	verify-easycrypt-pins verify-easycrypt-split-pins verify-easycrypt-split verify-easycrypt-docker verify-forsc-margin \
+ 	verify-proof-mutation verify-lean4checker verify-kontrol verify-halmos \
+ 	verify-bulk verify-interp verify-transcription verify-parse-transcription \
+ 	verify-independent-signer verify-primitive-kat verify-cavp verify-build \
+@@ -572,20 +572,20 @@ verify-crux-ns-ptr: ## crux-mir diversity check of ns_ptr_validate vs an indepen
+ # NOT CI-gated: needs an opam switch with EasyCrypt r2026.02 + Alt-Ergo 2.6.0.
+ # `make verify-easycrypt-pins` checks the ledger with no toolchain at all.
+ .PHONY: verify-easycrypt verify-easycrypt-full verify-easycrypt-pins
+-verify-easycrypt: ## EasyCrypt PARTIAL compile (stdlib +C chain; MM45-chain SKIPPED loudly) + pins
++verify-easycrypt: ## HISTORICAL drafts PARTIAL compile (stdlib +C chain; MM45-chain SKIPPED loudly) + pins
+ 	@/usr/bin/bash scripts/check_easycrypt.sh
+ 
+ # F5 (2026-07-16): "full" is now DISTINCT from partial and HONEST — it requires
+ # all 21 .ec compiled with ZERO skips (implies FORCE_MM45=1) and FAILS if the
+ # MM45 reference proofs / toolchain are absent, instead of the old behaviour
+ # where a skipped-11-of-21 run could still print a success banner.
+-verify-easycrypt-full: ## EasyCrypt FULL verification — 21/21, zero skips (needs MM45 toolchain)
++verify-easycrypt-full: ## HISTORICAL drafts FULL verification — 21/21, zero skips (needs MM45 toolchain)
+ 	@/usr/bin/bash scripts/check_easycrypt.sh --full
+ 
+ # F5: ledger (admit/axiom COUNT + SEMANTIC name->statement pin) with NO toolchain,
+ # preceded by the wired-in negative control (a `dmkey_ll : false` weakening and a
+ # delete-one-add-one, both count-preserving, MUST fire the semantic pin).
+-verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolchain) + negative control
++verify-easycrypt-pins: ## HISTORICAL drafts admit/axiom + semantic pin ledger (no toolchain) + negative control
+ 	@/usr/bin/bash scripts/check_easycrypt.sh --self-test
+ 	@/usr/bin/bash scripts/check_easycrypt.sh --dry-run
+ 
+@@ -601,13 +601,11 @@ verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolch
+ C10_PORT_DIR ?= $(HOME)/repos/c10-eufcma-port
+ DOCKER ?= docker
+ .PHONY: verify-easycrypt-docker
+-verify-easycrypt-docker: ## EasyCrypt C10-capstone gate in MM45's r2026.02 docker image (needs C10_PORT_DIR + docker)
++verify-easycrypt-docker: ## HISTORICAL external C10-capstone gate in MM45's r2026.02 docker image (needs C10_PORT_DIR + docker)
+ 	@if ! $(DOCKER) info >/dev/null 2>&1; then \
+-	  echo "SKIP: docker unavailable — the committed receipt (primary evidence) follows:"; echo; \
+-	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
++	  echo "ERROR: docker unavailable; historical receipt is not a new verification"; exit 1; fi
+ 	@if [ ! -d "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC/proofs" ]; then \
+-	  echo "SKIP: MM45 base absent at $(C10_PORT_DIR) (third-party, not vendored) — receipt follows:"; echo; \
+-	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
++	  echo "ERROR: historical MM45 base absent at $(C10_PORT_DIR)"; exit 1; fi
+ 	$(DOCKER) build -t fv-sphincsplus-ec:r2026.02 "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC"
+ 	@B64=$$(base64 -w0 easycrypt/docker/gate-c10-capstone.sh); \
+ 	 $(DOCKER) run --rm -v "$(C10_PORT_DIR)":/work:ro fv-sphincsplus-ec:r2026.02 \
+@@ -2215,3 +2213,13 @@ _extract-slotkdf-impl:
+ 	  && echo "OK: committed slot-kdf extraction matches the current Rust" \
+ 	  || { echo "DRIFT: domain/src/lib.rs slot-KDF path changed — re-extract, re-prove, re-commit"; exit 1; }
+ 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-slotkdf $${EXTRACTION_TMP_ROOT}/skout $${EXTRACTION_TMP_ROOT}/skout/Funs.fixed.lean
++
++# Current vendored split artifact (#670, #683-#686). Fast checks do not run proofs.
++.PHONY: verify-easycrypt-split-pins verify-easycrypt-split
++verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/assumption census and controls
++	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_split_contract.py
++	cd easycrypt/c10-port && $(_FV_PYTHON3) -B tools/split_contract.py
++	cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
++
++verify-easycrypt-split: ## Full current split proof replay in the pinned immutable toolchain image
++	$(_FV_PYTHON3) -B scripts/run_easycrypt_split.py
+diff --git a/contracts/verification/docs/FV_SURFACE_MAP.md b/contracts/verification/docs/FV_SURFACE_MAP.md
+index 6cf02365..94f9d816 100644
+--- a/contracts/verification/docs/FV_SURFACE_MAP.md
++++ b/contracts/verification/docs/FV_SURFACE_MAP.md
+@@ -1,6 +1,6 @@
+ # FV assurance/verification surface map
+ 
+-**Snapshot: 2026-07-23** (reconciled after the 2026-07-19 deep review; previously 2026-07-15). This map owns the current inventory of proof and
++**Snapshot: 2026-07-23; Kani/EasyCrypt rows updated 2026-09-16** (reconciled after the 2026-07-19 deep review; previously 2026-07-15). This map owns the current inventory of proof and
+ proof-adjacent assurance surfaces. It deliberately includes non-formal evidence
+ such as Miri, fuzzing, differential tests, and physical/tool receipts, but labels
+ their evidence tier instead of calling every row formal verification. A green
+@@ -13,18 +13,18 @@ row proves only the property, artifact, and configuration named in that row.
+ | 1 | Lean on-chain safety and SPHINCS+C verifier specification | Kernel-built theorem tree; exact advertised closures for selected headlines; proof mutations; independent `lean4checker` replay of 58 modules | Lean build/audit/lints per FV workflows; mutations partly nightly/local | No new kernel inconsistency found. Theorem intent and exact-closure policy remain distinct: independent kernel replay accepts kernel-valid project axioms unless a separate allowlist rejects them. |
+ | 2 | Solidity/Yul/model/deployed-bytecode correspondence (A3.1/A3.x) | Kernel model→spec interpreter refinement; structural source→AST parse; KAT/mutant differential; Halmos/Kontrol sessions and pinned codehashes | Mixed per-PR and local/manual; consult gate manifest and receipts | Model→spec is universally proved. Exact deployed-bytecode/source/session correspondence and property-specific Kontrol scope remain the boundary; public “transcription-free” wording is broader than the validate-wrapper evidence. |
+ | 3 | Aeneas-extracted Rust | Kernel theorems over committed generated Lean; selected Rust/extracted differentials | Default extracted build in CI; regeneration targets are not comprehensively triggered | **False-green freshness reproduced.** Current Tx-Merkle Rust differs semantically from committed extraction; regeneration fails. A Rust domain-tag mutation passes both extraction gates. The default closure check also accepts an arbitrary new project axiom. |
+-| 4 | Firmware Kani bounded proofs | 173 active `#[kani::proof]` harnesses in 27 files (census-locked by `scripts/kani_census.py` + `kani_census.lock.json`) | Nightly/default tiers plus a curated mutation manifest | 162 harnesses in 21 files reside in mutation-enrolled files; 11 harnesses in six files do not. Default/nightly runs 40/43 mutation groups; three are full-only. NOTE (2026-07-23): GitHub CI evidence remains suspended by the billing outage, so this row is local-run evidence. The three ERC-7730 Phase-D parameter harnesses were individually verified with Kani 0.67.0; **no fresh full Kani campaign is recorded in this tree at this snapshot**. Bounded harnesses are not architecture-wide proofs. |
++| 4 | Firmware Kani bounded proofs | 173 source harnesses in 27 files, locked by `kani_census.py`; 170 are included by default, three are `kani-heavy` only | Per-PR census/runner controls; nightly default mutation tier; local full/heavy tiers | Updated 2026-09-16 (#659/#662/#677/#685): 164 harnesses in 22 mutation-enrolled files, nine in five outside; 39 distinct harnesses have individual mutation entries. 43 groups: 10 quick, 29 default, three full, one heavy. Default selects 39, full 42; heavy selects its one group plus the canary. Mutation credit requires a passing original followed by one fully qualified, exactly selected failing harness. Focused local receipts are not a fresh full Kani campaign or hosted-CI success. |
+ | 5 | Firmware Miri and unsafe-code assurance | Host-reachable Miri checks plus source-level unsafe controls | Per configured host workflows | Host reachability excludes target-only CMSE/MMIO/interrupt/concurrency behavior. Treat as dynamic UB evidence, not formal verification or a whole-target guarantee. |
+ | 6 | ProVerif, Tamarin, and CryptoVerif protocol models | Symbolic/computational model results plus selected reachability witnesses | Mixed nightly/local | FIXED 2026-07-16 (F7): the driver enforces zero exit codes and pins per-query/per-lemma identities; the vendor-derived OPTIGA model is the pinned one (inj-agreement FALSE). Residual: the Kontrol/KEVM leg has no identity baseline (fv-deep-review-2026-07-19 F9). Deployed directionality, conditioned distributions, lifecycle, and code refinement remain explicit interfaces. |
+ | 7 | Constant-time, side-channel, and fault assurance | Selected source/object binary analyses, fault sweeps, and separate physical plans/receipts | Mostly local/manual; configuration-specific | Bind every result to exact symbols/bytes/profile and analyzer semantics. Selected binary CT is not physical leakage resistance; bounded instruction faults are not voltage/clock/EM/laser evidence. |
+ | 8 | Differential and fuzz assurance | Cross-implementation corpora and continuous fuzzing over selected parsers/render paths | Mixed continuous/local | Valuable regression evidence, not a universal proof. Record corpus provenance/coverage and unsupported paths; regenerate from current source where freshness is claimed. |
+-| 9 | EasyCrypt C10 cryptographic reductions | Partial WOTS+C/FORS+C games, combinatorial lemmas, and arithmetic guardrails | Semantic axiom pins + zero-skip full mode; container gate (`verify-easycrypt-docker`, receipt 2026-07-17); enrolled as `local_documented` in the 27-entry gate-enforcement manifest | FIXED 2026-07-16/17 (F5): full mode fails on any skip; axioms pinned by name+type; docker gate compiled the 21-file closure as targets with zero skips. Imported WOTS parameters exclude C10 (`w=8`, `log2_w=3`, `l=43`, no checksum). Adaptive WOTS, concrete FORS/tree/scheme, bounded grinding, and common-adversary composition remain open research. |
++| 9 | EasyCrypt C10 cryptographic reductions | Vendored `easycrypt/c10-port` split model: conditional game reductions and explicit unreduced probability terms | `verify-easycrypt-split-pins` per PR; `verify-easycrypt-split` scheduled in `nightly.yml`, pinned immutable image and complete 45-file dependency replay | Updated 2026-09-16 (#670/#683–#686): 1,077 unique declaration pins, 993 statements; both drivers directly check dependencies, with require and broken-proof controls. One remaining admit is `FORS_C_TreePort.extract_op`. Named-application taint is not a proof of an admit-free headline; implicit SMT/clone dependencies and firmware serialization/bounded-grinding refinement remain outside that check. This is not a numerical security bound. Historical draft/docker targets retain their historical scope. |
+ 
+-`verify-gate-enforcement` checks entries already declared in
+-`scripts/gate_enforcement.json`; it is not a reverse-discovery proof that every
+-proof target, model, script, or surface is enrolled. At this snapshot EasyCrypt
+-is enrolled as `local_documented` (the semantic-pin and docker gates remain
+-host-side; no workflow runs them — fv-deep-review-2026-07-19 F11).
++`verify-gate-enforcement` checks registered target identities, complete invocation
++steps and runner contexts, trigger coverage, and selected reverse-derived source
++surfaces. It does not prove arbitrary shell semantics or hosted CI success. The
++current split has separate fast and full registrations; historical draft pin
++checks remain enrolled separately and do not certify the split.
+ 
+ ## Post-snapshot expansion (added 2026-07-19)
+ 
+diff --git a/contracts/verification/docs/REVIEW_PROVENANCE.md b/contracts/verification/docs/REVIEW_PROVENANCE.md
+index ac617cf5..fdf48d69 100644
+--- a/contracts/verification/docs/REVIEW_PROVENANCE.md
++++ b/contracts/verification/docs/REVIEW_PROVENANCE.md
+@@ -19,6 +19,13 @@ is recorded separately because it has two mutually withheld first passes, two
+ symmetric cross reports, and one coordinator synthesis rather than a single
+ swarm row.
+ 
++### Executing receipts after the 2026-07-15 round
++
++| Round | Date | Surface reviewed | Depth | Findings | Verdict | Doc / commit |
++|---|---|---|---|---|---|---|
++| FV-KANI-ERC7730-PARAMS-2026-08-20 | 2026-08-20 | ERC-7730 Phase-D parameter harnesses in `pqsigner-erc7730/src/render/params.rs`: `params_native_currency_list_canonicality`, `params_interpolated_intent_executable_subset`, `params_nft_collection_path_current_slice` | `executing` | Evidence-hygiene re-run (issue #677): `cargo kani -p pqsigner-erc7730 --harness <name>` per harness, cargo-kani **0.67.0**, HEAD `666e3725` (erc7730 sources byte-identical to `0df6c928`; the tree additionally carries pre-existing uncommitted changes incl. `src/abi.rs`). All three **VERIFICATION:- SUCCESSFUL**. | No defect; the three Phase-D parameter proofs re-execute green at kani 0.67.0. | scripts/kani_mutations.json (the enrolled mutations pin these harnesses) + this row |
++| FV-KANI-MUTATION-REANCHOR-2026-08-20 | 2026-08-20 | Kani mutation-manifest rot remediation (issues #659/#662): `native_amount_exactness_helper_gate_dropped` re-anchored from the dac6fbd5-deleted helper to the shared predicate `amount_is_exact_at_fraction_digits` (`pqsigner-erc7730/src/display/primitives.rs`); `multisend_hidden_value` moved to a non-cumulative local-only `heavy` tier with `["--features", "kani-heavy"]` | `mutation-verified` | Scratch-worktree execution (HEAD `666e3725`, cargo-kani 0.67.0): the manifest's find/replace applied to `primitives.rs` -> `fmt_p0_native_amount_prepublication_decision_concrete` **VERIFICATION:- FAILED** (`assertion failed: !amount_is_exact_at_fraction_digits(&inexact, 18, 6)`); unmutated worktree baseline **SUCCESSFUL**; repo working tree **SUCCESSFUL**; mutation never landed in the repo. The static census (`verify-kani-census`) now fails a cfg-gated harness lacking matching z_flags (stripped-`z_flags` repro fires) and accepts cross-file mutation/harness pairs. `check_kani_mutations.py --list` shows the default and full tiers skip `multisend_hidden_value`; `--tier heavy` lists canary + that entry only. Heavy tier never CI-wired (13.05 GiB peak RSS vs 16 GB runners). | The re-anchored mutation is live (the harness is load-bearing for the exactness decision), the #662 cfg-gated class now dies statically, and the nightly default lane no longer meets the gated harness. | scripts/kani_mutations.json + scripts/kani_census.py + Makefile `verify-kani-mutation-heavy` |
++
+ ### FV-FULL-STACK-2026-07-15
+ 
+ | Artifact | Reviewer / depth | Frozen identity and result | Immutable report |
+diff --git a/contracts/verification/easycrypt/c10-port/cert-identity.tsv b/contracts/verification/easycrypt/c10-port/cert-identity.tsv
+index d8047136..853321e9 100644
+--- a/contracts/verification/easycrypt/c10-port/cert-identity.tsv
++++ b/contracts/verification/easycrypt/c10-port/cert-identity.tsv
+@@ -1101,5 +1101,5 @@
+ #   Updated to the live 242/217/345/389/1193 with a dated note; the superseded
+ #   value stays recoverable in git and in the dated entries below it.
+ # tree	hash
+-split	534572bd7147c4f0cc1227d5c2ccaa6b
++split	df34cee6a883deafc1aef86c89d8c464
+ fork	9c2d21280c84d52c30b22111151f1135
+diff --git a/contracts/verification/easycrypt/c10-port/cert-statements-split.tsv b/contracts/verification/easycrypt/c10-port/cert-statements-split.tsv
+index 412bc9d5..deeef838 100644
+--- a/contracts/verification/easycrypt/c10-port/cert-statements-split.tsv
++++ b/contracts/verification/easycrypt/c10-port/cert-statements-split.tsv
+@@ -1126,7 +1126,6 @@ op:base-c10-split/MerkleTrees.ec::val_ap	cf7c4a3711672f9dbd468806bfa8ba39
+ op:base-c10-split/MerkleTrees.ec::extract_collision_bt_ap	ef99cca109794b5146e340241cedd8ec
+ op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::t	6f21c9bb65d597748aafc25b30458924
+ op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f	ce3471132a5d4e33f61a595edc53b9d1
+-op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f	ce3471132a5d4e33f61a595edc53b9d1
+ op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::dpp	4183bb38825b3dd232f9cf8da2c48705
+ op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::din	f0b2c3d9a80bd64b18825630cbb63dc6
+ op:base-c10-split/TweakableHashFunctions.eca::f	ce3471132a5d4e33f61a595edc53b9d1
+diff --git a/contracts/verification/easycrypt/c10-port/cert-toolchain-split.json b/contracts/verification/easycrypt/c10-port/cert-toolchain-split.json
+new file mode 100644
+index 00000000..5229a1db
+--- /dev/null
++++ b/contracts/verification/easycrypt/c10-port/cert-toolchain-split.json
+@@ -0,0 +1,31 @@
++{
++  "image": "ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3",
++  "easycrypt": "r2026.02",
++  "provers": [
++    "Alt-Ergo@2.4.3",
++    "Alt-Ergo[FPA]@2.4.3",
++    "Alt-Ergo@2.5.4",
++    "Alt-Ergo[FPA]@2.5.4",
++    "Alt-Ergo[counterexamples]@2.5.4",
++    "Alt-Ergo@2.6.0",
++    "Alt-Ergo[BV]@2.6.0",
++    "Alt-Ergo[counterexamples]@2.6.0",
++    "CVC4@1.8.0",
++    "CVC4[counterexamples]@1.8.0",
++    "CVC4[strings]@1.8.0",
++    "CVC4[strings+counterexamples]@1.8.0",
++    "CVC5@1.0.9",
++    "CVC5[counterexamples]@1.0.9",
++    "CVC5[strings]@1.0.9",
++    "CVC5[strings+counterexamples]@1.0.9",
++    "Z3@4.8.17",
++    "Z3[counterexamples]@4.8.17",
++    "Z3[noBV]@4.8.17",
++    "Z3@4.12.6",
++    "Z3[counterexamples]@4.12.6",
++    "Z3[noBV]@4.12.6",
++    "Z3@4.13.4",
++    "Z3[counterexamples]@4.13.4",
++    "Z3[noBV]@4.13.4"
++  ]
++}
+diff --git a/contracts/verification/easycrypt/c10-port/cert_gate_split.sh b/contracts/verification/easycrypt/c10-port/cert_gate_split.sh
+index ca062084..3ace3bb1 100644
+--- a/contracts/verification/easycrypt/c10-port/cert_gate_split.sh
++++ b/contracts/verification/easycrypt/c10-port/cert_gate_split.sh
+@@ -30,10 +30,9 @@ TMPD=$(mktemp -d) || { echo 'FAIL mktemp'; exit 1; }
+ trap 'rm -rf "$TMPD"' EXIT
+ # Expected inventory sizes, COMMITTED. A guard that recomputes its expectation
+ # from the file it is checking cannot detect truncation of that file.
+-EXPECT_PINS=1078
+-# Committed count of top-level statements across the 38 certified roots.  Guards
+-# PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
+-# somebody must say why.  896 measured 2026-08-20.
++EXPECT_PINS=1077
++# Committed count of top-level statements across the complete 45-file cone.
++# PHASE 1h requires an explicit update when this statement set changes.
+ EXPECT_STMTS=993
+ # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
+ # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
+@@ -105,7 +104,7 @@ for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_I
+ # proof, and PHASE 2b/2c only canary two specific behaviours of it.
+ INPUTS_ID=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
+     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
+-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
++  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+ echo "### INPUTS_SHA256 $INPUTS_ID"
+ # AND NOW COMPARE IT.  This line was printed and checked by nothing: an identity
+ # receipt that no run can fail on is decoration.  The expected value lives in
+@@ -122,24 +121,13 @@ elif [ "$INPUTS_ID" != "$want_id" ]; then
+ else
+   echo "OK   INPUTS_SHA256 matches the committed identity"
+ fi
+-echo "### TOOLCHAIN $(easycrypt cli </dev/null 2>&1 | grep -ao 'GIT hash: [^ ]*' | head -1 || echo UNKNOWN)"
+-# PROVER INVENTORY (added 2026-08-02, run 10).  Every `smt()` in the closure is
+-# discharged by whatever provers the local why3 config offers, at whatever
+-# timeout; NOTHING here pins them and the receipt recorded only the EasyCrypt
+-# git hash.  This container answers with 25 prover configurations (Alt-Ergo
+-# 2.4.3/2.5.4/2.6.0, CVC4 1.8, CVC5 1.0.9, Z3 4.8.17/4.12.6/4.13.4).  A third
+-# party with a different set can get a different verdict on the SAME tree.
+-# Direction of the risk is fail-CLOSED FOR A MISSING PROVER -- it loses a goal,
+-# it does not invent one.  That is NOT the same as sound: a DIFFERENT prover
+-# version with a soundness bug does invent one, and this receipt inherits the
+-# prover-soundness assumption the whole artifact already makes (run 12).  So:
+-# a reproducibility receipt, under an unchanged trust assumption.
+-# 2>&1, NOT 2>/dev/null: EasyCrypt prints `known provers:` on STDERR, so the
+-# first version of this line hashed the EMPTY STRING and printed
+-# `e3b0c44298fc1c14 0 configurations` -- the SAME empty-input defect run 8
+-# found in the identity hash, committed again by me two hours later.  A
+-# receipt field must be checked for its VALUE, never for its presence.
+-echo "### PROVERS $(easycrypt config 2>&1 | sed -n 's/^known provers: //p' | head -1 | sha256sum | cut -c1-16) $(easycrypt config 2>&1 | sed -n 's/^known provers: //p' | head -1 | tr ',' '\n' | grep -c .) configurations"
++# The fast per-PR identity check deliberately needs no proof toolchain.
++if [ "${1:-}" = "--identity-only" ]; then exit "$fail"; fi
++[ "$fail" -eq 0 ] || exit 1
++python3 tools/split_contract.py || exit 1
++python3 tools/split_contract.py --toolchain || exit 1
++python3 tools/split_proof_controls.py || exit 1
++python3 tools/split_contract.py --targets > "$TMPD/targets" || exit 1
+ 
+ # PHASE 0 -- INCLUDE-PATH AMBIGUITY.  resolve() in tools/cert_cone.py tries
+ # '.ec' then '.eca' and takes the LAST hit, but EasyCrypt's own preference when
+@@ -193,18 +181,18 @@ echo "### ECO_REMAINING=$left"
+ [ "$left" -eq 0 ] || { echo "FAIL stale .eco survived the purge ($left)"; fail=$((fail+1)); }
+ 
+ echo "### PHASE 1 — TARGETS"
+-for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
+-  if easycrypt compile $ECFLAGS -I $B $B/$n.ec >/dev/null 2>&1; then echo "OK   base/$n"; else echo "FAIL base/$n"; fail=$((fail+1)); fi
+-done
+ n_seen=0
+-while read -r n || [ -n "$n" ]; do
+-  case "$n" in ''|\#*) continue;; esac
++while read -r f; do
+   n_seen=$((n_seen+1))
+-  if easycrypt compile $ECFLAGS $INC $D/$n.ec >/dev/null 2>&1; then echo "OK   $n"; else echo "FAIL $n"; fail=$((fail+1)); fi
+-done < closure-c10-split.txt
+-n_exp=$(grep -cve '^[[:space:]]*$' -e '^#' closure-c10-split.txt)
+-echo "### CLOSURE_COMPILED=$n_seen EXPECTED=$n_exp"
+-[ "$n_seen" -eq "$n_exp" ] || { echo "FAIL closure truncated"; fail=$((fail+1)); }
++  if easycrypt compile $ECFLAGS $INC "$f" >"$TMPD/compile.log" 2>&1; then
++    echo "OK   target $f"
++  else
++    echo "FAIL target $f"; tail -10 "$TMPD/compile.log"; fail=$((fail+1))
++  fi
++done < "$TMPD/targets"
++n_exp=$(wc -l < "$TMPD/targets")
++echo "### CONE_COMPILED=$n_seen EXPECTED=$n_exp"
++[ "$n_seen" -eq "$n_exp" ] && [ "$n_exp" -gt 0 ] || { echo "FAIL cone truncated"; fail=$((fail+1)); }
+ 
+ echo "### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)"
+ # EasyCrypt returns rc=0 for a file that ENDS mid-proof.  Measured 2026-08-03:
+@@ -218,10 +206,11 @@ echo "### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compila
+ # The probe is GENERATED from $CLOSURE so it cannot drift out of sync with the
+ # closure list the way a checked-in control file would.
+ { echo "require import AllCore."
+-  while read -r n || [ -n "$n" ]; do
+-    case "$n" in ''|\#*) continue;; esac
+-    echo "require import $n."
+-  done < $CLOSURE
++  while read -r f; do
++    n=$(basename "$f"); n="${n%.*}"
++    # Plain require also loads .eca abstract theories; import rejects those.
++    echo "require $n."
++  done < "$TMPD/targets"
+ } > "$TMPD/require_all.ec"
+ if easycrypt compile $ECFLAGS $INC "$TMPD/require_all.ec" >/dev/null 2>&1; then
+   echo "OK   all closure files are requirable"
+@@ -299,15 +288,15 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
+   # GprocT1Opre OTHER than the one just made deterministic are still budget-
+   # sensitive under the cli driver.  Not chased here; not load-bearing, since the
+   # leg passes at either budget.
+-  out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n')
++  if out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n'); then cli_rc=0; else cli_rc=$?; fi
+   d=$(printf '%s\n' "$out" | grep -c '^<tty>:' || true)
+   pr=$(printf '%s\n' "$out" | grep -c '^\[[0-9]*|' || true)
+   cli_run=$((cli_run+1))
+-  if [ "$pr" -lt 5 ]; then
++  if [ "$pr" -lt 1 ]; then
+     echo "FAIL $lbl (cli): only $pr commands processed -- the run did not happen"
+     fail=$((fail+1)); cli_bad=$((cli_bad+1)); return
+   fi
+-  if [ "$d" -eq 0 ]; then
++  if [ "$d" -eq 0 ] && [ "$cli_rc" -eq 0 ]; then
+     echo "OK   $lbl (cli, $pr cmds)"
+   else
+     echo "FAIL $lbl (cli): $d diagnostic(s) -- compile accepted what cli rejects"
+@@ -315,18 +304,11 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
+     fail=$((fail+1)); cli_bad=$((cli_bad+1))
+   fi
+ }
+-for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
+-  cli_one "base/$n" -I $B < $B/$n.ec
+-done
+-while read -r n || [ -n "$n" ]; do
+-  case "$n" in ''|\#*) continue;; esac
+-  cli_one "$n" $INC < $D/$n.ec
+-done < $CLOSURE
++while read -r f; do
++  cli_one "$f" $INC < "$f"
++done < "$TMPD/targets"
+ echo "### CLI_FILES_RUN=$cli_run CLI_DISAGREEMENTS=$cli_bad"
+-# Same truncation guard PHASE 1 carries: a closure file that shrank to nothing
+-# would run zero cli checks and still reach GREEN.
+-cli_exp=$(( $(grep -cve '^[[:space:]]*$' -e '^#' $CLOSURE) + 4 ))
+-[ "$cli_run" -eq "$cli_exp" ] || { echo "FAIL cli phase ran $cli_run of $cli_exp files"; fail=$((fail+1)); }
++[ "$cli_run" -eq "$n_exp" ] || { echo "FAIL cli phase ran $cli_run of $n_exp files"; fail=$((fail+1)); }
+ 
+ # The open question that stood here is CLOSED: the four PHASE 1e failures were
+ # the -iterate default difference, not defects.  See the PHASE 1e header.
+@@ -493,36 +475,13 @@ echo "### PHASE 1c — STATEMENT DIGESTS (names are not enough)"
+ # could be weakened to `true` (proof `trivial`) and every other phase would still
+ # pass.  Verified by negative control: weakening it moves the digest
+ # 5bd600cb2661b4af2426525bb72e4058 -> 028803b8e5cd6fca33e562cecd495360.
+-if [ -f cert-statements-split.tsv ]; then
+-  n_stmt=0
+-  while IFS=$'\t' read -r key want || [ -n "${key:-}" ]; do
+-    case "${key:-}" in ''|\#*) continue;; esac
+-    n_stmt=$((n_stmt+1))
+-    got=$(python3 tools/stmt_digest.py "$key" | cut -f2)
+-    # AN UNRESOLVABLE PIN MUST FAIL, NOT AGREE WITH ITSELF (run 13d).  digest()
+-    # returned None for an `equiv`, the caller printed NOT-FOUND, and a manifest
+-    # row carrying the literal string NOT-FOUND compared EQUAL -- a pin that
+-    # looks pinned and targets nothing.  Caught while pinning GprocKg_sk_eq.
+-    case "$got" in
+-      NOT-FOUND|AMBIGUOUS-*|ambig*|nostmt)
+-        echo "FAIL statement pin does not resolve: $key -> $got"; fail=$((fail+1)); continue;;
+-    esac
+-    if [ "$got" = "$want" ]; then echo "OK   statement pinned: $key"
+-    else echo "FAIL statement CHANGED: $key"; echo "       want $want"; echo "       got  $got"; fail=$((fail+1)); fi
+-  done < cert-statements-split.tsv
+-  # Row-count guard: deleting a row would silently UNPIN that lemma.
+-  exp_stmt=$EXPECT_PINS   # COMMITTED CONSTANT, not recomputed from the manifest
+-  echo "statements pinned=$n_stmt expected=$exp_stmt (manifest rows)"
+-  [ "${n_stmt:-0}" -eq "${exp_stmt:-0}" ] && [ "${exp_stmt:-0}" -ge 1 ] || { echo "FAIL statement pin file truncated"; fail=$((fail+1)); }
+-else
+-  echo "FAIL cert-statements-split.tsv missing -- statements unpinned"; fail=$((fail+1))
+-fi
++python3 tools/split_contract.py --pins || fail=$((fail+1))
+ 
+ echo "### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)"
+ # PHASE 1c iterates the MANIFEST (`done < cert-statements-split.tsv`), so it verifies
+ # that every PINNED statement still says what it said -- and is STRUCTURALLY BLIND to a
+-# statement that was never pinned.  Pinning all 896 statements that exist today does
+-# NOT stop an 897th appearing tomorrow: the new one is simply absent from the manifest,
++# statement that was never pinned.  Pinning every statement that exists today does
++# NOT stop another appearing tomorrow: the new one is simply absent from the manifest,
+ # and absence is invisible to a loop that reads the manifest.
+ #
+ # That was the entire point of the exercise -- a prior adversarial review found that a
+@@ -935,7 +894,7 @@ fi
+ # past the compile is caught, and it costs one second.
+ INPUTS_ID_END=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
+     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
+-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
++  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+ if [ "$INPUTS_ID_END" != "$INPUTS_ID" ]; then
+   echo "FAIL inputs CHANGED DURING THE RUN: start $INPUTS_ID, end $INPUTS_ID_END"
+   fail=$((fail+1))
+diff --git a/contracts/verification/easycrypt/c10-port/tools/split_contract.py b/contracts/verification/easycrypt/c10-port/tools/split_contract.py
+new file mode 100644
+index 00000000..f3800c08
+--- /dev/null
++++ b/contracts/verification/easycrypt/c10-port/tools/split_contract.py
+@@ -0,0 +1,137 @@
++#!/usr/bin/env python3
++"""Fast split integrity, complete proof target order, and checked tool identity.
++
++These are evidence checks, not a proof of the model or its refinement to firmware.
++The standard library/solver implementation remains a trusted foundation.
++"""
++import argparse
++from collections import Counter
++import json
++import os
++from pathlib import Path
++import re
++import subprocess
++import sys
++
++import cert_cone
++import stmt_coverage
++import stmt_digest
++
++cert_cone.INCLUDE_DIRS = ['base-c10-split', 'cdrafts-split']
++
++
++def rows(path):
++    return [s for s in Path(path).read_text().splitlines()
++            if s.strip() and not s.startswith('#')]
++
++
++def targets():
++    """Check the exact pinned closure and return dependencies before consumers."""
++    pinned = rows('cert-cone-files-split.tsv')
++    if not pinned or len(pinned) != len(set(pinned)):
++        raise ValueError('empty or duplicate cone file inventory')
++    roots = stmt_coverage.roots()
++    for p in roots + pinned:
++        if not Path(p).is_file():
++            raise ValueError(f'missing proof source: {p}')
++    files = cert_cone.cone(roots)
++    if set(files) != set(pinned):
++        raise ValueError('computed cone differs from pinned file inventory')
++    ordered, active, done = [], set(), set()
++
++    def visit(p):
++        if p in active:
++            raise ValueError(f'cyclic require: {p}')
++        if p in done:
++            return
++        active.add(p)
++        for name in cert_cone.requires_of(p, files[p]):
++            q = cert_cone.resolve(name)
++            if q is not None:
++                visit(q)
++        active.remove(p)
++        done.add(p)
++        ordered.append(p)
++
++    for p in sorted(files):
++        visit(p)
++    return ordered
++
++
++def check_pins():
++    pins = [s.split('\t') for s in rows('cert-statements-split.tsv')]
++    if any(len(p) != 2 for p in pins):
++        raise ValueError('malformed statement pin row')
++    keys = [p[0] for p in pins]
++    duplicates = [k for k, n in Counter(keys).items() if n != 1]
++    if duplicates:
++        raise ValueError(f'duplicate statement pin key: {duplicates[0]}')
++    expected = re.findall(r'^EXPECT_PINS=(\d+)$', Path('cert_gate_split.sh').read_text(), re.M)
++    if len(expected) != 1 or len(keys) != int(expected[0]) or not keys:
++        raise ValueError('unique statement pin count differs from committed EXPECT_PINS')
++    # Lexically different aliases (./A.ec, dir/../A.ec) must not count as two
++    # declaration identities and substitute for a deleted op pin.
++    allowed_paths = set(rows('cert-cone-files-split.tsv'))
++    for key, want in pins:
++        op = key.startswith('op:')
++        path, name = (key[3:] if op else key).split('::')
++        if path not in allowed_paths:
++            raise ValueError(f'noncanonical or out-of-cone statement pin path: {path}')
++        got = (stmt_digest.digest_op if op else stmt_digest.digest)(path, name)
++        if not re.fullmatch(r'[0-9a-f]{32}', want) or got != want:
++            raise ValueError(f'statement pin changed or unresolved: {key}')
++    print(f'OK unique statement pins: {len(keys)}')
++
++
++def check_toolchain(config, lock):
++    hashes = re.findall(r'^git-hash: (.+)$', config, re.M)
++    inventories = re.findall(r'^known provers: (.+)$', config, re.M)
++    if hashes != [lock['easycrypt']] or len(inventories) != 1:
++        raise ValueError('missing or unexpected EasyCrypt identity / prover inventory')
++    provers = inventories[0].split(', ')
++    if sorted(provers) != sorted(lock['provers']) or len(provers) != len(set(provers)):
++        raise ValueError('unexpected solver identity inventory')
++    if os.environ.get('PQ_EASYCRYPT_IMAGE') != lock['image']:
++        raise ValueError('run full certification through the pinned container wrapper')
++
++
++def run(*args):
++    subprocess.run([sys.executable, *args], check=True)
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--targets', action='store_true')
++    parser.add_argument('--pins', action='store_true')
++    parser.add_argument('--toolchain', action='store_true')
++    args = parser.parse_args()
++    if args.targets:
++        print('\n'.join(targets()))
++    elif args.pins:
++        check_pins()
++    elif args.toolchain:
++        lock = json.loads(Path('cert-toolchain-split.json').read_text())
++        cp = subprocess.run(['easycrypt', 'config'], stdout=subprocess.PIPE,
++                            stderr=subprocess.STDOUT, text=True, check=True)
++        check_toolchain(cp.stdout, lock)
++        print(f"OK toolchain: {lock['easycrypt']}, {len(lock['provers'])} pinned prover configurations")
++        print(f"### IMAGE {lock['image']}")
++    else:
++        files = targets()
++        check_pins()
++        current = Counter(tuple(row[:3]) for row in cert_cone.census(cert_cone.cone(stmt_coverage.roots())))
++        expected = Counter(tuple(s.split('\t')[:3]) for s in rows('cert-baseline-split.tsv'))
++        if not current or current != expected:
++            raise ValueError('assumption/declaration census differs from pinned baseline')
++        run('tools/stmt_coverage.py')
++        run('tools/policy_cap_fence.py')
++        run('tools/taint_closure.py', '--check')
++        print(f'OK split static contract: {len(files)} files; proof execution not performed')
++    return 0
++
++
++if __name__ == '__main__':
++    try:
++        sys.exit(main())
++    except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as exc:
++        sys.exit(f'FAIL split contract: {exc}')
+diff --git a/contracts/verification/easycrypt/c10-port/tools/split_proof_controls.py b/contracts/verification/easycrypt/c10-port/tools/split_proof_controls.py
+new file mode 100644
+index 00000000..49654214
+--- /dev/null
++++ b/contracts/verification/easycrypt/c10-port/tools/split_proof_controls.py
+@@ -0,0 +1,60 @@
++#!/usr/bin/env python3
++"""Executable controls for imported bad proofs and unfinished proof EOFs."""
++from pathlib import Path
++import subprocess
++import tempfile
++
++
++def compile_file(path, include):
++    return subprocess.run(['easycrypt', 'compile', '-no-eco', '-timeout', '60',
++                           '-I', str(include), str(path)], text=True,
++                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
++
++
++def main():
++    with tempfile.TemporaryDirectory() as temp:
++        root = Path(temp)
++        original = Path('base-c10-split/BinaryTrees.ec').read_text()
++        needle = 'proof. by elim: bt => /#. qed.'
++        assert original.count(needle) == 1, 'dependency control anchor drift'
++        source = root / 'BinaryTrees.ec'
++        source.write_text(original)
++        cp = compile_file(source, root)
++        assert cp.returncode == 0, 'dependency control baseline failed: ' + cp.stdout[-1500:]
++        source.write_text(original.replace(needle, 'proof. by trivial. qed.'))
++        cp = compile_file(source, root)
++        assert cp.returncode == 1 and 'cannot close goals' in cp.stdout.lower(), (
++            'broken dependency must fail its own proof: ' + cp.stdout[-1500:])
++        consumer = root / 'Consumer.ec'
++        consumer.write_text('require import BinaryTrees.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 0, 'dependency import semantics changed: ' + cp.stdout[-1500:]
++        unfinished = root / 'Unfinished.ec'
++        unfinished.write_text('require import AllCore.\nlemma unfinished : true.\nproof.\n')
++        # Requiring the file must reject the open proof even if compile accepts EOF.
++        consumer.write_text('require Unfinished.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 1 and 'proof' in cp.stdout.lower(), (
++            'open proof must fail require: ' + cp.stdout[-1500:])
++        abstract = root / 'Abstract.eca'
++        abstract.write_text('require import AllCore.\nlemma checked : true.\nproof. trivial. qed.\n')
++        cp = compile_file(abstract, root)
++        assert cp.returncode == 0, 'abstract theory must compile directly: ' + cp.stdout[-1500:]
++        consumer.write_text('require Abstract.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 0, 'abstract theory must be requirable: ' + cp.stdout[-1500:]
++        consumer.write_text('require import Abstract.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 1 and 'cannot import an abstract theory' in cp.stdout, (
++            'abstract import control changed: ' + cp.stdout[-1500:])
++        abstract.write_text('require import AllCore.\nlemma checked : true.\nproof.\n')
++        consumer.write_text('require Abstract.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 1 and 'proof' in cp.stdout.lower(), (
++            'abstract open proof must fail plain require: ' + cp.stdout[-1500:])
++    print('OK proof controls: direct dependency failure / import acceptance / '
++          'open-proof rejection / abstract require and EOF')
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/contracts/verification/easycrypt/c10-port/tools/stmt_coverage.py b/contracts/verification/easycrypt/c10-port/tools/stmt_coverage.py
+index 615359a1..98b4df95 100644
+--- a/contracts/verification/easycrypt/c10-port/tools/stmt_coverage.py
++++ b/contracts/verification/easycrypt/c10-port/tools/stmt_coverage.py
+@@ -68,7 +68,7 @@ def computed_cone():
+     import subprocess
+     env = dict(os.environ, CERT_CONE_DIRS='base-c10-split,cdrafts-split')
+     out = subprocess.run([sys.executable, 'tools/cert_cone.py'] + roots(),
+-                         capture_output=True, text=True, env=env).stdout
++                         capture_output=True, text=True, env=env, check=True).stdout
+     return sorted({l[4:].strip() for l in out.splitlines()
+                    if l.startswith('#   ') and l[4:].strip()})
+ 
+diff --git a/contracts/verification/easycrypt/c10-port/tools/test_split_contract.py b/contracts/verification/easycrypt/c10-port/tools/test_split_contract.py
+new file mode 100644
+index 00000000..01256913
+--- /dev/null
++++ b/contracts/verification/easycrypt/c10-port/tools/test_split_contract.py
+@@ -0,0 +1,91 @@
++#!/usr/bin/env python3
++"""Negative regression controls for the split gate's evidence contract."""
++from contextlib import contextmanager
++import json
++import os
++from pathlib import Path
++import tempfile
++import unittest
++from unittest.mock import patch
++
++import split_contract as gate
++
++
++@contextmanager
++def fixture():
++    here = Path.cwd()
++    with tempfile.TemporaryDirectory() as temp:
++        os.chdir(temp)
++        try:
++            yield Path(temp)
++        finally:
++            os.chdir(here)
++
++
++class ContractTests(unittest.TestCase):
++    def test_duplicate_replacing_deleted_pin_is_rejected(self):
++        with fixture() as p:
++            (p / 'cert_gate_split.sh').write_text('EXPECT_PINS=2\n')
++            (p / 'cert-statements-split.tsv').write_text('op:A.ec::x\tabc\nop:A.ec::x\tabc\n')
++            with self.assertRaisesRegex(ValueError, 'duplicate'):
++                gate.check_pins()
++
++    def test_missing_unique_pin_is_rejected(self):
++        with fixture() as p:
++            (p / 'cert_gate_split.sh').write_text('EXPECT_PINS=2\n')
++            (p / 'cert-statements-split.tsv').write_text('op:A.ec::x\tabc\n')
++            with self.assertRaisesRegex(ValueError, 'count'):
++                gate.check_pins()
++
++    def test_path_alias_cannot_substitute_for_a_deleted_pin(self):
++        with fixture() as p:
++            (p / 'cert_gate_split.sh').write_text('EXPECT_PINS=2\n')
++            (p / 'cert-cone-files-split.tsv').write_text('A.ec\n')
++            digest = 'a' * 32
++            (p / 'cert-statements-split.tsv').write_text(
++                f'op:A.ec::a\t{digest}\nop:./A.ec::a\t{digest}\n')
++            with patch.object(gate.stmt_digest, 'digest_op', return_value=digest):
++                with self.assertRaisesRegex(ValueError, 'noncanonical'):
++                    gate.check_pins()
++
++    def test_missing_or_changed_tool_identity_is_rejected(self):
++        lock = json.loads(Path('cert-toolchain-split.json').read_text())
++        good = f"git-hash: {lock['easycrypt']}\nknown provers: {', '.join(lock['provers'])}\n"
++        with patch.dict(os.environ, {'PQ_EASYCRYPT_IMAGE': lock['image']}):
++            gate.check_toolchain(good, lock)
++            for bad in ('', good.replace(lock['easycrypt'], 'unexpected'),
++                        good.replace(lock['provers'][0], 'unexpected'), good + good):
++                with self.assertRaises(ValueError):
++                    gate.check_toolchain(bad, lock)
++        with patch.dict(os.environ, {'PQ_EASYCRYPT_IMAGE': 'wrong'}):
++            with self.assertRaises(ValueError):
++                gate.check_toolchain(good, lock)
++
++    def test_targets_cover_pinned_dependencies_in_order(self):
++        targets = gate.targets()
++        self.assertEqual(len(targets), 45)
++        self.assertEqual(set(targets), set(gate.rows('cert-cone-files-split.tsv')))
++        self.assertIn('base-c10-split/HashAddresses.eca', targets)
++        for i, p in enumerate(targets):
++            code = gate.cert_cone.strip_comments(Path(p).read_text())
++            for name in gate.cert_cone.requires_of(p, code):
++                q = gate.cert_cone.resolve(name)
++                if q:
++                    self.assertLess(targets.index(q), i)
++
++    def test_unpinned_dependency_and_duplicate_file_are_rejected(self):
++        with fixture() as p, patch.object(gate.stmt_coverage, 'roots', return_value=['base-c10-split/A.ec']):
++            (p / 'base-c10-split').mkdir()
++            (p / 'base-c10-split/A.ec').write_text('require import B.\n')
++            (p / 'base-c10-split/B.eca').write_text('')
++            pin = p / 'cert-cone-files-split.tsv'
++            pin.write_text('base-c10-split/A.ec\n')
++            with self.assertRaisesRegex(ValueError, 'differs'):
++                gate.targets()
++            pin.write_text('base-c10-split/A.ec\nbase-c10-split/A.ec\n')
++            with self.assertRaisesRegex(ValueError, 'duplicate'):
++                gate.targets()
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/contracts/verification/easycrypt/docker/gate-c10-capstone.sh b/contracts/verification/easycrypt/docker/gate-c10-capstone.sh
+index c42816d9..ad6aa514 100644
+--- a/contracts/verification/easycrypt/docker/gate-c10-capstone.sh
++++ b/contracts/verification/easycrypt/docker/gate-c10-capstone.sh
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env bash
+-# gate-c10-capstone.sh — SOUND capstone gate. Run INSIDE fv-sphincsplus-ec:r2026.02
++# Historical external capstone; current split uses cert_gate_split.sh.
++# gate-c10-capstone.sh — capstone gate. Run INSIDE fv-sphincsplus-ec:r2026.02
+ # (image ENTRYPOINT = `opam exec --`).  /work = c10-eufcma-port (mounted).
+ #
+ # SOUNDNESS: EasyCrypt `require` does NOT re-verify a dependency — it trusts the .eco
+@@ -69,6 +70,15 @@ for f in "${ORDER[@]}"; do
+   b=$(basename "$f")
+   if EC "$f" >"/tmp/g.$b.log" 2>&1; then echo "  ok    $b"; else echo "  FAIL  $b"; tail -4 "/tmp/g.$b.log"|sed 's/^/        /'; rcG=1; fi
+ done
++# Direct compilation is necessary but does not reject an unfinished EOF proof.
++[ "${#ORDER[@]}" -gt 0 ] || rcG=1
++for f in "${ORDER[@]}"; do
++  b=$(basename "$f"); printf 'require %s.\n' "${b%.*}" > "$W/RequireProbe.ec"
++  if ! EC "$W/RequireProbe.ec" > /tmp/require-probe.log 2>&1; then
++    echo "FAIL cannot require $b"; tail -4 /tmp/require-probe.log; rcG=1
++  fi
++  rm -f "$W/RequireProbe.eco"
++done
+ echo "== rcG=$rcG (expect 0) =="
+ 
+ fire() { # $1=label $2=file-that-must-fail  — expects the just-run EC to have FAILED
+diff --git a/contracts/verification/scripts/check_easycrypt.sh b/contracts/verification/scripts/check_easycrypt.sh
+index 8e923639..c87e23cf 100755
+--- a/contracts/verification/scripts/check_easycrypt.sh
++++ b/contracts/verification/scripts/check_easycrypt.sh
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env bash
+ # =============================================================================
++# Historical drafts only. Current split: make verify-easycrypt-split[-pins].
+ # verify-easycrypt -- compile the SPHINCS+C EasyCrypt port and assert its ledger.
+ #
+ # WHY THIS EXISTS
+@@ -244,6 +245,8 @@ echo "[compile] every .ec as a TARGET (require does NOT re-verify)"
+ find "$DRAFTS" -name '*.eco' -delete 2>/dev/null
+ skipped=0
+ compiled=0
++require_tmp=$(mktemp -d) || exit 1
++trap 'rm -rf "$require_tmp"' EXIT
+ for f in "$DRAFTS"/*.ec; do
+   b="$(basename "$f")"
+   bn="${b%.ec}"
+@@ -258,7 +261,17 @@ for f in "$DRAFTS"/*.ec; do
+     timeout 1800 easycrypt compile "${INC[@]}" "$f" >/dev/null 2>&1
+   fi
+   rc=$?
+-  if [ "$rc" != 0 ]; then bad "$b does not compile (exit $rc)"; else note "ok  $b"; compiled=$(( compiled + 1 )); fi
++  if [ "$rc" != 0 ]; then
++    bad "$b does not compile (exit $rc)"
++  else
++    # compile alone accepts EOF inside an unfinished proof on r2026.02.
++    printf 'require import %s.\n' "$bn" > "$require_tmp/RequireProbe.ec"
++    if timeout 1800 bash "$EC_SH" compile -no-eco "${INC[@]}" "$require_tmp/RequireProbe.ec" >/dev/null 2>&1; then
++      note "ok  $b (compiled and required)"; compiled=$(( compiled + 1 ))
++    else
++      bad "$b cannot be required (possibly an unfinished proof at EOF)"
++    fi
++  fi
+ done
+ find "$DRAFTS" -name '*.eco' -delete 2>/dev/null
+ [ "$skipped" != 0 ] && note "SKIPPED $skipped MM45-chain file(s) -- need z3 4.13.x / prebuilt SPHINCS_PLUS.eco (see header); NOT verified here"
+diff --git a/contracts/verification/scripts/run_easycrypt_split.py b/contracts/verification/scripts/run_easycrypt_split.py
+new file mode 100644
+index 00000000..c16f744f
+--- /dev/null
++++ b/contracts/verification/scripts/run_easycrypt_split.py
+@@ -0,0 +1,25 @@
++#!/usr/bin/env python3
++"""Run the vendored split gate in its immutable tool image on a disposable copy."""
++import json
++from pathlib import Path
++import re
++import subprocess
++import sys
++
++root = Path(__file__).resolve().parents[1] / 'easycrypt/c10-port'
++lock = json.loads((root / 'cert-toolchain-split.json').read_text())
++image = lock['image']
++if not re.fullmatch(r'ghcr.io/easycrypt/ec-test-box@sha256:[0-9a-f]{64}', image):
++    sys.exit('FAIL: EasyCrypt image must be pinned by digest')
++if sys.argv[1:] not in ([], ['--controls']):
++    sys.exit('usage: run_easycrypt_split.py [--controls]')
++command = ('python3 tools/split_contract.py --toolchain && python3 tools/split_proof_controls.py'
++           if sys.argv[1:] else 'bash cert_gate_split.sh')
++# No host toolchain, mutable tag, network, shared cache, or existing container.
++# Docker verifies the content digest on acquisition; no receipt supplied by the
++# caller can select another image. The child gate also checks observed identities.
++subprocess.run(['docker', 'run', '--rm', '--init', '--network', 'none',
++                '--env', f'PQ_EASYCRYPT_IMAGE={image}',
++                '--volume', f'{root}:/source:ro', image, 'bash', '-lc',
++                'set -e; eval "$(opam env)"; cp -R /source /tmp/proofs; '
++                'cd /tmp/proofs; ' + command], check=True)
+diff --git a/docs/STATUS.md b/docs/STATUS.md
+index 038c7c4a..b72f366a 100644
+--- a/docs/STATUS.md
++++ b/docs/STATUS.md
+@@ -1,5 +1,10 @@
+ # PQSigner — STATUS (start here)
+ 
++**Kani/EasyCrypt evidence correction (2026-09-16):** current gate scope and
++research limits are owned by the [FV surface map](../contracts/verification/docs/FV_SURFACE_MAP.md),
++rows 4 and 9. Historical draft receipts below do not certify the vendored split.
++Implementation/review evidence: [remediation record](security/adversarial-review/findings/fv-evidence-remediation-2026-09-16.md).
++
+ > **The front door.** Read this first. It's a **router, not an encyclopedia**: §0 maps *where the truth
+ > lives* (one owner per concern — everyone else links); §A–§D are the **security/verification frontier**,
+ > the one slice this file owns directly. Detail lives in the linked docs, not here.
+diff --git a/docs/security/adversarial-review/findings/fv-evidence-remediation-2026-09-16.md b/docs/security/adversarial-review/findings/fv-evidence-remediation-2026-09-16.md
+new file mode 100644
+index 00000000..b09c320d
+--- /dev/null
++++ b/docs/security/adversarial-review/findings/fv-evidence-remediation-2026-09-16.md
+@@ -0,0 +1,137 @@
++# FV evidence remediation — 2026-09-16
++
++Active surface: Kani / vendored EasyCrypt split evidence correctness. Phase B
++selection into bounded Phase C, authorized by “Please fix all the findings”.
++Base: d52679ac76b8a1bbc373a1749b8185fea8bb372f, feat/pq1-board-target.
++Existing work is recorded in the external baseline.json and preserved; implementation
++uses an isolated worktree with only the pending Kani changes overlaid.
++
++Objective: mutation credit requires a passing original and one exactly selected
++failing harness; certification checks every pinned dependency, unique declaration
++pins and the supported toolchain, and current split checks have enrolled callers.
++
++Slices: (1) Kani exact selection/verdict/baseline and multiline feature checks;
++(2) EasyCrypt complete dependency targets, unique pins and toolchain contract;
++(3) toolchain-free per-PR and pinned-container scheduled split gates with independent
++registration; (4) affected counts and historical target/evidence descriptions.
++
++Selected approach: retain existing proof scripts and research boundary; share small
++static/target/toolchain checks rather than syncing the moving external research tree.
++No firmware, persistent-state, wire, signing-authority or hardware behavior changes.
++Container proofs use disposable copies, no existing container or checkout mutation.
++No extra research proofs or wider assurance campaign; #509 remains deferred.
++Named risks: substring result confusion (#685), hidden feature gating (#662),
++unreplayed dependency proofs (#683), duplicate pin substitution (#684), ambient
++prover drift (#686), unenrolled current artifact (#670), stale evidence (#677).
++#659's existing re-anchor is included. #681's old WOTS admit is already removed;
++remaining FORS admit and model/refinement limits remain explicit.
++
++Mandatory evidence: offline regression controls; Kani exact selection collision and
++original/mutant checks including amount predicate; static census; current split
++integrity plus direct broken-dependency/EOF/tool-identity controls; full split gate
++under the pinned image; gate-enforcement regressions and complete registration check.
++Heavy Kani stays local; no exhaustive Kani rerun required by runner-only correction.
++CI full-proof timeout must accommodate the measured full gate. No hardware resources
++are affected. Historical receipts remain dated evidence, never a substitute run.
++
++Closed Phase D checklist: freeze combined commit/tree; finish the above gates and
++run one simultaneous SOL ultra / Opus xhigh / Kimi max wave (900 s /800 words),
++parallelizing the independent full proof replay and source review as workflow
++section 4 permits. Both must finish before landing. Then reconcile and
++reproduce concrete blockers; remediate/re-freeze/re-review material changes; scoped
++integration preserving unrelated changes; commit/push; minimal tracker resolution
++and dated receipt. Existing owner authorization covers these reversible source fixes.
++Rollback is a scoped Git revert; no history rewrite or hardware action is included.
++
++Owners read without material scope/gate conflict (SHA256):
++- CLAUDE.md: 07de25be685fd4315d6d5d47c01fc4ee52df1a4c5e89b3ab45fddcff9e028074
++- docs/STATUS.md: b3dac08ad8f9698b6036d922efa8b7026b041439919da8ea364f4751346567de
++- docs/planning-and-review-workflow.md: db0d0934b788d6defae2a688848f9eba67e50a00b55d6918418122ac3cfd331b
++- docs/verification/fv-adversarial-review-playbook.md: 560c37790255c707eb45e86fd85148115891e7ac8bdf6503d7ed7aa87983c2ad
++- docs/security/adversarial-review/README.md: 46edb43d06b534a091c98de1ce81f36357d88386a78c6637ea31f100f61615f4
++
++## Phase C evidence (before final review)
++
++Kani 0.67.0 metadata supplied all 43 fully qualified manifest selections. Offline
++checks pass (11 census, six attribution/restoration tests). Real baseline/mutant
++pairs pass for the canary, CoW field offset and native amount exactness mutations;
++exact selection also isolates a passing harness from a deliberately failing
++similarly named fixture. All mutated sources were restored.
++
++The split static gate passes: 45 files, 1,077 unique pins, 993 statements, exact
++assumption census, policy fence and named-application taint check. Pinned image
++controls pass: a broken BinaryTrees proof fails directly but imports, and an
++unfinished EOF proof fails requiring. Full replay is mandatory and still pending
++at this pre-review record; no fresh complete certification is claimed here.
++Input identity: d7baf671282ba725121f24d59962191c.
++
++All 19 workflow/manifest regression groups and the checker self-test pass; 67
++gates are registered. Make invocation guard controls pass. Historical draft pins
++pass; missing Docker returns Make exit 2 immediately. A simulated successful
++compile followed by a failed require is rejected by the historical driver;
++this simulation is a shell control, not proof replay of the historical artifact.
++
++The container image is 5,281,661,595 bytes (linux/amd64), the copied vendored
++artifact 29 MiB; the nightly proof lane has a 240-minute ceiling. A fresh hosted
++run is not yet evidence. Original canonical work: 185 changed/untracked files,
++all hashes preserved before integration. No existing research container or
++external checkout was modified.
++
++## First implementation review and correction
++
++Frozen candidate cd43416cea0f0eb387ad8c47137f1a9c2dd6cdbe, tree
++6e1b7906481a44d41d6daa2da84b9488bba38043. SOL: GAP (729.826 s),
++Opus: FIX (295.302 s), Kimi: GO with pending-proof gap (628.967 s).
++All reports were within 900 s /800 words. SOL's initial 47.690 s leg had only
++nested-namespace tool launch failures and was stopped; its one permitted
++mechanical retry retained the outer read-only mounts and used legacy Landlock.
++No provider refusal was observed. Runtime artifacts remain external until closure.
++
++Coordinator reproduced Opus's abstract-theory import failure: `require Abstract.`
++passes, `require import Abstract.` fails in the pinned image. The full gate's
++probe now uses plain require; .ec and .eca open-proof controls still reject EOF.
++The first full replay was deliberately stopped after 17 successful direct targets
++because its later import probe was known to fail; it is not a green receipt.
++
++The heavy-tier omission also reproduced: enabling kani-heavy with tier default
++passed validation. Feature and tier must now agree, with regression controls.
++Kani now has seven attribution/manifest groups plus 11 census groups.
++
++The coordinator reproduced a same-finding #684 variant while reconciling unique
++pin identities: substituting an existing op through a ./ path alias passed the
++static guard after deleting emb_in's pin. Source identity still detected the edit;
++this was not a full-gate pass. Exact pinned-cone paths now reject aliases, and a
++sixth split regression group covers it. This is a concrete acceptance-check
++failure within the existing pin slice, not a broader assurance campaign.
++
++New input identity: df34cee6a883deafc1aef86c89d8c464. The correction requires a new combined review and a
++fresh full replay; no verdict from the superseded snapshot authorizes landing.
++
++## Second implementation review and correction
++
++Candidate b969690e628407635673db11b2ba376cd1cfd838, tree
++1bd2e4f194282bce10c73826b9c9c0c39608d151: Opus GO (530.287 s),
++Kimi GO (560.332 s), SOL FIX (668.557 s). All remain conditional on the
++full split replay. SOL again needed its one mechanical nested-namespace retry;
++no substantive report, timeout or provider refusal was retried.
++
++Coordinator confirmed the clean-environment blocker: the shared FV Makefile
++requires the password-database home's elan lake shim at parse time. In the
++pinned image without elan, Make exited 2 before the recipe. The nightly job now
++uses the project's existing commit/hash-checked elan bootstrap, default toolchain
++none, and its complete setup/checkout/invocation step sequence is pinned in the
++gate contract. The same setup in a disposable clean container followed by the
++split fast Make target passed. This is setup evidence, not a hosted workflow run.
++
++The parser also accepted a synthetic completed failing verdict followed by an
++explicit fatal tool diagnostic. It now rejects recognized fatal compiler/backend
++and panic diagnostics across the full combined output, including ANSI coloring.
++All six recorded real original/mutant outputs retain their correct classifications;
++new negative controls cover errors before and after the coherent result. This is
++a parser regression, not a claim that such a post-verification failure occurred
++in the recorded Kani runs. Kani now has eight runner groups and 11 census groups.
++
++These corrections do not alter any split proof input, tool image, driver flags
++or df34cee6a883deafc1aef86c89d8c464. The ongoing full replay remains applicable.
++A fresh combined source review is required. Full Kani nightly timing under the
++300-minute ceiling remains a visible, fail-closed follow-up measurement.
+diff --git a/scripts/check_gate_enforcement.py b/scripts/check_gate_enforcement.py
+index aa17a0e9..05b9f027 100755
+--- a/scripts/check_gate_enforcement.py
++++ b/scripts/check_gate_enforcement.py
+@@ -112,6 +112,8 @@ ENFORCEMENT_POLICY = {
+     "verify-easycrypt-docker": "local_documented",
+     "verify-easycrypt-full": "local_documented",
+     "verify-easycrypt-pins": "per_pr_blocking",
++    "verify-easycrypt-split-pins": "per_pr_blocking",
++    "verify-easycrypt-split": "nightly",
+     "verify-exec-gate": "local_documented",
+     "verify-extract-differential": "nightly",
+     "verify-extracted": "per_pr_blocking",
+@@ -1349,6 +1351,14 @@ def main() -> int:
+     all_fails += completeness(manifest)
+     easycrypt_gate = next(g for g in gates if g["id"] == "verify-easycrypt-pins")
+     all_fails += easycrypt_pin_coverage(easycrypt_gate.get("polices_paths", []))
++    for gate_id, workflow in [('verify-easycrypt-split-pins', 'lean-fv.yml'),
++                              ('verify-easycrypt-split', 'nightly.yml')]:
++        split_gate = next(g for g in gates if g['id'] == gate_id)
++        for path in ('contracts/verification/easycrypt/c10-port/**',
++                     'contracts/verification/scripts/run_easycrypt_split.py',
++                     'contracts/verification/Makefile', f'.github/workflows/{workflow}'):
++            if not _covers(split_gate.get('polices_paths', []), path):
++                all_fails.append(f'easycrypt-split-reverse: {gate_id} does not cover {path}')
+     protocol_gate = next(g for g in gates if g["id"] == "verify-protocol-models")
+     if _covers(protocol_gate.get("polices_paths", []),
+                "contracts/verification/cryptoverif/seed_split_secrecy.cv"):
+diff --git a/scripts/check_kani_mutations.py b/scripts/check_kani_mutations.py
+index 209590b6..6e1dcf4b 100755
+--- a/scripts/check_kani_mutations.py
++++ b/scripts/check_kani_mutations.py
+@@ -32,8 +32,16 @@ survive) — it pins the specific load-bearing behaviours. Add an entry whenever
+ new load-bearing harness lands.
+ 
+ Usage:
+-    check_kani_mutations.py [--tier quick|default|full] [--list]
+-Environment: MUTATIONS=quick|default|full overrides the tier (default: default).
++    check_kani_mutations.py [--tier quick|default|full|heavy] [--list]
++Environment: MUTATIONS=quick|default|full|heavy overrides the tier (default: default).
++
++TIERS: quick ⊆ default ⊆ full are cumulative. `heavy` is NON-cumulative and
++LOCAL-ONLY: `--tier heavy` runs ONLY the heavy entries (plus the always-on
++canary) and every other tier SKIPS them — so the nightly default lane never
++sees them. Heavy entries pin cfg(feature = "kani-heavy")-gated harnesses whose
++peak RSS (no_hidden_value 13.05 GiB / 7m55s, measured 2026-07-31) can OOM a
++16 GB hosted runner and suppress the rest of the job's evidence (issue #662).
++Run them via `make verify-kani-mutation-heavy` / `make kani-heavy`, never CI.
+ 
+ Exit: 0 = every mutation was caught as expected; 1 = a survivor (vacuous harness)
+       found; 2 = harness/manifest error (mutation didn't apply, canary survived,
+@@ -44,6 +52,7 @@ from __future__ import annotations
+ import atexit
+ import json
+ import os
++import re
+ import signal
+ import subprocess
+ import sys
+@@ -54,7 +63,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
+ REPO_ROOT = SCRIPT_DIR.parent
+ MANIFEST = SCRIPT_DIR / "kani_mutations.json"
+ 
+-TIER_ORDER = {"quick": 0, "default": 1, "full": 2}
++TIER_ORDER = {"quick": 0, "default": 1, "full": 2, "heavy": 3}
++# `heavy` sits ABOVE full in the order so the cumulative quick/default/full
++# selections (the CI/nightly lanes) always skip heavy entries; the heavy tier
++# itself is non-cumulative (see main()).
+ 
+ # Global so the signal/atexit handler can restore a half-applied mutation.
+ _ACTIVE: tuple[Path, str] | None = None
+@@ -87,12 +99,65 @@ class HarnessError(Exception):
+     pass
+ 
+ 
++def validate_manifest(muts: list[dict]) -> None:
++    ids = [m.get('id') for m in muts]
++    if ids.count('canary') != 1 or len(set(ids)) != len(ids):
++        raise HarnessError('manifest needs exactly one canary and unique mutation ids')
++    for m in muts:
++        name = m.get('harness_path', '')
++        if (not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+', name)
++                or name.split('::')[-1] != m.get('harness')):
++            raise HarnessError(f"{m['id']}: missing or inconsistent fully qualified harness_path")
++        if m.get('expect') != 'kani_fails' or m.get('tier') not in TIER_ORDER:
++            raise HarnessError(f"{m['id']}: invalid expectation or tier")
++        flags = m.get('z_flags', [])
++        # Only feature selection is currently needed. Do not allow a manifest
++        # flag to override --exact, output format, or verification execution.
++        if flags and not (isinstance(flags, list) and len(flags) == 2
++                          and flags[0] == '--features' and isinstance(flags[1], str)
++                          and re.fullmatch(r'[A-Za-z0-9_,/-]+', flags[1])):
++            raise HarnessError(f"{m['id']}: unsupported z_flags")
++        heavy_feature = bool(flags and any(f.split('/')[-1] == 'kani-heavy'
++                                          for f in flags[1].split(',')))
++        if heavy_feature != (m['tier'] == 'heavy'):
++            raise HarnessError(f"{m['id']}: kani-heavy feature and local heavy tier must agree")
++
++
++def classify_kani(out: str, returncode: int, harness: str) -> str:
++    """Accept one completed Kani 0.67 regular-format result, bound to its name.
++
++    A marker alone is insufficient: compile errors, interrupted runs, multiple
++    selected harnesses and unrelated failures are harness errors, never credit.
++    Unknown future output formats fail closed and require an explicit update.
++    """
++    # A completed failure and a later tool error can both use exit 1. Inspect
++    # both streams in full, including diagnostics after the result summary.
++    out = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', out)
++    fatal = re.search(r'^\s*(?:error(?:\[[^\]]+\])?:|fatal(?: error)?:|'
++                      r'thread\s+.*\bpanicked\b|Traceback \(most recent call last\):)',
++                      out, re.M | re.I)
++    if fatal:
++        raise HarnessError(f'{harness}: fatal tool diagnostic accompanies verification output')
++    names = re.findall(r'^Checking harness (.+)\.\.\.$', out, re.M)
++    verdicts = re.findall(r'^VERIFICATION:- (SUCCESSFUL|FAILED)$', out, re.M)
++    totals = re.findall(r'^Complete - (\d+) successfully verified harnesses, '
++                        r'(\d+) failures, (\d+) total\.$', out, re.M)
++    for verdict, code, summary, outcome in (
++            ('SUCCESSFUL', 0, ('1', '0', '1'), 'kani_passes'),
++            ('FAILED', 1, ('0', '1', '1'), 'kani_fails')):
++        if names == [harness] and verdicts == [verdict] and totals == [summary] and returncode == code:
++            return outcome
++    raise HarnessError(f'{harness}: incomplete, ambiguous or inconsistent Kani result '
++                       f'(exit {returncode}); tail: {out[-800:]}')
++
++
+ def run_kani(crate: str, harness: str, z_flags: list[str]) -> tuple[str, str]:
+     """Run one Kani harness. Returns (outcome, tail) where outcome is
+     "kani_fails" (harness reported VERIFICATION:- FAILED), "kani_passes"
+     (VERIFICATION:- SUCCESSFUL), or raises HarnessError if kani did not produce
+     a verdict (compile error / crash / missing tool)."""
+-    cmd = ["cargo", "kani", "-p", crate, *z_flags, "--harness", harness]
++    cmd = ["cargo", "kani", "-p", crate, *z_flags, "--harness", harness,
++           "--exact", "--output-format", "regular"]
+     try:
+         cp = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=1800)
+     except FileNotFoundError:
+@@ -101,15 +166,7 @@ def run_kani(crate: str, harness: str, z_flags: list[str]) -> tuple[str, str]:
+         raise HarnessError(f"kani timed out on {crate}::{harness} (>1800s).")
+     out = cp.stdout + cp.stderr
+     tail = out[-800:].strip()
+-    if "VERIFICATION:- FAILED" in out:
+-        return "kani_fails", tail
+-    if "VERIFICATION:- SUCCESSFUL" in out:
+-        return "kani_passes", tail
+-    # No verdict line: compile error, wrong harness name, or crash.
+-    raise HarnessError(
+-        f"{crate}::{harness}: kani produced no VERIFICATION verdict "
+-        f"(compile error / unknown harness?). tail: …{tail[-400:]}"
+-    )
++    return classify_kani(out, cp.returncode, harness), tail
+ 
+ 
+ def apply_and_test(mut: dict) -> tuple[bool, str]:
+@@ -141,13 +198,19 @@ def apply_and_test(mut: dict) -> tuple[bool, str]:
+     if mutated == orig:
+         raise HarnessError(f"{mut['id']}: applying the mutation changed nothing.")
+ 
++    baseline, _ = run_kani(mut['crate'], mut['harness_path'], mut.get('z_flags', []))
++    if baseline != 'kani_passes':
++        raise HarnessError(f"{mut['id']}: unmodified baseline did not pass; no mutation credit")
++    if path.read_text(encoding='utf-8') != orig:
++        raise HarnessError(f"{mut['id']}: source changed during baseline verification")
++
+     try:
+         _ACTIVE = (path, orig)
+         path.write_text(mutated, encoding="utf-8")
+         if path.read_text(encoding="utf-8") == orig:
+             raise HarnessError(f"{mut['id']}: write did not take effect.")
+ 
+-        outcome, tail = run_kani(mut["crate"], mut["harness"], mut.get("z_flags", []))
++        outcome, tail = run_kani(mut["crate"], mut["harness_path"], mut.get("z_flags", []))
+         matched = outcome == mut["expect"]
+         detail = f"outcome={outcome} expect={mut['expect']}"
+         if not matched:
+@@ -167,12 +230,22 @@ def main() -> int:
+     if "--tier" in args:
+         tier = args[args.index("--tier") + 1]
+     if tier not in TIER_ORDER:
+-        print(f"ERROR: unknown tier {tier!r} (quick|default|full)", file=sys.stderr)
++        print(f"ERROR: unknown tier {tier!r} (quick|default|full|heavy)", file=sys.stderr)
+         return 2
+ 
+     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+     muts = manifest["mutations"]
+-    sel = [m for m in muts if TIER_ORDER[m.get("tier", "default")] <= TIER_ORDER[tier]]
++    try:
++        validate_manifest(muts)
++    except HarnessError as exc:
++        print(f'ERROR: {exc}', file=sys.stderr)
++        return 2
++    if tier == "heavy":
++        # Non-cumulative: the heavy tier is exactly the cfg(kani-heavy)-gated,
++        # local-only entries (issue #662) — not the whole CI suite plus them.
++        sel = [m for m in muts if m.get("tier", "default") == "heavy"]
++    else:
++        sel = [m for m in muts if TIER_ORDER[m.get("tier", "default")] <= TIER_ORDER[tier]]
+     # Canary is ALWAYS included regardless of tier.
+     if not any(m["id"] == "canary" for m in sel):
+         sel = [m for m in muts if m["id"] == "canary"] + sel
+@@ -214,7 +287,7 @@ def main() -> int:
+         if m["id"] == "canary":
+             canary_ok = matched
+ 
+-    if canary_ok is False:
++    if canary_ok is not True:
+         print("\n=== HARNESS BROKEN: the canary mutation was NOT caught. The mutation "
+               "harness cannot detect a fault — ALL results are void. ===", file=sys.stderr)
+         return 2
+diff --git a/scripts/gate_enforcement.json b/scripts/gate_enforcement.json
+index dc0eabd4..17deaad3 100644
+--- a/scripts/gate_enforcement.json
++++ b/scripts/gate_enforcement.json
+@@ -262,6 +262,7 @@
+         "aa/src/offchain_header.rs",
+         "aa/src/userop.rs",
+         "fw-manifest/src/lib.rs",
++        "pqsigner-erc7730/src/display/primitives.rs",
+         "pqsigner-erc7730/src/display/render/amount_decision.rs",
+         "pqsigner-erc7730/src/display/render/formatters.rs",
+         "pqsigner-erc7730/src/render/array.rs",
+@@ -283,7 +284,7 @@
+       ],
+       "runs_in": "nightly.yml",
+       "enforcement": "nightly",
+-      "note": "CURATED per-slice anti-vacuity subset: 43 mutation groups (10 quick/30 default/3 full) across 21 of the 27 harness-bearing files (39 distinct harnesses individually mutation-screened; 162 active harnesses reside in those enrolled files). It does NOT screen every harness for vacuity — 11 harnesses in 6 files (domain/src/lib.rs, pqsigner-erc7730 display/primitives.rs + ir.rs + render/calldata_topology.rs + render/nested.rs + render/visibility.rs) have ZERO mutation coverage; do not read this as comprehensive Kani-vacuity coverage. check_gate_enforcement.py reverse-derives all 21 mutated source identities from scripts/kani_mutations.json and requires polices_paths to cover them plus the manifest itself. The full exact-identity census + enrolled/outside split is generated by scripts/kani_census.py (make verify-kani-census, per-PR) into kani_census.lock.json; refreshed 2026-07-23 at the FV Phase-D closure boundary. scripts/kani_mutations.json self-policed since 2026-07-19 (F13: the manifest you'd edit to fake mutation coverage must itself be policed).",
++      "note": "Curated anti-vacuity subset: 43 groups (10 quick, 29 default, 3 full, 1 local heavy), 39 distinct harnesses. Source census: 173 harnesses in 27 files; 164 in 22 mutation-enrolled files and nine in five outside. Enrollment does not individually mutation-screen every harness in those files. Default runs 39 groups; full 42; heavy only its one group plus the canary. Each credit requires a passing original and one fully qualified --exact failing harness, with a completed coherent verdict. #659/#662/#677/#685, 2026-09-16.",
+       "required_context": {
+         "step": {
+           "name": "make verify-kani-mutation",
+@@ -593,11 +594,17 @@
+         "shared/src/**",
+         "domain/src/**",
+         "tx-core/src/**",
+-        "scripts/kani_census.lock.json"
++        "scripts/kani_census.lock.json",
++        "scripts/kani_census.py",
++        "scripts/test_kani_census.py",
++        "scripts/check_kani_mutations.py",
++        "scripts/test_kani_mutations.py",
++        "scripts/kani_mutations.json",
++        "Makefile"
+       ],
+       "runs_in": "ci.yml",
+       "enforcement": "per_pr_blocking",
+-      "note": "F11 (introduced 2026-07-16; refreshed 2026-07-23): source-generated exact file/function Kani harness census (scripts/kani_census.py -> kani_census.lock.json) from active standalone attributes, plus file/harness and unique material find/replace manifest-rot checks. Pure Python (no cargo kani), so it runs per-PR in the gate-enforcement job (ci.yml), unlike the slow nightly `kani`/`verify-kani-mutation`. Closes the stale/hand-maintained-census and comment false-positive gaps (was '93 harnesses/17 files' in prose; live is 173/27, 11 harnesses in 6 files with no mutation coverage). scripts/kani_census.lock.json self-policed since 2026-07-19 (F13: the lock file you'd edit to fake the harness count must itself be policed; ci.yml has no paths filter, so it always fires).",
++      "note": "Source-generated exact file/function census plus material mutation anchors and explicit feature-gate checks. 173 source harnesses /27 files; 164 in22 mutation-enrolled files, nine in five outside. Offline runner regressions cover exact attribution, baseline failure and restoration. Source count includes three kani-heavy harnesses excluded from make kani. #662/#677/#685, 2026-09-16.",
+       "required_context": {
+         "step": {
+           "name": "verify-kani-census",
+@@ -625,7 +632,7 @@
+         "contracts/verification/easycrypt/**"
+       ],
+       "enforcement": "local_documented",
+-      "why": "F5 (2026-07-16) enrolls the EasyCrypt +C port gate — previously the ONLY formal-verification surface absent from this manifest, so its skips/admits/axioms/dependency state were invisible to the G1-G5 controls. Needs the pinned opam ec-r2026 switch (EasyCrypt r2026.02 + Alt-Ergo 2.6.0) + the MM45 reference proofs, so it stays local-only. Split into three targets: verify-easycrypt (PARTIAL: stdlib +C chain, MM45-chain skipped loudly), verify-easycrypt-full (FULL: 21/21 zero skips, fails if MM45 refs absent), verify-easycrypt-pins (toolchain-free ledger: admit/axiom COUNT + SEMANTIC name->statement pin + a wired-in negative control that a dmkey_ll:false weakening MUST fire). The toolchain-free pin (verify-easycrypt-pins) is CI-wired per-PR in lean-fv.yml since 2026-08-20 (#664); the full compile cannot be (no MM45 docker on runners)."
++      "why": "Historical research path, retained local-only (2026-09-16, #670). This does not certify the current vendored split artifact. Checks historical drafts with a partial MM45-dependent mode."
+     },
+     {
+       "id": "verify-three-claims",
+@@ -1298,7 +1305,7 @@
+       ],
+       "runs_in": "lean-fv.yml",
+       "enforcement": "per_pr_blocking",
+-      "note": "Toolchain-free EasyCrypt admit/axiom ledger: count pins + SEMANTIC name->statement pin + a wired-in negative control (a dmkey_ll:false weakening MUST fire). 1.9 s locally, verified green 2026-08-20 against 666e3725 — no container needed. Wired into lean-fv.yml 2026-08-20 (#664): it ran in NO workflow while the last ~15 master commits were EasyCrypt pin work. easycrypt/** added to the lean-fv.yml paths filter the same day so the gate FIRES on its policed surface (the F1 class).",
++      "note": "Historical easycrypt/drafts admit/axiom ledger only; current split checks have a separate verify-easycrypt-split-pins registration (#670, 2026-09-16).",
+       "required_context": {
+         "step": {
+           "name": "verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)",
+@@ -1327,7 +1334,7 @@
+         "contracts/verification/scripts/check_easycrypt.sh"
+       ],
+       "enforcement": "local_documented",
+-      "why": "FULL EasyCrypt verification (21/21 .ec compiled as targets, ZERO skips) needs the pinned opam ec-r2026 switch (EasyCrypt r2026.02 + Alt-Ergo 2.6.0) AND the MM45 reference proofs, and FAILS by design when either is absent — so it cannot run on a stock runner (F5 split, 2026-07-16). The toolchain-free ledger leg (verify-easycrypt-pins) is per-PR in lean-fv.yml. Enrolled 2026-08-20 (#664)."
++      "why": "Historical research path, retained local-only (2026-09-16, #670). This does not certify the current vendored split artifact. Compiles all historical drafts; needs the local MM45 references and supported toolchain."
+     },
+     {
+       "id": "verify-easycrypt-docker",
+@@ -1336,7 +1343,7 @@
+         "contracts/verification/easycrypt/**"
+       ],
+       "enforcement": "local_documented",
+-      "why": "the C10-concrete capstone reproduces MM45's confirmed toolchain (EC r2026.02 + Z3 4.13.4 + Alt-Ergo 2.6.0) in docker and needs a local MM45 checkout (C10_PORT_DIR with its FV-SPHINCSPLUS-EC submodule — third-party, not vendored); absent either it prints the committed 2026-07-17 gate receipt and SKIP-exits 0, which as a CI step would be a permanent green no-op. Enrolled 2026-08-20 (#664)."
++      "why": "Historical research path, retained local-only (2026-09-16, #670). This does not certify the current vendored split artifact. Requires Docker and an external MM45 checkout; fails immediately if absent. The July receipt is historical evidence, not a new run."
+     },
+     {
+       "id": "verify-tla",
+@@ -1582,6 +1589,87 @@
+       ],
+       "enforcement": "local_documented",
+       "why": "CryptoVerif requires its local executable/library setup. The nightly protocol job deliberately selects only proverif,tamarin; this wrapper selects the computational model alone through the existing verdict checker. Explicit local-only registration added for #664 on 2026-09-15; no fresh computational proof is claimed by source-wiring checks."
++    },
++    {
++      "id": "verify-easycrypt-split-pins",
++      "make": "make -C contracts/verification verify-easycrypt-split-pins",
++      "polices_paths": [
++        "contracts/verification/easycrypt/c10-port/**",
++        "contracts/verification/scripts/run_easycrypt_split.py",
++        "contracts/verification/Makefile",
++        ".github/workflows/lean-fv.yml"
++      ],
++      "runs_in": "lean-fv.yml",
++      "enforcement": "per_pr_blocking",
++      "note": "Current split: unique pins, computed complete dependency inventory, assumption census, coverage, quarantine, named-application taint and checked input identity. No proof replay. #670/#683/#684, 2026-09-16.",
++      "required_context": {
++        "step": {
++          "name": "verify-easycrypt-split-pins (current vendored split integrity)",
++          "run": "make -C contracts/verification verify-easycrypt-split-pins"
++        },
++        "job_equals": {
++          "runs-on": "ubuntu-latest"
++        },
++        "job_absent": [
++          "container",
++          "env",
++          "if",
++          "needs",
++          "strategy",
++          "defaults",
++          "continue-on-error"
++        ],
++        "workflow_context": {}
++      }
++    },
++    {
++      "id": "verify-easycrypt-split",
++      "make": "make -C contracts/verification verify-easycrypt-split",
++      "polices_paths": [
++        "contracts/verification/easycrypt/c10-port/**",
++        "contracts/verification/scripts/run_easycrypt_split.py",
++        "contracts/verification/Makefile",
++        ".github/workflows/nightly.yml"
++      ],
++      "runs_in": "nightly.yml",
++      "enforcement": "nightly",
++      "note": "Full current split gate: immutable image digest, observed compiler and solver identities, complete 45-file closure compiled directly by both drivers, require/negative controls and all split census/pin/taint checks. Conditional research result, not firmware refinement or production assurance. #670/#683/#686, 2026-09-16.",
++      "required_context": {
++        "step": {
++          "name": "verify-easycrypt-split (pinned toolchain, complete dependency closure)",
++          "run": "make -C contracts/verification verify-easycrypt-split"
++        },
++        "job_equals": {
++          "runs-on": "ubuntu-latest",
++          "timeout-minutes": 240,
++          "steps": [
++            {
++              "uses": "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
++              "with": {
++                "persist-credentials": false
++              }
++            },
++            {
++              "name": "install elan (toolchain pinned by lean-toolchain)",
++              "run": "# Pinned + verified, not `curl | sh` from a moving branch. `master`\n# is mutable: whoever controls that ref controls the toolchain\n# installer on every FV runner, which is the trust root the\n# verification Makefile builds on. Pin the commit, check the bytes,\n# and only then execute. (#562)\nset -euo pipefail\nELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2\nELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53\ncurl --proto '=https' --tlsv1.2 -fsSL \\\n  \"https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh\" \\\n  -o elan-init.sh\necho \"${ELAN_SHA256}  elan-init.sh\" | sha256sum -c -\nsh elan-init.sh -y --default-toolchain none\nrm -f elan-init.sh\necho \"$HOME/.elan/bin\" >> \"$GITHUB_PATH\"\n"
++            },
++            {
++              "name": "verify-easycrypt-split (pinned toolchain, complete dependency closure)",
++              "run": "make -C contracts/verification verify-easycrypt-split"
++            }
++          ]
++        },
++        "job_absent": [
++          "container",
++          "env",
++          "if",
++          "needs",
++          "strategy",
++          "defaults",
++          "continue-on-error"
++        ],
++        "workflow_context": {}
++      }
+     }
+   ],
+   "_completeness_waived": {}
+diff --git a/scripts/kani_census.lock.json b/scripts/kani_census.lock.json
+index 54c7959d..2faceaad 100644
+--- a/scripts/kani_census.lock.json
++++ b/scripts/kani_census.lock.json
+@@ -262,21 +262,21 @@
+   "totals": {
+     "total_files": 27,
+     "total_harnesses": 173,
+-    "mutation_enrolled_files": 21,
+-    "harnesses_in_enrolled_files": 162,
+-    "files_outside_mutation": 6,
+-    "harnesses_outside_mutation": 11,
++    "mutation_enrolled_files": 22,
++    "harnesses_in_enrolled_files": 164,
++    "files_outside_mutation": 5,
++    "harnesses_outside_mutation": 9,
+     "mutation_groups_total": 43,
+     "mutation_groups_by_tier": {
+       "quick": 10,
+-      "default": 30,
++      "default": 29,
++      "heavy": 1,
+       "full": 3
+     },
+     "distinct_enrolled_harnesses": 39
+   },
+   "files_outside_mutation": [
+     "domain/src/lib.rs",
+-    "pqsigner-erc7730/src/display/primitives.rs",
+     "pqsigner-erc7730/src/ir.rs",
+     "pqsigner-erc7730/src/render/calldata_topology.rs",
+     "pqsigner-erc7730/src/render/nested.rs",
+diff --git a/scripts/kani_census.py b/scripts/kani_census.py
+index 3c096373..f37433ee 100644
+--- a/scripts/kani_census.py
++++ b/scripts/kani_census.py
+@@ -128,6 +128,63 @@ def generate() -> dict:
+     }
+ 
+ 
++_FEATURE_REF = re.compile(r'\bfeature\s*=\s*"([^"]+)"')
++
++
++def _harness_cfg_features(source: str, harness: str) -> list[str]:
++    """``feature = "..."`` names from ``#[cfg(...)]`` attributes attached to
++    ``fn <harness>`` (walking up over the contiguous attribute/comment/blank
++    block above each same-named fn, unioned).
++
++    A cfg-gated harness (e.g. ``#[cfg(feature = "kani-heavy")]``) is compiled
++    OUT unless ``cargo kani`` gets a matching ``--features`` flag — without it
++    kani produces no VERIFICATION verdict and the mutation lane dies with a
++    HarnessError (issue #662). Only per-harness ``cfg`` attributes are seen;
++    a gate on an enclosing ``mod`` is not (none exist today).
++    """
++    fn_decl = re.compile(
++        r"^[ \t]*(?:(?:pub(?:\([^)]*\))?)[ \t]+)?"
++        r"(?:unsafe[ \t]+)?(?:async[ \t]+)?fn[ \t]+" + re.escape(harness) + r"\b"
++    )
++    # Normalize complete attributes first, so layout never hides a cfg gate.
++    source = re.sub(r"#\[[^\]]*\]", lambda m: " ".join(m.group().split()), source)
++    lines = source.splitlines()
++    features: list[str] = []
++    for i, line in enumerate(lines):
++        if not fn_decl.match(line):
++            continue
++        j = i - 1
++        while j >= 0:
++            s = lines[j].strip()
++            if not s or s.startswith("//"):
++                j -= 1
++                continue
++            if s.startswith("#["):
++                if re.match(r"#\[cfg(?:_attr)?\b", s) and _FEATURE_REF.search(s):
++                    if not re.fullmatch(r'#\[cfg\(\s*feature\s*=\s*"[^"]+"\s*\)\]', s):
++                        raise ValueError(f"unsupported feature cfg on {harness}: {s}")
++                    features.extend(_FEATURE_REF.findall(s))
++                j -= 1
++                continue
++            break
++    return sorted(set(features))
++
++
++def _z_flag_features(entry: dict) -> list[str]:
++    """Feature names an entry's ``z_flags`` passes via ``--features`` (both the
++    ``["--features", "a,b"]`` and ``["--features=a,b"]`` forms)."""
++    z_flags = entry.get("z_flags", [])
++    feats: list[str] = []
++    if not isinstance(z_flags, list):
++        return feats
++    for k, flag in enumerate(z_flags):
++        if flag == "--features" and k + 1 < len(z_flags):
++            feats.extend(x.strip() for x in str(z_flags[k + 1]).split(","))
++        elif isinstance(flag, str) and flag.startswith("--features="):
++            feats.extend(x.strip() for x in flag.split("=", 1)[1].split(","))
++    return [f for f in feats if f]
++
++
+ def manifest_rot(
+     census: dict,
+     *,
+@@ -141,6 +198,14 @@ def manifest_rot(
+     its replacement is a no-op. Otherwise a dead mutation can remain enrolled
+     in the published anti-vacuity count while never changing production code.
+ 
++    The harness may live in a DIFFERENT file than the mutation target (a shared
++    pure helper mutated where it is defined, pinned by a caller's harness —
++    e.g. ``native_amount_exactness_helper_gate_dropped``); it is only required
++    to exist in SOME git-tracked source. When the harness is cfg-gated
++    (``#[cfg(feature = "...")]``), the entry's ``z_flags`` must enable every
++    gating feature, else the slow lane compiles the harness out and dies with
++    a HarnessError instead of a verdict (issue #662).
++
+     ``manifest`` and ``repo_root`` are injectable only for the offline unit
+     tests; normal callers read the committed manifest under :data:`REPO_ROOT`.
+     """
+@@ -164,10 +229,14 @@ def manifest_rot(
+         if not path.exists():
+             fails.append(f"manifest `{mutation_id}`: file {f} does not exist (deleted/renamed).")
+             continue
+-        if h not in fh.get(f, []):
++        harness_file = f if h in fh.get(f, []) else next(
++            (hf for hf, hs in fh.items() if h in hs), None
++        )
++        if harness_file is None:
+             fails.append(
+-                f"manifest `{mutation_id}`: no `#[kani::proof] fn {h}` in {f} "
+-                f"(renamed/deleted harness — the mutation would misfire before Kani runs)."
++                f"manifest `{mutation_id}`: no `#[kani::proof] fn {h}` in {f} or any "
++                "other git-tracked source (renamed/deleted harness — the mutation "
++                "would misfire before Kani runs)."
+             )
+ 
+         find = m.get("find")
+@@ -192,6 +261,33 @@ def manifest_rot(
+                 f"manifest `{mutation_id}`: find string occurs {occurrences}x in {f}; "
+                 "expected exactly once."
+             )
++
++        # cfg-gate feature check (issue #662 class): a harness compiled out for
++        # lack of a `--features` flag yields no VERIFICATION verdict, so the
++        # slow lane dies with a HarnessError. Catch it statically here.
++        if harness_file is not None:
++            hsource = source
++            if harness_file != f:
++                try:
++                    hsource = (repo_root / harness_file).read_text(
++                        encoding="utf-8", errors="replace"
++                    )
++                except OSError:
++                    hsource = ""
++            try:
++                required = _harness_cfg_features(hsource, h)
++            except ValueError as exc:
++                fails.append(f"manifest `{mutation_id}`: {exc}")
++                continue
++            missing = [feat for feat in required if feat not in _z_flag_features(m)]
++            if missing:
++                fails.append(
++                    f"manifest `{mutation_id}`: harness {h} is cfg-gated on "
++                    f"feature(s) {required} in {harness_file} but the entry's z_flags "
++                    f"do not enable {missing} — `cargo kani` would compile the harness "
++                    f"OUT (no VERIFICATION verdict, the #662 nightly-lane death). Add "
++                    f'e.g. ["--features", "{missing[0]}"] to the entry\'s z_flags.'
++                )
+     return fails
+ 
+ 
+diff --git a/scripts/kani_mutations.json b/scripts/kani_mutations.json
+index a351a3d3..39af61be 100644
+--- a/scripts/kani_mutations.json
++++ b/scripts/kani_mutations.json
+@@ -1,5 +1,6 @@
+ {
+-  "_comment": "verify-kani-mutation manifest — the Kani-side analogue of the Lean verify-proof-mutation gate (anti-vacuity for the firmware bounded-verification harnesses). For each entry, mutate a decoder/gate function in a way a specific Kani harness MUST catch, run ONLY that harness, and assert it flips to `VERIFICATION:- FAILED`. A green-when-it-should-be-red = a vacuous / under-constrained harness (the exact failure class the per-slice manual mutation checks caught by hand; this makes them a standing gate — work-todo §34/§35). Paths are relative to the repo root. Every entry uses `expect: kani_fails` (the load-bearing mutation must be caught); the `canary` doubles as the machinery-health check (if it survives, ALL results are void).",
++  "_comment": "verify-kani-mutation manifest \u2014 the Kani-side analogue of the Lean verify-proof-mutation gate (anti-vacuity for the firmware bounded-verification harnesses). For each entry, mutate a decoder/gate function in a way a specific Kani harness MUST catch, run ONLY that harness, and assert it flips to `VERIFICATION:- FAILED`. A green-when-it-should-be-red = a vacuous / under-constrained harness (the exact failure class the per-slice manual mutation checks caught by hand; this makes them a standing gate \u2014 work-todo \u00a734/\u00a735). Paths are relative to the repo root. Every entry uses `expect: kani_fails` (the load-bearing mutation must be caught); the `canary` doubles as the machinery-health check (if it survives, ALL results are void).",
++  "notes": "TIERS (2026-08-20, issue #662): quick \u2286 default \u2286 full are CUMULATIVE (`--tier default` runs quick+default; the nightly lane runs default). `heavy` is NON-cumulative and LOCAL-ONLY: `--tier heavy` runs ONLY the heavy entries plus the always-on canary, and every other tier SKIPS heavy entries. Heavy entries pin #[cfg(feature = \"kani-heavy\")]-gated harnesses whose peak RSS (no_hidden_value 13.05 GiB / 7m55s, per_record_page_bound 12.71 GiB, cow_presign_precedence 11.50 GiB \u2014 measured 2026-07-31) can OOM a 16 GB hosted runner and suppress the rest of the job's evidence, so they must NEVER be wired into CI; run them via `make verify-kani-mutation-heavy` or `make kani-heavy`. An entry whose harness is cfg-gated MUST carry matching z_flags (e.g. [\"--features\", \"kani-heavy\"]): the static census (`make verify-kani-census`, scripts/kani_census.py manifest_rot) fails the manifest otherwise, so the #662 class (gated harness compiled out \u2192 no VERIFICATION verdict \u2192 nightly HarnessError) dies statically. An entry's `file` may differ from the file holding its `harness` when the mutation anchors a shared pure helper the harness pins (see native_amount_exactness_helper_gate_dropped, issue #659).",
+   "mutations": [
+     {
+       "id": "canary",
+@@ -10,7 +11,8 @@
+       "find": "self.fw_version() > rollback_floor",
+       "replace": "true",
+       "expect": "kani_fails",
+-      "note": "verify_rollback always-accepts -> the rollback_boundary biconditional (is_ok() <=> version > floor) MUST break. If this SURVIVES, the harness machinery is broken (kani not running / output not parsed) and every result is void."
++      "note": "verify_rollback always-accepts -> the rollback_boundary biconditional (is_ok() <=> version > floor) MUST break. If this SURVIVES, the harness machinery is broken (kani not running / output not parsed) and every result is void.",
++      "harness_path": "verification::rollback_boundary"
+     },
+     {
+       "id": "rollback_off_by_one",
+@@ -21,7 +23,8 @@
+       "find": "self.fw_version() > rollback_floor",
+       "replace": "self.fw_version() >= rollback_floor",
+       "expect": "kani_fails",
+-      "note": "the real anti-rollback off-by-one: `>=` would let a version==floor reinstall slip past the OTP rollback floor."
++      "note": "the real anti-rollback off-by-one: `>=` would let a version==floor reinstall slip past the OTP rollback floor.",
++      "harness_path": "verification::rollback_boundary"
+     },
+     {
+       "id": "aa_execute_abi_offset",
+@@ -32,7 +35,8 @@
+       "find": "out.buf[p + WORD - 1] = 0xa0;",
+       "replace": "out.buf[p + WORD - 1] = 0xc0;",
+       "expect": "kani_fails",
+-      "note": "the execute(...) head->tail ABI offset byte; a wrong value = calldata the on-chain wallet mis-decodes into a different call."
++      "note": "the execute(...) head->tail ABI offset byte; a wrong value = calldata the on-chain wallet mis-decodes into a different call.",
++      "harness_path": "userop::kani_harnesses::reconstruct_execute_layout"
+     },
+     {
+       "id": "multisend_record_walk_tiling",
+@@ -43,18 +47,24 @@
+       "find": "self.cursor += data_end;",
+       "replace": "self.cursor += data_end + 1;",
+       "expect": "kani_fails",
+-      "note": "perturb the multiSend record-walk cursor advance -> the exact-tiling partition proof MUST break (a hidden byte would ride between records)."
++      "note": "perturb the multiSend record-walk cursor advance -> the exact-tiling partition proof MUST break (a hidden byte would ride between records).",
++      "harness_path": "multisend::verification::record_walk_exact_tiling"
+     },
+     {
+       "id": "multisend_hidden_value",
+-      "tier": "default",
++      "tier": "heavy",
+       "crate": "pqsigner-tx",
+       "harness": "no_hidden_value",
+       "file": "tx/src/multisend.rs",
+       "find": "!value_is_zero && !matches!(kind, MsRecordKind::PlainEth | MsRecordKind::EmptyCall)",
+       "replace": "!value_is_zero && !matches!(kind, MsRecordKind::PlainEth | MsRecordKind::EmptyCall | MsRecordKind::Blind)",
+       "expect": "kani_fails",
+-      "note": "excluding Blind from the value-page rule would silently drop a Blind record's non-zero native value -> the no-hidden-value WYSIWYS proof MUST break."
++      "z_flags": [
++        "--features",
++        "kani-heavy"
++      ],
++      "note": "excluding Blind from the value-page rule would silently drop a Blind record's non-zero native value -> the no-hidden-value WYSIWYS proof MUST break. MOVED TO THE heavy TIER 2026-08-20 (issue #662): the no_hidden_value harness has been #[cfg(feature = \"kani-heavy\")]-gated since 80937852 (13.05 GiB / 7m55s peak, measured 2026-07-31 \u2014 see the Makefile kani-heavy target), so the default-tier nightly lane compiled it OUT and died with a HarnessError (no VERIFICATION verdict). The z_flags re-enable the harness for the local heavy tier; the static census (verify-kani-census) now fails any cfg-gated harness whose entry lacks matching z_flags, so this class dies statically next time. NEVER wire the heavy tier into a 16 GB CI runner \u2014 an OOM kills the job and suppresses the rest of its evidence; run `make verify-kani-mutation-heavy` / `make kani-heavy` locally.",
++      "harness_path": "multisend::verification::no_hidden_value"
+     },
+     {
+       "id": "cowswap_field_offset",
+@@ -65,7 +75,8 @@
+       "find": "sell_token.copy_from_slice(&canonical[8..28]);",
+       "replace": "sell_token.copy_from_slice(&canonical[9..29]);",
+       "expect": "kani_fails",
+-      "note": "shift a GPv2Order field read by one byte -> the verbatim-offset decode-soundness biconditional MUST break."
++      "note": "shift a GPv2Order field read by one byte -> the verbatim-offset decode-soundness biconditional MUST break.",
++      "harness_path": "cowswap_order::verification::decode_canonical_soundness"
+     },
+     {
+       "id": "multisend_op0_delegatecall",
+@@ -76,7 +87,8 @@
+       "find": "rec.operation != 0",
+       "replace": "false",
+       "expect": "kani_fails",
+-      "note": "disable the per-record op==0 DELEGATECALL-refusal in summarize_packed -> a payload carrying an op!=0 record is now accepted, so summarize_accept_implies_all_call's `Ok => forall record: operation==0` re-walk assertion MUST break. Verified 2026-07-01 by hand: mutation -> VERIFICATION:- FAILED via assert_failed_inner (the assert_eq!(rec.operation, 0) firing), unmutated -> SUCCESSFUL. Closes finding 3b-1's anti-vacuity guard (ADVERSARIAL_REVIEW_KANI_2026-07-01.md); the only kani_mutations entry outside the original 4-file curated set."
++      "note": "disable the per-record op==0 DELEGATECALL-refusal in summarize_packed -> a payload carrying an op!=0 record is now accepted, so summarize_accept_implies_all_call's `Ok => forall record: operation==0` re-walk assertion MUST break. Verified 2026-07-01 by hand: mutation -> VERIFICATION:- FAILED via assert_failed_inner (the assert_eq!(rec.operation, 0) firing), unmutated -> SUCCESSFUL. Closes finding 3b-1's anti-vacuity guard (ADVERSARIAL_REVIEW_KANI_2026-07-01.md); the only kani_mutations entry outside the original 4-file curated set.",
++      "harness_path": "multisend::verification::summarize_accept_implies_all_call"
+     },
+     {
+       "id": "safe_exec_noncanonical_address",
+@@ -87,7 +99,8 @@
+       "find": "word[..12].iter().any(|&b| b != 0)",
+       "replace": "false",
+       "expect": "kani_fails",
+-      "note": "disable read_address_word_off's top-12-zero address-canonicity reject -> a dirty-padding address word (to/gas_token/refund_receiver) is accepted, so decode_exec_rejects_noncanonical_address (expects NonCanonicalAddress) MUST break. Verified 2026-07-02 by hand: mutation -> BOTH decode_exec_rejects_noncanonical_address AND decode_exec_soundness (accept-direction top-12==0 assert) -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding 3b/#4 (exec address canonicity had NO harness; deleting the reject kept all 12 safe_tx harnesses green)."
++      "note": "disable read_address_word_off's top-12-zero address-canonicity reject -> a dirty-padding address word (to/gas_token/refund_receiver) is accepted, so decode_exec_rejects_noncanonical_address (expects NonCanonicalAddress) MUST break. Verified 2026-07-02 by hand: mutation -> BOTH decode_exec_rejects_noncanonical_address AND decode_exec_soundness (accept-direction top-12==0 assert) -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding 3b/#4 (exec address canonicity had NO harness; deleting the reject kept all 12 safe_tx harnesses green).",
++      "harness_path": "safe_tx::verification::decode_exec_rejects_noncanonical_address"
+     },
+     {
+       "id": "array_element_cap",
+@@ -98,7 +111,8 @@
+       "find": "if count > MAX_ARRAY_RENDER {",
+       "replace": "if false {",
+       "expect": "kani_fails",
+-      "note": "disable the dynamic-array element cap (step 7) -> a 9-element sole-tail body is accepted, so resolve_array_rejects_over_cap (expects Reject) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #2 (the cap was UNREACHABLE in the symbolic panic-free harnesses at N=160/224 which admit only count<=2/4, so `count<=MAX_ARRAY_RENDER` there was vacuous; the concrete control at 384 B exercises it)."
++      "note": "disable the dynamic-array element cap (step 7) -> a 9-element sole-tail body is accepted, so resolve_array_rejects_over_cap (expects Reject) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #2 (the cap was UNREACHABLE in the symbolic panic-free harnesses at N=160/224 which admit only count<=2/4, so `count<=MAX_ARRAY_RENDER` there was vacuous; the concrete control at 384 B exercises it).",
++      "harness_path": "render::array::kani_harnesses::resolve_array_rejects_over_cap"
+     },
+     {
+       "id": "enum_label_key_match",
+@@ -109,7 +123,8 @@
+       "find": "if key == k {",
+       "replace": "if true {",
+       "expect": "kani_fails",
+-      "note": "make lookup_enum_label's per-entry key comparison always-true -> the first entry matches any (high-zero) value, so the returned label is entry 0's regardless of which key the value actually matches. enum_two_entry_value_sound (a value matching key1, not key0, must return label1) MUST break. Verified 2026-07-02 by hand: mutation -> enum_two_entry_value_sound (and enum_single_entry_value_sound) VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #3 (the single-entry harness only proved the match where first==correct; the multi-entry return-the-matching-entry property was unverified)."
++      "note": "make lookup_enum_label's per-entry key comparison always-true -> the first entry matches any (high-zero) value, so the returned label is entry 0's regardless of which key the value actually matches. enum_two_entry_value_sound (a value matching key1, not key0, must return label1) MUST break. Verified 2026-07-02 by hand: mutation -> enum_two_entry_value_sound (and enum_single_entry_value_sound) VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #3 (the single-entry harness only proved the match where first==correct; the multi-entry return-the-matching-entry property was unverified).",
++      "harness_path": "render::enums::kani_harnesses::enum_two_entry_value_sound"
+     },
+     {
+       "id": "rlp_used_underreport",
+@@ -120,7 +135,8 @@
+       "find": "Ok((Item::Bytes(&input[..1]), 1))",
+       "replace": "Ok((Item::Bytes(&input[..1]), 0))",
+       "expect": "kani_fails",
+-      "note": "under-report the single-byte item's consumed count (used 1 -> 0) -> ListIter's `&self.rest[used..]` would re-read the same byte (a parse desync). The strengthened `assert_eq!(used, header_len + payload.len())` (header_len derived independently from the RLP prefix byte) MUST break; the old `used <= len` assert would have PASSED with used=0. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #10."
++      "note": "under-report the single-byte item's consumed count (used 1 -> 0) -> ListIter's `&self.rest[used..]` would re-read the same byte (a parse desync). The strengthened `assert_eq!(used, header_len + payload.len())` (header_len derived independently from the RLP prefix byte) MUST break; the old `used <= len` assert would have PASSED with used=0. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #10.",
++      "harness_path": "rlp::kani_harnesses::decode_item_panic_free_and_used_in_bounds"
+     },
+     {
+       "id": "erc20_transferfrom_to_offset",
+@@ -131,7 +147,8 @@
+       "find": "let to = decode_address_word(&body[32..64])",
+       "replace": "let to = decode_address_word(&body[0..32])",
+       "expect": "kani_fails",
+-      "note": "read transferFrom's `to` from word 0 (the `from` word) instead of word 1 -> the display would show the WRONG recipient for the approval-drain arm. parse_erc20_transfer_from_no_misdecode (decoded to == encoded to, forall) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #9 (only `transfer` had a forall no-misdecode harness; approve/transferFrom rested on point-tests)."
++      "note": "read transferFrom's `to` from word 0 (the `from` word) instead of word 1 -> the display would show the WRONG recipient for the approval-drain arm. parse_erc20_transfer_from_no_misdecode (decoded to == encoded to, forall) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #9 (only `transfer` had a forall no-misdecode harness; approve/transferFrom rested on point-tests).",
++      "harness_path": "erc20::calldata::kani_harnesses::parse_erc20_transfer_from_no_misdecode"
+     },
+     {
+       "id": "safe_mgmt_addr_word_offset",
+@@ -142,7 +159,8 @@
+       "find": "    addr.copy_from_slice(&word[12..32]);",
+       "replace": "    addr.copy_from_slice(&word[11..31]);",
+       "expect": "kani_fails",
+-      "note": "[§2 #1: Safe-mgmt owner/module address decode] Breaks decode_addr_word: reads the 20-byte address one byte too low (word[11..31] instead of the canonical word[12..32]), so the decoded owner is shifted off the ABI-encoded word. The concrete non-vacuity harness asserts new_owner[0]==0xaa and new_owner[19]==0xbb at their exact canonical offsets, which the shifted decode violates. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
++      "note": "[\u00a72 #1: Safe-mgmt owner/module address decode] Breaks decode_addr_word: reads the 20-byte address one byte too low (word[11..31] instead of the canonical word[12..32]), so the decoded owner is shifted off the ABI-encoded word. The concrete non-vacuity harness asserts new_owner[0]==0xaa and new_owner[19]==0xbb at their exact canonical offsets, which the shifted decode violates. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
++      "harness_path": "safe_mgmt::verification::classify_safe_mgmt_accepts_canonical_add_owner"
+     },
+     {
+       "id": "abi_dyn_payload_len",
+@@ -153,7 +171,8 @@
+       "find": "                    ArgClass::DynBytes | ArgClass::DynString => length as u64,",
+       "replace": "                    ArgClass::DynBytes | ArgClass::DynString => 0,",
+       "expect": "kani_fails",
+-      "note": "[§2 #1: typed-call ABI dynamic-tail bounds] Breaks the dynamic bytes/string payload-size accounting in walk: treats every dynamic payload as zero-length, so the tail bounds check (end = offset+32+padded_payload) under-reserves space and walk accepts a frame whose actual renderer read extent (body_off+32+count) runs past body.len(). The soundness harness reconstructs the renderer's UNPADDED read extent independently via renderer_read_end and asserts it is <= body.len(); the mutation makes that assertion (abi.rs:417) fail. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
++      "note": "[\u00a72 #1: typed-call ABI dynamic-tail bounds] Breaks the dynamic bytes/string payload-size accounting in walk: treats every dynamic payload as zero-length, so the tail bounds check (end = offset+32+padded_payload) under-reserves space and walk accepts a frame whose actual renderer read extent (body_off+32+count) runs past body.len(). The soundness harness reconstructs the renderer's UNPADDED read extent independently via renderer_read_end and asserts it is <= body.len(); the mutation makes that assertion (abi.rs:417) fail. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
++      "harness_path": "typed_call::abi::verification::walk_dyn_bytes_read_in_bounds"
+     },
+     {
+       "id": "ns_ptr_mailbox_straddle",
+@@ -164,7 +183,8 @@
+       "find": "    if ptr < r.mailbox_end && end > r.mailbox_base {",
+       "replace": "    if ptr > r.mailbox_end && end > r.mailbox_base {",
+       "expect": "kani_fails",
+-      "note": "[§2 #1: NS-ptr shared-mailbox overlap reject] Flips the write-path shared-mailbox overlap reject in ns_write_window_ok: `ptr < r.mailbox_end` -> `ptr > r.mailbox_end`. This makes a range straddling the mailbox lower boundary (ptr = mailbox_base-4, len 8) pass the overlap guard, so the TOCTOU-critical mailbox carve-out is no longer rejected. Find string is unique to line 90 (line 122's read-path check is prefixed `if in_sram && ptr ...`). Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
++      "note": "[\u00a72 #1: NS-ptr shared-mailbox overlap reject] Flips the write-path shared-mailbox overlap reject in ns_write_window_ok: `ptr < r.mailbox_end` -> `ptr > r.mailbox_end`. This makes a range straddling the mailbox lower boundary (ptr = mailbox_base-4, len 8) pass the overlap guard, so the TOCTOU-critical mailbox carve-out is no longer rejected. Find string is unique to line 90 (line 122's read-path check is prefixed `if in_sram && ptr ...`). Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
++      "harness_path": "ns_ptr_validate::verification::ns_rejects_mailbox_straddle_control"
+     },
+     {
+       "id": "params_enum_ref_endianness",
+@@ -175,7 +195,8 @@
+       "find": "                p.enum_ref = Some(u16::from_be_bytes([payload[0], payload[1]]));",
+       "replace": "                p.enum_ref = Some(u16::from_be_bytes([payload[1], payload[0]]));",
+       "expect": "kani_fails",
+-      "note": "[§2 #1: ERC-7730 enum_ref u16 decode] Swaps the two enum_ref payload bytes, breaking the big-endian u16 value decode. The harness reconstructs the expected value as u16::from_be_bytes([pool[4], pool[5]]) from the original pool at the fixed offset, so the swap produces the wrong value whenever payload[0]!=payload[1]. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
++      "note": "[\u00a72 #1: ERC-7730 enum_ref u16 decode] Swaps the two enum_ref payload bytes, breaking the big-endian u16 value decode. The harness reconstructs the expected value as u16::from_be_bytes([pool[4], pool[5]]) from the original pool at the fixed offset, so the swap produces the wrong value whenever payload[0]!=payload[1]. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
++      "harness_path": "render::params::kani_harnesses::params_enum_ref_width_and_value_sound"
+     },
+     {
+       "id": "resolve_leaf_oob_reject",
+@@ -186,7 +207,8 @@
+       "find": "        return Err(RenderErr::Reject(\"7730 res leaf oob\"));",
+       "replace": "        {}",
+       "expect": "kani_fails",
+-      "note": "[§2 #1: ERC-7730 leaf-offset bounds reject (slow ~460s -> full tier)] Drops the final leaf bounds reject so resolve_structured returns Ok(Leaf::Word/Dynamic(pos)) even when pos+32 > body.len() (a FieldIdx-terminated program with a large slot). The harness asserts every returned leaf offset satisfies off.checked_add(32) <= body.len(), which the removed check enforced. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
++      "note": "[\u00a72 #1: ERC-7730 leaf-offset bounds reject (slow ~460s -> full tier)] Drops the final leaf bounds reject so resolve_structured returns Ok(Leaf::Word/Dynamic(pos)) even when pos+32 > body.len() (a FieldIdx-terminated program with a large slot). The harness asserts every returned leaf offset satisfies off.checked_add(32) <= body.len(), which the removed check enforced. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
++      "harness_path": "render::resolve::kani_harness::resolve_structured_panic_free_and_in_bounds"
+     },
+     {
+       "id": "safe_exec_data_slice_shift",
+@@ -197,7 +219,8 @@
+       "find": "let payload_start = offset + 32;",
+       "replace": "let payload_start = offset;",
+       "expect": "kani_fails",
+-      "note": "shift the dynamic `data` payload start by -32 (read the length word as the payload) -> the rendered data slice starts 32 bytes early. decode_exec_data_slice_fidelity (d.data[i] == head[data_off+32+i], verbatim, for <=8-byte payloads; data_off + declared length re-read INDEPENDENTLY from the head bytes) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #5 (the empty-tail decode_exec_soundness + the single concrete offset-320 witness did not cover the data-slice content for symbolic offsets; the module note declined the biconditional as decoder-echo, but the payload-shift is a real gap this bounded fidelity harness closes)."
++      "note": "shift the dynamic `data` payload start by -32 (read the length word as the payload) -> the rendered data slice starts 32 bytes early. decode_exec_data_slice_fidelity (d.data[i] == head[data_off+32+i], verbatim, for <=8-byte payloads; data_off + declared length re-read INDEPENDENTLY from the head bytes) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #5 (the empty-tail decode_exec_soundness + the single concrete offset-320 witness did not cover the data-slice content for symbolic offsets; the module note declined the biconditional as decoder-echo, but the payload-shift is a real gap this bounded fidelity harness closes).",
++      "harness_path": "safe_tx::verification::decode_exec_data_slice_fidelity"
+     },
+     {
+       "id": "offchain_eip712_exact_consumption",
+@@ -208,7 +231,8 @@
+       "find": "if p + trailer_len != payload.len() {",
+       "replace": "if p + trailer_len > payload.len() {",
+       "expect": "kani_fails",
+-      "note": "weaken the EIP-712 typed-frame EXACT-consumption guard (`!=` -> `>`) so a payload with hidden trailing bytes after the trailer is accepted -> parse_frame_panic_free_and_exact's `trailer ends at payload.len()` assertion MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes review finding (h): the offchain EIP712_TYPED/_V3 companion header parser had no host-Kani coverage; now extracted to pqsigner_aa::offchain_header (behaviour-identical, re-wired into cmd_sign_offchain.rs) + panic/OOB + exact-consumption harnesses."
++      "note": "weaken the EIP-712 typed-frame EXACT-consumption guard (`!=` -> `>`) so a payload with hidden trailing bytes after the trailer is accepted -> parse_frame_panic_free_and_exact's `trailer ends at payload.len()` assertion MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes review finding (h): the offchain EIP712_TYPED/_V3 companion header parser had no host-Kani coverage; now extracted to pqsigner_aa::offchain_header (behaviour-identical, re-wired into cmd_sign_offchain.rs) + panic/OOB + exact-consumption harnesses.",
++      "harness_path": "offchain_header::verification::parse_frame_panic_free_and_exact"
+     },
+     {
+       "id": "usb_apdu_reassembly_bounds",
+@@ -219,7 +243,8 @@
+       "find": "Some(e) if e <= buf.len() && e <= MAX_APDU_RX => e,",
+       "replace": "Some(e) => e,",
+       "expect": "kani_fails",
+-      "note": "remove the HID-reassembly continuation bounds guard so `buf[rx_pos..end]` writes past the caller's reassembly buffer -> process_frame_continuation_no_oob (arbitrary assembler state incl. rx_pos over MAX_APDU_RX + a symbolic continuation frame) MUST hit an out-of-bounds slice write. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes the S-USB-OVERFLOW row of contracts/verification/docs/THREAT_CLAIM_MAP.md (UNCLAIMED -> PARTIAL): the attacker-facing USB APDU reassembly (shared/src/apdu_framing.rs, the one layer between a malicious USB host and the firmware) had proptest fuzz coverage but no exhaustive Kani panic/OOB proof. NB: with buf sized exactly MAX_APDU_RX the two guard conjuncts (e <= buf.len(), e <= MAX_APDU_RX) are individually redundant so dropping ONE is not catchable; this removes the guard entirely (the load-bearing memory-safety check)."
++      "note": "remove the HID-reassembly continuation bounds guard so `buf[rx_pos..end]` writes past the caller's reassembly buffer -> process_frame_continuation_no_oob (arbitrary assembler state incl. rx_pos over MAX_APDU_RX + a symbolic continuation frame) MUST hit an out-of-bounds slice write. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes the S-USB-OVERFLOW row of contracts/verification/docs/THREAT_CLAIM_MAP.md (UNCLAIMED -> PARTIAL): the attacker-facing USB APDU reassembly (shared/src/apdu_framing.rs, the one layer between a malicious USB host and the firmware) had proptest fuzz coverage but no exhaustive Kani panic/OOB proof. NB: with buf sized exactly MAX_APDU_RX the two guard conjuncts (e <= buf.len(), e <= MAX_APDU_RX) are individually redundant so dropping ONE is not catchable; this removes the guard entirely (the load-bearing memory-safety check).",
++      "harness_path": "apdu_framing::kani_harnesses::process_frame_continuation_no_oob"
+     },
+     {
+       "id": "offchain_gate_gap_bypass",
+@@ -230,7 +255,8 @@
+       "find": "if gap >= MAX_OFFCHAIN_GAP {",
+       "replace": "if false {",
+       "expect": "kani_fails",
+-      "note": "[work-todo §12e: off-chain counter sequence/interleave harness] Disable the MAX_OFFCHAIN_GAP gate in check_offchain_gate -> an accept can now be granted with gap >= 100, so offchain_gate_accept_is_sound's post-state gap bound (new_count - last_userop <= MAX_OFFCHAIN_GAP, i.e. gap+1) MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Guards the doc-baseline single-gate soundness proof (firmware-bounded-verification-sota-2026-06.md:81) against vacuity. `check_offchain_gate` is called in place by cmd_sign_offchain.rs so this is the shipped gate."
++      "note": "[work-todo \u00a712e: off-chain counter sequence/interleave harness] Disable the MAX_OFFCHAIN_GAP gate in check_offchain_gate -> an accept can now be granted with gap >= 100, so offchain_gate_accept_is_sound's post-state gap bound (new_count - last_userop <= MAX_OFFCHAIN_GAP, i.e. gap+1) MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Guards the doc-baseline single-gate soundness proof (firmware-bounded-verification-sota-2026-06.md:81) against vacuity. `check_offchain_gate` is called in place by cmd_sign_offchain.rs so this is the shipped gate.",
++      "harness_path": "offchain_gate::verification::offchain_gate_accept_is_sound"
+     },
+     {
+       "id": "offchain_gate_cap_bypass",
+@@ -241,7 +267,8 @@
+       "find": "if userop_sigs.saturating_add(new_count) > MAX_SLOT_USES {",
+       "replace": "if false {",
+       "expect": "kani_fails",
+-      "note": "[work-todo §12e] Disable the combined few-time-budget cap (userop_sigs + off-chain) in check_offchain_gate -> an accept can now push userop_sigs + new_count past MAX_SLOT_USES, so offchain_gate_accept_is_sound's combined-cap assertion MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. This is the MEDIUM-2 counter-replay cap (a withheld/reverted UserOp never bumps on-chain slotUses, so the device tallies its own Type-2 sigs); the harness now guards it non-vacuously."
++      "note": "[work-todo \u00a712e] Disable the combined few-time-budget cap (userop_sigs + off-chain) in check_offchain_gate -> an accept can now push userop_sigs + new_count past MAX_SLOT_USES, so offchain_gate_accept_is_sound's combined-cap assertion MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. This is the MEDIUM-2 counter-replay cap (a withheld/reverted UserOp never bumps on-chain slotUses, so the device tallies its own Type-2 sigs); the harness now guards it non-vacuously.",
++      "harness_path": "offchain_gate::verification::offchain_gate_accept_is_sound"
+     },
+     {
+       "id": "offchain_distinct_slot_wedge",
+@@ -252,7 +279,8 @@
+       "find": "already_present || distinct_live < MAX_DISTINCT_SLOTS",
+       "replace": "distinct_live < MAX_DISTINCT_SLOTS",
+       "expect": "kani_fails",
+-      "note": "[work-todo §12e: page-123 exhaustion brick, the found HIGH] Drop the already_present short-circuit from may_create_distinct_slot -> an EXISTING slot is now refused once distinct_live reaches the cap, i.e. a spray of distinct keys could wedge a live slot. distinct_slot_policy_graceful (asserts may_create_distinct_slot(any, true) is ALWAYS true) MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Pins the VULN-offchain-sync-page123-exhaustion-brick.md defence: at the cap, new-slot creation fails gracefully while existing slots keep signing."
++      "note": "[work-todo \u00a712e: page-123 exhaustion brick, the found HIGH] Drop the already_present short-circuit from may_create_distinct_slot -> an EXISTING slot is now refused once distinct_live reaches the cap, i.e. a spray of distinct keys could wedge a live slot. distinct_slot_policy_graceful (asserts may_create_distinct_slot(any, true) is ALWAYS true) MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Pins the VULN-offchain-sync-page123-exhaustion-brick.md defence: at the cap, new-slot creation fails gracefully while existing slots keep signing.",
++      "harness_path": "offchain_gate::verification::distinct_slot_policy_graceful"
+     },
+     {
+       "id": "tok_array_idx_off_by_one",
+@@ -263,7 +291,8 @@
+       "find": "if idx >= count {",
+       "replace": "if idx > count {",
+       "expect": "kani_fails",
+-      "note": "array_elem_address off-by-one lets idx == count through (reads one word past the last element). The panic-free harness stays green (the read is still bounds-checked); the VALUE harness's `idx < count` oracle assertion MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL."
++      "note": "array_elem_address off-by-one lets idx == count through (reads one word past the last element). The panic-free harness stays green (the read is still bounds-checked); the VALUE harness's `idx < count` oracle assertion MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
++      "harness_path": "render::resolve::kani_harness::tok_array_index_byte_binds"
+     },
+     {
+       "id": "array_count_underreport",
+@@ -274,7 +303,8 @@
+       "find": "Ok((len_end, count))",
+       "replace": "Ok((len_end, count.saturating_sub(1)))",
+       "expect": "kani_fails",
+-      "note": "under-report the element count by one (the renderer would silently HIDE the last element from review). The count == read_length_word oracle binding MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL."
++      "note": "under-report the element count by one (the renderer would silently HIDE the last element from review). The count == read_length_word oracle binding MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
++      "harness_path": "render::array::kani_harnesses::resolve_array_count_binds_to_length_word"
+     },
+     {
+       "id": "tok_slice_tail_anchor_drift",
+@@ -285,7 +315,8 @@
+       "find": "dl.checked_sub(ADDR_LEN)",
+       "replace": "dl.checked_sub(ADDR_LEN + 1)",
+       "expect": "kani_fails",
+-      "note": "[-20:] tail anchor drifts one byte early (data[len-21..len-1]) -- still in-bounds, so panic-free stays green; the byte-binding `addr == data[len-20..len]` MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL."
++      "note": "[-20:] tail anchor drifts one byte early (data[len-21..len-1]) -- still in-bounds, so panic-free stays green; the byte-binding `addr == data[len-20..len]` MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
++      "harness_path": "render::resolve::kani_harness::tok_slice_from_end_byte_binds"
+     },
+     {
+       "id": "resolve_slot_accum_drift",
+@@ -296,7 +327,8 @@
+       "find": ".checked_add(u16::from_be_bytes([a[0], a[1]]) as usize)",
+       "replace": ".checked_add(u16::from_be_bytes([a[0], a[1]]) as usize + 1)",
+       "expect": "kani_fails",
+-      "note": "FieldIdx slot accumulation drifts by +1 per op (the walker-slot-confusion class). Resolved leaf lands one word off; `Word(32*(s1+s2))` MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL."
++      "note": "FieldIdx slot accumulation drifts by +1 per op (the walker-slot-confusion class). Resolved leaf lands one word off; `Word(32*(s1+s2))` MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
++      "harness_path": "render::resolve::kani_harness::resolve_structured_slot_sum_binds"
+     },
+     {
+       "id": "token_amount_threshold_boundary_off_by_one",
+@@ -307,7 +339,8 @@
+       "find": "*value >= *t",
+       "replace": "*value > *t",
+       "expect": "kani_fails",
+-      "note": "unlimited-threshold gate off-by-one: value == threshold no longer selects the Unlimited arm (the single most dangerous approval renders as a normal amount). REPOINTED 2026-07-06 (M4 amount-decision factoring): the gate moved from formatters.rs into the pure token_amount_decision, and the catcher upgraded from the M3 concrete boundary witness to the doubly-symbolic forall biconditional (which pins BOTH directions of the gate; the concrete witness fmt_p0_token_amount_threshold_boundary_concrete still exists in formatters.rs as the paint-integration pin). Re-verified 2026-07-06 by hand on the new location: mutation -> VERIFICATION:- FAILED (assertion is_unlimited_arm == expect_unlimited); reverted -> file restored (grep-confirmed)."
++      "note": "unlimited-threshold gate off-by-one: value == threshold no longer selects the Unlimited arm (the single most dangerous approval renders as a normal amount). REPOINTED 2026-07-06 (M4 amount-decision factoring): the gate moved from formatters.rs into the pure token_amount_decision, and the catcher upgraded from the M3 concrete boundary witness to the doubly-symbolic forall biconditional (which pins BOTH directions of the gate; the concrete witness fmt_p0_token_amount_threshold_boundary_concrete still exists in formatters.rs as the paint-integration pin). Re-verified 2026-07-06 by hand on the new location: mutation -> VERIFICATION:- FAILED (assertion is_unlimited_arm == expect_unlimited); reverted -> file restored (grep-confirmed).",
++      "harness_path": "display::render::amount_decision::kani_harness::amt_dec_unlimited_iff_ge_threshold"
+     },
+     {
+       "id": "token_amount_native_precedence_dropped",
+@@ -318,7 +351,8 @@
+       "find": "if is_native {",
+       "replace": "if is_native && false {",
+       "expect": "kani_fails",
+-      "note": "disable the native-currency sentinel arm: a resolved token equal to the descriptor's Merkle-pinned nativeCurrencyAddress falls through to the erc20 ladder (UnverifiedRaw when no trailer matches) instead of Bound(18, native_ticker) -- ETH amounts on a nativeCurrencyAddress descriptor would render as raw wei with a dec=? banner, and a companion-supplied trailer could take over the sentinel's identity. The precedence forall MUST redden. Verified 2026-07-06 by hand: mutation -> VERIFICATION:- FAILED (dd == 18, ticker binding + arm asserts); reverted -> file restored (grep-confirmed)."
++      "note": "disable the native-currency sentinel arm: a resolved token equal to the descriptor's Merkle-pinned nativeCurrencyAddress falls through to the erc20 ladder (UnverifiedRaw when no trailer matches) instead of Bound(18, native_ticker) -- ETH amounts on a nativeCurrencyAddress descriptor would render as raw wei with a dec=? banner, and a companion-supplied trailer could take over the sentinel's identity. The precedence forall MUST redden. Verified 2026-07-06 by hand: mutation -> VERIFICATION:- FAILED (dd == 18, ticker binding + arm asserts); reverted -> file restored (grep-confirmed).",
++      "harness_path": "display::render::amount_decision::kani_harness::amt_dec_native_sentinel_precedence"
+     },
+     {
+       "id": "token_amount_identity_page_dropped",
+@@ -329,7 +363,8 @@
+       "find": "    let identity_page = if bound.is_none() && !is_native {\n        token_addr\n    } else {\n        None\n    };",
+       "replace": "let identity_page = None;",
+       "expect": "kani_fails",
+-      "note": "drop the MEDIUM-1 identity-page rule: an unbound token's resolved address is never emitted, so the user approves a transfer/withdraw/swap of an UNNAMED token (the identity-hiding class). The token-identity forall binds identity_page == Some(resolved addr) on every miss, so it MUST redden. Verified 2026-07-06 by hand: mutation -> VERIFICATION:- FAILED (d.identity_page == Some(addr)); reverted -> harness re-run SUCCESSFUL on the restored tree."
++      "note": "drop the MEDIUM-1 identity-page rule: an unbound token's resolved address is never emitted, so the user approves a transfer/withdraw/swap of an UNNAMED token (the identity-hiding class). The token-identity forall binds identity_page == Some(resolved addr) on every miss, so it MUST redden. Verified 2026-07-06 by hand: mutation -> VERIFICATION:- FAILED (d.identity_page == Some(addr)); reverted -> harness re-run SUCCESSFUL on the restored tree.",
++      "harness_path": "display::render::amount_decision::kani_harness::amt_dec_token_identity_binding"
+     },
+     {
+       "id": "raw_word_hex_row_slice_drift",
+@@ -340,18 +375,20 @@
+       "find": "write_hex_word(r2, &word[8..16]);",
+       "replace": "write_hex_word(r2, &word[9..17]);",
+       "expect": "kani_fails",
+-      "note": "raw-word hex row 2 drifts one byte (bytes 8..16 -> 9..17): a signed byte vanishes from the trusted display (the magnitude-hiding class). The forall exactness harness binds every row byte to an independent nibble table, so it MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; reverted -> file restored (grep-confirmed)."
++      "note": "raw-word hex row 2 drifts one byte (bytes 8..16 -> 9..17): a signed byte vanishes from the trusted display (the magnitude-hiding class). The forall exactness harness binds every row byte to an independent nibble table, so it MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; reverted -> file restored (grep-confirmed).",
++      "harness_path": "display::render::formatters::kani_harness::fmt_p0_raw_word_hex_exactness"
+     },
+     {
+       "id": "native_amount_exactness_helper_gate_dropped",
+       "tier": "default",
+       "crate": "pqsigner-erc7730",
+       "harness": "fmt_p0_native_amount_prepublication_decision_concrete",
+-      "file": "pqsigner-erc7730/src/display/render/formatters.rs",
+-      "find": "fn scaled_amount_prepublication_refuses(value: &U256, decimals: u32) -> bool {\n    !amount_is_exact_at_fraction_digits(value, decimals, INTERPOLATED_AMOUNT_POLICY.fraction_digits)\n}",
+-      "replace": "fn scaled_amount_prepublication_refuses(value: &U256, decimals: u32) -> bool {\n    false && !amount_is_exact_at_fraction_digits(value, decimals, INTERPOLATED_AMOUNT_POLICY.fraction_digits)\n}",
++      "file": "pqsigner-erc7730/src/display/primitives.rs",
++      "find": "    if discarded_digits == 0 || value.is_zero() {\n        return true;\n    }",
++      "replace": "    if discarded_digits <= 77 || value.is_zero() {\n        return true;\n    }",
+       "expect": "kani_fails",
+-      "note": "Disable the shared pure pre-publication scaled-amount exactness decision used by scalar amount/unit/bound tokenAmount and their array sinks. The helper-only concrete harness requires one 18-decimal unit plus one discarded base unit to refuse while exact/zero and decimals<=the six-digit policy remain allowed, so it MUST redden without entering format_decimal or any page painter. Caller-level Kani harnesses and host atomic-refusal tests remain as zero-publication integration pins. Replaces the two painter-reaching Phase-D mutants after the ordinary-amount mutant produced no Kani verdict within the bounded 900-second closure run."
++      "note": "RE-ANCHORED 2026-08-20 (issue #659): dac6fbd5 (render exact high-precision amounts) deleted the scaled_amount_prepublication_refuses wrapper and rewrote this harness to pin the SHARED pure predicate `amount_is_exact_at_fraction_digits` directly (its inlined production caller is the ExactAmountText::new precision search at display/render/formatters.rs:98). The mutation now lives at the predicate's real decision in display/primitives.rs: widening the zero-discarded-digit short-circuit to `discarded_digits <= 77` judges every in-range scaled amount exact, so a one-wei-over value would publish at the friendly six-digit precision with authenticated base units silently dropped \u2014 the same zero-publication-violation class the deleted helper gate pinned. The harness's `!amount_is_exact_at_fraction_digits(&inexact, 18, 6)` assertion MUST redden. Anchoring at the formatters.rs:98 call site instead would be DEAD: no Kani harness observes the search's chosen precision (the caller-level pins assert only is_ok + page count), so the material anchor is the shared predicate the harness exercises. Original semantics (pre-dac6fbd5, hand-verified mutation -> VERIFICATION:- FAILED): disable the shared pure pre-publication scaled-amount exactness decision used by scalar amount/unit/bound tokenAmount and their array sinks.",
++      "harness_path": "display::render::formatters::kani_harness::fmt_p0_native_amount_prepublication_decision_concrete"
+     },
+     {
+       "id": "erc20_canonical_padding",
+@@ -362,7 +399,8 @@
+       "find": "word[0..12].iter().any(|&b| b != 0)",
+       "replace": "false",
+       "expect": "kani_fails",
+-      "note": "Neuter the ERC-20 address-word zero-padding check. A non-canonical calldata (non-zero address high bytes) then decodes to a Transfer/Approve whose displayed recipient/spender differs from the signed bytes -> parse_erc20_only_accepts_canonical MUST turn red. If it SURVIVES, the show-one/sign-another canonicity proof is vacuous. (P1.2 signed-intent-to-display, 2026-07-16.)"
++      "note": "Neuter the ERC-20 address-word zero-padding check. A non-canonical calldata (non-zero address high bytes) then decodes to a Transfer/Approve whose displayed recipient/spender differs from the signed bytes -> parse_erc20_only_accepts_canonical MUST turn red. If it SURVIVES, the show-one/sign-another canonicity proof is vacuous. (P1.2 signed-intent-to-display, 2026-07-16.)",
++      "harness_path": "erc20::calldata::kani_harnesses::parse_erc20_only_accepts_canonical"
+     },
+     {
+       "id": "cow_setpresig_selector",
+@@ -373,7 +411,8 @@
+       "find": "calldata[0..4] != SETPRESIG_SELECTOR",
+       "replace": "false",
+       "expect": "kani_fails",
+-      "note": "Neuter the setPreSignature selector check. A non-setPreSignature call (any selector) would then decode to Some(uid) and bind an owner/orderUid the display did not derive from a real presign call -> decode_setpresig_orderuid_canonical MUST redden (assert c[0..4]==SETPRESIG_SELECTOR). If it SURVIVES, the CoW owner-UID canonicity proof is vacuous. (P1.2 CoW owner-UID binding, 2026-07-17.)"
++      "note": "Neuter the setPreSignature selector check. A non-setPreSignature call (any selector) would then decode to Some(uid) and bind an owner/orderUid the display did not derive from a real presign call -> decode_setpresig_orderuid_canonical MUST redden (assert c[0..4]==SETPRESIG_SELECTOR). If it SURVIVES, the CoW owner-UID canonicity proof is vacuous. (P1.2 CoW owner-UID binding, 2026-07-17.)",
++      "harness_path": "cowswap_order::verification::decode_setpresig_orderuid_canonical"
+     },
+     {
+       "id": "native_currency_list_two_member_bound",
+@@ -384,7 +423,8 @@
+       "find": "address_list_is_canonical(payload, MAX_NATIVE_CURRENCY_ADDRESSES)",
+       "replace": "address_list_is_canonical(payload, MAX_NATIVE_CURRENCY_ADDRESSES - 1)",
+       "expect": "kani_fails",
+-      "note": "Turn the inclusive two-address native-currency-list cap into an off-by-one rejection at the native-only wrapper (after address-list validation was shared with senderAddress). With MAX_NATIVE_CURRENCY_ADDRESSES=2, passing max-1 is exactly the prior count>=2 mutant without perturbing senderAddress. The exhaustive canonicality harness requires every distinct 40-byte pair to remain accepted and therefore MUST redden. The unmutated harness verified successfully with cargo-kani 0.67.0 on 2026-07-18 and the unique material mutation is statically enrolled; a targeted mutated execution receipt is still pending."
++      "note": "Turn the inclusive two-address native-currency-list cap into an off-by-one rejection at the native-only wrapper (after address-list validation was shared with senderAddress). With MAX_NATIVE_CURRENCY_ADDRESSES=2, passing max-1 is exactly the prior count>=2 mutant without perturbing senderAddress. The exhaustive canonicality harness requires every distinct 40-byte pair to remain accepted and therefore MUST redden. The unmutated harness verified successfully with cargo-kani 0.67.0 on 2026-07-18 and the unique material mutation is statically enrolled; a targeted mutated execution receipt is still pending.",
++      "harness_path": "render::params::kani_harnesses::params_native_currency_list_canonicality"
+     },
+     {
+       "id": "interpolated_intent_single_substitution",
+@@ -395,7 +435,8 @@
+       "find": "substitution_count != 1",
+       "replace": "substitution_count != 2",
+       "expect": "kani_fails",
+-      "note": "Change the single, pre-walk owner of the authority-bearing interpolation cardinality from exactly one substitution to exactly two. The executable-subset biconditional requires one-field programs to remain accepted and every two-field program to remain rejected, so this fixed-bound authority mutation MUST redden without turning the parser loop symbolic. Repointed 2026-07-18 after the prior downstream shape mutation became dead behind the early tractability gate."
++      "note": "Change the single, pre-walk owner of the authority-bearing interpolation cardinality from exactly one substitution to exactly two. The executable-subset biconditional requires one-field programs to remain accepted and every two-field program to remain rejected, so this fixed-bound authority mutation MUST redden without turning the parser loop symbolic. Repointed 2026-07-18 after the prior downstream shape mutation became dead behind the early tractability gate.",
++      "harness_path": "render::params::kani_harnesses::params_interpolated_intent_executable_subset"
+     },
+     {
+       "id": "nft_collection_path_exactness",
+@@ -406,7 +447,8 @@
+       "find": "payload == NFT_COLLECTION_TO_PATH.as_slice()",
+       "replace": "payload.len() == NFT_COLLECTION_TO_PATH.len()",
+       "expect": "kani_fails",
+-      "note": "Weaken the authenticated NFT collection-path gate from the exact frozen @.to bytecode to any four-byte path. The symbolic current-slice harness requires acceptance iff every path byte matches and therefore MUST redden. The unmutated harness verified successfully with cargo-kani 0.67.0 on 2026-07-18 and the unique material mutation is statically enrolled; a targeted mutated execution receipt is still pending."
++      "note": "Weaken the authenticated NFT collection-path gate from the exact frozen @.to bytecode to any four-byte path. The symbolic current-slice harness requires acceptance iff every path byte matches and therefore MUST redden. The unmutated harness verified successfully with cargo-kani 0.67.0 on 2026-07-18 and the unique material mutation is statically enrolled; a targeted mutated execution receipt is still pending.",
++      "harness_path": "render::params::kani_harnesses::params_nft_collection_path_current_slice"
+     },
+     {
+       "id": "t1-frame-validate-skips-crc",
+@@ -417,7 +459,8 @@
+       "find": "if computed != received {\n        return Err(FrameError::Crc);\n    }",
+       "replace": "let _ = (computed, received);",
+       "expect": "kani_fails",
+-      "note": "validate_frame stops checking the CRC and accepts anything well-shaped -> accept_implies_crc_over_declared_span MUST break, since it asserts the trailer equals crc16 over the declared span. If this SURVIVES, the soundness harness is vacuous."
++      "note": "validate_frame stops checking the CRC and accepts anything well-shaped -> accept_implies_crc_over_declared_span MUST break, since it asserts the trailer equals crc16 over the declared span. If this SURVIVES, the soundness harness is vacuous.",
++      "harness_path": "t1_frame::verification::accept_implies_crc_over_declared_span"
+     },
+     {
+       "id": "t1-frame-validate-drops-length-bound",
+@@ -428,7 +471,8 @@
+       "find": "if frame.len() < total {\n        return Err(FrameError::Malformed);\n    }",
+       "replace": "let _ = total;",
+       "expect": "kani_fails",
+-      "note": "inf_len is read OUT OF THE FRAME and then used to index it, so removing the declared-length bound is an attacker-controlled out-of-bounds read on a parser fed straight off the untrusted I2C bus (invariant #3). validate_frame_panic_free MUST break."
++      "note": "inf_len is read OUT OF THE FRAME and then used to index it, so removing the declared-length bound is an attacker-controlled out-of-bounds read on a parser fed straight off the untrusted I2C bus (invariant #3). validate_frame_panic_free MUST break.",
++      "harness_path": "t1_frame::verification::validate_frame_panic_free"
+     },
+     {
+       "id": "t1-frame-build-len-endianness",
+@@ -439,7 +483,8 @@
+       "find": "buf[2] = (len >> 8) as u8; // LEN MSB\n    buf[3] = (len & 0xFF) as u8; // LEN LSB",
+       "replace": "buf[2] = (len & 0xFF) as u8;\n    buf[3] = (len >> 8) as u8;",
+       "expect": "kani_fails",
+-      "note": "byte-swapping the 2-byte GP-1.0 LEN field breaks build/validate agreement for any inf_len whose two length bytes differ -> the round-trip MUST break. Unlike the CRC-poly case this IS caught, because only the builder changes."
++      "note": "byte-swapping the 2-byte GP-1.0 LEN field breaks build/validate agreement for any inf_len whose two length bytes differ -> the round-trip MUST break. Unlike the CRC-poly case this IS caught, because only the builder changes.",
++      "harness_path": "t1_frame::verification::build_then_validate_roundtrips"
+     },
+     {
+       "id": "format_decimal_round_ge5_to_gt5",
+@@ -450,7 +495,8 @@
+       "find": "if drop_digit >= 5 {",
+       "replace": "if drop_digit > 5 {",
+       "expect": "kani_fails",
+-      "note": "F10 (fv-deep-review 2026-07-19) executed PoC: the round-half-up boundary — a drop_digit of exactly 5 must round up (1.5 at frac=0 renders \"2\"); `> 5` truncates it to \"1\", a WYSIWYS understatement on the trusted display. Killed by the (15,1,0)->\"2\" exact case. The charset-only shape harness stays green on this swap (wrong digits are still digits) — that vacuity is what format_decimal_exact_on_boundaries exists to close."
++      "note": "F10 (fv-deep-review 2026-07-19) executed PoC: the round-half-up boundary \u2014 a drop_digit of exactly 5 must round up (1.5 at frac=0 renders \"2\"); `> 5` truncates it to \"1\", a WYSIWYS understatement on the trusted display. Killed by the (15,1,0)->\"2\" exact case. The charset-only shape harness stays green on this swap (wrong digits are still digits) \u2014 that vacuity is what format_decimal_exact_on_boundaries exists to close.",
++      "harness_path": "eip1559::kani_harness::format_decimal_exact_on_boundaries"
+     },
+     {
+       "id": "format_decimal_drop_digit_index_div",
+@@ -461,7 +507,8 @@
+       "find": "let drop_digit = if round_idx - 1 < n {",
+       "replace": "let drop_digit = if round_idx / 1 < n {",
+       "expect": "kani_fails",
+-      "note": "cargo-mutants 2026-06-26 survivor (mutants.out/missed.txt 177:43): round_idx/1 == round_idx makes the guard false exactly when the dropped digit is the value's ONLY significant digit, so 0.05 at frac=1 reads drop_digit=0, skips rounding, and renders \"0.0\" instead of \"0.1\" — the smallest-magnitude amount displayed as zero. Killed by the (5,2,1)->\"0.1\" exact case (the (15,1,0) case cannot catch it: there n_digits != round_idx so the mutant guard still passes — see the host KAT format_decimal_round_drop_is_only_significant_digit)."
++      "note": "cargo-mutants 2026-06-26 survivor (mutants.out/missed.txt 177:43): round_idx/1 == round_idx makes the guard false exactly when the dropped digit is the value's ONLY significant digit, so 0.05 at frac=1 reads drop_digit=0, skips rounding, and renders \"0.0\" instead of \"0.1\" \u2014 the smallest-magnitude amount displayed as zero. Killed by the (5,2,1)->\"0.1\" exact case (the (15,1,0) case cannot catch it: there n_digits != round_idx so the mutant guard still passes \u2014 see the host KAT format_decimal_round_drop_is_only_significant_digit).",
++      "harness_path": "eip1559::kani_harness::format_decimal_exact_on_boundaries"
+     },
+     {
+       "id": "format_decimal_carry_and_or",
+@@ -472,7 +519,8 @@
+       "find": "while carry > 0 && i < digits.len() {",
+       "replace": "while carry > 0 || i < digits.len() {",
+       "expect": "kani_fails",
+-      "note": "cargo-mutants 2026-06-26 survivor (missed.txt 187:33). HONEST SCOPE: this mutant is OUTPUT-EQUIVALENT — a 19.4M-tuple differential (values x decimals 0..=20 x frac 0..=20 x trim) shows zero output drift, because once carry=0 the extra iterations are the identity on 0..=9 digits and positions >= n_digits are always 0. NO byte-exact assertion can kill it. What it destroys is the carry loop's EARLY EXIT: every rounding then spins to the 80-element digit-array bound, which trips format_decimal_exact_on_boundaries' unwinding assertion (its unwind(48) covers the legit deepest loop — div10_inplace's 32 — but stays below 80 on purpose). This pins the loop's termination STRUCTURE; the arithmetic it guards is pinned by format_decimal_round_ge5_to_gt5 / format_decimal_drop_digit_index_div and by the extracted FormatDecimalSpec.lean theorem."
++      "note": "cargo-mutants 2026-06-26 survivor (missed.txt 187:33). HONEST SCOPE: this mutant is OUTPUT-EQUIVALENT \u2014 a 19.4M-tuple differential (values x decimals 0..=20 x frac 0..=20 x trim) shows zero output drift, because once carry=0 the extra iterations are the identity on 0..=9 digits and positions >= n_digits are always 0. NO byte-exact assertion can kill it. What it destroys is the carry loop's EARLY EXIT: every rounding then spins to the 80-element digit-array bound, which trips format_decimal_exact_on_boundaries' unwinding assertion (its unwind(48) covers the legit deepest loop \u2014 div10_inplace's 32 \u2014 but stays below 80 on purpose). This pins the loop's termination STRUCTURE; the arithmetic it guards is pinned by format_decimal_round_ge5_to_gt5 / format_decimal_drop_digit_index_div and by the extracted FormatDecimalSpec.lean theorem.",
++      "harness_path": "eip1559::kani_harness::format_decimal_exact_on_boundaries"
+     }
+   ]
+ }
+diff --git a/scripts/test_gate_enforcement.py b/scripts/test_gate_enforcement.py
+index d876ef1a..3c89fdf9 100644
+--- a/scripts/test_gate_enforcement.py
++++ b/scripts/test_gate_enforcement.py
+@@ -184,6 +184,24 @@ class GateControls(unittest.TestCase):
+                 row['polices_paths'].remove(name)
+                 self.assertIn('easycrypt-pins-reverse:', self.run_checker())
+ 
++    def test_current_split_paths_cannot_be_removed_from_either_lane(self):
++        for gate_id in ('verify-easycrypt-split-pins', 'verify-easycrypt-split'):
++            row = next(r for r in BASELINE['gates'] if r['id'] == gate_id)
++            for name in row['polices_paths']:
++                with self.subTest(gate=gate_id, path=name):
++                    self.manifest = copy.deepcopy(BASELINE)
++                    changed = next(r for r in self.manifest['gates'] if r['id'] == gate_id)
++                    changed['polices_paths'].remove(name)
++                    self.assertIn('easycrypt-split-reverse:', self.run_checker())
++
++    def test_split_job_requires_its_shared_makefile_prerequisite(self):
++        row = next(r for r in BLOCKING if r['id'] == 'verify-easycrypt-split')
++        def remove_setup(wf, job, step):
++            job['steps'] = [s for s in job['steps']
++                            if s.get('name') != 'install elan (toolchain pinned by lean-toolchain)']
++        self.change_workflow(row, remove_setup)
++        self.run_checker()
++
+     def test_per_pr_denylists_are_rejected(self):
+         row = next(r for r in BLOCKING if r['id'] == 'miri')
+         for event in ['push', 'pull_request']:
+diff --git a/scripts/test_kani_census.py b/scripts/test_kani_census.py
+index 61b11cb3..6c56a289 100644
+--- a/scripts/test_kani_census.py
++++ b/scripts/test_kani_census.py
+@@ -87,5 +87,108 @@ fn ordinary_test() {}
+         self.assertEqual(kani_census.harnesses_in(text), ["panic_free"])
+ 
+ 
++class CrossFileAndCfgGateTests(unittest.TestCase):
++    """Issue #659 (cross-file mutation/harness pairs) and #662 (cfg-gated
++    harnesses must carry matching z_flags)."""
++
++    def setUp(self) -> None:
++        self.temp = tempfile.TemporaryDirectory()
++        self.root = Path(self.temp.name)
++        helper = self.root / "crate/src/helper.rs"
++        helper.parent.mkdir(parents=True)
++        helper.write_text(
++            "pub fn decide(x: u32) -> bool {\n    x == 0 || x > 7\n}\n",
++            encoding="utf-8",
++        )
++        caller = self.root / "crate/src/caller.rs"
++        caller.write_text(
++            "#[kani::proof]\nfn decision_binds() {\n    assert!(true);\n}\n",
++            encoding="utf-8",
++        )
++        gated = self.root / "crate/src/gated.rs"
++        gated.write_text(
++            "/// doc comment between the gate and the proof attr\n"
++            "#[cfg(feature = \"kani-heavy\")]\n"
++            "#[kani::proof]\n"
++            "#[kani::unwind(101)]\n"
++            "fn heavy_harness() {\n    let guarded = true;\n}\n",
++            encoding="utf-8",
++        )
++        self.census = {
++            "_file_harnesses": {
++                "crate/src/caller.rs": ["decision_binds"],
++                "crate/src/gated.rs": ["heavy_harness"],
++            },
++        }
++
++    def tearDown(self) -> None:
++        self.temp.cleanup()
++
++    def failures(self, entry: dict) -> list[str]:
++        return kani_census.manifest_rot(
++            self.census,
++            manifest={"mutations": [entry]},
++            repo_root=self.root,
++        )
++
++    def test_cross_file_harness_pair_is_accepted(self) -> None:
++        # #659: the mutation anchors a shared helper in helper.rs while the
++        # covering harness lives in caller.rs.
++        entry = {
++            "id": "x",
++            "file": "crate/src/helper.rs",
++            "harness": "decision_binds",
++            "find": "    x == 0 || x > 7",
++            "replace": "    x <= 0 || x > 7",
++        }
++        self.assertEqual(self.failures(entry), [])
++
++    def test_cfg_gated_harness_without_z_flags_fails_statically(self) -> None:
++        # #662: a cfg(kani-heavy)-gated harness with no --features flag would
++        # compile OUT in the slow lane (no verdict, HarnessError). Dies here.
++        entry = {
++            "id": "g",
++            "file": "crate/src/gated.rs",
++            "harness": "heavy_harness",
++            "find": "let guarded = true;",
++            "replace": "let guarded = false;",
++        }
++        fails = self.failures(entry)
++        self.assertEqual(len(fails), 1)
++        self.assertIn("cfg-gated", fails[0])
++        self.assertIn("kani-heavy", fails[0])
++
++    def test_cfg_gated_harness_with_matching_z_flags_passes(self) -> None:
++        entry = {
++            "id": "g",
++            "file": "crate/src/gated.rs",
++            "harness": "heavy_harness",
++            "find": "let guarded = true;",
++            "replace": "let guarded = false;",
++            "z_flags": ["--features", "kani-heavy"],
++        }
++        self.assertEqual(self.failures(entry), [])
++        entry_eq = dict(entry, z_flags=["--features=kani-heavy"])
++        self.assertEqual(self.failures(entry_eq), [])
++
++    def test_multiline_cfg_cannot_hide_required_feature(self) -> None:
++        p = self.root / 'crate/src/gated.rs'
++        p.write_text(p.read_text().replace('#[cfg(feature = "kani-heavy")]',
++                                          '#[cfg(\n    feature = "kani-heavy"\n)]'))
++        entry = dict(id='g', file='crate/src/gated.rs', harness='heavy_harness',
++                     find='let guarded = true;', replace='let guarded = false;')
++        self.assertIn('cfg-gated', self.failures(entry)[0])
++        self.assertEqual(self.failures(dict(entry, z_flags=['--features', 'kani-heavy'])), [])
++
++    def test_unsupported_feature_expression_fails_explicitly(self) -> None:
++        p = self.root / 'crate/src/gated.rs'
++        p.write_text(p.read_text().replace('cfg(feature = "kani-heavy")',
++                                          'cfg(not(feature = "kani-heavy"))'))
++        entry = dict(id='g', file='crate/src/gated.rs', harness='heavy_harness',
++                     find='let guarded = true;', replace='let guarded = false;',
++                     z_flags=['--features', 'kani-heavy'])
++        self.assertIn('unsupported feature cfg', self.failures(entry)[0])
++
++
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/scripts/test_kani_mutations.py b/scripts/test_kani_mutations.py
+new file mode 100644
+index 00000000..84f446ec
+--- /dev/null
++++ b/scripts/test_kani_mutations.py
+@@ -0,0 +1,109 @@
++#!/usr/bin/env python3
++"""Offline controls for exact Kani mutation attribution and source restoration."""
++import copy
++import json
++from pathlib import Path
++import tempfile
++import unittest
++from unittest.mock import patch
++
++import check_kani_mutations as runner
++
++
++def output(name='proofs::selected', passed=True):
++    return (f'Checking harness {name}...\nVERIFICATION:- '
++            + ('SUCCESSFUL' if passed else 'FAILED')
++            + f'\nComplete - {int(passed)} successfully verified harnesses, '
++            + f'{int(not passed)} failures, 1 total.\n')
++
++
++class AttributionTests(unittest.TestCase):
++    def test_complete_exact_verdicts(self):
++        self.assertEqual(runner.classify_kani(output(), 0, 'proofs::selected'), 'kani_passes')
++        self.assertEqual(runner.classify_kani(output(passed=False), 1, 'proofs::selected'), 'kani_fails')
++
++    def test_collision_wrong_identity_truncation_and_crash(self):
++        cases = [(output() + output('proofs::unrelated_selected', False), 1),
++                 (output('proofs::unrelated_selected', False), 1),
++                 ('VERIFICATION:- FAILED\n', 1),
++                 (output(passed=False), -9), (output(passed=False), 2),
++                 (output(passed=False), 0), (output(), 1),
++                 (output().replace('1 total', '2 total'), 0)]
++        for text, rc in cases:
++            with self.subTest(rc=rc, text=text), self.assertRaises(runner.HarnessError):
++                runner.classify_kani(text, rc, 'proofs::selected')
++
++    def test_command_selects_exact_path(self):
++        with patch.object(runner.subprocess, 'run') as run:
++            run.return_value.stdout = output()
++            run.return_value.stderr = ''
++            run.return_value.returncode = 0
++            runner.run_kani('crate', 'proofs::selected', [])
++            self.assertEqual(run.call_args.args[0][-5:],
++                             ['--harness', 'proofs::selected', '--exact', '--output-format', 'regular'])
++
++    def test_complete_failure_plus_tool_error_gets_no_credit(self):
++        for diagnostic in ('error: post-verification tool failure\n',
++                           'error[E0001]: compiler failure\n',
++                           '\x1b[31merror:\x1b[0m backend failure\n',
++                           'FATAL ERROR: solver failure\n',
++                           "thread 'main' panicked at backend.rs:1\n"):
++            for text in (diagnostic + output(passed=False), output(passed=False) + diagnostic):
++                with self.subTest(diagnostic=diagnostic), self.assertRaisesRegex(runner.HarnessError, 'fatal tool'):
++                    runner.classify_kani(text, 1, 'proofs::selected')
++
++    def test_baseline_failure_gets_no_credit_and_never_mutates(self):
++        with tempfile.TemporaryDirectory() as temp, patch.object(runner, 'REPO_ROOT', Path(temp)):
++            path = Path(temp) / 'source.rs'
++            path.write_text('original')
++            m = dict(id='case', file='source.rs', find='original', replace='mutant',
++                     crate='crate', harness_path='proofs::selected', expect='kani_fails')
++            with patch.object(runner, 'run_kani', return_value=('kani_fails', '')) as run:
++                with self.assertRaisesRegex(runner.HarnessError, 'baseline'):
++                    runner.apply_and_test(m)
++                self.assertEqual(run.call_count, 1)
++                self.assertEqual(path.read_text(), 'original')
++
++    def test_mutation_is_bracketed_by_baseline_and_restore(self):
++        with tempfile.TemporaryDirectory() as temp, patch.object(runner, 'REPO_ROOT', Path(temp)):
++            path = Path(temp) / 'source.rs'
++            path.write_text('original')
++            m = dict(id='case', file='source.rs', find='original', replace='mutant',
++                     crate='crate', harness_path='proofs::selected', expect='kani_fails')
++            seen = []
++            def verify(*args):
++                seen.append(path.read_text())
++                return ('kani_passes' if len(seen) == 1 else 'kani_fails', '')
++            with patch.object(runner, 'run_kani', side_effect=verify):
++                self.assertTrue(runner.apply_and_test(m)[0])
++            self.assertEqual(seen, ['original', 'mutant'])
++            self.assertEqual(path.read_text(), 'original')
++            with patch.object(runner, 'run_kani', side_effect=[('kani_passes', ''), runner.HarnessError('crash')]):
++                with self.assertRaises(runner.HarnessError):
++                    runner.apply_and_test(m)
++            self.assertEqual(path.read_text(), 'original')
++
++    def test_real_manifest_and_removed_canary_or_overridden_selection(self):
++        muts = json.loads(runner.MANIFEST.read_text())['mutations']
++        runner.validate_manifest(muts)
++        with self.assertRaises(runner.HarnessError):
++            runner.validate_manifest([m for m in muts if m['id'] != 'canary'])
++        for change in ({'expect': 'kani_passes'}, {'harness_path': 'wrong::name'},
++                       {'z_flags': ['--harness', 'unrelated']}, {'z_flags': ['--only-codegen']}):
++            bad = copy.deepcopy(muts)
++            bad[0].update(change)
++            with self.assertRaises(runner.HarnessError):
++                runner.validate_manifest(bad)
++
++    def test_heavy_feature_cannot_enter_nightly_or_lose_its_flag(self):
++        muts = json.loads(runner.MANIFEST.read_text())['mutations']
++        for change in ({'tier': 'default'}, {'tier': 'full'}, {'z_flags': []},
++                       {'tier': 'default', 'z_flags': ['--features', 'pqsigner-tx/kani-heavy']}):
++            bad = copy.deepcopy(muts)
++            next(m for m in bad if m['tier'] == 'heavy').update(change)
++            with self.assertRaisesRegex(runner.HarnessError, 'local heavy tier'):
++                runner.validate_manifest(bad)
++
++
++if __name__ == '__main__':
++    unittest.main()

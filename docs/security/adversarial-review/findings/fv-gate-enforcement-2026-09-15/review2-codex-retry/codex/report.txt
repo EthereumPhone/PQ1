@@ -1,0 +1,5 @@
+VERDICT: FIX
+TARGET: 5f4b68de3b4dca96b9c7e6244cf576a009a3c916 / 82387d2164e82217aeb9152e4b7ced427e79d583
+FINDINGS:
+- HIGH scripts/check_gate_enforcement.py:229 — `_ignored()` detects only ignores that are ancestors of the declared surface, missing child-file exclusions; adding valid `pull_request.paths-ignore: [secure/src/nsc/mod.rs]` to the live Miri workflow made `check_gate()` return `[]` and actionlint pass, although a PR changing only that policed file would skip Miri; reject `paths-ignore` for blocking workflows or conservatively detect overlap in both directions, with a child-ignore regression.
+GAPS: The sandbox denied temporary writes, so the 13-group gate suite and EasyCrypt mutation controls could not complete; the read-only 65-gate checker, EasyCrypt dry-run ledger, and actionlint passed.

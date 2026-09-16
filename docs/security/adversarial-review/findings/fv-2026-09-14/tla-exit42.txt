@@ -1,0 +1,6 @@
+=== P1.5 combined budget-lifetime composition ===
+  [ok  ] cb_onchain_cap       expect=HOLD      got=HOLD
+  [ok  ] cb_margin_noreset    expect=HOLD      got=HOLD
+  [ok  ] cb_margin_reset      expect=VIOLATED  got=VIOLATED
+
+=== all 3 expected outcomes matched ===

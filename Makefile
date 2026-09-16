@@ -4061,7 +4061,7 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@echo "==> Kani: domain recovery parser (deserialize_pin_state)"
 	cargo kani -p pqsigner-domain --harness deserialize_pin_state_panic_free
 	@echo "==> Kani: ERC-20 calldata decoder (panic-free + transfer no-misdecode)"
-	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + page-budget classification: per-record page bound + no-hidden-value WYSIWYS + CoW-first precedence [records_pages_total panic-freedom compositional] + accept/reject controls)"
+	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + classification accept/reject controls; three kani-heavy proofs run separately via make kani-heavy)"
 	@echo "         + CoW GPv2Order canonical decode (decode-soundness: accept<=>enum-in-range, verbatim field offsets + accept/reject controls)"
 	@echo "         + typed-call ABI walker (no-read-past-end soundness + accept/reject controls)"
 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
@@ -4117,6 +4117,7 @@ verify-kani-mutation: ## anti-vacuity: break a decoder, expect a Kani harness to
 .PHONY: verify-kani-census
 verify-kani-census: ## source-generated Kani harness census vs kani_census.lock.json (fast, no Kani toolchain)
 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_census.py
+	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_mutations.py
 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/kani_census.py --check
 
 miri: ## Miri UB check on host crates
@@ -4311,6 +4312,10 @@ PROTOCOL_MODELS ?= proverif,tamarin,cryptoverif
 verify-protocol-models: ## anti-vacuity: assert the protocol models' verdicts vs baseline
 	PROTOCOL_MODELS="$(PROTOCOL_MODELS)" python3 scripts/check_protocol_models.py
 
+.PHONY: verify-cryptoverif
+verify-cryptoverif: ## local-only computational protocol verdict gate
+	PROTOCOL_MODELS=cryptoverif python3 scripts/check_protocol_models.py
+
 # Gate-enforcement lint — closes catalog class G1 (fv-adversarial-review-playbook
 # Part A2). Asserts every soundness gate in scripts/gate_enforcement.json actually
 # FIRES on the diff it polices (invoked by a job, path-triggered on its surface,
@@ -4322,6 +4327,7 @@ verify-protocol-models: ## anti-vacuity: assert the protocol models' verdicts vs
 .PHONY: verify-gate-enforcement
 verify-gate-enforcement: ## G1: assert every soundness gate is actually CI-enforced on its surface
 	@python3 scripts/check_gate_enforcement.py --self-test
+	@python3 scripts/test_gate_enforcement.py
 	python3 scripts/check_gate_enforcement.py
 
 # ---------------------------------------------------------------------------

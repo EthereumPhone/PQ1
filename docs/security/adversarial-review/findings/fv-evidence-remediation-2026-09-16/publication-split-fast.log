@@ -1,0 +1,17 @@
+make: Entering directory '/tmp/pq-fv-remediation-20260916-fl0q429t/publication/contracts/verification'
+cd easycrypt/c10-port && /usr/bin/python3 -E -S -B -W ignore::ResourceWarning tools/test_split_contract.py
+......
+----------------------------------------------------------------------
+Ran 6 tests in 1.110s
+
+OK
+cd easycrypt/c10-port && /usr/bin/python3 -E -S -B tools/split_contract.py
+OK   coverage: all 993 top-level statements across 45 CONE files are pinned (roots 38 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 7 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK unique statement pins: 1077
+OK split static contract: 45 files; proof execution not performed
+cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
+### INPUTS_SHA256 df34cee6a883deafc1aef86c89d8c464
+OK   INPUTS_SHA256 matches the committed identity
+make: Leaving directory '/tmp/pq-fv-remediation-20260916-fl0q429t/publication/contracts/verification'

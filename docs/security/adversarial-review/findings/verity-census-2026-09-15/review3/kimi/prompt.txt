@@ -1,0 +1,21 @@
+Review PQSigner OS formal-verification tooling for MERGE correctness. This is a defensive review of local Lean proof-assurance checks. Do not launch agents or other models.
+Target: /tmp/pq-verity-census-20260915-ld01keqz/target
+Commit: fdabe5eb9b953706681b1276eba3d3c48db12c2e
+Tree: 839e6bf8d646c34048ff90b1c5211c8b68ad764e
+Compare: ebb590d0ffd2b84b2b07939c85fd31af8e0b8412..fdabe5eb9b953706681b1276eba3d3c48db12c2e
+Bounded surface: Verity assurance census (#673).
+1. Complete fresh Part B build and census of each module's original private declaration data; duplicate names, stdlib redeclarations, or disagreement with the aggregate environment must fail.
+2. Kernel replay of safe/non-partial declarations against the trusted stdlib; five existing partial compiler helpers are explicitly census-only and unsafe declarations fail.
+3. Exact axiom identity/type and admitted-obligation identity/type/body pins; new/private/generated/transitive admissions must fail.
+4. Exact Lean source coverage and honest byte-pinned quarantine of five unbuildable Part A files, including the CREATE2 assumption.
+5. Pinned toolchain, cache independence, input/drift failures, blocking CI wiring, and accurate build/trust claims.
+Evidence already green: make -C contracts/verity ci (8 modules, 213 declarations, 208 kernel-rechecked, 15 environment axioms, 2 Part B axioms, 1 admitted declaration; 6 raw groups and 11 semantic groups, including kernel-replay and sibling-module declaration regressions); all 33 gate-enforcement entries plus self-test; actionlint for the new workflow. Replay source matches pinned upstream lean4checker v4.22.0.
+Non-goals: discharging existing obligations, unavailable Verity API port, ordinary closed-statement pinning, firmware/contract behavior, implementation equivalence, compiler-time IO/host filesystem isolation, shipment or hosted branch-protection settings. The installed Lean kernel/stdlib and reviewed checker/baseline are trusted; the census does not sandbox elaboration IO.
+Inspect the code diff and affected callers source-first. Read contracts/verity/TRUST_ASSUMPTIONS.md for the claim boundary. Keep the target immutable; focused tests may use temporary outputs outside it. No target edits, hardware, external writes, agents, prior reports, status prose or playbook catalogs. Do not read docs/security/adversarial-review/findings/: those archived reports are not review input. Ignore style and optional hardening. You have 15 minutes and 800 words. Check elapsed time between tool groups; reserve the last 3 minutes for synthesis and return an honest compact GAP before the deadline if necessary.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: fdabe5eb9b953706681b1276eba3d3c48db12c2e / 839e6bf8d646c34048ff90b1c5211c8b68ad764e
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+At most three findings. FIX requires a source anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none.

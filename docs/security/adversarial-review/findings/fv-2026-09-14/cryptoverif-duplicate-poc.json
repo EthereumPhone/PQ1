@@ -1,0 +1,18 @@
+[
+  {
+    "variant": "negative-control",
+    "parsed": {
+      "secrecy of seed": false
+    },
+    "failures": [
+      "seed_split_secrecy.cv: result `secrecy of seed` verdict DRIFTED \u2014 expected True, got False (a security property flipped)"
+    ]
+  },
+  {
+    "variant": "conflicting-results",
+    "parsed": {
+      "secrecy of seed": true
+    },
+    "failures": []
+  }
+]

@@ -1,0 +1,21 @@
+[
+  {
+    "label": "raw-zero-extracted-gate-before",
+    "command": [
+      "python3",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0
+  },
+  {
+    "label": "raw-zero-verity-gate-before",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0
+  }
+]

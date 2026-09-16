@@ -1,0 +1,22 @@
+{
+  "contracts/verification/Makefile": "9eddf3c2942672f9ea38d99fe185c1fc2fa8f28b2279cf3f90829676363c7086",
+  "contracts/verification/docs/ASSURANCE_CASE.md": "696a64591807de9337c4da8123bea56b2ffbb7412b5e369c32ba82c6e2394314",
+  "contracts/verification/scripts/axiom_inventory_extracted.json": "8d28db0af67c2dec9f6cc8a6b3577018cb9123558f9f4d366372add21574b44f",
+  "contracts/verification/scripts/axiom_inventory_lean.json": "1fca1f972f0ba81219d0dcf3ca3182c46551ccc7a5054d5de1d65dfa6de6c3f8",
+  "contracts/verification/scripts/check_axiom_inventory.py": "b8183c5505a300faff386156021b41e5cd3d28f1904b05a70d3eb1f1d7a5f96c",
+  "contracts/verification/scripts/check_proof_mutations.py": "3f52bb48a91e0280a73950f5344b3ce5eae39b7ff9414e90751414da05a03cdc",
+  "contracts/verification/scripts/check_verity_holes.py": "7a35a29dcae827b9f7876dd5b280f2e11512cc2c9805ebc9151876deed9ab3fa",
+  "contracts/verification/scripts/dump_axiom_inventory.lean": "67c998b3b505c90c765133c7cfc0880c2ab0444ca90ee678a2fb9c6d01e366d3",
+  "contracts/verification/scripts/lean_source.py": "8be1c8d247fc96266a44271591a119c05937a1b7f23dedfa583db885a357b9b1",
+  "contracts/verification/scripts/lint_axioms.sh": "77579cda4ce56f755facc995c7262b1a89758666c684a6da1274423411101a7b",
+  "contracts/verification/scripts/lint_extracted_axiom_census.sh": "5014e8549710aea35714ea78912ad3b0d404cff1fa300fec4652367ba35b8209",
+  "contracts/verification/scripts/lint_fv_invariants.sh": "bf3735a5db79cbd9f4df94e32f2e3efcbdf9414403f10719fbc4063113b8e35a",
+  "contracts/verification/scripts/test_axiom_inventory.py": "d461698a9dc6249acef6b168336d20a093711f1c305b4651012f0436d7047185",
+  "contracts/verification/tla/check_tlc.py": "5481eaa8cc8fb1f1fbd69b212aa64950701ebe50ba2f57d21c4bc70931191d0d",
+  "contracts/verification/tla/run.sh": "1e3138544eb109ac37dbb176f930ef86d4c94297c7fc321ca7ccb6b0acead706",
+  "contracts/verification/tla/run_combined.sh": "ea06042082374960a835e62a93bbc78ff52b2ba5eb51e9eef1624951be285d2b",
+  "contracts/verification/tla/run_pin.sh": "9be410e3fa8be461e0a1a5b43e476861b4695491dfdb5fbe7974b16a0e67ea0c",
+  "contracts/verity/Makefile": "d6d1ef661fd5589fe8453254d7efabc658af6f7e2ce400dfd46b618a7db2c094",
+  "docs/security/adversarial-review/findings/fv-remediation-2026-09-14.md": "19b4e86531e0f6e8e1d1ca83b2d15bfd52e411e681cadcd96e7624d0828ead59",
+  "scripts/check_protocol_models.py": "26a06abb202fbdb457e218b90963b2bcdf8bdf03046d17213b8e973a70d89fac"
+}

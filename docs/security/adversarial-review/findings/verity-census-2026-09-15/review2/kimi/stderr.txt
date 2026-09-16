@@ -1,0 +1,175 @@
+6096de0b fix(verity): kernel-recheck compiled declarations before census
+789b8e1f fix(verity): census fresh elaborated axioms and admitted declarations
+ebb590d0 fix(fv): enforce exact axiom inventories and model evidence
+ .../codex-mechanical-stop.json                     |    5 +
+ .../gate-enforcement-replay.log                    |   38 +
+ .../gate-enforcement-self-test.log                 |    2 +
+ .../verity-census-2026-09-15/gate-enforcement.log  |   38 +
+ .../review-clock-adapter.py                        |   17 +
+ .../review-codex-retry-dry-run.json                |   99 ++
+ .../review-codex-retry/codex/prompt.txt            |   22 +
+ .../review-codex-retry/codex/runtime.jsonl         |   59 ++
+ .../review-codex-retry/codex/stderr.txt            |    1 +
+ .../review-codex-retry/manifest.json               |  138 +++
+ .../verity-census-2026-09-15/review-dry-run.json   |  205 ++++
+ .../verity-census-2026-09-15/review-prompt.txt     |   22 +
+ .../review/claude/prompt.txt                       |   22 +
+ .../review/claude/report.txt                       |    7 +
+ .../review/claude/runtime.json                     |    1 +
+ .../review/claude/stderr.txt                       |    0
+ .../review/codex/prompt.txt                        |   22 +
+ .../review/codex/runtime.jsonl                     |   32 +
+ .../review/codex/stderr.txt                        |    2 +
+ .../review/kimi/prompt.txt                         |   22 +
+ .../review/kimi/report.txt                         |   13 +
+ .../review/kimi/runtime.jsonl                      |   23 +
+ .../review/kimi/stderr.txt                         | 1054 ++++++++++++++++++++
+ .../verity-census-2026-09-15/review/manifest.json  |  280 ++++++
+ .../reviewer-self-test.log                         |    2 +
+ .../verity-census-2026-09-15/unchecked-after.log   |    6 +
+ .../verity-census-2026-09-15/unchecked-before.log  |    2 +
+ .../unchecked-control.lean.txt                     |    9 +
+ scripts/gate_enforcement.json                      |   13 +
+ 43 files changed, 3423 insertions(+), 61 deletions(-)
+Makefile
+PQSigner
+README.md
+TRUST_ASSUMPTIONS.md
+assurance_inventory.json
+lakefile.lean
+lean-toolchain
+ contracts/verity/Makefile                 |  62 +++--------
+ contracts/verity/README.md                |  22 +++-
+ contracts/verity/TRUST_ASSUMPTIONS.md     |  44 ++++++--
+ contracts/verity/assurance_inventory.json | 165 ++++++++++++++++++++++++++++++
+ 4 files changed, 232 insertions(+), 61 deletions(-)
+__pycache__
+axiom_inventory_extracted.json
+axiom_inventory_lean.json
+check_axiom_closure.py
+check_axiom_inventory.py
+check_c10_source_pin.py
+check_c10_transcription.py
+check_c10_transcription_ast.py
+check_easycrypt.sh
+check_extraction_freshness.py
+check_extraction_regen_output.py
+check_forge_results.py
+check_hw_assumptions.py
+check_lean_proto_domain.py
+check_ledger_consistency.py
+check_linker_memory_map.py
+check_make_argv.py
+check_proof_mutations.py
+check_rollback_freeze_pin.py
+check_sphincs_digest_field_order.py
+check_storage_mutators.sh
+check_vendored_spec.py
+check_verity_holes.py
+check_verity_inventory.py
+dedup_extraction.py
+dump_axiom_inventory.lean
+dump_verity_inventory.lean
+ec_axioms.py
+ec_sweep.py
+format_axiom_status.py
+forsc_grinding_margin.py
+fv-external-tools.env
+gap1_differential.py
+gen_cavp_vectors.py
+gen_mutant_corpus.py
+independent_c10_signer.py
+known_trivial_theorems.txt
+known_true_axioms.txt
+lean_source.py
+lint_axioms.sh
+lint_extracted_axiom_census.sh
+lint_fv_invariants.sh
+lint_placeholders.py
+run_authoritative_make.sh
+run_lean4checker.sh
+test_axiom_inventory.py
+test_c10_transcription_ast_negative.py
+test_verity_inventory.py
+verify-three-claims.sh
+verity_census_vendor
+   210 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_axiom_closure.py
+   114 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_axiom_inventory.py
+   122 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_c10_source_pin.py
+   405 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_c10_transcription.py
+   647 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_c10_transcription_ast.py
+   947 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_extraction_freshness.py
+   716 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_extraction_regen_output.py
+   562 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_forge_results.py
+   286 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_hw_assumptions.py
+    68 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_lean_proto_domain.py
+  1526 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_ledger_consistency.py
+   218 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_linker_memory_map.py
+   311 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_make_argv.py
+   521 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_proof_mutations.py
+   908 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_rollback_freeze_pin.py
+  1134 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_sphincs_digest_field_order.py
+    70 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_vendored_spec.py
+    44 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_verity_holes.py
+   208 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/check_verity_inventory.py
+    66 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/dedup_extraction.py
+    49 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/ec_axioms.py
+    36 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/ec_sweep.py
+   208 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/format_axiom_status.py
+   409 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/forsc_grinding_margin.py
+   364 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/gap1_differential.py
+   143 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/gen_cavp_vectors.py
+   162 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/gen_mutant_corpus.py
+   469 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/independent_c10_signer.py
+    14 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/lean_source.py
+   193 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/lint_placeholders.py
+   190 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/test_axiom_inventory.py
+   143 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/test_c10_transcription_ast_negative.py
+   163 /tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verification/scripts/test_verity_inventory.py
+ 11626 total
+ .github/workflows/verity-fv.yml | 48 +++++++++++++++++++++++++++++++++++++++++
+ scripts/gate_enforcement.json   | 13 +++++++++++
+ 2 files changed, 61 insertions(+)
+diff --git a/scripts/gate_enforcement.json b/scripts/gate_enforcement.json
+index 90b1a678..4e485487 100644
+--- a/scripts/gate_enforcement.json
++++ b/scripts/gate_enforcement.json
+@@ -501,6 +501,19 @@
+       "runs_in": "nightly.yml",
+       "enforcement": "local_documented",
+       "why": "The three 100-byte-symbolic multiSend harnesses (per_record_page_bound 12.71 GiB/6m03s, no_hidden_value 13.05 GiB/7m55s, cow_presign_precedence 11.50 GiB/3m56s; all VERIFY SUCCESSFULLY, measured locally 2026-07-31) exceed what a hosted runner can absorb. Instrumented CI evidence 2026-07-31: the runner has 15,989 MB RAM with 14,497 MB available and 145 GB disk with 86 GB free, so DISK IS NOT THE CAUSE - it is memory. The kill lands between 'Runtime Postprocess Equation' and 'Solving with ...', i.e. inside CBMC's formula construction and BEFORE any SAT solver is invoked; a kissat experiment was therefore reverted, since the solver never runs. (That experiment's local peak-RSS numbers were also unsound: an external solver runs out-of-process and /usr/bin/time -v reports a per-process maximum, not an aggregate.) Excluded because an OOM kills the runner and suppresses every later mandatory gate in the same job - same reasoning as verify-extracted-heavy (53c19f21); continue-on-error cannot save a dead runner. The 100-byte bound is deliberately NOT reduced: shrinking a proof's bound to earn a green check is coverage loss disguised as a pass. Larger hosted runners are unavailable (Team/Enterprise-only; this org is free-plan; hosted-runners API 404s). Run via `make kani-heavy`; the other 170 harnesses stay blocking in nightly."
++    },
++    {
++      "id": "verify-verity-census",
++      "make": "make -C contracts/verity verify-verity-census",
++      "polices_paths": [
++        "contracts/verity/**",
++        "contracts/verification/scripts/**",
++        ".github/workflows/verity-fv.yml",
++        "scripts/gate_enforcement.json"
++      ],
++      "runs_in": "verity-fv.yml",
++      "enforcement": "per_pr_blocking",
++      "note": "Fresh Part B exported-environment axiom/admission census and exact unverified Part A source quarantine (#673)."
+     }
+   ],
+   "_completeness_waived": {
+e62d9a7c1048da3e6462d964e7cde03b1e7cd0a709f8a941cb6380842702691b  PQSigner/Common.lean
+2f6fa7ff6dc7cd5f98a493018ebd60224f8ba3b48b03f94b26f6310056d9278f  PQSigner/PQMultiOwnable.lean
+2c0bb359fd476477112b084ef2df6ca00c6ef5f0c13b837047e30fbfcd8b2783  PQSigner/PQSmartWalletFactory.lean
+de1ed57c21dcdd9f731ff118c6ea18efe6044c5087ffacbd38c3b6347cafb6a2  PQSigner/PQSmartWallet.lean
+0ce18de2961f3489849ab0d0113c7b2c8b70a4b6046f3a044795c752330a4f6e  PQSigner/Theorems.lean
+PASS: Verity sorry/admit ratchet (12 accounted holes, baseline 12)
+leanprover--lean4---v4.22.0
+leanprover--lean4---v4.23.0
+leanprover--lean4---v4.30.0-rc2
+leanprover--lean4---v4.32.2
+11
+make: Entering directory '/tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verity'
+PASS: Verity assurance census {"admitted_declarations": 1, "compiled_modules": 8, "environment_axioms": 15, "exported_declarations": 213, "kernel_rechecked_declarations": 208, "project_axioms": 2, "raw_hole_mentions": 12, "unverified_part_a_files": 5}
+Part A is source-pinned, uncompiled and unverified (11 holes, one CREATE2 axiom).
+make: Leaving directory '/tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verity'
+
+real	0m13.769s
+user	0m12.360s
+sys	0m1.200s

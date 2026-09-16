@@ -1,0 +1,134 @@
+{
+  "base": "aab89656690cf4b15a543b21e58a3ad4f918ec16",
+  "created_at": "2026-09-14T14:47:51.808781+00:00",
+  "executables": {
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/tmp/pq-fv-fixes-20260914-iddnxo7n/target"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.0,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": true,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-5.6-sol",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/tmp/pq-fv-fixes-20260914-iddnxo7n/prompt.txt",
+    "sha256": "eb796bd75b1cb8c76e0185340a1b0fc109bd6750317c4e1d4ca3b407950543f7"
+  },
+  "reviewers": {
+    "codex": {
+      "artifact_bytes": 598190,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/target",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/target",
+        "--chdir",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--enable",
+        "use_legacy_landlock",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/target",
+        "-o",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 269.342,
+      "ended_at": "2026-09-14T14:47:51.589926+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "eb796bd75b1cb8c76e0185340a1b0fc109bd6750317c4e1d4ca3b407950543f7",
+        "report_sha256": "89ad186510def3e998f685d38f9850c27d17472d7d94f33a034de05f3912b31d",
+        "runtime_sha256": "5a927424caef9fb370f1edc6fc67ac573ca06f0795a2faca42abe716132c385d",
+        "stderr_sha256": "3ceaa9b703c5d7b4c51b8874c7ef58f7026be4f8655a01d657f2d75d571f96c2"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry/codex",
+        "prompt": "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry/codex/prompt.txt",
+        "report": "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry/codex/report.txt",
+        "stderr": "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry/codex/stderr.txt"
+      },
+      "report_words": 79,
+      "started_at": "2026-09-14T14:43:22.248271+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "implementation",
+  "surface": "FV-remediation",
+  "target": {
+    "commit_after": "eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e",
+    "commit_before": "eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e",
+    "drift": false,
+    "path": "/tmp/pq-fv-fixes-20260914-iddnxo7n/target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "8120c3bd802ed6106f5f3926e1efdc11952c6f32",
+    "tree_before": "8120c3bd802ed6106f5f3926e1efdc11952c6f32"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-14T14:43:22.248192+00:00"
+}

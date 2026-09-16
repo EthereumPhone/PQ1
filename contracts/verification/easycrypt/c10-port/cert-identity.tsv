@@ -1362,5 +1362,10 @@
 #   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
 #   the gate run compares it itself.
 #
-split	d8bf474fcbeb8a29f8a83fea86382b92
+# 2026-09-16: integrate reviewed FV evidence fixes on master’s 53-file cone.
+# Preserve all 1166 pins, 1082 statements, 49 controls, per-headline scope
+# isolation/linkage and exact taint/margin counts. Add full dependency replay,
+# checked immutable toolchain and pin-alias/EOF controls. Fresh full replay
+# required for this identity; prior 45-file receipts do not certify it.
+split	e64e9594831f9b2df2ccdaeaf5f8c213
 fork	9c2d21280c84d52c30b22111151f1135

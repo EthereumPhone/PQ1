@@ -1,0 +1,36 @@
+{
+  "target": "/tmp/pq-fv-fixes-20260914-iddnxo7n/conservative-target",
+  "commit": "98446edc2b37cc5874f54cfe1091264ddc44eb3f",
+  "tree": "01e56934a227bf3969e35c46b3e7b6f19fd5c39e",
+  "base": "88818c79d83e8f73177d43c8edbc6393ce1e1ad2",
+  "original_base": "aab89656690cf4b15a543b21e58a3ad4f918ec16",
+  "paths": [
+    "contracts/verification/Makefile",
+    "contracts/verification/docs/ASSURANCE_CASE.md",
+    "contracts/verification/docs/TRUST_ASSUMPTIONS.md",
+    "contracts/verification/scripts/axiom_inventory_extracted.json",
+    "contracts/verification/scripts/axiom_inventory_lean.json",
+    "contracts/verification/scripts/check_axiom_inventory.py",
+    "contracts/verification/scripts/check_proof_mutations.py",
+    "contracts/verification/scripts/check_verity_holes.py",
+    "contracts/verification/scripts/dump_axiom_inventory.lean",
+    "contracts/verification/scripts/lean_source.py",
+    "contracts/verification/scripts/lint_axioms.sh",
+    "contracts/verification/scripts/lint_extracted_axiom_census.sh",
+    "contracts/verification/scripts/lint_fv_invariants.sh",
+    "contracts/verification/scripts/test_axiom_inventory.py",
+    "contracts/verification/tla/check_tlc.py",
+    "contracts/verification/tla/run.sh",
+    "contracts/verification/tla/run_combined.sh",
+    "contracts/verification/tla/run_pin.sh",
+    "contracts/verity/Makefile",
+    "scripts/check_protocol_models.py"
+  ],
+  "correction_paths": [
+    "contracts/verification/scripts/lean_source.py",
+    "contracts/verification/scripts/check_axiom_inventory.py",
+    "contracts/verification/scripts/test_axiom_inventory.py"
+  ],
+  "stage": "implementation",
+  "surface": "FV evidence acceptance"
+}

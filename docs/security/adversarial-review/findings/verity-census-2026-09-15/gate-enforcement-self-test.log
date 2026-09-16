@@ -1,0 +1,2 @@
+=== --self-test (negative controls) ===
+  self-test OK: allowlist gap caught (2), duplicate YAML/JSON keys rejected, exact authoritative ledger runner/step/context suppression controls verified, branch/ordered-path/workflow-self trigger suppressions rejected, paths-ignore denylist logic verified (directly), kani-reverse gap caught (1), kani-mutation-reverse gap caught (2), extraction-reverse gap caught (1).

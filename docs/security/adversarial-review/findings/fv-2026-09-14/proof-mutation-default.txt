@@ -1,0 +1,206 @@
+make: Entering directory '/tmp/pq-fv-review-20260914-gx635_x9/checks/contracts/verification'
+⚠ [28/59] Replayed SphincsCVerify.Interpreter.Phases
+warning: SphincsCVerify/Interpreter/Phases.lean:335:5: unused variable `hShapeS`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:336:5: unused variable `hShapeR`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:1237:5: unused variable `hseedw`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3211:5: unused variable `hhtbv`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3294:5: unused variable `hv0dig`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3984:14: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hseedw, hwa, hcn, hcount, hOUT,
+  ̵  ̵ ̵ ̵ite_true, i̵t̵e̵_̵f̵a̵l̵s̵e̵,̵ ̵String.reduceEq]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:3984:25: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hseedw, hwa, hcn, hcount, hOUT, ite_true, i̵t̵e̵_̵f̵a̵l̵s̵e̵,̵ ̵S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵]̵i̲t̲e̲_̲f̲a̲l̲s̲e̲]̲
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:4407:57: This simp argument is unused:
+  hOUT
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, hd, hwptr, hwa, hN, hO̵U̵T̵,̵ ̵h̵ival, ite_true, ite_false,
+  ̲  ̲ ̲ ̲String.reduceEq]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:4964:29: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, s̵e̵t̵V̵a̵r̵,̵ ̵hseedw, hOUT]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:6120:83: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval,̵ ̵s̵e̵t̵V̵a̵r̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/Phases.lean:6158:45: This simp argument is unused:
+  setVar
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval,̵ ̵s̵e̵t̵V̵a̵r̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [30/59] Replayed SphincsCVerify.Interpreter.HypertreePhase
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:436:5: unused variable `hpathSize`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:715:17: This simp argument is unused:
+  hwe
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵w̵e̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:775:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:775:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:782:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:782:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:799:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:808:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:814:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:814:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:898:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:906:43: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_false, if_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:906:60: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, String.reduceEq, it̵e̵_̵fa̵l̵s̵e̵,̵ ̵i̵f̵_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:946:52: This simp argument is unused:
+  hp
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵p̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Interpreter/HypertreePhase.lean:955:52: This simp argument is unused:
+  hp
+
+Hint: Omit it from the simp argument list.
+  simp only ̵[̵h̵p̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [31/59] Replayed SphincsCVerify.Interpreter.C10Refine
+warning: SphincsCVerify/Interpreter/C10Refine.lean:603:45: This simp argument is unused:
+  String.reduceEq
+
+Hint: Omit it from the simp argument list.
+  simp only [execStmt, eval, setVar, S̵t̵r̵i̵n̵g̵.̵r̵e̵d̵u̵c̵e̵E̵q̵,̵ ̵ite_true, hLcn', hLroot, mload32_mstore32_self]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [37/59] Replayed SphincsCVerify.Wallet.Invariants
+warning: SphincsCVerify/Wallet/Invariants.lean:1203:31: This simp argument is unused:
+  if_pos rfl
+
+Hint: Omit it from the simp argument list.
+  simp only [bumpForOwner, i̵f̵_̵p̵o̵s̵ ̵r̵f̵l̵,̵ ̵Storage.bumpBootstrap, hboot]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [42/59] Replayed SphincsCVerify.Spec.SignerPost
+warning: SphincsCVerify/Spec/SignerPost.lean:28:24: This simp argument is unused:
+  hx
+
+Hint: Omit it from the simp argument list.
+  simp [̵h̵x̵]̵ ̵at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: SphincsCVerify/Spec/SignerPost.lean:53:24: This simp argument is unused:
+  hx
+
+Hint: Omit it from the simp argument list.
+  simp [̵h̵x̵]̵ ̵at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [47/59] Replayed SphincsCVerify.Verifier.HonestConsistent
+warning: SphincsCVerify/Verifier/HonestConsistent.lean:95:52: This simp argument is unused:
+  Fin.val_mk
+
+Hint: Omit it from the simp argument list.
+  simp only [extractDigits, ofFn_getElem! _ i hi,̵ ̵F̵i̵n̵.̵v̵a̵l̵_̵m̵k̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Build completed successfully.
+make: Leaving directory '/tmp/pq-fv-review-20260914-gx635_x9/checks/contracts/verification'
+ERROR: proof-mutation receipt/corpus check failed: proof-mutation corpus identity drift: count=13 id_sha256=bf901ee7432f4d73f4f567117e96d13b40205b30361e89e735dd3edc70e2965e definition_sha256=1ce0292e6817e6d88ba9fbc5afc60e24c067043adc95d04ed94d4ea85dd77a3f; expected count=13 id_sha256=bf901ee7432f4d73f4f567117e96d13b40205b30361e89e735dd3edc70e2965e definition_sha256=170dad9e5c5f42322fde80aca28986df13cf221f6dc7b24cd6b88553fbc68e15
+make: *** [Makefile:646: verify-proof-mutation] Error 2

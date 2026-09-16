@@ -1,0 +1,106 @@
+[
+  {
+    "label": "fv-lints",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-fv-lints"
+    ],
+    "environment_overrides": {},
+    "status": 0,
+    "seconds": 17.4,
+    "log": "landing-fv-lints.log"
+  },
+  {
+    "label": "ledger-authoritative",
+    "command": [
+      "/usr/bin/bash",
+      "-c",
+      "[[ ${UID} -ne 0 && -u /usr/bin/sudo && -x /usr/bin/sudo ]] && /usr/bin/sudo -n -u \"#${UID}\" -- /usr/bin/env -i /usr/bin/bash --noprofile --norc -p contracts/verification/scripts/run_authoritative_make.sh make -C contracts/verification verify-ledger-consistency"
+    ],
+    "environment_overrides": {},
+    "status": 0,
+    "seconds": 10.25,
+    "log": "landing-ledger-authoritative.log"
+  },
+  {
+    "label": "extracted",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-extracted"
+    ],
+    "environment_overrides": {},
+    "status": 0,
+    "seconds": 10.3,
+    "log": "landing-extracted.log"
+  },
+  {
+    "label": "verity-ci",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "environment_overrides": {},
+    "status": 0,
+    "seconds": 2.6,
+    "log": "landing-verity-ci.log"
+  },
+  {
+    "label": "gate-enforcement",
+    "command": [
+      "python3",
+      "scripts/check_gate_enforcement.py"
+    ],
+    "environment_overrides": {},
+    "status": 0,
+    "seconds": 0.37,
+    "log": "landing-gate-enforcement.log"
+  },
+  {
+    "label": "protocol-selftest",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "scripts/check_protocol_models.py",
+      "--self-test"
+    ],
+    "environment_overrides": {},
+    "status": 0,
+    "seconds": 0.03,
+    "log": "landing-protocol-selftest.log"
+  },
+  {
+    "label": "cryptoverif",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "scripts/check_protocol_models.py"
+    ],
+    "environment_overrides": {
+      "PROTOCOL_MODELS": "cryptoverif"
+    },
+    "status": 0,
+    "seconds": 0.09,
+    "log": "landing-cryptoverif.log"
+  },
+  {
+    "label": "tla",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-tla"
+    ],
+    "environment_overrides": {},
+    "status": 0,
+    "seconds": 11.13,
+    "log": "landing-tla.log"
+  }
+]

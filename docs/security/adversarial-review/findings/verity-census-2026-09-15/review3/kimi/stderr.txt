@@ -1,0 +1,351 @@
+fdabe5eb fix(verity): census module declarations before name coalescing
+6096de0b fix(verity): kernel-recheck compiled declarations before census
+789b8e1f fix(verity): census fresh elaborated axioms and admitted declarations
+fdabe5eb9b953706681b1276eba3d3c48db12c2e
+Tue Sep 15 15:39:31 CEST 2026
+ .../review/kimi/report.txt                         |   13 +
+ .../review/kimi/runtime.jsonl                      |   23 +
+ .../review/kimi/stderr.txt                         | 1054 ++++++++++++++++++++
+ .../verity-census-2026-09-15/review/manifest.json  |  280 ++++++
+ .../review2-codex-retry-dry-run.json               |   99 ++
+ .../review2-codex-retry/codex/prompt.txt           |   22 +
+ .../review2-codex-retry/codex/report.txt           |    5 +
+ .../review2-codex-retry/codex/runtime.jsonl        |  101 ++
+ .../review2-codex-retry/codex/stderr.txt           |    2 +
+ .../review2-codex-retry/manifest.json              |  138 +++
+ .../verity-census-2026-09-15/review2-dry-run.json  |  205 ++++
+ .../verity-census-2026-09-15/review2-prompt.txt    |   22 +
+ .../review2/claude/prompt.txt                      |   22 +
+ .../review2/claude/report.txt                      |   21 +
+ .../review2/claude/runtime.json                    |    1 +
+ .../review2/claude/stderr.txt                      |    0
+ .../review2/codex/prompt.txt                       |   22 +
+ .../review2/codex/runtime.jsonl                    |   12 +
+ .../review2/codex/stderr.txt                       |    2 +
+ .../review2/kimi/prompt.txt                        |   22 +
+ .../review2/kimi/report.txt                        |   19 +
+ .../review2/kimi/runtime.jsonl                     |   30 +
+ .../review2/kimi/stderr.txt                        |  175 ++++
+ .../verity-census-2026-09-15/review2/manifest.json |  280 ++++++
+ .../reviewer-self-test.log                         |    2 +
+ .../verity-census-2026-09-15/unchecked-after.log   |    6 +
+ .../verity-census-2026-09-15/unchecked-before.log  |    2 +
+ .../unchecked-control.lean.txt                     |    9 +
+ scripts/gate_enforcement.json                      |   13 +
+ 68 files changed, 4786 insertions(+), 61 deletions(-)
+ .github/workflows/verity-fv.yml                    |   48 +
+ .../verification/scripts/check_verity_inventory.py |  208 ++++
+ .../scripts/dump_verity_inventory.lean             |   91 ++
+ .../verification/scripts/test_verity_inventory.py  |  175 ++++
+ .../scripts/verity_census_vendor/LICENSE           |  201 ++++
+ .../scripts/verity_census_vendor/README.md         |   17 +
+ .../verity_census_vendor/VerityCensusReplay.lean   |  176 ++++
+ contracts/verity/Makefile                          |   62 +-
+ contracts/verity/README.md                         |   22 +-
+ contracts/verity/TRUST_ASSUMPTIONS.md              |   51 +-
+ contracts/verity/assurance_inventory.json          |  165 +++
+ .../findings/verity-census-2026-09-15.md           |  152 +++
+ .../verity-census-2026-09-15/ci-replay.log         |   24 +
+ .../findings/verity-census-2026-09-15/ci-union.log |   25 +
+ .../findings/verity-census-2026-09-15/ci.log       |   23 +
+ .../codex-mechanical-stop.json                     |    5 +
+ .../codex2-mechanical-stop.json                    |    5 +
+ .../verity-census-2026-09-15/duplicate-after.log   |    6 +
+ .../verity-census-2026-09-15/duplicate-before.log  |    2 +
+ .../gate-enforcement-replay.log                    |   38 +
+ .../gate-enforcement-self-test.log                 |    2 +
+ .../gate-enforcement-union.log                     |   38 +
+ .../verity-census-2026-09-15/gate-enforcement.log  |   38 +
+ .../review-clock-adapter.py                        |   17 +
+ .../review-codex-retry-dry-run.json                |   99 ++
+ .../review-codex-retry/codex/prompt.txt            |   22 +
+ .../review-codex-retry/codex/runtime.jsonl         |   59 ++
+ .../review-codex-retry/codex/stderr.txt            |    1 +
+ .../review-codex-retry/manifest.json               |  138 +++
+ .../verity-census-2026-09-15/review-dry-run.json   |  205 ++++
+ .../verity-census-2026-09-15/review-prompt.txt     |   22 +
+ .../review/claude/prompt.txt                       |   22 +
+ .../review/claude/report.txt                       |    7 +
+ .../review/claude/runtime.json                     |    1 +
+ .../review/claude/stderr.txt                       |    0
+ .../review/codex/prompt.txt                        |   22 +
+ .../review/codex/runtime.jsonl                     |   32 +
+ .../review/codex/stderr.txt                        |    2 +
+ .../review/kimi/prompt.txt                         |   22 +
+ .../review/kimi/report.txt                         |   13 +
+ .../review/kimi/runtime.jsonl                      |   23 +
+ .../review/kimi/stderr.txt                         | 1054 ++++++++++++++++++++
+ .../verity-census-2026-09-15/review/manifest.json  |  280 ++++++
+ .../review2-codex-retry-dry-run.json               |   99 ++
+ .../review2-codex-retry/codex/prompt.txt           |   22 +
+diff --git a/.github/workflows/verity-fv.yml b/.github/workflows/verity-fv.yml
+new file mode 100644
+index 00000000..a3ed5265
+--- /dev/null
++++ b/.github/workflows/verity-fv.yml
+@@ -0,0 +1,48 @@
++name: Verity assurance census
++
++on:
++  push:
++    branches: [master]
++    paths:
++      - 'contracts/verity/**'
++      - 'contracts/verification/scripts/**'
++      - '.github/workflows/verity-fv.yml'
++      - 'scripts/gate_enforcement.json'
++  pull_request:
++    paths:
++      - 'contracts/verity/**'
++      - 'contracts/verification/scripts/**'
++      - '.github/workflows/verity-fv.yml'
++      - 'scripts/gate_enforcement.json'
++
++permissions:
++  contents: read
++
++concurrency:
++  group: verity-fv-${{ github.ref }}
++  cancel-in-progress: true
++
++jobs:
++  census:
++    runs-on: ubuntu-latest
++    timeout-minutes: 20
++    steps:
++      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
++        with:
++          persist-credentials: false
++      - name: Install pinned Lean toolchain
++        run: |
++          set -euo pipefail
++          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
++          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
++          curl --proto '=https' --tlsv1.2 -fsSL \
++            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
++            -o elan-init.sh
++          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
++          sh elan-init.sh -y --default-toolchain none
++          rm -f elan-init.sh
++          "$HOME/.elan/bin/elan" toolchain install leanprover/lean4:v4.22.0
++      - name: Fresh semantic census and source quarantine
++        run: make -C contracts/verity verify-verity-census
++      - name: Executable census regression controls
++        run: make -C contracts/verity test-census
+diff --git a/contracts/verity/Makefile b/contracts/verity/Makefile
+index 75336493..c5d8cda4 100644
+--- a/contracts/verity/Makefile
++++ b/contracts/verity/Makefile
+@@ -1,39 +1,19 @@
+-# Verity build helpers.
+-#
+-# Targets:
+-#   build         — `lake build`, builds everything
+-#   verify-stats  — emit VERIFICATION_STATUS.md (theorem/axiom/sorry counts)
+-#   emit-yul      — emit Yul for downstream `solc` consumption
+-#   clean         — `lake clean`
+-#   ci            — `build` + sorry ratchet (fails if any file's sorry count
+-#                   exceeds its baseline — census 12 on 2026-08-20, issue #673)
+-#
+-# Requires: lean (via elan), lake. See README.md §6.
+-
+-LEAN_FILES := $(shell find PQSigner -name '*.lean')
+-
+-.PHONY: build verify-stats emit-yul clean ci
++# Part B is pure Lean. Part A remains an unbuildable, source-pinned scaffold.
++.PHONY: build verify-stats verify-verity-census test-census emit-yul clean ci
+ 
+ build:
+ 	lake build
+ 
+-verify-stats:
+-	@echo "# VERIFICATION_STATUS — PQSigner Verity port" > VERIFICATION_STATUS.md
+-	@echo "" >> VERIFICATION_STATUS.md
+-	@echo "Generated: $$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> VERIFICATION_STATUS.md
+-	@echo "" >> VERIFICATION_STATUS.md
+-	@echo "| Metric | Value |" >> VERIFICATION_STATUS.md
+-	@echo "|--------|-------|" >> VERIFICATION_STATUS.md
+-	@echo "| Theorems | $$(grep -c '^theorem ' $(LEAN_FILES)) |" >> VERIFICATION_STATUS.md
+-	@echo "| Sorry sites | $$(grep -c 'sorry$$' $(LEAN_FILES)) |" >> VERIFICATION_STATUS.md
+-	@echo "| Axiom sites | $$(grep -c '^axiom ' $(LEAN_FILES)) |" >> VERIFICATION_STATUS.md
+-	@echo "| Opaque sites | $$(grep -c '^opaque ' $(LEAN_FILES)) |" >> VERIFICATION_STATUS.md
+-	@echo "" >> VERIFICATION_STATUS.md
+-	@echo "Per-file theorem counts:" >> VERIFICATION_STATUS.md
+-	@for f in $(LEAN_FILES); do \
+-		echo "  - $$f: $$(grep -c '^theorem ' $$f)" >> VERIFICATION_STATUS.md; \
+-	done
+-	@cat VERIFICATION_STATUS.md
++# Authoritative, fresh eight-module build + semantic census + Part A quarantine.
++# Does not read Lake caches or download/build the unused Verity dependency.
++verify-verity-census:
++	@/usr/bin/python3 -E -S ../verification/scripts/check_verity_inventory.py
++
++verify-stats: verify-verity-census
++
++test-census:
++	@/usr/bin/python3 -E -S ../verifica
+tion/scripts/test_axiom_inventory.py
++	@/usr/bin/python3 -E -S ../verification/scripts/test_verity_inventory.py
+ 
+ emit-yul:
+ 	@echo "TODO: invoke Verity's Yul emitter. Requires P1-P3 spike done."
+@@ -43,20 +23,4 @@ clean:
+ 	lake clean
+ 	rm -f VERIFICATION_STATUS.md
+ 
+-# ── Sorry ratchet (issue #673) ─────────────────────────────────────────
+-# Baseline census 2026-08-20: 12 live sorries — PQSigner/Theorems.lean ×11,
+-# PQSigner/Verifier/Merkle.lean ×1 (yul_swap_selector_in_known_set;
+-# documented, non-essential). Do NOT add to these; discharging one only
+-# ever lowers a count — that is always allowed, bump the baseline down in
+-# the same commit.
+-#
+-# Why not `grep -c 'sorry$'`: over multiple files that yields one
+-# `path:count` line per file, so `[ "$SORRY_COUNT" -gt 0 ]` errored into
+-# PASS (12 live sorries once passed this gate); `sorry$` also misses
+-# trailing-comment sites (`:= sorry  -- note`, e.g. Theorems.lean:297),
+-# and a bare word-grep would count comment prose (Theorems.lean:9,16).
+-# Every raw sorry/admit mention counts, including comments and strings. Source
+-# prose uses other wording to avoid false positives. There are no comment
+-# allowances or lexical guesses. Per-file budgets include unbuilt Part A.
+-ci: build
+-	@/usr/bin/python3 -E -S ../verification/scripts/check_verity_holes.py
++ci: verify-verity-census test-census
+diff --git a/contracts/verity/README.md b/contracts/verity/README.md
+index f3b4da20..953245c4 100644
+--- a/contracts/verity/README.md
++++ b/contracts/verity/README.md
+@@ -8,7 +8,7 @@ every chain) and #7 (monotonic per-chain caps) — from "enforced by
+ Solidity `require` + Foundry unit tests" to "machine-checked Lean
+ theorem".
+ 
+-**Status (2026-05-11, second pass)**: Part B (SPHINCS+C10 verifier
++**Status (2026-09-15)**: Part B (SPHINCS+C10 verifier
+ port) landed as buildable pure-Lean. Part A (smart-wallet contracts)
+ is documented intent — it imports modules (`Verity.Prelude`,
+ `Verity.Hash.Sha256`, `Verity.External.Call`, etc.) that **Verity
+@@ -20,6 +20,17 @@ point for getting Part A to compile.
+ | **A** | `PQMultiOwnable` storage + writers, `PQSmartWalletFactory` salt + digest, `PQSmartWallet` dispatch. Files at `PQSigner/{Common,PQMultiOwnable,PQSmartWalletFactory,PQSmartWallet,Theorems}.lean`. | **Does not build** — imports fictional Verity modules. Blocked on Verity Phase 0 (see `docs/archive/verity-v0.1.0-primitive-map.md`). Kept in-tree as the spec for what Verity v0.2.x+ must support. Lakefile root entry removed from default target. |
+ | **B** | SPHINCS+C10 verifier (pure-Lean reference impl of `sphincs-c10/`). Files at `PQSigner/Verifier/{Params,Address,Hash,Wots,Merkle,Fors,Hypertree,Top}.lean`. ~40 closed theorems on closeable invariants + 2 documented axioms + 1 documented sorry. | **Builds clean** under Lean 4.22.0. `make build` succeeds. |
+ 
++The blocking `verity-fv.yml` workflow runs the fresh census and its regression
++controls, including rejection of declarations inserted with kernel checking
++disabled. A separate kernel replay precedes the census (208 safe, non-partial
++Part B constants; five existing partial compiler helpers are inventoried only).
++`assurance_inventory.json` records the exact environment axiom set and
++the sole admitted Part B declaration, plus hashes of all five unverified Part A
++files. New exported admissions (including macro-generated ones), axiom changes,
++duplicate declaration names across modules, and unlisted source files fail the gate. `make verify-stats` reports this same
++census. A passing gate does not discharge the existing 12 source holes or prove
++wallet/implementation equivalence; see [TRUST_ASSUMPTIONS.md](TRUST_ASSUMPTIONS.md).
++
+ See [docs/archive/handoff-verity-c10-verifier.md](../../docs/archive/handoff-verity-c10-verifier.md)
+ for the original multi-quarter plan and
+ [docs/archive/verity-v0.1.0-primitive-map.md](../../docs/archive/verity-v0.1.0-primitive-map.md)
+@@ -233,11 +244,14 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf
+ source ~/.elan/env
+ lake update
+ 
+-# Build + verify all theorems:
++# Build the eight Part B modules only (Part A is excluded):
+ lake build                        # ~20 min first build, ~10s incremental
+ 
+-# Stats (matches Verity's own VERIFICATION_STATUS.md format):
+-make verify-stats
++# Fresh Part B semantic census + exact unverified Part A inventory:
++make verify-verity-census
++
++# Census plus executable regression controls (also enforced in CI):
++make ci
+ 
+ # Compile + emit Yul (for differential testing):
+ make emit-yul
+diff --git a/scripts/gate_enforcement.json b/scripts/gate_enforcement.json
+index 90b1a678..4e485487 100644
+--- a/scripts/gate_enforcement.json
++++ b/scripts/gate_enforcement.json
+@@ -501,6 +501,19 @@
+       "runs_in": "nightly.yml",
+       "enforcement": "local_documented",
+       "why": "The three 100-byte-symbolic multiSend harnesses (per_record_page_bound 12.71 GiB/6m03s, no_hidden_value 13.05 GiB/7m55s, cow_presign_precedence 11.50 GiB/3m56s; all VERIFY SUCCESSFULLY, measured locally 2026-07-31) exceed what a hosted runner can absorb. Instrumented CI evidence 2026-07-31: the runner has 15,989 MB RAM with 14,497 MB available and 145 GB disk with 86 GB free, so DISK IS NOT THE CAUSE - it is memory. The kill lands between 'Runtime Postprocess Equation' and 'Solving with ...', i.e. inside CBMC's formula construction and BEFORE any SAT solver is invoked; a kissat experiment was therefore reverted, since the solver never runs. (That experiment's local peak-RSS numbers were also unsound: an external solver runs out-of-process and /usr/bin/time -v reports a per-process maximum, not an aggregate.) Excluded because an OOM kills the runner and suppresses every later mandatory gate in the same job - same reasoning as verify-extracted-heavy (53c19f21); continue-on-error cannot save a dead runner. The 100-byte bound is deliberately NOT reduced: shrinking a proof's bound to earn a green check is coverage loss disguised as a pass. Larger hosted runners are unavailable (Team/Enterprise-only; this org is free-plan; hosted-runners API 404s). Run via `make kani-heavy`; the other 170 harnesses stay blocking in nightly."
++    },
++    {
++      "id": "verify-verity-census",
++      "make": "make -C contracts/verity verify-verity-census",
++      "polices_paths": [
++        "contracts/verity/**",
++        "contracts/verification/scripts/**",
++        ".github/workflows/verity-fv.yml",
++        "scripts/gate_enforcement.json"
++      ],
++      "runs_in": "verity-fv.yml",
++      "enforcement": "per_pr_blocking",
++      "note": "Fresh Part B exported-environment axiom/admission census and exact unverified Part A source quarantine (#673)."
+     }
+   ],
+   "_completeness_waived": {
+IDENTICAL
+__pycache__
+axiom_inventory_extracted.json
+axiom_inventory_lean.json
+check_axiom_closure.py
+check_axiom_inventory.py
+check_c10_source_pin.py
+check_c10_transcription.py
+check_c10_transcription_ast.py
+check_easycrypt.sh
+check_extraction_freshness.py
+check_extraction_regen_output.py
+check_forge_results.py
+check_hw_assumptions.py
+check_lean_proto_domain.py
+check_ledger_consistency.py
+check_linker_memory_map.py
+check_make_argv.py
+check_proof_mutations.py
+check_rollback_freeze_pin.py
+check_sphincs_digest_field_order.py
+check_storage_mutators.sh
+check_vendored_spec.py
+check_verity_holes.py
+check_verity_inventory.py
+dedup_extraction.py
+dump_axiom_inventory.lean
+dump_verity_inventory.lean
+ec_axioms.py
+ec_sweep.py
+format_axiom_status.py
+forsc_grinding_margin.py
+fv-external-tools.env
+gap1_differential.py
+gen_cavp_vectors.py
+gen_mutant_corpus.py
+independent_c10_signer.py
+known_trivial_theorems.txt
+known_true_axioms.txt
+lean_source.py
+lint_axioms.sh
+lint_extracted_axiom_census.sh
+lint_fv_invariants.sh
+lint_placeholders.py
+run_authoritative_make.sh
+run_lean4checker.sh
+test_axiom_inventory.py
+test_c10_transcription_ast_negative.py
+test_verity_inventory.py
+verify-three-claims.sh
+verity_census_vendor
+"""Conservative raw-source mention census, intentionally independent of parsing.
+
+Lean's extensible tokens can contain apparent comment/literal delimiters. Never
+strip comments or guess word boundaries: either could erase real declarations.
+A mention in prose or a string counts too. Whole-module axiom pins bind all
+matching source; Verity applies its unchanged per-file budget without comment
+allowances. The Lean build and elaborated inventory remain mandatory checks.
+"""
+import re
+
+
+def keyword_count(source: str, words: str) -> int:
+    """Count every raw substring match, using linear fixed-pattern scans."""
+    return sum(1 for _ in re.finditer(words, source))

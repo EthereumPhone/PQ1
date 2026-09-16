@@ -1,0 +1,10 @@
+make: Entering directory '/tmp/pq-fv-landing-20260915-jt2g76ic/target/contracts/verity'
+lake build
+info: pqsigner-verity: no previous manifest, creating one from scratch
+info: verity: checking out revision 'caac8a6831cdda8f7d09035cd92c8dcc84cf6e51'
+info: toolchain not updated; already up-to-date
+⚠ [6/10] Replayed PQSigner.Verifier.Merkle
+warning: PQSigner/Verifier/Merkle.lean:130:8: declaration uses 'sorry'
+Build completed successfully.
+PASS: Verity sorry/admit ratchet (12 accounted holes, baseline 12)
+make: Leaving directory '/tmp/pq-fv-landing-20260915-jt2g76ic/target/contracts/verity'

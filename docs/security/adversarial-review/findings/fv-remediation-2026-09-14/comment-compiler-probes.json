@@ -1,0 +1,182 @@
+[
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 0,
+    "source": "/-/- -/ axiom X : False -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 1,
+    "source": "/--/ -- -/ axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 2,
+    "source": "def n : Nat := 0axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 3,
+    "source": "def c : Char := 'a'axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 4,
+    "source": "macro \"\u4e2d\" : command => `(#check True)\n\u4e2daxiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "hole",
+    "index": 0,
+    "source": "/-/- -/ theorem X : False := by sorry -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:1:16: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "hole",
+    "index": 1,
+    "source": "/--/ -- -/ theorem X : False := by sorry\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:1:19: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "hole",
+    "index": 2,
+    "source": "postfix:max \"\u4e2d\" => id\ntheorem X : False := sorry\u4e2d\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:2:8: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "hole",
+    "index": 3,
+    "source": "syntax:1024 num term:1024 : term\nmacro_rules | `($n:num $t:term) => `($t)\ntheorem X : False := 0sorry\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:2:17: warning: unused variable `n`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:3:8: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 0,
+    "source": "/-/- -/ axiom X : False -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 1,
+    "source": "/--/ -- -/ axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 2,
+    "source": "def n : Nat := 0axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 3,
+    "source": "def c : Char := 'a'axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 4,
+    "source": "macro \"\u4e2d\" : command => `(#check True)\n\u4e2daxiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "hole",
+    "index": 0,
+    "source": "/-/- -/ theorem X : False := by sorry -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:1:16: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "hole",
+    "index": 1,
+    "source": "/--/ -- -/ theorem X : False := by sorry\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:1:19: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "hole",
+    "index": 2,
+    "source": "postfix:max \"\u4e2d\" => id\ntheorem X : False := sorry\u4e2d\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:2:8: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "hole",
+    "index": 3,
+    "source": "syntax:1024 num term:1024 : term\nmacro_rules | `($n:num $t:term) => `($t)\ntheorem X : False := 0sorry\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:2:17: warning: unused variable `n`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CommentProbe.lean:3:8: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  }
+]

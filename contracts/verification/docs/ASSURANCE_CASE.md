@@ -128,7 +128,7 @@ G0  theft-free + integrity (theft_free / theft_free_bytecode)
 │
 ├─ S4  the substrate behaves (SHA-256 / EVM / EntryPoint)
 │   ├─ A1  precompile 0x02 = FIPS-180-4 ................. T
-│   ├─ A2  deployed EntryPoint v0.6 = handleOp .......... T  (in-Lean marker is a K tautology)
+│   ├─ A2  deployed EntryPoint v0.6 = handleOp .......... T  (in-model theorem proved K; deployment faithfulness external)
 │   ├─ A4  EVM delivers emitted call bytes .............. T  (non-consumed marker in theft_free)
 │   └─ A6  Lean kernel ................................... X
 │
@@ -147,7 +147,9 @@ G0  theft-free + integrity (theft_free / theft_free_bytecode)
   returned success with a verifier-true installed-owner C10 sig over the op digest;
   no bypass, role-split (bootstrap vs slot) enforced, one-shot per credit.
 - **Artifact (K).** `theft_free` / `theft_free_bytecode` (closure: kernel triple +
-  A1,A2,A3.1,A4,A5×4 + A3.2 for the bytecode form); Claim-4 gate
+  A1,A3.1,A4,A5×4 + A3.2 for the bytecode form). A2 is an external
+  deployment-faithfulness assumption; `entrypoint_honest` is proved in-model
+  and contributes no closure axiom. Claim-4 gate:
   `every_call_gated_by_verifier`, `no_call_without_prior_verifier_acceptance`.
 - **Artifact (B).** Halmos pointwise-equivalence `HalmosValidateUserOpEquiv` +
   `HalmosExecuteEquiv` and Kontrol `KontrolValidateUserOp`/`KontrolExecute` on
@@ -303,7 +305,7 @@ Detail in `TRUST_ASSUMPTIONS.md`; summarized in §4 with evidence types.
 | Axiom | Statement (informal) | Type | In `theft_free` closure? | Defeater / elimination |
 |-------|----------------------|------|--------------------------|-------------------------|
 | **A1** | precompile `0x02` = FIPS-180-4 SHA-256 | **T** | named **non-consumed** marker | geth/reth/… consensus conformance; KAT parity test. Eliminate = verify a client's SHA-256 (Appel/VST). |
-| **A2** | deployed EntryPoint v0.6 ≡ `handleOp` | **T** | **consumed** (the in-Lean `entrypoint_honest` is a *tautology* over the model — the genuine assumption is the deployed-bytecode discharge) | OZ/ChainSecurity/Spearbit audits + ≥18-mo immutable mainnet. Eliminate = Kontrol vs deployed EntryPoint (8–12 mo). |
+| **A2** | deployed EntryPoint v0.6 ≡ `handleOp` | **T** | **external assumption, not a closure axiom**: the in-Lean `entrypoint_honest` is a proved theorem over the model | OZ/ChainSecurity/Spearbit audits + ≥18-mo immutable mainnet. Eliminate = Kontrol vs deployed EntryPoint (8–12 mo). |
 | **A3.1** | verifier bytecode = Lean Yul model | **C** | consumed | corpus + mutant (G2). Eliminate = interpreter-refinement (active). |
 | **A3.2/3.3/3.4** | wallet/factory/owner-table bytecode = Lean model | **B** | A3.2 in `theft_free_bytecode` | Halmos + Kontrol on pinned codehashes; deploy-profile reproduces live Base Mainnet exactly. |
 | **A4** | EVM delivers emitted call bytes | **T** | named **non-consumed** marker | KEVM / consensus conformance. |
@@ -311,10 +313,14 @@ Detail in `TRUST_ASSUMPTIONS.md`; summarized in §4 with evidence types.
 | **A6** | Lean kernel checks proofs | **X** | always | `propext`, `Classical.choice`, `Quot.sound`. |
 
 **Minimal shared TCB of all three claims:** A6 + A5 + A1 + A2 + A4 + A3.1–A3.4.
-The **`theft_free` kernel content** rests on A2 + A3.1 + A5×4 + kernel; A1 and A4
+The **`theft_free` kernel content** rests on A3.1 + A5×4 + kernel; A1 and A4
 are **non-consumed named markers** (deleting their `have` bindings leaves
 `theft_free` proven) — they document the on-chain substrate boundary without being
-logical premises of the bare safety conjunct.
+logical premises of the bare safety conjunct. A2's `entrypoint_honest` is proved
+from the in-Lean `handleOp` model and contributes no additional axiom. Applying
+that model to the deployed EntryPoint still requires external faithfulness
+evidence; this deployment assumption is distinct from the theorem's kernel
+premises (see [THE_CLAIM.md](THE_CLAIM.md)).
 
 ---
 

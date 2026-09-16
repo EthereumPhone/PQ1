@@ -1,0 +1,40 @@
+{
+  "base": "9762ea7c41de15b86191184bb2c2baa0caf68e58",
+  "commit": "c6c9f004a911049eb11fd50ce3f06b92a24d4536",
+  "tree": "c4d7d801797a806607f77280dac5c8a81166a6f1",
+  "coordinator": "GO",
+  "stage": "merge",
+  "reviewers": "SOL/Opus/Kimi GO",
+  "source_blobs": {
+    ".github/workflows/lean-fv.yml": {
+      "mode": "100644",
+      "blob": "db34de9aebed1b1169ae39f99b62a0dd4a38fd3e"
+    },
+    "Makefile": {
+      "mode": "100644",
+      "blob": "297a77be6fb272ae5e697aa7cb086f221b9c66f4"
+    },
+    "contracts/verification/scripts/check_easycrypt.sh": {
+      "mode": "100755",
+      "blob": "8e923639342edf3d1ba1a91c8af24d00a678ff6c"
+    },
+    "scripts/check_gate_enforcement.py": {
+      "mode": "100755",
+      "blob": "aa17a0e9e9057d5d948382e976bb5800f1ed3fe0"
+    },
+    "scripts/gate_enforcement.json": {
+      "mode": "100644",
+      "blob": "dc0eabd47c4552b1b4a0619f2175654748739af0"
+    },
+    "scripts/test_gate_enforcement.py": {
+      "mode": "100644",
+      "blob": "d876ef1a3885afa89f04fa9a8680efef24299046"
+    }
+  },
+  "deferred": "https://github.com/EthereumPhone/PQ1/issues/509#issuecomment-5683426902",
+  "limits": [
+    "Source wiring and supported trigger checks; no full workflow-schema or proof-execution claim.",
+    "SOL full unittest execution unavailable in read-only sandbox; coordinator and Kimi completed it.",
+    "SOL read baseline STATUS despite prompt exclusion; no archived candidate verdicts or other-leg report contents appeared in command outputs."
+  ]
+}

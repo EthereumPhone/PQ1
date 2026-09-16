@@ -1,5 +1,10 @@
 # PQSigner — STATUS (start here)
 
+**Kani/EasyCrypt evidence correction (2026-09-16):** current gate scope and
+research limits are owned by the [FV surface map](../contracts/verification/docs/FV_SURFACE_MAP.md),
+rows 4 and 9. Historical draft receipts below do not certify the vendored split.
+Implementation/review evidence: [remediation record](security/adversarial-review/findings/fv-evidence-remediation-2026-09-16.md).
+
 > **The front door.** Read this first. It's a **router, not an encyclopedia**: §0 maps *where the truth
 > lives* (one owner per concern — everyone else links); §A–§D are the **security/verification frontier**,
 > the one slice this file owns directly. Detail lives in the linked docs, not here.

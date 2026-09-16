@@ -1,0 +1,99 @@
+{
+  "base": "ebb590d0ffd2b84b2b07939c85fd31af8e0b8412",
+  "commit": "6096de0b6620a55a52da98298d155620dc5d51db",
+  "executables": {
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    }
+  },
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/tmp/pq-verity-census-20260915-ld01keqz/target",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "out": "/tmp/pq-verity-census-20260915-ld01keqz/review2-codex-retry",
+  "preflight": {
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": true,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-5.6-sol",
+      "status": "passed"
+    }
+  },
+  "prompt": "/tmp/pq-verity-census-20260915-ld01keqz/review2-prompt.txt",
+  "prompt_sha256": "77dc3507798cae4b41a04e5832796057b94ba4edb74c6dcde746f5f68859471b",
+  "reviewers": {
+    "codex": {
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--enable",
+        "use_legacy_landlock",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "-o",
+        "/tmp/pq-verity-census-20260915-ld01keqz/review2-codex-retry/codex/report.txt",
+        "-"
+      ],
+      "delivered_prompt_sha256": "77dc3507798cae4b41a04e5832796057b94ba4edb74c6dcde746f5f68859471b",
+      "environment_overrides": {},
+      "scratch": null
+    }
+  },
+  "target": "/tmp/pq-verity-census-20260915-ld01keqz/target",
+  "timeout_seconds": 900,
+  "tree": "47b7c15cc76d12eb474ceef69520d08867822575",
+  "version_contract": {
+    "mismatches": {
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "codex": "codex-cli 0.146.0"
+    }
+  }
+}

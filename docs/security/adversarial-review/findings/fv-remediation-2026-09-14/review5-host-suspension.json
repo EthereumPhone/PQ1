@@ -1,0 +1,7 @@
+{
+  "at": "2026-09-15T10:10:28.494370+00:00",
+  "action": "terminated the remaining SOL review process group",
+  "pgid": 490586,
+  "reason": "UTC timestamps exceeded the mandatory 900-second wall-clock boundary across overnight host suspension; active-runtime timer excluded the pause",
+  "mandatory_wave_acceptance": "GAP; do not treat active-runtime caps as proof of wall-clock compliance"
+}

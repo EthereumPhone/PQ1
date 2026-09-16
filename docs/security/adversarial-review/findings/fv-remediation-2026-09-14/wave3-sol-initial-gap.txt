@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 98446edc2b37cc5874f54cfe1091264ddc44eb3f / 01e56934a227bf3969e35c46b3e7b6f19fd5c39e
+FINDINGS: none
+GAPS: Source-read commands could not execute because the sandbox failed to create its required namespace.

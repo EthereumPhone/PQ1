@@ -1,0 +1,2 @@
+Visible declaration: [('PQSigner.Verifier.Merkle.auth_path_depth_eq_SUBTREE_H', 'PQSigner.Verifier.Wots', [])]
+Gate verdict: {'compiled_modules': 8, 'exported_declarations': 213, 'environment_axioms': 15, 'project_axioms': 2, 'kernel_rechecked_declarations': 208, 'admitted_declarations': 1, 'unverified_part_a_files': 5}

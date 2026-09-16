@@ -166,7 +166,7 @@ theorem hmsg_domain_separator_matches_yul :
         target_sum_lt_max, target_sum_enforced,
         chain_iterates_w_minus_1_minus_digit_steps,
         accepted_digit_sum_eq_205)
-      - Merkle: 3 closed + 1 sorry (yul_swap_selector_in_known_set is
+      - Merkle: 3 closed + 1 open proof (yul_swap_selector_in_known_set is
         documented + non-essential; the load-bearing
         branchless_swap_equivalent_to_branching_swap closes by rfl)
       - Fors: 9 closed (fors_indices_length_eq_K,
@@ -189,12 +189,21 @@ theorem hmsg_domain_separator_matches_yul :
         verify_byte_equivalent_to_rust was a vacuous `: True` axiom,
         DELETED 2026-08-11 — now an open obligation, see above)
 
-    Net: ~40 closed theorems + 2 axioms + 1 documented sorry.
-    CORRECTED 2026-08-11 — the "2 axioms" are NOT the two Lean↔Rust bridges
-    (those asserted `True` and are deleted). The two real axioms in this tree are
-    `sha256_size` and `sha256_deterministic` (Verifier/Hash.lean:40,47), i.e. the
-    opaque-hash interface. The count was right by coincidence and wrong in
-    attribution.
+    Net: ~40 closed theorems + 3 axioms + 12 documented sorries.
+    CORRECTED 2026-08-20 (issue #673) — axiom count 2 → 3: alongside
+    `sha256_size` / `sha256_deterministic` (Verifier/Hash.lean:40,47, the
+    opaque-hash interface) there is a third, `predict_matches_create`
+    (PQSmartWalletFactory.lean:65) — a content-bearing CREATE2
+    address-prediction claim over Solady `LibClone`, inventoried in
+    contracts/verity/TRUST_ASSUMPTIONS.md item 4. Sorry count 1 → 12: the
+    Merkle.lean site above plus 11 unfinished bodies in
+    PQSigner/Theorems.lean (wallet-side, outside the `Verifier.*` tree this
+    tally otherwise covers); the old zero-hole CI gate silently passed all
+    12 (fail-open `grep -c` over multiple files) and is now a pinned-ratchet
+    gate in contracts/verity/Makefile (`make -C contracts/verity ci`).
+    EARLIER CORRECTION 2026-08-11 — the "axioms" are NOT the two Lean↔Rust
+    bridges (those asserted `True` and are deleted, see Hypertree/Top
+    entries above).
 -/
 
 end PQSigner.Verifier.Top

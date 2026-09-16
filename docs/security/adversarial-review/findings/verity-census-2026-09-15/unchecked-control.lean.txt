@@ -1,0 +1,9 @@
+
+open Lean Elab Command in
+elab "census_unchecked" : command => do
+  liftCoreM <| withOptions (fun opts => debug.skipKernelTC.set opts true) <| addDecl <|
+    Declaration.thmDecl {
+      name := `census_unchecked_false, levelParams := [],
+      type := mkConst ``False, value := mkConst ``True.intro }
+census_unchecked
+theorem census_derived_false : False := census_unchecked_false

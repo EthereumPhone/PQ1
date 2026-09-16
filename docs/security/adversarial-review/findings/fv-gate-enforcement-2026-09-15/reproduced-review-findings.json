@@ -1,0 +1,27 @@
+[
+  {
+    "case": "removed pull_request",
+    "gate_failures": []
+  },
+  {
+    "case": "closed-only pull_request",
+    "gate_failures": []
+  },
+  {
+    "case": "EasyCrypt helper coverage",
+    "helpers": {
+      "ec_sweep.py": false,
+      "ec_axioms.py": false
+    }
+  },
+  {
+    "case": "CryptoVerif nightly claim",
+    "paths": [
+      "contracts/verification/proverif/**",
+      "contracts/verification/tamarin/**",
+      "contracts/verification/cryptoverif/**",
+      "scripts/check_protocol_models.py"
+    ],
+    "nightly_models": "PROTOCOL_MODELS=proverif,tamarin"
+  }
+]

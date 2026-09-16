@@ -1,0 +1,5 @@
+VERDICT: FIX
+TARGET: eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e / 8120c3bd802ed6106f5f3926e1efdc11952c6f32
+FINDINGS:
+- BLOCKER contracts/verification/docs/ASSURANCE_CASE.md:150 — G1 still lists A2 in `theft_free`’s axiom closure, conflating the external deployment-faithfulness assumption with kernel premises; `Bridge/EntryPoint.lean:172` defines `entrypoint_honest` as a theorem and ASSURANCE_CASE.md:314-320 says it contributes no axiom, while linked TRUST_ASSUMPTIONS.md:47-52 still calls it an axiom/closure marker; remove A2 from the closure list, identify it as a proved in-model theorem at line 131, and correct the linked A2 detail so only deployed-bytecode faithfulness remains external.
+GAPS: none

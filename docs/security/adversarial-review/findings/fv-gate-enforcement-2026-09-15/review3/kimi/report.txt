@@ -1,0 +1,13 @@
+VERDICT: GO
+TARGET: 31a219f71b28f3f39b83715931d9fb2c4c93e332 / f50fda40b8a39f68a302022beb1a5df4b7b36cb1
+FINDINGS: none
+GAPS: none
+
+Review notes (source-first, read-only; tree clean, HEAD/tree match the candidate):
+
+- Registration pinning: `ENFORCEMENT_POLICY` (scripts/check_gate_enforcement.py:83-149) pins all 65 identities/levels; `registration_failures` (877-890) requires exact dict equality, unique ids, and empty `_completeness_waived`; duplicate JSON/YAML keys fail closed via `_reject_duplicate_json_keys`/`_UniqueKeyLoader`. Deletion, duplicate, demotion, and waiver each have executable controls in scripts/test_gate_enforcement.py:114-142.
+- Blocking-step contract: `invokes_target` (321-375) requires exact parsed-step equality plus workflow `defaults`/`env` context, `job_equals`, and absent `job_absent` keys; boundary-safe regex, quote-aware comment stripping, `||` detection, `if: false`, `continue-on-error`, and dispatch-gating suppression are caught on both tiers. Printed/similarly-named/neutralized commands are exercised per gate (test_gate_enforcement.py:71-91). Production expected-failure wrappers (e.g. `prod-check-ship` with its grep assertions) are pinned verbatim in gate_enforcement.json and pass unchanged.
+- Triggers/paths: per-PR requires `pull_request` including opened/synchronize/reopened (413-443); `paths-ignore` and ordered negative patterns are rejected; master coverage is enforced. Nightly requires `schedule`; protocol nightly's pinned step is `PROTOCOL_MODELS=proverif,tamarin`, `verify-cryptoverif` is `local_documented` with the explicit Makefile wrapper, and the family-scope check (1324-1326) rejects cryptoverif claims. EasyCrypt reverse coverage (863-874) spans the model dir, helpers, Makefile, and workflow.
+- Self-verification: `make verify-gate-enforcement` runs `--self-test`, the unittest suite (its own CI step mutation control at test:144-147), then the live check; the path-coverage negative control reaches the intended `does NOT cover` diagnostic (test:203-225). `_covers` (208-232) correctly refuses literal-dir/single-star recursion and is shared by the Kani crate and mutation-manifest reverse checks; kani_mutations.json and extraction_registry.json are untouched by the diff.
+
+Evidence reproduced locally: `make verify-gate-enforcement` exit 0 ("all 65 gates fire"), `make -C contracts/verification verify-easycrypt-pins` exit 0 (negative control + dry-run pins), `actionlint .github/workflows/lean-fv.yml` clean. No proof or firmware behavior changes observed in the diff.

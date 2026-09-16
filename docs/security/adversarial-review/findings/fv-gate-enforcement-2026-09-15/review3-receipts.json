@@ -1,0 +1,33 @@
+{
+  "target": {
+    "base": "9762ea7c41de15b86191184bb2c2baa0caf68e58",
+    "commit": "31a219f71b28f3f39b83715931d9fb2c4c93e332",
+    "tree": "f50fda40b8a39f68a302022beb1a5df4b7b36cb1"
+  },
+  "reports": [
+    {
+      "reviewer": "claude",
+      "status": "completed",
+      "duration_seconds": 408.504,
+      "report_words": 485,
+      "report_sha256": "6f1a71e9d8215153511a86264c40019de617bec289237c31debdb700733a16ce",
+      "report": "review3/claude/report.txt"
+    },
+    {
+      "reviewer": "kimi",
+      "status": "completed",
+      "duration_seconds": 185.359,
+      "report_words": 267,
+      "report_sha256": "2e675add0edf1ec4d5204f71279eff5f59d3f8c3d85aaf39854d68309093af03",
+      "report": "review3/kimi/report.txt"
+    },
+    {
+      "reviewer": "codex",
+      "status": "completed",
+      "duration_seconds": 743.689,
+      "report_words": 159,
+      "report_sha256": "df3be61f4df7f58d38cf31a47f8433612e5d5f0abded11872c8018945d5afc27",
+      "report": "review3-codex-retry/codex/report.txt"
+    }
+  ]
+}

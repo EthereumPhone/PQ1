@@ -1,0 +1,24 @@
+Two compiled Lean inputs get past the corrected gate, so the verdict is FIX. The target and Git stayed unchanged (`git status` shows no changes, and Python ran with bytecode writes off).
+
+VERDICT: FIX
+TARGET: 1fb541057aa0244e8a6ce526de6e35fd16de0b2a / ba33e1143822f0bf36676539b723e8d14a668077
+FINDINGS:
+- HIGH contracts/verification/scripts/lean_source.py:58 (and :76) — **Mechanism:** in code mode, whenever the scanner sees `/-` or `--` it only follows the comment reading. It never also tries reading those characters as code. In Lean, a user token is matched by longest prefix before the whitespace/comment parser gets there. So a token with `/-` or `--` after its first character (`:/-`, `:--`), or one that extends `/--` (`/--x`), turns the text that follows into real code. The scanner removes that text, and `keyword_count` returns 0. The new two- and three-character body starts don't help, because the code reading is never tried. **Evidence:** I fed these through `lean --stdin` under v4.22.0 and v4.30.0-rc2. Each exits 0 and prints `X : False`, with a `declaration uses sorry` warning on D:
+  - (A) `macro ":/-" : command => \`(#check True)` then `:/- axiom X : False -- -/`
+  - (B) the same with the token `"/--x"`
+  - (C) the same with the token `":--"` and `:-- axiom X : False`
+  - (D) the same as A with `theorem X : False := by sorry`
+  
+  `keyword_count` returns `0 0 0 0` for these. **Consequence:** an unimported or unbuilt module in `lean`/`extracted` never reaches the elaborated inventory, so `source_inventory` stays equal to the manifest. A `PQSigner/*.lean` file in Verity adds 0 holes and stays within 11+1. Both gates pass while a real `axiom X : False` or `sorry` exists. This is the "mistaken lexical interpretation erases actual code" case from items 1–2; the gap predates this commit, but the correction claims to close it. **Smallest fix:** in the `/-` and `--` branches, also retain and push `(i+1, stack)` as code in two cases:
+  - the opener is not at the start of the file and not right after whitespace (a Lean token can't contain whitespace);
+  - the source has `/--` or `/-!` directly followed by a non-whitespace character.
+  
+  Add A–D to `COMMENT_AXIOMS`/`COMMENT_HOLES` and re-pin any counts that change.
+- HIGH contracts/verification/scripts/lean_source.py:80 — **Mechanism:** the `«` branch assumes `«` always starts a quoted identifier. It jumps straight to the next `»` and follows only that reading. A user token ending in `«` (`":«"` is a valid atom) makes Lean read a string literal instead, and that string can contain `»--`. After the jump the scanner is back in code mode, sees `--`, and removes the rest of the line. **Evidence:** (E) `macro ":«" s:str : command => \`(#check $s)` then `:« "»--" axiom X : False`, and (F) the same line with `theorem X : False := by sorry`. Both compile under both toolchains (`X : False`, with the sorry warning on F). `keyword_count` returns `0 0`. **Consequence:** the same bypass of the source census and the Verity hole ratchet as above. **Smallest fix:** in the `«` branch, also retain and push the plain code reading `(i+1, stack)` alongside the jump to `»`. Add E and F as regression inputs.
+
+GAPS: none
+
+**What checked out:**
+- **Manifests:** `source_inventory` still equals both manifest `source` sections, including the 66 and 3 pins for the two `#print axioms` modules. The diff leaves both `elaborated` sections unchanged.
+- **Verity:** `check_verity_holes` counts 12 holes against the 11+1 baseline.
+- **Quarantine:** these tricks can't precede an `import`, so the quarantine check isn't affected.

@@ -1,0 +1,2 @@
+Exported invalid declarations: [('census_derived_false', []), ('census_unchecked_false', [])]
+Gate verdict: {'compiled_modules': 8, 'exported_declarations': 217, 'environment_axioms': 15, 'project_axioms': 2, 'admitted_declarations': 1, 'unverified_part_a_files': 5}

@@ -1,0 +1,267 @@
+Kani Rust Verifier 0.67.0 (cargo plugin)
+warning: unused variable: `rollback_floor`
+   --> fw-manifest/src/lib.rs:496:35
+    |
+496 |     pub fn verify_rollback(&self, rollback_floor: u32) -> Result<(), VerifyError> {
+    |                                   ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_rollback_floor`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: Found the following unsupported constructs:
+             - caller_location (1)
+             - foreign function (1)
+         
+         Verification will fail if one or more of these constructs is reachable.
+         See https://model-checking.github.io/kani/rust-feature-support.html for more details.
+
+Checking harness verification::rollback_boundary...
+CBMC 6.8.0 (cbmc-6.8.0)
+CBMC version 6.8.0 (cbmc-6.8.0) 64-bit x86_64 linux
+Reading GOTO program from file /tmp/pq-fv-remediation-20260916-fl0q429t/target/target/kani/x86_64-unknown-linux-gnu/debug/deps/fw_manifest-2c0ec772be1ffd47__RNvNtCs5dRKJz12lvf_11fw_manifest12verification17rollback_boundary.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+aborting path on assume(false) at file /home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs line 439 column 17 function core::panicking::assert_failed_inner thread 0
+aborting path on assume(false) at file /home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs line 394 column 5 function core::panicking::assert_failed::<bool, bool> thread 0
+aborting path on assume(false) at file /home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/macros/mod.rs line 51 column 21 function verification::rollback_boundary thread 0
+Runtime Symex: 0.0406429s
+size of program expression: 3307 steps
+slicing removed 1961 assignments
+Generated 49 VCC(s), 1 remaining after simplification
+Runtime Postprocess Equation: 0.000668723s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00337985s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 6.773e-06s
+Solving with CaDiCaL 2.0.0
+4879 variables, 5262 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 7.9259e-05s
+Runtime decision procedure: 0.00351775s
+
+RESULTS:
+Check 1: core::slice::copy_from_slice_impl::len_mismatch_fail::do_panic::runtime.assertion.1
+	 - Status: SUCCESS
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/mod.rs:5117:9 in function core::slice::copy_from_slice_impl::len_mismatch_fail::do_panic::runtime
+
+Check 2: core::slice::index::slice_index_fail::do_panic::runtime.assertion.1
+	 - Status: SUCCESS
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:68:5 in function core::slice::index::slice_index_fail::do_panic::runtime
+
+Check 3: core::panicking::assert_failed_inner.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: fw-manifest/src/lib.rs:0:0 in function core::panicking::assert_failed_inner
+
+Check 4: core::panicking::assert_failed_inner.assertion.1
+	 - Status: SUCCESS
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs:434:23 in function core::panicking::assert_failed_inner
+
+Check 5: core::panicking::assert_failed_inner.assertion.2
+	 - Status: FAILURE
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs:439:17 in function core::panicking::assert_failed_inner
+
+Check 6: core::slice::index::slice_index_fail::do_panic::runtime.assertion.2
+	 - Status: SUCCESS
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:58:9 in function core::slice::index::slice_index_fail::do_panic::runtime
+
+Check 7: <core::ops::Range<usize> as core::slice::SliceIndex<[u8]>>::index_mut.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:448:5 in function <core::ops::Range<usize> as core::slice::SliceIndex<[u8]>>::index_mut
+
+Check 8: <core::ops::Range<usize> as core::slice::SliceIndex<[u8]>>::index_mut.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:454:22 in function <core::ops::Range<usize> as core::slice::SliceIndex<[u8]>>::index_mut
+
+Check 9: <core::ops::Range<usize> as core::slice::SliceIndex<[u8]>>::index_mut.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:454:22 in function <core::ops::Range<usize> as core::slice::SliceIndex<[u8]>>::index_mut
+
+Check 10: core::slice::index::slice_index_fail::do_panic::runtime.assertion.3
+	 - Status: SUCCESS
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:49:9 in function core::slice::index::slice_index_fail::do_panic::runtime
+
+Check 11: kani::rustc_intrinsics::offset::<u8, *mut u8, usize>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "Offset in bytes overflows isize"
+	 - Location: ../../../home/runner/work/kani/kani/library/kani/src/lib.rs:57:1 in function kani::rustc_intrinsics::offset::<u8, *mut u8, usize>
+
+Check 12: kani::rustc_intrinsics::offset::<u8, *mut u8, usize>.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "Offset result and original pointer must point to the same allocation"
+	 - Location: ../../../home/runner/work/kani/kani/library/kani/src/lib.rs:57:1 in function kani::rustc_intrinsics::offset::<u8, *mut u8, usize>
+
+Check 13: core::ptr::copy_nonoverlapping::<u8>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "`src` must be properly aligned"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:547:14 in function core::ptr::copy_nonoverlapping::<u8>
+
+Check 14: core::ptr::copy_nonoverlapping::<u8>.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "`dst` must be properly aligned"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:547:14 in function core::ptr::copy_nonoverlapping::<u8>
+
+Check 15: core::ptr::copy_nonoverlapping::<u8>.arithmetic_overflow.1
+	 - Status: SUCCESS
+	 - Description: "copy_nonoverlapping: attempt to compute number in bytes which would overflow"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:547:14 in function core::ptr::copy_nonoverlapping::<u8>
+
+Check 16: kani::mem::cbmc::same_allocation.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "Kani does not support reasoning about pointer to unallocated memory"
+	 - Location: ../../../home/runner/work/kani/kani/library/kani/src/lib.rs:57:1 in function kani::mem::cbmc::same_allocation
+
+Check 17: core::slice::index::slice_index_fail::do_panic::runtime.assertion.4
+	 - Status: SUCCESS
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:40:9 in function core::slice::index::slice_index_fail::do_panic::runtime
+
+Check 18: core::fmt::Arguments::<'_>::from_str.assertion.1
+	 - Status: UNREACHABLE
+	 - Description: "attempt to shift left with overflow"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:820:38 in function core::fmt::Arguments::<'_>::from_str
+
+Check 19: <usize as kani::rustc_intrinsics::ToISize>::to_isize.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../home/runner/work/kani/kani/library/kani_core/src/models.rs:176:17 in function <usize as kani::rustc_intrinsics::ToISize>::to_isize
+
+Check 20: <usize as kani::rustc_intrinsics::ToISize>::to_isize.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "Offset value overflows isize"
+	 - Location: ../../../home/runner/work/kani/kani/library/kani/src/lib.rs:57:1 in function <usize as kani::rustc_intrinsics::ToISize>::to_isize
+
+Check 21: <usize as kani::rustc_intrinsics::ToISize>::to_isize.assertion.1
+	 - Status: SUCCESS
+	 - Description: "internal error: entered unreachable code"
+	 - Location: ../../../home/runner/work/kani/kani/library/kani/src/lib.rs:57:1 in function <usize as kani::rustc_intrinsics::ToISize>::to_isize
+
+Check 22: core::panic::Location::<'_>::caller.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "caller_location is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/374"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic/location.rs:147:9 in function core::panic::Location::<'_>::caller
+
+Check 23: core::panicking::panic_nounwind_fmt::runtime.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "call to foreign "Rust" function `_RNvCs1hStedNDpZ2_7___rustc17rust_begin_unwind` is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/new/choose"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs:110:17 in function core::panicking::panic_nounwind_fmt::runtime
+
+Check 24: core::num::<impl usize>::abs_diff.assertion.1
+	 - Status: UNREACHABLE
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:2852:21 in function core::num::<impl usize>::abs_diff
+
+Check 25: core::num::<impl usize>::abs_diff.assertion.2
+	 - Status: UNREACHABLE
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:2854:21 in function core::num::<impl usize>::abs_diff
+
+Check 26: core::num::<impl usize>::checked_sub.arithmetic_overflow.1
+	 - Status: SUCCESS
+	 - Description: "attempt to compute `unchecked_sub` which would overflow"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:812:31 in function core::num::<impl usize>::checked_sub
+
+Check 27: core::ub_checks::maybe_is_nonoverlapping::runtime.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs:2437:9 in function core::ub_checks::maybe_is_nonoverlapping::runtime
+
+Check 28: core::ptr::const_ptr::<impl *const ()>::is_aligned_to.assertion.1
+	 - Status: UNREACHABLE
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:1377:23 in function core::ptr::const_ptr::<impl *const ()>::is_aligned_to
+
+Check 29: core::ptr::const_ptr::<impl *const ()>::is_aligned_to.assertion.2
+	 - Status: SUCCESS
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:1374:13 in function core::ptr::const_ptr::<impl *const ()>::is_aligned_to
+
+Check 30: core::result::Result::<(), VerifyError>::is_ok.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function core::result::Result::<(), VerifyError>::is_ok
+
+Check 31: core::result::Result::<(), VerifyError>::is_ok.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function core::result::Result::<(), VerifyError>::is_ok
+
+Check 32: core::result::Result::<(), VerifyError>::is_ok.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function core::result::Result::<(), VerifyError>::is_ok
+
+Check 33: core::result::Result::<(), VerifyError>::is_ok.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function core::result::Result::<(), VerifyError>::is_ok
+
+Check 34: core::result::Result::<(), VerifyError>::is_ok.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function core::result::Result::<(), VerifyError>::is_ok
+
+Check 35: core::result::Result::<(), VerifyError>::is_ok.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function core::result::Result::<(), VerifyError>::is_ok
+
+Check 36: core::panicking::assert_failed_inner.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs:433:11 in function core::panicking::assert_failed_inner
+
+Check 37: memcpy.pointer.1
+	 - Status: SUCCESS
+	 - Description: "same object violation in (const char *)(void *)src >= (const char *)(void *)dst + (signed long int)(count * sizeof(unsigned char) /*1*/ )"
+	 - Location: <builtin-library-memcpy>:33 in function memcpy
+
+Check 38: memcpy.pointer.2
+	 - Status: SUCCESS
+	 - Description: "same object violation in (const char *)(void *)dst >= (const char *)(void *)src + (signed long int)(count * sizeof(unsigned char) /*1*/ )"
+	 - Location: <builtin-library-memcpy>:34 in function memcpy
+
+Check 39: core::ptr::copy_nonoverlapping::<u8>.precondition_instance.1
+	 - Status: SUCCESS
+	 - Description: "memcpy src/dst overlap"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:547:14 in function core::ptr::copy_nonoverlapping::<u8>
+
+Check 40: core::ptr::copy_nonoverlapping::<u8>.precondition_instance.2
+	 - Status: SUCCESS
+	 - Description: "memcpy source region readable"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:547:14 in function core::ptr::copy_nonoverlapping::<u8>
+
+Check 41: core::ptr::copy_nonoverlapping::<u8>.precondition_instance.3
+	 - Status: SUCCESS
+	 - Description: "memcpy destination region writeable"
+	 - Location: ../../../home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:547:14 in function core::ptr::copy_nonoverlapping::<u8>
+
+
+SUMMARY:
+ ** 1 of 41 failed (4 unreachable)
+Failed Checks: This is a placeholder message; Kani doesn't support message formatted at runtime
+ File: "/home/runner/.rustup/toolchains/nightly-2025-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs", line 439, in core::panicking::assert_failed_inner
+
+VERIFICATION:- FAILED
+Verification Time: 0.17901674s
+
+Manual Harness Summary:
+Verification failed for - verification::rollback_boundary
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
+
+   Compiling fw-manifest v0.1.0 (/tmp/pq-fv-remediation-20260916-fl0q429t/target/fw-manifest)
+    Finished `dev` profile [optimized + debuginfo] target(s) in 0.39s

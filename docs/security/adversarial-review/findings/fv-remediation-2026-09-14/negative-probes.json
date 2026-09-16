@@ -1,0 +1,108 @@
+[
+  {
+    "label": "extracted-private-axiom",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-extracted"
+    ],
+    "status": 2,
+    "expected_marker": "source inventory drift"
+  },
+  {
+    "label": "flagship-break-token",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verification",
+      "verify-fv-lints"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 2,
+    "expected_marker": "source inventory drift"
+  },
+  {
+    "label": "generated-environment-axiom",
+    "command": [
+      "python3",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "lean"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 1,
+    "expected_marker": "elaborated inventory drift"
+  },
+  {
+    "label": "verity-admit-rejected",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 2,
+    "expected_marker": "proof holes exceed baseline"
+  },
+  {
+    "label": "tlc-exit42-run.sh",
+    "command": [
+      "bash",
+      "contracts/verification/tla/run.sh"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 1,
+    "expected_marker": "process status 42"
+  },
+  {
+    "label": "tlc-exit42-run_combined.sh",
+    "command": [
+      "bash",
+      "contracts/verification/tla/run_combined.sh"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 1,
+    "expected_marker": "process status 42"
+  },
+  {
+    "label": "tlc-exit42-run_pin.sh",
+    "command": [
+      "bash",
+      "contracts/verification/tla/run_pin.sh"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 1,
+    "expected_marker": "process status 42"
+  },
+  {
+    "label": "tlc-duplicate-run.sh",
+    "command": [
+      "bash",
+      "contracts/verification/tla/run.sh"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 2,
+    "expected_marker": "duplicate config pin"
+  },
+  {
+    "label": "tlc-duplicate-run_combined.sh",
+    "command": [
+      "bash",
+      "contracts/verification/tla/run_combined.sh"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 2,
+    "expected_marker": "duplicate config pin"
+  },
+  {
+    "label": "tlc-duplicate-run_pin.sh",
+    "command": [
+      "bash",
+      "contracts/verification/tla/run_pin.sh"
+    ],
+    "cwd": "/tmp/pq-fv-fixes-20260914-iddnxo7n/checks",
+    "status": 2,
+    "expected_marker": "duplicate config pin"
+  }
+]

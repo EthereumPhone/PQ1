@@ -1,0 +1,2 @@
+<stdin>:1:36: warning: declaration uses 'sorry'
+'X' depends on axioms: [sorryAx]
