@@ -54,3 +54,43 @@ currently pinned container environment but is corrected in this same batch.
 The proof sources and assumptions remain unchanged. Split identity is now
 `ec0cec4a59a4eef2b6862c56f8475f09`; the interrupted `e64e9594831f9b2df2ccdaeaf5f8c213` replay is superseded, not green evidence.
 The updated candidate requires the combined review and complete replay again.
+
+## Completion receipt — 2026-09-17
+
+Source commit `6bc23f2223aa820595be3bd6b04391bd7e5b6121`, tree
+`4a5ec55d432c2f4d46a041c3d231c85502a7fca6`, compared with master
+`ab9e9049a5a8c8d088966d02b7ff9a5714ae678a`. Source remained clean.
+
+The [full pinned-image replay](fv-master-integration-2026-09-16/full-replay-v2.json)
+exited 0: 53/53 direct compiles, 53/53 CLI runs, zero disagreements; all files
+requirable; 1,166 unique pins and 1,082 statements; unchanged assumption census;
+49 polarity/reason controls; 15 taint controls and four count controls; margin
+guards 4/4 and negative controls 3/3. Final input identity stayed
+`ec0cec4a59a4eef2b6862c56f8475f09`. The raw log ends GREEN. The run spans an
+overnight host-clock advance, reported as wall time rather than active runtime.
+The earlier interrupted replay is explicitly superseded and is not green evidence.
+
+Fresh checker evidence: 22 gate regression groups and 68 registrations; seven
+split-contract groups; 11 Kani census and eight runner groups; Verity CI with
+fresh compiler/kernel replay (213 exported declarations, 208 kernel-rechecked,
+one explicitly admitted declaration); TLC/protocol/proof-mutation checker
+controls. No new full Kani campaign, heavy Kani BMC, full independent Lean
+kernel campaign, hardware test or hosted-CI execution is claimed. Earlier full
+proof-project receipts are reused only for the recorded identical source inputs.
+
+The [corrected source review](fv-master-integration-2026-09-16/review-triage-v2.md)
+returned Opus GO and Kimi GO. SOL's one permitted mechanical retry timed out
+at 900 seconds without a report; its raw visible messages contain progress
+updates, not a final verdict. This remains a mandatory missing leg. All legs
+ended before the overnight host interruption. Opus's runtime identifies
+`claude-opus-5` and also reports an auxiliary Haiku usage entry; no additional
+coordinator reviewer was launched. Requested models, efforts, commands and
+runtime/report hashes remain in the unchanged launcher manifests.
+
+**Disposition: all required executable gates green; master publication pending
+an explicit owner decision on the missing SOL review.** No owner risk acceptance
+is inferred from the two GO reports. The workflow's second-wave stopping rule
+applies; no extra review round is launched. The two non-blocking source notes
+are banked in #688; integration closure is tracked in #687. The broader #509
+assurance pass stays deferred. This receipt adds no source, proof assumption,
+acceptance gate, firmware-equivalence claim or numerical security bound.

@@ -1,0 +1,6 @@
+VERDICT: FIX
+TARGET: b143b10f06799f56608acc97802cd2bedaf2b1f7 / 2c9399a504efa5ac178e818ae670e814ab95cbeb
+FINDINGS:
+- HIGH Makefile:4041 — `kani-heavy` omits heavy-tier mutation attribution and the advertised `verify-kani-mutation-heavy` rule is absent; `scripts/kani_mutations.json:54` contains the sole `tier: "heavy"` mutation with `--features kani-heavy`, while `make -n verify-kani-mutation-heavy` returns “No rule to make target”; restore the phony target running `check_kani_mutations.py --tier heavy` and invoke it from `kani-heavy`.
+- MEDIUM .github/workflows/nightly.yml:381 — the scheduled protocol job runs only the live checker, omitting its wired negative controls, so parser/control regressions can remain green; `check_protocol_models.py:75-81` says CI runs `--self-test`, but the workflow and Makefile target contain no such invocation; run the self-test before the live gate and pin that invocation in the enforcement contract.
+GAPS: Complete pinned-image replay and remaining coordinator-run checker controls were not observed, per instruction.

@@ -1,0 +1,26 @@
+{
+  "master_base": "ab9e9049a5a8c8d088966d02b7ff9a5714ae678a",
+  "ported_commits": [
+    "ebb590d0",
+    "9762ea7c",
+    "43cf6208",
+    "d168122e"
+  ],
+  "unchanged_from_reviewed_fix_branch": [
+    "contracts/verification/lean",
+    "contracts/verification/extracted",
+    "contracts/verity",
+    "contracts/verification/tla",
+    "contracts/verification/protocols"
+  ],
+  "master_easycrypt_sources_preserved": 433,
+  "split_identity": "e64e9594831f9b2df2ccdaeaf5f8c213",
+  "counts": {
+    "files": 53,
+    "pins": 1166,
+    "statements": 1082,
+    "controls": 49,
+    "headline_scope_files": 6
+  },
+  "canonical_baseline": "external baseline.json; no worktree edits"
+}

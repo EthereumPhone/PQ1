@@ -1,0 +1,8 @@
+{
+  "candidate": "b143b10f06799f56608acc97802cd2bedaf2b1f7",
+  "identity": "e64e9594831f9b2df2ccdaeaf5f8c213",
+  "completion": "coordinator stopped owned container after review required gate correction",
+  "container": "2a73d1e1082730315fc863adb2b4f4b5abcf6ef2ee69f501e9e01790dd53d39c",
+  "exit_code": 2,
+  "green": false
+}

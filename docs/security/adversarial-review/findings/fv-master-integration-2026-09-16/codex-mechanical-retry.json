@@ -1,0 +1,8 @@
+{
+  "completed_shell_commands": 3,
+  "namespace_failures": 3,
+  "stopped_process_groups": [
+    1555989
+  ],
+  "reason": "All completed commands failed before execution at nested namespace startup. One same-model retry retains outer read-only mounts."
+}

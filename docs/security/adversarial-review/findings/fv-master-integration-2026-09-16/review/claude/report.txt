@@ -1,0 +1,31 @@
+VERDICT: GO
+TARGET: b143b10f06799f56608acc97802cd2bedaf2b1f7 / 2c9399a504efa5ac178e818ae670e814ab95cbeb
+FINDINGS: none
+GAPS: I reviewed the EasyCrypt split gate, its workflow and Makefile callers, and the Kani mutation and census code line by line; I read the Lean/Verity/TLC/protocol-model diffs (item 1) only at the diff-stat level, and I did not run Kani or EasyCrypt to test output formats or the image lock, relying on the independent green runs for those.
+
+Also: a search matched an earlier review's receipt in the `docs/security/adversarial-review/findings/` archive, and I disregarded it.
+
+What I checked in the source:
+- **Both drivers see all 53 files (item 3).**
+  - PHASE 1 and PHASE 1e both read their file list from `split_contract.py --targets`. Each phase fails if its run count doesn't equal that list's length, and PHASE 1 also fails if the list is empty.
+  - `targets()` fails if the computed dependency cone differs from `cert-cone-files-split.tsv`, or if that file is empty or has duplicates. It returns dependencies before the files that require them.
+- **The lowered command threshold in PHASE 1e is compensated.** The minimum-commands check in `cli_one` dropped from 5 to 1. The script sets `pipefail` (`cert_gate_split.sh:7`), so the exit code captured is EasyCrypt's own. A file now fails on a nonzero exit code as well as on any diagnostic.
+- **Unfinished proofs are still caught.** PHASE 1d now writes plain `require $n.`, which also works for `.eca` files. In the host copy of the EasyCrypt r2026 source (`ec.ml:590`), a `.eco` cache file is only used to skip recompiling the input file itself; `require` re-reads the source. So the cache files PHASE 1 writes cannot hide a proof left open at end of file. The executable controls cover a broken dependency, an unfinished `.ec` and an unfinished `.eca`.
+- **Declaration pins (item 4).**
+  - The Python `check_pins` calls `digest` / `digest_op` exactly as the old command-line path did.
+  - It rejects duplicate keys, a count different from `EXPECT_PINS=1166`, malformed digests, unresolvable pins, and paths not listed exactly in the cone file.
+  - The manifest's path prefixes add up to 1166 (278 + 766 + 73 + 49).
+- **Master's controls are intact (item 5).** The 49 controls, 15 taint controls, 4 taint-count controls and the margin equalities are untouched; the diff only replaced the header, PHASE 1, 1c, 1d and 1e.
+- **Full replay (item 6).**
+  - `run_easycrypt_split.py` only accepts an image pinned by digest. It runs the container with no network, mounts the source read-only, and works on a copy in `/tmp`.
+  - Inside, `--toolchain` checks the `git-hash` and `known provers` lines from `easycrypt config` (stderr is captured) against the 25 prover entries in the lock file.
+  - The fast per-PR identity check fails if the `split` row is missing or doesn't match.
+  - `verify-easycrypt-split-pins` is wired into `lean-fv.yml` (runs on PRs) and `verify-easycrypt-split` into the scheduled nightly job. `check_gate_enforcement.py` checks that both cover `c10-port/**`, the wrapper, the Makefile and their workflow file.
+  - `verify-easycrypt-docker` now exits 1 when Docker or the base proofs are missing, instead of printing an old receipt and passing.
+- **Kani mutation credit (item 2).**
+  - Each run uses `--exact` and the fully qualified harness name, and the unmodified source must pass first.
+  - The source must be unchanged after that baseline run.
+  - Credit requires exactly one matching "Checking harness" line, verdict and summary line, with a consistent exit code.
+  - Any fatal tool diagnostic is rejected.
+  - A `kani-heavy` feature flag is only allowed on heavy-tier entries, and the reverse.
+  - The census matches `#[cfg(feature = …)]` gates even when the attribute spans several lines; any more complex `cfg` form is refused.
