@@ -1,0 +1,42 @@
+{
+  "valid": true,
+  "target": {
+    "commit_after": "816db25c4d161544d2ba74b988efd50942167d0d",
+    "commit_before": "816db25c4d161544d2ba74b988efd50942167d0d",
+    "drift": false,
+    "path": "/tmp/pq-fv-master-20260916-g4woz0z8/target-v6",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "050cafedbcb138388636551687710f67c69a9368",
+    "tree_before": "050cafedbcb138388636551687710f67c69a9368"
+  },
+  "reports": [
+    {
+      "reviewer": "claude",
+      "verdict": "GO",
+      "duration_seconds": 186.947,
+      "words": 555,
+      "report_sha256": "07c3d7dafc826738480056ad9da99e815b19be346a9d3cb4a2ad65e3fb4e32c4"
+    },
+    {
+      "reviewer": "codex",
+      "verdict": "GO",
+      "duration_seconds": 594.792,
+      "words": 29,
+      "report_sha256": "539dd8d5109d5c21eeeefbae05f70e3674a0a8993e764f057d873ae64b8ed778"
+    },
+    {
+      "reviewer": "kimi",
+      "verdict": "GO",
+      "duration_seconds": 298.528,
+      "words": 345,
+      "report_sha256": "24bd3ee78639e822de39e3add298392ad8fb437e88b3c64b2b993598ffbc343b"
+    }
+  ],
+  "launch_skew_seconds": 0.001131,
+  "all_hashes_verified": true,
+  "clock": "CLOCK_BOOTTIME includes suspend",
+  "executable_gaps": "none: frozen final Tamarin and complete pinned-image EasyCrypt replay both green",
+  "coordinator_blockers": [],
+  "executable_completion_receipt": "full-replay-v3-validation.json"
+}

@@ -1,0 +1,6 @@
+{
+  "source_gate_failures": [],
+  "parse_exit": 0,
+  "parsed_tautology": true,
+  "decisive_output": "lemma seed_secret_under_single_compromise: \"All s #i. Provisioned(s) @ i & (All x y #a #b. Compromise(x) @ a & Compromise(y) @ b ==> #a = #b) ==> not (Ex #j. K(s) @ j)\"'))\"\n  // safety formula\n\nlemma seed_secret_under_single_compromise:\n  all-traces \"\u22a4\"\n/*\nguarded formula characterizing all counter-examples:\n\"\u22a5\"\n*/\nby sorry\n\nrestriction pad2:\n  \"\u2200 x #i. (Provisioned( x ) @ #i) \u21d2 (\u00ac(x = '\"'))\"\n  // safety formula\n\n"
+}

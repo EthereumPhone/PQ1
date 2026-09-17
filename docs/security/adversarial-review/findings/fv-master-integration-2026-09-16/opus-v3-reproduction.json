@@ -1,0 +1,7 @@
+{
+  "source_changed": true,
+  "source_gate_failures": [],
+  "parse_exit": 0,
+  "parsed_tautology": true,
+  "parsed_lemma_excerpt": "lemma seed_secret_under_single_compromise:\n  all-traces \"\u22a4\"\n/*\nguarded formula characterizing all counter-examples:\n\"\u22a5\"\n*/\nby sorry\n\n"
+}

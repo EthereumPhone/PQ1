@@ -1,0 +1,21 @@
+VERDICT: FIX
+TARGET: c0cb9abcc0adab53b8769afba9c48659ac60e959 / c5e1c6969694c07643ee19f701c18ab0f676e798
+FINDINGS:
+- HIGH scripts/check_protocol_models.py:318-328 — **Mechanism:** Tamarin allows a `"` inside a single-quoted constant within a formula, but the pin scanner doesn't know that. The scanner ends a double-quoted formula at the first `"`, even when it sits inside a constant like `'…'`. Tamarin 1.12.0 reads that `"` as part of the constant. So Tamarin and the scanner can see different lemmas without any comment, preprocessor or `#include`. I replaced the `seed_secret_under_single_compromise` declaration in `seed_split_xor.spthy` with three lines:
+  - `restriction pad: "All x #i. Provisioned(x) @ i ==> not (x = '"<original declaration on one line>')"`
+  - `lemma seed_secret_under_single_compromise: "T"`
+  - `restriction pad2: "All x #i. Provisioned(x) @ i ==> not (x = '"')"`
+
+  **What each side sees:** the scanner counts the original declaration inside the first restriction as live, with its pinned hash. The `"T"` lemma falls inside what the scanner treats as a single-quoted span, and the scanner is back in step by the end of `pad2`. Tamarin sees the original only as constant text and the `"T"` lemma as live. Both restrictions are vacuous, because a fresh `~seed` never equals a public constant.
+
+  **Consequence:** the seed-secrecy security lemma can be gutted to ⊤ and `check_tamarin` still passes. This breaks the requirement that every live lemma is pinned or rejected and that quoting cannot desynchronize the scanner from Tamarin.
+
+  **Evidence:** everything ran in memory or through stdin; nothing was written to the target.
+  - `check_tamarin_source('seed_split_xor.spthy', mutated)` returns `[]`, and `parse_spthy_formulas` returns both pinned lemma names.
+  - `tamarin-prover --prove /dev/stdin` on the same text exits 0 and prints "All wellformedness checks were successful". It shows `lemma seed_secret_under_single_compromise: all-traces "⊤"`, then `seed_secret_under_single_compromise (all-traces): verified (1 steps)` and `both_compromised_leaks_seed (exists-trace): verified`.
+  - `diff_identity` on those verdicts is therefore empty too.
+  - The existing "quoted restriction hides a live tautology" control only covers comment delimiters inside quotes, so it doesn't catch this.
+
+  **Smallest fix:** inside double-quoted text, find each `'…'` constant and reject any constant that contains `"`. Outside formulas, also reject a `'` that isn't part of an identifier and has no matching close. I also suspect a second mismatch I did not test: the scanner treats `\` as an escape character inside quotes. Tamarin formulas have no escapes as far as I know, so rejecting backslashes in quoted text would close that too. Add the construct above as a self-test control in all three Python optimization modes. A sturdier option is to hash lemma formulas from Tamarin's own parsed output instead of a hand-written scanner.
+
+GAPS: EasyCrypt 53-file/1166-pin checkers and gate_enforcement contracts not re-read in the time box; I checked only `run_easycrypt_split.py`'s isolation, the `check_easycrypt.sh` require-probe diff, and the Kani baseline/`--exact`/classification/heavy-tier selection, with no findings there.

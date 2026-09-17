@@ -1,0 +1,17 @@
+All checks complete. `pipefail` is active at cert_gate_split.sh:7, so the `cli_rc` capture in `cli_one` is genuine — my one candidate concern is void.
+
+Summary of what I verified source-first across the compare range (docs/findings receipts excluded as instructed):
+
+- No `.ec`/`.eca` file changed in the range (proof bytes preserved); cone inventory is 53 files incl. 4 `.eca`, duplicate-free.
+- `split_contract.py:61-91` enforces 1166 pins unique by parsed `(path, identifier)` identity, paths restricted to the canonical cone inventory, identifiers regex-canonical, digests must resolve to a 32-hex match; census/coverage/quarantine/taint run in the same contract. EXPECT_PINS=1166 matches the manifest.
+- `cert_gate_split.sh` compiles and cli-iterates every cone file under both drivers with truncation guards, keeps the require-probe against EOF-unfinished proofs, and preserves master's 49 polarity/reason controls, 15 taint + 4 taint-count controls, 4/3 margin counts untouched.
+- Toolchain lock pins the image by digest plus the exact 25-prover inventory; `run_easycrypt_split.py` runs the gate in `--network none` docker on a disposable copy with `PQ_EASYCRYPT_IMAGE` cross-checked inside.
+- Kani: unmodified baseline must pass, `--exact` fully qualified harness, `classify_kani` rejects fatal diagnostics/ambiguous output, source-restoration check, heavy tier non-cumulative + canary, and both `kani-heavy` / `verify-kani-mutation-heavy` select it.
+- Tamarin formula pins strip nested comments/quotes, reject attributed declarations fail-closed, and pin-or-reject every live lemma; ProVerif raw RESULT count and CryptoVerif identity close the documented bypasses.
+- A2 `entrypoint_honest` demotion is a real `:= by` proof (no `sorry`), propagated coherently through ledger pins, closures, mutation manifest and THE_CLAIM.md.
+- Gate enforcement: 68 unique registrations, fail-closed required-context contracts; per-PR pins job and nightly replay wired with path triggers.
+
+VERDICT: GO
+TARGET: eb18115edb602fe8634d441249d13a11b0177043 / c70e88ec551d4b8100f605fd548b3b0e8ddaa5f8
+FINDINGS: none
+GAPS: I did not execute proof gates; per cert-identity.tsv the fresh pinned-image full replay for the 2026-09-17 identity 623ad0710d73000a1c693049b8933813 remains a coordinator-required green result before publication.

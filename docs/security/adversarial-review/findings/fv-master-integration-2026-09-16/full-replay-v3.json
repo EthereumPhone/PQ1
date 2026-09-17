@@ -1,0 +1,11 @@
+{
+  "command": "make -C contracts/verification verify-easycrypt-split",
+  "commit": "eb18115edb602fe8634d441249d13a11b0177043",
+  "tree": "c70e88ec551d4b8100f605fd548b3b0e8ddaa5f8",
+  "input_identity": "623ad0710d73000a1c693049b8933813",
+  "exit_code": 0,
+  "started_at": "2026-09-17T14:31:26.531701+00:00",
+  "ended_at": "2026-09-17T16:09:47.561118+00:00",
+  "elapsed_wall_seconds": 5901.029,
+  "log_sha256": "80efa33d6756f5bdc26e3c5ae00447686d2dd4fed36e09c572d1b7bcd2c7ed39"
+}

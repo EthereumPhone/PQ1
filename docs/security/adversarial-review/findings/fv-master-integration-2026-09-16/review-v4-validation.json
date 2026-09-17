@@ -1,0 +1,34 @@
+{
+  "valid": true,
+  "target": {
+    "commit_after": "557d7216f4e711ee95daba779bdc1a835951f14c",
+    "commit_before": "557d7216f4e711ee95daba779bdc1a835951f14c",
+    "drift": false,
+    "path": "/tmp/pq-fv-master-20260916-g4woz0z8/target-v4",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "d7ab1b27e6f0fac25a0b64593036f51d68f15009",
+    "tree_before": "d7ab1b27e6f0fac25a0b64593036f51d68f15009"
+  },
+  "reports": [
+    {
+      "reviewer": "claude",
+      "duration_seconds": 236.824,
+      "words": 239,
+      "report_sha256": "2c5432b337e0ae3243d19a13fce2a4dc07b236546dbfc855797fe94d6673f343"
+    },
+    {
+      "reviewer": "codex",
+      "duration_seconds": 352.017,
+      "words": 31,
+      "report_sha256": "7b4e9267023df6e172855c17f12aa286129e37c90ade0ad584efe6778f04e72d"
+    },
+    {
+      "reviewer": "kimi",
+      "duration_seconds": 508.437,
+      "words": 406,
+      "report_sha256": "c1cbe75c24e339ff630e071f324401814f4f4a2dc86d7408c15ed8f1c2b0f5d5"
+    }
+  ],
+  "launch_skew_seconds": 0.000817
+}

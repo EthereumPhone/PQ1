@@ -1,0 +1,13 @@
+{
+  "checked_at": "2026-09-17T16:11:07.894309+00:00",
+  "baseline_files": 316,
+  "all_baseline_file_hashes_unchanged": true,
+  "canonical_head_before": "5ec6bcacb3d4ff974e7f3c7818003793906f61a3",
+  "canonical_head_now": "3a32a8824a8a75962217f0e7724b63c0905d602d",
+  "canonical_branch": "feat/pq1-board-target",
+  "canonical_tree_mutations_by_coordinator": "none; isolated publication worktree only",
+  "remote_before_push": {
+    "refs/heads/fix/fv-master-integration-20260916": "17e9b5a507cc348c85986efa4f1533763dab7aeb",
+    "refs/heads/master": "ab9e9049a5a8c8d088966d02b7ff9a5714ae678a"
+  }
+}

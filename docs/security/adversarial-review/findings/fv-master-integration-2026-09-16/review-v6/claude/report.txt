@@ -1,0 +1,37 @@
+VERDICT: GO
+TARGET: 816db25c4d161544d2ba74b988efd50942167d0d / 050cafedbcb138388636551687710f67c69a9368
+FINDINGS: none
+GAPS: I only skimmed `scripts/check_gate_enforcement.py`, `check_axiom_inventory.py`, `lint_fv_invariants.sh` and the unchanged control sections of `cert_gate_split.sh`; the live Tamarin run and the full EasyCrypt replay (623ad071…) are still pending.
+
+What I checked, reading the source directly, with no edits and no proof runs:
+- **Tamarin** (`scripts/check_protocol_models.py:338-367,434-460`):
+  - A SHA-256 hash of each complete model file is checked before any formula extraction and before the prover starts. Any change fails with `SOURCE_DRIFTED`, and the prover never runs.
+  - The lists of source hashes and formula hashes must name the same three models.
+  - Every self-test mutation must actually change the source and must fail with `SOURCE_DRIFTED`. The script uses no `assert`, so `python -O` doesn't change what it checks.
+- **Kani mutations** (`scripts/check_kani_mutations.py:102-151,201-222,290`):
+  - Each run selects exactly one fully named harness.
+  - The unmodified original must pass, and the source must still be unchanged afterwards.
+  - Kani output is accepted only as one harness, one verdict and one summary with a matching exit code. Any fatal diagnostic is an error, the source is always restored, and the canary must pass.
+  - The heavy tier runs only the heavy entries plus the canary, and the `kani-heavy` feature flag must match the heavy tier.
+  - `kani_census.py` finds a harness's feature gate even when the attribute spans several lines. The census lock records mutation counts per tier, so an entry can't quietly move between tiers.
+  - Both `make kani-heavy` and `make verify-kani-mutation-heavy` reach `--tier heavy`.
+- **EasyCrypt split:**
+  - `split_contract.py`:
+    - The computed 53-file dependency set must equal the pinned list, and files are checked with dependencies first.
+    - The 1166 pins are unique by (path, name). Each pin's path must be one of the 53 pinned files, and its name must be a plain EasyCrypt identifier. Each pin must resolve to a 32-hex-character digest that matches.
+  - `cert_gate_split.sh` compiles every file directly and also runs it through the `easycrypt cli` driver, whose exit code is now checked. It checks that every file, `.eca` included, can be loaded with plain `require`. Its input hash now covers the new helper scripts and the toolchain lock file.
+  - The controls in `split_proof_controls.py` fail through `SystemExit`, not `assert`.
+  - `run_easycrypt_split.py` uses an image pinned by digest, with no network, a read-only mount and a throwaway copy of the sources.
+- **TLC** (`tla/check_tlc.py`): each run must report exactly one completion line and the expected exit status, and all 17 config files must match their pins exactly (no symlinks).
+- **Verity** (`check_verity_inventory.py`):
+  - It uses a fixed Lean binary and commit hash and builds all eight modules from scratch.
+  - Axioms, `sorry` uses and partial declarations must match an exact inventory, and the number of kernel re-checked declarations must match.
+  - The quarantined Part A files are pinned by hash, and the sources must be identical before and after the run.
+- **CI wiring:**
+  - The nightly protocol job runs the self-test before the ProVerif + Tamarin gate.
+  - The split pin checks run on every PR through `lean-fv.yml`, which triggers on `easycrypt/**`.
+  - The full split replay is a nightly job with no `if`, env or container settings that could bypass it.
+  - The new `verity-fv.yml` workflow is in place.
+  - The entries in `gate_enforcement.json` match these steps.
+
+The plan-mode file holding this review is `/home/nicola/.claude/plans/you-are-one-independent-zesty-bird.md`.

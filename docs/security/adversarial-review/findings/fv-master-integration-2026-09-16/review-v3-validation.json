@@ -1,0 +1,35 @@
+{
+  "valid": true,
+  "target": {
+    "commit_after": "eb18115edb602fe8634d441249d13a11b0177043",
+    "commit_before": "eb18115edb602fe8634d441249d13a11b0177043",
+    "drift": false,
+    "path": "/tmp/pq-fv-master-20260916-g4woz0z8/target-v3",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "c70e88ec551d4b8100f605fd548b3b0e8ddaa5f8",
+    "tree_before": "c70e88ec551d4b8100f605fd548b3b0e8ddaa5f8"
+  },
+  "reports": [
+    {
+      "reviewer": "claude",
+      "duration_seconds": 573.155,
+      "words": 396,
+      "report_sha256": "49d6ff7aecb387b48acf961d9ba8d154ff9e436532e0748896dbef40af9ec53f"
+    },
+    {
+      "reviewer": "codex",
+      "duration_seconds": 302.764,
+      "words": 22,
+      "report_sha256": "a2fa358ce3244b527e4c2a5ab6346fb62e8da73df1f87efcc282e271808ef036"
+    },
+    {
+      "reviewer": "kimi",
+      "duration_seconds": 364.86,
+      "words": 291,
+      "report_sha256": "c81c08605c1f08b103b91d67521589e0e337e8ac4e9ce7320a7a9c2156b2c573"
+    }
+  ],
+  "launch_skew_seconds": 0.000868,
+  "note": "Kimi includes an explanatory preamble within the word cap; its unambiguous compact verdict and exact target are retained unchanged. Opus runtime also records auxiliary Haiku usage."
+}

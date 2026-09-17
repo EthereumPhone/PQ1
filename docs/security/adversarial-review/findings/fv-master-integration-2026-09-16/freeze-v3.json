@@ -1,0 +1,32 @@
+{
+  "recorded_at": "2026-09-17T14:30:58.648558+00:00",
+  "target": "/tmp/pq-fv-master-20260916-g4woz0z8/target-v3",
+  "commit": "eb18115edb602fe8634d441249d13a11b0177043",
+  "tree": "c70e88ec551d4b8100f605fd548b3b0e8ddaa5f8",
+  "base": "ab9e9049a5a8c8d088966d02b7ff9a5714ae678a",
+  "input_identity": "623ad0710d73000a1c693049b8933813",
+  "prompt_sha256": "2a571caa1d42d2626e68b26cc1a56e18bab2b9ac39667580d2ab3206f6deae3a",
+  "reviewers": {
+    "codex": "gpt-6-astra ultra; owner selected replacement",
+    "claude": "opus xhigh",
+    "kimi": "kimi-code/k3 max"
+  },
+  "tests": {
+    "protocol_selftest_normal": 0,
+    "protocol_selftest_optimized": 0,
+    "live_tamarin_models": 3,
+    "live_tamarin_lemmas": 8,
+    "live_tamarin_exit": 0,
+    "split_contract_groups": 9,
+    "split_pins_gate_exit": 0,
+    "gate_regression_groups": 22,
+    "gate_registrations": 68,
+    "gate_enforcement_exit": 0
+  },
+  "source_changes_since_reviewed_v2": [
+    "scripts/check_protocol_models.py",
+    "contracts/verification/easycrypt/c10-port/tools/split_contract.py",
+    "contracts/verification/easycrypt/c10-port/tools/test_split_contract.py",
+    "contracts/verification/easycrypt/c10-port/cert-identity.tsv"
+  ]
+}

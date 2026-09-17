@@ -1,0 +1,27 @@
+You are one independent reviewer in an owner-authorized review of formal-verification tooling. Do not launch agents or other models.
+
+Review PQSigner OS for merge to master.
+Target: /tmp/pq-fv-master-20260916-g4woz0z8/target-v5
+Commit: c0cb9abcc0adab53b8769afba9c48659ac60e959
+Tree: c5e1c6969694c07643ee19f701c18ab0f676e798
+Compare: ab9e9049a5a8c8d088966d02b7ff9a5714ae678a..c0cb9abcc0adab53b8769afba9c48659ac60e959
+Focus on the combined formal-verification evidence fixes and their integration with master's newer EasyCrypt proof artifact. Source changes are in scripts/, contracts/verification/, contracts/verity/ and their CI callers. Historical raw review/test receipts under docs/security/adversarial-review/findings/ are evidence archives, not new implementation and not initial review material.
+1. Earlier FV/Verity corrections must retain exact source/elaborated axiom inventories, fresh kernel replay and explicit quarantine, coherent TLC/protocol results with required nightly negative controls, and effective proof-mutation attribution. The imported proof-project bytes match the existing fix branch; check their integration and callers here. Protocol formula pins must ignore commented or quoted declarations and pin or reject every live lemma, including attributed declarations. Quoted comments or unsupported preprocessing/includes must not desynchronize formula scanning from Tamarin; self-test setup and failure-reason checks must survive Python optimization.
+2. Kani mutation credit requires an unmodified passing original and one fully qualified exactly selected completed failing harness, no fatal tool diagnostics, source restoration, and matching heavy-tier/feature selection including multiline attributes; both documented heavy Make entrypoints must select the local-only heavy mutation tier plus canary.
+3. Every file in the pinned 53-file EasyCrypt dependency cone, including .eca theories, must be verified directly by both drivers. Imports and unfinished EOF proofs cannot substitute for replay.
+4. All 1166 declaration pins must be unique by parsed declaration identity, canonical in both path and identifier, and resolvable; retain the 1082-statement coverage and exact assumption/dependency inventories.
+5. Preserve master's 49 polarity/reason controls, six-headline-file scope-probe bijection, 15 taint controls, four taint-count controls and exact margin counts. Do not weaken these during integration with the new helper/driver.
+6. Full replay must enforce the immutable image and observed compiler/25-prover inventory, use a disposable source copy, and keep executable proof-control checks effective under Python optimization, and have fail-closed per-PR/scheduled gate invocation/trigger/setup contracts.
+7. Scope claims distinguish conditional game reductions, the separate legacy admit and checked headline scope isolation, numerical bounds, and unproved firmware/refinement obligations; no board/boot behavior or new cryptographic premise is part of this patch.
+
+Evidence already green: 11 census and eight Kani runner groups; nine split contract groups and the full static 53-file/1166-pin/1082-statement census/coverage/scope-linkage checks; 22 gate regression groups and all 68 gate registrations. All five earlier proof-project directories are byte-identical to the previously published fix branch, and all 433 existing master .ec/.eca files are preserved byte-for-byte. Fresh Verity CI/kernel replay and TLC/protocol/proof-mutation checker controls passed. The prior live Tamarin check passed all eight lemmas across three unchanged models. Current formula inventories match, quoted-comment controls pass in Python optimization modes 0/1/2, and nine targeted controls reject wrong counts, no-op edits and wrong failure reasons under those modes; the fresh live Tamarin check passes all eight lemmas across the three models. Preprocessing/include controls also pass in all three optimization modes. The prior 53-file full replay was green; unchanged proof sources now run through the corrected pin checker in a fresh full replay independently on byte-identical EasyCrypt inputs (identity 623ad0710d73000a1c693049b8933813); the coordinator must obtain all required green results before publication. Review source correctness; do not start another long proof run.
+Non-goals: new cryptographic theorems, optional hardening, broader playbook sweep, hardware, production approval or unrelated working-tree changes.
+
+Inspect the diff and affected callers source-first. Keep the target immutable. Read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, or follow-up model turns. Ignore style. You have 15 minutes and 800 words. At most three findings.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: c0cb9abcc0adab53b8769afba9c48659ac60e959 / c5e1c6969694c07643ee19f701c18ab0f676e798
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+FIX needs a source anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none.

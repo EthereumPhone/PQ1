@@ -1,0 +1,22 @@
+{
+  "replacement_review_valid": true,
+  "verdict": "FIX",
+  "duration_seconds": 482.686,
+  "report_words": 160,
+  "report_sha256": "1ccd39acb5ed40714ee27656f7052a3c43e08f63098d0a0d39461fcd49837162",
+  "coordinator_findings": {
+    "protocol_comment_attributed_lemma": "CONFIRMED by changed source, Tamarin exit 0 and unchanged verdicts passing the old gate",
+    "declaration_name_alias": "CONFIRMED: 1166 strings but 1165 declaration identities pass the old gate"
+  },
+  "remediation_files": [
+    "contracts/verification/easycrypt/c10-port/cert-identity.tsv",
+    "contracts/verification/easycrypt/c10-port/tools/split_contract.py",
+    "contracts/verification/easycrypt/c10-port/tools/test_split_contract.py",
+    "scripts/check_protocol_models.py"
+  ],
+  "proof_sources_and_assumptions_unchanged": true,
+  "normal_protocol_selftest_exit": 0,
+  "optimized_protocol_selftest_exit": 0,
+  "split_contract_test_groups": 9,
+  "split_contract_test_exit": 0
+}

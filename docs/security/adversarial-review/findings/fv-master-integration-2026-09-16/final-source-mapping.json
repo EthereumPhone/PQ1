@@ -1,0 +1,11 @@
+{
+  "replay_source_commit": "eb18115edb602fe8634d441249d13a11b0177043",
+  "final_source_commit": "816db25c4d161544d2ba74b988efd50942167d0d",
+  "input_identity": "623ad0710d73000a1c693049b8933813",
+  "git_diff_name_only": [
+    "scripts/check_protocol_models.py"
+  ],
+  "easycrypt_inputs_wrapper_makefile_and_ci_callers_byte_identical": true,
+  "protocol_live_log_sha256": "a24d2146776705812bcc7673242846dfadc72de6d9b45057d56fc98fa27785b6",
+  "protocol_live_status": "exit 0, all three models / eight lemmas match"
+}

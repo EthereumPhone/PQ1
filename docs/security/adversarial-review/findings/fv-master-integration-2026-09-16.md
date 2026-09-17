@@ -55,7 +55,7 @@ The proof sources and assumptions remain unchanged. Split identity is now
 `ec0cec4a59a4eef2b6862c56f8475f09`; the interrupted `e64e9594831f9b2df2ccdaeaf5f8c213` replay is superseded, not green evidence.
 The updated candidate requires the combined review and complete replay again.
 
-## Completion receipt — 2026-09-17
+## Earlier completion receipt — 2026-09-17 (superseded below)
 
 Source commit `6bc23f2223aa820595be3bd6b04391bd7e5b6121`, tree
 `4a5ec55d432c2f4d46a041c3d231c85502a7fca6`, compared with master
@@ -94,3 +94,54 @@ applies; no extra review round is launched. The two non-blocking source notes
 are banked in #688; integration closure is tracked in #687. The broader #509
 assurance pass stays deferred. This receipt adds no source, proof assumption,
 acceptance gate, firmware-equivalence claim or numerical security bound.
+
+## Owner-selected Astra and final correction review — 2026-09-17
+
+The owner explicitly selected **Astra instead of SOL**; this authorizes the
+reviewer substitution, not acceptance of a missing review. Astra found two
+checker defects, both reproduced: a Tamarin comment/attributed-lemma decoy and
+an EasyCrypt declaration-name alias that hid a missing pin. Later required
+reviews reproduced additional Tamarin lexical discrepancies. The final correction
+pins complete model source bytes before formula extraction or prover invocation,
+retains the separate formula/verdict inventories, and rejects noncanonical or
+aliased EasyCrypt declaration identities. The general Tamarin lexical scanner
+was removed. Models, EasyCrypt proof sources and assumptions remain unchanged.
+
+Final reviewed source: `816db25c4d161544d2ba74b988efd50942167d0d`, tree
+`050cafedbcb138388636551687710f67c69a9368`, on the same master base. The
+[final review triage](fv-master-integration-2026-09-16/review-triage-v6.md) records
+**Astra GO, Opus GO, Kimi GO**, no findings, no target drift, and all three
+reports within the simultaneous 900-second / 800-word bounds. Each material
+correction received a fresh blind review; historical FIX and timeout receipts
+remain intact. No missing mandatory reviewer or unresolved source blocker remains.
+
+The frozen final Tamarin checker passed all three models/eight lemmas. Its
+self-tests pass with Python optimization 0, 1 and 2; nine negative assertion
+controls fail for the intended reason. The EasyCrypt contract has nine passing
+test groups, 53 files, 1,166 canonical unique pins and 1,082 statements. Gate
+registration controls pass all 22 groups/68 registrations. Other unchanged
+prerequisite evidence retains the scope and limits stated above.
+
+The [source mapping](fv-master-integration-2026-09-16/final-source-mapping.json)
+binds the full EasyCrypt replay at `eb18115e` to the final candidate: the only
+subsequent changed file is `scripts/check_protocol_models.py`. All EasyCrypt
+inputs, wrapper, Makefile and CI callers are byte-identical. The new split input
+identity is `623ad0710d73000a1c693049b8933813`; the earlier `ec0cec4a…` replay is
+historical and is not used to certify this identity.
+
+The [full replay](fv-master-integration-2026-09-16/full-replay-v3.json) completed
+**GREEN**, exit 0, at 2026-09-17 16:09:47 UTC (5,901.029 seconds wall time):
+53 direct compiles, 53 CLI replays, zero disagreements, all files requirable,
+1,166 unique pins, 1,082 statements, unchanged census, 49 proof controls,
+15 taint controls, four taint-count controls, four margin guardrails and three
+margin negative controls. Final input identity remained `623ad0710d73000a1c693049b8933813`.
+Raw log SHA-256: `80efa33d6756f5bdc26e3c5ae00447686d2dd4fed36e09c572d1b7bcd2c7ed39`.
+
+**Final disposition: GO for master integration.** All stage-required executable
+gates and the three owner-selected reviews are complete; no reproduced blocker
+or mandatory review gap remains. The existing owner instruction authorizes the
+normal fast-forward push. The receipt-only publication delta changes no source,
+proof assumption or acceptance gate. Remote master is rechecked before pushing;
+the unrelated canonical workspace is preserved. #687 closes on verified landing.
+#688, #509 and the separate research frontier #100 remain open. No full Kani/heavy
+campaign, hosted-CI execution, hardware evidence or production authority is implied.
