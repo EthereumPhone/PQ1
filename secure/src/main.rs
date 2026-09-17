@@ -36,6 +36,17 @@ macro_rules! secure_log {
             if $crate::ARCH.dhcsr.read() & 1 != 0 {
                 cortex_m_semihosting::hprintln!($($arg)*);
             }
+            // Additionally mirror to the debug USART when `uart-console` is
+            // on. This is the ONLY channel that works with no debugger
+            // attached and independently of RDP level, which is what makes a
+            // silent secure world diagnosable on a board with no panel (pq1).
+            // Deliberately not `else`: with a probe attached both channels
+            // carry the same line, so a capture is never missing output just
+            // because someone was also using semihosting.
+            #[cfg(feature = "uart-console")]
+            {
+                $crate::uart_log::println(format_args!($($arg)*));
+            }
         }
         #[cfg(not(feature = "stm32u585"))]
         {
@@ -111,6 +122,11 @@ mod fih;
 // busy-spinning `cortex_m_semihosting` write path that hangs `make e2e`.
 #[cfg(not(test))]
 mod shio;
+// `core::fmt` sink over the board's debug USART, so `secure_log!` reaches a
+// wire that works without a debugger and at any RDP level. Bench only —
+// `uart-console` is in PROD_FORBIDDEN and the nsc/mod.rs release fence.
+#[cfg(all(feature = "uart-console", not(test)))]
+mod uart_log;
 mod sign_rate;
 #[cfg(test)]
 mod fuzz_props;
@@ -977,6 +993,16 @@ fn main() -> ! {
     unsafe {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
+        // Bring the debug USART up immediately after the clock tree, so every
+        // `secure_log!` from here on reaches the wire. It MUST be after
+        // `rcc::init` — `hw::uart::init` programs `board::CONSOLE_BRR`, which
+        // assumes PCLK = 160 MHz, so an earlier call would transmit at the
+        // wrong baud and read as line noise. Logs emitted before this point
+        // are simply not carried; that is the accepted cost of one correct
+        // divisor over a garbled prologue.
+        #[cfg(feature = "uart-console")]
+        uart_log::init();
+        secure_log!("[S] uart console up @ {} MHz", mhz);
         // Report the die identity (work-todo A4a / HW-ASSUME-REV-U). Report
         // only, never a fault: a rev X/W part is good silicon that the STM32U5
         // SESIP certificate (SESIP-2400133-01 / TN1545 Rev 3, which pins

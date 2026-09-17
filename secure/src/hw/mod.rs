@@ -96,10 +96,16 @@ pub mod boot_pulse;
 // callsites elsewhere in the crate stay buildable on every config.
 pub mod sca_trigger;
 
-/// Minimal USART1 driver routed to the B-U585I-IOT02A ST-LINK VCP
-/// (PA9 TX). Used under `uart-console` for diagnostic output from
-/// builds that can't rely on semihosting — specifically the RDP1
-/// SAES self-test target.
+/// Minimal console USART driver, board-parameterised via `board::CONSOLE_*`:
+/// **`iota2` = USART1 on PA9 AF7** (routed to the dev kit's on-board ST-LINK
+/// VCP), **`pq1` = USART2 on PA2 AF7** (the `J211` debug-UART pad; that board
+/// has no on-board debugger, so the VCP comes from an external STLINK-V3SET
+/// or a 3.3 V dongle).
+///
+/// Used under `uart-console` for diagnostic output from builds that can't rely
+/// on semihosting — the RDP1 SAES self-test target, and (via
+/// `crate::uart_log`) every `secure_log!` site, which is the only way to
+/// observe a secure world that halts on a board with no panel and no debugger.
 #[cfg(feature = "uart-console")]
 pub mod uart;
 
