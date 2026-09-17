@@ -142,9 +142,31 @@ non-existent port E:
 
 ### Boot select
 
-`BOOT0` is a `J211` pad, and is also driven by a 3.3 V LDO whose enable is the
-USB-C **`SBU2`** line — so its level can depend on what is plugged into the Type-C
-port. Worth knowing before debugging a board that "flashes fine but never runs".
+`BOOT0` is a `J211` pad, and is also driven by a 3.3 V LDO whose enable is a
+USB-C **sideband** line — so its level can depend on what is plugged into the
+Type-C port. Worth knowing before debugging a board that "flashes fine but
+never runs".
+
+**Which sideband is UNRESOLVED (2026-09-17).** This note has always said
+`SBU2`; the V10 schematic's POWER block appears to label the enable **`SBU1`**.
+Read at the resolution available, the conflict is legible but the winner is not,
+so neither is asserted here. The part is identifiable: it is the **third
+`NCP114ASN330T1G` 3.3 V LDO** on sheet 1 (`docs/hardware/schematics/`), input
+`VDD3V6`, output driving the `BOOT0` net across to sheet 2's `J211` pad — i.e.
+BOOT0 is *actively driven*, not a bare strap, and it also carries an RC network
+at the MCU pin.
+
+Resolve it before building anything on it, because it is the net that decides
+whether a **sealed** unit can be put into the system bootloader over USB-C
+(the enclosed units have no SWD access). Either zoom the schematic PDF or ask
+the ODM; the schematic is the authority for nets, while this document remains
+the authority for what is safe to physically probe.
+
+Two consequences worth stating either way: a cable or dongle that asserts the
+sideband can change how the device boots, which is a security property and not
+merely a convenience; and `- BOOT0 — Pad/jumper on EVT/DVT; hard-strap to GND
+on MP` above means a production strap would *remove* this path, so first-flash
+and recovery cannot silently depend on it.
 
 ### Bench SSD1306 OLED (`make oled-bench-hw BOARD=pq1`)
 
