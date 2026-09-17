@@ -99,8 +99,36 @@ OTP user area (starts 0x0BFA_0000):
   32 × 16-B QWs   Physical allocation OPEN; legacy bit tally rejected
 ```
 
-Current footprint for comparison: secure ≈ 354 KB / 464 KB capacity,
-nonsecure ≈ 90 KB / 512 KB capacity. Plenty of headroom.
+**Footprint — MEASURED 2026-09-17, and the headroom is NOT plentiful.** This
+paragraph previously said "secure ≈ 354 KB / 464 KB capacity, nonsecure ≈ 90 KB
+/ 512 KB capacity. Plenty of headroom." Both numbers were stale, and in the
+reassuring direction. Against slot A's 475,136 B (`SLOT_SECURE_CAPACITY`,
+58 × 8 KiB):
+
+| secure feature set (all `board-pq1`, slot-A linked) | size | of capacity |
+|---|---|---|
+| `dual-se,optiga-hw-counter,dev-testkey,ui-lcd,usb` — the v1 shape | 426,689 B | 89.8% |
+| … + `uart-console,debug-log` | **overflows by 41,888 B** | — |
+| `dual-se,dev-testkey,ui-noop,uart-console,debug-log` | 429,301 B | 90.4% |
+| boot-proof image (`mock-se,ui-noop,e2e-test,debug-log`) | 385,568 B | 81.1% |
+
+NS for the same v1 set is **18,080 B** of 524,288 B — that half really does
+have plenty of room.
+
+Two things this changes. **The intended shipping feature set already sits at
+~90% of slot A**, so new secure-world code competes for ~46 KB, not ~110 KB.
+And **`debug-log` cannot be added to a slot-A image with `ui-lcd`**: it drags in
+`core::fmt` plus a `.rodata` string for every one of the hundreds of
+`secure_log!` sites. `ui-lcd` is the expensive half of the pair — dropping
+`usb` alone recovered only ~1.4 KB of that 41,888 B overflow, while swapping
+`ui-lcd` for `ui-noop` recovered all of it.
+
+Consequence for diagnosing a slot-A boot: a UART-instrumented image must drop
+`ui-lcd` (fine when the board has no panel — see
+`docs/hardware/evt-debug-pins.md`), or be linked monolithically at
+`0x0C000000`, where the same full feature set is 517,013 B of 1,007,616 B
+(51.3%) but the FSBL is no longer in front of it and the boot chain is no
+longer what is under test.
 
 ## Legacy implementation: what gets signed (v0x02)
 
