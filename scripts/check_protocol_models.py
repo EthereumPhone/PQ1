@@ -275,9 +275,60 @@ def parse_tamarin(output: str) -> dict[str, str]:
 # A tamarin lemma in .spthy SOURCE: `lemma <name>:` then an optional
 # `exists-trace`/`all-traces` annotation, then the quoted formula (multi-line).
 _SPTHY_LEMMA_RE = re.compile(
-    r'lemma\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:(exists-trace|all-traces)\s+)?"(.*?)"',
+    r'lemma\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:(exists-trace|all-traces)\s+)?"((?:\\.|[^"\\])*)"',
     re.DOTALL,
 )
+
+
+def _spthy_lemma_source(source: str) -> tuple[str, list[int]]:
+    """Remove comments and find live lemma tokens, preserving offsets.
+
+    Tamarin permits nested /* */ and // comments. Quoted formula/constant
+    contents cannot introduce declarations or start comments. Tokenize names
+    so an identifier ending in a prime is not mistaken for a quoted constant.
+    This is a scanner for the pinned source subset, not a Tamarin parser.
+    """
+    code = list(source)
+    lemmas: list[int] = []
+    i = 0
+    while i < len(source):
+        start = i
+        if source.startswith('/*', i):
+            depth = 1
+            i += 2
+            while i < len(source) and depth:
+                if source.startswith('/*', i):
+                    depth += 1
+                    i += 2
+                elif source.startswith('*/', i):
+                    depth -= 1
+                    i += 2
+                else:
+                    i += 1
+            if depth:
+                raise HarnessError('unterminated .spthy block comment')
+            code[start:i] = ['\n' if c == '\n' else ' ' for c in source[start:i]]
+        elif source.startswith('//', i):
+            end = source.find('\n', i)
+            i = len(source) if end < 0 else end
+            code[start:i] = [' '] * (i - start)
+        elif source[i] in ('"', "'"):
+            quote = source[i]
+            i += 1
+            while i < len(source) and source[i] != quote:
+                i += 2 if source[i] == '\\' else 1
+            if i >= len(source):
+                raise HarnessError('unterminated .spthy quoted text')
+            i += 1
+        else:
+            token = re.match(r"[A-Za-z_][A-Za-z0-9_']*", source[i:])
+            if token:
+                if token.group() == 'lemma':
+                    lemmas.append(i)
+                i += len(token.group())
+            else:
+                i += 1
+    return ''.join(code), lemmas
 
 
 def formula_hash(annotation: str, formula: str) -> str:
@@ -292,9 +343,16 @@ def parse_spthy_formulas(source: str) -> dict[str, str]:
     """{lemma_name: formula_hash} from a .spthy source text. An absent
     annotation means tamarin's default `all-traces`. A lemma name parsed twice
     is a duplicate-definition ambiguity and raises (a model must not hide one
-    lemma behind a same-named twin)."""
+    lemma behind a same-named twin). Comments/quoted decoys are ignored, and
+    every live lemma must match the supported declaration form. In particular,
+    attributes such as [reuse] are rejected rather than silently skipped."""
     out: dict[str, str] = {}
-    for m in _SPTHY_LEMMA_RE.finditer(source):
+    code, lemmas = _spthy_lemma_source(source)
+    for start in lemmas:
+        m = _SPTHY_LEMMA_RE.match(code, start)
+        if m is None:
+            raise HarnessError('unsupported or malformed .spthy lemma declaration '
+                               '(lemma attributes are not supported by the formula gate)')
         name, ann, formula = m.group(1), m.group(2) or "all-traces", m.group(3)
         if name in out:
             raise HarnessError(f"duplicate lemma name {name!r} in .spthy source")
@@ -556,6 +614,52 @@ def self_test() -> int:
     fails = check_tamarin_source(sx, gutted)
     assert any("DRIFTED" in f for f in fails), f"expected a formula-hash DRIFT, got: {fails}"
     expect_fire('tamarin lemma gutted to "T" (same name+verdict)', fails)
+
+    # A commented original cannot stand in for a live attributed tautology.
+    # Unsupported live declarations fail closed before the prover is trusted.
+    def formula_failures(source: str) -> list[str]:
+        try:
+            return check_tamarin_source(sx, source)
+        except HarnessError as exc:
+            return [str(exc)]
+
+    name = 'seed_secret_under_single_compromise'
+    declaration = next(m.group() for m in _SPTHY_LEMMA_RE.finditer(src)
+                       if m.group(1) == name)
+    for label, decoy in (
+        ('block comment', '/* ' + declaration + ' */'),
+        ('line comments', '\n'.join('// ' + line for line in declaration.splitlines())),
+        ('nested comment', '/* outer /* ' + declaration + ' */ outer */'),
+    ):
+        for attribute in ('', ' [reuse]'):
+            changed = src.replace(declaration, decoy + '\nlemma ' + name + attribute + ': "T"')
+            expect_fire(f'tamarin {label} decoy with attribute {attribute!r}',
+                        formula_failures(changed))
+        expect_fire(f'tamarin declaration only in {label}',
+                    formula_failures(src.replace(declaration, decoy)))
+        expect_clean(f'tamarin irrelevant {label} declaration',
+                     formula_failures(decoy + '\n' + src))
+
+    for attribute in ('reuse', 'sources', 'hide_lemma=other'):
+        expect_fire(f'tamarin unsupported live [{attribute}] declaration',
+                    formula_failures(src.replace('lemma ' + name + ':',
+                                                 'lemma ' + name + f' [{attribute}]:')))
+    expect_clean('tamarin comments between header tokens', formula_failures(
+        src.replace('lemma ' + name + ':', 'lemma /* header */ ' + name + ' // header\n:')))
+    for label, changed in (
+        ('duplicate live declaration', src + '\n' + declaration),
+        ('unparsed live declaration', src + '\nlemma unparsed [reuse]: "T"'),
+        ('unterminated comment', src + '\n/*'),
+        ('unterminated quote', src + '\n"'),
+    ):
+        expect_fire(f'tamarin {label}', formula_failures(changed))
+
+    # Lexical decoys inside quoted text never introduce a second declaration;
+    # comment-like bytes inside the actual formula remain part of its hash.
+    quoted = '''lemma quoted: "P('lemma', '//', '/*')"'''
+    expect_clean('tamarin quoted lexical tokens', diff_identity(
+        'quoted', {'quoted': formula_hash('all-traces', "P('lemma', '//', '/*')")},
+        parse_spthy_formulas(quoted)))
 
     # PoC 8 (cryptoverif identity, #666): the clean RESULT line must NOT fire;
     # a DELETED query (banner still printed) and a `Could not prove` flip MUST.

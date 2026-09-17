@@ -78,6 +78,33 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gate.check_toolchain(good, lock)
 
+    def test_identifier_alias_cannot_substitute_for_a_deleted_operator_pin(self):
+        with fixture() as p:
+            (p / 'cert_gate_split.sh').write_text('EXPECT_PINS=2\n')
+            (p / 'cert-cone-files-split.tsv').write_text('A.ec\n')
+            (p / 'A.ec').write_text('op kept : int.\nop dropped : int.\n')
+            digest = gate.stmt_digest.digest_op('A.ec', 'kept')
+            # These distinct keys resolve to the same declaration in the
+            # textual digester. They must not replace the dropped op's pin.
+            for alias in ('kept ', 'kept :', 'kept : int'):
+                with self.subTest(alias=alias):
+                    self.assertEqual(gate.stmt_digest.digest_op('A.ec', alias), digest)
+                    (p / 'cert-statements-split.tsv').write_text(
+                        f'op:A.ec::kept\t{digest}\nop:A.ec::{alias}\t{digest}\n')
+                    with self.assertRaisesRegex(ValueError, 'noncanonical.*identifier'):
+                        gate.check_pins()
+
+    def test_pin_kind_prefix_does_not_create_a_second_declaration_identity(self):
+        with fixture() as p:
+            (p / 'cert_gate_split.sh').write_text('EXPECT_PINS=2\n')
+            (p / 'cert-cone-files-split.tsv').write_text('A.ec\n')
+            (p / 'A.ec').write_text('op kept : int.\n')
+            digest = gate.stmt_digest.digest_op('A.ec', 'kept')
+            (p / 'cert-statements-split.tsv').write_text(
+                f'op:A.ec::kept\t{digest}\nA.ec::kept\t{digest}\n')
+            with self.assertRaisesRegex(ValueError, 'duplicate.*declaration'):
+                gate.check_pins()
+
     def test_targets_cover_pinned_dependencies_in_order(self):
         targets = gate.targets()
         self.assertEqual(len(targets), 53)

@@ -72,11 +72,18 @@ def check_pins():
     # Lexically different aliases (./A.ec, dir/../A.ec) must not count as two
     # declaration identities and substitute for a deleted op pin.
     allowed_paths = set(rows('cert-cone-files-split.tsv'))
+    identities = set()
     for key, want in pins:
         op = key.startswith('op:')
         path, name = (key[3:] if op else key).split('::')
         if path not in allowed_paths:
             raise ValueError(f'noncanonical or out-of-cone statement pin path: {path}')
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_']*", name):
+            raise ValueError(f'noncanonical statement pin identifier: {name!r}')
+        identity = (path, name)
+        if identity in identities:
+            raise ValueError(f'duplicate statement pin declaration: {path}::{name}')
+        identities.add(identity)
         got = (stmt_digest.digest_op if op else stmt_digest.digest)(path, name)
         if not re.fullmatch(r'[0-9a-f]{32}', want) or got != want:
             raise ValueError(f'statement pin changed or unresolved: {key}')
