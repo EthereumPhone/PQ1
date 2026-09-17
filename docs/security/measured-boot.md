@@ -128,6 +128,30 @@ The `bip39/tests/prefix5_roundtrip.rs` test pins these invariants
    `nix run .#measure`) on a separate trusted machine.
 4. Confirm the 8 words match. Record them on paper as the baseline.
 
+> **UPDATE 2026-09-17 — first boot needs a panel AND buttons, and USB comes up
+> only after it.** Step 4 is not the end of first boot: the boot then enters
+> `run_first_boot_wizard()` (`secure/src/main.rs:3778`) and **blocks** there
+> until the user drives the PIN/seed dialogs with the two hardware buttons
+> (pq1: PA0 `UP_KEY`/LEFT, PA1 `DOWN_KEY`/RIGHT). `hw::usb_hw::init()` runs at
+> `main.rs:3975` — *after* the wizard and unlock — and `boot_ns::boot` at
+> `:4022` after that.
+>
+> The consequence is worth stating because it cost a bring-up session: on a
+> board with **no display**, a shipping-shaped image (`ui-lcd`, no `e2e-test`)
+> boots correctly, renders the fingerprint to a panel that isn't there, parks in
+> an invisible wizard, and **never enumerates USB**. That looks exactly like a
+> secure-world hang and is not one. Only `e2e-test` short-circuits the dialogs;
+> `dev-testkey` does not (`dev-testkey = ["otp-hardcoded-master-key"]`), and
+> `ui-lcd` *implies* `gpio-buttons` (`secure/Cargo.toml:534`), so the real
+> button driver is always compiled into an LCD build.
+>
+> To exercise first boot on a panel-less bench board, use `e2e-test`
+> (fixed-mnemonic auto-provisioning, no dialogs) or a semihosting UI. Nothing
+> in the waiting state is destructive: `is_provisioned()` is read-only, and the
+> wizard's idle timeout loops back (`main.rs:876-880` treats
+> `PinEntryResult::IdleWipe` as `show_status("Idle","retry...")` + `continue`)
+> rather than wiping — despite the variant's name.
+
 ### Every subsequent boot
 
 1. Power up. Glance at the NV3007 LCD.
