@@ -283,8 +283,9 @@ _SPTHY_LEMMA_RE = re.compile(
 def _spthy_lemma_source(source: str) -> tuple[str, list[int]]:
     """Remove comments and find live lemma tokens, preserving offsets.
 
-    Tamarin permits nested /* */ and // comments. Quoted formula/constant
-    contents cannot introduce declarations or start comments. Tokenize names
+    Tamarin permits nested /* */ and // comments, including inside quoted
+    formulas. Reject comment delimiters in quoted text rather than approximate
+    that grammar; quoted tokens themselves are not declarations. Tokenize names
     so an identifier ending in a prime is not mistaken for a quoted constant.
     This is a scanner for the pinned source subset, not a Tamarin parser.
     """
@@ -319,6 +320,9 @@ def _spthy_lemma_source(source: str) -> tuple[str, list[int]]:
                 i += 2 if source[i] == '\\' else 1
             if i >= len(source):
                 raise HarnessError('unterminated .spthy quoted text')
+            if any(mark in source[start + 1:i] for mark in ('/*', '*/', '//')):
+                raise HarnessError('comment delimiters inside .spthy quoted text '
+                                   'are not supported by the formula gate')
             i += 1
         else:
             token = re.match(r"[A-Za-z_][A-Za-z0-9_']*", source[i:])
@@ -546,7 +550,8 @@ def self_test() -> int:
     clean_out = ("RESULT event(Install(m_1)) ==> event(Sign(m_1)) is true.\n"
                  "RESULT not event(Install(m_1)) is false.\n")
     got, _, raw = parse_proverif(clean_out)
-    assert raw == PROVERIF_RESULT_COUNT[fw]
+    if raw != PROVERIF_RESULT_COUNT[fw]:
+        raise HarnessError('self-test: clean ProVerif raw result count differs')
     expect_clean("fw baseline", diff_identity(fw, base, got))
 
     # PoC 1: Install=>Sign substituted by the tautology Install=>Install (SAME
@@ -610,9 +615,11 @@ def self_test() -> int:
         lambda m: (f'lemma {m.group(1)}:\n    {m.group(2) or "all-traces"}\n    "T"'
                    if m.group(1) == "seed_secret_under_single_compromise" else m.group(0)),
         src)
-    assert gutted != src, "self-test setup: gut substitution did not apply"
+    if gutted == src:
+        raise HarnessError('self-test setup: gut substitution did not apply')
     fails = check_tamarin_source(sx, gutted)
-    assert any("DRIFTED" in f for f in fails), f"expected a formula-hash DRIFT, got: {fails}"
+    if not any("DRIFTED" in f for f in fails):
+        raise HarnessError(f'expected a formula-hash DRIFT, got: {fails}')
     expect_fire('tamarin lemma gutted to "T" (same name+verdict)', fails)
 
     # A commented original cannot stand in for a live attributed tautology.
@@ -654,11 +661,24 @@ def self_test() -> int:
     ):
         expect_fire(f'tamarin {label}', formula_failures(changed))
 
-    # Lexical decoys inside quoted text never introduce a second declaration;
-    # comment-like bytes inside the actual formula remain part of its hash.
-    quoted = '''lemma quoted: "P('lemma', '//', '/*')"'''
+    # Tamarin recognizes comments *inside* formula quotes. A quote inside such
+    # a comment must not desynchronize this scanner from the prover. Restriction
+    # formulas are unpinned, so this must reject delimiters in every quote.
+    quoted_decoy = ('restriction pad: "All s #i. Provisioned(s) @ i '
+                    '==> Ex #j. Provisioned(s) @ j /* "\n' + declaration +
+                    '\n*/ "\nlemma ' + name + ': "T"\n// "')
+    expect_fire('tamarin quoted restriction hides a live tautology',
+                formula_failures(src.replace(declaration, quoted_decoy)))
+    for mark in ('/*', '*/', '//'):
+        for quote in ('"', "'"):
+            changed = quote + 'prefix ' + mark + ' suffix' + quote + '\n' + src
+            expect_fire(f'tamarin quoted comment delimiter {quote}{mark}',
+                        formula_failures(changed))
+
+    # Ordinary quoted keyword tokens do not introduce declarations.
+    quoted = '''lemma quoted: "P('lemma', 'literal')"'''
     expect_clean('tamarin quoted lexical tokens', diff_identity(
-        'quoted', {'quoted': formula_hash('all-traces', "P('lemma', '//', '/*')")},
+        'quoted', {'quoted': formula_hash('all-traces', "P('lemma', 'literal')")},
         parse_spthy_formulas(quoted)))
 
     # PoC 8 (cryptoverif identity, #666): the clean RESULT line must NOT fire;
