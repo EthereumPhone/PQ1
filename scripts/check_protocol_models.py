@@ -48,6 +48,14 @@ verdict-IDENTITY gate, not just a verdict-COUNT tripwire:
      per-query identity dict, with the tool version recorded in the baseline
      (CryptoVerif 2.12).
 
+  5. COMPLETE TAMARIN SOURCE IDENTITY (2026-09-17). Tamarin's comment,
+     quoting and preprocessing grammar cannot safely be approximated by a
+     formula regex. SHA-256 therefore binds every byte of each committed
+     model BEFORE formula extraction or prover execution. Any source edit,
+     including comments, requires explicit re-baselining after model/formula
+     review and prover replay. Formula and verdict pins remain separate checks
+     on those exact models; none of the pinned models uses includes.
+
 ProVerif fresh-variable suffixes (`c_2`, `p_6`, `m_1`, ...) are numbered
 per-run, so the query text is normalized `_[0-9]+ -> _N` before comparison; the
 predicate/structure — the security-relevant part — is exact.
@@ -87,7 +95,9 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PV_DIR = REPO_ROOT / "contracts" / "verification" / "proverif"
@@ -215,6 +225,14 @@ TAMARIN_IDENTITY: dict[str, dict[str, dict[str, str]]] = {
         },
     },
 }
+# Full UTF-8 source bytes, independent of the textual formula extractor.
+# These are reviewed input identities, never values to regenerate automatically
+# merely because a model changed. Current models have no includes/preprocessing.
+TAMARIN_SOURCE_SHA256: dict[str, str] = {
+    "pin_lockstep.spthy": "46fd87fef7ab8f6f5af1e8ffdfd233478f6b3317649aa60064c70498f50050d2",
+    "scp03_replay.spthy": "ddb4f8fe0d41beedd2b5e4c2b994beea10d20bedb2aab209e81c9164162550c4",
+    "seed_split_xor.spthy": "e647ecf4253a154cbb6dd5ea5fc70035abaab805ddff133a1a358f76ed09c68e",
+}
 # CryptoVerif (2026-08-20, #666): the gate was a bare `All queries proved`
 # substring check — a deleted query still prints it. The RESULT lines are now
 # parsed into a pinned per-query identity dict {query_text: proved_bool}.
@@ -280,66 +298,6 @@ _SPTHY_LEMMA_RE = re.compile(
 )
 
 
-def _spthy_lemma_source(source: str) -> tuple[str, list[int]]:
-    """Remove comments and find live lemma tokens, preserving offsets.
-
-    Tamarin permits nested /* */ and // comments, including inside quoted
-    formulas. Reject comment delimiters in quoted text rather than approximate
-    that grammar; quoted tokens themselves are not declarations. Tokenize names
-    so an identifier ending in a prime is not mistaken for a quoted constant.
-    Preprocessing is outside the pinned model subset: reject # outside quotes
-    rather than count disabled declarations or miss declarations from includes.
-    This is a scanner for the pinned source subset, not a Tamarin parser.
-    """
-    code = list(source)
-    lemmas: list[int] = []
-    i = 0
-    while i < len(source):
-        start = i
-        if source.startswith('/*', i):
-            depth = 1
-            i += 2
-            while i < len(source) and depth:
-                if source.startswith('/*', i):
-                    depth += 1
-                    i += 2
-                elif source.startswith('*/', i):
-                    depth -= 1
-                    i += 2
-                else:
-                    i += 1
-            if depth:
-                raise HarnessError('unterminated .spthy block comment')
-            code[start:i] = ['\n' if c == '\n' else ' ' for c in source[start:i]]
-        elif source.startswith('//', i):
-            end = source.find('\n', i)
-            i = len(source) if end < 0 else end
-            code[start:i] = [' '] * (i - start)
-        elif source[i] in ('"', "'"):
-            quote = source[i]
-            i += 1
-            while i < len(source) and source[i] != quote:
-                i += 2 if source[i] == '\\' else 1
-            if i >= len(source):
-                raise HarnessError('unterminated .spthy quoted text')
-            if any(mark in source[start + 1:i] for mark in ('/*', '*/', '//')):
-                raise HarnessError('comment delimiters inside .spthy quoted text '
-                                   'are not supported by the formula gate')
-            i += 1
-        elif source[i] == '#':
-            raise HarnessError('preprocessing or # outside quoted .spthy formulas '
-                               'is not supported by the formula gate')
-        else:
-            token = re.match(r"[A-Za-z_][A-Za-z0-9_']*", source[i:])
-            if token:
-                if token.group() == 'lemma':
-                    lemmas.append(i)
-                i += len(token.group())
-            else:
-                i += 1
-    return ''.join(code), lemmas
-
-
 def formula_hash(annotation: str, formula: str) -> str:
     """sha256 of `<annotation>\n<normalized formula>` (#665). Whitespace runs
     collapse to one space, so re-indenting a lemma is hash-stable but ANY
@@ -349,19 +307,15 @@ def formula_hash(annotation: str, formula: str) -> str:
 
 
 def parse_spthy_formulas(source: str) -> dict[str, str]:
-    """{lemma_name: formula_hash} from a .spthy source text. An absent
-    annotation means tamarin's default `all-traces`. A lemma name parsed twice
-    is a duplicate-definition ambiguity and raises (a model must not hide one
-    lemma behind a same-named twin). Comments/quoted decoys are ignored, and
-    every live lemma must match the supported declaration form. In particular,
-    attributes such as [reuse] are rejected rather than silently skipped."""
+    """Extract formulas from an identity-checked committed model.
+
+    This is not a general Tamarin parser. The live gate MUST first bind the
+    complete source in check_tamarin_source; arbitrary quoting, preprocessing,
+    or included declarations cannot be certified by this textual extractor.
+    Source-pin changes require a fresh model/formula review and prover replay.
+    """
     out: dict[str, str] = {}
-    code, lemmas = _spthy_lemma_source(source)
-    for start in lemmas:
-        m = _SPTHY_LEMMA_RE.match(code, start)
-        if m is None:
-            raise HarnessError('unsupported or malformed .spthy lemma declaration '
-                               '(lemma attributes are not supported by the formula gate)')
+    for m in _SPTHY_LEMMA_RE.finditer(source):
         name, ann, formula = m.group(1), m.group(2) or "all-traces", m.group(3)
         if name in out:
             raise HarnessError(f"duplicate lemma name {name!r} in .spthy source")
@@ -396,9 +350,20 @@ def tamarin_formula_pins(ident: dict[str, dict[str, str]]) -> dict[str, str]:
 
 
 def check_tamarin_source(fname: str, source: str) -> list[str]:
-    """Formula-hash diff of a .spthy SOURCE against the pinned baseline — pure,
-    no tamarin run (#665). Fires on a gutted/weakened/renamed lemma even when
-    the prover would still report the same name->verdict map."""
+    """Bind the entire model before using its textual formula inventory.
+
+    A changed model cannot hide a live lemma in syntax that the extractor does
+    not understand. Source re-baselining is an explicit reviewed artifact change,
+    even when its formula inventory or prover verdicts would stay the same.
+    """
+    expected_source = TAMARIN_SOURCE_SHA256.get(fname, '')
+    if not re.fullmatch(r'[0-9a-f]{64}', expected_source):
+        raise HarnessError(f'{fname}: missing or malformed complete source pin')
+    actual_source = hashlib.sha256(source.encode('utf-8')).hexdigest()
+    if actual_source != expected_source:
+        return [f'{fname}: SOURCE_DRIFTED — complete model source changed '
+                f'(expected {expected_source}, got {actual_source}); '
+                'rebaseline only after model/formula review and prover replay']
     expected = tamarin_formula_pins(TAMARIN_IDENTITY[fname])
     got = parse_spthy_formulas(source)
     fails = []
@@ -478,14 +443,20 @@ def check_proverif() -> list[str]:
 
 
 def check_tamarin() -> list[str]:
+    if set(TAMARIN_SOURCE_SHA256) != set(TAMARIN_IDENTITY):
+        raise HarnessError('Tamarin source and formula model inventories differ')
     fails = []
     for fname, ident in TAMARIN_IDENTITY.items():
         path = TAM_DIR / fname
         if not path.exists():
             raise HarnessError(f"tamarin model missing: {path}")
-        # Formula pins fire on the SOURCE first (#665): a gutted lemma fails
-        # here even if tamarin would still print the same name->verdict line.
-        src_fails = check_tamarin_source(fname, path.read_text())
+        # Bind the complete source before extracting formulas or invoking the
+        # prover: a changed model cannot retain credit via unchanged verdicts.
+        src_fails = check_tamarin_source(fname, path.read_bytes().decode('utf-8'))
+        if src_fails:
+            print(f"    [FAIL] {fname}: source identity/formula mismatch; prover not run")
+            fails += src_fails
+            continue
         out, rc = _run(["tamarin-prover", "--prove", fname], TAM_DIR, 900)
         if rc != 0:
             raise HarnessError(f"tamarin exited {rc} on {fname} (crash/parse error, NOT a verdict)")
@@ -614,8 +585,12 @@ def self_test() -> int:
     # to "T" — name and verdict unchanged, exactly the demonstrated bypass —
     # MUST fire.
     sx = "seed_split_xor.spthy"
-    src = (TAM_DIR / sx).read_text()
-    expect_clean("real seed_split_xor.spthy source", check_tamarin_source(sx, src))
+    if set(TAMARIN_SOURCE_SHA256) != set(TAMARIN_IDENTITY):
+        raise HarnessError('self-test: source and formula model inventories differ')
+    for name in TAMARIN_IDENTITY:
+        expect_clean(f'real {name} complete source and formulas', check_tamarin_source(
+            name, (TAM_DIR / name).read_bytes().decode('utf-8')))
+    src = (TAM_DIR / sx).read_bytes().decode('utf-8')
     gutted = _SPTHY_LEMMA_RE.sub(
         lambda m: (f'lemma {m.group(1)}:\n    {m.group(2) or "all-traces"}\n    "T"'
                    if m.group(1) == "seed_secret_under_single_compromise" else m.group(0)),
@@ -623,21 +598,40 @@ def self_test() -> int:
     if gutted == src:
         raise HarnessError('self-test setup: gut substitution did not apply')
     fails = check_tamarin_source(sx, gutted)
-    if not any("DRIFTED" in f for f in fails):
-        raise HarnessError(f'expected a formula-hash DRIFT, got: {fails}')
+    if not any("SOURCE_DRIFTED" in f for f in fails):
+        raise HarnessError(f'expected a full-source DRIFT, got: {fails}')
     expect_fire('tamarin lemma gutted to "T" (same name+verdict)', fails)
 
-    # A commented original cannot stand in for a live attributed tautology.
-    # Unsupported live declarations fail closed before the prover is trusted.
+    # Full-source identity rejects these semantic substitutions before either
+    # textual extraction or prover invocation can credit an unchanged verdict.
     def formula_failures(source: str) -> list[str]:
-        try:
-            return check_tamarin_source(sx, source)
-        except HarnessError as exc:
-            return [str(exc)]
+        if source == src:
+            raise HarnessError('self-test setup: source mutation did not apply')
+        failures = check_tamarin_source(sx, source)
+        return failures if any('SOURCE_DRIFTED' in f for f in failures) else []
 
     name = 'seed_secret_under_single_compromise'
     declaration = next(m.group() for m in _SPTHY_LEMMA_RE.finditer(src)
                        if m.group(1) == name)
+    single_line = ' '.join(declaration.split())
+    constant_decoy = (
+        'restriction pad: "All x #i. Provisioned(x) @ i ==> not (x = \'"' +
+        single_line + '\')"\nlemma ' + name + ': "T"\n' +
+        'restriction pad2: "All x #i. Provisioned(x) @ i ==> not (x = \'"\')"')
+    expect_fire('tamarin original lemma hidden in a quoted public constant',
+                formula_failures(src.replace(declaration, constant_decoy)))
+    expect_fire('tamarin rule edit with identical lemma formulas',
+                formula_failures(src.replace('Out(ho)', "Out('public')")))
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / sx).write_bytes((src + '\n').encode('utf-8'))
+        module = sys.modules[__name__]
+        with patch.object(module, 'TAM_DIR', Path(tmp)), \
+             patch.object(module, 'TAMARIN_IDENTITY', {sx: TAMARIN_IDENTITY[sx]}), \
+             patch.object(module, 'TAMARIN_SOURCE_SHA256', {sx: TAMARIN_SOURCE_SHA256[sx]}), \
+             patch.object(module, '_run', side_effect=HarnessError(
+                 'self-test: changed model must not invoke the prover')):
+            expect_fire('tamarin changed source rejected before prover execution',
+                        check_tamarin())
     for label, decoy in (
         ('block comment', '/* ' + declaration + ' */'),
         ('line comments', '\n'.join('// ' + line for line in declaration.splitlines())),
@@ -649,14 +643,14 @@ def self_test() -> int:
                         formula_failures(changed))
         expect_fire(f'tamarin declaration only in {label}',
                     formula_failures(src.replace(declaration, decoy)))
-        expect_clean(f'tamarin irrelevant {label} declaration',
+        expect_fire(f'tamarin added {label} changes complete source',
                      formula_failures(decoy + '\n' + src))
 
     for attribute in ('reuse', 'sources', 'hide_lemma=other'):
         expect_fire(f'tamarin unsupported live [{attribute}] declaration',
                     formula_failures(src.replace('lemma ' + name + ':',
                                                  'lemma ' + name + f' [{attribute}]:')))
-    expect_clean('tamarin comments between header tokens', formula_failures(
+    expect_fire('tamarin header comment requires source rebaseline', formula_failures(
         src.replace('lemma ' + name + ':', 'lemma /* header */ ' + name + ' // header\n:')))
     for label, changed in (
         ('duplicate live declaration', src + '\n' + declaration),
@@ -666,9 +660,8 @@ def self_test() -> int:
     ):
         expect_fire(f'tamarin {label}', formula_failures(changed))
 
-    # Tamarin recognizes comments *inside* formula quotes. A quote inside such
-    # a comment must not desynchronize this scanner from the prover. Restriction
-    # formulas are unpinned, so this must reject delimiters in every quote.
+    # Tamarin recognizes comments inside formula quotes. The complete source
+    # pin rejects this restriction decoy before textual formula extraction.
     quoted_decoy = ('restriction pad: "All s #i. Provisioned(s) @ i '
                     '==> Ex #j. Provisioned(s) @ j /* "\n' + declaration +
                     '\n*/ "\nlemma ' + name + ': "T"\n// "')
@@ -684,19 +677,13 @@ def self_test() -> int:
         ('directive after a comment', src + '\n/* header */ #define SOMETHING'),
     ):
         expect_fire(f'tamarin {label}', formula_failures(changed))
-    expect_clean('tamarin preprocessor text in a comment',
+    expect_fire('tamarin commented directive requires source rebaseline',
                  formula_failures('/* #include "ignored.spthy" */\n' + src))
     for mark in ('/*', '*/', '//'):
         for quote in ('"', "'"):
             changed = quote + 'prefix ' + mark + ' suffix' + quote + '\n' + src
             expect_fire(f'tamarin quoted comment delimiter {quote}{mark}',
                         formula_failures(changed))
-
-    # Ordinary quoted keyword tokens do not introduce declarations.
-    quoted = '''lemma quoted: "P('lemma', 'literal')"'''
-    expect_clean('tamarin quoted lexical tokens', diff_identity(
-        'quoted', {'quoted': formula_hash('all-traces', "P('lemma', 'literal')")},
-        parse_spthy_formulas(quoted)))
 
     # PoC 8 (cryptoverif identity, #666): the clean RESULT line must NOT fire;
     # a DELETED query (banner still printed) and a `Could not prove` flip MUST.
