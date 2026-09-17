@@ -30,7 +30,14 @@
 //! narrower button-pattern shoulder-surf class, which is real but
 //! less than full grid-scramble protection.
 
+// Under `e2e-test` the interactive `enter_pin` below is compiled out, so the
+// button/timer imports it alone consumes become unused in that configuration.
+// Annotating is deliberate: splitting these `use` statements would churn a
+// PIN-entry path that several `ui_under_test::pure_tests` assert on by source
+// text, for two cosmetic warnings (CI does not deny warnings).
+#[cfg_attr(feature = "e2e-test", allow(unused_imports))]
 use super::{display, input, show_status, Button, Press, DISPLAY_COLS};
+#[cfg_attr(feature = "e2e-test", allow(unused_imports))]
 use crate::timeout;
 use sphincs_tz_shared::PIN_LEN;
 use zeroize::Zeroize;
@@ -44,6 +51,7 @@ pub enum PinEntryResult {
     Mismatch,
 }
 
+#[cfg(not(feature = "e2e-test"))]
 pub fn enter_pin() -> PinEntryResult {
     // F-20: initialise each PIN position to a fresh random digit so
     // an attacker counting Left/Right presses cannot derive the
@@ -135,6 +143,35 @@ pub fn enter_pin() -> PinEntryResult {
             }
         }
     }
+}
+
+/// `e2e-test` variant: return the fixed provisioning PIN without touching
+/// the buttons. Sibling of the `confirm()` fast-path in `confirm.rs`.
+///
+/// CLAUDE.md long claimed `e2e-test` short-circuited BOTH dialogs, but this
+/// half did not exist until 2026-09-17, and its absence was a real bench
+/// defect rather than a cosmetic one. SysTick (`main.rs:4090`) pends PendSV
+/// once the idle deadline passes while unlocked; PendSV (`main.rs:4177`) then
+/// loops on `enter_pin()`, refreshing the inactivity deadline on every pass —
+/// re-arming the only timer whose expiry can end the wait. With no panel and
+/// no buttons that loop is unbounded, the CPU never leaves the secure
+/// handler, the non-secure world stops being scheduled, and USB goes silent
+/// ~120 s after unlock. Measured on pq1 silicon: DSCSR=0x00030000 (CDS=1,
+/// secure state), DHCSR S_RETIRE_ST=1 with S_HALT/S_SLEEP/S_LOCKUP=0, and
+/// CFSR=HFSR=0 in both views — running, in secure state, no fault ever.
+///
+/// WHY THIS EXACT VALUE: `b"00000000"` is what the `e2e-test` auto-provision
+/// path provisions with (`main.rs`, `let pin: [u8; 8] = *b"00000000"`). It
+/// MUST match. PendSV feeds this straight into `nsc::gated_unlock`, so a
+/// wrong constant would spin that loop burning attempts three ways (MCU page
+/// 124 + OPTIGA E120 + SE050 UserID) and wipe the device at ten.
+///
+/// Not shippable: `nsc/mod.rs` requires `not(feature = "e2e-test")` for every
+/// production mode and hard-errors otherwise, so this arm cannot exist in a
+/// release image.
+#[cfg(feature = "e2e-test")]
+pub fn enter_pin() -> PinEntryResult {
+    PinEntryResult::Pin(*b"00000000")
 }
 
 fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
