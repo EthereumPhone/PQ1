@@ -4161,6 +4161,30 @@ unsafe fn DefaultHandler(irqn: i16) {
 #[cfg(all(not(test), feature = "stm32u585"))]
 static mut PENDSV_IN_FLIGHT: u32 = 0;
 
+/// Hard cap on re-unlock attempts within a single PendSV entry.
+///
+/// WHY THIS EXISTS: every pass through the re-unlock loop below can burn one
+/// page-124 pre-commit attempt — the `Err(_)` arm's own comment says so
+/// explicitly ("still burned (fail-closed)") — and `PinIncorrect` burns one
+/// by definition. Those two arms `continue`, so the loop's only exits are
+/// success and `PinLocked`.
+///
+/// Before the `e2e-test` fast-path landed in `ui::pin_entry::enter_pin`, that
+/// loop was throttled by `enter_pin` blocking until the inactivity deadline
+/// (~120 s per pass), so exhausting the 10-attempt budget took ~20 minutes of
+/// wall clock. With a non-blocking `enter_pin` the same loop can consume the
+/// whole three-way budget (MCU page 124 + OPTIGA E120 + SE050 UserID) in
+/// seconds and trip the 10-wrong-PIN wipe. Bounding the retries removes that
+/// amplification.
+///
+/// 12 > `MAX_ATTEMPTS` (10) on purpose: the SE-side lockout should still be
+/// what stops a genuine wrong-PIN sequence, so this cap only catches a
+/// *runaway* (e.g. a transport/session error that never becomes a PIN
+/// verdict). On exhaustion the handler returns to the non-secure world with
+/// the device locked, which keeps NS scheduled and USB alive.
+#[cfg(all(not(test), feature = "stm32u585"))]
+const PENDSV_MAX_REUNLOCK_ATTEMPTS: u32 = 12;
+
 /// PendSV handler — runs the PIN re-unlock flow after an idle wipe.
 ///
 /// Triggered by SysTick when it detects idle timeout. Runs at the lowest
@@ -4194,7 +4218,23 @@ fn PendSV() {
         use ui::pin_entry::{enter_pin, PinEntryResult};
         use zeroize::Zeroize;
 
+        let mut attempts: u32 = 0;
+
         loop {
+            attempts += 1;
+            if attempts > PENDSV_MAX_REUNLOCK_ATTEMPTS {
+                // Runaway guard, not a lockout: the SE/page-124 budget is
+                // still the authority on wrong PINs. Returning leaves the
+                // device LOCKED but keeps the non-secure world scheduled,
+                // so USB stays alive instead of the CPU spinning here.
+                ui::show_status("Locked", "retry later");
+                secure_log!(
+                    "[S] PendSV re-unlock aborted after {} attempts (runaway guard)",
+                    PENDSV_MAX_REUNLOCK_ATTEMPTS
+                );
+                break;
+            }
+
             ui::show_status("Enter PIN", "to unlock");
 
             timeout::reset_activity();
