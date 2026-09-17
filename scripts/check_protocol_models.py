@@ -287,6 +287,8 @@ def _spthy_lemma_source(source: str) -> tuple[str, list[int]]:
     formulas. Reject comment delimiters in quoted text rather than approximate
     that grammar; quoted tokens themselves are not declarations. Tokenize names
     so an identifier ending in a prime is not mistaken for a quoted constant.
+    Preprocessing is outside the pinned model subset: reject # outside quotes
+    rather than count disabled declarations or miss declarations from includes.
     This is a scanner for the pinned source subset, not a Tamarin parser.
     """
     code = list(source)
@@ -324,6 +326,9 @@ def _spthy_lemma_source(source: str) -> tuple[str, list[int]]:
                 raise HarnessError('comment delimiters inside .spthy quoted text '
                                    'are not supported by the formula gate')
             i += 1
+        elif source[i] == '#':
+            raise HarnessError('preprocessing or # outside quoted .spthy formulas '
+                               'is not supported by the formula gate')
         else:
             token = re.match(r"[A-Za-z_][A-Za-z0-9_']*", source[i:])
             if token:
@@ -669,6 +674,18 @@ def self_test() -> int:
                     '\n*/ "\nlemma ' + name + ': "T"\n// "')
     expect_fire('tamarin quoted restriction hides a live tautology',
                 formula_failures(src.replace(declaration, quoted_decoy)))
+    disabled = '#ifdef NEVER\n' + declaration + '\n#endif'
+    for label, changed in (
+        ('disabled pinned declaration', src.replace(declaration, disabled)),
+        ('included declaration', src + '\n#include "other.spthy"'),
+        ('disabled original and included replacement',
+         src.replace(declaration, disabled + '\n#include "replacement.spthy"')),
+        ('inline preprocessor directive', src.replace(declaration, '  #ifdef NEVER\n' + declaration)),
+        ('directive after a comment', src + '\n/* header */ #define SOMETHING'),
+    ):
+        expect_fire(f'tamarin {label}', formula_failures(changed))
+    expect_clean('tamarin preprocessor text in a comment',
+                 formula_failures('/* #include "ignored.spthy" */\n' + src))
     for mark in ('/*', '*/', '//'):
         for quote in ('"', "'"):
             changed = quote + 'prefix ' + mark + ' suffix' + quote + '\n' + src
