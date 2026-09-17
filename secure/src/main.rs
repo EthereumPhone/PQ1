@@ -72,7 +72,9 @@ mod tx;
 // AES-256 vectors. No hardware deps.
 mod cmac;
 // Pure-logic SE050 SCP03 primitives (AES-128 ECB/CBC, CMAC-AES-128, the
-// GP `PUT KEY` APDU builder, KCV, OEF-`0xA201` (SE050C2) factory key constants).
+// GP `PUT KEY` APDU builder, KCV, and the published factory key constants for
+// the fitted SE050 variant — E2/`0xA921` by default, C2/`0xA201` under
+// `se050-part-c2`).
 // Always compiled — `se050::scp03` (which is `feature="se050"` /
 // `not(test)`-gated) imports from here, and the host test build runs the
 // NIST FIPS 197 / SP 800-38B vectors + the GP layout assertions.

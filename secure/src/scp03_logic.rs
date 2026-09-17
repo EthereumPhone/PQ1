@@ -1,6 +1,7 @@
 //! Pure-logic primitives for SE050 SCP03 — the AES / CMAC primitives, the
 //! NIST SP 800-108 counter-mode KDF inputs, the SCP03 KCV, the GP `PUT
-//! KEY` APDU builder, the OEF-`0xA201` (SE050C2) factory key constants, and
+//! KEY` APDU builder, the published factory key constants for the fitted
+//! SE050 variant (`se050-part-c2` selects which), and
 //! the FI-hardened R-MAC authentication-receipt verifier. Nothing in this
 //! module depends on `t1oi2c`, `crate::rng`, `secure_log!`, or any other
 //! firmware-only facility (`crate::fi` is always-compiled and host-safe),
@@ -26,16 +27,19 @@ use cmac::Cmac;
 use cmac::Mac as CmacMac;
 
 // ---------------------------------------------------------------------------
-// SE050C2 factory platform keys, OEF `0x0001A201` (SE050C2HQ1/Z01SDZ)
+// Published factory platform keys for the FITTED SE050 variant
+//   default            → SE050E2, OEF `0x0001A921`
+//   `se050-part-c2`    → SE050C2, OEF `0x0001A201` (SE050C2HQ1/Z01SDZ)
 // ---------------------------------------------------------------------------
 //
-// Per AN12436 Rev 2.4 §3.4 Table 6 row `SE050C2` (previous-generation default
+// Both sets are from AN12436 Rev 2.4 §3.4 Table 6 (previous-generation default
 // Platform SCP keys), mirrored in
-// `plug-and-trust/sss/ex/inc/ex_sss_tp_scp03_keys.h` `SSS_PFSCP_ENABLE_SE050C2`.
+// `plug-and-trust/sss/ex/inc/ex_sss_tp_scp03_keys.h`
+// (`SSS_PFSCP_ENABLE_SE050C2` / the A921 row).
 //
 // ⚠ Table 6's OEF column is a known NXP typo — it prints `A200` on the
 // SE050C2 row, contradicting AN12436 Tables 2 and 13 (SE050C2 = OEF `A201`).
-// The bytes below are keyed on the *variant name* SE050C2, which the MW macro
+// The C2 bytes below are keyed on the *variant name* SE050C2, which the MW macro
 // and Tables 2/13 agree on — NOT on the mis-printed OEF cell. Do not "correct"
 // them to the A200 (SE050C1) row.
 //
@@ -44,24 +48,57 @@ use cmac::Mac as CmacMac;
 // of a fresh chip; `work-todo #20` rotates them to per-device BHK-derived keys
 // via GP `PUT KEY` (replacing keyset `0x0B` in place) at production time.
 //
-// PART-SWAP (2026-07-20): swapped from the SE050E2 OEF-`A921` keys
-// (`D2DB63E7…`) to these SE050C2 OEF-`A201` keys when the production part was
-// finalized as SE050C2HQ1/Z01SDZ. A build WITHOUT `se050-derived-scp03` (every
-// bench HW target: `se050-stress`, `pin-gate-hw-*`) uses these as the LIVE
-// SCP03 keys, so such builds now establish only against a real C2 — an SE050E2
-// bench board fails SCP03 (card-cryptogram mismatch) until reflashed for its
-// own keyset. A C2 on a plain OM-SE050ARD dev kit instead presents the separate
-// A375 "Development Board" keyset (ENC `35C25645…`); try that if establish
-// fails on dev-kit hardware before suspecting the driver.
+// WHY THE DEFAULT IS E2 (owner decision 2026-09-17). `df8468d8` (2026-07-20)
+// hard-swapped these constants E2→C2 because the production part had been
+// finalized as SE050C2HQ1/Z01SDZ. That commit's own message predicted the
+// consequence — "the SE050E2 bench board fails SCP03 until swapped" — and on
+// 2026-09-17 it came true on the pq1 board, which carries an **SE050E2HQ1**
+// (`secure/src/board/pq1.rs:135`, `docs/hardware/schematics/README.md:32`).
+// Measured both ways on that silicon, same image except these bytes:
+//
+//                                  C2 keys     E2 keys
+//     "Card cryptogram MISMATCH"        11           0
+//     "[SCP03] Session established"      0           3
+//     factory_reset_admin          Err(Scp03)     success
+//     boot outcome            panic @ crypto.rs:458  provisioning completes
+//
+// So the keyset is now SELECTABLE and defaults to the part we actually have.
+// `docs/hardware/evt-silicon-validation.md` still says the production part is a
+// C2; §6 of that same doc records that the C2 "has never run on silicon", so it
+// is an ordering intent rather than an observation. When C2 hardware does
+// arrive, build it with `se050-part-c2` — do not flip these constants again.
+//
+// A C2 on a plain OM-SE050ARD dev kit is a third case: it presents the separate
+// A375 "Development Board" keyset (ENC `35C25645…`), not encoded here; try that
+// if `establish` fails on dev-kit hardware before suspecting the driver.
 
+#[cfg(not(feature = "se050-part-c2"))]
+pub const PLATFORM_ENC: [u8; 16] = [
+    0xD2, 0xDB, 0x63, 0xE7, 0xA0, 0xA5, 0xAE, 0xD7,
+    0x2A, 0x64, 0x60, 0xC4, 0xDF, 0xDC, 0xAF, 0x64,
+];
+#[cfg(not(feature = "se050-part-c2"))]
+pub const PLATFORM_MAC: [u8; 16] = [
+    0x73, 0x8D, 0x5B, 0x79, 0x8E, 0xD2, 0x41, 0xB0,
+    0xB2, 0x47, 0x68, 0x51, 0x4B, 0xFB, 0xA9, 0x5B,
+];
+#[cfg(not(feature = "se050-part-c2"))]
+pub const PLATFORM_DEK: [u8; 16] = [
+    0x67, 0x02, 0xDA, 0xC3, 0x09, 0x42, 0xB2, 0xC8,
+    0x5E, 0x7F, 0x47, 0xB4, 0x2C, 0xED, 0x4E, 0x7F,
+];
+
+#[cfg(feature = "se050-part-c2")]
 pub const PLATFORM_ENC: [u8; 16] = [
     0xBD, 0x1D, 0xE2, 0x0A, 0x81, 0xEA, 0xB2, 0xBF,
     0x3B, 0x70, 0x9A, 0x9D, 0x69, 0xA3, 0x12, 0x54,
 ];
+#[cfg(feature = "se050-part-c2")]
 pub const PLATFORM_MAC: [u8; 16] = [
     0x9A, 0x76, 0x1B, 0x8D, 0xBA, 0x6B, 0xED, 0xF2,
     0x27, 0x41, 0xE4, 0x5D, 0x8D, 0x42, 0x36, 0xF5,
 ];
+#[cfg(feature = "se050-part-c2")]
 pub const PLATFORM_DEK: [u8; 16] = [
     0x9B, 0x99, 0x3B, 0x60, 0x0F, 0x1C, 0x64, 0xF5,
     0xAD, 0xC0, 0x63, 0x19, 0x2A, 0x96, 0xC9, 0x47,
@@ -459,6 +496,14 @@ pub fn build_put_key_apdu(
 /// constants. Used by `Se050::rotate_scp03_keys` to refuse `PUT KEY`-ing
 /// the published keys over themselves (which would mean the derived-key
 /// path isn't actually selecting a per-device root).
+///
+/// "Factory" means *for the variant this build was compiled for* — the
+/// `PLATFORM_*` constants are selected by `se050-part-c2` (E2/A921 by
+/// default, C2/A201 with the flag). A C2 chip's genuine factory keys
+/// therefore read as NOT-factory to a default-built host, which is the
+/// correct answer for this function's one caller: it guards against
+/// rotating published keys onto themselves, and a keyset the host cannot
+/// even open a session with is not a keyset it can rotate.
 pub fn keys_are_factory_default(enc: &[u8; 16], mac: &[u8; 16], dek: &[u8; 16]) -> bool {
     *enc == PLATFORM_ENC && *mac == PLATFORM_MAC && *dek == PLATFORM_DEK
 }
@@ -1206,22 +1251,47 @@ mod tests {
         assert_eq!(via_kdf, via_cmac);
     }
 
-    /// SE050C2 factory keyset is published in AN12436 Rev 2.4 §3.4 Table 6
-    /// (previous-generation) and is the **plaintext-equivalent** state until
-    /// `PUT KEY` lands. Pin the constants so a typo or a `// TODO swap with
-    /// random` regression surfaces immediately — these bytes are load-bearing
-    /// for the derived-keys fallback in `establish()`.
+    /// Both SE050 factory keysets are published in AN12436 Rev 2.4 §3.4
+    /// Table 6 (previous-generation) and are the **plaintext-equivalent**
+    /// state until `PUT KEY` lands. Pin the constants so a typo or a
+    /// `// TODO swap with random` regression surfaces immediately — these
+    /// bytes are load-bearing for the derived-keys fallback in `establish()`,
+    /// and a wrong keyset fails closed in a way that also locks the
+    /// `admin_factory_reset` recovery path (pq1 silicon, 2026-09-17).
+    ///
+    /// Which set is compiled in is chosen by `se050-part-c2`; each arm below
+    /// ALSO asserts the other variant's identifying byte is absent, so a
+    /// copy-paste that made both arms identical — silently turning the
+    /// feature into a no-op — fails instead of passing in both configs.
     #[test]
     fn positive_platform_keyset_bytes_match_an12436() {
-        // First and last bytes are the unique identifier for each constant
-        // (SE050C2 OEF-A201 keyset). The KCV test below pins the remainder
-        // structurally.
-        assert_eq!(PLATFORM_ENC[0], 0xBD);
-        assert_eq!(PLATFORM_ENC[15], 0x54);
-        assert_eq!(PLATFORM_MAC[0], 0x9A);
-        assert_eq!(PLATFORM_MAC[15], 0xF5);
-        assert_eq!(PLATFORM_DEK[0], 0x9B);
-        assert_eq!(PLATFORM_DEK[15], 0x47);
+        // First and last bytes are the unique identifier for each constant.
+        // The KCV test below pins the remainder structurally.
+        #[cfg(not(feature = "se050-part-c2"))]
+        {
+            // SE050E2 / OEF A921 — the default, and the part on every board
+            // we physically have.
+            assert_eq!(PLATFORM_ENC[0], 0xD2);
+            assert_eq!(PLATFORM_ENC[15], 0x64);
+            assert_eq!(PLATFORM_MAC[0], 0x73);
+            assert_eq!(PLATFORM_MAC[15], 0x5B);
+            assert_eq!(PLATFORM_DEK[0], 0x67);
+            assert_eq!(PLATFORM_DEK[15], 0x7F);
+            // Anti-no-op: must NOT be the C2 keyset.
+            assert_ne!(PLATFORM_ENC[0], 0xBD, "default build must use E2 keys");
+        }
+        #[cfg(feature = "se050-part-c2")]
+        {
+            // SE050C2 / OEF A201 (SE050C2HQ1/Z01SDZ).
+            assert_eq!(PLATFORM_ENC[0], 0xBD);
+            assert_eq!(PLATFORM_ENC[15], 0x54);
+            assert_eq!(PLATFORM_MAC[0], 0x9A);
+            assert_eq!(PLATFORM_MAC[15], 0xF5);
+            assert_eq!(PLATFORM_DEK[0], 0x9B);
+            assert_eq!(PLATFORM_DEK[15], 0x47);
+            // Anti-no-op: must NOT be the E2 keyset.
+            assert_ne!(PLATFORM_ENC[0], 0xD2, "se050-part-c2 must use C2 keys");
+        }
         // The three factory constants MUST be pairwise distinct (a
         // chip whose ENC == MAC etc. would have a trivial cross-protocol
         // weakness, and would also be a typo signal).
