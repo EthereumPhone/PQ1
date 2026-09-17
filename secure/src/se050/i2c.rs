@@ -91,6 +91,37 @@ fn wait_flag(mask: u32) -> Result<u32, I2cError> {
         let isr = REG.isr.read();
         if isr & ISR_NACKF != 0 {
             REG.icr.write(ICR_NACKCF);
+            // Drain the STOP that AUTOEND generates after a NACK and clear
+            // STOPF before handing the error up. Mirrors `optiga/i2c.rs`,
+            // which has always done this and is proven on this silicon.
+            //
+            // Clearing NACKF alone leaves the peripheral holding a stale
+            // STOPF and an unfinished transfer; the next `configure_transfer`
+            // then writes CR2 with START on top of it, so ONE bad exchange
+            // wedges the bus permanently. `t1oi2c::read_frame`'s SOF poll
+            // deliberately TOLERATES `Err(Nack)` and retries up to
+            // MAX_READ_RETRIES (1000) times, so a single slow applet-select
+            // turns into a flood of them.
+            //
+            // Why this stayed invisible until pq1: on `iota2` BOTH secure
+            // elements share I2C1 (`board::{OPTIGA,SE050}_I2C_BASE` are both
+            // `I2C1_S`), so the OPTIGA driver's correct recovery incidentally
+            // cleaned up after this one. `pq1` moves SE050 to its own I2C4 —
+            // nothing else touches that peripheral, so nothing cleans up.
+            //
+            // Silicon 2026-09-17 (pq1): the first `interface_reset` returned a
+            // valid frame (`NAD=a5 PCB=ef CRC_OK=true`), then every subsequent
+            // one failed `after 20 attempts: Some(I2c(Nack))` while OPTIGA on
+            // I2C1 kept working all run. Provisioning then refused a degraded
+            // entropy split (invariant #1) and panicked at crypto.rs:458.
+            let mut s = TIMEOUT_LOOPS;
+            while REG.isr.read() & ISR_STOPF == 0 {
+                s -= 1;
+                if s == 0 {
+                    break;
+                }
+            }
+            REG.icr.write(ICR_STOPCF);
             return Err(I2cError::Nack);
         }
         if isr & ISR_BERR != 0 {

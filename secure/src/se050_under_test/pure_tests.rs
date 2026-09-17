@@ -1281,6 +1281,52 @@ fn negative_i2c_nack_flag_clears_register() {
 }
 
 #[test]
+fn negative_i2c_nack_path_drains_the_stop_condition() {
+    // This test exists because the one ABOVE was too weak, and the gap cost a
+    // bring-up session (pq1 silicon, 2026-09-17). Its comment already named the
+    // exact hazard — "leaving them set traps the next transfer ... and the bus
+    // stays wedged" — but it only asserted that NACKF is cleared. Clearing
+    // NACKF is the easy half. Under AUTOEND the hardware also emits a STOP,
+    // and leaving STOPF set plus an unfinished transfer wedges the peripheral
+    // just as thoroughly: the first SE050 exchange succeeded, every later one
+    // returned `I2c(Nack)` forever, and provisioning panicked rather than
+    // accept a degraded entropy split.
+    //
+    // It stayed latent because `iota2` puts BOTH secure elements on I2C1, so
+    // the OPTIGA driver's correct recovery cleaned up after this driver. `pq1`
+    // gives SE050 its own I2C4, where nothing else does.
+    //
+    // A bare `contains("REG.icr.write(ICR_STOPCF);")` would be VACUOUS here —
+    // that line already appears in the success tails of `read()` and `write()`
+    // and passed throughout the broken build. So bind the drain to the NACK
+    // branch positionally.
+    let nack = I2C_SRC
+        .find("REG.icr.write(ICR_NACKCF);")
+        .expect("SE050 I2C driver must clear NACKF");
+    let window = &I2C_SRC[nack..];
+    let ret = window
+        .find("return Err(I2cError::Nack);")
+        .expect("the NACK branch must return I2cError::Nack");
+    let branch = &window[..ret];
+    assert!(
+        branch.contains("while REG.isr.read() & ISR_STOPF == 0 {"),
+        "the NACK branch must WAIT for the AUTOEND-generated STOP before \
+         returning; without it the next configure_transfer issues START on top \
+         of an unfinished transfer and the bus never recovers"
+    );
+    assert!(
+        branch.contains("REG.icr.write(ICR_STOPCF);"),
+        "the NACK branch must CLEAR STOPF after draining the STOP"
+    );
+    // The drain must be bounded — an unbounded spin here is a S-world DoS on
+    // exactly the path that runs when the bus is already misbehaving.
+    assert!(
+        branch.contains("let mut s = TIMEOUT_LOOPS;") && branch.contains("if s == 0 {"),
+        "the STOP drain must be bounded by TIMEOUT_LOOPS"
+    );
+}
+
+#[test]
 fn negative_i2c_timeout_bound_present() {
     // Otherwise a stuck flag loops forever in S-world — DoS for the
     // SE050 leg.
