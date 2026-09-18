@@ -8,12 +8,12 @@ returned Type-2 wrapper structurally. The raw bytes are ALSO written to
 disk so the C10 signature can be verified cryptographically offline,
 without holding the device's narrow window open.
 
-WHY STRUCTURAL + OFFLINE, NOT CRYPTOGRAPHIC INLINE: the device only stays
-reachable for ~120 s after unlock (secure/src/main.rs:4090 pends PendSV
-once timeout::is_idle(), and enter_pin() has no e2e-test short-circuit, so
-NS never runs again). Cryptographic verification needs the C10 verifier and
-a keccak userOpHash computation; doing that inside the window risks losing
-the response entirely. Get the bytes out first, verify at leisure.
+WHY STRUCTURAL + OFFLINE, NOT CRYPTOGRAPHIC INLINE: this client was written
+when the device only stayed reachable ~120 s after unlock (PendSV blocked in
+enter_pin(); fixed for e2e-test images by a8961636). Verification stays
+offline anyway: tools/verify-c10-sig checks the signature, and --deploy /
+--chain plus the <out>.json record let an on-chain UserOp be assembled from
+exactly the fields the device signed.
 
 Protocol (docs/companion/usb-protocol-v2.md + nonsecure/src/usb/commands.rs):
   * Request chaining: P1=0x80 "more blocks follow", P1=0x00 last block
@@ -23,12 +23,13 @@ Protocol (docs/companion/usb-protocol-v2.md + nonsecure/src/usb/commands.rs):
     The host then issues GET_RESPONSE (INS 0xC0, CLA-agnostic) repeatedly,
     concatenating payloads, until SW1 != 0x61.
 
-Usage: ./hid_sign.py [--out FILE]
+Usage: ./hid_sign.py [--out FILE] [--chain ID] [--deploy] [--nonce N] [gas/value overrides]
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import sys
 
 from hid_smoke import (
@@ -122,26 +123,31 @@ def send_chained(hid: HidRaw, ins: int, payload: bytes) -> tuple[int, bytes]:
     raise AssertionError("empty payload")
 
 
-def build_payload(sender: bytes) -> bytes:
-    """Minimal normal-mode UserOp: neither INIT_CODE nor REGISTER_SLOT,
-    account 0, slot 0, no inner calldata, no trailers."""
-    flags = 0  # bit31 INIT_CODE=0, bit30 REG_SLOT=0, account 0, slot 0
+FLAG_INCLUDE_INIT_CODE = 0x8000_0000
+INIT_CODE_LEN = 4280
+
+
+def build_payload(sender: bytes, req: dict) -> bytes:
+    """One UserOp request, account 0 / slot 0, no inner calldata, no trailers.
+    `req` holds every signed field so the caller can record exactly what the
+    device committed to (an on-chain UserOp must reuse these values verbatim:
+    PQSmartWallet.sphincsDigest re-hashes all of them)."""
     p = b"".join(
         [
-            u64(CHAIN_ID),          # 0
-            u32(flags),             # 8
-            sender,                 # 12  (20)
-            ENTRY_POINT_V06,        # 32  (20)
-            u256(0),                # 52  nonce
-            u256(CALL_GAS),         # 84
-            u256(VER_GAS),          # 116
-            u256(PRE_VER_GAS),      # 148
-            u256(MAX_FEE),          # 180
-            u256(MAX_PRIORITY_FEE), # 212
-            SHA256_EMPTY,           # 244 paymaster_and_data_hash
-            TO_ADDRESS,             # 276 (20)
-            u256(VALUE_WEI),        # 296
-            u16(0),                 # 328 data_len = 0
+            u64(req["chain_id"]),               # 0
+            u32(req["flags"]),                  # 8
+            sender,                             # 12  (20)
+            ENTRY_POINT_V06,                    # 32  (20)
+            u256(req["nonce"]),                 # 52
+            u256(req["callGasLimit"]),          # 84
+            u256(req["verificationGasLimit"]),  # 116
+            u256(req["preVerificationGas"]),    # 148
+            u256(req["maxFeePerGas"]),          # 180
+            u256(req["maxPriorityFeePerGas"]),  # 212
+            SHA256_EMPTY,                       # 244 paymaster_and_data_hash (no paymaster)
+            bytes.fromhex(req["to"][2:]),       # 276 (20)
+            u256(req["value"]),                 # 296
+            u16(0),                             # 328 data_len = 0
         ]
     )
     assert len(p) == SIGN_USEROP_HEADER_LEN, f"payload is {len(p)} B, want {SIGN_USEROP_HEADER_LEN}"
@@ -162,7 +168,36 @@ def check(label: str, got, want) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="sign_response.bin")
+    ap.add_argument("--chain", type=int, default=CHAIN_ID)
+    ap.add_argument("--deploy", action="store_true",
+                    help="set FLAG_INCLUDE_INIT_CODE (first UserOp: deploys the wallet, slot 0)")
+    ap.add_argument("--nonce", type=int, default=0)
+    ap.add_argument("--to", default="0x" + TO_ADDRESS.hex())
+    ap.add_argument("--value", type=int, default=VALUE_WEI)
+    ap.add_argument("--call-gas", type=int, default=CALL_GAS)
+    ap.add_argument("--ver-gas", type=int, default=VER_GAS)
+    ap.add_argument("--pre-ver-gas", type=int, default=PRE_VER_GAS)
+    ap.add_argument("--max-fee", type=int, default=MAX_FEE)
+    ap.add_argument("--max-prio", type=int, default=MAX_PRIORITY_FEE)
+    ap.add_argument("--req-out", default=None,
+                    help="write every signed field + the parsed response as JSON "
+                         "(default: <out>.json)")
     args = ap.parse_args()
+    req = {
+        "chain_id": args.chain,
+        "flags": FLAG_INCLUDE_INIT_CODE if args.deploy else 0,
+        "nonce": args.nonce,
+        "callGasLimit": args.call_gas,
+        "verificationGasLimit": args.ver_gas,
+        "preVerificationGas": args.pre_ver_gas,
+        "maxFeePerGas": args.max_fee,
+        "maxPriorityFeePerGas": args.max_prio,
+        "paymasterAndData": "0x",
+        "to": args.to.lower(),
+        "value": args.value,
+        "data": "0x",
+    }
+    want_init_len = INIT_CODE_LEN if args.deploy else 0
 
     node = find_hidraw()
     if node is None:
@@ -190,9 +225,10 @@ def main() -> int:
         sender = data
         print(f"    sender = 0x{sender.hex()}")
 
-        payload = build_payload(sender)
+        payload = build_payload(sender, req)
         hid.timeout_s = 45.0  # generous slack for keygen + FI double-sign
-        print(f"\n==> INS 0x30 SIGN_USEROP — {len(payload)} B payload, "
+        print(f"\n==> INS 0x30 SIGN_USEROP — chain {req['chain_id']}, flags 0x{req['flags']:08x}, "
+              f"nonce {req['nonce']}, {len(payload)} B payload, "
               f"{(len(payload) + 254) // 255} chained APDU(s)")
         sw, resp = send_chained(hid, INS_SIGN_USEROP, payload)
         print(f"    SW=0x{sw:04x}  response={len(resp)} B")
@@ -207,8 +243,8 @@ def main() -> int:
             print("\n!! device refused the sign; response bytes (if any) saved for analysis")
             return 1
 
-        # Expected: [count(8)][init_len(4)=0][t1_len(4)=0][t2_len(4)=4128][t2]
-        expected_total = 8 + 4 + 4 + 4 + SIG_WRAPPER_LEN
+        # Expected: [count(8)][init_len(4)][initCode][t1_len(4)=0][t2_len(4)=4128][t2]
+        expected_total = 8 + 4 + want_init_len + 4 + 4 + SIG_WRAPPER_LEN
         check("total length", len(resp), expected_total)
         if len(resp) < 20:
             print("!! response too short to parse")
@@ -217,7 +253,8 @@ def main() -> int:
         count = int.from_bytes(resp[0:8], "big")
         init_len = int.from_bytes(resp[8:12], "big")
         print(f"    ..    new_offchain_count       = {count}")
-        check("init_code_len (no flag)", init_len, 0)
+        check("init_code_len", init_len, want_init_len)
+        init_code = resp[12 : 12 + init_len]
         off = 12 + init_len
         t1_len = int.from_bytes(resp[off : off + 4], "big")
         check("type1_len (no flag)", t1_len, 0)
@@ -241,6 +278,22 @@ def main() -> int:
             print(f"    ..    c10 sig nonzero bytes   = {nonzero}/{C10_SIG_LEN}")
             # An all-zero or near-constant signature would mean a stub, not a sign.
             check("sig is not all zeros", nonzero > C10_SIG_LEN // 2, True)
+
+        # Everything the device committed to, plus what it returned. An on-chain
+        # UserOp must reuse these fields byte-for-byte; the wallet re-hashes them
+        # (PQSmartWallet.sphincsDigest), so any drift fails signature validation.
+        rec = dict(req)
+        rec.update({
+            "sender": "0x" + sender.hex(),
+            "entryPoint": "0x" + ENTRY_POINT_V06.hex(),
+            "newOffchainCount": count,
+            "initCode": "0x" + init_code.hex(),
+            "type2Wrapper": "0x" + t2.hex(),
+        })
+        req_out = args.req_out or (args.out + ".json")
+        with open(req_out, "w") as fh:
+            json.dump(rec, fh, indent=1)
+        print(f"    request + parsed response -> {req_out}")
     except TimeoutError as e:
         print(f"\n!! TIMEOUT: {e}")
         print("!! The window likely closed (PendSV holds the CPU in secure state).")
