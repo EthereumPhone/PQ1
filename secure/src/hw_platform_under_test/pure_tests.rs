@@ -321,8 +321,34 @@ fn positive_rng_peripheral_secure_alias() {
 
 #[test]
 fn positive_rng_nist_compliant_default_cr() {
-    // ST LL driver value (CONFIG3=0x0F, CONFIG1=0x34, NISTC=0).
+    // RM0456 Rev 7 Table 464 configuration C CR bits: NISTC=0,
+    // CONFIG1=0x0F, CONFIG2=0x0, CONFIG3=0xD, CLKDIV=0. (An earlier comment
+    // here said "CONFIG3=0x0F, CONFIG1=0x34"; the value never decoded to that.)
     assert!(RNG_SRC.contains("const RNG_CR_NIST_DEFAULT: u32 = 0x00F0_0D00;"));
+}
+
+#[test]
+fn positive_rng_htcr_config_c_written_inside_condrst_window() {
+    // Configuration C is a PAIR: the CR bits above AND RNG_HTCR = 0xAAC7
+    // (RM0456 Rev 7 Table 464). HTCR is only taken into account while
+    // CONDRST=1 (§48.7.5), so the write must sit between the CR write that
+    // sets CONDRST and the one that clears it, and be read back fail-closed.
+    // Without it the health tests run at the reset thresholds (0x72AC) and pq1
+    // latched a seed error (SR=0x41) before nearly every post-idle draw.
+    assert!(RNG_SRC.contains("const RNG_HTCR_CONFIG_C: u32 = 0x0000_AAC7;"));
+    assert!(RNG_SRC.contains("htcr: Reg32::new(RNG + 0x10),"));
+    let init = extract_body(RNG_SRC, "fn init_locked() -> Result<(), ()> {");
+    let set = init
+        .find("REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);")
+        .expect("CONDRST set");
+    let write = init
+        .find("REG.htcr.write(RNG_HTCR_CONFIG_C);")
+        .expect("HTCR write missing from init_locked");
+    let clear = init
+        .find("REG.cr.write(RNG_CR_NIST_DEFAULT);")
+        .expect("CONDRST clear");
+    assert!(set < write && write < clear, "HTCR must be written while CONDRST=1");
+    assert!(init.contains("if htcr_after != RNG_HTCR_CONFIG_C {\n        return Err(());"));
 }
 
 #[test]

@@ -18,6 +18,7 @@ struct RngRegs {
     cr: Reg32,
     sr: Reg32,
     dr: RoReg32,
+    htcr: Reg32,
 }
 
 // SAFETY: each address is a real, 4-byte-aligned MMIO register owned by the
@@ -28,6 +29,7 @@ const REG: RngRegs = unsafe {
         cr: Reg32::new(RNG + 0x00),
         sr: Reg32::new(RNG + 0x04),
         dr: RoReg32::new(RNG + 0x08),
+        htcr: Reg32::new(RNG + 0x10),
     }
 };
 
@@ -47,10 +49,25 @@ const ERROR_FLAGS: u32 = SEIS | SECS | CEIS | CECS;
 /// Bounded polling budget for conditioning reset and data-ready waits.
 const POLL_LIMIT: u32 = 1_000_000;
 
-// NIST-compliant default CR config for STM32U5 (from ST's LL driver —
-// CONFIG3=0x0F, CONFIG1=0x34, NISTC=0). Using the wrong CR layout here is
-// what caused the first-boot wizard to see `rng::fill FAILED`.
+// RNG_CR configuration bits. Decoded against RM0456 Rev 7 Table 464 this is
+// **configuration C**: NISTC=0, RNG_CONFIG1=0x0F, RNG_CONFIG2=0x0,
+// RNG_CONFIG3=0xD, CLKDIV=0 (48 MHz HSI48; §48.6.2 validation conditions:
+// rng_clk = 48 MHz, CED cleared). It is NOT configuration A, the only one
+// Table 465 marks suitable for NIST SP800-90B keys (A is defined in AN4230).
+// An earlier comment here called it "CONFIG3=0x0F, CONFIG1=0x34"; the value
+// never said that. Using the wrong CR layout here is what caused the
+// first-boot wizard to see `rng::fill FAILED`.
 const RNG_CR_NIST_DEFAULT: u32 = 0x00F0_0D00;
+
+// RNG_HTCR for configuration C (RM0456 Rev 7 Table 464, note 4: "can be fixed
+// in the RNG driver, it does not depend upon the STM32 product"). The driver
+// previously never wrote HTCR, so configuration C's CR bits ran against the
+// RESET health-test thresholds (0x0000_72AC, §48.7.5) — a pairing Table 464
+// does not define. On pq1 that showed up as a latched seed error (SR=0x41:
+// SEIS, SECS already clear) before the first draw after nearly every idle
+// gap. HTCR is only taken into account while CONDRST=1 (§48.7.5), so it is
+// written inside the conditioning-reset window in `init_locked`.
+const RNG_HTCR_CONFIG_C: u32 = 0x0000_AAC7;
 
 /// Last accepted 32-bit word for a continuous repetition test. Zero is the
 /// initial sentinel and cannot collide with a valid observation because an
@@ -424,6 +441,23 @@ fn read_healthy_word_into(word_out: &mut u32, read_receipt: &mut u32) {
 fn init_locked() -> Result<(), ()> {
     // 1. Enter config mode with the NIST-compliant CR value.
     REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);
+    // 1b. Health-test thresholds matching the CR configuration. Must happen
+    //     while CONDRST=1 or the write is ignored; read back and fail closed
+    //     if it did not take (e.g. CONFIGLOCK set, or a wrong register map).
+    let htcr_before = REG.htcr.read();
+    REG.htcr.write(RNG_HTCR_CONFIG_C);
+    let htcr_after = REG.htcr.read();
+    secure_log!(
+        "[S] rng: HTCR 0x{:08x} -> 0x{:08x} (config C wants 0x{:08x})",
+        htcr_before,
+        htcr_after,
+        RNG_HTCR_CONFIG_C
+    );
+    // Only consumed by `secure_log!`, which is empty without `debug-log`.
+    let _ = htcr_before;
+    if htcr_after != RNG_HTCR_CONFIG_C {
+        return Err(());
+    }
     // 2. Leave config mode (clear CONDRST) while keeping the config bits.
     REG.cr.write(RNG_CR_NIST_DEFAULT);
     wait_for_conditioning_reset()?;
