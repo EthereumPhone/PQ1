@@ -204,7 +204,7 @@ The **consumption mask** is ported too: pq1 runs it on **TIM3_CH1 / PA6 / AF2** 
 
 **HW probe-rs gotcha.** `probe-rs` does not implement semihosting `0x07 SYS_READC`. Any `ui-semihosting` PIN prompt on real silicon hangs in the polling loop with a storm of `Target wanted to run semihosting operation 0x7 ...` warnings. This hits `make e2e-hw` because the NS test driver still calls `CMD_REQUEST_UNLOCK` even when `e2e-test` pre-unlocks the secure side. QEMU is unaffected. Workarounds: `make test-key-speed` (no reads, prints `=== PASS ===`) or `make play-hw-display` (arrow keys via probe-rs `print` handshake).
 
-**Expected timings on hardware** (with `hw-sha256`, auto under `stm32u585`): first-sign ≤ 3 s (master keygen + slot keygen + 2 signs); Type-2-only on cached slot ≈ 1.1 s; second-chain first-sign with cached slot ≈ 2.5 s. Substantially higher = HASH peripheral isn't being used.
+**Timings on hardware — measured, not the old targets (#699).** On pq1, 2026-09-18, `make test-key-speed BOARD=pq1`, with `[S] hash: HW SHA-256 self-test PASS` in the same boot: first sign (type1 + slot keygen + type2) ≈ 14–17 s; Type-2 on a cached slot ≈ 6.4–7.2 s (C10 target-sum grinding spreads single runs by ±1 s or more). The older "first-sign ≤ 3 s / cached ≈ 1.1 s" figures do not match this silicon. Do **not** read a slow sign as "HASH peripheral unused" — first check the boot log for the self-test PASS line.
 
 **HW SHA-256 self-test.** `hw::hash::init_clock()` runs a `SHA-256("abc")` KAT. Look for `[S] hash: HW SHA-256 self-test PASS` early in boot — `FAIL — HALT` parks the CPU in `loop { wfe() }`.
 
