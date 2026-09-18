@@ -142,31 +142,63 @@ non-existent port E:
 
 ### Boot select
 
-`BOOT0` is a `J211` pad, and is also driven by a 3.3 V LDO whose enable is a
-USB-C **sideband** line — so its level can depend on what is plugged into the
-Type-C port. Worth knowing before debugging a board that "flashes fine but
-never runs".
+`BOOT0` is a `J211` pad (test point `TP103`). It is also *actively driven* by a
+3.3 V LDO — the **third `NCP114ASN330T1G`** on sheet 1 of the V10 schematic,
+input `VDD3V6`, output reaching the `BOOT0` net through `R131` (5.1 kΩ) to
+sheet 2's `J211` pad — and carries an RC network at the MCU pin, which has a
+10 kΩ pulldown (`R121`) with `R119` a 0 Ω series link. That LDO's enable comes
+from the USB-C **sideband** via `R132` (10 kΩ); on the V10 schematic *both*
+`SBU1/A8` and `SBU2/B8` join the same `SBU` net, so the long-running
+"`SBU1` or `SBU2`?" question is moot — they are one net.
 
-**Which sideband is UNRESOLVED (2026-09-17).** This note has always said
-`SBU2`; the V10 schematic's POWER block appears to label the enable **`SBU1`**.
-Read at the resolution available, the conflict is legible but the winner is not,
-so neither is asserted here. The part is identifiable: it is the **third
-`NCP114ASN330T1G` 3.3 V LDO** on sheet 1 (`docs/hardware/schematics/`), input
-`VDD3V6`, output driving the `BOOT0` net across to sheet 2's `J211` pad — i.e.
-BOOT0 is *actively driven*, not a bare strap, and it also carries an RC network
-at the MCU pin.
+**The sideband is NOT how production flashing works.** Recorded here because
+two separate reviews went down that path: the agreed flow (owner↔ODM,
+2026-07-03) is the STM32U585's built-in **USB DFU bootloader over the USB-C
+port**, entered by ST's *empty-check* — a blank flash at the boot address makes
+the ROM bootloader run **regardless of BOOT0**. That is why `BOOT0` is
+hard-strapped to GND on MP: the strap is the plan, not an obstacle. After the
+first flash, DFU no longer auto-enters and updates go through the signed
+firmware-update path; the SWD **pads** (the 10-pin connector is removed on
+lab/MP units, the pads stay) are the recovery path for a unit that fails
+mid-flash, since a partially-programmed device no longer auto-enters the
+bootloader.
 
-Resolve it before building anything on it, because it is the net that decides
-whether a **sealed** unit can be put into the system bootloader over USB-C
-(the enclosed units have no SWD access). Either zoom the schematic PDF or ask
-the ODM; the schematic is the authority for nets, while this document remains
-the authority for what is safe to physically probe.
+**The trap that follows from this:** a unit that ALREADY carries firmware — for
+example the ODM's own factory test image — has non-blank flash, so empty-check
+does not fire. With `BOOT0` strapped low, *neither* entry path works and the
+unit is SWD-only, which on a sealed device means opening the case. Establish
+whether the strap is fitted before assuming a sealed unit can be recovered over
+USB-C.
 
-Two consequences worth stating either way: a cable or dongle that asserts the
-sideband can change how the device boots, which is a security property and not
-merely a convenience; and `- BOOT0 — Pad/jumper on EVT/DVT; hard-strap to GND
-on MP` above means a production strap would *remove* this path, so first-flash
-and recovery cannot silently depend on it.
+**Measured 2026-09-18 on an untouched bare `AL_A66_MB_V10`.** Asserting BOOT0
+by hand does work, and is the bench route when flash is not blank:
+
+1. Remove ALL power first — USB-C **and** ST-LINK, or the probe keeps the board
+   alive and there is no reset. `BOOT0` is sampled as the MCU leaves reset, so
+   the jumper must be in place across the power cycle.
+2. Jumper `J210` pin 1 (`VDD3V3`/VTref, via `R212` 10 Ω) → `BOOT0`
+   (`J211` pin 3, or `TP103`). One wire. 3.3 V only — never VBUS.
+3. Power up over USB-C to the host.
+
+Result: `0483:df11`, `Product: DFU in FS Mode`; CubeProgrammer then reports
+`Device ID 0x482`, `STM32U575/STM32U585`, `NVM 2 MBytes`, `DFU protocol 1.1`.
+
+**`sudo` is required and its absence is misleading.** `/dev/bus/usb/BBB/DDD` is
+`crw-rw-r--` and no udev rule exists for `0483:df11`, so CubeProgrammer cannot
+claim the interface and fails with `Error: Target device not found` even while
+`lsusb` plainly shows the device and you pass the correct `sn=`. `sudo` also
+resets `PATH`, so give the binary its full path.
+
+Shipped option bytes, read from an untouched board: `RDP 0xAA` (Level 0),
+`TZEN=0`, `nSWBOOT0=1` (BOOT0 taken from the **pin**), `nBOOT0=1`, WRP1A
+inverted/empty, `UNLOCK_1A=1`. Two of those gate the route: RDP-0 leaves the
+ROM bootloader enabled (RDP-2 disables bootloader selection outright), and
+`nSWBOOT0=1` means the BOOT0 pin is honoured at all.
+
+One security consequence survives regardless of mechanism: a cable or dongle
+that asserts the sideband can change how the device boots. That is a security
+property, not a convenience — but first-flash and recovery are designed around
+empty-check and the SWD pads, and must not silently depend on it.
 
 ### Bench SSD1306 OLED (`make oled-bench-hw BOARD=pq1`)
 
