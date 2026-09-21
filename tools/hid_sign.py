@@ -179,6 +179,13 @@ def main() -> int:
     ap.add_argument("--pre-ver-gas", type=int, default=PRE_VER_GAS)
     ap.add_argument("--max-fee", type=int, default=MAX_FEE)
     ap.add_argument("--max-prio", type=int, default=MAX_PRIORITY_FEE)
+    ap.add_argument(
+        "--confirm-timeout",
+        type=float,
+        default=None,
+        help="seconds to wait for the on-device confirm (default 45; use ~300 "
+             "for a real trusted-UI build where a human presses the buttons)",
+    )
     ap.add_argument("--req-out", default=None,
                     help="write every signed field + the parsed response as JSON "
                          "(default: <out>.json)")
@@ -195,6 +202,9 @@ def main() -> int:
         "paymasterAndData": "0x",
         "to": args.to.lower(),
         "value": args.value,
+        # Transport-only; not part of the signed payload (build_payload reads
+        # the wire fields by name, never this key).
+        "confirm_timeout": args.confirm_timeout,
         "data": "0x",
     }
     want_init_len = INIT_CODE_LEN if args.deploy else 0
@@ -226,7 +236,14 @@ def main() -> int:
         print(f"    sender = 0x{sender.hex()}")
 
         payload = build_payload(sender, req)
-        hid.timeout_s = 45.0  # generous slack for keygen + FI double-sign
+        # 45 s fits an `e2e-test` image, where confirm() is short-circuited. On
+        # a REAL trusted-UI build the device now blocks on the physical confirm
+        # while a human reads the pages, so the window has to be sized to how
+        # the thing is actually operated, not to the crypto. --confirm-timeout
+        # sets it; the default stays 45 s so automated runs fail fast.
+        hid.timeout_s = float(req.get("confirm_timeout") or 45.0)
+        if hid.timeout_s > 45.0:
+            print(f"    (waiting up to {hid.timeout_s:.0f}s — confirm on the DEVICE)")
         print(f"\n==> INS 0x30 SIGN_USEROP — chain {req['chain_id']}, flags 0x{req['flags']:08x}, "
               f"nonce {req['nonce']}, {len(payload)} B payload, "
               f"{(len(payload) + 254) // 255} chained APDU(s)")
@@ -283,6 +300,9 @@ def main() -> int:
         # UserOp must reuse these fields byte-for-byte; the wallet re-hashes them
         # (PQSmartWallet.sphincsDigest), so any drift fails signature validation.
         rec = dict(req)
+        # Transport-only knob; keep it out of the signed-request record, which
+        # fork_submit_userop.py replays field-for-field.
+        rec.pop("confirm_timeout", None)
         rec.update({
             "sender": "0x" + sender.hex(),
             "entryPoint": "0x" + ENTRY_POINT_V06.hex(),
