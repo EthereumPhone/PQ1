@@ -1,15 +1,18 @@
-# CERTIFIED CONE FILE LIST -- every file the 47 gate roots transitively require.
+# CERTIFIED CONE FILE LIST -- every file the 51 gate roots transitively require.
 # Enforced by PHASE 1h (tools/stmt_coverage.py): a file ENTERING or LEAVING the cone is
-# a fatal, human-visible delta.  Without this the coverage check would silently absorb a
+# a fatal, human-visible delta. Without this the coverage check would silently absorb a
 # new cone file by enumerating whatever it found that day.
-# 56 files = 47 roots + 9 transitively required.
-# (C10BoundedGrind root plus C10Counter/C10Bytes dependencies added 2026-09-21.)
+# 60 files = 51 roots + 9 transitively required.
+# 2026-09-21 integration: surface-count roots plus the C10BoundedGrind root and
+# C10Counter/C10Bytes dependencies; roots include the four base roots.
 # (GprocTCollNamed.ec added 2026-09-14 -- the deployed headline with the encoding-collision term at +C.)
 # (TCollResEnum.ec, BadEncSplit.ec, BadEncToTColl.ec, BadEncStep4.ec added 2026-09-14 --
 #  the T_COLL_RES_ENUM chain, promoted from experiments/wots-badenc/{tcoll,red}.)
 # (GprocWotsNamed.ec added 2026-09-01 -- the deployed headline with the WOTS leg named.)
 # (WotsLegCharged.ec added 2026-09-01 -- the deployed WOTS leg, charged.)
 # (BadEncCountermodel.ec added 2026-08-31 -- promoted from experiments/wots-badenc.)
+# (VecDP/CountDS/C10SurfaceKernel/C10Surface added 2026-09-21 -- the constant-sum
+#  surface count, promoted from experiments/wots-badenc/count.)
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -32,6 +35,9 @@ cdrafts-split/C10DeployedGeometry.ec
 cdrafts-split/C10DeployedInstance.ec
 cdrafts-split/C10DeployedScope.ec
 cdrafts-split/C10SpecControls.ec
+cdrafts-split/C10Surface.ec
+cdrafts-split/C10SurfaceKernel.ec
+cdrafts-split/CountDS.ec
 cdrafts-split/DarkSide.ec
 cdrafts-split/DarkSideC10.ec
 cdrafts-split/FORS_C.ec
@@ -57,6 +63,7 @@ cdrafts-split/SphincsC10CapstoneCharged.ec
 cdrafts-split/SphincsC10CapstoneWired.ec
 cdrafts-split/SphincsC10Content.ec
 cdrafts-split/TCollResEnum.ec
+cdrafts-split/VecDP.ec
 cdrafts-split/WOTS_C_Interactive.ec
 cdrafts-split/WOTS_C_Multi.ec
 cdrafts-split/WOTS_C_Real.ec

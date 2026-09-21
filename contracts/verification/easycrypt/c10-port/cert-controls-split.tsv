@@ -138,3 +138,20 @@ scratch/_scope_neg_op_GprocWotsNamed.ec	MUST-FAIL	unknown variable or constant: 
 scratch/C10CounterWrongCardinality.ec	MUST-FAIL	cannot save an incomplete proof
 scratch/C10BytesWrongPadding.ec	MUST-FAIL	cannot save an incomplete proof
 scratch/C10GrindSkip.ec	MUST-FAIL	cannot prove goal (strict)
+# --- surface-count controls, promoted 2026-09-21 alongside cdrafts-split/{VecDP,CountDS,
+# --- C10SurfaceKernel,C10Surface}.ec.  Reasons OBSERVED under the pinned image, not assumed.
+# KctlC: complement symmetry d |-> 7-d maps sum 205 to itself.  KctlE: small-scale true value 0.
+# KctlD/CtlSum204/CtlLen42/CtlVal each perturb one input (steps, target sum, word length, value).
+#
+# KctlA and KctlB are DELIBERATELY NOT REGISTERED.  Both fail -- but with
+# `anomaly: Stack overflow`, not a proof failure, at full 43/205 scale (observed today AND in
+# the original 2026-08-14 receipt: WALL_MS 42763/41990).  A stack overflow does not
+# DISCRIMINATE: it would occur just the same if count_ds were broken into computing garbage,
+# so registering it would buy a control that fails for a reason unrelated to the property.
+# CtlVal perturbs the same value and fails cleanly, so the property is covered.
+experiments/wots-badenc/count/controls/KctlC.ec	MUST-PASS	-
+experiments/wots-badenc/count/controls/KctlE.ec	MUST-PASS	-
+experiments/wots-badenc/count/controls/KctlD.ec	MUST-FAIL	[by]: cannot close goals
+experiments/wots-badenc/count/controls/CtlSum204.ec	MUST-FAIL	[by]: cannot close goals
+experiments/wots-badenc/count/controls/CtlLen42.ec	MUST-FAIL	[by]: cannot close goals
+experiments/wots-badenc/count/controls/CtlVal.ec	MUST-FAIL	[by]: cannot close goals

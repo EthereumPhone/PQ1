@@ -1367,7 +1367,24 @@
 # isolation/linkage and exact taint/margin counts. Add full dependency replay,
 # checked immutable toolchain and pin-alias/EOF controls. Fresh full replay
 # required for this identity; prior 45-file receipts do not certify it.
-split	f6e0baf0e5966293fbcf2aace729c577
+# 2026-09-21: PROMOTE the constant-sum surface count into the perimeter.
+# experiments/wots-badenc/count/{VecDP,CountDS,C10SurfaceKernel,C10Surface}.ec MOVED (not
+# copied) into cdrafts-split/, per the 2026-08-19 PTgtsPin precedent, because two cone
+# members -- C10DeployedScope.ec:344 and GprocTCollNamed.ec:56 -- lean on a constant that
+# lived in an ungated directory.  Required by nothing, so they enter the cone as roots.
+#   roots 46 -> 50 | cone 53 -> 57 | EXPECT_STMTS 1082 -> 1120 | EXPECT_PINS 1166 -> 1220
+#   census 1677 -> 1693, all 16 additions defined-op, LEDGER UNCHANGED AT 241 -- this
+#   promotion adds no assumption of any kind.
+#   EXPECT_CTLS 49 -> 55: six of the experiment's eight controls registered.  KctlA/KctlB
+#   are deliberately NOT registered -- they fail by `anomaly: Stack overflow`, not by proof
+#   (observed today AND in the original 2026-08-14 receipt), so their failure does not
+#   discriminate: it would occur just the same if count_ds computed garbage.  CtlVal covers
+#   the same perturbation and fails cleanly via count_ds_kernel.
+# Also folded in: GprocTCollNamed.ec:56 no longer calls 2^114.0941 machine-checked (the
+# integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
+# cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
+#
+split	25a44da326139fa04dedb005f3ff58cf
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1380,3 +1397,7 @@ fork	9c2d21280c84d52c30b22111151f1135
 # with regression controls for missing operator pins hidden by aliases.
 # Proof sources, statements, pins and cryptographic assumptions are unchanged.
 # A complete fresh pinned-image replay is required for this input identity.
+
+# 2026-09-21 combined integration: preserve master e6ac316e surface-count promotion
+# and concrete counter/byte/search work from 27307116. Cone60, roots51, pins1276,
+# statements1154, controls58. A fresh full replay is required on this union.

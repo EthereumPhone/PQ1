@@ -132,7 +132,7 @@ class ContractTests(unittest.TestCase):
 
     def test_targets_cover_pinned_dependencies_in_order(self):
         targets = gate.targets()
-        self.assertEqual(len(targets), 56)
+        self.assertEqual(len(targets), 60)
         self.assertEqual(set(targets), set(gate.rows('cert-cone-files-split.tsv')))
         self.assertIn('base-c10-split/HashAddresses.eca', targets)
         for i, p in enumerate(targets):
