@@ -52,6 +52,7 @@ import json
 import os
 import struct
 import sys
+import select
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -316,6 +317,59 @@ class UnitReport:
 # ---------------------------------------------------------------------------
 
 
+def _find_hidraw_node(vid: int, pid: int) -> str | None:
+    """The `/dev/hidrawN` node for `vid:pid`, or None.
+
+    Reads the ids out of sysfs rather than shelling out, so it works on a bare
+    fixture image with no extra tooling.
+    """
+    for entry in sorted(Path("/sys/class/hidraw").glob("hidraw*")):
+        try:
+            uevent = (entry / "device/uevent").read_text()
+        except OSError:
+            continue
+        # HID_ID looks like "3:0000109:00007051" — bus:vendor:product, hex.
+        for line in uevent.splitlines():
+            if not line.startswith("HID_ID="):
+                continue
+            parts = line.split("=", 1)[1].split(":")
+            if len(parts) == 3:
+                try:
+                    if int(parts[1], 16) == vid and int(parts[2], 16) == pid:
+                        return f"/dev/{entry.name}"
+                except ValueError:
+                    pass
+    return None
+
+
+class HidRawDevice:
+    """Minimal hidapi-compatible wrapper over a `/dev/hidrawN` node.
+
+    Implements only what `ProdtestTransport` calls — `write`, `read` with a
+    millisecond timeout, and `close` — and matches hidapi's semantics: the
+    caller supplies the leading report-ID byte on write, and read returns the
+    report without it. A timeout returns empty, which is what the transport's
+    own timeout check expects.
+    """
+
+    def __init__(self, path: str) -> None:
+        self.fd = os.open(path, os.O_RDWR)
+        self.path = path
+
+    def write(self, data: bytes) -> int:
+        return os.write(self.fd, data)
+
+    def read(self, size: int, timeout_ms: int = 0) -> bytes:
+        timeout_s = (timeout_ms / 1000.0) if timeout_ms else None
+        ready, _, _ = select.select([self.fd], [], [], timeout_s)
+        if not ready:
+            return b""
+        return os.read(self.fd, size)
+
+    def close(self) -> None:
+        os.close(self.fd)
+
+
 class ProdtestTransport:
     """USB-HID APDU-over-Ledger-framing transport.
 
@@ -347,8 +401,25 @@ class ProdtestTransport:
         try:
             import hid  # type: ignore
         except ImportError:
-            print("ERROR: hidapi not installed. `pip install hid`.", file=sys.stderr)
-            raise
+            # Fall back to the kernel's hidraw. A factory fixture should not
+            # need a pip install to talk to a USB HID device, and on Linux
+            # hidraw is always present — so this is the preferred path there,
+            # not a degraded one. `HidRawDevice` implements exactly the three
+            # hidapi calls this class uses.
+            node = _find_hidraw_node(self.vid, self.pid)
+            if node is None:
+                print(
+                    "ERROR: hidapi not installed and no matching hidraw node "
+                    f"for {self.vid:#06x}:{self.pid:#06x}. Either `pip install "
+                    "hid` or check the device is connected and readable "
+                    "(a udev rule may be needed).",
+                    file=sys.stderr,
+                )
+                raise
+            self._dev = HidRawDevice(node)
+            if self.verbose:
+                print(f"[hid] opened {node} via hidraw (hidapi not installed)")
+            return
         self._dev = hid.device()
         self._dev.open(self.vid, self.pid)
         if self.verbose:
