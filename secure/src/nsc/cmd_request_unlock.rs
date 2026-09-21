@@ -34,6 +34,23 @@ pub(super) unsafe fn run() -> u32 {
     // user is typing the PIN or while we are deriving master_secret.
     let _busy = super::HandlerGuard::enter();
 
+    // Arm a fresh input window before prompting (#713). `enter_pin` samples
+    // `timeout::is_idle()` BEFORE waiting and only calls `reset_activity()`
+    // after a button event, so entering it with an already-expired deadline —
+    // exactly the state after a lock or an idle timeout — makes it return
+    // `IdleWipe` instantly, with the PIN screen flashing up and vanishing. The
+    // device then could not be unlocked over USB at all; only a power cycle
+    // recovered it.
+    //
+    // This does not weaken "NS does not control the inactivity timer": that
+    // invariant exists so NS cannot keep an UNLOCKED session alive by pinging.
+    // Here the device is LOCKED with no secret loaded, and the window being
+    // armed is for a human to type on the trusted UI. The PendSV re-unlock
+    // loop already does exactly this on every pass (`main.rs`, immediately
+    // before its own `enter_pin()` call).
+    #[cfg(feature = "stm32u585")]
+    crate::timeout::reset_activity();
+
     let mut pin = match enter_pin() {
         PinEntryResult::Pin(p) => p,
         PinEntryResult::Cancelled | PinEntryResult::Mismatch => {

@@ -1726,3 +1726,61 @@ fn negative_nsc_status_codes_pin() {
         }
     }
 }
+
+
+/// A verdictless runaway must not be able to spend the user's PIN budget, and
+/// a locked device must still be unlockable over USB.
+///
+/// Both were observed on pq1 silicon 2026-09-21 with a real trusted-UI image:
+/// the operator entered the CORRECT PIN and the device displayed "PIN locked /
+/// factory reset" (#715), and an explicit `CMD_LOCK` left the device
+/// unrecoverable without a power cycle (#713).
+#[test]
+fn positive_reunlock_cannot_spend_the_pin_budget_on_verdictless_failures() {
+    // Local to this test: the PendSV loop lives in main.rs, which this file
+    // does not otherwise pin.
+    const MAIN_SRC: &str = include_str!("main.rs");
+    // The runaway cap must exist and be counted separately from the pass cap.
+    assert!(
+        MAIN_SRC.contains("const PENDSV_MAX_NO_VERDICT_FAILURES: u32 = 3;"),
+        "verdictless failures need their own, smaller cap"
+    );
+    // ...and be provably below the budget, or it cannot protect it.
+    assert!(
+        MAIN_SRC.contains("PENDSV_MAX_NO_VERDICT_FAILURES < sphincs_tz_shared::MAX_ATTEMPTS as u32"),
+        "the cap must be compile-time proven below MAX_ATTEMPTS"
+    );
+    // A real PIN verdict must RESET the runaway counter, otherwise a user
+    // making a few genuine mistakes would trip the runaway guard instead of
+    // the lockout that is supposed to handle them.
+    assert!(
+        MAIN_SRC.contains("no_verdict = 0;"),
+        "a chip-side PIN verdict must reset the verdictless counter"
+    );
+    assert!(
+        MAIN_SRC.contains("no_verdict >= PENDSV_MAX_NO_VERDICT_FAILURES"),
+        "the loop must give up once the verdictless cap is reached"
+    );
+    // The lockout screen must not claim a wipe that this path never performs;
+    // the real wipe path prints its own WIPING / WALLET WIPED screens.
+    assert!(
+        !MAIN_SRC.contains(r#"ui::show_status("PIN locked", "factory reset")"#),
+        "this arm does not wipe — it must not claim a factory reset (#715)"
+    );
+}
+
+#[test]
+fn positive_request_unlock_arms_the_input_window_before_prompting() {
+    // `enter_pin` samples is_idle() BEFORE waiting and only calls
+    // reset_activity() after a button event, so prompting with an expired
+    // deadline returns IdleWipe instantly and the device cannot be unlocked
+    // over USB at all (#713).
+    let idx_reset = REQUEST_UNLOCK_SRC.find("crate::timeout::reset_activity();");
+    let idx_enter = REQUEST_UNLOCK_SRC.find("match enter_pin()");
+    assert!(idx_reset.is_some(), "request_unlock must arm the input window");
+    assert!(idx_enter.is_some(), "request_unlock must prompt for a PIN");
+    assert!(
+        idx_reset < idx_enter,
+        "the window must be armed BEFORE enter_pin(), not after"
+    );
+}

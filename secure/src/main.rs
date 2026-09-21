@@ -3961,8 +3961,13 @@ fn main() -> ! {
                         secure_log!("[S] PIN verified but forced-attempt arm failed closed");
                     }
                     Err(secure_element::UnlockError::PinLocked) => {
-                        ui::show_status("PIN locked", "factory reset");
-                        secure_log!("[S] PIN locked out");
+                        // Same correction as the PendSV arm (#715): this is
+                        // also reached as a short-circuit when the counter is
+                        // already at MAX, where nothing was wiped. The real
+                        // wipe path prints its own WIPING / WALLET WIPED
+                        // screens, so a reset claimed here would be false.
+                        ui::show_status("PIN locked", "power cycle");
+                        secure_log!("[S] PIN locked out (no wipe performed on this path)");
                         break;
                     }
                     Err(secure_element::UnlockError::PinIncorrect) => {
@@ -4201,6 +4206,30 @@ static mut PENDSV_IN_FLIGHT: u32 = 0;
 #[cfg(all(not(test), feature = "stm32u585"))]
 const PENDSV_MAX_REUNLOCK_ATTEMPTS: u32 = 12;
 
+/// Consecutive re-unlock passes that produced **no PIN verdict** before this
+/// loop gives up — transport/session/FI-gate failures, not wrong PINs.
+///
+/// WHY THIS IS SEPARATE FROM THE CAP ABOVE, AND MUCH SMALLER: the `Err(_)` arm
+/// burns a page-124 attempt even though the PIN was never judged (fail-closed,
+/// so an attacker cannot probe for free by inducing errors). With only the
+/// 12-pass cap — deliberately set ABOVE `MAX_ATTEMPTS` so it never preempts a
+/// genuine wrong-PIN lockout — a repeating fault therefore consumed the user's
+/// entire 10-attempt budget and tripped the lockout with no user error at all.
+///
+/// Observed on pq1 silicon 2026-09-21 (#715): the operator entered the CORRECT
+/// PIN once and was shown "PIN locked". Counting *verdictless* failures
+/// separately keeps both properties: a real wrong-PIN sequence still runs to
+/// the SE/page-124 lockout untouched, while a runaway stops after three burns
+/// and leaves the budget intact.
+#[cfg(all(not(test), feature = "stm32u585"))]
+const PENDSV_MAX_NO_VERDICT_FAILURES: u32 = 3;
+
+#[cfg(all(not(test), feature = "stm32u585"))]
+const _: () = assert!(
+    PENDSV_MAX_NO_VERDICT_FAILURES < sphincs_tz_shared::MAX_ATTEMPTS as u32,
+    "a verdictless runaway must give up well before it can exhaust the PIN budget"
+);
+
 /// PendSV handler — runs the PIN re-unlock flow after an idle wipe.
 ///
 /// Triggered by SysTick when it detects idle timeout. Runs at the lowest
@@ -4235,6 +4264,8 @@ fn PendSV() {
         use zeroize::Zeroize;
 
         let mut attempts: u32 = 0;
+        // Consecutive failures that never reached a chip-side PIN compare.
+        let mut no_verdict: u32 = 0;
 
         loop {
             attempts += 1;
@@ -4288,11 +4319,22 @@ fn PendSV() {
                     secure_log!("[S] PIN verified but forced-attempt arm failed closed");
                 }
                 Err(secure_element::UnlockError::PinLocked) => {
-                    ui::show_status("PIN locked", "factory reset");
-                    secure_log!("[S] PIN locked out");
+                    // Do NOT say "factory reset" here. This arm is also
+                    // reached as a pure short-circuit when the counter is
+                    // already at MAX, in which case nothing was wiped — and
+                    // the real wipe path prints its own "WIPING" /
+                    // "WALLET WIPED" screens. Claiming a reset that did not
+                    // happen sends the user hunting for a seed phrase they
+                    // did not need (#715).
+                    ui::show_status("PIN locked", "power cycle");
+                    secure_log!("[S] PIN locked out (no wipe performed on this path)");
                     break;
                 }
                 Err(secure_element::UnlockError::PinIncorrect) => {
+                    // A real verdict: the chip judged the PIN. This is what
+                    // the attempt budget is FOR, so the runaway counter
+                    // resets.
+                    no_verdict = 0;
                     ui::show_status("Wrong PIN", "try again");
                     secure_log!("[S] Wrong PIN on re-unlock");
                 }
@@ -4302,6 +4344,19 @@ fn PendSV() {
                     // gate). The page-124 pre-commit attempt is still
                     // burned (fail-closed), but the PIN was never judged
                     // — don't render it as "Wrong PIN".
+                    no_verdict += 1;
+                    if no_verdict >= PENDSV_MAX_NO_VERDICT_FAILURES {
+                        // Stop before this fault eats the PIN budget. The
+                        // device stays locked and NS stays scheduled, so USB
+                        // remains alive and the state is diagnosable.
+                        ui::show_status("SE fault", "power cycle");
+                        secure_log!(
+                            "[S] Re-unlock abandoned after {} verdictless failures — \
+                             budget preserved",
+                            no_verdict
+                        );
+                        break;
+                    }
                     ui::show_status("Unlock error", "try again");
                     secure_log!("[S] Re-unlock failed: internal/SE error (not a PIN mismatch)");
                 }
