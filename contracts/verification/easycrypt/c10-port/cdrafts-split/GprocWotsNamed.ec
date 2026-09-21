@@ -111,9 +111,10 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
          * `c <= p_tgts`                     -- a PARAMETER CHOICE (the SM-DT-TCR game
            must be given at least as many targets as there are instances); the tree
            classifies it as not-a-theorem-and-not-meant-to-be (C10DeployedGeometry.ec:468).
-         * `size (emb_in witness) = 8*n + c10_r` -- a genuine CONSTRAINT ON A FREE OP.
-           `emb_in` is abstract-op:f718c0661391; nothing in the closure pins its width.
-           This is the artifact's least visible real assumption. *)
+         * `size (emb_in witness) = 8*n + c10_r` -- retained for compatibility.
+           UPDATE 2026-09-21: emb_in is now the concrete compact encoder;
+           c10_emb_in_width proves this binder without an extra premise. The
+           earlier description as a constraint on a free op is historical. *)
     size (emb_in witness) = 8 * n + c10_r =>   (* NODE || u32 counter *)
     Pr[EUFCMA_C10(F).main() @ &m : res]
       <= `|  Pr[SKG_PRF.PRF(R_SKGPRF_EUFCMA_C(F), SKG_PRF.O_PRF_Default).main(false) @ &m : res]

@@ -472,6 +472,14 @@ qed.
    not about the bound.  Quote _AT_DEPLOYED_PARAMS for strength; quote this one only when
    the point being made is about non-degeneracy, and say so.
 
+   UPDATE 2026-09-21: the counter/rank/injectivity warnings in the following
+   historical paragraphs describe the former abstract model. The actual WOTS
+   consumer now uses the full u32 domain in numeric order. C10DeployedInstance
+   proves c10_counter_cardinality, c10_counter_rank, c10_emb_in_pinned and
+   c10_emb_in_injective without extra premises; C10Bytes supplies the physical
+   byte adapter. The headline's encoder binder remains for compatibility. This
+   does not establish the full Rust/hash/predicate refinement or a numeric bound.
+
    AND WHAT IT DOES *NOT* BUY -- CORRECTED 2026-08-29, and the correction is this tree's
    own, from 2026-08-03.  An earlier draft said the pin moves the assumption to "THIS
    SPECIFIC ENCODER".  IT DOES NOT.  C10DeployedCapstone.ec:150-156 and

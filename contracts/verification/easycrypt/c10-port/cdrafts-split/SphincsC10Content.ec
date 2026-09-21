@@ -363,9 +363,11 @@ qed.
    NON-DEGENERACY, both axes the task names:
      * P (the interpretation of predC) is NOT identically false;
      * H (the interpretation of ThC)   is NOT constant.
-   The counter-distinctness hypothesis `c0 <> c1` is what the C10 32-bit counter
-   space supplies (2^32 counters); it cannot be PROVED here because `type cntr`
-   is abstract (only finiteness is carried, via STCRC_WC.G.CntrFT). *)
+   UPDATE 2026-09-21: the counter domain is now the full u32 type, with its
+   cardinality proved in C10Counter and C10DeployedInstance. Distinct counters
+   exist in that domain. This lemma retains `c0 <> c1` for the two arbitrary
+   counters supplied by its caller; the former abstract-domain limitation is
+   historical. *)
 lemma MODEL_N1_N2_nondegenerate (c0 c1 : cntr) :
   c0 <> c1 =>
   (* ROUTE (D): H has ThC's shape -- NODE in, WIDE digest out -- and P gates the

@@ -79,7 +79,7 @@
 # first assumption REMOVED, as opposed to relocated, in this arc.  The only ADDED rows
 # were `module` (BadEncFlag, Game4_WOTSTWES_BadEnc, Game4_WOTSTWES_Alt,
 # O_Game34_WOTSTWES_AltX and two anonymous A), which are MEANING rows, not ledger.
-### CONE_FILES=56
+### CONE_FILES=60
 #   base-c10-split/BinaryTrees.ec
 #   base-c10-split/FL_SL_XMSS_MT_ES.ec
 #   base-c10-split/FORS_ES.ec
@@ -102,6 +102,9 @@
 #   cdrafts-split/C10DeployedInstance.ec
 #   cdrafts-split/C10DeployedScope.ec
 #   cdrafts-split/C10SpecControls.ec
+#   cdrafts-split/C10Surface.ec
+#   cdrafts-split/C10SurfaceKernel.ec
+#   cdrafts-split/CountDS.ec
 #   cdrafts-split/DarkSide.ec
 #   cdrafts-split/DarkSideC10.ec
 #   cdrafts-split/FORS_C.ec
@@ -127,6 +130,7 @@
 #   cdrafts-split/SphincsC10CapstoneWired.ec
 #   cdrafts-split/SphincsC10Content.ec
 #   cdrafts-split/TCollResEnum.ec
+#   cdrafts-split/VecDP.ec
 #   cdrafts-split/WOTS_C_Interactive.ec
 #   cdrafts-split/WOTS_C_Multi.ec
 #   cdrafts-split/WOTS_C_Real.ec

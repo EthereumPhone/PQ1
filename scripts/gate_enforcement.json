@@ -1643,7 +1643,7 @@
       ],
       "runs_in": "nightly.yml",
       "enforcement": "nightly",
-      "note": "Full current split: source binding and Rust transcript host test, immutable image and observed tool identities, complete 56-file dependency replay through both drivers, require/negative controls and split census/pin/taint checks. Conditional model evidence, not complete firmware refinement. #100/#670/#683/#686, 2026-09-21.",
+      "note": "Full current split: source binding and Rust transcript host test, immutable image and observed tool identities, complete 60-file dependency replay through both drivers, require/negative controls and split census/pin/taint checks. Conditional model evidence, not complete firmware refinement. #100/#670/#683/#686, 2026-09-21.",
       "required_context": {
         "step": {
           "name": "verify-easycrypt-split (pinned toolchain, complete dependency closure)",
