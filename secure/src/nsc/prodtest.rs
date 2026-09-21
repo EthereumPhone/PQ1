@@ -22,9 +22,10 @@
 //!   user secrets leave the chip via these commands.
 //!
 //! - **Supported profile**: GET_ID, DISPLAY_PATTERN, SAES, TRNG, the
-//!   two SE handshakes, USB loopback, and buttons are required. BHK
-//!   and FLASH_RW remain explicit unsupported-capability probes; they
-//!   return `InternalError` and never mutate persistent state.
+//!   two SE handshakes, USB loopback, buttons, and (on `pq1`) the RGB
+//!   LED test are required. BHK and FLASH_RW remain explicit
+//!   unsupported-capability probes; they return `InternalError` and
+//!   never mutate persistent state.
 
 #![cfg(feature = "prodtest")]
 
@@ -40,7 +41,7 @@ use super::GatewayArgs;
 /// Prodtest firmware version. Bumped on every prodtest behavioral
 /// change so the factory's traceability DB can correlate per-unit
 /// diagnostic data with the firmware version that produced it.
-const PRODTEST_FW_VERSION: u32 = 3;
+const PRODTEST_FW_VERSION: u32 = 4;
 
 /// STM32U585 chip UID, 96 bits at `0x0BFA_0700` per RM0456 §28.10.
 const STM32_UID_ADDR: u32 = 0x0BFA_0700;
@@ -715,6 +716,108 @@ pub(super) unsafe fn cmd_button_test_run(args: &GatewayArgs) -> u32 {
         secure_log!("[PRODTEST] button_test: step_status=0x{:02x}", step_status);
         NscStatus::InternalError as u32
     }
+}
+
+// ---------------------------------------------------------------------------
+// CMD_PRODTEST_RGB_TEST (110) — Phase D
+// ---------------------------------------------------------------------------
+//
+// Lights the `pq1` board's 9 RGB LEDs via the AW21036 on I2C2 and hands the
+// fixture everything needed to localize a dark board in one shot: a bus scan
+// (with the AW99703 backlight at 0x36 as the bus's positive control and the
+// AW21036's broadcast address 0x1C as a second witness for the part), both
+// readable identity registers, and an ACK tally.
+//
+// Why the output is written even on failure: "the LEDs are dark" has at least
+// six causes (bus pins, pull-ups, chip absent, AD strap, RGB_EN, current
+// registers), and a bare status byte distinguishes none of them. The handler
+// therefore always writes the diagnostic and reports health in the status.
+//
+// Why no pass/fail on the light itself: the firmware cannot see its own LEDs.
+// The chip ACKing every write is the machine-checkable half; the colour and
+// the per-LED coverage are the operator's half, which is why the command takes
+// (r, g, b) rather than running a fixed pattern.
+
+const RGB_TEST_IN_LEN: usize = sphincs_tz_shared::PRODTEST_RGB_IN_LEN;
+const RGB_TEST_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_RGB_OUT_LEN;
+/// Sentinel for "the addressing phase was not ACKed", distinct from a chip
+/// that genuinely answers `0x00`.
+const RGB_READ_FAILED: u8 = 0xFF;
+
+// Wire contract, asserted at compile time rather than in this file's
+// `#[cfg(test)]` module: that module is inside `#![cfg(feature = "prodtest")]`
+// and `prodtest` only builds for `thumbv8m`, so nothing in it ever runs
+// host-side. These asserts DO fire on every prodtest firmware build.
+// The fixture decodes `out[16]`/`out[17]` by number, so the sentinel must not
+// collide with either identity value or a dead bus would read as a live chip.
+const _: () = assert!(RGB_TEST_OUT_LEN == 16 + 6 + 2, "scan + 6 fields + 2 reserved");
+const _: () = assert!(RGB_TEST_IN_LEN == 6, "[r, g, b, gcc, en, reserved]");
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+const _: () = assert!(RGB_READ_FAILED != crate::hw::aw21036::VER_EXPECTED);
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+const _: () = assert!(RGB_READ_FAILED != crate::hw::aw21036::RESET_ID_EXPECTED);
+
+/// # Safety
+/// CMSE non-secure-entry handler — NS pointer derefs only after
+/// `validate_ns_read_ptr` / `validate_ns_write_ptr`, and the NS input is
+/// copied to the S-stack before use (TOCTOU).
+pub(super) unsafe fn cmd_rgb_test_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_read_ptr(args.arg0, RGB_TEST_IN_LEN)
+        || !validate_ns_write_ptr(args.arg1, RGB_TEST_OUT_LEN)
+    {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    // Copy the NS request to the S-stack before parsing it (invariant #4).
+    let mut req = [0u8; RGB_TEST_IN_LEN];
+    for (i, byte) in req.iter_mut().enumerate() {
+        // SAFETY: arg0 was validated for RGB_TEST_IN_LEN bytes above.
+        *byte = unsafe { core::ptr::read_volatile((args.arg0 as *const u8).add(i)) };
+    }
+
+    let mut out = [0u8; RGB_TEST_OUT_LEN];
+    let healthy = rgb_test_fill(&req, &mut out);
+
+    let out_ptr = args.arg1 as *mut u8;
+    for (i, byte) in out.iter().enumerate() {
+        // SAFETY: arg1 was validated for RGB_TEST_OUT_LEN bytes above.
+        unsafe { core::ptr::write_volatile(out_ptr.add(i), *byte) };
+    }
+
+    if healthy {
+        NscStatus::Ok as u32
+    } else {
+        NscStatus::InternalError as u32
+    }
+}
+
+/// Run the test and serialise the report. Split out so the wire layout is
+/// exercised by the host tests below without any hardware.
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+fn rgb_test_fill(req: &[u8; RGB_TEST_IN_LEN], out: &mut [u8; RGB_TEST_OUT_LEN]) -> bool {
+    let report = crate::hw::aw21036::light(req[0], req[1], req[2], req[3], req[4] != 0);
+    out[..16].copy_from_slice(&report.scan);
+    out[16] = report.ver.unwrap_or(RGB_READ_FAILED);
+    out[17] = report.reset_id.unwrap_or(RGB_READ_FAILED);
+    out[18] = report.acks_ok;
+    out[19] = report.acks_total;
+    out[20] = u8::from(report.en_level);
+    out[21] = report.gcc;
+    secure_log!(
+        "[PRODTEST] rgb_test: ver=0x{:02x} acks={}/{} en={}",
+        out[16],
+        out[18],
+        out[19],
+        out[20]
+    );
+    report.healthy()
+}
+
+/// Boards with no RGB driver: all-zero output, unhealthy. The `_` bindings keep
+/// the signature identical to the `pq1` arm.
+#[cfg(not(all(feature = "stm32u585", feature = "board-pq1")))]
+fn rgb_test_fill(_req: &[u8; RGB_TEST_IN_LEN], _out: &mut [u8; RGB_TEST_OUT_LEN]) -> bool {
+    false
 }
 
 // ---------------------------------------------------------------------------

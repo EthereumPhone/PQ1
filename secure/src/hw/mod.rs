@@ -166,3 +166,16 @@ pub mod se_i2c_probe;
 /// coverage, so it must never carry secure-element traffic.
 #[cfg(all(feature = "ui-oled-bench", feature = "stm32u585"))]
 pub mod soft_i2c;
+
+/// Bit-banged I2C master for the `pq1` auxiliary bus (I2C2, PB13/PB14) shared
+/// by the two LED-driver ICs. Pin-generic, so the AW21036 and (once merged)
+/// the AW99703 backlight share one transport instead of a copy each.
+/// **LED brightness only** — never secure-element traffic.
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+pub mod soft_i2c_aux;
+
+/// AW21036 RGB LED driver — the `pq1` board's 9 RGB LEDs on channels 1..27.
+/// Self-identifying (`VER` reads `0xA8`), so a failure localizes to the bus,
+/// the part, or the `RGB_EN` line rather than "the LEDs are dark".
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+pub mod aw21036;

@@ -60,7 +60,33 @@ class FakeTransport:
             return runner.STATUS_OK, in_data
         if cmd == runner.CMD_PRODTEST_BUTTON_TEST:
             return runner.STATUS_OK, b"\x00\x00\x00\x00"
+        if cmd == runner.CMD_PRODTEST_RGB_TEST:
+            return runner.STATUS_OK, healthy_rgb_response()
         raise AssertionError(f"unexpected command {cmd}")
+
+
+def rgb_response(
+    present: tuple[int, ...] = (
+        0x1C,
+        0x34,
+        0x36,
+    ),
+    ver: int = 0xA8,
+    reset_id: int = 0x18,
+    acks_ok: int = 58,
+    acks_total: int = 58,
+    en_level: int = 1,
+    gcc: int = 0x28,
+) -> bytes:
+    """Build a CMD_PRODTEST_RGB_TEST response with a given bus population."""
+    scan = bytearray(16)
+    for addr in present:
+        scan[addr // 8] |= 1 << (addr % 8)
+    return bytes(scan) + bytes([ver, reset_id, acks_ok, acks_total, en_level, gcc, 0, 0])
+
+
+def healthy_rgb_response() -> bytes:
+    return rgb_response()
 
 
 class ReversibleProfileTests(unittest.TestCase):
@@ -71,7 +97,7 @@ class ReversibleProfileTests(unittest.TestCase):
         return report
 
     def test_profile_matrix_covers_exact_stable_command_set(self) -> None:
-        self.assertEqual(set(runner.COMMAND_POLICIES), set(range(100, 110)))
+        self.assertEqual(set(runner.COMMAND_POLICIES), set(range(100, 111)))
         unsupported = {
             cmd
             for cmd, (_, policy) in runner.COMMAND_POLICIES.items()
@@ -86,7 +112,7 @@ class ReversibleProfileTests(unittest.TestCase):
         )
         receipt = runner.profile_receipt()
         self.assertEqual(receipt["max_response_data_len"], 254)
-        self.assertEqual(receipt["expected_firmware_version"], 3)
+        self.assertEqual(receipt["expected_firmware_version"], 4)
         self.assertEqual(
             receipt["feature_list_authority"],
             "host_expected_not_device_attested",
@@ -175,7 +201,9 @@ class ReversibleProfileTests(unittest.TestCase):
         report = self.run_profile(tx)
         get_id = next(result for result in report.results if result.cmd == 100)
         self.assertEqual(report.prodtest_fw_version, 1)
-        self.assertIn("expected v3", get_id.detail)
+        self.assertIn(
+            f"expected v{runner.EXPECTED_PRODTEST_FW_VERSION}", get_id.detail
+        )
         self.assertEqual(
             tx.calls,
             [(runner.CMD_PRODTEST_GET_ID, b"", 24)],
@@ -217,6 +245,62 @@ class ReversibleProfileTests(unittest.TestCase):
             self.assertIn("fixture unavailable", receipt["fatal_error"])
             self.assertEqual(receipt["profile"]["commands"][0]["cmd"], 100)
             self.assertEqual(list(Path(temp_dir).glob(".*.tmp")), [])
+
+
+
+
+class RgbTestDecodeTests(unittest.TestCase):
+    """The RGB response exists to localize a dark board, so the decode and the
+    hint selection are tested directly — including the failure shapes, which is
+    the half that actually gets read in the factory."""
+
+    def test_scan_bitmap_round_trips_addresses(self) -> None:
+        for present in ((), (0x08,), (0x34, 0x36), (0x1C, 0x34, 0x36, 0x77)):
+            resp = rgb_response(present=present)
+            self.assertEqual(
+                runner.decode_rgb_scan(resp[: runner.RGB_SCAN_LEN]), sorted(present)
+            )
+
+    def test_healthy_response_passes_and_sends_six_byte_request(self) -> None:
+        tx = FakeTransport()
+        result = runner.test_rgb_test(tx, 0xFF, 0x00, 0x00, label="red")
+        self.assertTrue(result.passed)
+        self.assertIn("ver=0xa8", result.detail)
+        cmd, in_data, out_size = tx.calls[0]
+        self.assertEqual(cmd, runner.CMD_PRODTEST_RGB_TEST)
+        self.assertEqual(out_size, runner.RGB_OUT_LEN)
+        # [r, g, b, gcc, en, reserved] — en defaults to 1 (drive RGB_EN high).
+        self.assertEqual(in_data, bytes([0xFF, 0x00, 0x00, 0x00, 0x01, 0x00]))
+
+    def test_silent_part_on_live_bus_blames_the_part_not_the_bus(self) -> None:
+        # Backlight ACKs, AW21036 does not: bus and pull-ups are proven good.
+        resp = rgb_response(present=(0x36,), ver=0xFF, acks_ok=0)
+        tx = FakeTransport({runner.CMD_PRODTEST_RGB_TEST: (runner.STATUS_OK, resp)})
+        result = runner.test_rgb_test(tx)
+        self.assertFalse(result.passed)
+        self.assertIn("part or AD strap", result.detail)
+
+    def test_dead_bus_blames_the_bus(self) -> None:
+        resp = rgb_response(present=(), ver=0xFF, acks_ok=0)
+        tx = FakeTransport({runner.CMD_PRODTEST_RGB_TEST: (runner.STATUS_OK, resp)})
+        result = runner.test_rgb_test(tx)
+        self.assertFalse(result.passed)
+        self.assertIn("nothing on the bus", result.detail)
+
+    def test_partial_acks_fail_even_with_a_healthy_identity(self) -> None:
+        # The classic "chip is there, writes are dropping" shape: identity reads
+        # fine but the register writes did not all land.
+        resp = rgb_response(acks_ok=57, acks_total=58)
+        tx = FakeTransport({runner.CMD_PRODTEST_RGB_TEST: (runner.STATUS_OK, resp)})
+        result = runner.test_rgb_test(tx)
+        self.assertFalse(result.passed)
+        self.assertIn("acks=57/58", result.detail)
+
+    def test_short_response_fails_without_indexing_past_the_end(self) -> None:
+        tx = FakeTransport({runner.CMD_PRODTEST_RGB_TEST: (runner.STATUS_OK, b"\x00" * 8)})
+        result = runner.test_rgb_test(tx)
+        self.assertFalse(result.passed)
+        self.assertIn("expected 24", result.detail)
 
 
 if __name__ == "__main__":

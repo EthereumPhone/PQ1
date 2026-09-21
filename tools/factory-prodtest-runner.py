@@ -72,11 +72,12 @@ CMD_PRODTEST_OPTIGA_HANDSHAKE = 106
 CMD_PRODTEST_SE050_HANDSHAKE = 107
 CMD_PRODTEST_USB_LOOPBACK = 108
 CMD_PRODTEST_BUTTON_TEST = 109
+CMD_PRODTEST_RGB_TEST = 110
 
 # Shared wire contract. Mirrors
 # `proto/src/lib.rs::PRODTEST_MAX_RESPONSE_DATA_LEN`.
 PRODTEST_MAX_RESPONSE_DATA_LEN = 254
-EXPECTED_PRODTEST_FW_VERSION = 3
+EXPECTED_PRODTEST_FW_VERSION = 4
 
 PROFILE_ID = "pqsigner-prodtest-reversible-v1"
 PROFILE_REQUIRED = "required"
@@ -101,6 +102,11 @@ COMMAND_POLICIES = {
     CMD_PRODTEST_SE050_HANDSHAKE: ("SE050_HANDSHAKE", PROFILE_REQUIRED),
     CMD_PRODTEST_USB_LOOPBACK: ("USB_LOOPBACK", PROFILE_REQUIRED),
     CMD_PRODTEST_BUTTON_TEST: ("BUTTON_TEST", PROFILE_REQUIRED),
+    # Board-conditional: the AW21036 exists on `pq1` and not on `iota2`, so the
+    # shared profile cannot require it. On a pq1 line it is a real acceptance
+    # step (the operator sees the colour); promoting it to PROFILE_REQUIRED
+    # belongs with a PROFILE_ID bump, once pq1 is the only target.
+    CMD_PRODTEST_RGB_TEST: ("RGB_TEST", PROFILE_OPTIONAL),
 }
 
 
@@ -146,6 +152,7 @@ INS_FOR_CMD = {
     CMD_PRODTEST_SE050_HANDSHAKE:   0x87,
     CMD_PRODTEST_USB_LOOPBACK:      0x88,
     CMD_PRODTEST_BUTTON_TEST:       0x89,
+    CMD_PRODTEST_RGB_TEST:          0x8A,
 }
 
 # APDU + HID framing constants. Mirror `proto/src/lib.rs::APDU_CLA_V2`
@@ -727,6 +734,74 @@ def test_button_test(tx: ProdtestTransport) -> TestResult:
     )
 
 
+# RGB_TEST response layout — mirrors `proto/src/lib.rs::CMD_PRODTEST_RGB_TEST`.
+RGB_OUT_LEN = 24
+RGB_SCAN_LEN = 16
+RGB_VER_EXPECTED = 0xA8
+RGB_RESET_ID_EXPECTED = 0x18
+RGB_ADDR = 0x34           # AW21036, AD strapped to GND
+RGB_BROADCAST_ADDR = 0x1C  # answered by the AW21036 regardless of the strap
+BACKLIGHT_ADDR = 0x36      # AW99703 on the same bus — the bus's positive control
+
+
+def decode_rgb_scan(scan: bytes) -> list[int]:
+    """7-bit addresses present in the bitmap (bit a%8 of byte a//8)."""
+    return [a for a in range(128) if scan[a // 8] & (1 << (a % 8))]
+
+
+def test_rgb_test(
+    tx: ProdtestTransport,
+    r: int = 0,
+    g: int = 0,
+    b: int = 0,
+    gcc: int = 0,
+    en: int = 1,
+    label: str = "",
+) -> TestResult:
+    """Light the 9 RGB LEDs and interpret the driver's self-report.
+
+    The detail string is written to localize a dark board: if the AW21036 did
+    not answer but the AW99703 backlight at 0x36 did, the bus is fine and the
+    fault is the part or its strap; if neither answered, the fault is the bus.
+    """
+    name = f"RGB_TEST({label or f'{r:02x}{g:02x}{b:02x}'})"
+    in_data = bytes([r & 0xFF, g & 0xFF, b & 0xFF, gcc & 0xFF, 1 if en else 0, 0])
+    status, resp = tx.send_cmd(CMD_PRODTEST_RGB_TEST, in_data, out_size=RGB_OUT_LEN)
+    if len(resp) != RGB_OUT_LEN:
+        return TestResult(
+            name=name,
+            cmd=CMD_PRODTEST_RGB_TEST,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes (expected {RGB_OUT_LEN})",
+        )
+    seen = decode_rgb_scan(resp[:RGB_SCAN_LEN])
+    ver, reset_id, acks_ok, acks_total, en_level, gcc_used = resp[16:22]
+    parts = [
+        f"ver=0x{ver:02x}",
+        f"id=0x{reset_id:02x}",
+        f"acks={acks_ok}/{acks_total}",
+        f"en={en_level}",
+        f"gcc=0x{gcc_used:02x}",
+        "bus=[" + " ".join(f"0x{a:02x}" for a in seen) + "]",
+    ]
+    if ver != RGB_VER_EXPECTED:
+        if BACKLIGHT_ADDR in seen and RGB_ADDR not in seen:
+            parts.append("HINT: bus OK (backlight answered), AW21036 silent — part or AD strap")
+        elif not seen:
+            parts.append("HINT: nothing on the bus — I2C2 pins, pull-ups or rail")
+        else:
+            parts.append("HINT: part addressable but identity wrong — wrong chip or bad read")
+    return TestResult(
+        name=name,
+        cmd=CMD_PRODTEST_RGB_TEST,
+        passed=(status == STATUS_OK and ver == RGB_VER_EXPECTED and acks_ok == acks_total),
+        status_code=status,
+        detail=", ".join(parts),
+        raw_response=resp,
+    )
+
+
 def test_trng_sample(
     tx: ProdtestTransport, n: int = PRODTEST_MAX_RESPONSE_DATA_LEN
 ) -> TestResult:
@@ -794,6 +869,18 @@ def run_all_tests(tx: ProdtestTransport, report: UnitReport) -> None:
     # operator must be present and pressing buttons; failures from
     # the prior automated tests are easier to recover from without
     # involving a human).
+    # RGB LEDs: a colour sweep the operator (or the fixture's camera) watches.
+    # Held long enough to be seen, and left dark at the end so the next unit
+    # starts from an unlit board.
+    for r, g, b, label in (
+        (0xFF, 0x00, 0x00, "red"),
+        (0x00, 0xFF, 0x00, "green"),
+        (0x00, 0x00, 0xFF, "blue"),
+        (0xFF, 0xFF, 0xFF, "white"),
+    ):
+        report.results.append(test_rgb_test(tx, r, g, b, label=label))
+        time.sleep(1.0)
+    report.results.append(test_rgb_test(tx, 0, 0, 0, label="off"))
     report.results.append(test_button_test(tx))
 
 

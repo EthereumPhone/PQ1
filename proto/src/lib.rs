@@ -721,6 +721,48 @@ pub const CMD_PRODTEST_USB_LOOPBACK: u32 = 108;
 /// (1=timeout, 2=wrong button) so the fixture's error table is compact.
 pub const CMD_PRODTEST_BUTTON_TEST: u32 = 109;
 
+/// CMD_PRODTEST_RGB_TEST — light the `pq1` board's 9 RGB LEDs through the
+/// AW21036 on I²C2 (`0x34`) and report what the part said back. Catches a
+/// dead/unsoldered driver, a bad `RGB_EN` line, swapped R/G/B channels, and
+/// dead individual LEDs (the operator sees the colour).
+///
+/// The response is deliberately self-localizing, because "the LEDs are dark"
+/// otherwise has half a dozen causes: it carries a full bus scan (the AW99703
+/// backlight at `0x36` is a positive control for the bus, and `0x1C` is the
+/// AW21036 broadcast address answering as a second witness), both readable
+/// identity registers, and an ACK tally over the 58 register writes.
+///   in_ptr  → 6 bytes `[r, g, b, gcc, en, reserved]`
+///     `r`/`g`/`b` — brightness written to every wired LED's R/G/B channel.
+///       All-zero is the "off" case and still writes/ACKs every register.
+///     `gcc`      — global current; `0` selects the driver's conservative
+///                  default (full scale on 27 channels is ~0.46 A).
+///     `en`       — `1` drives `RGB_EN` high (normal), `0` leaves it low as the
+///                  negative control for that pin. Note the part's I²C stays
+///                  accessible in standby, so an ACK with `en = 0` is expected
+///                  and proves nothing; only the *functional* difference
+///                  (identical writes, dark at `0`, lit at `1`) tests the pin.
+///   out_ptr → 24 bytes
+///     `[0..16]` — 7-bit address bitmap; address `a` is bit `a % 8` of byte `a / 8`
+///     `[16]`    — `VER` (`0x7E`) readback, `0xA8` when healthy, `0xFF` if the
+///                 addressing phase was not ACKed at all
+///     `[17]`    — `RESET` (`0x7F`) readback, `0x18` when healthy, `0xFF` as above
+///     `[18]`    — register writes ACKed
+///     `[19]`    — register writes attempted
+///     `[20]`    — `RGB_EN` read back from `IDR` (0/1)
+///     `[21]`    — the `GCC` actually programmed
+///     `[22..24]`— reserved, zero
+/// Returns `NscStatus::Ok` when `VER == 0xA8` and every write was ACKed,
+/// `NscStatus::InvalidPointer` if either buffer fails NS-pointer validation,
+/// and `NscStatus::InternalError` otherwise — **with the output still
+/// written**, so the fixture always gets the diagnostic instead of a bare
+/// status. On a board with no RGB driver the output is all-zero and the status
+/// is `InternalError` (there is no `NotSupported` code in this ABI).
+pub const CMD_PRODTEST_RGB_TEST: u32 = 110;
+
+/// Byte counts for [`CMD_PRODTEST_RGB_TEST`]'s two buffers.
+pub const PRODTEST_RGB_IN_LEN: usize = 6;
+pub const PRODTEST_RGB_OUT_LEN: usize = 24;
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks
@@ -877,6 +919,7 @@ pub const INS_V2_PRODTEST_OPTIGA_HANDSHAKE: u8 = 0x86;
 pub const INS_V2_PRODTEST_SE050_HANDSHAKE: u8 = 0x87;
 pub const INS_V2_PRODTEST_USB_LOOPBACK: u8 = 0x88;
 pub const INS_V2_PRODTEST_BUTTON_TEST: u8 = 0x89;
+pub const INS_V2_PRODTEST_RGB_TEST: u8 = 0x8A;
 
 // -- Continuation --
 pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
@@ -1959,6 +2002,57 @@ impl From<u32> for NscStatus {
 
 #[cfg(test)]
 mod tests {
+    /// The prodtest INS space is `0x80 + (CMD - 100)` by convention, and the
+    /// factory runner mirrors both the map and the RGB buffer sizes by hand
+    /// (`tools/factory-prodtest-runner.py`). This is the only place the two
+    /// can be checked against each other in a test that actually runs: the
+    /// firmware-side `nsc/prodtest.rs` test module sits inside
+    /// `#![cfg(feature = "prodtest")]`, which never builds for the host.
+    #[test]
+    fn prodtest_ins_map_is_mechanical_and_collision_free() {
+        let pairs = [
+            (CMD_PRODTEST_GET_ID, INS_V2_PRODTEST_GET_ID),
+            (CMD_PRODTEST_DISPLAY_PATTERN, INS_V2_PRODTEST_DISPLAY_PATTERN),
+            (CMD_PRODTEST_SAES_SELFTEST, INS_V2_PRODTEST_SAES_SELFTEST),
+            (CMD_PRODTEST_BHK_SELFTEST, INS_V2_PRODTEST_BHK_SELFTEST),
+            (CMD_PRODTEST_FLASH_RW, INS_V2_PRODTEST_FLASH_RW),
+            (CMD_PRODTEST_TRNG_SAMPLE, INS_V2_PRODTEST_TRNG_SAMPLE),
+            (CMD_PRODTEST_OPTIGA_HANDSHAKE, INS_V2_PRODTEST_OPTIGA_HANDSHAKE),
+            (CMD_PRODTEST_SE050_HANDSHAKE, INS_V2_PRODTEST_SE050_HANDSHAKE),
+            (CMD_PRODTEST_USB_LOOPBACK, INS_V2_PRODTEST_USB_LOOPBACK),
+            (CMD_PRODTEST_BUTTON_TEST, INS_V2_PRODTEST_BUTTON_TEST),
+            (CMD_PRODTEST_RGB_TEST, INS_V2_PRODTEST_RGB_TEST),
+        ];
+        for (cmd, ins) in pairs {
+            assert_eq!(
+                u32::from(ins),
+                0x80 + (cmd - 100),
+                "INS for CMD {cmd} breaks the 0x80 + (CMD - 100) convention"
+            );
+        }
+        // No INS reused, and none collides with the continuation INS.
+        for (i, (_, ins_a)) in pairs.iter().enumerate() {
+            assert_ne!(*ins_a, INS_V2_GET_RESPONSE);
+            for (_, ins_b) in pairs.iter().skip(i + 1) {
+                assert_ne!(ins_a, ins_b, "duplicate prodtest INS");
+            }
+        }
+    }
+
+    /// The RGB response is decoded by fixed offsets on the host, so its size
+    /// and the 16-byte scan prefix are part of the wire contract.
+    #[test]
+    fn prodtest_rgb_buffers_match_the_documented_layout() {
+        assert_eq!(PRODTEST_RGB_IN_LEN, 6, "[r, g, b, gcc, en, reserved]");
+        // 16 B scan bitmap + ver + reset_id + acks_ok + acks_total + en + gcc
+        // + 2 reserved.
+        assert_eq!(PRODTEST_RGB_OUT_LEN, 16 + 6 + 2);
+        // A 128-bit bitmap is exactly the 7-bit address space.
+        assert_eq!(16 * 8, 128);
+        // Both buffers must survive the NS response buffer's status-word tail.
+        assert!(PRODTEST_RGB_OUT_LEN <= PRODTEST_MAX_RESPONSE_DATA_LEN);
+    }
+
     use super::*;
 
     #[test]

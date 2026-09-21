@@ -332,6 +332,8 @@ impl CommandRouter {
             INS_V2_PRODTEST_USB_LOOPBACK => return self.cmd_prodtest_usb_loopback(data),
             #[cfg(feature = "prodtest")]
             INS_V2_PRODTEST_BUTTON_TEST => return self.cmd_prodtest_button_test(),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_RGB_TEST => return self.cmd_prodtest_rgb_test(data),
 
             _ => {}
         }
@@ -1110,6 +1112,19 @@ impl CommandRouter {
         let status = nsc_api::prodtest_button_test(&mut out);
         RESP_BUF[..4].copy_from_slice(&out);
         self.prodtest_finalize(4, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_rgb_test(&self, data: &[u8]) -> Response {
+        if data.len() != PRODTEST_RGB_IN_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let mut req = [0u8; PRODTEST_RGB_IN_LEN];
+        req.copy_from_slice(data);
+        let mut out = [0u8; PRODTEST_RGB_OUT_LEN];
+        let status = nsc_api::prodtest_rgb_test(&req, &mut out);
+        RESP_BUF[..PRODTEST_RGB_OUT_LEN].copy_from_slice(&out);
+        self.prodtest_finalize(PRODTEST_RGB_OUT_LEN, status)
     }
 
     // ===================================================================

@@ -27,9 +27,12 @@
 //!   whereas LPUART1 is governed by GTZC2 — a controller the firmware does
 //!   not touch at all; and it keeps the driver a base-address change away
 //!   from `iota2`'s USART1 rather than a second baud-rate algorithm.
-//! - **RGB LED enable.** The schematic appears to show `RGB_EN` on PB11;
-//!   the pin table puts it on **PB12**, and PB11 is not bonded on this
-//!   package at all. PB12 it is.
+//! - **RGB LED enable is PB12, and the schematic says so too.** An earlier
+//!   version of this note claimed the schematic showed `RGB_EN` on PB11 and
+//!   that only the pin table said PB12. That was a misreading: sheet 1 of
+//!   `AL_A66_MB_V10_20260714_1500.pdf` lists `PB12` at MCU pin 25 on the
+//!   `RGB_EN` net, driving the AW21036's `EN` (its pin 36). Both sources
+//!   agree, and PB11 is not bonded on this package anyway.
 //!
 //! ## Things that bite on this board
 //!
@@ -243,10 +246,14 @@ pub const AUX_I2C_SDA_PIN: u32 = 14;
 pub const AUX_I2C_AF: u32 = 4;
 /// AW99703 backlight boost driver.
 pub const BACKLIGHT_I2C_ADDR: u8 = 0x36;
-/// AW21036 RGB LED driver.
+/// AW21036 RGB LED driver — 9 RGB LEDs on channels `LED1..LED27`.
+///
+/// `0x34` is the 7-bit address the `AD` strap selects (AD→GND; the datasheet's
+/// table gives GND/VDD/SCL/SDA ⇒ `0x34`/`0x35`/`0x36`/`0x37`), and it is
+/// annotated on the schematic next to U109. Note `0x35`..`0x37` would collide
+/// with [`BACKLIGHT_I2C_ADDR`] on this shared bus; the board's strap does not.
 pub const RGB_I2C_ADDR: u8 = 0x34;
-/// `RGB_EN` — PB12 (the pin table's value; the schematic's PB11 is not
-/// bonded on this package).
+/// `RGB_EN` — PB12, driving the AW21036's `EN` pin (schematic MCU pin 25).
 pub const RGB_EN: Option<(u32, u32)> = Some((GPIOB_S, 12));
 
 /// Height in pixels of the SSD1306 wired to this board's bench setup.
