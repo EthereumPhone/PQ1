@@ -1,5 +1,14 @@
 # Mechanizing C10 EUF-CMA in EasyCrypt — a sourced feasibility verdict (2026-07)
 
+> **Current assessment — 2026-09-21:** the July parameter-impossibility notice
+> below is historical for the old unsplit development. The current split model
+> admits C10's numerical geometry, and the counter/serialization/bounded-search
+> batch has landed. Concrete digit/predicate realization, abort-aware game
+> composition and numerical bounds remain open. Read the
+> [September literature reassessment](#update-2026-09-21--literature-reassessment-after-the-concrete-grind-batch)
+> and the [current artifact boundary](../../contracts/verification/easycrypt/c10-port/README.md)
+> before quoting the older verdicts.
+
 > ### ⚠ READ FIRST — PARAMETER QUALIFIER (2026-07-25)
 > **Every EUF-CMA / capstone claim in this document holds at MM45-admissible WOTS parameters
 > (`w ∈ {4,16,256}`) — NOT at the deployed C10 configuration (`W=8, L=43, TARGET_SUM=205`).**
@@ -4342,3 +4351,215 @@ over-counting form; the under-counting form must never be adopted.
 **Scope unchanged.** This does NOT prove C10 secure at deployed parameters. The single remaining obligation is real
 and is the computational leg (T-COLL-RES advantage at C10, discharged in a game hop BEFORE the case split) —
 deliberately not started, per two independent external reviewers.
+
+## UPDATE 2026-09-21 — literature reassessment after the concrete grind batch
+
+**Decision:** keep [#100](https://github.com/EthereumPhone/PQ1/issues/100) and
+[#295](https://github.com/EthereumPhone/PQ1/issues/295) open. Two next steps look
+tractable with existing techniques: connect the actual digit encoder to the
+counted surface, then compose explicit signing failure into the games. The
+numerical cryptographic terms need additional modelling and reductions; no
+examined publication supplies a ready-made theorem for this implementation.
+
+**Research boundary.** Active surface: EasyCrypt C10 implementation/game
+correspondence. Phase A/B, read-only source and literature analysis. Bounded
+slices: deployed encoder, bounded failure and fresh-R sampling, quantitative
+game bounds, reusable verification artifacts. Next boundary: select an
+implementation batch with its own acceptance criteria. This note does not start
+Phase C/D, change parameters or firmware, or activate the deferred #509 sweep.
+
+Baseline: master **19ddfc401ac3ba6c473f628d7552a4f8bc45ddef**, verified against the
+remote on September 21. The canonical working tree contains unrelated changes;
+this research used an isolated clean snapshot. The prior full replay covers
+60 files through both drivers and 58 controls; its exact executed source and
+later editorial mapping are recorded in the
+[integration receipt](../security/adversarial-review/findings/easycrypt-concrete-grind-2026-09-21/README.md).
+This research did not repeat that replay.
+
+### What remains in the actual source
+
+| Boundary | Current evidence | What would close the next useful slice |
+|---|---|---|
+| Counter and input bytes | Actual WOTS consumer uses full-u32 enumeration and fixed compact encoding. C10Bytes and C10DeployedInstance prove the byte adapter; Rust helper tests and source pins add correspondence evidence. | Already landed within the manual-model boundary. |
+| Digest-to-chain encoding | WOTS_TW_ES still declares encode_msgWOTS; target_sum is the sum at tgt_witness. predC refers to that predicate. C10 constants are admissible, but this is not a concrete 205 predicate. | Realize the actual consumer at n=16, message width=32, radix=8, length=43 and target=205; prove its digit formula and connect it to count_ds. |
+| Failure semantics | C10BoundedGrind proves first-hit/exhaustion and agreement with total grindC on success. Rust panics after 10M attempts. | A signing game accounting for exhaustion, with a relational theorem connecting successful responses and failures to the current game. |
+| Fresh R | fors::grind_r uses secret seed, optional randomizer, message and a zero-extended nonce slot, then truncates SHA-256 to 16 bytes and calls h_msg. | Concrete transcript/bit-field correspondence and a shared-oracle argument covering history, repeated values and adaptive calls. |
+| Numerical forgery probability | ITSRC10, T_COLL_RES_ENUM and primitive probabilities remain terms in reductions. Structural target cap c=262656 is not a signature-query limit. | Explicit adversary/query accounting, justified bounds for those exact games and composition under one adversary. |
+| Remaining local FORS admit | extract_op is excluded from all six headline environments by scope controls. | Keep its present disposition. Closing a disconnected mirror is not the next step toward a stronger headline. |
+
+There is substantial reusable work **inside this repository**:
+
+- **extracted/Extracted/WotsDigits.lean::extract_digits_spec** proves, for every
+  32-byte input and j<43, digit j = (digestWord >> (3*j)) mod 8. This includes
+  byte-spanning extraction.
+- **extracted/Extracted/HashSpecs/WotsDigest.lean::hash.wots_digest_spec** proves
+  the extracted 128-byte transcript equals its pure hash-input specification.
+- The Rust and generated-Lean hashes for **extract-wots-digits** and
+  **extract-hash-fns** all match their current registry entries. This is a
+  selected source-identity check, not fresh extraction, a Lean replay, or
+  evidence that unrelated extraction problems have disappeared.
+- **experiments/tcollres-leg/Proj129.ec** contains useful integer projection
+  lemmas. Its digit order is most-significant-first; firmware assigns chains
+  least-significant-first. Sum/cardinality arguments tolerate reversal, but
+  per-chain correspondence must prove the order explicitly.
+- Research commit **acef3b99** preserves **BoundedIID.ec**: exact finite-budget
+  conditioning with an explicit None mass. That result remains outside the
+  certified cone; the landed search batch did not promote it.
+
+A Lean theorem is not automatically an EasyCrypt theorem. Reuse the closed-form
+specification and proof ideas while documenting the cross-system connection.
+An arbitrary-input Rust correspondence theorem cannot be claimed from the 210
+transcript tests alone.
+
+### Literature: useful developments and their limits
+
+**1. Concrete WOTS+C implementation verification now has an external example.**
+The August 2026 [libshrincs announcement](https://delvingbitcoin.org/t/libshrincs-a-c-implementation-with-a-machine-checked-security-proof/2795)
+describes a Rocq/SSProve security proof joined to a VST C proof. I inspected
+[the current source](https://github.com/remix7531/libshrincs/tree/911c583cc9c4e5e54a91695a1c6d2a114968715c):
+model/wots.v returns None on bounded search failure; ssprove/wots/kots_link.v
+handles that branch in the security-game connection. It uses radix 16, 32
+chains, target 240 and a 16-bit counter, different bytes and a known-message
+valid-commit game. wots_plus_c.v retains six symbolic hash-game bounds and
+lacks a resource model supplying numerical hardness. **Assessment:** reuse
+its failure/composition pattern; do not transfer its security conclusion to
+C10 or migrate proof assistants merely to use it. No libshrincs build was run.
+
+**2. Rust implementation refinement is increasingly practical.**
+[Ho et al., September 14, 2026](https://arxiv.org/html/2609.15648v1) report
+Aeneas/Lean verification of production Rust cryptography, including bit-level
+reasoning and panic-freedom. Their table distinguishes deployed components
+from experimental SHA-2 work; unsupported operations and intrinsics still have
+trusted models. **Assessment:** extend our existing extractions rather than
+rewrite the signer. This work does not verify our STM32 SHA peripheral,
+prove SHA-256 cryptographic hardness, or automatically connect Lean to EasyCrypt.
+
+**3. An implementation-to-security connection exists in EasyCrypt for a
+related scheme.**
+[Barbosa et al., Completing the Chain, 2026/134](https://eprint.iacr.org/2026/134)
+connect Jasmin implementations of XMSS/XMSSMT on AMD64 to EasyCrypt
+specifications and machine-checked security. [Meijers' May 2026
+dissertation](https://research.tue.nl/en/publications/toward-machine-checked-post-quantum-cryptography-formal-verificat/)
+also distinguishes XMSS implementation verification from the SPHINCS+
+security development. **Assessment:** this demonstrates the architecture, but
+its implementations and assumptions are not our Rust C10. The dissertation
+abstract was available; its full PDF could not be retrieved in this session.
+
+**4. The current SPHINCS+ proof is substrate, not a missing +C instantiation.**
+The [Barbosa et al. paper](https://eprint.iacr.org/2024/910) and
+[MM45 artifact](https://github.com/MM45/FV-SPHINCSPLUS-EC/tree/a28e4c53897a4bb57b575a177225862d48f824b7)
+remain relevant. Upstream's latest listed commit is March 26, 2026, a
+code-position compatibility repair. The checked material did not supply our
+C10 encoder, bounded signer or fresh-R connection. **Assessment:** continue
+the existing split port; an upstream refresh alone does not close #100.
+
+**5. Target-sum theory supplies useful concepts, with different sampling.**
+[Drake et al., IACR CiC 2(1), article 13](https://cic.iacr.org/p/2/1/13/pdf),
+Definition 11, Lemma 8 and Corollary 2, handle incomparable encodings,
+target-sum correctness error and restricted target collisions. Their target
+oracle samples fresh randomness; Table 1 accounts for adversary and internal
+retry queries. C10 enumerates public WOTS counters and our T_COLL_RES_ENUM
+allows collection queries while targets are chosen. **Assessment:** use the
+definitions to guide a correspondence argument, not as an already applicable
+bound. Cardinality or a counter-width substitution does not establish it.
+This is the previously examined 2025/055 work, not a new attack or a reason
+to reopen the accepted bootstrap-budget discussion.
+
+**6. EasyCrypt already has relevant probability machinery.**
+[Hopping Proofs of Expectation-Based Properties, OOPSLA 2024](https://doi.org/10.1145/3649839)
+provides expectation-based reasoning and applications to security.
+The [EasyCrypt-KEMs source](https://github.com/sandbox-quantum/EasyCrypt-KEMs/tree/f56ff686bbfd5319e6ee106e632d2af73acf5978)
+has lazy/eager-oracle proofs and failure-event bounds in proofs/ROMx2.eca,
+plus finite conditioning decompositions in proofs/SimpleCondProb.ec.
+**Assessment:** reuse these patterns for classical oracle/history reasoning.
+Our local finite IID theorem already avoids needing a new probability
+framework. The historical #295 suggestion that mathlib is a prerequisite
+should not block a finite EasyCrypt result; a separate Lean probability
+project remains its own scope decision. Import compatibility was not tested.
+
+**7. Other recent candidates do not supply closure.**
+The [August 31, 2026 Sonnberger thesis](https://epb.bibl.th-koeln.de/files/3578/Thesis_Sonnberger_Tuning_Sphincs_plus.pdf)
+studies combinations and parameter tradeoffs, and discusses deterministic
+first-counter selection. It does not establish our EasyCrypt bridge.
+[Constant-sum Winternitz, CRYPTO 2023](https://eprint.iacr.org/2023/850)
+is another encoding construction, not a proof that our existing digit map is
+injective on the full digest space. The [2025 SPHINCS+/NTRU quantum-bounds
+preprint](https://arxiv.org/html/2508.19250v1) was screened but provides no
+identified connection to our C10 formal games; it was not used for closure.
+The [SHRINCS specification](https://github.com/SHRINCS/shrincs-bip/blob/main/SHRINCS.md)
+is another explicit bounded-failure specification, not a compatible replacement.
+
+### A small quantitative result we can aim to mechanize
+
+Independent host calculations reproduced the gated integer count by both
+dynamic programming and inclusion-exclusion:
+
+**S = count_ds 43 8 205 = 22169393903687611906220091621190388.**
+
+The candidate concrete encoder uses exactly 129 bits. Every length-43 base-8
+vector has exactly 2^127 preimages among 256-bit digests, so **for a uniformly
+sampled digest**, the acceptance mass should be proved as:
+
+**p_W = S / 2^129, approximately 0.00003257499661867356.**
+
+The ideal IID mean is approximately **30,698.39 trials**. At B=10,000,000,
+the IID failure mass (1-p_W)^B has log2 approximately **-469.9655**.
+The analogous **IID digest** calculation for the 11-bit FORS condition uses
+p_F=2^-11 and gives approximately **2^-7046.13**.
+
+These decimals are host calculations, not new EasyCrypt theorems.
+The WOTS result is a candidate **conditional correctness/liveness**
+theorem, not a 470-bit security claim. For a fixed transcript selected
+independently of the oracle, distinct counter inputs yield fresh outputs in
+the ideal random-oracle model. Adaptive selection after querying that oracle
+requires an additional argument.
+
+FORS needs particular care: different nonce inputs can produce the same
+truncated R, so h_msg inputs need not be fresh. For fixed H and independent
+uniform R draws, our IID theorem applies with the actual acceptance mass
+p_H; averaging gives E_H[(1-p_H)^B], not automatically
+(1-E_H[p_H])^B. Retain this conditioning or account explicitly for repeated
+inputs and prior oracle queries. Neither step is supplied by the digit count.
+Actual SHA-256 is deterministic, and both model digest halves must be
+projections of one common hash result, with any distributional independence
+derived under the chosen model.
+
+The [original SPHINCS+C analysis, Appendix C](https://csrc.nist.gov/csrc/media/Events/2022/fourth-pqc-standardization-conference/documents/papers/sphincs-plus-c-pqc2022.pdf)
+uses a geometric-failure calculation and then assumes suitable counters exist
+for its security analysis. Our bounded implementation needs the omitted
+failure branch represented explicitly.
+
+### Recommended next implementation boundary
+
+**Batch 1 — actual digits, predicate and uniform-input mass.** Construct the
+real least-significant-first encoder through the existing 256-bit message
+type, pin target 205 with a constructive witness, and prove per-position
+correspondence. Connect accepted codewords bijectively to the counted
+surface; prove uniform-digest acceptance mass and meaningful rejection controls.
+Check current extraction and theorem dependencies before using the existing
+Lean results as correspondence evidence. Acceptance: the actual WOTS consumer
+uses these definitions; a disconnected integer model is insufficient.
+This should require proof engineering, not a new hardness assumption.
+
+**Batch 2 — explicit failure through the signing games.** Reuse bounded search
+and the preserved IID result. Model the Rust panic as an explicit abort with
+no signature, documenting the abstraction from the firmware halt; do not
+silently replace it with a recoverable signing response. Prove successful-output agreement and an
+appropriate game-distance or abort-restricted relation, including repeated
+requests. A union bound over per-call failure is useful only after each bound
+holds conditional on reachable history. Keep failure probability and success
+conditioning explicit. Libshrincs supplies a source example of this style,
+not a transferable proof.
+
+**Later bounded research — shared-oracle and numerical composition.** Realize
+the fresh-R process, preserve full-u32 verification and account for every
+permitted adversary query. First target a labelled classical random-oracle
+result. Quantum transfer needs matched experiments and resource accounting;
+changing q to q-squared is not a proof. Only then attempt numerical
+ITSRC10/T_COLL_RES_ENUM and the common-adversary total bound.
+
+**Evidence limits:** source and selected hash checks, primary-source literature,
+and two-method host arithmetic were executed. No new EasyCrypt or Lean
+compilation, extraction regeneration, external artifact replay, hardware
+experiment, or complete security audit was performed. No new production defect
+was established, and no security parameter or remaining issue is declared closed.
