@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "scope": "Manually reviewed Rust/EasyCrypt model inputs; hashes and finite host tests are not extraction or full hash/predicate refinement.",
+  "sources": {
+    "sphincs-c10/src/wots.rs": "e7ebe1d71591e68f6045383b041905ff17ad5822def35e77e11244ffdf49c56b",
+    "sphincs-c10/src/hash.rs": "049a689c96ef9e14ce34030e71269292f3f6951b522cad88d56daa4466ade2c4",
+    "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+    "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+    "sphincs-c10/tests/easycrypt_transcript.rs": "fd653d45fe386f203e4ca629c98839d764d205e48a52e142ee15acb2f1a47ef5",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "17bdc92393ccedb2c86f38d837b7cb7883d2532d1a8ffd4e419825d60934697f",
+    "contracts/verification/scripts/run_easycrypt_split.py": "c675c91dab371086af6ff2937d5b09b04118878b51fbd4060bbfc334431e774f",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Counter.ec": "1c93aa173db90139e6d113311b23a78da77d6cbf67e7fc56fbccc9e5a7445d34",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Bytes.ec": "3d6924904713347fabf77deca15c56d04094c95be8c7130575c02e671e6a563b",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10BoundedGrind.ec": "27e8f6a469bfab0a58b73acfa398155a217f901bd03980a6595006b48ff5c733",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10DeployedInstance.ec": "12bf8b716900aaec54c7deadf19825cb51b3afd479c4c9dc85802ea6fe81c823",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/WOTS_C_Real.ec": "eac2fdc9d437310ae0e1039fa2be7362481a311809d85c59b3244f794f3fed2b"
+  }
+}

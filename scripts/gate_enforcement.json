@@ -1597,11 +1597,16 @@
         "contracts/verification/easycrypt/c10-port/**",
         "contracts/verification/scripts/run_easycrypt_split.py",
         "contracts/verification/Makefile",
-        ".github/workflows/lean-fv.yml"
+        ".github/workflows/lean-fv.yml",
+        "sphincs-c10/src/wots.rs",
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/tests/easycrypt_transcript.rs"
       ],
       "runs_in": "lean-fv.yml",
       "enforcement": "per_pr_blocking",
-      "note": "Current split: unique pins, computed complete dependency inventory, assumption census, coverage, quarantine, named-application taint and checked input identity. No proof replay. #670/#683/#684, 2026-09-16.",
+      "note": "Current split: source-bound manual Rust/model correspondence, unique pins, complete dependency inventory, assumption census, coverage, quarantine, taint and input identity. No proof replay. #100/#670/#683/#684, 2026-09-21.",
       "required_context": {
         "step": {
           "name": "verify-easycrypt-split-pins (current vendored split integrity)",
@@ -1629,11 +1634,16 @@
         "contracts/verification/easycrypt/c10-port/**",
         "contracts/verification/scripts/run_easycrypt_split.py",
         "contracts/verification/Makefile",
-        ".github/workflows/nightly.yml"
+        ".github/workflows/nightly.yml",
+        "sphincs-c10/src/wots.rs",
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/tests/easycrypt_transcript.rs"
       ],
       "runs_in": "nightly.yml",
       "enforcement": "nightly",
-      "note": "Full current split gate: immutable image digest, observed compiler and solver identities, complete 53-file closure compiled directly by both drivers, require/negative controls and all split census/pin/taint checks. Conditional research result, not firmware refinement or production assurance. #670/#683/#686, 2026-09-16.",
+      "note": "Full current split: source binding and Rust transcript host test, immutable image and observed tool identities, complete 56-file dependency replay through both drivers, require/negative controls and split census/pin/taint checks. Conditional model evidence, not complete firmware refinement. #100/#670/#683/#686, 2026-09-21.",
       "required_context": {
         "step": {
           "name": "verify-easycrypt-split (pinned toolchain, complete dependency closure)",

@@ -40,7 +40,7 @@ binders**, not off lines ending in `=>`:
 | `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED` | 6 | `c <= p_tgts`, `0%r <= mkg_adv`, four `dfC0` width disequalities |
 | `..._TIGHT` | 5 | the same at `mkg_adv := 0` — strictly tighter, **no free real** |
 | `..._TIGHT_AT_DEPLOYED_PARAMS` | **2** | `c <= p_tgts`, `size (emb_in witness) = 8*n + c10_r` |
-| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` (a **non-constant rank encoding of the right width** — *not* injective here, and *not* the firmware's u32) |
+| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` (the fixed full-u32 rank encoding; equality is now proved) |
 
 **Quote `..._TIGHT_AT_DEPLOYED_PARAMS`.** It **logically subsumes**
 `..._TIGHT_AT_PINNED_ENCODER`: since `emb_in = c10_embg` implies the width fact (via
@@ -53,16 +53,38 @@ only when that is the point being made, and say so.
 said "neither supersedes the other". The pinned proof at `GprocChargedQWired.ec` is the
 disproof.)
 
-**And the pinned encoder is NOT injective in that theorem.**
-`C10DeployedInstance.ec:336` proves `c10_embg_inj` only under
-`STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`, and the pinned headline carries **no such premise** —
-its hypotheses are `c <= p_tgts` and `emb_in = c10_embg`, nothing else. With `cntr` an
-abstract FinType of unbounded cardinality, a 32-bit rank encoding **need not be injective at
-all**. What is available premise-free is **non-constancy**. Calling it an "injective rank
-encoder" was itself a *correction*, made 2026-08-29, and was still too strong — the second
-overstatement in this spot.
+**Concrete counter/serialization integration (2026-09-21).** `WOTS_C_Real`
+now consumes `C10Counter.counter` and its ascending full-u32 enumeration in the
+actual `STCRC_WC` clone. That clone's `enum_spec` is realized. The standard
+library Subtype construction axioms (`insubN`, `insubT`, `valP`, `valK`) remain
+trusted; the generic `Grind` theory still declares its abstract enumeration
+obligation. The census is not a claim that every clone obligation disappeared.
 
-**Both remaining premises are substantive, and they differ in kind.**
+`emb_in` is now defined as the node bits followed by the numeric 32-bit counter.
+`C10DeployedInstance` proves the rank equality, cardinality, width, injectivity,
+and equality to `c10_embg` without additional premises. The published headline
+statements retain their two binders for compatibility; the width/encoder binder
+is now discharged by `c10_emb_in_width`/`c10_emb_in_pinned`. Only the target-cap
+premise below remains to be supplied.
+
+`C10Bytes` proves the adapter between the compact input and the physical
+64-byte payload (node, right padding, zero-extended big-endian counter).
+`c10_payload_recovers_emb_in` connects it to the actual model input.
+`C10BoundedGrind.Search` models the ascending 10,000,000-attempt signing prefix,
+proves first-hit correctness and exhaustion, and proves conditional agreement
+with the existing full-domain `grindC`. The verifier domain stays all u32 values.
+The total signing game has **not** been changed into a panic/abort game, so this
+is not an end-to-end theorem about the Rust signer.
+
+The manually reviewed source boundary is pinned in `cert-source-binding.json`.
+The normal full split wrapper checks that binding and runs the Rust
+`easycrypt_transcript` test against real `pad16`, address and `wots_digest`
+helpers (210 node/counter cases, including budget and u32 boundaries). The
+byte-layout proof and those finite tests are separate evidence: they are not
+Rust extraction. The abstract hash collection, output law, digit encoder/205
+predicate realization, and bounded-failure probability still need a concrete
+refinement. Both digest halves must come from one SHA-256 result; no independent
+hash assumption was introduced. Issue #100 therefore remains open.
 
 * **`c <= p_tgts` is a reduction-side TARGET CAP — not a bound on how many messages a key
   may sign.** This is worth spelling out because the tree records mistaking it for a query
@@ -74,9 +96,7 @@ overstatement in this spot.
   many targets as there are instances: `C10DeployedGeometry.ec:468` classifies it as "NOT A
   THEOREM AND NOT MEANT TO BE … satisfiable by construction and not derivable from the
   closure".
-* **The `emb_in` condition constrains a FREE op** — nothing in the closure pins `emb_in` —
-  and is a *fidelity* claim about the deployed serialisation, argued but **not
-  machine-checked against `sphincs-c10`**.
+
 
 **The theorem is ROLE-AGNOSTIC, and that is deliberate.** `EUFCMA_C10`
 (`FxChain.ec:255`) is the textbook **single-key stateless EUF-CMA game**: one keypair, one

@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 import split_contract as gate
+import check_source_binding as binding
 
 
 @contextmanager
@@ -25,6 +26,30 @@ def fixture():
 
 
 class ContractTests(unittest.TestCase):
+    def test_manual_source_binding_rejects_drift_and_missing_inputs(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            sources = {}
+            for name in binding.SOURCES:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('reviewed input\n')
+                sources[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+            manifest = root / binding.PORT / 'cert-source-binding.json'
+            manifest.write_text(json.dumps({'schema': 1, 'sources': sources}))
+            binding.check(root)
+            for name in binding.SOURCES:
+                path = root / name
+                path.write_text('changed input\n')
+                with self.assertRaisesRegex(ValueError, 'source binding changed'):
+                    binding.check(root)
+                path.write_text('reviewed input\n')
+            sources.pop(binding.SOURCES[0])
+            manifest.write_text(json.dumps({'schema': 1, 'sources': sources}))
+            with self.assertRaisesRegex(ValueError, 'source set'):
+                binding.check(root)
+
     def test_proof_controls_reject_a_false_green_driver_with_optimization(self):
         with tempfile.TemporaryDirectory() as temp:
             driver = Path(temp) / 'easycrypt'
@@ -107,7 +132,7 @@ class ContractTests(unittest.TestCase):
 
     def test_targets_cover_pinned_dependencies_in_order(self):
         targets = gate.targets()
-        self.assertEqual(len(targets), 53)
+        self.assertEqual(len(targets), 56)
         self.assertEqual(set(targets), set(gate.rows('cert-cone-files-split.tsv')))
         self.assertIn('base-c10-split/HashAddresses.eca', targets)
         for i, p in enumerate(targets):

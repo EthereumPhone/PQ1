@@ -313,6 +313,24 @@ qed.
 op c10_embg (x : dgstblock * cntr) : dgst =
   DigestBlock.val x.`1 ++ int2bs c10_r (index x.`2 STCRC_WC.G.CntrFT.enum).
 
+(* 2026-09-21: the actual STCRC_WC clone now consumes the full-u32 type and
+   ascending enumeration. These facts no longer need a cardinality premise. *)
+lemma c10_counter_cardinality : STCRC_WC.G.CntrFT.card = 4294967296.
+proof. exact C10Counter.cardinality. qed.
+
+lemma c10_counter_cardinality_bound : STCRC_WC.G.CntrFT.card <= 2 ^ c10_r.
+proof. exact C10Counter.cardinality_bound. qed.
+
+lemma c10_counter_rank (c : cntr) :
+  index c STCRC_WC.G.CntrFT.enum = C10Counter.U32.val c.
+proof. exact C10Counter.rank_numeric. qed.
+
+lemma c10_emb_in_pinned : emb_in = c10_embg.
+proof.
+  by apply fun_ext => x; rewrite /emb_in /C10Bytes.compact /C10Bytes.counter_bits
+    /c10_embg /c10_r c10_counter_rank.
+qed.
+
 lemma c10_embg_size (x : dgstblock * cntr) :
   size (c10_embg x) = 8 * n + c10_r.
 proof.
@@ -339,6 +357,38 @@ lemma c10_embg_inj (x y : dgstblock * cntr) :
 proof.
   move=> hcard; rewrite !c10_embg_is_embg => heq.
   by apply (embg_inj c10_r x y _ hcard heq); rewrite /c10_r.
+qed.
+
+lemma c10_emb_in_injective (x y : dgstblock * cntr) :
+  emb_in x = emb_in y => x = y.
+proof. by rewrite c10_emb_in_pinned; apply c10_embg_inj; exact c10_counter_cardinality_bound. qed.
+
+lemma c10_emb_in_width (x : dgstblock * cntr) :
+  size (emb_in x) = 8 * n + c10_r.
+proof. by rewrite c10_emb_in_pinned c10_embg_size. qed.
+
+(* Physical payload: 16 node bytes, 16 pad bytes, 28 pad bytes, 4 counter
+   bytes. The two projections of ThC remain correlated halves of one digest;
+   this adapter does not identify the abstract thfc operation with SHA-256. *)
+op c10_payload (x : dgstblock * cntr) : int list =
+  C10Bytes.payload (DigestBlock.val x.`1) x.`2.
+
+lemma c10_payload_width (x : dgstblock * cntr) : size (c10_payload x) = 64.
+proof. by rewrite /c10_payload C10Bytes.payload_size 1:DigestBlock.valP 1:n_val. qed.
+
+lemma c10_payload_recovers_emb_in (x : dgstblock * cntr) :
+  C10Bytes.bytes_to_bits (take 16 (c10_payload x)) ++
+    C10Bytes.bytes_to_bits (drop 60 (c10_payload x)) = emb_in x.
+proof.
+  by rewrite /c10_payload /emb_in C10Bytes.payload_recovers_compact
+    1:DigestBlock.valP 1:n_val.
+qed.
+
+lemma c10_payload_injective (x y : dgstblock * cntr) :
+  c10_payload x = c10_payload y => x = y.
+proof.
+  move=> heq; apply c10_emb_in_injective.
+  by rewrite -!c10_payload_recovers_emb_in heq.
 qed.
 
 (* So the deployed serialisation meets BOTH model requirements, not just one:

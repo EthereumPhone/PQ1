@@ -13,9 +13,15 @@ if not re.fullmatch(r'ghcr.io/easycrypt/ec-test-box@sha256:[0-9a-f]{64}', image)
     sys.exit('FAIL: EasyCrypt image must be pinned by digest')
 if sys.argv[1:] not in ([], ['--controls']):
     sys.exit('usage: run_easycrypt_split.py [--controls]')
+subprocess.run([sys.executable, '-B', str(root / 'tools/check_source_binding.py')], check=True)
+if not sys.argv[1:]:
+    subprocess.run(['cargo', 'test', '--locked', '-p', 'sphincs-c10',
+                    '--target', 'x86_64-unknown-linux-gnu', '--features', 'sim-internals',
+                    '--test', 'easycrypt_transcript'], cwd=root.parents[3], check=True)
 command = ('python3 tools/split_contract.py --toolchain && python3 tools/split_proof_controls.py'
            if sys.argv[1:] else 'bash cert_gate_split.sh')
-# No host toolchain, mutable tag, network, shared cache, or existing container.
+# EasyCrypt uses no host compiler, mutable tag, network, shared cache, or
+# existing container. The Rust host test above is separate correspondence evidence.
 # Docker verifies the content digest on acquisition; no receipt supplied by the
 # caller can select another image. The child gate also checks observed identities.
 subprocess.run(['docker', 'run', '--rm', '--init', '--network', 'none',

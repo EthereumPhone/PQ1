@@ -1,3 +1,7 @@
+# 2026-09-21: concrete WOTS counter, byte adapter and bounded search.
+# Retire WOTS_C_Real abstract cntr/emb_in; realize the actual clone enum_spec.
+# Add four explicit stdlib Subtype construction obligations, not hash axioms.
+# Generic Grind enumeration obligations remain; no admits added.
 # UNCHANGED 2026-09-14 (Run 2) -- cdrafts-split/GprocTCollNamed.ec entered the closure (roots
 # 41 -> 42, cone files 52 -> 53) and the census did NOT move: added=0 removed=0, ledger=241,
 # total=1677.  The file declares one lemma and nothing else, as predicted in
@@ -75,7 +79,7 @@
 # first assumption REMOVED, as opposed to relocated, in this arc.  The only ADDED rows
 # were `module` (BadEncFlag, Game4_WOTSTWES_BadEnc, Game4_WOTSTWES_Alt,
 # O_Game34_WOTSTWES_AltX and two anonymous A), which are MEANING rows, not ledger.
-### CONE_FILES=53
+### CONE_FILES=56
 #   base-c10-split/BinaryTrees.ec
 #   base-c10-split/FL_SL_XMSS_MT_ES.ec
 #   base-c10-split/FORS_ES.ec
@@ -90,6 +94,9 @@
 #   cdrafts-split/BadEncSplit.ec
 #   cdrafts-split/BadEncStep4.ec
 #   cdrafts-split/BadEncToTColl.ec
+#   cdrafts-split/C10BoundedGrind.ec
+#   cdrafts-split/C10Bytes.ec
+#   cdrafts-split/C10Counter.ec
 #   cdrafts-split/C10DeployedCapstone.ec
 #   cdrafts-split/C10DeployedGeometry.ec
 #   cdrafts-split/C10DeployedInstance.ec
@@ -1285,6 +1292,27 @@ cdrafts-split/BadEncToTColl.ec	module:3ab8854e6791	R_TCOLL	# line 100
 cdrafts-split/BadEncToTColl.ec	module:66df9a626025	O_wrap	# line 103
 cdrafts-split/BadEncToTColl.ec	module:83e1f9184386	AA	# line 160
 cdrafts-split/BadEncToTColl.ec	module:d5b79be98dff	A	# line 310
+cdrafts-split/C10BoundedGrind.ec	defined-op:13312df50453	of_int	# line 9
+cdrafts-split/C10BoundedGrind.ec	defined-op:1d345d1e1b5a	hit	# line 10
+cdrafts-split/C10BoundedGrind.ec	module:5d49d49f44a0	Search	# line 13
+cdrafts-split/C10Bytes.ec	defined-op:7932f00a2928	bytes_to_bits	# line 8
+cdrafts-split/C10Bytes.ec	defined-op:60a3ee3458ab	bits_to_bytes	# line 10
+cdrafts-split/C10Bytes.ec	defined-op:d0bab37bb351	counter_bits	# line 46
+cdrafts-split/C10Bytes.ec	defined-op:7bc0eb83b303	counter_bytes	# line 47
+cdrafts-split/C10Bytes.ec	defined-op:46f48878f97e	compact	# line 48
+cdrafts-split/C10Bytes.ec	defined-op:633c6423fac2	payload	# line 61
+cdrafts-split/C10Bytes.ec	defined-op:67f83423e913	transcript	# line 64
+cdrafts-split/C10Counter.ec	operand:c1e1af0670c8	U32.T	# line 7
+cdrafts-split/C10Counter.ec	operand:c491da9c1fb2	U32.P	# line 7
+cdrafts-split/C10Counter.ec	clone-obligation:Subtype	U32.insubN	# line 7
+cdrafts-split/C10Counter.ec	clone-obligation:Subtype	U32.insubT	# line 7
+cdrafts-split/C10Counter.ec	clone-obligation:Subtype	U32.valP	# line 7
+cdrafts-split/C10Counter.ec	clone-obligation:Subtype	U32.valK	# line 7
+cdrafts-split/C10Counter.ec	clone-discharge:list:inhabited|realize:inhabited	U32	# line 7
+cdrafts-split/C10Counter.ec	defined-type:0a1e6930a4c9	counter	# line 13
+cdrafts-split/C10Counter.ec	defined-op:38b0a2decdd2	enum	# line 15
+cdrafts-split/C10Counter.ec	defined-op:8d018c72743d	signing_budget	# line 57
+cdrafts-split/C10Counter.ec	defined-op:120af444d7f1	signing_enum	# line 58
 cdrafts-split/C10DeployedGeometry.ec	defined-op:9fb98081dd8d	c10_n	# line 66
 cdrafts-split/C10DeployedGeometry.ec	defined-op:51a2b549384e	c10_log2_w	# line 67
 cdrafts-split/C10DeployedGeometry.ec	defined-op:e19e9578444e	c10_w	# line 68
@@ -1302,8 +1330,9 @@ cdrafts-split/C10DeployedInstance.ec	defined-op:ec131faa2703	c10_witness_word	# 
 cdrafts-split/C10DeployedInstance.ec	defined-op:ecdbb5c4f406	c10_k	# line 280
 cdrafts-split/C10DeployedInstance.ec	defined-op:833f420ccdb5	c10_r	# line 281
 cdrafts-split/C10DeployedInstance.ec	defined-op:86535e747145	c10_embg	# line 313
-cdrafts-split/C10DeployedInstance.ec	defined-op:ec3c58535522	c10_digit_at	# line 382
-cdrafts-split/C10DeployedInstance.ec	defined-op:4f20a2f3a1fb	c10_witness_bits	# line 422
+cdrafts-split/C10DeployedInstance.ec	defined-op:2bea2b53f90e	c10_payload	# line 373
+cdrafts-split/C10DeployedInstance.ec	defined-op:ec3c58535522	c10_digit_at	# line 432
+cdrafts-split/C10DeployedInstance.ec	defined-op:4f20a2f3a1fb	c10_witness_bits	# line 472
 cdrafts-split/C10DeployedScope.ec	defined-op:e85bca859c3b	c10_hp	# line 118
 cdrafts-split/C10DeployedScope.ec	defined-op:cd2da22f40b9	c10_d	# line 119
 cdrafts-split/C10DeployedScope.ec	defined-op:43d4826d1a44	c10_h	# line 120
@@ -1724,30 +1753,30 @@ cdrafts-split/WOTS_C_Multi.ec	module:db54f499c6a6	GAME1_MULTI	# line 373
 cdrafts-split/WOTS_C_Multi.ec	module:2628b564683e	AA	# line 374
 cdrafts-split/WOTS_C_Multi.ec	module:cf05f7d16d25	G0_MULTI	# line 426
 cdrafts-split/WOTS_C_Multi.ec	module:f41e35ee1cdf	AA	# line 427
-cdrafts-split/WOTS_C_Real.ec	refined-const:720f257d2456	ge0_ptgts	# line 340
-cdrafts-split/WOTS_C_Real.ec	operand:61612567f25d	STCRC_WC.pp_t	# line 345
-cdrafts-split/WOTS_C_Real.ec	operand:9ae7ae045a8e	STCRC_WC.tw_t	# line 345
-cdrafts-split/WOTS_C_Real.ec	operand:4700c5ff2a14	STCRC_WC.msg_t	# line 345
-cdrafts-split/WOTS_C_Real.ec	operand:385363ef3829	STCRC_WC.cntr	# line 345
-cdrafts-split/WOTS_C_Real.ec	operand:dfaeb2b7bc87	STCRC_WC.out_t	# line 345
-cdrafts-split/WOTS_C_Real.ec	operand:539163dce701	STCRC_WC.ThC	# line 345
-cdrafts-split/WOTS_C_Real.ec	operand:818189939749	STCRC_WC.predC	# line 345
-cdrafts-split/WOTS_C_Real.ec	operand:a2ba6bb81603	STCRC_WC.dpp	# line 345
-cdrafts-split/WOTS_C_Real.ec	operand:b2418f94f880	STCRC_WC.p_stcr	# line 345
-cdrafts-split/WOTS_C_Real.ec	clone-discharge:list:dpp_ll,ge0_pstcr|realize:dpp_ll,ge0_pstcr	STCRC_WC	# line 345
+cdrafts-split/WOTS_C_Real.ec	refined-const:720f257d2456	ge0_ptgts	# line 345
+cdrafts-split/WOTS_C_Real.ec	operand:61612567f25d	STCRC_WC.pp_t	# line 350
+cdrafts-split/WOTS_C_Real.ec	operand:9ae7ae045a8e	STCRC_WC.tw_t	# line 350
+cdrafts-split/WOTS_C_Real.ec	operand:4700c5ff2a14	STCRC_WC.msg_t	# line 350
+cdrafts-split/WOTS_C_Real.ec	operand:385363ef3829	STCRC_WC.cntr	# line 350
+cdrafts-split/WOTS_C_Real.ec	operand:dfaeb2b7bc87	STCRC_WC.out_t	# line 350
+cdrafts-split/WOTS_C_Real.ec	operand:539163dce701	STCRC_WC.ThC	# line 350
+cdrafts-split/WOTS_C_Real.ec	operand:818189939749	STCRC_WC.predC	# line 350
+cdrafts-split/WOTS_C_Real.ec	operand:a2ba6bb81603	STCRC_WC.dpp	# line 350
+cdrafts-split/WOTS_C_Real.ec	operand:eb851446ad4d	STCRC_WC.p_stcr	# line 350
+cdrafts-split/WOTS_C_Real.ec	clone-discharge:list:G.CntrFT.enum_spec,dpp_ll,ge0_pstcr|realize:G.CntrFT.enum_spec,dpp_ll,ge0_pstcr	STCRC_WC	# line 350
 cdrafts-split/WOTS_C_Real.ec	defined-op:6077a96cf01a	c	# line 41
-cdrafts-split/WOTS_C_Real.ec	abstract-type:8b0a31e00a4a	cntr	# line 48
+cdrafts-split/WOTS_C_Real.ec	defined-type:4bd4e15ee55f	cntr	# line 48
 cdrafts-split/WOTS_C_Real.ec	defined-op:22a6cabc5a01	emb_tw	# line 80
-cdrafts-split/WOTS_C_Real.ec	abstract-op:f718c0661391	emb_in	# line 164
-cdrafts-split/WOTS_C_Real.ec	defined-op:bf3dbe347db4	emb_in0	# line 194
-cdrafts-split/WOTS_C_Real.ec	defined-op:0b699d75c914	emb_in1	# line 195
-cdrafts-split/WOTS_C_Real.ec	defined-op:8e592d26ee68	ThC	# line 214
-cdrafts-split/WOTS_C_Real.ec	defined-op:ed1d5c7f137b	cw_sum	# line 252
-cdrafts-split/WOTS_C_Real.ec	defined-op:c1cd383d3435	predC	# line 279
-cdrafts-split/WOTS_C_Real.ec	defined-op:52d308813ba4	TargetSumReachable	# line 286
-cdrafts-split/WOTS_C_Real.ec	defined-const:8cd1f778f243	p_tgts	# line 340
-cdrafts-split/WOTS_C_Real.ec	defined-op:0075335b8622	encode_msgWOTS_C	# line 404
-cdrafts-split/WOTS_C_Real.ec	defined-op:75a1f84afa2f	grindC	# line 423
+cdrafts-split/WOTS_C_Real.ec	defined-op:dd26e5fe140d	emb_in	# line 167
+cdrafts-split/WOTS_C_Real.ec	defined-op:bf3dbe347db4	emb_in0	# line 199
+cdrafts-split/WOTS_C_Real.ec	defined-op:0b699d75c914	emb_in1	# line 200
+cdrafts-split/WOTS_C_Real.ec	defined-op:8e592d26ee68	ThC	# line 219
+cdrafts-split/WOTS_C_Real.ec	defined-op:ed1d5c7f137b	cw_sum	# line 257
+cdrafts-split/WOTS_C_Real.ec	defined-op:c1cd383d3435	predC	# line 284
+cdrafts-split/WOTS_C_Real.ec	defined-op:52d308813ba4	TargetSumReachable	# line 291
+cdrafts-split/WOTS_C_Real.ec	defined-const:8cd1f778f243	p_tgts	# line 345
+cdrafts-split/WOTS_C_Real.ec	defined-op:0075335b8622	encode_msgWOTS_C	# line 411
+cdrafts-split/WOTS_C_Real.ec	defined-op:75a1f84afa2f	grindC	# line 431
 cdrafts-split/WOTS_C_Reduction.ec	module-type:c07b516ee250	Adv_EUFNACMA_WOTSC	# line 32
 cdrafts-split/WOTS_C_Reduction.ec	module:c3da2ecae1f2	EUF_NACMA_WOTSC	# line 37
 cdrafts-split/WOTS_C_Reduction.ec	module:c1ea25a2aebb	AA	# line 38

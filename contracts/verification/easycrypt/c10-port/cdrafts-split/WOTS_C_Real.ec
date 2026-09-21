@@ -27,7 +27,7 @@
 
 require import AllCore List Distr StdBigop StdOrder.
 require import SPHINCS_PLUS.
-require STCR_C.
+require STCR_C C10Counter C10Bytes.
 
 import FSSLXMTWES.         (* n, w, len, d, nr_nodes_ht, pseed, dgst (FLAG-2 rebase) *)
 import FSSLXMTWES.WTWES.   (* CONCRETE WOTS-TW instance *)
@@ -43,9 +43,9 @@ op c : int = bigi predT (fun (d' : int) => nr_nodes_ht d' 0) 0 d.
 (* --------------------------------------------------------------------------
    1.  WOTS+C-specific parameters over the REAL WOTS types.
    -------------------------------------------------------------------------- *)
-(* r-bit grinding counter (C10: 32-bit word) — finite (carried as the modelling
-   axiom STCRC_WC.G.CntrFT.enum_spec once instantiated). *)
-type cntr.
+(* Full deployed u32 domain. The real STCRC clone below consumes the concrete
+   enumeration and discharges its enum_spec; the signing budget is separate. *)
+type cntr = C10Counter.counter.
 
 (* --------------------------------------------------------------------------
    The SPHINCS+ message-compression embedding (moved here from WOTS_C_Bridge.ec
@@ -161,7 +161,11 @@ have e2 : nth witness (get_wgpidxs (emb_tw b)) 1 = pkcotype.
 have : chtype = pkcotype by rewrite -e1 -e2 heq.
 smt(dist_adrstypes).
 qed.
-op emb_in : dgstblock * cntr -> dgst.   (* the +C hash's INPUT is a hypertree NODE *)
+(* Compact model input, now fixed. C10Bytes expands the node and u32 into the
+   firmware's padded byte payload. The hash collection remains abstract; fixing
+   this encoding does not identify its two members with the concrete SHA hash. *)
+op emb_in (x : dgstblock * cntr) : dgst =
+  C10Bytes.compact (DigestBlock.val x.`1) x.`2.
 
 (* Th+C : the count-tweaked message-compression hash
    (paper Thm 5.2:  Th+C : P x T x {0,1}^n x {0,1}^r -> {0,1}^n).
@@ -169,8 +173,9 @@ op emb_in : dgstblock * cntr -> dgst.   (* the +C hash's INPUT is a hypertree NO
    compression address `emb_tw tw` on the serialised input `emb_in (m,c)`,
    with the thfc input-length index `size (emb_in (m,c))`.  This makes the
    bridge's `emb_thfc_ThC` hold by construction (it is the DEFINITION of how
-   SPHINCS+ realises Th+C), WITHOUT trivialising the S-TCR(+C) term: `thfc`,
-   `emb_tw`, `emb_in`, `predC` all stay abstract, so `InSec^{S-TCR(+C)}(Th+C)`
+   SPHINCS+ realises Th+C), WITHOUT trivialising the S-TCR(+C) term:
+   `emb_tw` and `predC` are model definitions and `emb_in` is now pinned;
+   `thfc` remains unconstrained, so `InSec^{S-TCR(+C)}(Th+C)`
    remains the genuine SM-DT-TCR-C assumption over the abstract tweakable hash. *)
 (* ROUTE (D), 2026-08-01.  TWO SERIALISERS INTO THE SAME COLLECTION.  The two
    tags differ in LENGTH, so `emb_in0`/`emb_in1` select two DISTINCT members of
@@ -351,10 +356,12 @@ clone import STCR_C.STCRC as STCRC_WC with
   op   ThC    <- ThC,
   op   predC  <- predC,
   op   dpp    <- dpseed,
-  op   p_stcr <- p_tgts
-  proof dpp_ll, ge0_pstcr.
+  op   p_stcr <- p_tgts,
+  op   G.CntrFT.enum = C10Counter.enum
+  proof dpp_ll, ge0_pstcr, G.CntrFT.enum_spec.
 realize dpp_ll   by exact: dpseed_ll.
 realize ge0_pstcr by exact: ge0_ptgts.
+realize G.CntrFT.enum_spec by exact: C10Counter.enum_spec.
 
 (* The concrete real S-TCR(+C) game is now `STCRC_WC.S_TCR_C`, its challenge
    oracle `STCRC_WC.O_STCRC_Default`, and its collection (Th_lambda) oracle
@@ -419,7 +426,8 @@ lemma encode_msgWOTS_C_compat (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr)
   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc).
 proof. by rewrite /encode_msgWOTS_C. qed.
 
-(* The signer's counter search is the proved total grind. *)
+(* The total signing game's search. C10BoundedGrind proves agreement with
+   the firmware's finite prefix on success; exhaustion is a separate outcome. *)
 op grindC (ps : pseed) (ad : adrs) (m : dgstblock) : cntr = STCRC_WC.G.grind ps ad m.
 
 (* --------------------------------------------------------------------------

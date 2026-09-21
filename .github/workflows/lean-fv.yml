@@ -43,6 +43,12 @@ on:
       # to the .ec files / axiom_pins.txt it polices (the F1 class: it ran in NO
       # workflow while ~15 straight master commits touched easycrypt/**).
       - 'contracts/verification/easycrypt/**'
+      # Source-bound EasyCrypt counter/serialization correspondence (#100).
+      - 'sphincs-c10/src/wots.rs'
+      - 'sphincs-c10/src/hash.rs'
+      - 'sphincs-c10/src/address.rs'
+      - 'sphincs-c10/src/params.rs'
+      - 'sphincs-c10/tests/easycrypt_transcript.rs'
   pull_request:
     paths:
       - 'contracts/verification/lean/**'
@@ -55,6 +61,12 @@ on:
       - 'contracts/verification/extracted/Extracted/**'
       # EasyCrypt pin-ledger surface (verify-easycrypt-pins, #664) — see above.
       - 'contracts/verification/easycrypt/**'
+      # Source-bound EasyCrypt counter/serialization correspondence (#100).
+      - 'sphincs-c10/src/wots.rs'
+      - 'sphincs-c10/src/hash.rs'
+      - 'sphincs-c10/src/address.rs'
+      - 'sphincs-c10/src/params.rs'
+      - 'sphincs-c10/tests/easycrypt_transcript.rs'
 
 permissions:
   contents: read

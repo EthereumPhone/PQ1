@@ -1,8 +1,9 @@
-# CERTIFIED CONE FILE LIST -- every file the 38 gate roots transitively require.
+# CERTIFIED CONE FILE LIST -- every file the 47 gate roots transitively require.
 # Enforced by PHASE 1h (tools/stmt_coverage.py): a file ENTERING or LEAVING the cone is
 # a fatal, human-visible delta.  Without this the coverage check would silently absorb a
 # new cone file by enumerating whatever it found that day.
-# 53 files = the 46 roots + 7 transitively required.
+# 56 files = 47 roots + 9 transitively required.
+# (C10BoundedGrind root plus C10Counter/C10Bytes dependencies added 2026-09-21.)
 # (GprocTCollNamed.ec added 2026-09-14 -- the deployed headline with the encoding-collision term at +C.)
 # (TCollResEnum.ec, BadEncSplit.ec, BadEncToTColl.ec, BadEncStep4.ec added 2026-09-14 --
 #  the T_COLL_RES_ENUM chain, promoted from experiments/wots-badenc/{tcoll,red}.)
@@ -23,6 +24,9 @@ cdrafts-split/BadEncCountermodel.ec
 cdrafts-split/BadEncSplit.ec
 cdrafts-split/BadEncStep4.ec
 cdrafts-split/BadEncToTColl.ec
+cdrafts-split/C10BoundedGrind.ec
+cdrafts-split/C10Bytes.ec
+cdrafts-split/C10Counter.ec
 cdrafts-split/C10DeployedCapstone.ec
 cdrafts-split/C10DeployedGeometry.ec
 cdrafts-split/C10DeployedInstance.ec

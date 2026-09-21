@@ -2217,6 +2217,7 @@ _extract-slotkdf-impl:
 # Current vendored split artifact (#670, #683-#686). Fast checks do not run proofs.
 .PHONY: verify-easycrypt-split-pins verify-easycrypt-split
 verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/assumption census and controls
+	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/check_source_binding.py
 	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_split_contract.py
 	cd easycrypt/c10-port && $(_FV_PYTHON3) -B tools/split_contract.py
 	cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
