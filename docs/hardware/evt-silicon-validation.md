@@ -256,6 +256,25 @@ Three findings worth carrying forward:
 firmware at all, so `LCM_EN` alone may not light the panel; and nothing reads
 `FLAGB`.
 
+> **UPDATE 2026-09-21 — both LED drivers now have firmware; `FLAGB` still does
+> not.** The backlight half was confirmed the hard way: `LCM_EN` (PB15) alone
+> leaves the panel dark, because that pin is only the AW99703's `HWEN` and the
+> chip emits no current until `MODE[1:0]` is written over I2C2. The AW21036 RGB
+> driver landed as `secure/src/hw/aw21036.rs` plus a pin-generic bit-banged
+> master (`soft_i2c_aux.rs`) and `CMD_PRODTEST_RGB_TEST` (INS `0x8A`).
+>
+> Two board facts settled from the schematic while doing it: `RGB_EN` is
+> **PB12** (MCU pin 25 — an earlier note in `board/pq1.rs` claimed the
+> schematic showed PB11, which it does not), and the nine RGB LEDs are wired
+> to channels `LED1..LED27` through the **`LCM+RGB` connector**, i.e. they live
+> on the module, not the mainboard. A bare board therefore passes the
+> electrical half of the RGB test with nothing lit.
+>
+> Still open (#709): the on-silicon run, the `--en 0` vs `--en 1` functional
+> differential that is the only real test of the `RGB_EN` line (the part's I2C
+> stays accessible in standby, so an ACK proves nothing), and the ambiguous
+> `R_EXT` value that leaves per-channel full-scale current known only to ±2x.
+
 ### UPDATE 2026-08-30 (later) — secure-element path ported to pq1
 
 The SE half of the pin table above is now implemented, not just recorded. What
