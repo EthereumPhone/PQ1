@@ -19,6 +19,14 @@ RUNNER_PATH = Path(__file__).with_name("factory-prodtest-runner.py")
 SPEC = importlib.util.spec_from_file_location("factory_prodtest_runner", RUNNER_PATH)
 assert SPEC is not None and SPEC.loader is not None
 runner = importlib.util.module_from_spec(SPEC)
+# Python caches bytecode for this module in tools/__pycache__, and source
+# invalidation is (mtime, size) only. A same-length edit inside one mtime tick —
+# exactly what a negative control that flips one constant does — leaves a stale
+# .pyc that Python cannot distinguish from the restored source, so the OLD
+# constants keep being served. That produced a false hardware FAIL once
+# (RGB_VER_EXPECTED 0xA8 read back as 0xA9 from cache while the file on disk
+# said 0xA8). Writing no cache for this loader removes the failure mode.
+sys.dont_write_bytecode = True
 sys.modules[SPEC.name] = runner
 SPEC.loader.exec_module(runner)
 

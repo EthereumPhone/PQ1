@@ -36,6 +36,14 @@ assert _spec and _spec.loader
 runner = importlib.util.module_from_spec(_spec)
 # Register before exec: the runner uses @dataclass, which resolves its own
 # module out of sys.modules and fails with an unregistered spec.
+# Python caches bytecode for this module in tools/__pycache__, and source
+# invalidation is (mtime, size) only. A same-length edit inside one mtime tick —
+# exactly what a negative control that flips one constant does — leaves a stale
+# .pyc that Python cannot distinguish from the restored source, so the OLD
+# constants keep being served. That produced a false hardware FAIL once
+# (RGB_VER_EXPECTED 0xA8 read back as 0xA9 from cache while the file on disk
+# said 0xA8). Writing no cache for this loader removes the failure mode.
+sys.dont_write_bytecode = True
 sys.modules[_spec.name] = runner
 _spec.loader.exec_module(runner)
 
