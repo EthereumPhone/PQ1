@@ -314,10 +314,29 @@ closure files). A container recipe is in `../docker/`.
 # $PATH, so a bare `bash cert_gate_split.sh` from a host shell silently uses whatever
 # EasyCrypt is installed there and produces a PLAUSIBLE BUT WRONG receipt.
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
-  cd /work && bash cert_gate_split.sh'"   # 42 targets, 1166 pins, 1677 census rows (2026-09-15)
+  cd /work && bash cert_gate_split.sh'"   # SUPERSEDED 2026-09-17 -- read the note below before running this
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
   cd /work && bash cert_gate_fork.sh'"    # 19 targets,  9 pins, 1089 census rows
 ```
+
+> **:warning: THE SPLIT RECIPE ABOVE NO LONGER WORKS (2026-09-17).** The gate now checks its own
+> toolchain: `tools/split_contract.py --toolchain` compares the observed EasyCrypt `git-hash:` and
+> the sorted prover inventory against `cert-toolchain-split.json`, **and requires the environment
+> variable `PQ_EASYCRYPT_IMAGE` to equal the pinned image digest**. A bare `bash cert_gate_split.sh`
+> — including the `docker exec ec-grind` form above — raises there and exits at
+> `cert_gate_split.sh:182`, *before any phase runs and before any `### RESULT` line is printed*.
+> Run it through the wrapper instead, from the repo root:
+>
+> ```sh
+> python3 contracts/verification/scripts/run_easycrypt_split.py              # full gate
+> python3 contracts/verification/scripts/run_easycrypt_split.py --controls   # toolchain + proof controls only
+> ```
+>
+> The wrapper does `docker run --rm --init --network none` on the digest-pinned image, mounts this
+> directory read-only, copies it to a disposable path and runs there. The fork recipe is untouched.
+> `bash cert_gate_split.sh --identity-only` remains available as a fast per-PR identity check that
+> deliberately needs no proof toolchain.
+
 
 `LC_ALL=C` is REQUIRED: identity hashing is collation-sensitive.
 
@@ -3996,3 +4015,152 @@ OK   inputs unchanged across the run
 ```
 
 Full log: `scratch/gate_20260915_run7.log`.
+
+### UPDATE 2026-09-21 — a full read of the artifact, and the gate it now has
+
+This is a review, not a change to the proof. **No `.ec` source, manifest or tool was edited**, and
+no gate run accompanies it: `README.md` is not in the hashed input set (`cert_gate_split.sh:161`),
+so the identity does not move. Two corrections named below *are* in hashed files and are
+deliberately **not** made here — each would require a full pinned-image replay, and neither is
+worth a replay on its own.
+
+Read against master `16279ead`, i.e. **after** the 2026-09-17 integration (PR #689), which changed
+the gate but no proof source.
+
+#### What the body proves
+
+A complete, machine-checked **reduction** of single-key stateless EUF-CMA for SPHINCS+C10 to named
+hardness games at deployed parameters. The surface to quote remains
+`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS`
+(`cdrafts-split/GprocChargedQWired.ec:351`). Its premise count was re-verified **at source** rather
+than from the table above: the proof intro at `:429` is `move=> hc hsz` — exactly **two** binders,
+`c <= p_tgts` and `size (emb_in witness) = 8*n + c10_r`. No free real, no N2, no unreduced `Q`.
+
+It is **not a numerically meaningful bound**, and that is settled rather than outstanding:
+`Pr[M.F.ITSRC10 …]` is carried unreduced and `scratch/_countermodel.ec::countermodel_pr1` exhibits a
+legal clone where it equals 1.
+
+Two things here that MM45 does not have: the **FORS+C leg**, which the paper never proves, and the
+removal of MM45's encoder-injectivity admit — shown not merely unproven but **refutable**, and
+replaced by an explicit charged term.
+
+`..._TCOLLNAMED` is **strictly weaker as an inequality** than `..._WOTSNAMED` — a corollary of it
+(`GprocTCollNamed.ec:32-38`). It buys *which* term is carried, not a number. Quote WOTSNAMED when
+the tighter statement is wanted.
+
+#### The assumption surface, decomposed
+
+"Ledger 241" reads as 241 things to believe; it is not. Measured from `cert-baseline-split.tsv`:
+
+| kind | count | what it is |
+|---|---|---|
+| clone-discharge | 84 | instantiation bookkeeping |
+| op-annotation | 68 | " |
+| refined-const | 47 | " |
+| clone-obligation | 12 | " |
+| **axiom** | **24** | the believable surface |
+| **declare-axiom** | **5** | " |
+| **admit** | **1** | `extract_op` |
+
+Of the 24 axioms, seven are C10 parameter pins (`n=16, k=13, a=11, log2_w=3, len=43, h'=9, d=2`) and
+are definitional. The substantive ones are the `g` structural axioms in `FORS_C10.ec` — which exist
+because an external review exhibited a legal clone `g y = nseq k (0,0,0)` satisfying the weaker set
+while representing a single tree — plus `dmkey_ll`, `good_pos` (the p_nu assumption), and
+`ch0`/`chS`.
+
+**One admit in the perimeter**, confirmed by a comment-stripping sweep of all 53 cone files:
+`cdrafts-split/FORS_C_TreePort.ec:1511`. Note that `admit.` also appears in `R6probe.ec`,
+`Zprobe.ec` and `sphincs_c10_capstone_*_wip.ec`, which sit in `cdrafts-split/` but are **not cone
+members** — the directory holds 89 files; the perimeter is 53. Directory membership is not
+perimeter membership.
+
+#### The gate, as it now stands
+
+The 2026-09-17 integration changed it materially, and the sections above this one describe the
+older shape:
+
+* **Targets 46 → 53.** `tools/split_contract.py::targets()` recomputes the cone from the roots,
+  requires `set(files) == set(pinned)` against the 53-row `cert-cone-files-split.tsv`, rejects
+  empty, duplicate, missing and cyclic, and emits the files dependency-ordered. All 53 are compiled
+  **and** CLI-replayed. The previous split compiled 42 closure entries plus 4 base files.
+* **The toolchain is now checked, not merely printed.** This closes a real hole: the old
+  `### TOOLCHAIN` / `### PROVERS` lines were `echo` substitutions whose values were never captured
+  or compared, and `|| echo UNKNOWN` meant a broken `easycrypt` yielded the literal string `UNKNOWN`
+  with nothing failing — the `cert-identity.tsv` rows pinned only `INPUTS_SHA256`. The pin is now
+  the container image **by sha256 digest**, `r2026.02`, and all 25 prover configurations.
+* **Two self-referential guards are gone.** The old `:258` and `:381` compared a loop count against
+  a `grep -c` of *the same file*, so deleting a row moved both sides together; `:381`'s own comment
+  claimed it caught "a closure file that shrank to nothing", which was the one thing it could not
+  catch. Both were backstopped by `INPUTS_SHA256`, PHASE 1h and PHASE 2, so neither was a live
+  fail-open — but the messages misdescribed what they enforced. The expectation is now anchored to
+  the verified pinned inventory.
+* **The 2026-09-15 pin-key guard survived and was extended.** `check_pins()` keeps duplicate-key
+  rejection, the exact `EXPECT_PINS` comparison and unresolvable-pin rejection, and adds canonical
+  path and identifier checks so a lexical alias (`./A.ec` vs `A.ec`) cannot stand in for a deleted
+  `op:` pin. `tools/test_split_contract.py::test_duplicate_replacing_deleted_pin_is_rejected` is the
+  2026-09-15 scenario as a unit test.
+
+New identity `623ad0710d73000a1c693049b8933813`; `cert-identity.tsv` records that prior 45-file
+receipts do not certify it.
+
+#### Findings from this review
+
+1. **Nine exit paths, one `### RESULT` line.** `cert_gate_split.sh` exits at `:25`, `:29`, `:179`,
+   `:180`, `:181`, `:182`, `:183`, `:184` and `:210`; the only verdict line is `:1031`. Six of those
+   are new and sit *ahead of every phase*, so a toolchain mismatch or a split-contract failure
+   produces **no `### RESULT` at all**. A consumer grepping for `### RESULT:` sees nothing and must
+   not read that as absence of failure. Capturing the exit status (`__GATE_EXIT=$?`) is what
+   distinguishes these cases.
+2. **A certified file overstates by a decimal.** `cdrafts-split/GprocTCollNamed.ec:56` says the
+   constant-sum surface count "`|C_T| = 2^114.0941` is machine-checked". What is machine-checked is
+   the exact integer (`C10SurfaceKernel.ec:25`) and the bracket `2^114 < |C_T| < 2^115`
+   (`C10Surface.ec:62`). The figure `114.0941` appears only in a **comment** at `C10Surface.ec:61`.
+   The arithmetic is right; "machine-checked" attaches to the wrong object. **Hashed file — not
+   corrected here.**
+3. **A stale count in a hashed manifest.** `cert-cone-files-split.tsv:1` says "every file the **38**
+   gate roots transitively require". That was right when written on 2026-08-20 (34 closure + 4 base)
+   and is now wrong twice over. Line 5's "53 files = the 46 roots + 7 transitively required" is
+   **correct** and was nearly filed as a defect here: "roots" there means the 46 compiled targets of
+   the old split (42 closure + 4 base), and 53 − 46 = 7 is `cdrafts-split/FORS_C.ec` plus the 6 base
+   cone files that were not targets. **Hashed file — not corrected here.**
+4. **PHASE 1f is entirely vacuous today.** `cert-watched-split.tsv` has 0 rows and
+   `EXPECT_WATCHED=0`, so the loop body never executes and the check is `0 -eq 0`. Correct by
+   construction, informative about nothing.
+5. **A cross-perimeter `require`.** `cdrafts-split/LeafWiring.ec:74` does `require import
+   EncoderBridge`, whose only copy is `experiments/tcollres-leg/EncoderBridge.ec`. `LeafWiring` is
+   in neither the closure nor the cone, so nothing is wrong today; it is a hazard only if that file
+   is ever promoted, and `LeafWiring.ec:10-17` independently argues the naive wiring is poisoned.
+6. **The reproduction recipe was broken** by the toolchain check; corrected in place above.
+
+#### What can still be done — and two thirds of it is not proof work
+
+**Theorem-terminated or recorded dead. Do not re-attempt.** `Pr[ITSRC10]` (countermodel).
+Bounding BadEnc at the WOTS-TW layer — provably 1 there. The S-TCR sibling reduction
+(`stcr_reduction_wip.ec:234` records that it does not hold). Closing `extract_op` — the two-reviewer
+verdict is *do not close it*: it targets a local mirror game, not the headline's term. Gating
+`WOTS_C_Multi` — `scratch/FINDING-c-le-ptgts-justification-is-ungated.md` **retracts its own central
+inference**; its title reads like a live gap and is not one.
+
+**Owner decisions, not proof work.** `extract_op` retire/archive, which would remove ~100
+statements from the certified surface. Whether the EUF-CMA statement is meant to cover
+bootstrap-signed Type-1 authorisations. The `(len, w, target_sum)` parameter conversation is
+**already closed** — those are frozen.
+
+**Genuinely live, in order.**
+1. **Promote the surface count.** `cdrafts-split/C10DeployedScope.ec:344` — a *cone* file — cites
+   `experiments/wots-badenc/count/C10SurfaceKernel.ec` for a constant it leans on, and no
+   `experiments/` file is in the perimeter. Zero admits, zero axioms, eight controls. This is the
+   pattern that justified the PTgtsPin promotion.
+2. **`experiments/ptgts-pin/PTgtsPinCapstone.ec`** — 0 admits, 0 axioms, discharges `c <= p_tgts`
+   against a pinned value. Its own dependency was promoted on 2026-08-19 and this file was left
+   behind: `AT_PINNED_PTGTS` appears in no `cdrafts-split/` file and has 0 manifest rows. It targets
+   the 2026-08 capstone, not the current quotation surface.
+3. **`emb_in` ↔ Rust fidelity** — this README already calls it "the obvious next unit and is **not**
+   done".
+4. **The losslessness obligations** that WOTSNAMED and TCOLLNAMED carry as premises rather than
+   discharge — `scratch/FINDING-unfold-is-unblocked-at-the-deployed-adversary.md` calls this "the
+   real remaining cost".
+
+What Runs 1–7 and the 2026-09-17 integration bought is **auditability, not strength**: that the
+files contain what this README says, and that a deletion cannot pass unnoticed. No theorem became
+stronger. That distinction is worth keeping in front of any reader who arrives at the counts first.
