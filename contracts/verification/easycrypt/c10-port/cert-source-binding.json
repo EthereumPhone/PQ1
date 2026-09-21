@@ -12,7 +12,7 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Counter.ec": "1c93aa173db90139e6d113311b23a78da77d6cbf67e7fc56fbccc9e5a7445d34",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Bytes.ec": "3d6924904713347fabf77deca15c56d04094c95be8c7130575c02e671e6a563b",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10BoundedGrind.ec": "27e8f6a469bfab0a58b73acfa398155a217f901bd03980a6595006b48ff5c733",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10DeployedInstance.ec": "12bf8b716900aaec54c7deadf19825cb51b3afd479c4c9dc85802ea6fe81c823",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/WOTS_C_Real.ec": "eac2fdc9d437310ae0e1039fa2be7362481a311809d85c59b3244f794f3fed2b"
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10DeployedInstance.ec": "853b4143ae86e4a5b44ca062f29358f9a28f9c2793cfa357969de9e710e007be",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/WOTS_C_Real.ec": "0d7b1d82c47ae62e590039dbc2ad0488dfd987bc932454d4c108193a5e8d65de"
   }
 }

@@ -90,6 +90,9 @@ op emb_tw (ad : adrs) : adrs =
    from WOTS_C_Flag2Discharge.ec (which stays as the standalone record).
    `thfc` / `emb_in` / `predC` STAY ABSTRACT, so the S-TCR(+C) term remains the
    genuine SM-DT-TCR-C assumption -- nothing is trivialised.
+   UPDATE 2026-09-21: that last sentence describes the earlier model.
+   emb_in is now fixed and predC is a defined model predicate; thfc remains
+   unconstrained. Fixing the input encoder does not bound the S-TCR term.
    ========================================================================== *)
 (* Instance properties: any valid SPHINCS+ address supplies the kpidx/tidx/lidx
    the pkco validity predicate demands (needed by emb_tw_valid). *)

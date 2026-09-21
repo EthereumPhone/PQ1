@@ -540,7 +540,13 @@ qed.
    serialises the counter's RANK IN AN ARBITRARY ENUMERATION
    (`int2bs c10_r (index x.`2 CntrFT.enum)`), and `cntr` is an abstract FinType
    whose cardinality no axiom bounds.  A singleton counter satisfies every
-   premise.  This is an INJECTIVE RANK ENCODER, not the firmware's u32.] 
+   premise.  This is an INJECTIVE RANK ENCODER, not the firmware's u32.]
+
+   UPDATE 2026-09-21: the arbitrary-enumeration/singleton discussion above
+   describes the former model. cntr now is C10Counter.counter; its cardinality
+   is 2^32 and its ascending rank is its numeric value. emb_in = c10_embg and
+   injectivity are proved above without extra premises. The warning about
+   unconstrained thfc and the missing cryptographic bound still applies.
    ========================================================================== *)
 lemma c10_deployed_encoder_meets_model :
      STCRC_WC.G.CntrFT.card <= 2 ^ c10_r
