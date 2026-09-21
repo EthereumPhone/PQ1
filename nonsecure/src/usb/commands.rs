@@ -282,6 +282,7 @@ impl CommandRouter {
         match ins {
             INS_V2_GET_DEVICE_INFO => return self.cmd_get_device_info(),
             INS_V2_GET_STATUS => return self.cmd_get_status(),
+            INS_V2_GET_PIN_ATTEMPT_LOG => return self.cmd_get_pin_attempt_log(),
             INS_V2_UNLOCK => return self.cmd_unlock(),
             INS_V2_LOCK => return self.cmd_lock(),
             INS_V2_GET_WALLET_ADDRESS => return self.cmd_get_wallet_address(data),
@@ -471,6 +472,23 @@ impl CommandRouter {
         Response {
             ptr: RESP_BUF.as_ptr(),
             len: 4,
+        }
+    }
+
+    /// 0x03 GET_PIN_ATTEMPT_LOG — why each PIN attempt was consumed (#715).
+    /// Read-only; no secret material (see `secure/src/pin_attempt_log.rs`).
+    unsafe fn cmd_get_pin_attempt_log(&self) -> Response {
+        let mut out = [0u8; PIN_ATTEMPT_LOG_LEN];
+        let status = nsc_api::get_pin_attempt_log(&mut out);
+        if status != 0 {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+        RESP_BUF[..PIN_ATTEMPT_LOG_LEN].copy_from_slice(&out);
+        RESP_BUF[PIN_ATTEMPT_LOG_LEN] = (SW_OK >> 8) as u8;
+        RESP_BUF[PIN_ATTEMPT_LOG_LEN + 1] = (SW_OK & 0xFF) as u8;
+        Response {
+            ptr: RESP_BUF.as_ptr(),
+            len: PIN_ATTEMPT_LOG_LEN + 2,
         }
     }
 

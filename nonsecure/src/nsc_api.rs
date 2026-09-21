@@ -184,6 +184,7 @@ mod transport {
         // Prodtest CMSE veneers. The secure side declares these under
         // `#[cfg(feature = "prodtest")]`; the NS side mirrors the gate
         // so non-prodtest builds don't link against missing symbols.
+        fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
         fn nsc_prodtest_get_id(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
@@ -334,6 +335,11 @@ mod transport {
     // -----------------------------------------------------------------
     // Prodtest transport wrappers
     // -----------------------------------------------------------------
+
+    #[inline]
+    pub(super) fn get_pin_attempt_log_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_get_pin_attempt_log(out_ptr as u32) }
+    }
 
     #[cfg(feature = "prodtest")]
     #[inline]
@@ -603,6 +609,12 @@ pub fn fw_abort() -> u32 {
 // `secure/src/nsc/mod.rs::nsc_prodtest_*`. Buffers are caller-owned
 // — typical caller is `usb::commands::cmd_prodtest_*`.
 // ---------------------------------------------------------------------------
+
+pub fn get_pin_attempt_log(
+    out: &mut [u8; sphincs_tz_shared::PIN_ATTEMPT_LOG_LEN],
+) -> u32 {
+    transport::get_pin_attempt_log_call(out.as_mut_ptr())
+}
 
 #[cfg(feature = "prodtest")]
 pub fn prodtest_get_id(out: &mut [u8; 24]) -> u32 {

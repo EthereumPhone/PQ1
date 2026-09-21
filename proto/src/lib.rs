@@ -89,6 +89,42 @@ pub const CMD_NONE: u32 = 0;
 pub const CMD_GET_REMAINING: u32 = 1;
 pub const CMD_REQUEST_UNLOCK: u32 = 2;
 pub const CMD_GET_PUBKEY: u32 = 3;
+
+/// CMD_GET_PIN_ATTEMPT_LOG — why each PIN attempt was consumed.
+///
+/// `gated_unlock` PRE-CHARGES the page-124 counter before the secure element
+/// judges the PIN, so the counter alone cannot distinguish a legitimate
+/// wrong-PIN burn from a fault that burned an attempt without ever reaching a
+/// verdict. This returns the reason for each recent attempt.
+///
+/// Motivated by #715: a pq1 unit displayed "PIN locked" after the operator
+/// entered the CORRECT PIN, and nothing recorded how ten attempts had been
+/// spent — shipping images omit `debug-log` because semihosting `BKPT`
+/// hard-faults on a sealed unit, so the event left no trace at all.
+///
+/// RAM-resident: it explains a lockout on a device that is still powered, and
+/// does NOT survive a reset. Read it BEFORE power-cycling a suspect unit.
+///
+/// Discloses reason codes and the pre-attempt counter value — no secret, no
+/// PIN material. An attacker with USB access can already read the remaining
+/// count via `CMD_GET_REMAINING`, so this grants no new capability.
+///   in_ptr  → ignored
+///   out_ptr → `PIN_ATTEMPT_LOG_LEN` bytes:
+///     `[0]`     format version (1)
+///     `[1]`     entry count
+///     `[2..4]`  entries dropped since boot (u16 BE) — a non-zero value means
+///               the ring wrapped and the earliest cause is gone
+///     `[4..]`   `(reason, pre_count)` pairs, OLDEST FIRST, zero padded
+///   Reason codes: 1 ok+reset, 2 ok-but-reset-FAILED, 3 wrong PIN,
+///   4 already at max, 5 precharge failed, 6 no verdict, 7 counter unstable,
+///   8 duress wipe.
+/// Returns `NscStatus::Ok`, or `NscStatus::InvalidPointer` on validation
+/// failure.
+pub const CMD_GET_PIN_ATTEMPT_LOG: u32 = 4;
+
+/// Byte count of the [`CMD_GET_PIN_ATTEMPT_LOG`] response. Mirrors
+/// `secure/src/pin_attempt_log.rs::SERIALISED_LEN` (4 + 16 * 2).
+pub const PIN_ATTEMPT_LOG_LEN: usize = 36;
 // CMD 4 reserved (was CMD_SIGN in v1)
 // CMD 5 reserved; do not reuse this frozen protocol value.
 // CMD 6 reserved (was CMD_CLEAR_SIGN_MSG — standalone EIP-712 typed-data
@@ -880,6 +916,7 @@ pub const APDU_CLA_V2: u8 = 0xF0;
 // -- Device info & status (0x01-0x0F) --
 pub const INS_V2_GET_DEVICE_INFO: u8 = 0x01;
 pub const INS_V2_GET_STATUS: u8 = 0x02;
+pub const INS_V2_GET_PIN_ATTEMPT_LOG: u8 = 0x03;
 
 /// `GET_DEVICE_INFO.capabilities` bit 0: the unified UserOperation signing
 /// command is available.

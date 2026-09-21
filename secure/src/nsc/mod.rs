@@ -42,6 +42,7 @@ mod cmd_is_unlocked;
 mod cmd_lock;
 mod cmd_offchain_status;
 mod cmd_offchain_sync;
+mod cmd_pin_attempt_log;
 mod cmd_request_unlock;
 mod cmd_sign_offchain;
 mod cmd_sign_userop;
@@ -1210,9 +1211,14 @@ pub unsafe fn gated_unlock(
         crate::fi::wait_random();
         let pre_count_b = crate::hw::flash::pin_attempts_read();
         if pre_count_a != pre_count_b {
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::CounterUnstable,
+                pre_count_a,
+            );
             return Err(UnlockError::PinLocked);
         }
         let pre_count = pre_count_a;
+        crate::pin_attempt_log::note_precharge(pre_count);
 
         // Affirmative "allowed to proceed" — Hamming-distant sentinel
         // returned only on a clean `pre_count < MAX_ATTEMPTS`. The
@@ -1221,6 +1227,11 @@ pub unsafe fn gated_unlock(
             || pre_count < sphincs_tz_shared::MAX_ATTEMPTS,
         );
         if allowed != crate::fi::OK_SENTINEL {
+            // Short-circuit at MAX: nothing burned, nothing wiped here.
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
+                pre_count,
+            );
             return Err(UnlockError::PinLocked);
         }
 
@@ -1251,6 +1262,10 @@ pub unsafe fn gated_unlock(
                 && unsafe { crate::hw::flash::pin_attempts_read() } == pre_count + 1
         });
         if bumped != crate::fi::OK_SENTINEL {
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::PrechargeFailed,
+                pre_count,
+            );
             // Flash write fault (PROGERR / readback mismatch), a faulted or
             // skipped bump, or the counter did not advance by exactly one.
             // Refuse without ever calling the SE driver.
@@ -1360,18 +1375,42 @@ pub unsafe fn gated_unlock(
                 let reset_ok =
                     crate::fi::check_true_into_sentinel(|| reset_result.is_ok());
                 if reset_ok != crate::fi::OK_SENTINEL {
+                    // The PIN was CORRECT but the counter stayed charged.
+                    // Repeat this and the budget walks to a lockout with the
+                    // user doing nothing wrong — the self-brick the comment
+                    // above describes, now visible instead of silent (#715).
+                    crate::pin_attempt_log::record_outcome(
+                        crate::pin_attempt_log::AttemptReason::OkResetFailed,
+                    );
                     return Err(UnlockError::InternalError);
                 }
             }
+            crate::pin_attempt_log::record_outcome(
+                crate::pin_attempt_log::AttemptReason::OkReset,
+            );
             Ok(master)
         }
         Ok(_) => {
             // FI inconsistency between the two reads of `result.is_ok()` (or a
             // glitched `verdict`) — refuse without resetting the MCU counter.
             // Counter stays bumped from the pre-commit above.
+            crate::pin_attempt_log::record_outcome(
+                crate::pin_attempt_log::AttemptReason::NoVerdict,
+            );
             Err(UnlockError::InternalError)
         }
-        Err(e) => Err(e),
+        Err(e) => {
+            // A real chip-side verdict is what the budget exists for; anything
+            // else burned an attempt without judging the PIN.
+            crate::pin_attempt_log::record_outcome(match e {
+                UnlockError::PinIncorrect => {
+                    crate::pin_attempt_log::AttemptReason::PinIncorrect
+                }
+                UnlockError::PinLocked => crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
+                _ => crate::pin_attempt_log::AttemptReason::NoVerdict,
+            });
+            Err(e)
+        }
     }
 }
 
@@ -1569,6 +1608,7 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         sphincs_tz_shared::CMD_TEST_PIN_LOCKOUT => cmd_test_pin_lockout::run(),
         // Prodtest commands — only present in the `prodtest` build
         // profile, never in production firmware.
+        sphincs_tz_shared::CMD_GET_PIN_ATTEMPT_LOG => cmd_pin_attempt_log::run(args),
         #[cfg(feature = "prodtest")]
         sphincs_tz_shared::CMD_PRODTEST_GET_ID => prodtest::cmd_get_id_run(args),
         #[cfg(feature = "prodtest")]
@@ -1780,6 +1820,19 @@ pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
 // ---------------------------------------------------------------------------
 // Prodtest CMSE veneers (`prodtest` feature)
 // ---------------------------------------------------------------------------
+
+/// CMD_GET_PIN_ATTEMPT_LOG (4) — why each PIN attempt was consumed (#715).
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { cmd_pin_attempt_log::run(&args) };
+    secure_log!("[NSC] get_pin_attempt_log -> {}", r);
+    r
+}
 
 /// CMD_PRODTEST_GET_ID (100) — read STM32 UID + firmware version.
 #[cfg(feature = "prodtest")]

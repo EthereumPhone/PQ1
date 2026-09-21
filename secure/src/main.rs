@@ -95,6 +95,9 @@ mod first_boot;
 // erases. The STM32 driver consumes its validated address/page capabilities;
 // page 127 remains exclusively owned by the first-boot journal.
 mod flash_policy;
+/// Why each PIN attempt was consumed (#715). RAM-resident, read-only over the
+/// gateway; no secret material. Pure ring logic, host-tested.
+mod pin_attempt_log;
 
 // Pure classification of the device-master-key OTP region (Virgin / Partial /
 // Complete, per quad-word). Free of MMIO so the D4 rule — an interrupted
