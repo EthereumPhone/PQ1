@@ -327,6 +327,45 @@ firmware at all, so `LCM_EN` alone may not light the panel; and nothing reads
 > full-scale *drive* current known only to ±2x (it does not affect the OSD
 > result above).
 
+### UPDATE 2026-09-21 — first complete factory acceptance run on hardware
+
+`tools/factory-prodtest-runner.py` against the sealed EVT unit, profile
+**`pqsigner-prodtest-reversible-pq1-v2`**. Receipt archived as
+[`prodtest-receipt-example-pq1.json`](prodtest-receipt-example-pq1.json) — one
+example so the format is reviewable; per-unit receipts belong in the factory's
+traceability DB, not this repo.
+
+20 checks: **18 PASS**, 2 approved `SKIP_UNSUPPORTED` (BHK, FLASH_RW — the
+reversible profile's deliberate non-authority probes), **1 FAIL**. Verdict
+`PROFILE REJECTED`, exit 1 — the right answer for this board, whose single
+defect is a dead green channel (`RGB_OSD` → `OPEN: LED5-G(ch14)`).
+
+Covered in one run: chip UID + prodtest version gate, five LCD patterns,
+SAES/DHUK, MCU TRNG (167 distinct values in 254 B), an OPTIGA handshake, an
+SE050 handshake, a 254-byte USB loopback returned byte-identical, the RGB colour
+sweep, per-channel open detection, and the three-step button test.
+
+Incidental anti-vacuity evidence: across runs the TRNG distinct-value count and
+both secure elements' RNG outputs differ, so those checks read live entropy
+rather than replaying a cached constant.
+
+**Two tool defects only a hardware run could expose, both now fixed:**
+
+- The runner's default USB ids were **Ledger's** `0x2C97:0x0006`, so it could not
+  find a PQSigner unit at all — "no matching hidraw node" against a device that
+  was plugged in and working. The firmware advertises `0x1209:0x7051`. A factory
+  would have hit this on its first run. A test now derives the expected ids from
+  `nonsecure/src/usb/mod.rs` so they cannot drift again.
+- The SAES line read like a per-unit fingerprint. It is DHUK-derived, and **DHUK
+  is shared across all parts at RDP-0** (per-device only from RDP0.5, RM0456
+  Table 21) — `117d822a62a50830` is byte-identical on two different dies. Units
+  are tested and shipped at RDP-0, so in a per-unit receipt that invites reading
+  a constant as a device identity, which would make every unit look cloned. The
+  receipt now says so and points at the STM32 UID for identity.
+
+The runner also no longer needs `hidapi`: it falls back to the kernel's hidraw,
+so a fixture image needs no `pip install` to talk to the device.
+
 ### UPDATE 2026-08-30 (later) — secure-element path ported to pq1
 
 The SE half of the pin table above is now implemented, not just recorded. What

@@ -1,0 +1,309 @@
+{
+  "stm32_uid_hex": "22003b00025046304c313320",
+  "prodtest_fw_version": 4,
+  "results": [
+    {
+      "name": "GET_ID",
+      "cmd": 100,
+      "passed": true,
+      "status_code": 0,
+      "detail": "uid=22003b00025046304c313320 fw_v4",
+      "raw_response": "22003b00025046304c313320040000000000000000000000",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "DISPLAY_PATTERN(0)",
+      "cmd": 101,
+      "passed": true,
+      "status_code": 0,
+      "detail": "pattern=0",
+      "raw_response": "",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "DISPLAY_PATTERN(1)",
+      "cmd": 101,
+      "passed": true,
+      "status_code": 0,
+      "detail": "pattern=1",
+      "raw_response": "",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "DISPLAY_PATTERN(2)",
+      "cmd": 101,
+      "passed": true,
+      "status_code": 0,
+      "detail": "pattern=2",
+      "raw_response": "",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "DISPLAY_PATTERN(3)",
+      "cmd": 101,
+      "passed": true,
+      "status_code": 0,
+      "detail": "pattern=3",
+      "raw_response": "",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "DISPLAY_PATTERN(4)",
+      "cmd": 101,
+      "passed": true,
+      "status_code": 0,
+      "detail": "pattern=4",
+      "raw_response": "",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "SAES_SELFTEST",
+      "cmd": 102,
+      "passed": true,
+      "status_code": 0,
+      "detail": "fingerprint=117d822a62a50830 (shared at RDP-0, not a unit id)",
+      "raw_response": "117d822a62a50830",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "BHK_SELFTEST",
+      "cmd": 103,
+      "passed": false,
+      "status_code": 28416,
+      "detail": "unsupported by reversible profile (expected non-authority result)",
+      "raw_response": "0000000000000000",
+      "policy": "unsupported",
+      "outcome": "SKIP_UNSUPPORTED"
+    },
+    {
+      "name": "FLASH_RW",
+      "cmd": 104,
+      "passed": false,
+      "status_code": 28416,
+      "detail": "unsupported by reversible profile (no flash-write authority)",
+      "raw_response": "",
+      "policy": "unsupported",
+      "outcome": "SKIP_UNSUPPORTED"
+    },
+    {
+      "name": "TRNG_SAMPLE(254)",
+      "cmd": 105,
+      "passed": true,
+      "status_code": 0,
+      "detail": "got 254 bytes, 167 distinct values",
+      "raw_response": "17ceeece78a6ee9c051fa0af13e39a4a6db92f41162294101ea50a412665be9073e06150a22fbdfc09958670ac1775009d40faf179a6efc12eddd1289e6508043b734338d14ed87f2bbb2e53e639d528dd704275d6fc3639a1b0908ff5b51706c4e22fed1f47e1d2446ed47a8ae9e0b35583e4edb8119c0cc002ac4d53117a69c97dd680b96edf43a326b2dc30351efcb97bdadbbe77b63d51efb175a1aecc282959911f7f0860a099ad744d8a602ce5a41dbc148b398686dbf71c78793dd8c388d44b319c48a711a929e0472f603894ebb1482a124c4ba7d0ba3b1df99b760f986804683f00bf86d9e111ef8d4cf0d2e7fe5e52c73a1f63260a73fc5231",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "OPTIGA_HANDSHAKE",
+      "cmd": 106,
+      "passed": true,
+      "status_code": 0,
+      "detail": "rng=74bfdb488704179ab71a9e8191683902",
+      "raw_response": "74bfdb488704179ab71a9e8191683902",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "SE050_HANDSHAKE",
+      "cmd": 107,
+      "passed": true,
+      "status_code": 0,
+      "detail": "rng=ae0eac4b4f7d41bff6804dcfd0587fdf",
+      "raw_response": "ae0eac4b4f7d41bff6804dcfd0587fdf",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "USB_LOOPBACK(254)",
+      "cmd": 108,
+      "passed": true,
+      "status_code": 0,
+      "detail": "254 bytes round-tripped byte-identical",
+      "raw_response": "",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "RGB_TEST(red)",
+      "cmd": 110,
+      "passed": true,
+      "status_code": 0,
+      "detail": "ver=0xa8, id=0x18, acks=58/58, en=1, gcc=0x28, bus=[0x1c 0x34 0x36]",
+      "raw_response": "00000010000050000000000000000000a8183a3a01280000",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "RGB_TEST(green)",
+      "cmd": 110,
+      "passed": true,
+      "status_code": 0,
+      "detail": "ver=0xa8, id=0x18, acks=58/58, en=1, gcc=0x28, bus=[0x1c 0x34 0x36]",
+      "raw_response": "00000010000050000000000000000000a8183a3a01280000",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "RGB_TEST(blue)",
+      "cmd": 110,
+      "passed": true,
+      "status_code": 0,
+      "detail": "ver=0xa8, id=0x18, acks=58/58, en=1, gcc=0x28, bus=[0x1c 0x34 0x36]",
+      "raw_response": "00000010000050000000000000000000a8183a3a01280000",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "RGB_TEST(white)",
+      "cmd": 110,
+      "passed": true,
+      "status_code": 0,
+      "detail": "ver=0xa8, id=0x18, acks=58/58, en=1, gcc=0x28, bus=[0x1c 0x34 0x36]",
+      "raw_response": "00000010000050000000000000000000a8183a3a01280000",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "RGB_TEST(off)",
+      "cmd": 110,
+      "passed": true,
+      "status_code": 0,
+      "detail": "ver=0xa8, id=0x18, acks=58/58, en=1, gcc=0x28, bus=[0x1c 0x34 0x36]",
+      "raw_response": "00000010000050000000000000000000a8183a3a01280000",
+      "policy": "required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "RGB_OSD",
+      "cmd": 111,
+      "passed": false,
+      "status_code": 0,
+      "detail": "ver=0xa8, acks=46/46, en=1, gcc=0x20, wired=27/36, a=0000000000, b=002000f80f, open-encoding=b(OSDE=11), OPEN: LED5-G(ch14)",
+      "raw_response": "0000000000002000f80fa82e2e01201b2400000000000000",
+      "policy": "required",
+      "outcome": "FAIL"
+    },
+    {
+      "name": "BUTTON_TEST",
+      "cmd": 109,
+      "passed": true,
+      "status_code": 0,
+      "detail": "PASS: all 3 steps OK",
+      "raw_response": "00000000",
+      "policy": "required",
+      "outcome": "PASS"
+    }
+  ],
+  "fatal_error": "",
+  "profile": {
+    "id": "pqsigner-prodtest-reversible-pq1-v2",
+    "board": "pq1",
+    "feature_list_authority": "host_expected_not_device_attested",
+    "secure_features": [
+      "prodtest",
+      "dev-testkey",
+      "saes-dhuk",
+      "board-pq1"
+    ],
+    "nonsecure_features": [
+      "stm32u585",
+      "usb",
+      "prodtest"
+    ],
+    "max_response_data_len": 254,
+    "expected_firmware_version": 4,
+    "policy_classes": {
+      "required": [
+        100,
+        101,
+        102,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111
+      ],
+      "optional": [],
+      "unsupported": [
+        103,
+        104
+      ]
+    },
+    "commands": [
+      {
+        "cmd": 100,
+        "name": "GET_ID",
+        "policy": "required"
+      },
+      {
+        "cmd": 101,
+        "name": "DISPLAY_PATTERN",
+        "policy": "required"
+      },
+      {
+        "cmd": 102,
+        "name": "SAES_SELFTEST",
+        "policy": "required"
+      },
+      {
+        "cmd": 103,
+        "name": "BHK_SELFTEST",
+        "policy": "unsupported"
+      },
+      {
+        "cmd": 104,
+        "name": "FLASH_RW",
+        "policy": "unsupported"
+      },
+      {
+        "cmd": 105,
+        "name": "TRNG_SAMPLE",
+        "policy": "required"
+      },
+      {
+        "cmd": 106,
+        "name": "OPTIGA_HANDSHAKE",
+        "policy": "required"
+      },
+      {
+        "cmd": 107,
+        "name": "SE050_HANDSHAKE",
+        "policy": "required"
+      },
+      {
+        "cmd": 108,
+        "name": "USB_LOOPBACK",
+        "policy": "required"
+      },
+      {
+        "cmd": 109,
+        "name": "BUTTON_TEST",
+        "policy": "required"
+      },
+      {
+        "cmd": 110,
+        "name": "RGB_TEST",
+        "policy": "required"
+      },
+      {
+        "cmd": 111,
+        "name": "RGB_OSD",
+        "policy": "required"
+      }
+    ]
+  },
+  "required_checks_passed": false,
+  "all_results_passed": false,
+  "profile_accepted": false
+}
