@@ -274,6 +274,14 @@ pub fn light(r: u8, g: u8, b: u8, gcc: u8, en: bool) -> Report {
 /// board itself settles it, because `LED28..LED36` have no LED attached on this
 /// design, so whichever mode flags those nine is the open-detect encoding.
 ///
+/// **Resolved on silicon 2026-09-21: the register table is right and the prose
+/// is wrong — `OSDE = 0b11` is open detection.** On the EVT unit `0b11` flagged
+/// all nine unwired channels plus exactly one wired one, while `0b10` (short)
+/// flagged nothing; bit-identical over five runs and a 4x range of bias
+/// current. Both encodings are still reported rather than hardcoding that
+/// result, because the resolution is cheap, self-checking, and the alternative
+/// is trusting a document that is known to be wrong in one of two places.
+///
 /// That same fact makes the test self-validating: if *neither* mode flags the
 /// nine unwired channels, detection did not actually run, and the honest answer
 /// is "inconclusive", never "pass".

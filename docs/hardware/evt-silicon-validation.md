@@ -299,8 +299,33 @@ firmware at all, so `LCM_EN` alone may not light the panel; and nothing reads
 > part's `OSST0..4` open/short status registers; see #709, including the
 > datasheet's self-contradiction on the `OSDE` enable encoding.
 >
+> **Dead-LED detection works, and it found the defect independently
+> (2026-09-21).** `CMD_PRODTEST_RGB_OSD` (INS `0x8B`) runs the AW21036's
+> per-channel open detection. On the EVT unit, `OSDE = 0b11` returned
+> `00 20 00 f8 0f` = channels `{14, 28..36}`:
+>
+> - channels **28..36** are the nine with no LED attached, so they *must* read
+>   open — the positive control fired, which is what makes the result mean
+>   anything rather than "the scan returned zeros";
+> - channel **14 = LED5's green die**, the only wired channel open. That
+>   matches, from a completely independent mechanism, the LED an operator saw
+>   rendering magenta instead of white — with no one looking at the board;
+> - `OSDE = 0b10` (short detection) flagged nothing, as a healthy board should.
+>
+> Bit-identical across five runs and across `gcc` 0x10/0x20/0x40, so the
+> measurement is stable and — usefully — insensitive to the `R_EXT` ambiguity
+> over a 4x bias range.
+>
+> **Vendor-doc erratum, resolved empirically:** the AW21036 datasheet
+> contradicts itself on the `OSDE` encoding (prose: `10` = open, `11` = short;
+> `OSDCR` register table: the reverse). The register table is correct — `0b11`
+> is open detection. The firmware still reports both bitmaps and re-derives the
+> answer from the unwired channels on every run, rather than hardcoding a fact
+> taken from a document that is demonstrably wrong in one of two places.
+>
 > Still open (#709): the ambiguous `R_EXT` value, which leaves per-channel
-> full-scale current known only to ±2x.
+> full-scale *drive* current known only to ±2x (it does not affect the OSD
+> result above).
 
 ### UPDATE 2026-08-30 (later) — secure-element path ported to pq1
 
