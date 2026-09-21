@@ -1327,10 +1327,26 @@ fn main() -> ! {
             }
             match hw::bhk::load_and_lock() {
                 Ok(()) => {
-                    secure_log!("[S] BHK loaded + BHKLOCK set");
+                    // Ok now MEANS the active SAES Bhk key is the one flash
+                    // holds — load_and_lock verifies it rather than assuming
+                    // the register writes landed (#712).
+                    secure_log!("[S] BHK verified active + BHKLOCK set");
                 }
                 Err(e) => {
-                    secure_log!("[S] BHK load FAIL: {:?} — BHK derivations will error", e);
+                    // Production: a mismatch means the key the SAES Bhk path
+                    // will use is NOT this device's key, so every SE050
+                    // credential derived from it is wrong. That is lifecycle
+                    // damage or tamper, not something to log and carry on
+                    // with — the same reasoning as the missing-BHK panic
+                    // above. A power cycle resets the backup domain and is
+                    // the operator remedy the fault screen already gives.
+                    #[cfg(feature = "rdp2-self-lock")]
+                    panic!("BHK not verified active after ALL_DONE: {:?}", e);
+                    // Bench builds keep the old non-fatal behaviour so a
+                    // board without a provisioned BHK still boots for
+                    // unrelated work.
+                    #[cfg(not(feature = "rdp2-self-lock"))]
+                    secure_log!("[S] BHK load FAIL: {:?} — BHK derivations will be wrong", e);
                 }
             }
         } else {

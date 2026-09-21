@@ -79,6 +79,16 @@ pub(crate) const BHK_PAGE_ADDR: u32 =
     pqsigner_geometry::page_addr(pqsigner_geometry::Bank::One, BHK_PAGE_NUM as u8);
 /// Bank-1 page number, for `flash::erase_secure_page`.
 pub(crate) const BHK_PAGE_NUM: u32 = 126;
+/// Fixed plaintext for the post-lock active-key check. Its value is
+/// irrelevant to security — what matters is that the SAME block is encrypted
+/// under the intended key (via `KeySel::Software`) and under the now-locked
+/// hardware key (via `KeySel::Bhk`), so the two ciphertexts agree only if the
+/// active key IS the intended key.
+///
+/// Note a round-trip self-test (encrypt then decrypt under `Bhk`) does NOT do
+/// this: it succeeds under any key, including a stale one. The comparison has
+/// to be against a value computed from the key we meant to install.
+const ACTIVE_KEY_KAT_BLOCK: [u8; 16] = *b"pqsigner/bhk-kat";
 /// Size of the (un)wrapped BHK in bytes.
 const BHK_LEN: usize = 32;
 
@@ -144,6 +154,29 @@ pub enum BhkError {
     Saes(SaesError),
     /// The TRNG could not produce 32 bytes during `provision()`.
     Rng,
+    /// `BHKLOCK` was already set on entry **and** the key it holds is not the
+    /// one flash says it should be — so the backup registers could not be
+    /// reloaded this power cycle and the active key is stale.
+    ///
+    /// Measured on silicon 2026-09-21 (#712): the lock is sticky, survives a
+    /// system reset, and software cannot clear it. Without this check the
+    /// function returned `Ok` while installing nothing, so a first-boot retry
+    /// rotated SE credentials against the PREVIOUS key while flash held the new
+    /// one — an SE050 stranded with no mass erase involved.
+    ///
+    /// Being already locked with the CORRECT key is not an error — that is the
+    /// ordinary warm-reset case and returns `Ok`.
+    ///
+    /// Recovery is a power cycle: that resets the backup domain and clears the
+    /// lock, after which provisioning starts cleanly. This is exactly what the
+    /// panic/fault screen already tells the operator to do.
+    AlreadyLocked,
+    /// After locking, the key the SAES `Bhk` path actually uses does not match
+    /// the key this call intended to install. Catches a silently-ignored
+    /// register write (see `AlreadyLocked`) and any fault that leaves the
+    /// backup registers holding something else. No credential may derive from
+    /// the BHK after this error.
+    ActiveKeyMismatch,
 }
 
 impl From<SaesError> for BhkError {
@@ -259,14 +292,24 @@ pub unsafe fn provision_from_entropy(bhk: &mut [u8; 32]) -> Result<(), BhkError>
 /// via `KeySel::Bhk`. Must be called once at boot, before any
 /// `KeySel::Bhk` operation, and after `saes::init()`.
 ///
-/// Idempotent within a boot only in the trivial sense that once
-/// `BHKLOCK` is set, a second call will fail to re-write BKPR (the lock
-/// also write-protects them) — callers should invoke this exactly once.
+/// **Not idempotent.** Once `BHKLOCK` is set the backup registers cannot be
+/// re-written (the lock write-protects them, and on silicon it also blocks
+/// software reads and survives a system reset). A second call with the SAME
+/// key is therefore a verified no-op returning `Ok`; with a different key it
+/// returns `AlreadyLocked` instead of silently doing nothing.
 ///
 /// # Errors
 ///
 /// `NotProvisioned` if the flash page is blank (only an explicit non-RDP bench
-/// flow may call `provision()` first); `Saes` if an unwrap block fails.
+/// flow may call `provision()` first); `Saes` if an unwrap block fails;
+/// `AlreadyLocked` if the registers were already locked holding a DIFFERENT
+/// key (the #712 path); `ActiveKeyMismatch` if they were writable yet the
+/// active key still does not match. Already locked with the same key is the
+/// ordinary warm-reset case and returns `Ok`.
+///
+/// **No SE credential may be derived from the BHK unless this returns `Ok`.**
+/// Before 2026-09-21 it returned `Ok` unconditionally after writing, which is
+/// the #712 stranding path.
 ///
 /// # Safety
 ///
@@ -332,23 +375,89 @@ pub unsafe fn load_and_lock() -> Result<(), BhkError> {
         }
     }
 
-    // --- write the 32 BHK bytes into BKP0R..BKP7R (8 × u32, LE) ---
-    for i in 0..8usize {
-        let w = u32::from_le_bytes([
-            bhk[i * 4],
-            bhk[i * 4 + 1],
-            bhk[i * 4 + 2],
-            bhk[i * 4 + 3],
-        ]);
-        write_volatile((TAMP_BKP0R + (i as u32) * 4) as *mut u32, w);
+    // --- is the lock already set? (#712) ---
+    //
+    // The lock is sticky: measured on silicon 2026-09-21 it survives a system
+    // reset, blocks software reads and writes of BKP0..7, and cannot be
+    // cleared by software. Writing the key into locked registers is therefore
+    // silently ignored by the hardware.
+    //
+    // Being already locked is NOT itself an error. After an ordinary warm
+    // reset the backup domain still holds the right key, so there is simply
+    // nothing to install — failing there would break a perfectly good device.
+    // What matters is whether the ACTIVE key is the one flash says it should
+    // be, and the check below establishes that either way.
+    let already_locked = read_volatile(TAMP_SECCFGR) & TAMP_BHKLOCK != 0;
+
+    // Reference ciphertext under the key we INTEND to install, computed while
+    // we still hold the plaintext. Compared after locking against the same
+    // block encrypted by the hardware key path; they agree only if the active
+    // key is this key. Computed BEFORE the registers are touched so a failure
+    // here costs nothing.
+    let expected = match saes::encrypt_ecb_block(KeySel::Software, Some(&bhk), &ACTIVE_KEY_KAT_BLOCK)
+    {
+        Ok(v) => v,
+        Err(e) => {
+            bhk.zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(BhkError::Saes(e));
+        }
+    };
+
+    // --- install, unless the hardware would ignore us anyway ---
+    if !already_locked {
+        // write the 32 BHK bytes into BKP0R..BKP7R (8 × u32, LE)
+        for i in 0..8usize {
+            let w = u32::from_le_bytes([
+                bhk[i * 4],
+                bhk[i * 4 + 1],
+                bhk[i * 4 + 2],
+                bhk[i * 4 + 3],
+            ]);
+            write_volatile((TAMP_BKP0R + (i as u32) * 4) as *mut u32, w);
+        }
+        // lock BHKLOCK: SAES can still read BKPR, software cannot
+        let seccfgr = read_volatile(TAMP_SECCFGR);
+        write_volatile(TAMP_SECCFGR, seccfgr | TAMP_BHKLOCK);
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
     }
     bhk.zeroize();
+    crate::fi::zeroize_barrier();
 
-    // --- lock BHKLOCK: SAES can still read BKPR, software cannot ---
-    let seccfgr = read_volatile(TAMP_SECCFGR);
-    write_volatile(TAMP_SECCFGR, seccfgr | TAMP_BHKLOCK);
-    cortex_m::asm::dsb();
-    cortex_m::asm::isb();
+    // --- prove the ACTIVE key is the one we installed ---
+    //
+    // Note a `Bhk` encrypt/decrypt round trip would NOT do this: it is
+    // self-consistent under any key, including a stale one left by an earlier
+    // attempt. The comparison must be against a value derived from the
+    // intended key, which is why `expected` was computed above.
+    //
+    // Scope: this catches a mismatch between the intended and active key. It
+    // does NOT detect a flash record that is itself corrupt or unwrapped under
+    // the wrong DHUK — both sides would then agree on the same wrong key. That
+    // needs an authenticated, versioned root record (#712), which is a
+    // persisted-format change and is deliberately not made here.
+    let actual = match saes::encrypt_ecb_block(KeySel::Bhk, None, &ACTIVE_KEY_KAT_BLOCK) {
+        Ok(v) => v,
+        Err(e) => return Err(BhkError::Saes(e)),
+    };
+    let ok = bool::from(subtle::ConstantTimeEq::ct_eq(&expected[..], &actual[..]));
+    if !ok {
+        // Both errors mean "the active key is not the one in flash". They are
+        // kept distinct because the cause differs and so does the remedy:
+        //
+        // - AlreadyLocked: a previous attempt this power cycle locked a
+        //   DIFFERENT key, and the hardware ignored our write. This is the
+        //   #712 stranding path. Remedy: power cycle, which resets the backup
+        //   domain — exactly what the fault screen already instructs.
+        // - ActiveKeyMismatch: we wrote into unlocked registers and the key
+        //   still does not match. That is a fault, not a lifecycle race.
+        return Err(if already_locked {
+            BhkError::AlreadyLocked
+        } else {
+            BhkError::ActiveKeyMismatch
+        });
+    }
 
     Ok(())
 }

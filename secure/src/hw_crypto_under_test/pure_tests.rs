@@ -72,6 +72,55 @@ fn positive_saes_base_secure_alias_0x520c_0c00() {
     );
 }
 
+/// `load_and_lock` must PROVE the active BHK is the intended one.
+///
+/// Measured on silicon 2026-09-21 (issue #712, `tools/bhklock-reset-scope.sh`):
+/// `TAMP_SECCFGR.BHKLOCK` is sticky, survives a system reset, blocks software
+/// reads AND writes of `BKP0..7`, and software cannot clear it. So writing the
+/// key into already-locked registers is a silent no-op. The old code did
+/// exactly that and returned `Ok`, which is how a first-boot retry could
+/// rotate SE050 credentials against the PREVIOUS key while flash held the new
+/// one — stranding the SE050 with no mass erase involved.
+///
+/// These pins live here, not in `bhk.rs`'s own test module: that module is
+/// inside a target-only feature gate and never runs host-side (#708).
+#[test]
+fn positive_bhk_load_and_lock_verifies_the_active_key() {
+    // The reference ciphertext must come from the INTENDED key via the
+    // software key path. A `Bhk` round trip is self-consistent under any key,
+    // including a stale one, so it cannot substitute for this.
+    assert!(
+        BHK_SRC.contains("KeySel::Software, Some(&bhk), &ACTIVE_KEY_KAT_BLOCK"),
+        "the expected value must be computed from the key we intend to install"
+    );
+    assert!(
+        BHK_SRC.contains("saes::encrypt_ecb_block(KeySel::Bhk, None, &ACTIVE_KEY_KAT_BLOCK)"),
+        "the active value must come from the hardware BHK key path"
+    );
+    // ...and the two must actually be compared, in constant time.
+    assert!(
+        BHK_SRC.contains("ConstantTimeEq::ct_eq(&expected[..], &actual[..])"),
+        "expected and actual must be compared"
+    );
+    // A mismatch must be an error, never a log-and-continue.
+    assert!(
+        BHK_SRC.contains("BhkError::ActiveKeyMismatch") && BHK_SRC.contains("BhkError::AlreadyLocked"),
+        "a mismatched active key must surface as an error"
+    );
+    // The already-locked case must be detected explicitly, because that is the
+    // condition under which the hardware ignores the write.
+    assert!(
+        BHK_SRC.contains("let already_locked = read_volatile(TAMP_SECCFGR) & TAMP_BHKLOCK != 0;"),
+        "load_and_lock must know whether the registers were already locked"
+    );
+    // But being locked with the RIGHT key is the ordinary warm-reset case and
+    // must stay non-fatal — failing there would break a working device.
+    assert!(
+        BHK_SRC.contains("if !already_locked {"),
+        "the install must be skipped, not failed, when already locked"
+    );
+}
+
 #[test]
 fn positive_saes_rcc_uses_secure_alias_for_shsi() {
     // RM0456: "The SHSI configuration and status bits are secured when the SAES
