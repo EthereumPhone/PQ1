@@ -270,10 +270,27 @@ firmware at all, so `LCM_EN` alone may not light the panel; and nothing reads
 > on the module, not the mainboard. A bare board therefore passes the
 > electrical half of the RGB test with nothing lit.
 >
-> Still open (#709): the on-silicon run, the `--en 0` vs `--en 1` functional
-> differential that is the only real test of the `RGB_EN` line (the part's I2C
-> stays accessible in standby, so an ACK proves nothing), and the ambiguous
-> `R_EXT` value that leaves per-channel full-scale current known only to ±2x.
+> **Both now run on silicon (2026-09-21, sealed EVT unit).** Every phase
+> reported `ver=0xa8`, `id=0x18`, `acks=58/58` and `bus=[0x1c 0x34 0x36]` — the
+> part identifies itself, all 58 register writes ACK, and exactly the three
+> predicted addresses answer (broadcast, AW21036, and the AW99703 backlight
+> serving as the bus's positive control). The operator saw the colour sweep.
+>
+> `RGB_EN`/PB12 is confirmed by **functional differential**, the only test that
+> works on this part: its I2C stays accessible with `EN` low, so it ACKs
+> identically either way. With byte-identical register writes the board was
+> dark at `--en 0` and lit at `--en 1`.
+>
+> One hardware defect found: on white, one LED renders **magenta** — red and
+> blue present, green absent — while the other eight render white from the same
+> register values. 58/58 ACKs plus the uniform `ch % 3` colour mapping (a code
+> bug would kill green on all nine) narrow it to that green die, its driver
+> output, or its trace. Naming the exact channel is possible in hardware via the
+> part's `OSST0..4` open/short status registers; see #709, including the
+> datasheet's self-contradiction on the `OSDE` enable encoding.
+>
+> Still open (#709): the ambiguous `R_EXT` value, which leaves per-channel
+> full-scale current known only to ±2x.
 
 ### UPDATE 2026-08-30 (later) — secure-element path ported to pq1
 

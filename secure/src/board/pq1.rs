@@ -254,6 +254,12 @@ pub const BACKLIGHT_I2C_ADDR: u8 = 0x36;
 /// with [`BACKLIGHT_I2C_ADDR`] on this shared bus; the board's strap does not.
 pub const RGB_I2C_ADDR: u8 = 0x34;
 /// `RGB_EN` — PB12, driving the AW21036's `EN` pin (schematic MCU pin 25).
+///
+/// **Confirmed on silicon 2026-09-21** by functional differential, which is the
+/// only test that works here: the AW21036's I2C stays accessible while `EN` is
+/// low (datasheet, standby mode), so it ACKs identically either way and an ACK
+/// proves nothing about this pin. With byte-identical register writes the board
+/// was dark with PB12 low and lit with it high.
 pub const RGB_EN: Option<(u32, u32)> = Some((GPIOB_S, 12));
 
 /// Height in pixels of the SSD1306 wired to this board's bench setup.
