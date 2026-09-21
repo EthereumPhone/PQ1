@@ -4105,12 +4105,16 @@ receipts do not certify it.
 
 #### Findings from this review
 
-1. **Nine exit paths, one `### RESULT` line.** `cert_gate_split.sh` exits at `:25`, `:29`, `:179`,
-   `:180`, `:181`, `:182`, `:183`, `:184` and `:210`; the only verdict line is `:1031`. Six of those
-   are new and sit *ahead of every phase*, so a toolchain mismatch or a split-contract failure
-   produces **no `### RESULT` at all**. A consumer grepping for `### RESULT:` sees nothing and must
-   not read that as absence of failure. Capturing the exit status (`__GATE_EXIT=$?`) is what
-   distinguishes these cases.
+1. **Eight failure exits, one `### RESULT` line.** `cert_gate_split.sh` exits on failure at `:25`,
+   `:29`, `:180`, `:181`, `:182`, `:183`, `:184` and `:210`, against a single verdict line at
+   `:1031`. Five of them (`:180`-`:184`) are new in the 2026-09-17 integration and sit *ahead of
+   every phase*, so a toolchain mismatch or a split-contract failure produces **no `### RESULT` at
+   all**. A consumer grepping for `### RESULT:` sees nothing and must not read that as absence of
+   failure; capturing the exit status (`__GATE_EXIT=$?`) is what distinguishes the cases.
+   (**Corrected 2026-09-21, same day:** the first version of this bullet said "nine exit paths" and
+   counted `:179` among them. `:179` is the `--identity-only` fast path — `exit "$fail"`, a
+   *designed* early return that is meant to produce no verdict line. It is an exit, but it is not a
+   missing-verdict defect, and including it overstated the finding by one.)
 2. **A certified file overstates by a decimal.** `cdrafts-split/GprocTCollNamed.ec:56` says the
    constant-sum surface count "`|C_T| = 2^114.0941` is machine-checked". What is machine-checked is
    the exact integer (`C10SurfaceKernel.ec:25`) and the bracket `2^114 < |C_T| < 2^115`
