@@ -40,3 +40,11 @@ BadEncSplit
 BadEncToTColl
 BadEncStep4
 GprocTCollNamed
+# 2026-09-21: the constant-sum surface count, PROMOTED from
+# experiments/wots-badenc/count/ (moved, not copied).  Cited by two cone members
+# -- C10DeployedScope.ec:344 and GprocTCollNamed.ec:56 -- while living in an
+# ungated directory.  Required by nothing, so they enter the cone only as roots.
+VecDP
+CountDS
+C10SurfaceKernel
+C10Surface

@@ -1806,3 +1806,21 @@ cdrafts-split/XmssmtCC_All.ec	module:56b8ab614858	R_top_OC	# line 9925
 cdrafts-split/XmssmtCC_All.ec	module:1404b4722204	O_CMA	# line 9927
 cdrafts-split/XmssmtCC_All.ec	module:db55adac56dc	F_leak	# line 9946
 cdrafts-split/XmssmtCC_All.ec	module:083f75b2c62f	F_triv	# line 10018
+# 2026-09-21: the constant-sum surface count, promoted from experiments/wots-badenc/count.
+# 16 rows, every one defined-op.  ZERO ledger rows: this promotion adds no assumption.
+cdrafts-split/C10Surface.ec	defined-op:46d806b9ba48	powl	# line 21
+cdrafts-split/C10Surface.ec	defined-op:94e9fb5513c6	fu14	# line 32
+cdrafts-split/C10Surface.ec	defined-op:aea59ae0f0f4	fu15	# line 33
+cdrafts-split/C10Surface.ec	defined-op:13524f834fab	fu114	# line 34
+cdrafts-split/C10Surface.ec	defined-op:1d0152682241	fu115	# line 35
+cdrafts-split/C10SurfaceKernel.ec	defined-op:0b2508c78a79	fs205	# line 4
+cdrafts-split/C10SurfaceKernel.ec	defined-op:81adee9e2274	fu43	# line 5
+cdrafts-split/CountDS.ec	defined-op:797649b9434a	cstep	# line 29
+cdrafts-split/CountDS.ec	defined-op:36d420b63507	count_ds	# line 32
+cdrafts-split/CountDS.ec	defined-op:07a3ee75b1b3	is_digit	# line 56
+cdrafts-split/CountDS.ec	defined-op:dd33d10c86ac	wstep	# line 59
+cdrafts-split/CountDS.ec	defined-op:49aebf5f0d1a	words	# line 62
+cdrafts-split/CountDS.ec	defined-op:2d2d3ee00212	vrep	# line 140
+cdrafts-split/VecDP.ec	defined-op:090a0c157608	vstep	# line 18
+cdrafts-split/VecDP.ec	defined-op:7adf8272d254	runs	# line 24
+cdrafts-split/VecDP.ec	defined-op:4eb2b1e1f94b	vinit	# line 30

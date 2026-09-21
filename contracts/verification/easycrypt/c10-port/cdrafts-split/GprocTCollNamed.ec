@@ -53,8 +53,13 @@
 
    IT BOUNDS NOTHING -- READ THIS BEFORE QUOTING.
      * `T_COLL_RES_ENUM` is an UNBOUNDED hardness assumption, and there is NO NUMBER to
-       quote for it.  The constant-sum surface count |C_T| = 2^114.0941 is machine-checked
-       (experiments/wots-badenc/count/ -- NOT a closure member), but no derivation turns a
+       quote for it.  The constant-sum surface count is machine-checked -- and as of
+       2026-09-21 it is IN the closure (cdrafts-split/C10SurfaceKernel.ec::c10_surface_count,
+       C10Surface.ec::c10_surface_bits), promoted from experiments/wots-badenc/count.
+       READ WHAT IS ACTUALLY PROVED: the exact integer 22169393903687611906220091621190388
+       and the bracket 2^114 < |C_T| < 2^115.  The decimal "2^114.0941" this comment used to
+       give is that integer's base-2 LOGARITHM, computed outside EasyCrypt; it appears only in
+       a comment (C10Surface.ec:61) and is not a theorem.  No derivation turns a
        surface size into an advantage bound against an adversary that holds the keyed
        collection oracle and chooses its own counter.  Every figure this tree has attached
        to the term -- ~2^-72, 2^-82, 2^-78.09 -- was RETRACTED or WITHDRAWN (vendored

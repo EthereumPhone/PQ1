@@ -1,14 +1,18 @@
-# CERTIFIED CONE FILE LIST -- every file the 38 gate roots transitively require.
+# CERTIFIED CONE FILE LIST -- every file the 50 gate roots transitively require.
+# (Said "38" from 2026-08-20, when roots were 34 closure + 4 base, until 2026-09-21.)
 # Enforced by PHASE 1h (tools/stmt_coverage.py): a file ENTERING or LEAVING the cone is
 # a fatal, human-visible delta.  Without this the coverage check would silently absorb a
 # new cone file by enumerating whatever it found that day.
-# 53 files = the 46 roots + 7 transitively required.
+# 57 files = the 50 roots + 7 transitively required.
+# ("roots" = the closure list plus the four base roots compiled by name.)
 # (GprocTCollNamed.ec added 2026-09-14 -- the deployed headline with the encoding-collision term at +C.)
 # (TCollResEnum.ec, BadEncSplit.ec, BadEncToTColl.ec, BadEncStep4.ec added 2026-09-14 --
 #  the T_COLL_RES_ENUM chain, promoted from experiments/wots-badenc/{tcoll,red}.)
 # (GprocWotsNamed.ec added 2026-09-01 -- the deployed headline with the WOTS leg named.)
 # (WotsLegCharged.ec added 2026-09-01 -- the deployed WOTS leg, charged.)
 # (BadEncCountermodel.ec added 2026-08-31 -- promoted from experiments/wots-badenc.)
+# (VecDP/CountDS/C10SurfaceKernel/C10Surface added 2026-09-21 -- the constant-sum
+#  surface count, promoted from experiments/wots-badenc/count.)
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -28,6 +32,9 @@ cdrafts-split/C10DeployedGeometry.ec
 cdrafts-split/C10DeployedInstance.ec
 cdrafts-split/C10DeployedScope.ec
 cdrafts-split/C10SpecControls.ec
+cdrafts-split/C10Surface.ec
+cdrafts-split/C10SurfaceKernel.ec
+cdrafts-split/CountDS.ec
 cdrafts-split/DarkSide.ec
 cdrafts-split/DarkSideC10.ec
 cdrafts-split/FORS_C.ec
@@ -53,6 +60,7 @@ cdrafts-split/SphincsC10CapstoneCharged.ec
 cdrafts-split/SphincsC10CapstoneWired.ec
 cdrafts-split/SphincsC10Content.ec
 cdrafts-split/TCollResEnum.ec
+cdrafts-split/VecDP.ec
 cdrafts-split/WOTS_C_Interactive.ec
 cdrafts-split/WOTS_C_Multi.ec
 cdrafts-split/WOTS_C_Real.ec

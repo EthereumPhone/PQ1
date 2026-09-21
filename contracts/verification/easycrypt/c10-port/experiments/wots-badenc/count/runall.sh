@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# SUPERSEDED 2026-09-21: VecDP/CountDS/C10SurfaceKernel/C10Surface were PROMOTED to
+# cdrafts-split/ and are no longer in this directory, so the positive-chain loop below
+# will not resolve as written.  Kept as the development receipt.  The promoted files are
+# compiled as gate targets on every run; the controls here are driven by PHASE 3 with
+# -I base-c10-split -I cdrafts-split.
 # Full clean receipt run: wipe every .eco, rebuild the chain with -check-all,
 # then run every control and record its RC.
 set -u

@@ -4168,3 +4168,111 @@ bootstrap-signed Type-1 authorisations. The `(len, w, target_sum)` parameter con
 What Runs 1–7 and the 2026-09-17 integration bought is **auditability, not strength**: that the
 files contain what this README says, and that a deletion cannot pass unnoticed. No theorem became
 stronger. That distinction is worth keeping in front of any reader who arrives at the counts first.
+
+### UPDATE 2026-09-21 (later) — the constant-sum surface count is IN the perimeter
+
+The review earlier today ranked this first among the live candidates, and it is now done. Four
+files move from `experiments/wots-badenc/count/` into `cdrafts-split/` and become gated closure
+members: `VecDP.ec`, `CountDS.ec`, `C10SurfaceKernel.ec`, `C10Surface.ec`.
+
+**Why.** Two *cone members* — `C10DeployedScope.ec:344` and `GprocTCollNamed.ec:56` — lean on the
+constant `|C_T|`, and the object they leaned on lived in a directory the cone census does not
+cover. That is the same question the PTgtsPin promotion answered on 2026-08-19 ("where is this
+written down?" → "in an UNGATED experiment"), and the same answer is taken here. **Moved, not
+copied**, per that precedent: the tree holds exactly one definition, so the two cannot drift apart.
+
+**What is now gated.** `c10_surface_count` — the exact cardinality
+`count_ds 43 8 205 = 22169393903687611906220091621190388`, *computed* inside EasyCrypt rather than
+asserted — together with `c10_surface_is_a_cardinality` (a duplicate-free list whose members are
+exactly the length-43 vectors over `[0,8)` summing to 205) and the bracket
+`c10_surface_bits : 2^114 < |C_T| < 2^115`.
+
+**What it does NOT buy, stated before the run rather than after.** No chain result, no bound, and
+no number attached to `T_COLL_RES_ENUM`. The surface count is a cardinality, and
+`scratch/FINDING-do-not-import-the-policy-cap.md` §1 records that **no derivation connects it to an
+advantage**. This is a deliberately **gated-not-wired leaf** — `C10DeployedScope.ec:28-30` records
+the same property of its own content. The leaves two reviews criticised
+(`experiments/tcollres-leg/`) were failed attempts at a *chain* result; here the leaf is the
+deliverable. What changes is that a constant two cone members cite is compiled and digest-pinned on
+every run instead of rotting in an untracked directory.
+
+#### Cost, predicted before computing and matched except in one place
+
+`scratch/PREDICTION-surface-count-promotion-2026-09-21.md`.
+
+| quantity | before | after |
+|---|---|---|
+| closure roots | 42 | **46** (+4; 50 counting the base roots) |
+| cone files | 53 | **57** |
+| `EXPECT_STMTS` | 1082 | **1120** (+38) |
+| `EXPECT_PINS` | 1166 | **1220** (+38 statements, +16 `op:` definitions) |
+| census rows | 1677 | **1693** (`added=16`, `removed=0`, every one `defined-op`) |
+| **ledger** | 241 | **241 — unchanged** |
+| `EXPECT_CTLS` | 49 | **55** (predicted 57 — see below) |
+
+**The ledger does not move.** This promotion adds no axiom, no admit and no clone obligation; all
+sixteen census additions are `defined-op`. That is the whole point of checking it rather than
+asserting it.
+
+#### The prediction miss, which is the part worth reading
+
+I predicted `EXPECT_CTLS` 49 → 57, registering all eight of the experiment's controls. The actual
+number is **55**, because two of them are not worth registering, and I only found that out by
+running them and reading the message instead of trusting the polarity.
+
+`KctlA` and `KctlB` do fail — with **`anomaly: Stack overflow`**, not with a proof failure. At full
+43/205 scale they ask the evaluator to reduce the whole DP against a deliberately wrong literal,
+and it blows the stack before reaching a verdict. This is not new and not an artifact of the move:
+the original 2026-08-14 receipt records exactly the same two anomalies (`WALL_MS` 42763 and 41990).
+
+**A stack overflow does not discriminate.** It would happen just the same if `count_ds` were broken
+into computing garbage, so the control's failure carries no information about the property it
+claims to test. Registering it would have bought a control that fails for an unrelated reason —
+the same defect class as the T4 control that rotted in 2026-08-29 and passed while testing nothing.
+So they are left out, with the reason recorded in `cert-controls-split.tsv` rather than silently
+dropped.
+
+The property is still covered, by a control that *does* discriminate. `CtlVal` perturbs the
+identical value by +1 but reaches it differently: it first proves `kernelT` — the true value, which
+reduces in ~41 s — then rewrites through `count_ds_kernel`, so the failing step is a small
+arithmetic disequality and the diagnostic is `[by]: cannot close goals`. Six controls are
+registered: `KctlC` and `KctlE` MUST-PASS, and `KctlD`, `CtlSum204`, `CtlLen42`, `CtlVal` MUST-FAIL,
+each graded on its **observed** `[critical]` message.
+
+#### Two corrections folded in, since a replay was required anyway
+
+Both were named in the review earlier today and left undone because each lives in a hashed file:
+
+* `GprocTCollNamed.ec:56` no longer says "`|C_T| = 2^114.0941` is machine-checked". What is
+  machine-checked is the exact integer and the `2^114 < |C_T| < 2^115` bracket; the decimal is that
+  integer's base-2 logarithm, computed outside EasyCrypt, and it appears only in a comment
+  (`C10Surface.ec:61`). The comment now cites the two closure members instead.
+* `cert-cone-files-split.tsv:1` said "every file the **38** gate roots transitively require" —
+  correct when written on 2026-08-20 (34 closure + 4 base), stale since. It now says 50, and the
+  "`53 files = the 46 roots + 7`" line — which was *correct*, and which this review nearly filed as
+  a defect before working out that "roots" there counts the four base roots too — reads 57 = 50 + 7.
+
+#### Receipt
+
+Full pinned-image replay through `contracts/verification/scripts/run_easycrypt_split.py`; identity
+`623ad0710d73000a1c693049b8933813` → `a814f744b21ecee6c5ecf32d2c58efc2`, computed by the gate's own
+`--identity-only` path rather than by hand.
+
+```
+### RESULT: GREEN                       (0 FAIL lines, __GATE_EXIT=0)
+OK toolchain: r2026.02, 25 pinned prover configurations
+### IMAGE ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3
+OK   INPUTS_SHA256 matches the committed identity  (a814f744...)
+### CONE_COMPILED=57 EXPECTED=57 | CLI_FILES_RUN=57 CLI_DISAGREEMENTS=0
+OK unique statement pins: 1220
+OK   coverage: all 1120 top-level statements across 57 CONE files are pinned (roots 50 + transitively required)
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=459  total=1693
+controls executed (unique)=55 expected=55 | margin 4/4 and 3/3 | figures 7/7
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK   taint controls: pass=15 unique=15 fail=0 expected=15
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run (a814f744...)
+```
+
+Full log: `scratch/gate_20260921_surface_count.log`.
