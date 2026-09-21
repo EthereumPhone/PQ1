@@ -4563,3 +4563,53 @@ and two-method host arithmetic were executed. No new EasyCrypt or Lean
 compilation, extraction regeneration, external artifact replay, hardware
 experiment, or complete security audit was performed. No new production defect
 was established, and no security parameter or remaining issue is declared closed.
+
+
+## 2026-09-21 implementation: encoder/count and bounded failure batch
+
+Active surface: EasyCrypt C10 correspondence. Phase C comprises the concrete
+consumer encoder/witness, uniform acceptance bridge, bounded signer/game and
+IID companion, then pin/control/source integration. The next boundary is one
+combined Phase D candidate. Its closed checklist is focused and full dual-driver
+proof replay, all registered controls, source binding and Rust correspondence,
+fast integrity/gate regressions, bounded Astra/Opus review under the user's
+standing reviewer substitutions, remediation of blockers, landing and tracker
+update. Kimi is excluded by the owner's current access decision. #509 stays
+deferred; this does not start another playbook campaign.
+
+The batch implements the first two recommendations above:
+
+- `RadixEncoding` supplies increasing-significance radix digits. The actual
+  WOTS consumer and designated target witness are definitions, replacing two
+  previously unspecified operations. Its generic antichain proof still checks.
+- `C10Encoding.deployed_digit_integer` gives the same per-chain arithmetic
+  formula as the existing Aeneas/Lean `extract_digits_spec`. The independent
+  proof assistants do not exchange a theorem. `deployed_target_205` pins the
+  actual consumer target, not an unattached integer example.
+- `C10DigitUniform.uniform_digits` maps uniform bits to independent uniform
+  digits while preserving arbitrary unused high bits. `consumer_uniform_acceptance_bits`
+  then consumes the existing exact CountDS theorem and proves the acceptance
+  mass on the real consumer predicate, `S/2^129`, for uniform 256-bit inputs.
+- `C10BoundedSigning` models no-signature exhaustion, proves full signature
+  agreement with the total signer on a successful prefix, records failure in
+  the oracle, and proves successful query/state agreement. Its guarded game
+  rejects a set failure flag. Adversaries may use oracle methods but must not
+  access the oracle's private model globals directly. The implementation's
+  panic is represented as an abort of the experiment, not a recoverable API.
+- `BoundedIID` is the preserved September 17 generic proof, now in the checked
+  cone. `C10BoundedIID` supplies the concrete uniform consumer distribution and
+  budget. Exhaustion, successful-event mass and the full None/Some mixture are
+  proved without conditioning away the failure branch.
+
+The ledger delta replaces the abstract encoder/witness with definitions and
+adds only definitions/modules. No project axiom or admit is added. The broader
+legacy FORS mirror and its isolation boundary are unchanged. Full certification
+now covers 66 files, 54 roots, 1,332 declaration pins, 1,201 statements and 64
+controls; actual run identities and review results are recorded separately.
+
+This batch does **not** discharge the existing capstones' universal grind
+premises or supply a numerical EUF-CMA bound. In particular, the independent
+uniform sampler is not the shared SHA-256 transcript process. The next research
+boundary remains a failure-aware end-to-end reduction and a resource-accounted
+shared-oracle/adaptive-history argument, especially the FORS truncated-R reuse
+and conditional acceptance probabilities. Keep #100 and #295 open.

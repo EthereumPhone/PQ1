@@ -12,13 +12,16 @@ import sys
 ROOT = Path(__file__).resolve().parent.joinpath('../../../../..').resolve()
 PORT = 'contracts/verification/easycrypt/c10-port/'
 SOURCES = (
-    'sphincs-c10/src/wots.rs', 'sphincs-c10/src/hash.rs',
+    'sphincs-c10/src/wots.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/lib.rs',
     'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs',
     'sphincs-c10/tests/easycrypt_transcript.rs',
     PORT + 'tools/check_source_binding.py',
     'contracts/verification/scripts/run_easycrypt_split.py',
+    PORT + 'base-c10-split/WOTS_TW_ES.ec',
+    PORT + 'base-c10-split/RadixEncoding.ec',
     *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
-        'C10Counter', 'C10Bytes', 'C10BoundedGrind', 'C10DeployedInstance', 'WOTS_C_Real')),
+        'C10Counter', 'C10Bytes', 'C10BoundedGrind', 'C10DeployedInstance', 'WOTS_C_Real',
+        'C10Encoding', 'C10DigitUniform', 'C10BoundedSigning', 'BoundedIID', 'C10BoundedIID')),
 )
 
 

@@ -49,3 +49,8 @@ VecDP
 CountDS
 C10SurfaceKernel
 C10Surface
+
+# Concrete digit/predicate/count bridge and failure-aware signing experiments.
+C10Encoding
+C10BoundedSigning
+C10BoundedIID

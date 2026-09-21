@@ -8,6 +8,7 @@ require (*--*) DigitalSignatures.
 
 (* -- Local -- *)
 require (*--*) HashAddresses KeyedHashFunctions TweakableHashFunctions.
+require RadixEncoding.
 
 
 
@@ -621,7 +622,21 @@ qed.
 
 
 (* -- Message encoding -- *)
-op encode_msgWOTS : msgWOTS -> emsgWOTS.
+(* Concrete low-order radix digits; physical byte order is handled by C10Bytes. *)
+op encode_msgWOTS (m : msgWOTS) : emsgWOTS =
+  EmsgWOTS.mkemsgWOTS
+    (mkseq (fun i => BaseW.insubd
+      (RadixEncoding.digit log2_w (MDigestBlock.val m) i)) len).
+
+lemma encode_msgWOTS_digit (m : msgWOTS) (i : int) :
+  0 <= i < len => BaseW.val (encode_msgWOTS m).[i] =
+    RadixEncoding.digit log2_w (MDigestBlock.val m) i.
+proof.
+  move=> hi; rewrite EmsgWOTS.getE hi /= /encode_msgWOTS EmsgWOTS.ofemsgWOTSK.
+  + by rewrite size_mkseq; smt(ge2_len).
+  rewrite nth_mkseq //= BaseW.insubdK //.
+  by apply RadixEncoding.digit_range; smt(val_log2w).
+qed.
 
 (* ===================================================================== *)
 (* MM45 FORK, 2026-07-28.  `P` is the predicate the two encoding axioms  *)
@@ -641,8 +656,10 @@ op digitsum (e : emsgWOTS) : int = bigi predT (fun i => BaseW.val e.[i]) 0 len.
    reaches, i.e. models where `P` is identically false and the gated game is
    trivially vacuous.  Pinning it to the digit sum of a designated codeword makes
    `targetSumReachable` a THEOREM below and costs no axiom.
-   It does NOT pin the deployed 205, and is not meant to. *)
-const tgt_witness : msgWOTS.
+   At the deployed geometry the concrete witness below has 41 digits of 5
+   followed by two zero digits, so the target is proved to be 205. *)
+op tgt_witness : msgWOTS = MDigestBlock.insubd
+  (mkseq (fun j => j < 123 /\ j %% 3 <> 1) (8 * n_m)).
 
 op target_sum : int = digitsum (encode_msgWOTS tgt_witness).
 

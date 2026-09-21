@@ -53,42 +53,55 @@ only when that is the point being made, and say so.
 said "neither supersedes the other". The pinned proof at `GprocChargedQWired.ec` is the
 disproof.)
 
-**Concrete counter/serialization integration (2026-09-21).** `WOTS_C_Real`
-now consumes `C10Counter.counter` and its ascending full-u32 enumeration in the
-actual `STCRC_WC` clone. That clone's `enum_spec` is realized. The standard
-library Subtype construction axioms (`insubN`, `insubT`, `valP`, `valK`) remain
-trusted; the generic `Grind` theory still declares its abstract enumeration
-obligation. The census is not a claim that every clone obligation disappeared.
+**Concrete C10 correspondence (2026-09-21 encoder/abort batch).** The actual
+`WOTS_C_Real` consumer uses the full ascending u32 counter domain and fixed
+compact input encoder. `C10Bytes` proves the physical-byte adapter; signing
+search examines counters 0 through 9,999,999, while verification keeps all u32.
+The standard library Subtype axioms and generic clone obligations remain
+explicitly inventoried. No new project axiom or admit is introduced here.
 
-`emb_in` is now defined as the node bits followed by the numeric 32-bit counter.
-`C10DeployedInstance` proves the rank equality, cardinality, width, injectivity,
-and equality to `c10_embg` without additional premises. The published headline
-statements retain their two binders for compatibility; the width/encoder binder
-is now discharged by `c10_emb_in_width`/`c10_emb_in_pinned`. Only the target-cap
-premise below remains to be supplied.
+`WOTS_TW_ES.encode_msgWOTS` is now a definition, using low-order radix digits
+of the wide digest. Its designated witness is concrete. `C10Encoding` proves
+that the SPHINCS_PLUS consumer takes digit i from integer bits 3i through 3i+2,
+in increasing significance order, and that its actual target is 205. It connects
+that consumer predicate to the checked CountDS census: for an independently
+uniform 256-bit digest, acceptance is exactly
+`22169393903687611906220091621190388 / 2^129`. `C10DigitUniform` proves the
+uniform digit law with all 127 unused bits retained in the input distribution.
+This is uniform-input arithmetic, not a claim about SHA-256 output independence.
 
-`C10Bytes` proves the adapter between the compact input and the physical
-64-byte payload (node, right padding, zero-extended big-endian counter).
-`c10_payload_recovers_emb_in` connects it to the actual model input.
-`C10BoundedGrind.Search` models the ascending 10,000,000-attempt signing prefix,
-proves first-hit correctness and exhaustion, and proves conditional agreement
-with the existing full-domain `grindC`. The verifier domain stays all u32 values.
-The total signing game has **not** been changed into a panic/abort game, so this
-is not an end-to-end theorem about the Rust signer.
+`C10BoundedSigning` adds an option-valued signer: exhaustion produces `None`.
+Successful output, including the signature chains and counter, agrees with the
+existing total signer. Its bounded oracle records failure, produces no further
+signatures after failure, and forwards successful queries with the original
+reply and state. The new forgery game retains the existing winning conditions
+and rejects runs whose failure flag is set. Oracle globals must be excluded
+from admissible adversaries, as in the existing game reductions. Dummy replies
+after failure are an experiment device; the Rust implementation panics. These
+models do not claim a recoverable firmware error API or physical fault behavior.
 
-The manually reviewed source boundary is pinned in `cert-source-binding.json`.
-The normal full split wrapper checks that binding and runs the Rust
-`easycrypt_transcript` test against real `pad16`, address and `wots_digest`
-helpers (210 node/counter cases, including budget and u32 boundaries). The
-byte-layout proof and those finite tests are separate evidence: they are not
-Rust extraction. The abstract hash collection, output law, digit encoder/205
-predicate realization, and bounded-failure probability still need a concrete
-refinement. Both digest halves must come from one SHA-256 result; no independent
-hash assumption was introduced. Issue #100 therefore remains open.
+`BoundedIID` and `C10BoundedIID` separately formalize independent uniform draws.
+They preserve both exhaustion `(1-p)^B` and successful-event mass
+`(1-(1-p)^B) * Pr[conditioned event]`, with `p` supplied by the actual consumer
+predicate and `B=10000000`. **They do not instantiate the deterministic SHA-256
+counter search.** The existing capstones and their total-grind premises remain
+unchanged. A failure-aware end-to-end reduction, real shared-oracle/adaptive-history
+coupling (including FORS truncated R), and numerical resource bounds remain open
+under #100/#295. #509 remains the deferred owner-triggered combined playbook pass.
 
-The combined 2026-09-21 perimeter also preserves master's independent surface-count
-promotion: 60 proof files, 51 roots, 1,276 declaration pins, 1,154 statements, and
-58 controls. Its full replay receipt is recorded with the integration review.
+The source boundary is pinned in `cert-source-binding.json`. The full split
+wrapper checks it and runs `easycrypt_transcript` against the real Rust helpers:
+210 transcript cases and 259 digit inputs, including every individual bit and
+the target witness. These finite checks and the manual EasyCrypt model are
+separate from Aeneas/Lean's `extract_digits_spec`; no cross-assistant theorem or
+Rust extraction is implied. Both abstract digest members must be projections
+of the **same** SHA-256 result: dfC0 is the low half (bytes 16–31 in physical
+big-endian order), dfC1 the high half. The collection is still abstract.
+
+The current perimeter contains 66 proof files, 54 roots, 1,332 unique declaration
+pins, 1,201 statements and 64 controls. New controls reject a wrong target,
+dropped bit 128, erased exhaustion, and omitted successful-event mass. Full
+replay and bounded source review remain required before landing this batch.
 
 * **`c <= p_tgts` is a reduction-side TARGET CAP — not a bound on how many messages a key
   may sign.** This is worth spelling out because the tree records mistaking it for a query

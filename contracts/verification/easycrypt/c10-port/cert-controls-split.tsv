@@ -155,3 +155,11 @@ experiments/wots-badenc/count/controls/KctlD.ec	MUST-FAIL	[by]: cannot close goa
 experiments/wots-badenc/count/controls/CtlSum204.ec	MUST-FAIL	[by]: cannot close goals
 experiments/wots-badenc/count/controls/CtlLen42.ec	MUST-FAIL	[by]: cannot close goals
 experiments/wots-badenc/count/controls/CtlVal.ec	MUST-FAIL	[by]: cannot close goals
+
+# Concrete digit consumer and explicit IID failure mass (observed proof failures).
+scratch/C10EncoderPositive.ec	MUST-PASS	-
+scratch/C10IIDPositive.ec	MUST-PASS	-
+scratch/C10EncoderWrongOrder.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10EncoderWrongTarget.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10IIDErasedFailure.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10IIDMissingSuccessFactor.ec	MUST-FAIL	[by]: cannot close goals

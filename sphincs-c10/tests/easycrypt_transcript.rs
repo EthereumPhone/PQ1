@@ -1,9 +1,9 @@
-//! Checks the manually modelled C10Bytes transcript against the real helpers.
+//! Checks the manual C10Bytes and RadixEncoding models against the real helpers.
 //! This is finite host evidence, not extraction or a proof about SHA-256.
 #![cfg(feature = "sim-internals")]
 
 use sha2::{Digest, Sha256};
-use sphincs_c10::sim_internals::{make_adrs, pad16, wots_digest};
+use sphincs_c10::sim_internals::{extract_digits, make_adrs, pad16, wots_digest};
 
 // C10Bytes.bits_to_bytes: little-endian bits, chunks of eight, reversed bytes.
 fn model_bytes(bits: &[bool]) -> Vec<u8> {
@@ -61,4 +61,29 @@ fn concrete_digest_matches_easycrypt_byte_adapter() {
             assert_eq!(wots_digest(&seed, &address, &padded, counter), expected);
         }
     }
+}
+
+#[test]
+fn concrete_digits_match_easycrypt_bit_order_and_target() {
+    let mut cases = vec![[false; 256], [true; 256]];
+    // All consumed positions, byte crossings, and all 127 ignored high bits.
+    for i in 0..256 {
+        let mut bits = [false; 256];
+        bits[i] = true;
+        cases.push(bits);
+    }
+    let witness = core::array::from_fn(|j| j < 123 && j % 3 != 1);
+    cases.push(witness);
+    for bits in cases {
+        let bytes: [u8; 32] = model_bytes(&bits).try_into().unwrap();
+        let expected: [u8; 43] = core::array::from_fn(|i| {
+            u8::from(bits[3 * i]) + 2 * u8::from(bits[3 * i + 1]) + 4 * u8::from(bits[3 * i + 2])
+        });
+        assert_eq!(extract_digits(&bytes), expected);
+    }
+    let witness_bytes: [u8; 32] = model_bytes(&witness).try_into().unwrap();
+    let digits = extract_digits(&witness_bytes);
+    assert_eq!(&digits[..41], &[5; 41]);
+    assert_eq!(&digits[41..], &[0; 2]);
+    assert_eq!(digits.iter().map(|&d| usize::from(d)).sum::<usize>(), 205);
 }

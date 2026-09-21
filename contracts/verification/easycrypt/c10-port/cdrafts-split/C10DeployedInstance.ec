@@ -1,3 +1,8 @@
+(* 2026-09-21 update: C10Encoding.ec consumes the geometric lemmas below
+   and the now-defined encoder/witness, proves target_sum = 205, and connects
+   the actual predicate to CountDS under uniform 256-bit inputs. Earlier
+   sections describing the encoder as unpinned record the former boundary.
+   The abstract hash collection and real search probability remain open. *)
 (* ==========================================================================
    C10DeployedInstance.ec — THE DEPLOYED PARAMETER SET, IN THE SPLIT FORK.
 

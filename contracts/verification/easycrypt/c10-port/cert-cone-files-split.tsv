@@ -1,18 +1,5 @@
-# CERTIFIED CONE FILE LIST -- every file the 51 gate roots transitively require.
-# Enforced by PHASE 1h (tools/stmt_coverage.py): a file ENTERING or LEAVING the cone is
-# a fatal, human-visible delta. Without this the coverage check would silently absorb a
-# new cone file by enumerating whatever it found that day.
-# 60 files = 51 roots + 9 transitively required.
-# 2026-09-21 integration: surface-count roots plus the C10BoundedGrind root and
-# C10Counter/C10Bytes dependencies; roots include the four base roots.
-# (GprocTCollNamed.ec added 2026-09-14 -- the deployed headline with the encoding-collision term at +C.)
-# (TCollResEnum.ec, BadEncSplit.ec, BadEncToTColl.ec, BadEncStep4.ec added 2026-09-14 --
-#  the T_COLL_RES_ENUM chain, promoted from experiments/wots-badenc/{tcoll,red}.)
-# (GprocWotsNamed.ec added 2026-09-01 -- the deployed headline with the WOTS leg named.)
-# (WotsLegCharged.ec added 2026-09-01 -- the deployed WOTS leg, charged.)
-# (BadEncCountermodel.ec added 2026-08-31 -- promoted from experiments/wots-badenc.)
-# (VecDP/CountDS/C10SurfaceKernel/C10Surface added 2026-09-21 -- the constant-sum
-#  surface count, promoted from experiments/wots-badenc/count.)
+# Certified dependency cone: 66 files, 54 roots.
+# 2026-09-21 encoder/count and bounded-failure batch.
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -20,6 +7,7 @@ base-c10-split/HashAddresses.eca
 base-c10-split/KeyedHashFunctions.eca
 base-c10-split/MerkleTrees.ec
 base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca
+base-c10-split/RadixEncoding.ec
 base-c10-split/SPHINCS_PLUS.ec
 base-c10-split/TweakableHashFunctions.eca
 base-c10-split/WOTS_TW_ES.ec
@@ -27,13 +15,18 @@ cdrafts-split/BadEncCountermodel.ec
 cdrafts-split/BadEncSplit.ec
 cdrafts-split/BadEncStep4.ec
 cdrafts-split/BadEncToTColl.ec
+cdrafts-split/BoundedIID.ec
 cdrafts-split/C10BoundedGrind.ec
+cdrafts-split/C10BoundedIID.ec
+cdrafts-split/C10BoundedSigning.ec
 cdrafts-split/C10Bytes.ec
 cdrafts-split/C10Counter.ec
 cdrafts-split/C10DeployedCapstone.ec
 cdrafts-split/C10DeployedGeometry.ec
 cdrafts-split/C10DeployedInstance.ec
 cdrafts-split/C10DeployedScope.ec
+cdrafts-split/C10DigitUniform.ec
+cdrafts-split/C10Encoding.ec
 cdrafts-split/C10SpecControls.ec
 cdrafts-split/C10Surface.ec
 cdrafts-split/C10SurfaceKernel.ec
