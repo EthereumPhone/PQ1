@@ -58,6 +58,15 @@ const REG_UPDATE: u8 = 0x49;
 const REG_COL0: u8 = 0x4A;
 /// Global current `GCC`.
 const REG_GCCR: u8 = 0x6E;
+/// Spread-spectrum control; bits 7:5 are `PWMDIS2..0`, one per group of 12
+/// channels. The prose calls this field `PWMDIS[2:0]`, but the register table
+/// gives explicit bit positions 7/6/5 — the table is right, so `0b111 << 5`.
+const REG_SSCR: u8 = 0x78;
+/// Open/short detect control: bit 3 `OTH`, bit 2 `STH`, bits 1:0 `OSDE`.
+const REG_OSDCR: u8 = 0x71;
+/// `OSST0..OSST4` — 36 open/short status bits, `LED(k)` is bit `(k-1) % 8` of
+/// `OSST[(k-1) / 8]`.
+const REG_OSST0: u8 = 0x72;
 /// Version, read-only. Reads [`VER_EXPECTED`].
 const REG_VER: u8 = 0x7E;
 /// Write `0x00` for a software reset; reads back [`RESET_ID_EXPECTED`].
@@ -73,6 +82,23 @@ pub const RESET_ID_EXPECTED: u8 = 0x18;
 const RESET_MAGIC: u8 = 0x00;
 /// Per-channel current at full scale — the ceiling is set by `GCC` instead.
 const COL_FULL: u8 = 0xFF;
+/// `PWMDIS2|PWMDIS1|PWMDIS0` — 100 % duty on all 36 channels, which the
+/// datasheet requires while open/short detection runs. Note this **bypasses
+/// `BR`**, so the OSD bias current comes from `GCC x WB x COLn` alone and the
+/// `BR` registers are left at their reset `0x00`.
+const SSCR_PWM_DISABLED: u8 = 0b111 << 5;
+/// `OSDE = 0b10`, thresholds at default (`OTH` 0.1 V, `STH` VLED-1 V).
+const OSDCR_MODE_A: u8 = 0b10;
+/// `OSDE = 0b11`, same thresholds.
+const OSDCR_MODE_B: u8 = 0b11;
+/// Total channels the part drives, wired or not.
+pub const TOTAL_CHANNELS: u8 = 36;
+/// Bytes of `OSST` status (36 bits over 5 registers).
+pub const OSST_BYTES: usize = 5;
+/// Global current for the OSD bias. The datasheet asks for ~1 mA per LED; at
+/// `COL = WB = 0xFF` and 100 % duty this gives `GCC/255 x I_max`, i.e. ~1.0-2.1
+/// mA across the `R_EXT` ambiguity (see the module header).
+pub const OSD_GCC: u8 = 0x20;
 
 /// Number of channels with an LED on the other end (9 RGB triples).
 pub const WIRED_CHANNELS: u8 = 27;
@@ -235,6 +261,108 @@ pub fn light(r: u8, g: u8, b: u8, gcc: u8, en: bool) -> Report {
         report.gcc,
         report.saw(BACKLIGHT_ADDR),
         report.saw(BROADCAST_ADDR)
+    );
+    report
+}
+
+/// Result of one open/short detection pass.
+///
+/// Both `OSDE` encodings are captured because **the datasheet contradicts
+/// itself** about which is which: the prose says `10` = open / `11` = short,
+/// while the `OSDCR` register table says `10` = short / `11` = open. Rather
+/// than guess, this reports both bitmaps and lets the host decide — and the
+/// board itself settles it, because `LED28..LED36` have no LED attached on this
+/// design, so whichever mode flags those nine is the open-detect encoding.
+///
+/// That same fact makes the test self-validating: if *neither* mode flags the
+/// nine unwired channels, detection did not actually run, and the honest answer
+/// is "inconclusive", never "pass".
+#[derive(Clone, Copy)]
+pub struct OsdReport {
+    /// `OSST0..4` after `OSDE = 0b10`.
+    pub mode_a: [u8; OSST_BYTES],
+    /// `OSST0..4` after `OSDE = 0b11`.
+    pub mode_b: [u8; OSST_BYTES],
+    /// `VER` readback, as a witness that the part was talking at all.
+    pub ver: Option<u8>,
+    pub acks_ok: u8,
+    pub acks_total: u8,
+    pub en_level: bool,
+    pub gcc: u8,
+}
+
+/// Run open/short detection over all 36 channels.
+///
+/// Leaves the board dark (global current zero, `PWMDIS` cleared, detection
+/// disabled) so a factory sequence can run this between visual steps without
+/// leaving the LEDs biased.
+///
+/// `gcc` is the bias current; `0` selects [`OSD_GCC`]. `en` drives `RGB_EN`.
+pub fn open_short_scan(gcc: u8, en: bool) -> OsdReport {
+    let bus = AuxI2c::board_aux();
+    bus.init();
+    let en_level = set_en(en);
+
+    let ver = bus.read_reg(ADDR, REG_VER);
+    let gcc = if gcc == 0 { OSD_GCC } else { gcc };
+    let mut ok = 0u8;
+    let mut total = 0u8;
+    let mut write = |reg: u8, val: u8| {
+        total = total.saturating_add(1);
+        if bus.write_reg(ADDR, reg, val) {
+            ok = ok.saturating_add(1);
+        }
+    };
+
+    write(REG_RESET, RESET_MAGIC);
+    cortex_m::asm::delay(2 * CYCLES_PER_MS); // >=2 ms after a software reset
+    write(REG_GCR, GCR_CHIPEN);
+    cortex_m::asm::delay(CYCLES_PER_MS / 4); // >=200 us for the OSC
+    write(REG_SSCR, SSCR_PWM_DISABLED);
+    write(REG_GCCR, gcc);
+    // Every channel, not just the wired 27: an undriven channel tells us
+    // nothing, and the nine unwired ones are this test's positive control.
+    for ch in 0..TOTAL_CHANNELS {
+        write(REG_COL0 + ch, COL_FULL);
+    }
+    cortex_m::asm::delay(2 * CYCLES_PER_MS); // let the bias settle
+
+    let mut mode_a = [0u8; OSST_BYTES];
+    let mut mode_b = [0u8; OSST_BYTES];
+    write(REG_OSDCR, OSDCR_MODE_A);
+    cortex_m::asm::delay(2 * CYCLES_PER_MS);
+    for (i, slot) in mode_a.iter_mut().enumerate() {
+        *slot = bus.read_reg(ADDR, REG_OSST0 + i as u8).unwrap_or(0);
+    }
+    write(REG_OSDCR, OSDCR_MODE_B);
+    cortex_m::asm::delay(2 * CYCLES_PER_MS);
+    for (i, slot) in mode_b.iter_mut().enumerate() {
+        *slot = bus.read_reg(ADDR, REG_OSST0 + i as u8).unwrap_or(0);
+    }
+
+    // Park dark: detection off, PWM back under BR control, global current zero.
+    write(REG_OSDCR, 0x00);
+    write(REG_SSCR, 0x00);
+    write(REG_GCCR, 0x00);
+    write(REG_UPDATE, RESET_MAGIC);
+
+    let report = OsdReport {
+        mode_a,
+        mode_b,
+        ver,
+        acks_ok: ok,
+        acks_total: total,
+        en_level,
+        gcc,
+    };
+    secure_log!(
+        "[S] aw21036: osd a={:?} b={:?} ver={:?} acks={}/{} gcc={:#04x}",
+        report.mode_a,
+        report.mode_b,
+        report.ver,
+        report.acks_ok,
+        report.acks_total,
+        report.gcc
     );
     report
 }

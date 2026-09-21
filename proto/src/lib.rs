@@ -763,6 +763,52 @@ pub const CMD_PRODTEST_RGB_TEST: u32 = 110;
 pub const PRODTEST_RGB_IN_LEN: usize = 6;
 pub const PRODTEST_RGB_OUT_LEN: usize = 24;
 
+/// CMD_PRODTEST_RGB_OSD — run the AW21036's per-channel **open/short
+/// detection** and return the raw status bitmaps. This is the machine-checkable
+/// dead-LED test: it names the failing channel by index instead of relying on
+/// an operator seeing a wrong colour, which is what a certification or
+/// end-of-line fixture needs.
+///
+/// Two properties make the result trustworthy, and both matter more than the
+/// measurement itself:
+///
+/// 1. **Both `OSDE` encodings are returned, because the datasheet contradicts
+///    itself.** Its prose says `OSDE=10` enables open detection and `11` short;
+///    the `OSDCR` register table says the opposite. Firmware does not guess.
+/// 2. **The result is self-validating.** `LED28..LED36` have no LED attached on
+///    this board, so they MUST read open. Whichever mode flags those channels is
+///    the open-detect encoding; if *neither* does, detection did not run and the
+///    only honest verdict is inconclusive — never a pass. A certification gate
+///    that can pass vacuously is worse than no gate.
+///
+/// The response carries the wired/total channel counts so the host derives that
+/// control set from the device instead of duplicating a board constant.
+///   in_ptr  → 4 bytes `[gcc, en, reserved, reserved]`
+///     `gcc` — bias current; `0` selects the driver's ~1 mA default. The
+///             datasheet asks for ~1 mA per LED during detection.
+///     `en`  — `1` drives `RGB_EN` high; `0` is the negative control.
+///   out_ptr → 24 bytes
+///     `[0..5]`   — `OSST0..4` after `OSDE=0b10`
+///     `[5..10]`  — `OSST0..4` after `OSDE=0b11`
+///                  In both, `LED(k)` is bit `(k-1) % 8` of byte `(k-1) / 8`.
+///     `[10]`     — `VER` readback (`0xA8` healthy, `0xFF` if unreadable)
+///     `[11]`     — register writes ACKed
+///     `[12]`     — register writes attempted
+///     `[13]`     — `RGB_EN` read back from `IDR`
+///     `[14]`     — the `GCC` actually programmed
+///     `[15]`     — wired channel count (LEDs physically present)
+///     `[16]`     — total channel count the part drives
+///     `[17..24]` — reserved, zero
+/// The command leaves the board dark. Returns `NscStatus::Ok` when the part
+/// identified itself and every write was ACKed, `NscStatus::InvalidPointer` on
+/// buffer validation failure, `NscStatus::InternalError` otherwise — with the
+/// output still written. Note `Ok` means *the scan ran*, not *the LEDs are
+/// good*: the pass/fail over channels is the host's call from the bitmaps.
+pub const CMD_PRODTEST_RGB_OSD: u32 = 111;
+
+pub const PRODTEST_RGB_OSD_IN_LEN: usize = 4;
+pub const PRODTEST_RGB_OSD_OUT_LEN: usize = 24;
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks
@@ -920,6 +966,7 @@ pub const INS_V2_PRODTEST_SE050_HANDSHAKE: u8 = 0x87;
 pub const INS_V2_PRODTEST_USB_LOOPBACK: u8 = 0x88;
 pub const INS_V2_PRODTEST_BUTTON_TEST: u8 = 0x89;
 pub const INS_V2_PRODTEST_RGB_TEST: u8 = 0x8A;
+pub const INS_V2_PRODTEST_RGB_OSD: u8 = 0x8B;
 
 // -- Continuation --
 pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
@@ -2022,6 +2069,7 @@ mod tests {
             (CMD_PRODTEST_USB_LOOPBACK, INS_V2_PRODTEST_USB_LOOPBACK),
             (CMD_PRODTEST_BUTTON_TEST, INS_V2_PRODTEST_BUTTON_TEST),
             (CMD_PRODTEST_RGB_TEST, INS_V2_PRODTEST_RGB_TEST),
+            (CMD_PRODTEST_RGB_OSD, INS_V2_PRODTEST_RGB_OSD),
         ];
         for (cmd, ins) in pairs {
             assert_eq!(
@@ -2051,6 +2099,20 @@ mod tests {
         assert_eq!(16 * 8, 128);
         // Both buffers must survive the NS response buffer's status-word tail.
         assert!(PRODTEST_RGB_OUT_LEN <= PRODTEST_MAX_RESPONSE_DATA_LEN);
+    }
+
+    /// The OSD response packs two 5-byte bitmaps plus scalars; the host reads
+    /// those windows by offset, and the 36 status bits must fit the 5 bytes.
+    #[test]
+    fn prodtest_rgb_osd_buffers_match_the_documented_layout() {
+        assert_eq!(PRODTEST_RGB_OSD_IN_LEN, 4);
+        assert_eq!(PRODTEST_RGB_OSD_OUT_LEN, 24);
+        // 2 x 5 bitmap bytes + ver + 2 ack counters + en + gcc + 2 channel
+        // counts + 7 reserved.
+        assert_eq!(5 + 5 + 1 + 2 + 1 + 1 + 2 + 7, PRODTEST_RGB_OSD_OUT_LEN);
+        // 5 bytes must cover all 36 channels, with room to spare in the last.
+        assert!(5 * 8 >= 36);
+        assert!(PRODTEST_RGB_OSD_OUT_LEN <= PRODTEST_MAX_RESPONSE_DATA_LEN);
     }
 
     use super::*;

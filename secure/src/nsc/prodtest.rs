@@ -821,6 +821,90 @@ fn rgb_test_fill(_req: &[u8; RGB_TEST_IN_LEN], _out: &mut [u8; RGB_TEST_OUT_LEN]
 }
 
 // ---------------------------------------------------------------------------
+// CMD_PRODTEST_RGB_OSD (111) — Phase D
+// ---------------------------------------------------------------------------
+//
+// Per-channel open/short detection: the machine-checkable dead-LED test, which
+// names the failing channel by index rather than relying on an operator seeing
+// a wrong colour. Firmware deliberately makes no pass/fail judgement over the
+// channels — it returns both `OSDE` bitmaps raw, because the datasheet
+// contradicts itself about which encoding is open detection, and because the
+// board's nine unwired channels let the host both resolve that AND verify that
+// detection actually ran. A gate that cannot tell "all good" from "did not
+// run" is not a gate.
+
+const RGB_OSD_IN_LEN: usize = sphincs_tz_shared::PRODTEST_RGB_OSD_IN_LEN;
+const RGB_OSD_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_RGB_OSD_OUT_LEN;
+
+const _: () = assert!(RGB_OSD_IN_LEN == 4, "[gcc, en, reserved, reserved]");
+const _: () = assert!(RGB_OSD_OUT_LEN == 24, "2x5 bitmaps + 7 scalars + 7 rsvd");
+
+/// # Safety
+/// CMSE non-secure-entry handler — NS pointer derefs only after validation,
+/// and the NS input is copied to the S-stack before use (TOCTOU).
+pub(super) unsafe fn cmd_rgb_osd_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_read_ptr(args.arg0, RGB_OSD_IN_LEN)
+        || !validate_ns_write_ptr(args.arg1, RGB_OSD_OUT_LEN)
+    {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    let mut req = [0u8; RGB_OSD_IN_LEN];
+    for (i, byte) in req.iter_mut().enumerate() {
+        // SAFETY: arg0 was validated for RGB_OSD_IN_LEN bytes above.
+        *byte = unsafe { core::ptr::read_volatile((args.arg0 as *const u8).add(i)) };
+    }
+
+    let mut out = [0u8; RGB_OSD_OUT_LEN];
+    let ran = rgb_osd_fill(&req, &mut out);
+
+    let out_ptr = args.arg1 as *mut u8;
+    for (i, byte) in out.iter().enumerate() {
+        // SAFETY: arg1 was validated for RGB_OSD_OUT_LEN bytes above.
+        unsafe { core::ptr::write_volatile(out_ptr.add(i), *byte) };
+    }
+
+    if ran {
+        NscStatus::Ok as u32
+    } else {
+        NscStatus::InternalError as u32
+    }
+}
+
+/// Serialise the scan. Returns whether the scan *ran* (part identified itself
+/// and every write ACKed) — explicitly NOT whether the LEDs are healthy, which
+/// only the host can decide from the bitmaps.
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+fn rgb_osd_fill(req: &[u8; RGB_OSD_IN_LEN], out: &mut [u8; RGB_OSD_OUT_LEN]) -> bool {
+    use crate::hw::aw21036;
+    let r = aw21036::open_short_scan(req[0], req[1] != 0);
+    out[..aw21036::OSST_BYTES].copy_from_slice(&r.mode_a);
+    out[aw21036::OSST_BYTES..2 * aw21036::OSST_BYTES].copy_from_slice(&r.mode_b);
+    out[10] = r.ver.unwrap_or(RGB_READ_FAILED);
+    out[11] = r.acks_ok;
+    out[12] = r.acks_total;
+    out[13] = u8::from(r.en_level);
+    out[14] = r.gcc;
+    out[15] = aw21036::WIRED_CHANNELS;
+    out[16] = aw21036::TOTAL_CHANNELS;
+    secure_log!(
+        "[PRODTEST] rgb_osd: ver=0x{:02x} acks={}/{} wired={} total={}",
+        out[10],
+        out[11],
+        out[12],
+        out[15],
+        out[16]
+    );
+    r.ver == Some(aw21036::VER_EXPECTED) && r.acks_ok == r.acks_total
+}
+
+/// Boards with no RGB driver: all-zero output, did-not-run.
+#[cfg(not(all(feature = "stm32u585", feature = "board-pq1")))]
+fn rgb_osd_fill(_req: &[u8; RGB_OSD_IN_LEN], _out: &mut [u8; RGB_OSD_OUT_LEN]) -> bool {
+    false
+}
+
+// ---------------------------------------------------------------------------
 // Host tests — pure helpers
 // ---------------------------------------------------------------------------
 

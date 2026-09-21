@@ -73,6 +73,7 @@ CMD_PRODTEST_SE050_HANDSHAKE = 107
 CMD_PRODTEST_USB_LOOPBACK = 108
 CMD_PRODTEST_BUTTON_TEST = 109
 CMD_PRODTEST_RGB_TEST = 110
+CMD_PRODTEST_RGB_OSD = 111
 
 # Shared wire contract. Mirrors
 # `proto/src/lib.rs::PRODTEST_MAX_RESPONSE_DATA_LEN`.
@@ -107,6 +108,9 @@ COMMAND_POLICIES = {
     # step (the operator sees the colour); promoting it to PROFILE_REQUIRED
     # belongs with a PROFILE_ID bump, once pq1 is the only target.
     CMD_PRODTEST_RGB_TEST: ("RGB_TEST", PROFILE_OPTIONAL),
+    # Board-conditional for the same reason as RGB_TEST. This is the
+    # machine-checkable half of the LED acceptance — no camera, no operator.
+    CMD_PRODTEST_RGB_OSD: ("RGB_OSD", PROFILE_OPTIONAL),
 }
 
 
@@ -153,6 +157,7 @@ INS_FOR_CMD = {
     CMD_PRODTEST_USB_LOOPBACK:      0x88,
     CMD_PRODTEST_BUTTON_TEST:       0x89,
     CMD_PRODTEST_RGB_TEST:          0x8A,
+    CMD_PRODTEST_RGB_OSD:           0x8B,
 }
 
 # APDU + HID framing constants. Mirror `proto/src/lib.rs::APDU_CLA_V2`
@@ -802,6 +807,131 @@ def test_rgb_test(
     )
 
 
+# RGB_OSD response layout — mirrors `proto/src/lib.rs::CMD_PRODTEST_RGB_OSD`.
+RGB_OSD_OUT_LEN = 24
+OSST_BYTES = 5
+OSD_INCONCLUSIVE = "INCONCLUSIVE"
+
+
+def decode_osst(bitmap: bytes, total_channels: int) -> set[int]:
+    """1-based channel numbers flagged in an OSST bitmap.
+
+    `LED(k)` is bit `(k-1) % 8` of byte `(k-1) // 8`.
+    """
+    return {
+        k
+        for k in range(1, total_channels + 1)
+        if bitmap[(k - 1) // 8] & (1 << ((k - 1) % 8))
+    }
+
+
+def channel_label(k: int) -> str:
+    """Name channel `k` as its RGB package and colour.
+
+    The board wires LED1..LED27 as LED_R1, LED_G1, LED_B1, LED_R2, ... so the
+    channel index identifies both which of the nine packages and which die.
+    """
+    return f"LED{(k - 1) // 3 + 1}-{'RGB'[(k - 1) % 3]}"
+
+
+def test_rgb_osd(tx: ProdtestTransport, gcc: int = 0, en: int = 1) -> TestResult:
+    """Per-channel open detection — the dead-LED test a fixture can gate on.
+
+    Two things have to be established before any verdict is meaningful, and
+    both come from the same board fact:
+
+    1. **Which `OSDE` encoding is open detection.** The datasheet contradicts
+       itself (prose says 10=open/11=short, the register table says the
+       reverse), so firmware returns both bitmaps and we resolve it here.
+    2. **That detection actually ran.** Channels LED28..36 have no LED
+       attached, so they MUST read open. Whichever mode flags all of them is
+       open detection; if neither does, the mechanism did not work and the
+       verdict is INCONCLUSIVE.
+
+    A certification gate that reports PASS when the measurement silently did
+    nothing is worse than no gate, so INCONCLUSIVE never passes.
+    """
+    in_data = bytes([gcc & 0xFF, 1 if en else 0, 0, 0])
+    status, resp = tx.send_cmd(CMD_PRODTEST_RGB_OSD, in_data, out_size=RGB_OSD_OUT_LEN)
+    if len(resp) != RGB_OSD_OUT_LEN:
+        return TestResult(
+            name="RGB_OSD",
+            cmd=CMD_PRODTEST_RGB_OSD,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes (expected {RGB_OSD_OUT_LEN})",
+        )
+
+    mode_a = resp[0:OSST_BYTES]
+    mode_b = resp[OSST_BYTES : 2 * OSST_BYTES]
+    ver, acks_ok, acks_total, en_level, gcc_used, wired, total = resp[10:17]
+
+    parts = [
+        f"ver=0x{ver:02x}",
+        f"acks={acks_ok}/{acks_total}",
+        f"en={en_level}",
+        f"gcc=0x{gcc_used:02x}",
+        f"wired={wired}/{total}",
+        f"a={mode_a.hex()}",
+        f"b={mode_b.hex()}",
+    ]
+
+    if not 0 < wired <= total or total > OSST_BYTES * 8:
+        parts.append("channel counts from the device are not sane")
+        return TestResult(
+            name="RGB_OSD",
+            cmd=CMD_PRODTEST_RGB_OSD,
+            passed=False,
+            status_code=status,
+            detail=", ".join(parts),
+            raw_response=resp,
+        )
+
+    flagged_a = decode_osst(mode_a, total)
+    flagged_b = decode_osst(mode_b, total)
+    unwired = set(range(wired + 1, total + 1))
+    a_is_open = bool(unwired) and unwired <= flagged_a
+    b_is_open = bool(unwired) and unwired <= flagged_b
+
+    if a_is_open == b_is_open:
+        # Neither mode flagged the physically-open control channels (detection
+        # did not run), or both did (cannot tell the encodings apart).
+        why = (
+            "both modes flagged the unwired control channels — cannot identify "
+            "the open-detect encoding"
+            if a_is_open
+            else f"neither mode flagged the unwired control channels {sorted(unwired)} "
+            "— open detection did not run (check the ~1 mA bias and PWMDIS)"
+        )
+        parts.append(f"{OSD_INCONCLUSIVE}: {why}")
+        return TestResult(
+            name="RGB_OSD",
+            cmd=CMD_PRODTEST_RGB_OSD,
+            passed=False,
+            status_code=status,
+            detail=", ".join(parts),
+            raw_response=resp,
+        )
+
+    open_mode = "a(OSDE=10)" if a_is_open else "b(OSDE=11)"
+    flagged_open = flagged_a if a_is_open else flagged_b
+    faulty = sorted(flagged_open & set(range(1, wired + 1)))
+    parts.append(f"open-encoding={open_mode}")
+    parts.append(
+        "channels OK"
+        if not faulty
+        else "OPEN: " + " ".join(f"{channel_label(k)}(ch{k})" for k in faulty)
+    )
+    return TestResult(
+        name="RGB_OSD",
+        cmd=CMD_PRODTEST_RGB_OSD,
+        passed=(status == STATUS_OK and not faulty),
+        status_code=status,
+        detail=", ".join(parts),
+        raw_response=resp,
+    )
+
+
 def test_trng_sample(
     tx: ProdtestTransport, n: int = PRODTEST_MAX_RESPONSE_DATA_LEN
 ) -> TestResult:
@@ -881,6 +1011,9 @@ def run_all_tests(tx: ProdtestTransport, report: UnitReport) -> None:
         report.results.append(test_rgb_test(tx, r, g, b, label=label))
         time.sleep(1.0)
     report.results.append(test_rgb_test(tx, 0, 0, 0, label="off"))
+    # Machine-checkable dead-LED detection — names the failing channel, so it
+    # does not depend on the operator noticing a wrong colour.
+    report.results.append(test_rgb_osd(tx))
     report.results.append(test_button_test(tx))
 
 

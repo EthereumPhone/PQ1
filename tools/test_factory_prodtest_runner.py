@@ -70,7 +70,47 @@ class FakeTransport:
             return runner.STATUS_OK, b"\x00\x00\x00\x00"
         if cmd == runner.CMD_PRODTEST_RGB_TEST:
             return runner.STATUS_OK, healthy_rgb_response()
+        if cmd == runner.CMD_PRODTEST_RGB_OSD:
+            return runner.STATUS_OK, osd_response()
         raise AssertionError(f"unexpected command {cmd}")
+
+
+def osd_bitmap(channels: tuple[int, ...]) -> bytes:
+    """Pack 1-based channel numbers into a 5-byte OSST bitmap."""
+    b = bytearray(runner.OSST_BYTES)
+    for k in channels:
+        b[(k - 1) // 8] |= 1 << ((k - 1) % 8)
+    return bytes(b)
+
+
+def osd_response(
+    open_channels: tuple[int, ...] | None = None,
+    short_channels: tuple[int, ...] = (),
+    open_in_mode_a: bool = True,
+    ver: int = 0xA8,
+    acks_ok: int = 46,
+    acks_total: int = 46,
+    en_level: int = 1,
+    gcc: int = 0x20,
+    wired: int = 27,
+    total: int = 36,
+) -> bytes:
+    """Build a CMD_PRODTEST_RGB_OSD response.
+
+    `open_channels` defaults to the nine unwired channels, i.e. a healthy
+    board: the physically-absent LEDs read open and nothing else does.
+    """
+    if open_channels is None:
+        open_channels = tuple(range(wired + 1, total + 1))
+    opens = osd_bitmap(open_channels)
+    shorts = osd_bitmap(short_channels)
+    mode_a, mode_b = (opens, shorts) if open_in_mode_a else (shorts, opens)
+    return (
+        mode_a
+        + mode_b
+        + bytes([ver, acks_ok, acks_total, en_level, gcc, wired, total])
+        + bytes(7)
+    )
 
 
 def rgb_response(
@@ -105,7 +145,7 @@ class ReversibleProfileTests(unittest.TestCase):
         return report
 
     def test_profile_matrix_covers_exact_stable_command_set(self) -> None:
-        self.assertEqual(set(runner.COMMAND_POLICIES), set(range(100, 111)))
+        self.assertEqual(set(runner.COMMAND_POLICIES), set(range(100, 112)))
         unsupported = {
             cmd
             for cmd, (_, policy) in runner.COMMAND_POLICIES.items()
@@ -309,6 +349,83 @@ class RgbTestDecodeTests(unittest.TestCase):
         result = runner.test_rgb_test(tx)
         self.assertFalse(result.passed)
         self.assertIn("expected 24", result.detail)
+
+
+
+
+class RgbOsdDecodeTests(unittest.TestCase):
+    """The OSD verdict is what a certification fixture would gate on, so the
+    important cases are the ones where it must REFUSE to pass."""
+
+    def osd(self, **kw) -> object:
+        resp = osd_response(**kw)
+        tx = FakeTransport({runner.CMD_PRODTEST_RGB_OSD: (runner.STATUS_OK, resp)})
+        return runner.test_rgb_osd(tx)
+
+    def test_bitmap_round_trips_channel_numbers(self) -> None:
+        for chans in ((), (1,), (2, 5, 8), (28, 36), tuple(range(1, 37))):
+            self.assertEqual(
+                runner.decode_osst(osd_bitmap(chans), 36), set(chans)
+            )
+
+    def test_channel_label_maps_index_to_package_and_colour(self) -> None:
+        # LED1..3 are the R/G/B dies of package 1, LED4..6 of package 2, ...
+        self.assertEqual(runner.channel_label(1), "LED1-R")
+        self.assertEqual(runner.channel_label(2), "LED1-G")
+        self.assertEqual(runner.channel_label(3), "LED1-B")
+        self.assertEqual(runner.channel_label(26), "LED9-G")
+        self.assertEqual(runner.channel_label(27), "LED9-B")
+
+    def test_healthy_board_passes_and_names_the_open_encoding(self) -> None:
+        r = self.osd()
+        self.assertTrue(r.passed)
+        self.assertIn("open-encoding=a(OSDE=10)", r.detail)
+        self.assertIn("channels OK", r.detail)
+
+    def test_resolves_the_encoding_either_way_round(self) -> None:
+        # The datasheet contradicts itself; the unwired control channels decide.
+        r = self.osd(open_in_mode_a=False)
+        self.assertTrue(r.passed)
+        self.assertIn("open-encoding=b(OSDE=11)", r.detail)
+
+    def test_dead_green_channel_fails_and_is_named(self) -> None:
+        # Channel 26 = LED9's green die — the shape actually seen on the EVT
+        # unit, where one LED rendered magenta instead of white.
+        r = self.osd(open_channels=tuple(range(28, 37)) + (26,))
+        self.assertFalse(r.passed)
+        self.assertIn("LED9-G(ch26)", r.detail)
+
+    def test_detection_that_did_not_run_is_INCONCLUSIVE_not_pass(self) -> None:
+        # The critical anti-vacuity case: all-zero status. Nine channels are
+        # physically open, so an empty bitmap cannot mean "all good".
+        r = self.osd(open_channels=())
+        self.assertFalse(r.passed)
+        self.assertIn(runner.OSD_INCONCLUSIVE, r.detail)
+        self.assertIn("did not run", r.detail)
+
+    def test_ambiguous_encoding_is_INCONCLUSIVE(self) -> None:
+        # Both modes flag the control channels → cannot tell them apart.
+        unwired = tuple(range(28, 37))
+        r = self.osd(open_channels=unwired, short_channels=unwired)
+        self.assertFalse(r.passed)
+        self.assertIn(runner.OSD_INCONCLUSIVE, r.detail)
+        self.assertIn("cannot identify", r.detail)
+
+    def test_insane_channel_counts_from_the_device_fail(self) -> None:
+        # `open_channels=()` keeps the helper from packing channel numbers the
+        # 5-byte bitmap cannot hold; the point here is the device's own counts.
+        for wired, total in ((0, 36), (40, 36), (27, 64)):
+            r = self.osd(wired=wired, total=total, open_channels=())
+            self.assertFalse(r.passed, f"wired={wired} total={total}")
+            self.assertIn("not sane", r.detail)
+
+    def test_short_response_fails_without_indexing_past_the_end(self) -> None:
+        tx = FakeTransport(
+            {runner.CMD_PRODTEST_RGB_OSD: (runner.STATUS_OK, b"\x00" * 8)}
+        )
+        r = runner.test_rgb_osd(tx)
+        self.assertFalse(r.passed)
+        self.assertIn("expected 24", r.detail)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ Usage:
   tools/prodtest_rgb.py --rgb ff ff ff --gcc 0x60   # brighter
   tools/prodtest_rgb.py --en 0 --rgb ff 0 0  # negative control: EN held low
   tools/prodtest_rgb.py --hold 3             # seconds to hold each colour
+  tools/prodtest_rgb.py --osd                # per-channel open detection only
 
 Exit status: 0 if every step passed, 1 otherwise, 2 if no device was found.
 """
@@ -99,6 +100,11 @@ def main() -> int:
     ap.add_argument("--gcc", default="0", help="global current, hex; 0 = firmware default")
     ap.add_argument("--en", type=int, default=1, choices=(0, 1), help="drive RGB_EN")
     ap.add_argument("--hold", type=float, default=1.5, help="seconds per colour")
+    ap.add_argument(
+        "--osd",
+        action="store_true",
+        help="run per-channel open detection instead of the colour sweep",
+    )
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -109,6 +115,23 @@ def main() -> int:
     print(f"== device: {node}")
 
     gcc = parse_byte(args.gcc)
+    if args.osd:
+        hid = HidRaw(node)
+        try:
+            tx = HidRawTransport(hid, verbose=args.verbose)
+            result = runner.test_rgb_osd(tx, gcc=gcc, en=args.en)
+        finally:
+            hid.close()
+        mark = "PASS" if result.passed else "FAIL"
+        print(f"[{mark}] {result.name}: {result.detail}")
+        if runner.OSD_INCONCLUSIVE in result.detail:
+            print(
+                "\nINCONCLUSIVE is not a failing board — it means the measurement "
+                "did not run, so the result says nothing either way. Never read it "
+                "as a pass."
+            )
+        return 0 if result.passed else 1
+
     if args.rgb:
         r, g, b = (parse_byte(v) for v in args.rgb)
         steps = [(r, g, b, f"{r:02x}{g:02x}{b:02x}")]

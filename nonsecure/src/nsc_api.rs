@@ -206,6 +206,8 @@ mod transport {
         fn nsc_prodtest_button_test(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
         fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_rgb_osd(in_ptr: u32, out_ptr: u32) -> u32;
 
         // IWDG heartbeat registration. Gated on `iwdg` on both sides so
         // a non-iwdg build links no dangling veneer symbol.
@@ -404,6 +406,12 @@ mod transport {
     #[inline]
     pub(super) fn prodtest_rgb_test_call(in_ptr: *const u8, out_ptr: *mut u8) -> u32 {
         unsafe { nsc_prodtest_rgb_test(in_ptr as u32, out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_rgb_osd_call(in_ptr: *const u8, out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_rgb_osd(in_ptr as u32, out_ptr as u32) }
     }
 }
 
@@ -659,4 +667,12 @@ pub fn prodtest_rgb_test(
     out: &mut [u8; sphincs_tz_shared::PRODTEST_RGB_OUT_LEN],
 ) -> u32 {
     transport::prodtest_rgb_test_call(req.as_ptr(), out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_rgb_osd(
+    req: &[u8; sphincs_tz_shared::PRODTEST_RGB_OSD_IN_LEN],
+    out: &mut [u8; sphincs_tz_shared::PRODTEST_RGB_OSD_OUT_LEN],
+) -> u32 {
+    transport::prodtest_rgb_osd_call(req.as_ptr(), out.as_mut_ptr())
 }
