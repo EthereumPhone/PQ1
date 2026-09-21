@@ -73,6 +73,25 @@ fn positive_saes_base_secure_alias_0x520c_0c00() {
 }
 
 #[test]
+fn positive_saes_rcc_uses_secure_alias_for_shsi() {
+    // RM0456: "The SHSI configuration and status bits are secured when the SAES
+    // is configured as secure." `sau.rs` marks SAES SECURE (GTZC1_TZSC_SECCFGR3
+    // bit 15), so SHSION/SHSIRDY (RCC_CR bits 14/15) are secure-only. Driven
+    // through the NS alias (0x4602_0C00) the enable is silently dropped,
+    // SHSIRDY never rises, and `saes::init()` fails `ShsiTimeout` — which is
+    // exactly what pq1 silicon did on 2026-09-21 (bare board AND sealed EVT),
+    // taking the whole DHUK / Tier-1 KDF path with it.
+    assert!(
+        SAES_SRC.contains("const RCC: u32 = 0x5602_0C00;"),
+        "SAES must reach RCC through the SECURE alias or SHSI never starts"
+    );
+    assert!(
+        !SAES_SRC.contains("const RCC: u32 = 0x4602_0C00;"),
+        "the NS RCC alias silently drops the SHSI enable"
+    );
+}
+
+#[test]
 fn positive_hash_register_offsets() {
     assert!(HASH_SRC.contains("cr: Reg32::new(HASH_BASE + 0x00)"), "HASH_CR at offset 0x00");
     assert!(HASH_SRC.contains("din: Reg32::new(HASH_BASE + 0x04)"), "HASH_DIN at offset 0x04");

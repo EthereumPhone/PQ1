@@ -146,7 +146,15 @@ const ISR_RNGEIF: u32 = 1 << 3;
 // AHB2RSTR2 at 0x68). Verified against `stm32u5-0.16.0/src/stm32u585/rcc.rs`
 // lines 172/177.
 // ---------------------------------------------------------------------------
-const RCC: u32 = 0x4602_0C00;
+// SECURE alias (0x5602_xxxx), not the NS one (0x4602_xxxx), and that choice is
+// load-bearing: RM0456 §"SHSI" — "The SHSI configuration and status bits are
+// secured when the SAES is configured as secure." `sau.rs` marks SAES SECURE in
+// `GTZC1_TZSC_SECCFGR3` bit 15, so SHSION/SHSIRDY (CR bits 14/15) are
+// secure-only. Written through the NS alias the enable is silently dropped,
+// SHSIRDY never rises and `init()` fails `ShsiTimeout` — measured on pq1
+// silicon 2026-09-21 on both a bare board and a sealed EVT unit, i.e. the whole
+// DHUK/Tier-1 path was dead from the moment TZSC started securing SAES.
+const RCC: u32 = 0x5602_0C00;
 
 const RCC_CR_SHSION: u32 = 1 << 14;
 const RCC_CR_SHSIRDY: u32 = 1 << 15;
