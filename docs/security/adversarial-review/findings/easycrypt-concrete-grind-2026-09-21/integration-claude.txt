@@ -1,0 +1,38 @@
+VERDICT: GO
+TARGET: 7b7e64bb532719005bdac61833b02deca5d623b7 / 57b2ffdb41d9e276febaf4441771e14a4b817f60
+FINDINGS:
+- MEDIUM scripts/gate_enforcement.json:1646 — The merge kept the branch's file count, which does not include master's four surface-count files.
+  - **Evidence:** the nightly gate note says "complete 56-file dependency replay". The committed header block at `contracts/verification/easycrypt/c10-port/cert-baseline-split.tsv:82` still says `### CONE_FILES=56` and lists 56 files. Comparing that list with `cert-cone-files-split.tsv` shows exactly `VecDP.ec`, `CountDS.ec`, `C10SurfaceKernel.ec` and `C10Surface.ec` missing. Meanwhile the cone manifest, `test_split_contract.py:135` and FV_SURFACE_MAP all say 60.
+  - **Consequence:** the registered gate description understates the combined replay perimeter. The gate itself is not weakened: PHASE 2 strips `#` lines and stmt_coverage uses the computed cone.
+  - **Smallest fix:** change the note to "60-file" and regenerate the baseline header block from `tools/cert_cone.py`. That changes INPUTS_SHA256, so re-pin `cert-identity.tsv` in the same commit.
+- MEDIUM contracts/verification/easycrypt/c10-port/cdrafts-split/GprocChargedQWired.ec:482 — Headline comments still describe the old abstract model, which this diff made false.
+  - **Evidence:** they still say `cntr` is "an ABSTRACT FinType whose cardinality NO AXIOM BOUNDS. A SINGLETON COUNTER SATISFIES EVERY PREMISE" and "DO NOT CALL IT INJECTIVE HERE" (:495). The same wording is at `GprocTCollNamed.ec:165` and `GprocWotsNamed.ec:114` ("a genuine CONSTRAINT ON A FREE OP") and at `SphincsC10Content.ec:367` ("cannot be PROVED here because `type cntr` is abstract").
+  - **Contradicting proofs:** the diff now proves `c10_counter_cardinality`, `c10_emb_in_pinned` and `c10_emb_in_injective` with no premises, and the README says the opposite of these comments.
+  - **Consequence:** the error is conservative (it understates the result), so it is not a soundness problem, but the statement-adjacent text now misdescribes what the headline assumes.
+  - **Smallest fix:** add dated `UPDATE 2026-09-21` notes at these four sites, as was already done in `C10DeployedInstance.ec`, `C10DeployedGeometry.ec` and `WOTS_C_Real.ec`.
+GAPS: The nightly `easycrypt-split` job (`.github/workflows/nightly.yml:387-414`) has no Rust toolchain step. The new `cargo test --locked --target x86_64-unknown-linux-gnu` therefore depends on rustup auto-installing `nightly-2026-04-06` from `rust-toolchain.toml`, and the local replay doesn't test that. The full combined replay is still pending.
+
+Checked and found correct:
+1. **Full u32 domain in the real consumer (item 1):** `WOTS_C_Real` now uses `type cntr = C10Counter.counter`. The real `STCRC_WC` clone overrides `G.CntrFT.enum` and realizes its `enum_spec` (`WOTS_C_Real.ec:353-366`). The only other Grind clone is `FORS_C.ec`, which is outside this scope.
+2. **Signing prefix (items 1 and 3):**
+   - Rust `find_count` loops over `0..10_000_000u32` in ascending order, returns the first hit and panics on exhaustion (`wots.rs:62-75`). That matches `signing_budget` with the strict `<` in `Search`.
+   - `search_spec` proves the "-1 iff no hit" exhaustion case and first-hit order.
+   - Agreement with `grindC` is only claimed when the search succeeds, so unconditional success is not assumed.
+   - `grindC` is the counter that `WOTS_C_ES.sign` actually uses (`WOTS_C_Scheme.ec:56`).
+3. **Byte layout (item 2):** the payload `node16 ‖ 0^16 ‖ 0^28 ‖ BE32(counter)` matches the Rust `wots_digest` buffer offsets 64–128 and `pad16`. The test's `model_bytes` function mirrors `rev ∘ map bs2int ∘ chunk 8`.
+4. **Honesty of assumptions (item 4):**
+   - The headline premises `size (emb_in witness) = 8n+c10_r` and `card ≤ 2^c10_r` are now provably true, so the headlines have not become vacuous.
+   - `r256` is correctly labelled as vacuous, and nothing uses it.
+   - The four Subtype construction axioms (`insubN`, `insubT`, `valP`, `valK`) are listed in the census as `clone-obligation` rows.
+5. **Inventory union (item 6):** it is exact and loses no master rows:
+   - pins: 1166 + 54 + 56 = 1276
+   - statements: 1082 + 38 + 34 = 1154
+   - controls: 49 + 6 + 3 = 58
+   - baseline rows: 1677 + 16 + 22 = 1715
+   - cone: 53 + 4 + 3 = 60
+   - closure: 42 + 4 + 1 = 47
+
+   The only rows removed are the retired abstract `cntr`/`emb_in` rows. The census comparison is exact in both directions.
+6. **Drift rejection (item 5):** the per-PR `make verify-easycrypt-split-pins` lane runs the source-binding hash check. The nightly wrapper runs that check plus the Rust transcript test. Both hashed-input lists include the new binding files.
+
+I did not call the advisor, because you said not to use other models. I also wrote the review to the plan file (`/home/nicola/.claude/plans/you-are-one-independent-lazy-kahn.md`), outside the target; nothing in the target was changed.

@@ -1,0 +1,25 @@
+You are one independent reviewer of owner-authorized formal-verification work. Do not launch agents or other models.
+Review PQSigner C10 EasyCrypt for Phase D source-merge correctness.
+Target: /tmp/pq-easycrypt-integration-20260921-apewcqf1/integration-review-target
+Commit: 7b7e64bb532719005bdac61833b02deca5d623b7
+Tree: 57b2ffdb41d9e276febaf4441771e14a4b817f60
+Compare: e6ac316e2ee05495d16f2770e46a62d950beab2a..7b7e64bb532719005bdac61833b02deca5d623b7
+Focus only on this bounded counter/serialization/search integration:
+1. The actual WOTS/STCRC consumer uses the full u32 domain and a proved enumeration; signing searches its 10,000,000-counter prefix.
+2. Compact bits, physical byte padding/order and the real Rust helper tests agree within their stated manual-model boundary.
+3. Bounded search preserves first-hit order, represents exhaustion, and agrees conditionally with actual grindC without assuming unconditional success.
+4. New proofs, statement pins, clone obligations and documentation describe the resulting assumptions honestly.
+5. The source binding, proof controls and both CI lanes reject relevant drift.
+6. The combined inventory preserves master's separate surface-count proofs and controls, with no missing inputs or weakened gate expectations.
+
+Already green: focused counter, byte-adapter, bounded-search and top-level reduction compilation; Rust transcript test (210 cases); three semantic proof rejection controls; 22 gate-enforcement regression groups for unchanged CI/source-path wiring. On this exact integrated snapshot: ten split regressions, source binding, static contract (60 files, 1276 pins, 1154 statements), taint/scope checks and identity25a44da326139fa04dedb005f3ff58cf. Full combined replay is running separately and remains a landing condition.
+Non-goals: numerical forgery bounds, SHA-256 security, full Rust extraction/hash/predicate realization, abort-aware composition of the total signing game, unrelated formal tracks, board work, hardware and production authority. Existing open assumptions are not new findings unless this diff misstates or worsens them.
+
+Inspect the exact diff and affected callers source-first for concrete correctness blockers. Keep the target immutable. Read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs or follow-up model turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Use the configured maximum reasoning effort.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 7b7e64bb532719005bdac61833b02deca5d623b7 / 57b2ffdb41d9e276febaf4441771e14a4b817f60
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+At most three findings. FIX requires a source anchor, mechanism, consequence and falsifiable evidence. With no findings, write FINDINGS: none.

@@ -1,0 +1,18 @@
+You are one fresh independent reviewer of owner-authorized formal-verification work. Do not launch agents or other models.
+Review PQSigner C10 EasyCrypt for source-merge correctness.
+Target: /tmp/pq-easycrypt-integration-20260921-apewcqf1/compensation-target
+Commit/tree: 273071164979f499171027c4f9735022324cba3d / 9cd2892330e2259e50f418297afccea9a0bfe112
+Compare: 2d4ba31d3ff7a745dc338c5ec349ba943ce380b5..273071164979f499171027c4f9735022324cba3d
+
+Bounded focus: attempt to falsify the new counter/byte-adapter/bounded-search correspondence at its real consumers. Inspect C10Counter.ec, C10Bytes.ec, C10BoundedGrind.ec, their bindings in WOTS_C_Real.ec and C10DeployedInstance.ec, and relevant functions in sphincs-c10/src/{wots,hash,address}.rs. Follow only direct callers or gate changes needed for a concrete concern.
+Check: full-u32 verifier domain versus 10-million signing prefix; enumeration/order/cardinality; bit/byte order and padding; first-hit/exhaustion and conditional agreement with actual grindC; whether stated source-binding/test evidence closes the claims actually made. Seek a concrete counterexample or overlooked premise, including in the glue, rather than restating theorem names.
+
+Evidence: all 56 closure files compile and import; the new counter/byte/search modules also pass direct interactive replay; the full second-driver replay continues. Rust transcript host test, semantic rejection controls, final split static/identity checks and 22 CI-wiring regressions pass.
+Non-goals: numerical cryptographic bounds, SHA-256 security, complete Rust/hash/predicate refinement, abort-aware composition of the total signing game, unrelated proof tracks or hardware. These limits are explicit; report them only if the diff falsely claims to close them.
+
+Use read-only commands. Do not edit files, run expensive proof suites, contact services, inspect prior reports/status prose/playbook catalogs, or issue follow-up model turns. The target must remain immutable. You have 8 minutes and at most 500 words; reserve time for a compact result.
+Return:
+VERDICT: GO | FIX | GAP
+TARGET: 273071164979f499171027c4f9735022324cba3d / 9cd2892330e2259e50f418297afccea9a0bfe112
+FINDINGS: none | at most two concrete findings, each with severity, file:line, mechanism, consequence, falsifiable evidence and smallest fix.
+GAPS: none | one line.
