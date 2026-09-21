@@ -137,6 +137,23 @@ def healthy_rgb_response() -> bytes:
     return rgb_response()
 
 
+def makefile_prodtest_features() -> list[str]:
+    """`PRODTEST_SECURE_FEATURES` from the Makefile, board placeholder resolved.
+
+    Naming a board is mandatory on every stm32u585 build, so `$(BOARD_FEATURE)`
+    always resolves to a real feature; here it resolves to the profile's board.
+    """
+    makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
+    for line in makefile.splitlines():
+        if "PRODTEST_SECURE_FEATURES" in line and ":=" in line:
+            rhs = line.split(":=", 1)[1].strip()
+            return [
+                f"board-{runner.PROFILE_BOARD}" if f == "$(BOARD_FEATURE)" else f
+                for f in rhs.split(",")
+            ]
+    raise AssertionError("PRODTEST_SECURE_FEATURES not found in the Makefile")
+
+
 class ReversibleProfileTests(unittest.TestCase):
     def run_profile(self, tx: FakeTransport) -> object:
         report = runner.UnitReport()
@@ -170,9 +187,12 @@ class ReversibleProfileTests(unittest.TestCase):
             set(receipt["policy_classes"]),
             {"required", "optional", "unsupported"},
         )
-        self.assertEqual(
-            receipt["secure_features"], ["prodtest", "dev-testkey", "saes-dhuk"]
-        )
+        # Derived from the Makefile rather than pinned as a literal: the
+        # receipt states the build policy a manufacturer must reproduce, so the
+        # two drifting apart is the failure worth preventing. (It had already
+        # drifted — the list omitted the board feature, which the build has
+        # always passed.)
+        self.assertEqual(receipt["secure_features"], makefile_prodtest_features())
 
     def test_safe_profile_accepts_required_passes_and_nonpassing_skips(self) -> None:
         tx = FakeTransport()
@@ -426,6 +446,99 @@ class RgbOsdDecodeTests(unittest.TestCase):
         r = runner.test_rgb_osd(tx)
         self.assertFalse(r.passed)
         self.assertIn("expected 24", r.detail)
+
+
+
+
+class ProfileV2Tests(unittest.TestCase):
+    """v2 makes LED acceptance a machine gate, which changes what the profile
+    means: it is now board-scoped, so the identity must say so and the two RGB
+    commands must be required rather than advisory."""
+
+    def test_profile_id_is_board_scoped_and_versioned(self) -> None:
+        self.assertEqual(runner.PROFILE_BOARD, "pq1")
+        self.assertIn(runner.PROFILE_BOARD, runner.PROFILE_ID)
+        self.assertTrue(runner.PROFILE_ID.endswith("-v2"), runner.PROFILE_ID)
+        # The receipt must carry the board, or a manufacturer cannot tell which
+        # board a stored receipt was produced against.
+        self.assertEqual(runner.profile_receipt()["board"], "pq1")
+
+    def test_both_rgb_commands_are_required(self) -> None:
+        for cmd in (runner.CMD_PRODTEST_RGB_TEST, runner.CMD_PRODTEST_RGB_OSD):
+            self.assertEqual(
+                runner.COMMAND_POLICIES[cmd][1], runner.PROFILE_REQUIRED
+            )
+        required = runner.profile_receipt()["policy_classes"][
+            runner.PROFILE_REQUIRED
+        ]
+        self.assertIn(runner.CMD_PRODTEST_RGB_TEST, required)
+        self.assertIn(runner.CMD_PRODTEST_RGB_OSD, required)
+
+    def test_receipt_derives_every_policy_class_including_optional(self) -> None:
+        # Regression: the optional list was hardcoded [] while the other two
+        # classes were derived, so a receipt could claim no optional commands
+        # while some were declared.
+        #
+        # v2 leaves NO command optional, which makes the obvious version of this
+        # test vacuous — hardcoded [] and a derived [] are indistinguishable.
+        # So inject an optional command and assert the receipt reports it. This
+        # tests the derivation itself rather than today's matrix.
+        receipt = runner.profile_receipt()["policy_classes"]
+        for policy in (
+            runner.PROFILE_REQUIRED,
+            runner.PROFILE_OPTIONAL,
+            runner.PROFILE_UNSUPPORTED,
+        ):
+            expected = sorted(
+                cmd
+                for cmd, (_, declared) in runner.COMMAND_POLICIES.items()
+                if declared == policy
+            )
+            self.assertEqual(sorted(receipt[policy]), expected, policy)
+
+        sentinel = 199
+        self.assertNotIn(sentinel, runner.COMMAND_POLICIES)
+        with mock.patch.dict(
+            runner.COMMAND_POLICIES,
+            {sentinel: ("SENTINEL", runner.PROFILE_OPTIONAL)},
+        ):
+            classes = runner.profile_receipt()["policy_classes"]
+            self.assertIn(
+                sentinel,
+                classes[runner.PROFILE_OPTIONAL],
+                "receipt does not report a declared optional command",
+            )
+
+    def test_a_required_rgb_failure_rejects_the_profile(self) -> None:
+        # The point of promotion: a dead LED must now sink the unit's verdict.
+        bad = osd_response(open_channels=tuple(range(28, 37)) + (26,))
+        tx = FakeTransport({runner.CMD_PRODTEST_RGB_OSD: (runner.STATUS_OK, bad)})
+        report = runner.UnitReport()
+        with mock.patch.object(runner.time, "sleep", return_value=None):
+            runner.run_all_tests(tx, report)
+        self.assertFalse(report.required_checks_passed)
+        self.assertFalse(report.profile_accepted)
+
+    def test_board_without_an_rgb_driver_says_so(self) -> None:
+        # The firmware stub on a non-pq1 build writes nothing, so the response
+        # is all zeros. A real pq1 run always ATTEMPTS writes, which makes
+        # acks_total == 0 an unambiguous "this build has no RGB driver" rather
+        # than a misleading "check your I2C pull-ups".
+        zeros = bytes(runner.RGB_OSD_OUT_LEN)
+        tx = FakeTransport(
+            {runner.CMD_PRODTEST_RGB_OSD: (runner.SW_INTERNAL_ERROR_WIRE, zeros)}
+        )
+        r = runner.test_rgb_osd(tx)
+        self.assertFalse(r.passed)
+        self.assertIn("no RGB driver", r.detail)
+
+        zeros_rgb = bytes(runner.RGB_OUT_LEN)
+        tx = FakeTransport(
+            {runner.CMD_PRODTEST_RGB_TEST: (runner.SW_INTERNAL_ERROR_WIRE, zeros_rgb)}
+        )
+        r = runner.test_rgb_test(tx)
+        self.assertFalse(r.passed)
+        self.assertIn("no RGB driver", r.detail)
 
 
 if __name__ == "__main__":

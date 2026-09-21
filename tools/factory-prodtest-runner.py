@@ -80,7 +80,17 @@ CMD_PRODTEST_RGB_OSD = 111
 PRODTEST_MAX_RESPONSE_DATA_LEN = 254
 EXPECTED_PRODTEST_FW_VERSION = 4
 
-PROFILE_ID = "pqsigner-prodtest-reversible-v1"
+# Acceptance-profile identity. Board-scoped and versioned, because the matrix
+# below is not board-neutral: v2 REQUIRES the two AW21036 RGB commands, which
+# exist only on `pq1`. Running this profile against an `iota2` unit is therefore
+# expected to fail, and the failure is the correct answer rather than a bug —
+# the RGB decoders say so explicitly when the firmware has no RGB driver.
+#
+# v1 -> v2 (2026-09-21): RGB_TEST and RGB_OSD promoted OPTIONAL -> REQUIRED, so
+# LED acceptance is a machine gate rather than an operator's glance; profile id
+# carries the board. Receipts from the two versions stay distinguishable.
+PROFILE_ID = "pqsigner-prodtest-reversible-pq1-v2"
+PROFILE_BOARD = "pq1"
 PROFILE_REQUIRED = "required"
 PROFILE_OPTIONAL = "optional"
 PROFILE_UNSUPPORTED = "unsupported"
@@ -103,14 +113,13 @@ COMMAND_POLICIES = {
     CMD_PRODTEST_SE050_HANDSHAKE: ("SE050_HANDSHAKE", PROFILE_REQUIRED),
     CMD_PRODTEST_USB_LOOPBACK: ("USB_LOOPBACK", PROFILE_REQUIRED),
     CMD_PRODTEST_BUTTON_TEST: ("BUTTON_TEST", PROFILE_REQUIRED),
-    # Board-conditional: the AW21036 exists on `pq1` and not on `iota2`, so the
-    # shared profile cannot require it. On a pq1 line it is a real acceptance
-    # step (the operator sees the colour); promoting it to PROFILE_REQUIRED
-    # belongs with a PROFILE_ID bump, once pq1 is the only target.
-    CMD_PRODTEST_RGB_TEST: ("RGB_TEST", PROFILE_OPTIONAL),
-    # Board-conditional for the same reason as RGB_TEST. This is the
-    # machine-checkable half of the LED acceptance — no camera, no operator.
-    CMD_PRODTEST_RGB_OSD: ("RGB_OSD", PROFILE_OPTIONAL),
+    # Both RGB commands are `pq1`-only, which is why this profile is
+    # board-scoped (see PROFILE_ID). RGB_TEST proves the drive path — the part
+    # identifies itself and every register write ACKs; the colour itself is the
+    # operator's half. RGB_OSD is the fully machine-checkable half: it names a
+    # dead LED by channel, needs no camera, and cannot pass vacuously.
+    CMD_PRODTEST_RGB_TEST: ("RGB_TEST", PROFILE_REQUIRED),
+    CMD_PRODTEST_RGB_OSD: ("RGB_OSD", PROFILE_REQUIRED),
 }
 
 
@@ -122,7 +131,14 @@ def profile_receipt() -> dict:
             for cmd, (_, policy) in COMMAND_POLICIES.items()
             if policy == PROFILE_REQUIRED
         ],
-        PROFILE_OPTIONAL: [],
+        # Derived, not hardcoded: an earlier version pinned this to [] while the
+        # other two classes were computed, so a receipt silently claimed there
+        # were no optional commands while two were declared optional.
+        PROFILE_OPTIONAL: [
+            cmd
+            for cmd, (_, policy) in COMMAND_POLICIES.items()
+            if policy == PROFILE_OPTIONAL
+        ],
         PROFILE_UNSUPPORTED: [
             cmd
             for cmd, (_, policy) in COMMAND_POLICIES.items()
@@ -131,8 +147,13 @@ def profile_receipt() -> dict:
     }
     return {
         "id": PROFILE_ID,
+        "board": PROFILE_BOARD,
         "feature_list_authority": "host_expected_not_device_attested",
-        "secure_features": ["prodtest", "dev-testkey", "saes-dhuk"],
+        # `board-pq1` is listed because naming a board is mandatory on every
+        # stm32u585 build: omitting it compiles the iota2 pin map with every
+        # pq1 fence silently inert, which is how an earlier recipe put iota2
+        # pins on pq1 silicon.
+        "secure_features": ["prodtest", "dev-testkey", "saes-dhuk", "board-pq1"],
         "nonsecure_features": ["stm32u585", "usb", "prodtest"],
         "max_response_data_len": PRODTEST_MAX_RESPONSE_DATA_LEN,
         "expected_firmware_version": EXPECTED_PRODTEST_FW_VERSION,
@@ -791,7 +812,12 @@ def test_rgb_test(
         "bus=[" + " ".join(f"0x{a:02x}" for a in seen) + "]",
     ]
     if ver != RGB_VER_EXPECTED:
-        if BACKLIGHT_ADDR in seen and RGB_ADDR not in seen:
+        if acks_total == 0:
+            parts.append(
+                "HINT: firmware attempted no writes — this build has no RGB "
+                "driver (wrong board, or built without board-pq1)"
+            )
+        elif BACKLIGHT_ADDR in seen and RGB_ADDR not in seen:
             parts.append("HINT: bus OK (backlight answered), AW21036 silent — part or AD strap")
         elif not seen:
             parts.append("HINT: nothing on the bus — I2C2 pins, pull-ups or rail")
@@ -875,6 +901,20 @@ def test_rgb_osd(tx: ProdtestTransport, gcc: int = 0, en: int = 1) -> TestResult
         f"a={mode_a.hex()}",
         f"b={mode_b.hex()}",
     ]
+
+    if acks_total == 0:
+        parts.append(
+            "firmware attempted no writes — this build has no RGB driver "
+            "(wrong board, or built without board-pq1)"
+        )
+        return TestResult(
+            name="RGB_OSD",
+            cmd=CMD_PRODTEST_RGB_OSD,
+            passed=False,
+            status_code=status,
+            detail=", ".join(parts),
+            raw_response=resp,
+        )
 
     if not 0 < wired <= total or total > OSST_BYTES * 8:
         parts.append("channel counts from the device are not sane")
@@ -1047,7 +1087,7 @@ def write_report_atomic(path: str, report: UnitReport) -> None:
 def print_summary(report: UnitReport) -> None:
     print()
     print("=" * 60)
-    print(f"Profile:    {PROFILE_ID}")
+    print(f"Profile:    {PROFILE_ID} (board {PROFILE_BOARD})")
     print(f"UID:        {report.stm32_uid_hex}")
     print(f"FW version: {report.prodtest_fw_version}")
     print("=" * 60)
