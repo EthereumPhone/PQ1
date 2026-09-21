@@ -217,6 +217,11 @@ that asserts the sideband can change how the device boots. That is a security
 property, not a convenience — but first-flash and recovery are designed around
 empty-check and the SWD pads, and must not silently depend on it.
 
+> **Day-to-day re-flashing of a sealed unit without the adapter** (both buttons
+> at power-up → software DFU entry, `tools/evt-dev-flash.sh`) is the runbook in
+> [`evt-dev-loop.md`](evt-dev-loop.md). The sections below are the underlying
+> findings.
+
 ### UPDATE 2026-09-18 — flashing over USB-C with no probe (ROM DFU)
 
 The SBU→U111→BOOT0 circuit above is the ODM's "flash over USB-C" path: a cable
