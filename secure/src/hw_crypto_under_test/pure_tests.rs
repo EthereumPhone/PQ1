@@ -420,6 +420,42 @@ fn wt36_secret_keys_new_labels_and_fns_pinned() {
     assert!(SECRET_KEYS_SRC.contains(r#"feature = "rdp2-self-lock""#), "current_pbs must gate salted path");
 }
 
+/// `current_pbs` must never fall back to the unsalted secret on a ROTATED
+/// device.
+///
+/// It used to select the credential with `if let Some(salt) =
+/// journal_salt_if_all_done()`, which returns `None` both before the rotation
+/// and when a completed rotation's salt is unrecoverable. Those two need
+/// opposite behaviour: pre-rotation the unsalted value is correct, while after
+/// rotation it is a DIFFERENT secret than the one E140 holds, so falling
+/// through silently selected the wrong credential instead of reporting that
+/// the final root record is damaged.
+#[test]
+fn positive_current_pbs_has_no_silent_unsalted_fallback() {
+    // The tri-state must be matched exhaustively — that is what keeps the two
+    // None cases apart.
+    for arm in [
+        "FinalPbs::Rotated(salt) => return optiga_pairing_secret_salted(&salt)",
+        "FinalPbs::RotatedSaltMissing => return Err(OtpError::FinalPbsSaltMissing)",
+        "FinalPbs::PreRotation => {}",
+    ] {
+        assert!(
+            SECRET_KEYS_SRC.contains(arm),
+            "current_pbs must handle each journal state explicitly: {arm}"
+        );
+    }
+    // The collapsing accessor must not be what drives the choice.
+    assert!(
+        !SECRET_KEYS_SRC.contains("if let Some(salt) = crate::first_boot::journal_salt_if_all_done()"),
+        "credential selection must not use the accessor that conflates the two None cases"
+    );
+    // A rotated-but-unrecoverable device must fail closed, with its own error.
+    assert!(
+        OTP_SRC.contains("FinalPbsSaltMissing"),
+        "the damaged-final-root state needs a distinct error to surface"
+    );
+}
+
 #[test]
 fn legacy_otp_rollback_logical_bit_walk_is_lsb_first() {
     // Pins the quarantined software model only. STM32U585 OTP cannot perform

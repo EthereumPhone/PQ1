@@ -234,6 +234,15 @@ pub enum OtpError {
     /// read when the consequence is an irreversible write or a key
     /// derivation.
     MasterKeyUnstable,
+    /// The page-127 journal says the first-boot rotation COMPLETED, but the
+    /// persisted salt could not be recovered — so the salted-final OPTIGA PBS
+    /// that E140 was paired with cannot be reconstructed.
+    ///
+    /// There is deliberately no fallback. The unsalted pre-rotation secret is
+    /// a different value; handing it to the PRL handshake fails against a
+    /// rotated chip, and writing it back would overwrite the pairing. Fail
+    /// closed and surface the damage instead.
+    FinalPbsSaltMissing,
 }
 
 /// Read the current rollback floor (count of zero bits in the OTP

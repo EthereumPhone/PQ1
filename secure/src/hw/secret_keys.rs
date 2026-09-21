@@ -523,8 +523,19 @@ pub fn optiga_pairing_secret_salted(salt: &[u8; 32]) -> Result<[u8; 64], OtpErro
 pub fn current_pbs() -> Result<[u8; 64], OtpError> {
     #[cfg(feature = "rdp2-self-lock")]
     {
-        if let Some(salt) = crate::first_boot::journal_salt_if_all_done() {
-            return optiga_pairing_secret_salted(&salt);
+        use crate::first_boot::FinalPbs;
+        match crate::first_boot::final_pbs_state() {
+            // Rotation completed: the salted-final PBS is the ONLY correct
+            // credential for this device.
+            FinalPbs::Rotated(salt) => return optiga_pairing_secret_salted(&salt),
+            // Rotation completed but the salt is gone. Falling through to the
+            // unsalted secret would silently select a DIFFERENT credential
+            // than the one E140 holds — exactly the failure this branch exists
+            // to prevent. Report the damage instead.
+            FinalPbs::RotatedSaltMissing => return Err(OtpError::FinalPbsSaltMissing),
+            // Not rotated yet: the unsalted value below is correct, and is
+            // byte-identical to pre-#36 behaviour.
+            FinalPbs::PreRotation => {}
         }
     }
     optiga_pairing_secret()

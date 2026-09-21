@@ -28,11 +28,56 @@ pub mod state;
 // `#[cfg(all(not(test), feature = "rdp2-self-lock"))]` (the feature implies
 // `stm32u585` transitively via `bhk` → `saes-dhuk`).
 
+/// What the page-127 journal says about which OPTIGA PBS is installed.
+///
+/// The three cases must stay distinguishable. An `Option<[u8; 32]>` collapses
+/// the last two into `None`, and `secret_keys::current_pbs` then fell back to
+/// the UNSALTED secret in both — silently selecting the wrong credential for a
+/// device whose E140 already holds the salted-final one.
+#[cfg(all(not(test), feature = "rdp2-self-lock"))]
+#[derive(Clone, Copy, Debug)]
+pub enum FinalPbs {
+    /// The first-boot rotation has not completed. The pre-rotation unsalted
+    /// secret is the correct credential.
+    PreRotation,
+    /// Rotation completed and the salt is recoverable: the salted-final PBS is
+    /// the only correct credential.
+    Rotated([u8; 32]),
+    /// Rotation completed but the salt is NOT recoverable, so the installed
+    /// credential cannot be reconstructed. There is no safe fallback — the
+    /// unsalted value is a different secret, and handing it to the PRL
+    /// handshake fails against an E140 that was paired with the salted one.
+    RotatedSaltMissing,
+}
+
+/// Classify the journal in a single scan.
+#[cfg(all(not(test), feature = "rdp2-self-lock"))]
+#[must_use]
+pub fn final_pbs_state() -> FinalPbs {
+    // SAFETY: page 127 (KEY_PAGE) is a fixed 8 KB in-flash region, owned
+    // outright by this journal; this is a read-only view.
+    let page = unsafe {
+        core::slice::from_raw_parts(
+            crate::hw::flash::KEY_PAGE_ADDR as *const u8,
+            journal::PAGE_QWS * journal::QW,
+        )
+    };
+    let st = journal::scan(page);
+    if !st.all_done() {
+        return FinalPbs::PreRotation;
+    }
+    match st.salt {
+        Some(salt) => FinalPbs::Rotated(salt),
+        None => FinalPbs::RotatedSaltMissing,
+    }
+}
+
 /// Scan the page-127 journal and return the persisted TRNG salt iff the whole
-/// first-boot ceremony has completed (`ALL_DONE`). Used by
-/// `secret_keys::current_pbs` to decide whether the OPTIGA driver pairs with
-/// the salted-final PBS or the pre-rotation value. Reads memory-mapped flash
-/// directly (no stack copy of the 8 KB page).
+/// first-boot ceremony has completed (`ALL_DONE`).
+///
+/// **Prefer [`final_pbs_state`] for credential selection.** This returns `None`
+/// both before the rotation and when a completed rotation's salt is missing,
+/// and those two cases require opposite behaviour.
 #[cfg(all(not(test), feature = "rdp2-self-lock"))]
 #[must_use]
 pub fn journal_salt_if_all_done() -> Option<[u8; 32]> {
