@@ -1357,7 +1357,10 @@ def main() -> int:
         split_gate = next(g for g in gates if g['id'] == gate_id)
         for path in ('contracts/verification/easycrypt/c10-port/**',
                      'contracts/verification/scripts/run_easycrypt_split.py',
-                     'contracts/verification/Makefile', f'.github/workflows/{workflow}'):
+                     'contracts/verification/Makefile', f'.github/workflows/{workflow}',
+                     'sphincs-c10/src/wots.rs', 'sphincs-c10/src/hash.rs',
+                     'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs',
+                     'sphincs-c10/tests/easycrypt_transcript.rs'):
             if not _covers(split_gate.get('polices_paths', []), path):
                 all_fails.append(f'easycrypt-split-reverse: {gate_id} does not cover {path}')
     protocol_gate = next(g for g in gates if g["id"] == "verify-protocol-models")
