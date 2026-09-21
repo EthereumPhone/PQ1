@@ -1128,6 +1128,10 @@ fn main() -> ! {
     unsafe {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
+        // `dev-dfu`: both buttons held at power-up → ROM USB-DFU bootloader.
+        // Deliberately the first thing after the clocks — see hw/dev_dfu.rs.
+        #[cfg(feature = "dev-dfu")]
+        hw::dev_dfu::check_and_enter();
         // Bring the debug USART up immediately after the clock tree, so every
         // `secure_log!` from here on reaches the wire. It MUST be after
         // `rcc::init` — `hw::uart::init` programs `board::CONSOLE_BRR`, which

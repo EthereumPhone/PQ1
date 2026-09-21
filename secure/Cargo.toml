@@ -234,6 +234,14 @@ se-i2c-probe = []
 # nothing more. NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
 se-lcd-diag = []
 
+# Bench: hold BOTH buttons while powering up → firmware clears nSWBOOT0/nBOOT0
+# and reloads option bytes, so the chip comes back in the ROM USB-DFU
+# bootloader without a probe or an SBU cable (`hw::dev_dfu`, checked right
+# after `rcc::init`, before any UI/SE/USB code). Pair with
+# `tools/evt-dev-flash.sh`, which restores the boot option bits.
+# NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
+dev-dfu = []
+
 # Bench-only SSD1306 OLED backend over BIT-BANGED I2C (`secure/src/ui/oled.rs`
 # + `hw/soft_i2c.rs`). Renders the same 16x4 character grid as every other UI
 # backend.
