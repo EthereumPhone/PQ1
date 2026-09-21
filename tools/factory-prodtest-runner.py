@@ -216,8 +216,14 @@ STATUS_INVALID_POINTER = 4
 STATUS_NOT_INITIALIZED = 5
 STATUS_INTERNAL_ERROR = 0xFFFFFFFF  # catch-all for the dispatcher
 
-USB_VID_DEFAULT = 0x2C97
-USB_PID_DEFAULT = 0x0006
+# The device's own ids, from `nonsecure/src/usb/mod.rs`'s
+# `UsbVidPid(0x1209, 0x7051)`. These were previously Ledger's 0x2C97:0x0006 —
+# a stale default that made the runner unable to find any PQSigner unit, which
+# a factory would hit on its first run. `test_usb_ids_match_the_firmware`
+# derives the expected values from that source file so they cannot drift again.
+# 0x1209 is pid.codes, the community VID; 0x7051 is our allocation.
+USB_VID_DEFAULT = 0x1209
+USB_PID_DEFAULT = 0x7051
 
 # Display test patterns
 PATTERN_WHITE = 0
@@ -646,7 +652,14 @@ def test_saes_selftest(tx: ProdtestTransport) -> TestResult:
         cmd=CMD_PRODTEST_SAES_SELFTEST,
         passed=nonzero,
         status_code=status,
-        detail=f"fingerprint={fingerprint}",
+        # NOT a unit identity. This is a DHUK-derived value, and DHUK is shared
+        # across all parts at RDP-0 (per-device only from RDP0.5 up, RM0456
+        # Table 21). Units are tested and shipped at RDP-0, so every unit on the
+        # line prints the SAME fingerprint — measured identical on two dies. It
+        # proves the SAES/DHUK path runs; it does not distinguish boards, and
+        # reading it as a per-unit value would make every unit look cloned. Use
+        # the STM32 UID from GET_ID for identity.
+        detail=f"fingerprint={fingerprint} (shared at RDP-0, not a unit id)",
         raw_response=resp,
     )
 

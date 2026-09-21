@@ -7,6 +7,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import re
 import struct
 import sys
 import tempfile
@@ -454,6 +455,31 @@ class ProfileV2Tests(unittest.TestCase):
     """v2 makes LED acceptance a machine gate, which changes what the profile
     means: it is now board-scoped, so the identity must say so and the two RGB
     commands must be required rather than advisory."""
+
+    def test_saes_fingerprint_is_not_presented_as_a_unit_identity(self) -> None:
+        """At RDP-0 the DHUK fingerprint is shared across all parts, so a
+        per-unit receipt must not let it read as a device identity — every unit
+        on the line prints the same value (measured identical on two dies)."""
+        tx = FakeTransport()
+        r = runner.test_saes_selftest(tx)
+        self.assertTrue(r.passed)
+        self.assertIn("not a unit id", r.detail)
+
+    def test_usb_ids_match_the_firmware(self) -> None:
+        """The runner's default ids must be the ones the firmware advertises.
+
+        They had drifted to Ledger's 0x2C97:0x0006, so the tool could not find
+        a PQSigner unit at all — the kind of defect a factory hits on its first
+        run and we would hear about as "your tool is broken".
+        """
+        usb_rs = (
+            Path(__file__).resolve().parents[1] / "nonsecure/src/usb/mod.rs"
+        ).read_text()
+        match = re.search(r"UsbVidPid\(\s*(0x[0-9a-fA-F]+)\s*,\s*(0x[0-9a-fA-F]+)\s*\)", usb_rs)
+        self.assertIsNotNone(match, "UsbVidPid not found in the NS USB module")
+        vid, pid = int(match.group(1), 16), int(match.group(2), 16)
+        self.assertEqual(runner.USB_VID_DEFAULT, vid)
+        self.assertEqual(runner.USB_PID_DEFAULT, pid)
 
     def test_profile_id_is_board_scoped_and_versioned(self) -> None:
         self.assertEqual(runner.PROFILE_BOARD, "pq1")
