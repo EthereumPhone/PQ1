@@ -99,9 +99,23 @@ def main() -> int:
     # callData from an INDEPENDENT encoder (cast), not the firmware's own
     # reconstruct_execute_calldata: if the two disagree, the on-chain
     # sha256(callData) differs from what the device signed and step 5 fails.
-    # Slot 0 => ownerIndex 1.
-    call_data = cast("calldata", "executeWithOffchainCount(uint256,uint256,address,uint256,bytes)",
-                     "1", str(rec["newOffchainCount"]), rec["to"], str(rec["value"]), rec["data"]).stdout.strip()
+    # ownerIndex == slot + 1 (slot 0 => 1).
+    owner_index = str(rec.get("slot", 0) + 1)
+    if rec.get("kind") == "batch":
+        # One UserOp, several inner txs: executeBatchWithOffchainCount.
+        txs = rec["txs"]
+        call_data = cast(
+            "calldata",
+            "executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])",
+            owner_index, str(rec["newOffchainCount"]),
+            "[" + ",".join(t["to"] for t in txs) + "]",
+            "[" + ",".join(str(t["value"]) for t in txs) + "]",
+            "[" + ",".join(t["data"] for t in txs) + "]",
+        ).stdout.strip()
+    else:
+        call_data = cast("calldata", "executeWithOffchainCount(uint256,uint256,address,uint256,bytes)",
+                         owner_index, str(rec["newOffchainCount"]), rec["to"], str(rec["value"]),
+                         rec["data"]).stdout.strip()
 
     init_code = rec["initCode"]
     print("==> 2. wallet address (independent of the device)")
@@ -166,7 +180,9 @@ def main() -> int:
         return 1
 
     print("==> 5. the genuine device-signed op")
-    to_before = int(cast("balance", rec["to"], *R).stdout.strip())
+    recipients = ([(t["to"], t["value"]) for t in rec["txs"]] if rec.get("kind") == "batch"
+                  else [(rec["to"], rec["value"])])
+    before = {to: int(cast("balance", to, *R).stdout.strip()) for to, _ in recipients}
     sim = cast("call", ENTRY_POINT, HANDLE_OPS, op_str(genuine), ANVIL_ADDR, *R, check=False)
     ok("eth_call simulation succeeds", sim.returncode == 0, "" if sim.returncode == 0 else revert_reason(sim.stderr + sim.stdout))
     if problems:
@@ -188,8 +204,10 @@ def main() -> int:
     print("==> 6. post-state")
     code = cast("code", sender, *R).stdout.strip()
     ok("wallet code present at the device-predicted address", len(code) > 2, f"{(len(code) - 2) // 2} B")
-    to_after = int(cast("balance", rec["to"], *R).stdout.strip())
-    ok("recipient received exactly the signed value", to_after - to_before == rec["value"], f"+{to_after - to_before} wei")
+    for to, value in recipients:
+        after = int(cast("balance", to, *R).stdout.strip())
+        ok(f"recipient {to[:10]}… received exactly the signed value",
+           after - before[to] == value, f"+{after - before[to]} wei")
     su = int(cast("call", sender, "slotUses(uint256)(uint256)", "1", *R).stdout.split()[0])
     oc = int(cast("call", sender, "offchainSigCount(uint256)(uint256)", "1", *R).stdout.split()[0])
     bu = int(cast("call", sender, "bootstrapUses()(uint256)", *R).stdout.split()[0])
