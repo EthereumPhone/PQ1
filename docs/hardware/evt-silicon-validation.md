@@ -889,3 +889,26 @@ current authority. Listed for completeness; do not action without owner stage de
 | One-shot RDP-2 self-lock | first-boot only (`program_rdp_level2_and_launch`) | never run |
 
 *End of index. Amend in place — do not fork a parallel silicon-validation doc.*
+
+### UPDATE 2026-09-21 — sealed EVT #1 booted end-to-end over USB-C DFU (no probe)
+
+Image: `origin/feat/pq1-board-target` @ `0cf0cfe8` + an AW99703 backlight
+driver (`secure/src/hw/aw99703.rs`, bit-banged I2C2 on PB13/PB14, channel 1
+only, OVP lowered to 24 V for the 25 V output cap, ~75 % brightness), features
+`dual-se,dev-testkey,ui-lcd,stm32u585,usb,board-pq1` — deliberately WITHOUT
+`optiga-hw-counter` (its first provisioning rewrites F1D0 metadata). Flashed
+through the SBU-bridged breakout + `tools/flash-evt-dfu.sh` (see
+`evt-debug-pins.md` for the TZEN-off-then-on order the ROM bootloader forces).
+
+Observed on the sealed unit: backlight + NV3007 panel + both buttons work
+(closes "LCD bring-up: dev board only so far" — with the caveat that the panel
+stays DARK without the AW99703 driver, `LCM_EN` alone is not enough);
+PIN pad seeded with random digits (i.e. `rng_strong` = STM32 TRNG ⊕ OPTIGA ⊕
+SE050 all answered — `3c1c95f7` HTCR fix + E2 keyset default were both
+required); 24-word wizard; both SEs provisioned; "PQSigner OS Ready";
+enumerates `1209:7051 PQSigner OS` on the host. Wallet state is reversible via
+`wipe-for-wizard`. Unit remains RDP-0 / TZEN=1.
+
+Before those two fixes the same flow on this unit showed an all-zero PIN pad
+(the `pin_entry` fallback when `rng_strong::fill` fails) — a useful field
+signature for "an SE session or the TRNG is down".
