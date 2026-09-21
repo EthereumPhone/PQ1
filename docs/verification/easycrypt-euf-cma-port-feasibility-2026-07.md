@@ -3,8 +3,10 @@
 > **Current assessment — 2026-09-21:** the July parameter-impossibility notice
 > below is historical for the old unsplit development. The current split model
 > admits C10's numerical geometry, and the counter/serialization/bounded-search
-> batch has landed. Concrete digit/predicate realization, abort-aware game
-> composition and numerical bounds remain open. Read the
+> batch has landed. The encoder/abort batch now defines the actual digit
+> encoder, proves target 205 and uniform-input acceptance, and adds explicit
+> bounded-failure semantics. Failure-aware end-to-end composition, shared-oracle
+> coupling and numerical bounds remain open. Read the
 > [September literature reassessment](#update-2026-09-21--literature-reassessment-after-the-concrete-grind-batch)
 > and the [current artifact boundary](../../contracts/verification/easycrypt/c10-port/README.md)
 > before quoting the older verdicts.

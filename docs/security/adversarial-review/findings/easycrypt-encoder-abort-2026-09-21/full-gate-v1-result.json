@@ -1,0 +1,12 @@
+{
+  "exit_code": 2,
+  "gate_exit_code": 1,
+  "failures": 1,
+  "completed_utc": "2026-09-21T21:59:13.967854+00:00",
+  "source_commit": "031158745e5939885f2886fd6040747ce441557b",
+  "input_identity": "a2b4139a06f65f3c979fc9f8ecc1a08f",
+  "compiled": 66,
+  "cli_files_run": 66,
+  "cli_disagreements": 1,
+  "controls": 64
+}

@@ -1,0 +1,21 @@
+make: Entering directory '/home/nicola/.local/state/pqsigner-research/easycrypt-encoder-abort-20260921-g0lja304/candidate/contracts/verification'
+/usr/bin/python3 -E -S -B easycrypt/c10-port/tools/check_source_binding.py
+OK EasyCrypt manual source binding: 20 inputs (not extraction)
+cd easycrypt/c10-port && /usr/bin/python3 -E -S -B -W ignore::ResourceWarning tools/test_split_contract.py
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 1.403s
+
+OK
+OK EasyCrypt manual source binding: 20 inputs (not extraction)
+cd easycrypt/c10-port && /usr/bin/python3 -E -S -B tools/split_contract.py
+OK   coverage: all 1201 top-level statements across 66 CONE files are pinned (roots 54 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK unique statement pins: 1332
+OK split static contract: 66 files; proof execution not performed
+cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
+### INPUTS_SHA256 946053f3a3915a95a5556a0a08a93fb7
+OK   INPUTS_SHA256 matches the committed identity
+make: Leaving directory '/home/nicola/.local/state/pqsigner-research/easycrypt-encoder-abort-20260921-g0lja304/candidate/contracts/verification'

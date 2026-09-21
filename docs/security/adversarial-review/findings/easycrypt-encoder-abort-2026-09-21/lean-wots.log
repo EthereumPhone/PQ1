@@ -1,0 +1,235 @@
+⚠ [1507/1691] Replayed Aeneas.Std.Slice
+warning: Aeneas/Std/Slice.lean:364:4: declaration uses `sorry`
+warning: Aeneas/Std/Slice.lean:587:8: declaration uses `sorry`
+⚠ [1585/1691] Replayed Aeneas.Std.StringIter
+warning: Aeneas/Std/StringIter.lean:13:4: declaration uses `sorry`
+✔ [1684/1691] Built Extracted.Wots.Types (4.5s)
+✔ [1685/1691] Built Extracted.Fors.Types (4.5s)
+⚠ [1686/1691] Built Extracted.Bits (4.6s)
+warning: Extracted/Bits.lean:17:32: unused variable `hx`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: Extracted/Bits.lean:34:37: This simp argument is unused:
+  Nat.le_of_lt
+
+Hint: Omit it from the simp argument list.
+  simp [hv, hj, Nat.not_lt.mpr hj,̵ ̵N̵a̵t̵.̵l̵e̵_̵o̵f̵_̵l̵t̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+✔ [1687/1691] Built Extracted.Wots.Funs (1.5s)
+✔ [1688/1691] Built Extracted.Fors.Funs (1.6s)
+⚠ [1689/1691] Built Extracted.ForsLoop (3.6s)
+warning: Extracted/ForsLoop.lean:32:13: This simp argument is unused:
+  core.iter.range.StepUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [̵c̵o̵r̵e̵.̵i̵t̵e̵r̵.̵r̵a̵n̵g̵e̵.̵S̵t̵e̵p̵U̵s̵i̵z̵e̵,̵ ̵c̵o̵r̵e̵.̵c̵m̵p̵.̵P̵a̵r̵t̵i̵a̵l̵O̵r̵d̵U̵s̵i̵z̵e̵,̵[̲c̲o̲r̲e̲.̲c̲m̲p̲.̲P̲a̲r̲t̲i̲a̲l̲O̲r̲d̲U̲s̲i̲z̲e̲,̲ core.clone.CloneUsize,
+  ̲  ̲ ̲ ̲core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+  ̲  ̲ ̲ ̲core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:32:40: This simp argument is unused:
+  core.cmp.PartialOrdUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.iter.range.StepUsize, c̵o̵r̵e̵.̵c̵m̵p̵.̵P̵a̵r̵t̵i̵a̵l̵O̵r̵d̵U̵s̵i̵z̵e̵,̵core.clone.CloneUsize,
+      core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+      core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:33:13: This simp argument is unused:
+  core.clone.CloneUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.iter.range.StepUsize, core.cmp.PartialOrdUsize,
+      c̵o̵r̵e̵.̵c̵l̵o̵n̵e̵.̵C̵l̵o̵n̵e̵U̵s̵i̵z̵e̵,̵ ̵core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+  ̲  ̲ ̲ ̲core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:83:8: 'first
+| scalar_tac
+| (refine ⟨?_, ?_⟩ <;> scalar_tac)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:83:8: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:105:4: 'first
+| scalar_tac
+| (rw [Nat.shiftLeft_eq, Nat.one_mul, Nat.mod_eq_of_lt hlt64]; omega)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:105:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:120:4: 'first
+| (apply read_bits_le_terminates <;> scalar_tac)
+| scalar_tac
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:120:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:149:8: 'first
+| (apply read_bits_le_terminates <;> scalar_tac)
+| scalar_tac
+| (refine ⟨?_, ?_⟩ <;> scalar_tac)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:149:8: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:166:4: 'first
+| (apply extract_fors_indices_loop_terminates <;> scalar_tac)
+| scalar_tac
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:166:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:188:7: 'rw [Nat.shiftLeft_eq, Nat.one_mul, Nat.mod_eq_of_lt hlt64]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:188:67: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:190:6: 'trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:188:67: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:190:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:185:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:206:7: 'apply read_bits_le_in_range' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:206:39: 'scalar_tac' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:209:6: 'trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:206:39: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:209:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:204:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:250:8: 'first
+| (apply read_bits_le_in_range <;> scalar_tac)
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:251:43: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:249:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:284:4: 'first
+| (apply extract_fors_indices_loop_in_range)
+| scalar_tac
+| (intro j hj; simp_all)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:284:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1690/1691] Built Extracted.ForsExtract (4.1s)
+warning: Extracted/ForsExtract.lean:72:13: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this ⊢
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:94:77: This simp argument is unused:
+  UScalar.bv
+
+Hint: Omit it from the simp argument list.
+  simp only [core.num.Usize.wrapping_sub, UScalar.wrapping_sub, UScalar.val, U̵S̵c̵a̵l̵a̵r̵.̵b̵v̵,̵UScalarTy.Usize,
+      BitVec.toNat_sub, show UScalarTy.Usize.numBits = System.Platform.numBits from rfl]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:95:13: This simp argument is unused:
+  UScalarTy.Usize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.num.Usize.wrapping_sub, UScalar.wrapping_sub, UScalar.val, UScalar.bv,
+      U̵S̵c̵a̵l̵a̵r̵T̵y̵.̵U̵s̵i̵z̵e̵,̵ ̵BitVec.toNat_sub, show UScalarTy.Usize.numBits = System.Platform.numBits from rfl]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:114:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsExtract.lean:170:76: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/ForsExtract.lean:172:69: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:226:2: Too many ids provided ([none, none]): expected ≤ 1 ids, got 2
+warning: Extracted/ForsExtract.lean:227:2: Too many ids provided ([none, none]): expected ≤ 1 ids, got 2
+warning: Extracted/ForsExtract.lean:329:4: 'first
+| (apply extract_fors_indices_loop_value)
+| scalar_tac
+| (intro j hj; simp_all)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsExtract.lean:329:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1691/1691] Built Extracted.WotsDigits (6.9s)
+warning: Extracted/WotsDigits.lean:20:37: This simp argument is unused:
+  Nat.le_of_lt
+
+Hint: Omit it from the simp argument list.
+  simp [hv, hj, Nat.not_lt.mpr hj,̵ ̵N̵a̵t̵.̵l̵e̵_̵o̵f̵_̵l̵t̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/WotsDigits.lean:22:56: unused variable `h1`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: Extracted/WotsDigits.lean:55:72: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/WotsDigits.lean:109:71: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/WotsDigits.lean:110:77: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Build completed successfully (1691 jobs).

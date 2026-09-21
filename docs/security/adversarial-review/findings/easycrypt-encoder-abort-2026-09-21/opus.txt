@@ -1,0 +1,32 @@
+VERDICT: GO
+TARGET: 47c9bb1edd4ee4386ac1f829f762a9d924df94fd / 553f3ff818a366a88a8b54fb5801c5205d08d852
+FINDINGS: none
+
+What I checked, reading the source directly. I ran no proofs and relied on the green evidence you listed.
+
+1. **Digit order, widths, witness and 205.**
+   - `RadixEncoding.digit` reads 3-bit windows, lowest bit first (`digit3` = b₃ᵢ + 2b₃ᵢ₊₁ + 4b₃ᵢ₊₂).
+   - That matches Rust `extract_digits` (`wots.rs:27-41`: `byte_idx = 31 - off/8`, then shift and mask) through the reversed-byte `C10Bytes.bits_to_bytes` adapter. The new Rust test builds its bytes with the same adapter.
+   - `join_dgst` = dfC0 ++ dfC1, with dfC0 as the low half. So bit 128, the top bit of digit 42, comes from dfC1. That is exactly what the positive control checks and what "wrong-order" rejects.
+   - Lean `extract_digits_spec` uses the same formula, `(word >>> 3j) % 8`. No link between the two proof assistants is claimed.
+   - The witness `j<123 ∧ j%3≠1` gives 41 digits of 5 followed by two 0s, so 205. I recomputed `count_ds(43,8,205)` = 22169393903687611906220091621190388 and confirmed 8⁴³ = 2¹²⁹.
+2. **Uniform-bit to count bridge.**
+   - `uniform_digits` keeps all 127 unused bits inside `dlist dbool (3n+extra)`.
+   - The only premises are `n_val`/`len_val`/`log2_w_val`, which already existed.
+   - `mu_eq_support` rewrites `predC∘insubd` correctly on size-256 support.
+3. **Bounded signer and guarded game.**
+   - `signing_budget` = 10,000,000, matching Rust `0..10_000_000u32`.
+   - `Search.run` stops at the first hit, and `search_result` ties the result to `grindC`.
+   - `bounded_sign_agrees` gives full agreement on both signature and counter, given a hit within the budget.
+   - `WOTS_TW_ES_NPRF.keygen` returns `(sk, ps, ad)`, so `O_Bounded`'s `Search(ps, WAddress.val wad, m)` is the same grind that `Default.query` signs with.
+   - After failure, `bad` stays set, no further `qs` entries are added, and `BoundedGame` requires `!bad`.
+4. **Model boundaries.** `BoundedIID` and `C10BoundedIID` are standalone and clearly labelled. Nothing instantiates them against `ThC`. Neither the README nor any lemma claims a real SHA-256 probability or a game-level reduction that counts the failure case.
+5. **Census, pins and controls.**
+   - Diffing the baseline's semantic fields shows only two changes to existing entries: `tgt_witness` (was an abstract constant) and `encode_msgWOTS` (was an abstract op) are now definitions.
+   - Everything else is new definitions and modules. There are no new axioms or admits.
+   - Among existing statements, only those two ops were re-pinned. The pin counts (+56 pins, +47 statements, +6 controls) match the added rows.
+   - The failing controls fail on the intended false claims.
+6. **Rust exposure.** `extract_digits` is re-exported only inside `sim_internals`, which is `#[cfg(feature="sim-internals")]` and `#[doc(hidden)]`. The 259 single-bit, all-zero, all-one and witness inputs fully cover what is a bitwise-linear function.
+7. **WOTS_C_Multi.** The theorem, the seq/while invariants and the premises are unchanged. No timeouts or prover lists were added. Only the loop-exit `skip` proof became explicit (`size ksL = size qs` from the exit condition plus the bound).
+
+GAPS: Stale comment at `cdrafts-split/WOTS_C_Real.ec:272-274` still calls `tgt_witness` "declared" and says 205 is not pinned (it understates, doesn't overclaim). Landing still depends on the separate full dual-driver 66-file replay.

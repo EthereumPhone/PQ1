@@ -101,7 +101,9 @@ big-endian order), dfC1 the high half. The collection is still abstract.
 The current perimeter contains 66 proof files, 54 roots, 1,332 unique declaration
 pins, 1,201 statements and 64 controls. New controls reject a wrong target,
 dropped bit 128, erased exhaustion, and omitted successful-event mass. Full
-replay and bounded source review remain required before landing this batch.
+replay and bounded source review pass; see the
+[encoder/abort receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md)
+for the exact reviewed source, toolchain and remaining research boundary.
 
 * **`c <= p_tgts` is a reduction-side TARGET CAP — not a bound on how many messages a key
   may sign.** This is worth spelling out because the tree records mistaking it for a query
