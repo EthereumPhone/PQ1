@@ -226,6 +226,14 @@ board-pq1 = []
 # listed in the Makefile's PROD_FORBIDDEN.
 se-i2c-probe = []
 
+# LCD-only secure-element diagnostic for a probe-less board (EVT over DFU):
+# after the panel is up, runs TRNG / SE050 init+random / OPTIGA init+pair+
+# shield+random / rng_strong one step at a time, shows each result on the
+# LCD, then cycles the summary forever. Never reaches the wizard. Performs
+# the SAME SE writes the normal first boot performs (OPTIGA E140 pairing),
+# nothing more. NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
+se-lcd-diag = []
+
 # Bench-only SSD1306 OLED backend over BIT-BANGED I2C (`secure/src/ui/oled.rs`
 # + `hw/soft_i2c.rs`). Renders the same 16x4 character grid as every other UI
 # backend.
