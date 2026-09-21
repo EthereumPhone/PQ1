@@ -256,12 +256,22 @@ Three findings worth carrying forward:
 firmware at all, so `LCM_EN` alone may not light the panel; and nothing reads
 `FLAGB`.
 
-> **UPDATE 2026-09-21 — both LED drivers now have firmware; `FLAGB` still does
-> not.** The backlight half was confirmed the hard way: `LCM_EN` (PB15) alone
+> **UPDATE 2026-09-21 — the RGB driver has firmware on this branch; the
+> backlight driver exists but is NOT merged; `FLAGB` still has neither.**
+> Be precise about which is where, because the two arrived by different routes:
+>
+> - **AW21036 RGB** — landed here: `secure/src/hw/aw21036.rs` plus a
+>   pin-generic bit-banged master (`soft_i2c_aux.rs`) and
+>   `CMD_PRODTEST_RGB_TEST` (INS `0x8A`).
+> - **AW99703 backlight** — implemented on the **`pq1-evt-dfu` branch**
+>   (`secure/src/hw/aw99703.rs`), deliberately not merged while provisioning is
+>   held to the last step. The silicon run below used a throwaway build that
+>   combined that branch with this one, so the working panel is evidence about
+>   *that image*, not about `feat/pq1-board-target` alone.
+>
+> The backlight finding itself is confirmed either way: `LCM_EN` (PB15) alone
 > leaves the panel dark, because that pin is only the AW99703's `HWEN` and the
-> chip emits no current until `MODE[1:0]` is written over I2C2. The AW21036 RGB
-> driver landed as `secure/src/hw/aw21036.rs` plus a pin-generic bit-banged
-> master (`soft_i2c_aux.rs`) and `CMD_PRODTEST_RGB_TEST` (INS `0x8A`).
+> chip emits no LED current until `MODE[1:0]` is written over I2C2.
 >
 > Two board facts settled from the schematic while doing it: `RGB_EN` is
 > **PB12** (MCU pin 25 — an earlier note in `board/pq1.rs` claimed the
