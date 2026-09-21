@@ -39,6 +39,7 @@ from hid_smoke import SW_OK, HidRaw, find_hidraw, send
 INS_V2_SIGN_OFFCHAIN = 0x62
 OFFCHAIN_KIND_RAW32 = 0
 OFFCHAIN_KIND_PERSONAL_SIGN = 1
+OFFCHAIN_KIND_EIP712_TYPED = 2
 OFFCHAIN_FLAG_ACCOUNT_DEPLOYED = 0x01
 C10_SIG_LEN = 4008
 EIP6492_BLOB_LEN = 8608
@@ -55,18 +56,45 @@ def main() -> int:
     kind = ap.add_mutually_exclusive_group(required=True)
     kind.add_argument("--raw32", help="32-byte hex hash H")
     kind.add_argument("--personal", help="UTF-8 message")
+    kind.add_argument("--eip712", metavar="FIXTURE",
+                      help="EIP-712 typed data (kind 2). FIXTURE is "
+                           "[domain_separator(32) | primary_type_hash(32) | ERC-7730 trailer], "
+                           "the layout build.rs emits from the catalogue")
+    ap.add_argument("--encoded-data", default=None,
+                    help="hex EIP-712 encodeData body for --eip712 (no type hash); default is the "
+                         "e2e Delegation body abi.encode(0x42*20, 7, 2000000000)")
     ap.add_argument("--out", default="offchain_response.bin")
     args = ap.parse_args()
 
+    domain_separator = primary_type_hash = encoded_data = None
     if args.raw32 is not None:
         k = OFFCHAIN_KIND_RAW32
         payload = bytes.fromhex(args.raw32.removeprefix("0x"))
         if len(payload) != 32:
             print(f"!! --raw32 must be exactly 32 bytes, got {len(payload)}")
             return 2
-    else:
+    elif args.personal is not None:
         k = OFFCHAIN_KIND_PERSONAL_SIGN
         payload = args.personal.encode()
+    else:
+        # usb-protocol-v2.md §0x62 kind 2:
+        #   [u16 BE = 1][domain_separator 32][primary_type_hash 32]
+        #   [u16 BE encoded_data_len][encoded_data][u16 BE trailer_len][trailer]
+        k = OFFCHAIN_KIND_EIP712_TYPED
+        fixture = open(args.eip712, "rb").read()
+        if len(fixture) <= 64:
+            print(f"!! fixture must carry a trailer, got {len(fixture)} B")
+            return 2
+        domain_separator, primary_type_hash, trailer = fixture[:32], fixture[32:64], fixture[64:]
+        if args.encoded_data:
+            encoded_data = bytes.fromhex(args.encoded_data.removeprefix("0x"))
+        else:
+            encoded_data = (bytes(12) + bytes([0x42] * 20)
+                            + (7).to_bytes(32, "big")
+                            + (2_000_000_000).to_bytes(32, "big"))
+        payload = (u16(1) + domain_separator + primary_type_hash
+                   + u16(len(encoded_data)) + encoded_data
+                   + u16(len(trailer)) + trailer)
     flags = OFFCHAIN_FLAG_ACCOUNT_DEPLOYED if args.deployed else 0
     want_len = 8 + (C10_SIG_LEN if args.deployed else EIP6492_BLOB_LEN)
 
@@ -86,8 +114,9 @@ def main() -> int:
             print(f"!! GET_WALLET_ADDRESS failed (SW=0x{sw:04x}, {len(data)} B)")
             return 1
         sender = data
+        kind_name = {0: "raw32", 1: "personal", 2: "eip712"}[k]
         print(f"==> wallet 0x{sender.hex()}  chain {args.chain}  slot {args.slot}  "
-              f"kind {'raw32' if k == 0 else 'personal'}  "
+              f"kind {kind_name}  payload {len(payload)} B  "
               f"{'deployed' if args.deployed else 'counterfactual (ERC-6492)'}")
         hid.timeout_s = 45.0
         sw, resp = send_chained(hid, INS_V2_SIGN_OFFCHAIN, req)
@@ -106,13 +135,19 @@ def main() -> int:
     rec = {
         "chain_id": args.chain,
         "slot": args.slot,
-        "kind": "raw32" if k == 0 else "personal",
+        "kind": kind_name,
         "payload": "0x" + payload.hex(),
         "message": args.personal,
         "accountDeployed": bool(args.deployed),
         "sender": "0x" + sender.hex(),
         "newLocalOffchainCount": count,
     }
+    if k == OFFCHAIN_KIND_EIP712_TYPED:
+        # The verifier recomputes the dapp-level hash from these:
+        # H = keccak256(0x1901 || domain_separator || keccak256(primary_type_hash || encoded_data))
+        rec["domainSeparator"] = "0x" + domain_separator.hex()
+        rec["primaryTypeHash"] = "0x" + primary_type_hash.hex()
+        rec["encodedData"] = "0x" + encoded_data.hex()
     if args.deployed:
         rec["c10Sig"] = "0x" + body.hex()
         nonzero = sum(1 for b in body if b)

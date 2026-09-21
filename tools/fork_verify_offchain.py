@@ -88,10 +88,19 @@ def main() -> int:
         return 1
 
     print("==> 2. the dapp-level hash H")
+    k = lambda s: cast("keccak", s).stdout.strip()
     if rec["kind"] == "raw32":
         H = rec["payload"].lower()
-    else:
+    elif rec["kind"] == "personal":
         H = cast("hash-message", rec["message"]).stdout.strip().lower()
+    else:
+        # EIP-712: H = keccak(0x1901 || domainSeparator || structHash),
+        # structHash = keccak(primaryTypeHash || encodeData). Derived here from
+        # the request fields, independently of the firmware.
+        struct_hash = k("0x" + rec["primaryTypeHash"][2:] + rec["encodedData"][2:])
+        H = k("0x1901" + rec["domainSeparator"][2:] + struct_hash[2:]).lower()
+        print(f"    domainSeparator = {rec['domainSeparator']}")
+        print(f"    structHash      = {struct_hash}")
     print(f"    H = {H}  ({rec['kind']})")
 
     if rec["accountDeployed"]:
@@ -151,7 +160,6 @@ def main() -> int:
     ok("eip712Domain = (PQSmartWallet, 1, chain, this)",
        (name, version, dom_chain, dom_addr) == ("PQSmartWallet", "1", rec["chain_id"], wallet),
        f"({name}, {version}, {dom_chain}, {dom_addr})")
-    k = lambda s: cast("keccak", s).stdout.strip()
     dom_typehash = k("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
     dom_sep = k(cast("abi-encode", "f(bytes32,bytes32,bytes32,uint256,address)", dom_typehash,
                      k(name), k(version), str(dom_chain), dom_addr).stdout.strip())
