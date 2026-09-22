@@ -1606,9 +1606,15 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_LOCK => cmd_lock::run(),
         #[cfg(feature = "e2e-test")]
         sphincs_tz_shared::CMD_TEST_PIN_LOCKOUT => cmd_test_pin_lockout::run(),
+        // PRESENT IN PRODUCTION, deliberately: its whole purpose is explaining
+        // a lockout on a shipped unit, and shipping images carry no debug-log.
+        // Read-only, no secret material — see the disclosure note in
+        // `crate::pin_attempt_log`. Placed ABOVE the prodtest block so it is
+        // not mistaken for a prodtest-gated command.
+        sphincs_tz_shared::CMD_GET_PIN_ATTEMPT_LOG => cmd_pin_attempt_log::run(args),
+
         // Prodtest commands — only present in the `prodtest` build
         // profile, never in production firmware.
-        sphincs_tz_shared::CMD_GET_PIN_ATTEMPT_LOG => cmd_pin_attempt_log::run(args),
         #[cfg(feature = "prodtest")]
         sphincs_tz_shared::CMD_PRODTEST_GET_ID => prodtest::cmd_get_id_run(args),
         #[cfg(feature = "prodtest")]

@@ -28,10 +28,25 @@
 //! ## Disclosure
 //!
 //! Reason codes and the pre-attempt counter value. No secret, no PIN material,
-//! nothing derived from one. An attacker with USB access can already read the
-//! remaining-attempt count via `GET_STATUS`, so this adds no capability — it
-//! adds the *reason*, which is what a diagnosis needs and an attacker does not
-//! benefit from.
+//! nothing derived from one.
+//!
+//! **This ships in production and is readable WITHOUT the PIN on a locked
+//! device** — deliberately, because a log that disappears in production cannot
+//! explain a shipped unit's lockout, which is its entire purpose. The exposure
+//! is an owner decision tracked in #719; do not gate or ungate it here without
+//! that decision.
+//!
+//! The failure-class discrimination it exposes is already public: every
+//! `UNLOCK` returns a distinct status word per class (`PinIncorrect` ->
+//! `SW_SECURITY_NOT_SATISFIED`, `PinLocked` -> `SW_CONDITIONS_NOT_SATISFIED`,
+//! `InternalError` -> `SW_INTERNAL_ERROR`), per attempt and in real time, and
+//! the trusted UI shows the same split on screen. So this grants an attacker
+//! no new oracle — a status word beats a log for tuning a glitch.
+//!
+//! What IS new is *history*: a powered, locked device will tell an
+//! unauthenticated peer roughly "unlocked three times recently, one wrong
+//! PIN". That is an activity signal about the owner, not a key-recovery aid,
+//! and being RAM-resident a seized powered-off device yields nothing.
 //!
 //! The ring logic is pure and lives here rather than beside the hardware so it
 //! is exercised by host tests; a `#[cfg(test)]` module inside a target-only
