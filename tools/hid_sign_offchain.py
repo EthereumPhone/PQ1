@@ -19,6 +19,28 @@ Wire (docs/companion/usb-protocol-v2.md §0x62, proto SIGN_OFFCHAIN_INPUT_*):
 
 Usage: ./hid_sign_offchain.py --chain 8453 (--deployed|--counterfactual)
                               (--raw32 HEX | --personal TEXT) [--out FILE]
+
+For the typed kinds (2 / 3) the device also needs an authenticated ERC-7730
+trailer proving against the firmware-pinned `ERC7730_DESCRIPTORS_ROOT`. Emit
+one first, then pass `-` as the fixture and hand over the three pieces:
+
+  python3 tools/companion-stub/erc7730_trailer.py \
+      --db tools/companion-stub/erc7730_db.bin \
+      --known-calls-bloom secure/data/erc7730-known-calls.bloom \
+      --unverified-status-for-test tools/companion-stub/erc7730_status.bin \
+      --chain 8453 --contract 0x000000000022d473030f116ddee9f6b43ac78ba3 \
+      --context eip712 \
+      --domain-separator 0x3b6f35e4... --primary-type-hash 0xaf1b0d30... \
+      --out /tmp/permit2_base.trailer.bin
+
+  ./hid_sign_offchain.py --chain 8453 --deployed --eip712 - \
+      --trailer /tmp/permit2_base.trailer.bin \
+      --domain-separator 0x3b6f35e4... --primary-type-hash 0xaf1b0d30...
+
+(`--eip712-v3 -` for kind 3.) `--list` on the trailer tool shows every
+descriptor; Permit2 is entry [241] on Base. The packed `--eip712 FIXTURE`
+form — `domain_separator(32) || primary_type_hash(32) || trailer` in one
+file — still works.
 """
 from __future__ import annotations
 
@@ -50,6 +72,14 @@ MAX_OFFCHAIN_EIP712_NESTED_LEN = 2048
 C10_SIG_LEN = 4008
 EIP6492_BLOB_LEN = 8608
 EIP6492_MAGIC = bytes.fromhex("6492649264926492649264926492649264926492649264926492649264926492")
+
+
+def parse_hash32(text: str, label: str) -> bytes:
+    """Decode a 32-byte hex value, 0x-prefixed or not."""
+    raw = bytes.fromhex(text.removeprefix("0x"))
+    if len(raw) != 32:
+        raise ValueError(f"{label} must be 32 bytes, got {len(raw)}")
+    return raw
 
 
 def build_eip712_payload(
@@ -119,6 +149,15 @@ def main() -> int:
                       help="EIP-712 typed data (kind 2). FIXTURE is "
                            "[domain_separator(32) | primary_type_hash(32) | ERC-7730 trailer], "
                            "the layout build.rs emits from the catalogue")
+    ap.add_argument("--trailer", default=None, metavar="FILE",
+                    help="ERC-7730 trailer emitted by "
+                         "tools/companion-stub/erc7730_trailer.py. Use with "
+                         "--domain-separator/--primary-type-hash instead of "
+                         "packing a --eip712 FIXTURE by hand.")
+    ap.add_argument("--domain-separator", default=None, metavar="HEX32",
+                    help="EIP-712 domain separator, for use with --trailer")
+    ap.add_argument("--primary-type-hash", default=None, metavar="HEX32",
+                    help="EIP-712 primary type hash, for use with --trailer")
     kind.add_argument("--eip712-v3", default=None, metavar="FIXTURE",
                       help="same fixture layout as --eip712, sent as kind 3 "
                            "(EIP712_TYPED_V3): inserts the descriptor-selected "
@@ -148,11 +187,32 @@ def main() -> int:
         #   [u16 BE encoded_data_len][encoded_data][u16 BE trailer_len][trailer]
         is_v3 = args.eip712_v3 is not None
         k = OFFCHAIN_KIND_EIP712_TYPED_V3 if is_v3 else OFFCHAIN_KIND_EIP712_TYPED
-        fixture = open(args.eip712_v3 if is_v3 else args.eip712, "rb").read()
-        if len(fixture) <= 64:
-            print(f"!! fixture must carry a trailer, got {len(fixture)} B")
-            return 2
-        domain_separator, primary_type_hash, trailer = fixture[:32], fixture[32:64], fixture[64:]
+        src = args.eip712_v3 if is_v3 else args.eip712
+        if src == "-":
+            # Unpacked form: the three pieces the trailer tool already took as
+            # arguments, so nobody has to concatenate 32+32+N bytes by hand.
+            missing = [n for n, v in (("--trailer", args.trailer),
+                                      ("--domain-separator", args.domain_separator),
+                                      ("--primary-type-hash", args.primary_type_hash))
+                       if v is None]
+            if missing:
+                print(f"!! `-` needs {', '.join(missing)}")
+                return 2
+            try:
+                domain_separator = parse_hash32(args.domain_separator, "--domain-separator")
+                primary_type_hash = parse_hash32(args.primary_type_hash, "--primary-type-hash")
+            except ValueError as e:
+                print(f"!! {e}")
+                return 2
+            trailer = open(args.trailer, "rb").read()
+        else:
+            fixture = open(src, "rb").read()
+            if len(fixture) <= 64:
+                print(f"!! fixture must carry a trailer, got {len(fixture)} B")
+                return 2
+            domain_separator, primary_type_hash, trailer = (
+                fixture[:32], fixture[32:64], fixture[64:]
+            )
         if args.encoded_data:
             encoded_data = bytes.fromhex(args.encoded_data.removeprefix("0x"))
         else:

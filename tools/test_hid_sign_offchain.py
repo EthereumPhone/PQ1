@@ -177,3 +177,99 @@ class RefusesMalformedInput(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TrailerChainIsEndToEndValid(unittest.TestCase):
+    """The real catalogue must yield a trailer the real firmware would accept.
+
+    #693 blocked on "no trailer emitter exists". It does —
+    `tools/companion-stub/erc7730_trailer.py` — and this proves the whole
+    chain host-side so the eventual device run is send-and-compare rather
+    than debugging two unknowns at once:
+
+        catalogue -> trailer -> payload -> Merkle root == firmware pin
+
+    The root is recomputed here independently of the emitter (leaf
+    `sha256(0x00||ir)`, node `sha256(0x01||l||r)`, per
+    `pqsigner_erc7730::bundle`) and compared against the constant compiled
+    into the firmware. If the companion catalogue and the firmware pin ever
+    drift, every trailer the companion emits is rejected on-device — this
+    says so in CI instead.
+    """
+
+    REPO = Path(__file__).resolve().parents[1]
+    # Permit2 on Base — entry [241], the canonical registry-known typed
+    # message, on the chain fork_verify_offchain.py already forks.
+    CHAIN = 8453
+    CONTRACT = "0x000000000022d473030f116ddee9f6b43ac78ba3"
+    DOMAIN_SEP = "0x3b6f35e4fce979ef8eac3bcdc8c3fc38fe7911bb0c69c8fe72bf1fd1a17e6f07"
+    TYPE_HASH = "0xaf1b0d30d2cab0380e68f0689007e3254993c596f2fdd0aaa7f4d04f79440863"
+
+    def emit_trailer(self) -> bytes:
+        import subprocess, tempfile
+        out = Path(tempfile.mkdtemp()) / "trailer.bin"
+        r = subprocess.run(
+            [sys.executable, "tools/companion-stub/erc7730_trailer.py",
+             "--db", "tools/companion-stub/erc7730_db.bin",
+             "--known-calls-bloom", "secure/data/erc7730-known-calls.bloom",
+             "--unverified-status-for-test", "tools/companion-stub/erc7730_status.bin",
+             "--chain", str(self.CHAIN), "--contract", self.CONTRACT,
+             "--context", "eip712",
+             "--domain-separator", self.DOMAIN_SEP,
+             "--primary-type-hash", self.TYPE_HASH,
+             "--out", str(out)],
+            cwd=self.REPO, capture_output=True, text=True,
+            env={**__import__("os").environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        )
+        self.assertEqual(r.returncode, 0, f"trailer emit failed:\n{r.stderr}")
+        return out.read_bytes()
+
+    def firmware_pinned_root(self) -> bytes:
+        src = (self.REPO / "secure" / "src" / "db_roots.rs").read_text()
+        m = re.search(
+            r"pub static ERC7730_DESCRIPTORS_ROOT: \[u8; 32\] = \[(.*?)\];", src, re.S
+        )
+        self.assertIsNotNone(m, "ERC7730_DESCRIPTORS_ROOT not found in db_roots.rs")
+        raw = bytes(int(x, 16) for x in re.findall(r"0x([0-9a-fA-F]{2})", m.group(1)))
+        self.assertEqual(len(raw), 32, "pinned root must be 32 bytes")
+        return raw
+
+    def test_emitted_trailer_proves_to_the_firmware_pinned_root(self) -> None:
+        import hashlib
+        trailer = self.emit_trailer()
+        ir_len = int.from_bytes(trailer[:2], "big")
+        ir = trailer[2 : 2 + ir_len]
+        leaf_index = int.from_bytes(trailer[2 + ir_len : 6 + ir_len], "big")
+        depth = int.from_bytes(trailer[6 + ir_len : 10 + ir_len], "big")
+        proof = trailer[10 + ir_len :]
+        self.assertEqual(
+            len(trailer), 2 + ir_len + 4 + 4 + depth * 32, "trailer is not well-formed"
+        )
+        self.assertGreater(depth, 0, "a single-leaf catalogue would make this vacuous")
+
+        node = hashlib.sha256(b"\x00" + ir).digest()
+        idx = leaf_index
+        for level in range(depth):
+            sib = proof[level * 32 : (level + 1) * 32]
+            pair = (sib + node) if (idx & 1) else (node + sib)
+            node = hashlib.sha256(b"\x01" + pair).digest()
+            idx >>= 1
+        self.assertEqual(
+            node.hex(), self.firmware_pinned_root().hex(),
+            "the companion catalogue and the firmware-pinned "
+            "ERC7730_DESCRIPTORS_ROOT disagree — every trailer the companion "
+            "emits would be refused on-device",
+        )
+
+    def test_assembled_payload_embeds_that_exact_trailer(self) -> None:
+        # The signing client must splice the trailer through unmodified; a
+        # truncation here would surface on silicon as an opaque refusal.
+        trailer = self.emit_trailer()
+        ds = bytes.fromhex(self.DOMAIN_SEP.removeprefix("0x"))
+        pth = bytes.fromhex(self.TYPE_HASH.removeprefix("0x"))
+        for nested in (None, b"", b"\x07" * 16):
+            payload = tool.build_eip712_payload(ds, pth, b"\x11" * 64, trailer, nested)
+            self.assertTrue(payload.endswith(u16(len(trailer)) + trailer),
+                            f"trailer not spliced intact (nested={nested!r})")
+            self.assertEqual(payload[2:34], ds)
+            self.assertEqual(payload[34:66], pth)
