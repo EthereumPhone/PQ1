@@ -2616,7 +2616,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  se050-crash-safety-e2e se050-admin-extract-attempt-e2e se050-stress \
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e duress-provision-e2e \
-                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-oled-bench
+                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-oled-bench ui-px-frametime
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required

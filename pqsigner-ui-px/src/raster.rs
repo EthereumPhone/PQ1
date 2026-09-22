@@ -150,6 +150,32 @@ impl<'a> Strip<'a> {
         }
     }
 
+    /// Composite `color` at coverage `a` over the run `x0 ..= x1` of row `y`
+    /// (clipped). Same per-pixel result as [`Strip::blend`]; the bounds are
+    /// checked once and an opaque run is a plain store.
+    pub fn fill_span(&mut self, x0: i32, x1: i32, y: i32, color: Rgb, a: u8) {
+        if y < self.y0 || y >= self.y0 + self.h || a == 0 {
+            return;
+        }
+        let x0 = x0.max(0);
+        let x1 = x1.min(W - 1);
+        if x1 < x0 {
+            return;
+        }
+        let row = ((y - self.y0) * W) as usize;
+        let run = &mut self.buf[row + x0 as usize..=row + x1 as usize];
+        if a == 255 {
+            let p = color.to565();
+            for d in run.iter_mut() {
+                *d = p;
+            }
+        } else {
+            for d in run.iter_mut() {
+                *d = blend_over(*d, color, a);
+            }
+        }
+    }
+
     /// Landscape pixel readback (clipped: black outside the strip).
     #[must_use]
     pub fn get(&self, x: i32, y: i32) -> u16 {
@@ -287,27 +313,85 @@ fn edge_cov(d: Q8) -> u8 {
     (v.clamp(0, ONE_Q8) * 255 / ONE_Q8) as u8
 }
 
-/// Filled disc; `max_y` limits the fill to rows `≥ max_y` when given (chord).
+/// Coverage thresholds of [`edge_cov`], in Q8 signed distance: a pixel is
+/// fully covered at `d ≤ −FULL_D` and untouched at `d ≥ ZERO_D`.
+const FULL_D: Q8 = ONE_Q8 / 2;
+const ZERO_D: Q8 = ONE_Q8 / 2 - 1;
+
+/// Pixel centres `x` (inclusive range) whose Q8 offset `256·x + c` satisfies
+/// `|offset| ≤ bound`; empty when `bound < 0`.
+#[inline]
+fn centres_within(c: Q8, bound: Q8) -> (i32, i32) {
+    if bound < 0 {
+        return (1, 0);
+    }
+    // ceil((−bound − c) / 256) ..= floor((bound − c) / 256); `>> 8` floors.
+    (-((bound + c) >> 8), (bound - c) >> 8)
+}
+
+/// Largest `|offset|` with `offset² < limit`, or `None` when `limit ≤ 0`.
+#[inline]
+fn half_width(limit: i64) -> Option<Q8> {
+    if limit <= 0 {
+        return None;
+    }
+    Some(isqrt_u64((limit - 1) as u64) as Q8)
+}
+
+/// Filled disc; `min_y` limits the fill to rows `≥ min_y` when given (chord).
+///
+/// Per row the interior (`dist ≤ r − ½ px`, always coverage 255) is one span
+/// fill and the outside (`dist ≥ r + ½ px`, always 0) is skipped; only the
+/// ≈ 1 px anti-aliased rim evaluates the exact distance. Pixel-for-pixel the
+/// same output as evaluating [`edge_cov`] everywhere, ~15× fewer square roots.
 fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8, u8)>) {
     let (level, a) = min_y.unwrap_or((i32::MIN / 2, 255));
     let y_lo = ((cy - r) >> 8) - 1;
     let y_hi = ((cy + r) >> 8) + 1;
-    let x_lo = ((cx - r) >> 8) - 1;
-    let x_hi = ((cx + r) >> 8) + 1;
+    let c = ONE_Q8 / 2 - cx; // offset of pixel centre x = 0
+    let r_zero = i64::from(r + ZERO_D); // dist ≥ r + ZERO_D ⇒ cov 0
+    let r_full = i64::from(r - FULL_D + 1); // dist ≤ r − FULL_D ⇔ dist² < r_full²
     for y in y_lo.max(s.y0)..=y_hi.min(s.y0 + s.h - 1) {
         let py = (y << 8) + ONE_Q8 / 2; // pixel centre
         if py < level {
             continue;
         }
         let dy = py - cy;
-        for x in x_lo.max(0)..=x_hi.min(W - 1) {
-            let px = (x << 8) + ONE_Q8 / 2;
-            let d = dist_q8(px - cx, dy) - r;
-            let cov = edge_cov(d);
-            if cov != 0 {
-                let aa = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
-                s.blend(x, y, color, aa);
+        let dy2 = i64::from(dy) * i64::from(dy);
+        // Non-zero coverage ⇔ dist < r + ZERO_D ⇔ dx² < r_zero² − dy².
+        let Some(hz) = half_width(r_zero * r_zero - dy2) else { continue };
+        let (xa, xb) = centres_within(c, hz);
+        let (xa, xb) = (xa.max(0), xb.min(W - 1));
+        if xb < xa {
+            continue;
+        }
+        // Full coverage ⇔ dist ≤ r − FULL_D ⇔ dx² < r_full² − dy² (r_full > 0).
+        let (fa, fb) = if r_full > 0 {
+            match half_width(r_full * r_full - dy2) {
+                Some(hf) => centres_within(c, hf),
+                None => (1, 0),
             }
+        } else {
+            (1, 0)
+        };
+        let (fa, fb) = (fa.max(xa), fb.min(xb));
+        let rim = |s: &mut Strip<'_>, x0: i32, x1: i32| {
+            for x in x0..=x1 {
+                let px = (x << 8) + ONE_Q8 / 2;
+                let d = dist_q8(px - cx, dy) - r;
+                let cov = edge_cov(d);
+                if cov != 0 {
+                    let aa = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
+                    s.blend(x, y, color, aa);
+                }
+            }
+        };
+        if fb < fa {
+            rim(s, xa, xb);
+        } else {
+            rim(s, xa, fa - 1);
+            s.fill_span(fa, fb, y, color, a);
+            rim(s, fb + 1, xb);
         }
     }
 }
@@ -316,27 +400,56 @@ fn chord(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, level_y: Q8, color: Rgb, a: u
     disc(s, cx, cy, r, color, Some((level_y, a)));
 }
 
+/// Ring (annulus `r − w ..= r`). Only the band that can carry coverage —
+/// `r_in − ½ px < dist < r + ½ px` — evaluates the exact distance; the hole
+/// and the outside are skipped by row span. Output identical to evaluating
+/// every pixel of the bounding box.
 fn ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
     let r_in = r - w;
     let y_lo = ((cy - r) >> 8) - 1;
     let y_hi = ((cy + r) >> 8) + 1;
-    let x_lo = ((cx - r) >> 8) - 1;
-    let x_hi = ((cx + r) >> 8) + 1;
+    let c = ONE_Q8 / 2 - cx;
+    let r_zero = i64::from(r + ZERO_D); // dist ≥ r + ZERO_D ⇒ 0 (outside)
+    let r_hole = i64::from(r_in - ZERO_D + 1); // dist ≤ r_in − ZERO_D ⇔ dist² < r_hole² ⇒ 0 (hole)
     for y in y_lo.max(s.y0)..=y_hi.min(s.y0 + s.h - 1) {
         let dy = (y << 8) + ONE_Q8 / 2 - cy;
         if dy.abs() > r + ONE_Q8 {
             continue;
         }
-        for x in x_lo.max(0)..=x_hi.min(W - 1) {
-            let px = (x << 8) + ONE_Q8 / 2;
-            let d = dist_q8(px - cx, dy);
-            // Inside the annulus when r_in ≤ d ≤ r: signed distance to the
-            // nearest edge, negative inside.
-            let sd = (d - r).max(r_in - d);
-            let cov = edge_cov(sd);
-            if cov != 0 {
-                s.blend(x, y, color, cov);
+        let dy2 = i64::from(dy) * i64::from(dy);
+        let Some(hz) = half_width(r_zero * r_zero - dy2) else { continue };
+        let (xa, xb) = centres_within(c, hz);
+        let (xa, xb) = (xa.max(0), xb.min(W - 1));
+        if xb < xa {
+            continue;
+        }
+        let (ha, hb) = if r_hole > 0 {
+            match half_width(r_hole * r_hole - dy2) {
+                Some(hh) => centres_within(c, hh),
+                None => (1, 0),
             }
+        } else {
+            (1, 0)
+        };
+        let (ha, hb) = (ha.max(xa), hb.min(xb));
+        let band = |s: &mut Strip<'_>, x0: i32, x1: i32| {
+            for x in x0..=x1 {
+                let px = (x << 8) + ONE_Q8 / 2;
+                let d = dist_q8(px - cx, dy);
+                // Inside the annulus when r_in ≤ d ≤ r: signed distance to the
+                // nearest edge, negative inside.
+                let sd = (d - r).max(r_in - d);
+                let cov = edge_cov(sd);
+                if cov != 0 {
+                    s.blend(x, y, color, cov);
+                }
+            }
+        };
+        if hb < ha {
+            band(s, xa, xb);
+        } else {
+            band(s, xa, ha - 1);
+            band(s, hb + 1, xb);
         }
     }
 }
@@ -566,5 +679,127 @@ mod tests {
             assert!(f.push(Item::None));
         }
         assert!(!f.push(Item::None));
+    }
+}
+
+#[cfg(test)]
+mod span_equivalence {
+    //! The span-based disc / ring must be pixel-identical to the brute-force
+    //! per-pixel evaluation they replaced (the goldens depend on it).
+    use super::*;
+
+    fn brute_disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8, u8)>) {
+        let (level, a) = min_y.unwrap_or((i32::MIN / 2, 255));
+        let y_lo = ((cy - r) >> 8) - 1;
+        let y_hi = ((cy + r) >> 8) + 1;
+        let x_lo = ((cx - r) >> 8) - 1;
+        let x_hi = ((cx + r) >> 8) + 1;
+        for y in y_lo.max(s.y0)..=y_hi.min(s.y0 + s.h - 1) {
+            let py = (y << 8) + ONE_Q8 / 2;
+            if py < level {
+                continue;
+            }
+            let dy = py - cy;
+            for x in x_lo.max(0)..=x_hi.min(W - 1) {
+                let px = (x << 8) + ONE_Q8 / 2;
+                let d = dist_q8(px - cx, dy) - r;
+                let cov = edge_cov(d);
+                if cov != 0 {
+                    let aa = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
+                    s.blend(x, y, color, aa);
+                }
+            }
+        }
+    }
+
+    fn brute_ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
+        let r_in = r - w;
+        let y_lo = ((cy - r) >> 8) - 1;
+        let y_hi = ((cy + r) >> 8) + 1;
+        let x_lo = ((cx - r) >> 8) - 1;
+        let x_hi = ((cx + r) >> 8) + 1;
+        for y in y_lo.max(s.y0)..=y_hi.min(s.y0 + s.h - 1) {
+            let dy = (y << 8) + ONE_Q8 / 2 - cy;
+            if dy.abs() > r + ONE_Q8 {
+                continue;
+            }
+            for x in x_lo.max(0)..=x_hi.min(W - 1) {
+                let px = (x << 8) + ONE_Q8 / 2;
+                let d = dist_q8(px - cx, dy);
+                let sd = (d - r).max(r_in - d);
+                let cov = edge_cov(sd);
+                if cov != 0 {
+                    s.blend(x, y, color, cov);
+                }
+            }
+        }
+    }
+
+    /// Deterministic LCG so the sweep covers many sub-pixel phases.
+    fn lcg(seed: &mut u32) -> u32 {
+        *seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        *seed >> 8
+    }
+
+    #[test]
+    fn disc_ring_and_chord_match_brute_force() {
+        let mut seed = 7u32;
+        let color = Rgb::new(0x13, 0xFF, 0x7F);
+        let under = Rgb::new(0x40, 0x20, 0x90);
+        for case in 0..400 {
+            let cx = (lcg(&mut seed) % ((W as u32 + 80) << 8)) as i32 - (40 << 8);
+            let cy = (lcg(&mut seed) % ((H as u32 + 80) << 8)) as i32 - (40 << 8);
+            let r = (lcg(&mut seed) % (40 << 8)) as i32;
+            let w = (lcg(&mut seed) % (6 << 8)) as i32 + 1;
+            let a = (lcg(&mut seed) % 256) as u8;
+            let level = cy + (lcg(&mut seed) % (80 << 8)) as i32 - (40 << 8);
+            let y0 = (lcg(&mut seed) % (H as u32 - 16)) as i32;
+            let mut b1 = [0u16; (W * 16) as usize];
+            let mut b2 = [0u16; (W * 16) as usize];
+            // A non-black background so partial coverage is exercised.
+            for (i, p) in b1.iter_mut().enumerate() {
+                *p = if i % 3 == 0 { under.to565() } else { 0 };
+            }
+            b2.copy_from_slice(&b1);
+            let mut s1 = Strip::new(y0, 16, &mut b1).unwrap();
+            let mut s2 = Strip::new(y0, 16, &mut b2).unwrap();
+            match case % 3 {
+                0 => {
+                    disc(&mut s1, cx, cy, r, color, None);
+                    brute_disc(&mut s2, cx, cy, r, color, None);
+                }
+                1 => {
+                    ring(&mut s1, cx, cy, r, w, color);
+                    brute_ring(&mut s2, cx, cy, r, w, color);
+                }
+                _ => {
+                    disc(&mut s1, cx, cy, r, color, Some((level, a)));
+                    brute_disc(&mut s2, cx, cy, r, color, Some((level, a)));
+                }
+            }
+            assert!(b1 == b2, "case {case}: cx={cx} cy={cy} r={r} w={w} a={a} level={level} y0={y0}");
+        }
+    }
+
+    #[test]
+    fn fill_span_matches_blend() {
+        let color = Rgb::new(200, 100, 50);
+        for a in [0u8, 1, 77, 128, 254, 255] {
+            let mut b1 = [0x1234u16; (W * 16) as usize];
+            let mut b2 = [0x1234u16; (W * 16) as usize];
+            let mut s1 = Strip::new(32, 16, &mut b1).unwrap();
+            let mut s2 = Strip::new(32, 16, &mut b2).unwrap();
+            s1.fill_span(-5, 100, 40, color, a);
+            s1.fill_span(300, W + 10, 47, color, a);
+            s1.fill_span(10, 5, 41, color, a); // empty
+            s1.fill_span(0, W, 10, color, a); // off-strip row
+            for x in -5..=100 {
+                s2.blend(x, 40, color, a);
+            }
+            for x in 300..=W + 10 {
+                s2.blend(x, 47, color, a);
+            }
+            assert!(b1 == b2, "a={a}");
+        }
     }
 }

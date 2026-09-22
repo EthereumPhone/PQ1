@@ -17,7 +17,7 @@
 //! panic on the device).
 
 use crate::fixed::Q8;
-use crate::raster::{Rgb, Strip};
+use crate::raster::{blend_over, Rgb, Strip, W};
 
 const FILE_HDR: usize = 12;
 const TIER_HDR: usize = 16;
@@ -198,11 +198,20 @@ impl<'a> Font<'a> {
         if bottom < s.y0 || top >= s.y0 + s.h {
             return;
         }
+        // Per-run LUTs over the 16 atlas alpha levels × the run alpha: the
+        // coverage, and the pixel that coverage yields over black (the
+        // common case — text on the background — becomes a plain store).
+        let mut lut = [0u8; 16];
+        let mut over_black = [0u16; 16];
+        for n in 0..16 {
+            lut[n] = ((n as u16 * 17 * u16::from(run.alpha) + 127) / 255) as u8;
+            over_black[n] = blend_over(0, color, lut[n]);
+        }
         for (i, &c) in run.text.iter().enumerate() {
             let Some(g) = t.glyph(c) else { continue };
             let gx = ((x_q6 + 32) >> 6) + i32::from(g.bearing_x);
             let gy = baseline - i32::from(g.bearing_top);
-            blit_glyph(s, &g, gx, gy, color, run.alpha);
+            blit_glyph(s, &g, gx, gy, color, &lut, &over_black);
             x_q6 += i32::from(g.advance_q6);
             if i + 1 < run.text.len() {
                 x_q6 += run.ls_q6;
@@ -211,25 +220,29 @@ impl<'a> Font<'a> {
     }
 }
 
-fn blit_glyph(s: &mut Strip<'_>, g: &Glyph<'_>, x0: i32, y0: i32, color: Rgb, alpha: u8) {
+fn blit_glyph(s: &mut Strip<'_>, g: &Glyph<'_>, x0: i32, y0: i32, color: Rgb, lut: &[u8; 16], over_black: &[u16; 16]) {
     if g.w == 0 || g.h == 0 {
         return;
     }
     let stride = (usize::from(g.w) + 1) / 2;
     let y_lo = y0.max(s.y0);
     let y_hi = (y0 + i32::from(g.h)).min(s.y0 + s.h);
-    // Per-run colour LUT over the 16 alpha levels × the run alpha.
-    let mut lut = [0u8; 16];
-    for (n, v) in lut.iter_mut().enumerate() {
-        *v = ((n as u16 * 17 * u16::from(alpha) + 127) / 255) as u8;
+    // Horizontal clip once per glyph, not per pixel.
+    let x_lo = (-x0).max(0);
+    let x_hi = i32::from(g.w).min(W - x0);
+    if x_hi <= x_lo {
+        return;
     }
     for y in y_lo..y_hi {
         let row = &g.rows[(y - y0) as usize * stride..];
-        for x in 0..i32::from(g.w) {
+        let base = ((y - s.y0) * W + x0) as usize;
+        for x in x_lo..x_hi {
             let b = row[(x / 2) as usize];
-            let n = if x % 2 == 0 { b >> 4 } else { b & 0x0F };
+            let n = usize::from(if x % 2 == 0 { b >> 4 } else { b & 0x0F });
             if n != 0 {
-                s.blend(x0 + x, y, color, lut[usize::from(n)]);
+                let i = base + x as usize;
+                let dst = s.buf[i];
+                s.buf[i] = if dst == 0 { over_black[n] } else { blend_over(dst, color, lut[n]) };
             }
         }
     }

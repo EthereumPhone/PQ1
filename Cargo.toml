@@ -179,6 +179,12 @@ opt-level = 3
 [profile.release.package.hmac]
 opt-level = 3
 
+# The pixel trusted-UI rasteriser runs per frame on the NV3007 (~40 ms budget
+# at the design's frame rate); `s` cost it roughly 2× on the M33 for ~8 KB of
+# flash. Pure logic, no secrets — speed it.
+[profile.release.package.pqsigner-ui-px]
+opt-level = 3
+
 # `micromath` provides the f32 sin/cos/sqrt/powf for the `splash-test` animated
 # preview. It is the per-frame hot path there (the nebula noise field alone is
 # ~46k trig calls/frame), and it is NOT linked into any production build

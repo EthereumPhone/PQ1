@@ -45,10 +45,15 @@ pub fn clamp01(t: Q16) -> Q16 {
 }
 
 /// Integer square root (floor).
+///
+/// Values that fit in 32 bits take the `u32` Newton path: on Cortex-M the
+/// 32-bit divide is a hardware instruction (`udiv`, ≤ 12 cycles) while a
+/// 64-bit divide is a compiler-rt call costing hundreds of cycles per step.
+/// Both paths return the exact floor, so the result is identical either way.
 #[must_use]
 pub fn isqrt_u64(v: u64) -> u32 {
-    if v == 0 {
-        return 0;
+    if v <= u64::from(u32::MAX) {
+        return isqrt_u32(v as u32);
     }
     // Newton from a power-of-two seed; converges in a handful of steps.
     let mut x = 1u64 << ((64 - v.leading_zeros()).div_ceil(2));
@@ -56,6 +61,23 @@ pub fn isqrt_u64(v: u64) -> u32 {
         let y = (x + v / x) >> 1;
         if y >= x {
             return x as u32;
+        }
+        x = y;
+    }
+}
+
+/// Integer square root (floor) of a 32-bit value; hardware-divide Newton.
+#[must_use]
+pub fn isqrt_u32(v: u32) -> u32 {
+    if v == 0 {
+        return 0;
+    }
+    let mut x = 1u32 << ((32 - v.leading_zeros()).div_ceil(2));
+    loop {
+        // `x` never exceeds 2^16 (the seed is ≤ 2^16), so `x + v / x` fits.
+        let y = (x + v / x) >> 1;
+        if y >= x {
+            return x;
         }
         x = y;
     }
@@ -200,5 +222,40 @@ mod tests {
         assert_eq!(mul_q16(q16(3), q16(2)), q16(6));
         assert_eq!(mul_q8(q8(3), q8(2)), q8(6));
         assert_eq!(dist_q8(q8(3), q8(4)), q8(5));
+    }
+}
+
+#[cfg(test)]
+mod isqrt_tests {
+    use super::*;
+
+    fn slow(v: u64) -> u32 {
+        let mut r = 0u64;
+        while (r + 1) * (r + 1) <= v {
+            r += 1;
+        }
+        r as u32
+    }
+
+    #[test]
+    fn isqrt_u32_matches_floor_sqrt() {
+        for v in (0u32..70_000).chain([u32::MAX, u32::MAX - 1, 1 << 31, 0xFFFE_0001, 0xFFFE_0000]) {
+            assert_eq!(isqrt_u32(v), slow(u64::from(v)), "v={v}");
+        }
+        // Every perfect square and its neighbours up to 2^16.
+        for r in 0u64..=65_535 {
+            let sq = r * r;
+            assert_eq!(u64::from(isqrt_u32(sq as u32)), r);
+            if sq > 0 {
+                assert_eq!(u64::from(isqrt_u32((sq - 1) as u32)), r - 1);
+            }
+        }
+    }
+
+    #[test]
+    fn isqrt_u64_paths_agree_at_the_boundary() {
+        for v in [u64::from(u32::MAX) - 5, u64::from(u32::MAX), u64::from(u32::MAX) + 1, 1u64 << 40, (1u64 << 34) + 12_345] {
+            assert_eq!(isqrt_u64(v), slow(v), "v={v}");
+        }
     }
 }

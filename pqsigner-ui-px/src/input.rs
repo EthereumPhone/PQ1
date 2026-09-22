@@ -89,8 +89,16 @@ impl InputCtx {
 #[derive(Clone, Copy, Debug, Default)]
 struct SideState {
     down: bool,
+    /// Time of the current press (hold clock origin).
     t_edge: u32,
-    lockout_until: u32,
+    /// Time of the last ACCEPTED edge on this side, press or release: the
+    /// debounce lockout is measured from here. (Measuring it from `t_edge`
+    /// — the press — left a release bounce free to re-press the side, after
+    /// which the FSM believed the button was down and swallowed the next
+    /// real press: the "tap twice" symptom on the EVT, 2026-09-22.)
+    t_last_edge: u32,
+    /// `t_last_edge` is meaningful.
+    edged: bool,
     hold_started: bool,
     hold_fired: bool,
     /// Consumed by a chord: no tap / hold from this press.
@@ -104,6 +112,11 @@ pub struct InputFsm {
     left: SideState,
     right: SideState,
     ctx: InputCtx,
+    /// Latest `now` seen; `poll` never lets time run backwards (a presenter
+    /// that replays timestamped edges and then polls with a stale clock
+    /// would otherwise measure a wrapped, multi-hour hold and fire a commit).
+    last_now: u32,
+    started: bool,
 }
 
 fn after(now: u32, t: u32) -> u32 {
@@ -117,7 +130,8 @@ impl InputFsm {
             left: SideState {
                 down: false,
                 t_edge: 0,
-                lockout_until: 0,
+                t_last_edge: 0,
+                edged: false,
                 hold_started: false,
                 hold_fired: false,
                 consumed: false,
@@ -126,13 +140,16 @@ impl InputFsm {
             right: SideState {
                 down: false,
                 t_edge: 0,
-                lockout_until: 0,
+                t_last_edge: 0,
+                edged: false,
                 hold_started: false,
                 hold_fired: false,
                 consumed: false,
                 last_tap_at: None,
             },
             ctx,
+            last_now: 0,
+            started: false,
         }
     }
 
@@ -144,6 +161,7 @@ impl InputFsm {
     /// `(side, held_ms)` — the presenter draws the fill from it.
     #[must_use]
     pub fn hold_progress(&self, now: u32) -> Option<(Btn, u32)> {
+        let now = self.clamp_now(now);
         for (btn, s) in [(Btn::Left, &self.left), (Btn::Right, &self.right)] {
             if s.down && s.hold_started && !s.consumed && !s.hold_fired {
                 return Some((btn, after(now, s.t_edge)));
@@ -156,6 +174,9 @@ impl InputFsm {
     /// while a button is down (the SysTick edge ring provides exact edge
     /// times; the frame loop provides the time-driven events).
     pub fn poll(&mut self, now: u32, left_down: bool, right_down: bool) -> Events {
+        let now = self.clamp_now(now);
+        self.last_now = now;
+        self.started = true;
         let mut ev = Events::default();
         // Edges first, left then right.
         self.edge(now, Btn::Left, left_down, &mut ev);
@@ -185,6 +206,16 @@ impl InputFsm {
         ev
     }
 
+    /// `now`, or the last `now` when the clock appears to have stepped back
+    /// (wrapping-aware: a backward step is a difference in the top half).
+    fn clamp_now(&self, now: u32) -> u32 {
+        if self.started && now.wrapping_sub(self.last_now) >= (1 << 31) {
+            self.last_now
+        } else {
+            now
+        }
+    }
+
     fn side(&self, b: Btn) -> &SideState {
         match b {
             Btn::Left => &self.left,
@@ -211,12 +242,10 @@ impl InputFsm {
         if level == s.down {
             return;
         }
-        // Debounce lockout (wrapping-safe: lockout is "now is before until").
-        if s.lockout_until != 0 && after(s.lockout_until, now) < (1 << 31) && s.lockout_until != now {
-            // still inside the lockout window
-            if after(now, s.t_edge) < DEBOUNCE_MS {
-                return;
-            }
+        // Debounce lockout: ignore a change within `DEBOUNCE_MS` of the last
+        // accepted edge on this side (press OR release).
+        if s.edged && after(now, s.t_last_edge) < DEBOUNCE_MS {
+            return;
         }
         if level {
             // ---- press ----
@@ -226,7 +255,8 @@ impl InputFsm {
             let s = self.side_mut(btn);
             s.down = true;
             s.t_edge = now;
-            s.lockout_until = now.wrapping_add(DEBOUNCE_MS);
+            s.t_last_edge = now;
+            s.edged = true;
             s.hold_started = false;
             s.hold_fired = false;
             s.consumed = false;
@@ -261,7 +291,8 @@ impl InputFsm {
             let s = self.side_mut(btn);
             s.down = false;
             let held = after(now, s.t_edge);
-            s.lockout_until = now.wrapping_add(DEBOUNCE_MS);
+            s.t_last_edge = now;
+            s.edged = true;
             if s.consumed {
                 s.consumed = false;
                 ev.push(Gesture::Release(btn));
@@ -361,6 +392,44 @@ mod tests {
         assert!(f.poll(5, false, false).is_empty(), "bounce ignored");
         assert!(f.poll(10, true, false).is_empty());
         assert_eq!(collect(f.poll(120, false, false)), [Gesture::Release(Btn::Left), Gesture::Tap(Btn::Left)]);
+    }
+
+    #[test]
+    fn release_bounce_cannot_re_press_the_side() {
+        // Press 0, release 100 (tap); the switch bounces at 102/104 on the
+        // way up. Before the fix the 102 re-press was accepted (the lockout
+        // was measured from the PRESS), the FSM stayed "down", and the real
+        // press at 500 was swallowed.
+        let mut f = InputFsm::new(InputCtx::NAV);
+        assert_eq!(collect(f.poll(0, true, false)), [Gesture::Press(Btn::Left)]);
+        assert_eq!(collect(f.poll(100, false, false)), [Gesture::Release(Btn::Left), Gesture::Tap(Btn::Left)]);
+        assert!(f.poll(102, true, false).is_empty(), "release bounce (down) ignored");
+        assert!(f.poll(104, false, false).is_empty(), "release bounce (up) ignored");
+        assert!(f.poll(200, false, false).is_empty());
+        assert_eq!(collect(f.poll(500, true, false)), [Gesture::Press(Btn::Left)], "next real press is seen");
+        assert_eq!(collect(f.poll(600, false, false)), [Gesture::Release(Btn::Left), Gesture::Tap(Btn::Left)]);
+    }
+
+    #[test]
+    fn a_change_that_outlives_the_lockout_is_accepted_late() {
+        // A 10 ms tap: the release lands inside the press lockout and is
+        // ignored; the level is still up at 30 ms, so the release is accepted
+        // then (held 30 ≤ TAP_MAX → still a tap).
+        let mut f = InputFsm::new(InputCtx::NAV);
+        f.poll(0, false, true);
+        assert!(f.poll(10, false, false).is_empty());
+        assert_eq!(collect(f.poll(30, false, false)), [Gesture::Release(Btn::Right), Gesture::Tap(Btn::Right)]);
+    }
+
+    #[test]
+    fn clock_stepping_backwards_cannot_fire_a_commit() {
+        // A press stamped 1000 by the edge ring, then a level poll with a
+        // clock read before the drain (990): the hold must read 0, not 2^32.
+        let mut f = InputFsm::new(InputCtx::NAV);
+        assert_eq!(collect(f.poll(1000, false, true)), [Gesture::Press(Btn::Right)]);
+        assert!(f.poll(990, false, true).is_empty(), "no HoldStart/HoldCommit from a backwards clock");
+        assert!(f.hold_progress(990).is_none());
+        assert_eq!(collect(f.poll(1100, false, false)), [Gesture::Release(Btn::Right), Gesture::Tap(Btn::Right)]);
     }
 
     #[test]

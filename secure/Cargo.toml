@@ -195,6 +195,9 @@ ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger)
 ui-px = []
 # `ui-px` at SPI ÷4 = 40 MHz (production board without the dev kit's LED on SCK).
 ui-px-spi40 = ["ui-px", "ui-lcd"]
+# Bench-only: overlay the previous frame's render / blit / period (ms) in the
+# top-left of every pixel-UI frame (DWT cycle counter). NEVER ship.
+ui-px-frametime = ["ui-px", "ui-lcd"]
 # Real STM32U585 hardware target (vs QEMU mps2-an505). Pulls in `hw-sha256`
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.
