@@ -41,6 +41,23 @@ one first, then pass `-` as the fixture and hand over the three pieces:
 descriptor; Permit2 is entry [241] on Base. The packed `--eip712 FIXTURE`
 form — `domain_separator(32) || primary_type_hash(32) || trailer` in one
 file — still works.
+
+**THE CATALOGUE MUST MATCH THE IMAGE.** `secure/src/db_roots.rs` pins TWO
+descriptor roots: production (`cfg(not(feature = "e2e-test"))`) and a separate
+e2e one (`cfg(feature = "e2e-test")`). A trailer built from the production
+catalogue is refused by an `e2e-test` image with a bare `SW=0x6f00` and no
+diagnostic — the Merkle proof simply does not reach the pinned root. For an
+`e2e-test` image use the `_e2e` artefacts throughout:
+
+    --db tools/companion-stub/erc7730_db_e2e.bin
+    --known-calls-bloom secure/data/erc7730-known-calls-e2e.bloom
+    --unverified-status-for-test tools/companion-stub/erc7730_status_e2e.bin
+
+That catalogue holds ONE EIP-712 descriptor: chain 11155111, contract
+`0x…7730`, domain separator `0x65a0dc9a…`, type hash `0xe4832905…`, and this
+tool's DEFAULT `--encoded-data` is its body. Also note most registry EIP-712
+types are NESTED (all three Permit2 types are), so they cannot render from
+`encoded_data` alone and need kind 3 with a real witness record.
 """
 from __future__ import annotations
 
@@ -248,7 +265,7 @@ def main() -> int:
             print(f"!! GET_WALLET_ADDRESS failed (SW=0x{sw:04x}, {len(data)} B)")
             return 1
         sender = data
-        kind_name = {0: "raw32", 1: "personal", 2: "eip712"}[k]
+        kind_name = {0: "raw32", 1: "personal", 2: "eip712", 3: "eip712-v3"}[k]
         print(f"==> wallet 0x{sender.hex()}  chain {args.chain}  slot {args.slot}  "
               f"kind {kind_name}  payload {len(payload)} B  "
               f"{'deployed' if args.deployed else 'counterfactual (ERC-6492)'}")

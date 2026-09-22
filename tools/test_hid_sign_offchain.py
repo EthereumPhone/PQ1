@@ -273,3 +273,23 @@ class TrailerChainIsEndToEndValid(unittest.TestCase):
                             f"trailer not spliced intact (nested={nested!r})")
             self.assertEqual(payload[2:34], ds)
             self.assertEqual(payload[34:66], pth)
+
+
+class EveryKindIsReportable(unittest.TestCase):
+    def test_kind_name_map_covers_every_kind_the_tool_can_send(self) -> None:
+        # Regression: `--eip712-v3` crashed with `KeyError: 3` on a live device
+        # because the report map still listed only kinds 0-2. The payload tests
+        # above all passed -- they exercise `build_eip712_payload`, not the
+        # reporting path, so a device run was the first thing to hit it.
+        src = TOOL.read_text()
+        m = re.search(r"kind_name = \{([^}]*)\}", src)
+        self.assertIsNotNone(m, "kind_name map not found")
+        mapped = {int(k) for k in re.findall(r"(\d+):", m.group(1))}
+        sendable = {
+            tool.OFFCHAIN_KIND_RAW32, tool.OFFCHAIN_KIND_PERSONAL_SIGN,
+            tool.OFFCHAIN_KIND_EIP712_TYPED, tool.OFFCHAIN_KIND_EIP712_TYPED_V3,
+        }
+        self.assertEqual(
+            sendable - mapped, set(),
+            "every kind the tool can send must have a report name",
+        )
