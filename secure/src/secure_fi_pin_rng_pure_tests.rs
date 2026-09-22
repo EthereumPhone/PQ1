@@ -2490,3 +2490,60 @@ mod fuzz_props_source_text {
         );
     }
 }
+
+/// The TRNG must run ST's AN4230 values for THIS part, not another part's.
+///
+/// #704: the driver wrote `RNG_HTCR = 0xAAC7` — RM0456 Table 464's generic
+/// configuration-C row — and never wrote `RNG_NSCR` at all (the register was
+/// not even mapped). `stm32u585xx.h` ships the per-product AN4230 values under
+/// "RNG Nist Compliance Values", and `0xAAC7` is what the U535/U545 headers
+/// define: the two parts with **no NSCR register**. U575/U585, which have one,
+/// use `0xA2B0` + `0x17CBB`. Health-test thresholds are matched to the noise
+/// source, so the old pairing ran our health tests against thresholds meant for
+/// different noise hardware — the same class of mismatch as #698.
+#[test]
+fn positive_trng_uses_this_parts_an4230_values() {
+    const HW_RNG_SRC: &str = include_str!("hw/rng.rs");
+
+    // The health-test value must be U575/U585's, and the U535/U545 one must be
+    // gone — keeping both would let a careless edit reinstate the wrong pair.
+    assert!(
+        HW_RNG_SRC.contains("const RNG_HTCR_AN4230: u32 = 0x0000_A2B0;"),
+        "HTCR must be the AN4230 value for a part that HAS an NSCR"
+    );
+    assert!(
+        !HW_RNG_SRC.contains("0x0000_AAC7"),
+        "0xAAC7 belongs to U535/U545, which have no NSCR register"
+    );
+
+    // NSCR must be mapped, written, and read back. Never-mapped was the whole
+    // defect: the noise oscillators ran at their reset selection.
+    assert!(
+        HW_RNG_SRC.contains("const RNG_NSCR_AN4230: u32 = 0x0001_7CBB;"),
+        "NSCR needs this part's AN4230 value"
+    );
+    assert!(
+        HW_RNG_SRC.contains("nscr: Reg32::new(RNG + 0x0C)"),
+        "NSCR must be mapped at offset 0x0C or it cannot be written at all"
+    );
+    assert!(
+        HW_RNG_SRC.contains("REG.nscr.write(RNG_NSCR_AN4230);"),
+        "NSCR must actually be written"
+    );
+    assert!(
+        HW_RNG_SRC.contains("if nscr_after != RNG_NSCR_AN4230 {"),
+        "a silently-ignored NSCR write must fail closed, like HTCR's"
+    );
+
+    // Both config writes only take effect while CONDRST=1, so they must sit
+    // between entering and leaving the conditioning-reset window.
+    let enter = HW_RNG_SRC.find("REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);");
+    let nscr = HW_RNG_SRC.find("REG.nscr.write(RNG_NSCR_AN4230);");
+    let leave = HW_RNG_SRC.find("REG.cr.write(RNG_CR_NIST_DEFAULT);");
+    assert!(enter.is_some() && nscr.is_some() && leave.is_some());
+    assert!(
+        enter < nscr && nscr < leave,
+        "NSCR must be written INSIDE the CONDRST window, or the write is ignored"
+    );
+}
+
