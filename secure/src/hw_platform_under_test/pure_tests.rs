@@ -328,27 +328,38 @@ fn positive_rng_nist_compliant_default_cr() {
 }
 
 #[test]
-fn positive_rng_htcr_config_c_written_inside_condrst_window() {
-    // Configuration C is a PAIR: the CR bits above AND RNG_HTCR = 0xAAC7
-    // (RM0456 Rev 7 Table 464). HTCR is only taken into account while
-    // CONDRST=1 (§48.7.5), so the write must sit between the CR write that
-    // sets CONDRST and the one that clears it, and be read back fail-closed.
-    // Without it the health tests run at the reset thresholds (0x72AC) and pq1
-    // latched a seed error (SR=0x41) before nearly every post-idle draw.
-    assert!(RNG_SRC.contains("const RNG_HTCR_CONFIG_C: u32 = 0x0000_AAC7;"));
+fn positive_rng_htcr_an4230_written_inside_condrst_window() {
+    // UPDATED (#704). This pinned RNG_HTCR = 0xAAC7 as "configuration C", taken
+    // from RM0456 Table 464's generic row. That value is wrong for this part:
+    // NIST ESV certificate E11 covers "STM32U575x / STM32U585x ... revision B
+    // and Later" and its Table 2 permits only 0x06E9C (alpha=2^-20) or 0x0A2B0
+    // (alpha=2^-30). 0xAAC7 is neither — it is what stm32u535xx.h/u545xx.h
+    // define, the two parts with no RNG_NSCR register at all.
+    //
+    // The ordering requirement is unchanged and still the point of this test:
+    // HTCR is only taken into account while CONDRST=1 (§48.7.5), so the write
+    // must sit between the CR write that sets CONDRST and the one that clears
+    // it, and be read back fail-closed. Without any HTCR write the health tests
+    // run at the reset thresholds (0x72AC) and pq1 latched a seed error
+    // (SR=0x41) before nearly every post-idle draw (#698).
+    assert!(RNG_SRC.contains("const RNG_HTCR_AN4230: u32 = 0x0000_A2B0;"));
+    assert!(
+        !RNG_SRC.contains("0x0000_AAC7"),
+        "0xAAC7 is not one of E11's two permitted HTCR values for this part"
+    );
     assert!(RNG_SRC.contains("htcr: Reg32::new(RNG + 0x10),"));
     let init = extract_body(RNG_SRC, "fn init_locked() -> Result<(), ()> {");
     let set = init
         .find("REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);")
         .expect("CONDRST set");
     let write = init
-        .find("REG.htcr.write(RNG_HTCR_CONFIG_C);")
+        .find("REG.htcr.write(RNG_HTCR_AN4230);")
         .expect("HTCR write missing from init_locked");
     let clear = init
         .find("REG.cr.write(RNG_CR_NIST_DEFAULT);")
         .expect("CONDRST clear");
     assert!(set < write && write < clear, "HTCR must be written while CONDRST=1");
-    assert!(init.contains("if htcr_after != RNG_HTCR_CONFIG_C {\n        return Err(());"));
+    assert!(init.contains("if htcr_after != RNG_HTCR_AN4230 {\n        return Err(());"));
 }
 
 #[test]
