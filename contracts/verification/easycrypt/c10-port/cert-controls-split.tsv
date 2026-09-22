@@ -168,3 +168,8 @@ scratch/C10IIDMissingSuccessFactor.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10BoundedGamePositive.ec	MUST-PASS	-
 scratch/C10BoundedGameNoGuard.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10BoundedGameResetFailure.ec	MUST-FAIL	[by]: cannot close goals
+
+# Good accepted transcripts and the N2-free member-aware theorem.
+scratch/C10BoundedMAPositive.ec	MUST-PASS	-
+scratch/C10BoundedMAEraseHistory.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10BoundedMAAppendFailure.ec	MUST-FAIL	[by]: cannot close goals

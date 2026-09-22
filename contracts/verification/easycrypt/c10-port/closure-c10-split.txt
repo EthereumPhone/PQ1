@@ -58,3 +58,6 @@ C10BoundedIID
 # Adaptive bounded-game comparison and conditional WOTS reduction.
 C10BoundedGame
 C10BoundedReduction
+
+# Failure-rejecting, N2-free member-aware WOTS bound.
+C10BoundedMA

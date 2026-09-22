@@ -98,6 +98,19 @@ collection-tweak condition is the original WOTS-level restriction, not the
 member-aware condition needed by the hypertree reduction. This corollary does
 not close the failure-aware whole-scheme SPHINCS+C reduction.
 
+`C10BoundedMA.bounded_interactive_D1_MA` now gives the bounded game a
+member-aware two-challenge bound **without universal counter reachability (N2)
+or a charged grind-failure term**. Only successful searches append records;
+their counters witness reachability. An up-to-bad coupling carries this good
+transcript into the total game, and the collision split preserves it on the
+WOTS-TW branch. The collision branch uses the existing member-aware S-TCR
+reduction. This is an unconditional-in-N2 probability inequality for one
+admissible terminating adversary; target cap, address separation, encoder bridge,
+and member-aware collection separation remain explicit premises. The existing
+challenge reductions can still enumerate the full counter domain: no useful
+running-time bound, challenge-probability estimate, or hypertree composition
+is established by this theorem.
+
 `BoundedIID` and `C10BoundedIID` separately formalize independent uniform draws.
 They preserve both exhaustion `(1-p)^B` and successful-event mass
 `(1-(1-p)^B) * Pr[conditioned event]`, with `p` supplied by the actual consumer
@@ -116,10 +129,12 @@ Rust extraction is implied. Both abstract digest members must be projections
 of the **same** SHA-256 result: dfC0 is the low half (bytes 16–31 in physical
 big-endian order), dfC1 the high half. The collection is still abstract.
 
-The current perimeter contains 68 proof files, 56 roots, 1,339 unique declaration
-pins, 1,208 statements and 67 controls. The new controls preserve the guarded
+The current perimeter contains 69 proof files, 57 roots, 1,347 unique declaration
+pins, 1,216 statements and 70 controls. The new controls preserve the guarded
 comparison and absorbing-failure contract, and reject dropping the guard or
-clearing the failure flag. The earlier encoder/abort replay and review remain
+clearing the failure flag. The member-aware controls also reject erasing the
+good-history premise and appending a failed-query record; a positive control
+applies the exact new final theorem. The earlier encoder/abort replay and review remain
 recorded in the [September 21 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md).
 The bounded-game batch passes its full replay and bounded Astra/Opus source
 review; the [September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-game-2026-09-22/README.md)

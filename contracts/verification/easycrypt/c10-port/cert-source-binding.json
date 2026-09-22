@@ -8,7 +8,7 @@
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "129b83a80734c131c38b9259c4490f04428c04d7a352e5a58f0c32049a48d693",
-    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "8ff9b5e3c546a9405eb50f8f136fb0ed10638f9a04912725987d122f2f41fc12",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "085ba30c983fadf85e4c61f104f196b8fa3ad0d150598df1c29784221050bd98",
     "contracts/verification/scripts/run_easycrypt_split.py": "c675c91dab371086af6ff2937d5b09b04118878b51fbd4060bbfc334431e774f",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
@@ -23,6 +23,7 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/BoundedIID.ec": "7f958c635295653ee49812c41a1871a7205541ec5d203aa0ed8b907755a56f61",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10BoundedIID.ec": "3702e516d002ef8ca8f6d0d4650042da0dd1aab131d835639c59229c393fdea4",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10BoundedGame.ec": "42aa8e3047493f1eb3960c933423123f49b8ff7b80ca9036edda06bed641e004",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10BoundedReduction.ec": "048c1194c39af620ac04e88a39f41aee4d3d7739329ae8ac6f204df570b54dc1"
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10BoundedReduction.ec": "048c1194c39af620ac04e88a39f41aee4d3d7739329ae8ac6f204df570b54dc1",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10BoundedMA.ec": "f0e847dd19962f32b9e7fe53618dea2693c77720078c33fc61ce79de29e128dc"
   }
 }

@@ -4676,3 +4676,49 @@ The bounded-game Phase D evidence is complete: both source reviewers return GO
 and the full cold 68-file / 67-control gate passes. See the
 [September 22 receipt](../security/adversarial-review/findings/easycrypt-bounded-game-2026-09-22/README.md)
 for the exact reviewed source and unchanged remaining research boundary.
+
+
+## 2026-09-22 implementation: bounded member-aware WOTS reduction
+
+Active surface: the failure-rejecting WOTS probability reduction, isolated on
+`feat/easycrypt-bounded-ma-20260922` from master `8f739990`. The three bounded
+slices prove the accepted-transcript invariant, preserve it through the
+member-aware collision split, and enroll the new root with pins/source binding
+and three proof controls. The existing fail-stop experiment contract is used;
+there is no firmware, API, parameter or persistent-state change.
+
+`C10BoundedMA.bounded_interactive_D1_MA` bounds the exact `BoundedGame(A)` win
+probability by the existing WOTS-TW and member-aware S-TCR challenge probabilities.
+It has **no N2 premise and no grind-failure summand**. A prefix hit witnesses
+counter reachability; exhausted queries append nothing, so every recorded query
+is good. The coupling retains the good-transcript event on successful bounded
+runs. The collision split carries that event into `GAME1_INT`, where the
+existing `interactive_hop2_charged` restricted-event lemma can consume it. The
+collision half is bounded by `interactive_hop1_reduce_MA`. This does not assume
+an independent random hash or assert that exhaustion is impossible.
+
+The target cap, address separation, encoder bridge, member-aware collection
+separation, private oracle globals and explicit adversary termination remain
+part of the statement. The right-hand challenge reductions are still the total
+reductions and may enumerate all u32 counters. This batch supplies no useful
+resource bound or numerical estimate for either challenge. It closes N2 only
+for this bounded WOTS experiment, not the old total games or the whole hypertree.
+
+Focused direct compilation and CLI iteration check the new root; the positive
+control applies the exact final theorem. Two negative controls must fail at
+proof obligations when the initial good history is dropped or a failed-query
+record is appended. There are 69 files / 57 roots / 1,347 declaration pins /
+1,216 statements / 70 controls. The raw assumption/module census is unchanged
+at 1,730 rows; no new project axiom or admit is introduced.
+
+The closed Phase-D checklist is focused checks and inventory; clean frozen
+source; full cold two-driver split gate and all controls, in parallel with one
+bounded Astra/Opus source review under standing owner substitutions; blocker
+remediation and material re-review; authorized master landing; compact receipts
+and #100/#295 handoff. No additional review campaign is part of this batch.
+
+Next research is a bounded hypertree game/coupling with the required collection
+separation and termination facts, followed by shared-hash/adaptive-history,
+FORS truncated-R and numerical resource accounting. #100 and #295 remain open;
+#509 remains deferred owner-triggered combined assurance. The model is manually
+linked to Rust, and this result grants no production or hardware authority.

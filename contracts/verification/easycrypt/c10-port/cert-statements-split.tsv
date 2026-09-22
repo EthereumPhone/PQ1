@@ -1441,3 +1441,13 @@ cdrafts-split/C10BoundedGame.ec::bounded_win_le_total	250136fb518b77e5e3f2827a99
 cdrafts-split/C10BoundedGame.ec::total_bounded_main	db8dabb92ef3c3034b6579d096d15fe1
 cdrafts-split/C10BoundedGame.ec::total_bounded_query	841b66cf056b82b3357cf90dd7a025bc
 cdrafts-split/C10BoundedReduction.ec::bounded_interactive_D1	4e6faf22ae0fe16b0b44cc7ecb6628db
+
+# Bounded member-aware WOTS reduction (no universal N2).
+cdrafts-split/C10BoundedMA.ec::bounded_choose_good	c871ed7eebf48b9a5639dbd41be92c79
+cdrafts-split/C10BoundedMA.ec::bounded_choose_good_transcript	4c57344e98086e86a29eef400d91e9b9
+cdrafts-split/C10BoundedMA.ec::bounded_interactive_D1_MA	7f6a8ee52e2bfdc4c5564b0b5bc93654
+cdrafts-split/C10BoundedMA.ec::bounded_query_good_transcript	46ca5569a2a2b0a7461eef98765f4955
+cdrafts-split/C10BoundedMA.ec::bounded_win_le_total_good	64e6b937a7f326dc16ed4f3ce28b528b
+cdrafts-split/C10BoundedMA.ec::interactive_hop1_MA_good	4f93bc33b24265028fe6bc76db21aa24
+cdrafts-split/C10BoundedMA.ec::prefix_hit_no_grind_failure	3af9040f0f3b412c4a04fccb78f87b1a
+cdrafts-split/C10BoundedMA.ec::total_bounded_main_good	ee283041f80e136dde42dc8d07afed5f
