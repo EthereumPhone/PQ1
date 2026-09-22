@@ -121,9 +121,9 @@ pins, 1,208 statements and 67 controls. The new controls preserve the guarded
 comparison and absorbing-failure contract, and reject dropping the guard or
 clearing the failure flag. The earlier encoder/abort replay and review remain
 recorded in the [September 21 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md).
-The bounded-game batch requires a fresh full replay and bounded source review;
-the [owner plan](../../../../docs/verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-22-implementation-bounded-wots-game-probability-bridge)
-records its completion boundary.
+The bounded-game batch passes its full replay and bounded Astra/Opus source
+review; the [September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-game-2026-09-22/README.md)
+records the exact source, interrupted run, completed evidence and remaining boundaries.
 
 * **`c <= p_tgts` is a reduction-side TARGET CAP — not a bound on how many messages a key
   may sign.** This is worth spelling out because the tree records mistaking it for a query

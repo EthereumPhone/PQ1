@@ -1,0 +1,28 @@
+You are one independent reviewer in an owner-authorized defensive formal-verification review. Do not launch agents or other models.
+
+Review PQSigner_OS for Phase D source merge.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-target
+Commit: 2c9be6fc596f498946d2789f126f13190422baa9
+Tree: c21fc1fd7d5612bcc12152d2a2f6317794170a36
+Compare: d947c04780a156853160bef32882b158518c90b7..2c9be6fc596f498946d2789f126f13190422baa9
+Focus only on EasyCrypt C10 bounded-signing game composition:
+1. Same-adversary game comparison across repeated adaptive signing and hash-oracle queries.
+2. Absorbing failure, no signature record after failure, and the guarded winning event.
+3. Explicit adversary termination and private-global restrictions.
+4. Correct composition with the existing interactive WOTS theorem and retention of all its premises.
+5. Exact proof-root/pin/census/control enrollment and source binding.
+6. Honest boundary between this WOTS comparison, conditional reduction, whole-scheme closure, and real shared-hash probability.
+
+Evidence already green: both new roots compile and pass CLI replay (zero diagnostics); a positive guarded-game/absorbing-failure control passes; removing the guard and clearing failure are rejected at the intended proof obligations. Ten split-contract regressions and the static 68-file/1339-pin/1208-statement gate pass. The raw assumption census is unchanged, with no new project axiom or admit. Existing Rust/Lean correspondence inputs are unchanged. The mandatory cold full two-driver replay and 67 controls are running separately; landing requires success.
+Non-goals: firmware or parameter changes, removal of the existing total-grind premise, numerical security claims, whole SPHINCS+C closure, shared-hash research, unrelated surfaces, process rewrites, or broad assurance campaigns.
+
+Inspect the exact diff and affected callers source-first for concrete correctness blockers. Keep the target immutable. Read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs or follow-up model turns. Ignore style and optional hardening. You have 15 minutes and 800 words.
+
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 2c9be6fc596f498946d2789f126f13190422baa9 / c21fc1fd7d5612bcc12152d2a2f6317794170a36
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+
+Use at most three findings. FIX requires a source anchor, mechanism, consequence and falsifiable evidence. If there are no findings, write FINDINGS: none.

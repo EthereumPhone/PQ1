@@ -1,0 +1,46 @@
+VERDICT: GO
+TARGET: 2c9be6fc596f498946d2789f126f13190422baa9 / c21fc1fd7d5612bcc12152d2a2f6317794170a36
+FINDINGS: none
+GAPS: I did not run the prover or the identity script myself (read-only). This GO relies on the stated green evidence and still depends on the separate cold two-driver replay and all 67 controls passing.
+
+I read the source against the six focus points; none produced a blocker.
+
+1. **Same adversary, repeated adaptive queries.**
+   - **The two games:** `bounded_win_le_total` (`C10BoundedGame.ec:100-115`) runs `BoundedGame(A)` against `M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default)`. Both sides use the same `A` and the same `&m`.
+   - **Adaptive `choose`:** `bounded_choose` uses EasyCrypt's standard up-to-failure rule. It covers any number of adaptive calls to both oracles, `O.query` and `OC.query`.
+   - **Signing oracle:** `total_bounded_query` makes the bounded and total oracles agree until failure.
+   - **Hash oracle:** the hash-oracle step compares identical code on both sides.
+   - **Main game:** `total_bounded_main` splits on the failure flag and syncs the `forge` and `verify` calls in the no-failure branch.
+   - **Failure test uses the right address:** the search and the signer check the same `(ps, ad, m)`. `keygen` returns `sk.3 = WAddress.val wad` (`WOTS_TW_ES.ec:2522`), and `sign` searches for its counter at `sk.2, sk.3`.
+
+2. **Failure is absorbing, and failed runs cannot win.**
+   - `bounded_failed_query_stops` is a probability-1 contract on the real `O_Bounded.query` (`C10BoundedSigning.ec:127` skips the whole query body once failure is set). Failure stays set, the log `qs` is unchanged and the reply is the dummy value.
+   - The failing query itself never calls `Default.query`, so no signature is recorded.
+   - The win check `win /\ !O_Bounded.bad` (`C10BoundedSigning.ec:188`) reads the flag after `forge`. `forge` has no oracles and is barred from `O_Bounded`, so it cannot change the flag.
+
+3. **Termination and private globals.**
+   - Both new roots restrict the adversary from `O_Bounded`, `O_MEUFGCMA_WOTSC_Default` and `FC.O_THFC_Default`.
+   - `Search` and `WOTS_C_ES` hold no module state.
+   - Termination is an explicit premise for `choose` (given lossless oracles) and for `forge`.
+   - `interactive_D1` had no termination premise, so the new corollary covers only terminating adversaries. The docs say this.
+
+4. **Composition with `interactive_D1`.**
+   - `bounded_interactive_D1` keeps all five `interactive_D1` premises word for word: `c <= p_tgts`, `embdisj`, `encb`, `hN2` and `A_wf`. It also restricts the adversary to a superset of the original exclusions (adds `-O_Bounded`).
+   - The right-hand side matches exactly, and the proof is a plain `smt()` transitivity step.
+   - `hN2` does not make the result trivial: `signing_budget = 10^7` is less than 2^32 (`C10Counter.ec:57`), so failure can still happen under N2.
+
+5. **Enrollment.**
+   - Seven new statements are pinned; pins go 1332→1339 and statements 1201→1208.
+   - The control inventory has 67 rows, matching `EXPECT_CTLS=67`. The cone has 68 files, and the roots count rose by the same +2 as the closure file.
+   - No new ops, modules or axioms, so leaving the baseline unchanged is consistent. `O_Bounded`, `BoundedGame` and `O_MEUFGCMA_WOTSC_Default` are already pinned.
+   - I recomputed the source-binding SHA-256s for `C10BoundedGame.ec`, `C10BoundedReduction.ec` and `check_source_binding.py`; all three match the manifest.
+   - **NoGuard control:** the only obligation that cannot close is the guard-removing post implication, so its "cannot close goals" reason points at the intended step.
+   - **ResetFailure control:** it can only fail at the final `by auto`, which again matches its declared reason.
+
+6. **Claim boundary.**
+   - The README, `FV_SURFACE_MAP` and the feasibility note all say:
+     - runs that hit failure count as losses;
+     - N2 and collection-tweak well-formedness are kept, not proved;
+     - `A_wf` is the WOTS-level condition, not the member-aware one the hypertree reduction needs;
+     - there is no whole-scheme, real-SHA-256 or numerical claim.
+   - That matches what the source proves.

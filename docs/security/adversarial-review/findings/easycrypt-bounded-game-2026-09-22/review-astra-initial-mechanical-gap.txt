@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 2c9be6fc596f498946d2789f126f13190422baa9 / c21fc1fd7d5612bcc12152d2a2f6317794170a36
+FINDINGS: none
+GAPS: Source review blocked: both read-only command attempts failed before execution with “bwrap: No permissions to create new namespace.” Target identity, diff, and callers remain unverified; rerun with working read-only access. Mandatory cold replay and 67 controls also remain pending.

@@ -4671,3 +4671,8 @@ shared-hash/adaptive-history process, FORS truncated-R reuse, and numerical
 resources. #100 and #295 remain open. #509 remains the deferred owner-triggered
 combined assurance pass. No hardware, shipment, or irreversible action is
 licensed by this source-proof batch.
+
+The bounded-game Phase D evidence is complete: both source reviewers return GO
+and the full cold 68-file / 67-control gate passes. See the
+[September 22 receipt](../security/adversarial-review/findings/easycrypt-bounded-game-2026-09-22/README.md)
+for the exact reviewed source and unchanged remaining research boundary.
