@@ -73,7 +73,15 @@ class FakeTransport:
             return runner.STATUS_OK, healthy_rgb_response()
         if cmd == runner.CMD_PRODTEST_RGB_OSD:
             return runner.STATUS_OK, osd_response()
+        if cmd == runner.CMD_PRODTEST_RNG_CONFIG:
+            return runner.STATUS_OK, rng_config_response()
         raise AssertionError(f"unexpected command {cmd}")
+
+
+def rng_config_response(cr=0x80F00D04, nscr=0x00017CBB, htcr=0x0000A2B0,
+                        ver=0x41, idcode=0x10016482) -> bytes:
+    """A unit in E11's certified configuration on certified silicon."""
+    return struct.pack("<5I", cr, nscr, htcr, ver, idcode)
 
 
 def osd_bitmap(channels: tuple[int, ...]) -> bytes:
@@ -163,7 +171,7 @@ class ReversibleProfileTests(unittest.TestCase):
         return report
 
     def test_profile_matrix_covers_exact_stable_command_set(self) -> None:
-        self.assertEqual(set(runner.COMMAND_POLICIES), set(range(100, 112)))
+        self.assertEqual(set(runner.COMMAND_POLICIES), set(range(100, 113)))
         unsupported = {
             cmd
             for cmd, (_, policy) in runner.COMMAND_POLICIES.items()
@@ -178,7 +186,7 @@ class ReversibleProfileTests(unittest.TestCase):
         )
         receipt = runner.profile_receipt()
         self.assertEqual(receipt["max_response_data_len"], 254)
-        self.assertEqual(receipt["expected_firmware_version"], 4)
+        self.assertEqual(receipt["expected_firmware_version"], 5)
         self.assertEqual(
             receipt["feature_list_authority"],
             "host_expected_not_device_attested",
@@ -565,6 +573,55 @@ class ProfileV2Tests(unittest.TestCase):
         r = runner.test_rgb_test(tx)
         self.assertFalse(r.passed)
         self.assertIn("no RGB driver", r.detail)
+
+
+
+
+class RngConfigTests(unittest.TestCase):
+    """E11's configuration is only evidence if a deviation actually fails."""
+
+    def run_one(self, **kw):
+        tx = FakeTransport({runner.CMD_PRODTEST_RNG_CONFIG:
+                            (runner.STATUS_OK, rng_config_response(**kw))})
+        return runner.test_rng_config(tx)
+
+    def test_certified_configuration_passes(self) -> None:
+        r = self.run_one()
+        self.assertTrue(r.passed, r.detail)
+        self.assertIn("VER=0x41", r.detail)
+
+    def test_configlock_clear_fails_and_says_so(self) -> None:
+        # The exact state before 21aace81: right config, not frozen.
+        r = self.run_one(cr=0x00F00D04)
+        self.assertFalse(r.passed)
+        self.assertIn("CONFIGLOCK NOT set", r.detail)
+
+    def test_the_old_wrong_htcr_fails(self) -> None:
+        # 0xAAC7 shipped for months; it is not one of E11's two values.
+        r = self.run_one(htcr=0x0000AAC7)
+        self.assertFalse(r.passed)
+        self.assertIn("not one of E11", r.detail)
+
+    def test_both_permitted_htcr_values_pass(self) -> None:
+        for htcr in (0x00006E9C, 0x0000A2B0):
+            self.assertTrue(self.run_one(htcr=htcr).passed, f"{htcr:#x}")
+
+    def test_unwritten_nscr_fails(self) -> None:
+        r = self.run_one(nscr=0x00000000)
+        self.assertFalse(r.passed)
+        self.assertIn("NSCR", r.detail)
+
+    def test_uncertified_silicon_revision_fails(self) -> None:
+        # E11 covers revision B and later only; anything else is out of scope
+        # of the certificate even with a perfect configuration.
+        r = self.run_one(ver=0x40)
+        self.assertFalse(r.passed)
+        self.assertIn("revision B and later", r.detail)
+
+    def test_wrong_part_fails(self) -> None:
+        r = self.run_one(idcode=0x10016483)
+        self.assertFalse(r.passed)
+        self.assertIn("not U575/U585", r.detail)
 
 
 if __name__ == "__main__":

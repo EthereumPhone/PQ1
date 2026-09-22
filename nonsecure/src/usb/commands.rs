@@ -337,6 +337,8 @@ impl CommandRouter {
             INS_V2_PRODTEST_RGB_TEST => return self.cmd_prodtest_rgb_test(data),
             #[cfg(feature = "prodtest")]
             INS_V2_PRODTEST_RGB_OSD => return self.cmd_prodtest_rgb_osd(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_RNG_CONFIG => return self.cmd_prodtest_rng_config(),
 
             _ => {}
         }
@@ -1145,6 +1147,14 @@ impl CommandRouter {
         let status = nsc_api::prodtest_rgb_test(&req, &mut out);
         RESP_BUF[..PRODTEST_RGB_OUT_LEN].copy_from_slice(&out);
         self.prodtest_finalize(PRODTEST_RGB_OUT_LEN, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_rng_config(&self) -> Response {
+        let mut out = [0u8; PRODTEST_RNG_CONFIG_LEN];
+        let status = nsc_api::prodtest_rng_config(&mut out);
+        RESP_BUF[..PRODTEST_RNG_CONFIG_LEN].copy_from_slice(&out);
+        self.prodtest_finalize(PRODTEST_RNG_CONFIG_LEN, status)
     }
 
     #[cfg(feature = "prodtest")]

@@ -1655,6 +1655,8 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         sphincs_tz_shared::CMD_PRODTEST_RGB_TEST => prodtest::cmd_rgb_test_run(args),
         #[cfg(feature = "prodtest")]
         sphincs_tz_shared::CMD_PRODTEST_RGB_OSD => prodtest::cmd_rgb_osd_run(args),
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_RNG_CONFIG => prodtest::cmd_rng_config_run(args),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -1997,6 +1999,20 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr:
     };
     let r = unsafe { prodtest::cmd_rgb_test_run(&args) };
     secure_log!("[NSC] prodtest_rgb_test -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_RNG_CONFIG (112) — TRNG certified-configuration receipt.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rng_config(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_rng_config_run(&args) };
+    secure_log!("[NSC] prodtest_rng_config -> {}", r);
     r
 }
 

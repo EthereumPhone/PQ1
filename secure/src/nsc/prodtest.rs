@@ -22,8 +22,8 @@
 //!   user secrets leave the chip via these commands.
 //!
 //! - **Supported profile**: GET_ID, DISPLAY_PATTERN, SAES, TRNG, the
-//!   two SE handshakes, USB loopback, buttons, and (on `pq1`) the RGB
-//!   LED test are required. BHK and FLASH_RW remain explicit
+//!   two SE handshakes, USB loopback, buttons, the TRNG certified-config
+//!   receipt, and (on `pq1`) the RGB LED test are required. BHK and FLASH_RW remain explicit
 //!   unsupported-capability probes; they return `InternalError` and
 //!   never mutate persistent state.
 
@@ -41,7 +41,7 @@ use super::GatewayArgs;
 /// Prodtest firmware version. Bumped on every prodtest behavioral
 /// change so the factory's traceability DB can correlate per-unit
 /// diagnostic data with the firmware version that produced it.
-const PRODTEST_FW_VERSION: u32 = 4;
+const PRODTEST_FW_VERSION: u32 = 5;
 
 /// STM32U585 chip UID, 96 bits at `0x0BFA_0700` per RM0456 §28.10.
 const STM32_UID_ADDR: u32 = 0x0BFA_0700;
@@ -902,6 +902,65 @@ fn rgb_osd_fill(req: &[u8; RGB_OSD_IN_LEN], out: &mut [u8; RGB_OSD_OUT_LEN]) -> 
 #[cfg(not(all(feature = "stm32u585", feature = "board-pq1")))]
 fn rgb_osd_fill(_req: &[u8; RGB_OSD_IN_LEN], _out: &mut [u8; RGB_OSD_OUT_LEN]) -> bool {
     false
+}
+
+// ---------------------------------------------------------------------------
+// CMD_PRODTEST_RNG_CONFIG (112) — TRNG certified-configuration receipt
+// ---------------------------------------------------------------------------
+//
+// Reads back the three RNG configuration registers plus two identity values.
+// It asserts nothing on-device: the raw words always reach the host so a
+// failing unit still produces a receipt saying WHAT was wrong, the same
+// reasoning as the RGB command.
+//
+// The version register is not in RM0456's RNG register map (which documents
+// 0x000..0x010 only); ESV certificate E11 names it as the place revision B is
+// identified by the value 0x41, and ST's IP-version registers conventionally
+// sit at offset 0x3F4.
+
+const RNG_CONFIG_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_RNG_CONFIG_LEN;
+const _: () = assert!(RNG_CONFIG_OUT_LEN == 20, "5 u32 words");
+
+/// # Safety
+/// CMSE non-secure-entry handler — NS pointer deref only after
+/// `validate_ns_write_ptr`. Reads five MMIO words; no writes, no secrets.
+pub(super) unsafe fn cmd_rng_config_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_write_ptr(args.arg1, RNG_CONFIG_OUT_LEN) {
+        return NscStatus::InvalidPointer as u32;
+    }
+    let mut out = [0u8; RNG_CONFIG_OUT_LEN];
+
+    #[cfg(feature = "stm32u585")]
+    {
+        const RNG_BASE: u32 = 0x520C_0800;
+        const DBGMCU_IDCODE: u32 = 0xE004_4000;
+        // SAFETY: RNG_BASE is the secure-alias RNG peripheral from RM0456's
+        // memory map (0x520C_0800, 1 KB window) and DBGMCU_IDCODE is the
+        // documented debug identity register. All five are plain reads.
+        let words = unsafe {
+            [
+                core::ptr::read_volatile((RNG_BASE + 0x00) as *const u32), // CR
+                core::ptr::read_volatile((RNG_BASE + 0x0C) as *const u32), // NSCR
+                core::ptr::read_volatile((RNG_BASE + 0x10) as *const u32), // HTCR
+                core::ptr::read_volatile((RNG_BASE + 0x3F4) as *const u32), // VERR
+                core::ptr::read_volatile(DBGMCU_IDCODE as *const u32),
+            ]
+        };
+        for (i, w) in words.iter().enumerate() {
+            out[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        secure_log!(
+            "[PRODTEST] rng_config: CR=0x{:08x} NSCR=0x{:08x} HTCR=0x{:08x} VER=0x{:08x} ID=0x{:08x}",
+            words[0], words[1], words[2], words[3], words[4]
+        );
+    }
+
+    let out_ptr = args.arg1 as *mut u8;
+    for (i, b) in out.iter().enumerate() {
+        // SAFETY: arg1 was validated for RNG_CONFIG_OUT_LEN bytes above.
+        unsafe { core::ptr::write_volatile(out_ptr.add(i), *b) };
+    }
+    NscStatus::Ok as u32
 }
 
 // ---------------------------------------------------------------------------

@@ -842,6 +842,35 @@ pub const PRODTEST_RGB_OUT_LEN: usize = 24;
 /// good*: the pass/fail over channels is the host's call from the bitmaps.
 pub const CMD_PRODTEST_RGB_OSD: u32 = 111;
 
+/// CMD_PRODTEST_RNG_CONFIG — prove this unit's TRNG is in the certified
+/// configuration, and that its silicon is the certified revision.
+///
+/// NIST ESV certificate **E11** (validated 2022-12-16) covers the entropy
+/// source "implemented in the STM32U575x / STM32U585x family of
+/// microcontrollers of **revision B and Later**", identified by reading
+/// **0x41** from the RNG version register. E11 Table 2 fixes the configuration:
+/// `RNG_CR = 0x80F00DXX` (bit 31 CONFIGLOCK set, low byte application
+/// dependent), `RNG_NSCR = 0x17CBB`, `RNG_HTCR = 0x06E9C` or `0x0A2B0`.
+///
+/// Neither half is checkable from outside the device, and both are per-unit
+/// facts: silicon revision varies by batch, and a configuration write can be
+/// silently ignored. A fixture that records this per unit turns "we set the
+/// certified values in firmware" into evidence for the unit in hand.
+///   in_ptr  → ignored
+///   out_ptr → 20 bytes, all little-endian u32:
+///     `[0..4]`   RNG_CR      (expect 0x80F00D04: config + RNGEN + CONFIGLOCK)
+///     `[4..8]`   RNG_NSCR    (expect 0x00017CBB)
+///     `[8..12]`  RNG_HTCR    (expect 0x0000A2B0)
+///     `[12..16]` RNG version register (expect 0x41 for revision B and later)
+///     `[16..20]` DBGMCU_IDCODE (DEV_ID low 12 bits = 0x482 for U575/U585;
+///                REV_ID in the top 16 — the independent revision witness)
+/// Returns `NscStatus::Ok` once the reads complete; the host decides pass/fail
+/// so the raw values always reach the receipt.
+pub const CMD_PRODTEST_RNG_CONFIG: u32 = 112;
+
+/// Byte count of the [`CMD_PRODTEST_RNG_CONFIG`] response.
+pub const PRODTEST_RNG_CONFIG_LEN: usize = 20;
+
 pub const PRODTEST_RGB_OSD_IN_LEN: usize = 4;
 pub const PRODTEST_RGB_OSD_OUT_LEN: usize = 24;
 
@@ -1004,6 +1033,7 @@ pub const INS_V2_PRODTEST_USB_LOOPBACK: u8 = 0x88;
 pub const INS_V2_PRODTEST_BUTTON_TEST: u8 = 0x89;
 pub const INS_V2_PRODTEST_RGB_TEST: u8 = 0x8A;
 pub const INS_V2_PRODTEST_RGB_OSD: u8 = 0x8B;
+pub const INS_V2_PRODTEST_RNG_CONFIG: u8 = 0x8C;
 
 // -- Continuation --
 pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
@@ -2107,6 +2137,7 @@ mod tests {
             (CMD_PRODTEST_BUTTON_TEST, INS_V2_PRODTEST_BUTTON_TEST),
             (CMD_PRODTEST_RGB_TEST, INS_V2_PRODTEST_RGB_TEST),
             (CMD_PRODTEST_RGB_OSD, INS_V2_PRODTEST_RGB_OSD),
+            (CMD_PRODTEST_RNG_CONFIG, INS_V2_PRODTEST_RNG_CONFIG),
         ];
         for (cmd, ins) in pairs {
             assert_eq!(

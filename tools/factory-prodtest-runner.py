@@ -75,11 +75,12 @@ CMD_PRODTEST_USB_LOOPBACK = 108
 CMD_PRODTEST_BUTTON_TEST = 109
 CMD_PRODTEST_RGB_TEST = 110
 CMD_PRODTEST_RGB_OSD = 111
+CMD_PRODTEST_RNG_CONFIG = 112
 
 # Shared wire contract. Mirrors
 # `proto/src/lib.rs::PRODTEST_MAX_RESPONSE_DATA_LEN`.
 PRODTEST_MAX_RESPONSE_DATA_LEN = 254
-EXPECTED_PRODTEST_FW_VERSION = 4
+EXPECTED_PRODTEST_FW_VERSION = 5
 
 # Acceptance-profile identity. Board-scoped and versioned, because the matrix
 # below is not board-neutral: v2 REQUIRES the two AW21036 RGB commands, which
@@ -121,6 +122,9 @@ COMMAND_POLICIES = {
     # dead LED by channel, needs no camera, and cannot pass vacuously.
     CMD_PRODTEST_RGB_TEST: ("RGB_TEST", PROFILE_REQUIRED),
     CMD_PRODTEST_RGB_OSD: ("RGB_OSD", PROFILE_REQUIRED),
+    # Board-independent: every STM32U585 unit must be in the ESV-certified TRNG
+    # configuration, and must BE the certified silicon revision.
+    CMD_PRODTEST_RNG_CONFIG: ("RNG_CONFIG", PROFILE_REQUIRED),
 }
 
 
@@ -180,6 +184,7 @@ INS_FOR_CMD = {
     CMD_PRODTEST_BUTTON_TEST:       0x89,
     CMD_PRODTEST_RGB_TEST:          0x8A,
     CMD_PRODTEST_RGB_OSD:           0x8B,
+    CMD_PRODTEST_RNG_CONFIG:        0x8C,
 }
 
 # APDU + HID framing constants. Mirror `proto/src/lib.rs::APDU_CLA_V2`
@@ -1056,6 +1061,66 @@ def test_rgb_osd(tx: ProdtestTransport, gcc: int = 0, en: int = 1) -> TestResult
     )
 
 
+# CMD_PRODTEST_RNG_CONFIG — NIST ESV certificate E11 (STM32U575x/U585x,
+# validated 2022-12-16). Table 2 fixes the configuration; the certificate covers
+# "revision B and Later" silicon, identified by 0x41 in the RNG version register.
+RNG_CONFIG_LEN = 20
+RNG_CR_EXPECTED = 0x80F00D04      # config + RNGEN (bit 2) + CONFIGLOCK (bit 31)
+RNG_NSCR_EXPECTED = 0x00017CBB
+RNG_HTCR_ALLOWED = (0x00006E9C, 0x0000A2B0)   # alpha = 2^-20 or 2^-30
+RNG_VER_EXPECTED = 0x41
+DEV_ID_U575_U585 = 0x482
+
+
+def test_rng_config(tx: ProdtestTransport) -> TestResult:
+    """Per-unit evidence that the TRNG is in the ESV-certified configuration.
+
+    Neither half is visible from outside the device and both are per-unit
+    facts: silicon revision varies by batch, and a configuration write can be
+    silently ignored (RNG_HTCR and RNG_NSCR are only honoured while CONDRST=1,
+    and are frozen entirely once CONFIGLOCK is set).
+    """
+    status, resp = tx.send_cmd(CMD_PRODTEST_RNG_CONFIG, b"", out_size=RNG_CONFIG_LEN)
+    if len(resp) != RNG_CONFIG_LEN:
+        return TestResult(
+            name="RNG_CONFIG",
+            cmd=CMD_PRODTEST_RNG_CONFIG,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes (expected {RNG_CONFIG_LEN})",
+        )
+    cr, nscr, htcr, ver, idcode = struct.unpack("<5I", resp)
+    dev_id, rev_id = idcode & 0xFFF, (idcode >> 16) & 0xFFFF
+    parts, bad = [], []
+    parts.append(f"CR=0x{cr:08x}")
+    if cr != RNG_CR_EXPECTED:
+        bad.append(f"CR 0x{cr:08x} != 0x{RNG_CR_EXPECTED:08x}"
+                   + ("" if cr & (1 << 31) else " (CONFIGLOCK NOT set)"))
+    parts.append(f"NSCR=0x{nscr:05x}")
+    if nscr != RNG_NSCR_EXPECTED:
+        bad.append(f"NSCR 0x{nscr:x} != 0x{RNG_NSCR_EXPECTED:x}")
+    parts.append(f"HTCR=0x{htcr:04x}")
+    if htcr not in RNG_HTCR_ALLOWED:
+        bad.append(f"HTCR 0x{htcr:x} is not one of E11's permitted values")
+    parts.append(f"VER=0x{ver:02x}")
+    if ver != RNG_VER_EXPECTED:
+        bad.append(f"RNG version 0x{ver:x} != 0x{RNG_VER_EXPECTED:x}"
+                   " — E11 covers revision B and later only")
+    parts.append(f"DEV_ID=0x{dev_id:03x} REV_ID=0x{rev_id:04x}")
+    if dev_id != DEV_ID_U575_U585:
+        bad.append(f"DEV_ID 0x{dev_id:03x} is not U575/U585 (0x482)")
+    if bad:
+        parts.append("NOT CERTIFIED-CONFIG: " + "; ".join(bad))
+    return TestResult(
+        name="RNG_CONFIG",
+        cmd=CMD_PRODTEST_RNG_CONFIG,
+        passed=(status == STATUS_OK and not bad),
+        status_code=status,
+        detail=", ".join(parts),
+        raw_response=resp,
+    )
+
+
 def test_trng_sample(
     tx: ProdtestTransport, n: int = PRODTEST_MAX_RESPONSE_DATA_LEN
 ) -> TestResult:
@@ -1138,6 +1203,7 @@ def run_all_tests(tx: ProdtestTransport, report: UnitReport) -> None:
     # Machine-checkable dead-LED detection — names the failing channel, so it
     # does not depend on the operator noticing a wrong colour.
     report.results.append(test_rgb_osd(tx))
+    report.results.append(test_rng_config(tx))
     report.results.append(test_button_test(tx))
 
 
