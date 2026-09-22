@@ -43,6 +43,32 @@ There is no legitimate NSC call that returns the seed, the mnemonic, the SPHINCS
 
 ---
 
+### 2.4 Trusted-display consent gate
+
+Two consent policies coexist, by path, since 2026-09-22:
+
+| Path | Hold-right-to-sign is armed… | Since |
+|---|---|---|
+| Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
+| Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`, pilot = Safe flow) | on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) and the returning ask; **never on a detail** | owner decision 2026-09-22, following PQ-UI `DESIGN.md` § Input "Commit arming" |
+
+The pixel path intentionally re-opens the class the 2026-06-26 fix closed for
+that path only: a user can sign from the opening ask without paging through
+the details. Mitigations the design supplies: declining is armed on every
+screen (hold-left), the `Confirm?` early exit sits after five detail screens,
+the returning ask is the demo's canonical hold point, and every value the
+legacy pages showed is present in the transcript (host fact differential in
+`safe_screens_render_pure_tests.rs`). The arming flag is a `FihBool`
+re-derived from the record's `commit` byte (double read) on every screen
+change; the `OK_SENTINEL` is minted at exactly one site.
+
+**Revert switch:** `secure/src/ui/px/confirm_px.rs::PX_COMMIT_REQUIRES_SEEN_LAST = true`
+restores scroll-to-end semantics on the pixel path (hold-right on the asks is
+a no-op until the returning ask has been displayed); the loop maintains
+`seen_last` either way so no other change is needed. Do not re-litigate the
+owner decision without new evidence; record any change here and in
+`CLAUDE.md` Pre-Production Caveats.
+
 ## 3. SE050 Configuration
 
 ### 3.1 Authentication Object
