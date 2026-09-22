@@ -167,6 +167,18 @@ pub mod erc8213;
 #[allow(dead_code)]
 pub mod safe_display;
 
+// `safe_screens` — the pixel-UI painter over `safe_display::classify`. Host-
+// mounted unconditionally (the firmware gates it behind `ui-px`) so the
+// legacy-vs-screens fact differential and the per-scenario screen goldens run
+// on every `cargo test`.
+#[path = "../tx/display/safe_screens.rs"]
+#[allow(dead_code)]
+pub mod safe_screens;
+
+#[path = "../tx/display/px_lift.rs"]
+#[allow(dead_code)]
+pub mod px_lift;
+
 // `safe_mgmt` IS re-mounted: it has no unused helpers in the host-test
 // configuration, and its per-op renderers are pure-display logic that
 // should be host-asserted against expected page rows.
@@ -199,6 +211,9 @@ mod cowswap_render_pure_tests;
 
 #[cfg(test)]
 mod safe_display_render_pure_tests;
+
+#[cfg(test)]
+mod safe_screens_render_pure_tests;
 
 #[cfg(test)]
 mod wysiwys_dispatch_differential_tests;

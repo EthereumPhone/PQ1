@@ -42,6 +42,15 @@ mod offchain_sync;
 pub(super) mod primitives;
 #[cfg(not(test))]
 mod safe_display;
+/// Pixel-UI screen emitter for the Safe flow (`ui-px`): the second painter
+/// over `safe_display::classify`.
+#[cfg(feature = "ui-px")]
+mod safe_screens;
+/// The legacy-pages → screens lift and its transcript proof (`ui-px`).
+#[cfg(feature = "ui-px")]
+pub mod px_lift;
+#[cfg(feature = "ui-px")]
+pub(crate) use dispatch::safe_route_meta;
 #[cfg(not(test))]
 mod safe_mgmt;
 mod slot_rotation;
