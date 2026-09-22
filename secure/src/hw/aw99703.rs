@@ -219,6 +219,14 @@ pub fn pre_init_snapshot() -> (bool, u8, u8) {
 /// (the LCD driver does that) — HWEN low resets every register and disables
 /// the I2C interface. Returns `true` if the chip ACKed every write.
 pub fn init() -> bool {
+    // #705, settled by experiment 2026-09-22: the panel is DARK until this
+    // function runs. A dev build that stalled 5 s here showed a blank screen
+    // for exactly that window, then light — so the backlight is off until the
+    // I2C write moves the AW99703 out of Standby (MODE.WORKMODE defaults to
+    // 00). Any stage running earlier — notably the FSBL, which has no I2C —
+    // therefore renders onto a dark panel. The delay has been removed; do not
+    // re-add it to a shipping path.
+
     // SAFETY: the secure-alias RCC AHB2ENR1; `gpio_rcc_bit` maps the port to
     // its own enable bit, so this RMW touches no other driver's bit.
     let enr = unsafe { Reg32::new(board::RCC_S + board::RCC_AHB2ENR1_OFF) };
