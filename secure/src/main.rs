@@ -967,6 +967,139 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
     }
 }
 
+/// `se-lcd-diag`: step through every secure-element dependency of the
+/// first-boot wizard and show each result on the LCD, for a board with no
+/// debug probe. Each step is shown for ~3 s; afterwards the summary cycles
+/// forever. Terminal by design — the wizard is never reached.
+#[cfg(all(feature = "se-lcd-diag", feature = "dual-se", feature = "stm32u585"))]
+fn se_lcd_diag() -> ! {
+    use core::fmt::Write;
+    struct Line {
+        buf: [u8; ui::DISPLAY_COLS],
+        len: usize,
+    }
+    impl Line {
+        const fn new() -> Self {
+            Self { buf: [b' '; ui::DISPLAY_COLS], len: 0 }
+        }
+        fn as_str(&self) -> &str {
+            core::str::from_utf8(&self.buf[..self.len]).unwrap_or("?")
+        }
+    }
+    impl Write for Line {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            for &b in s.as_bytes() {
+                if self.len >= self.buf.len() {
+                    break;
+                }
+                self.buf[self.len] = if b.is_ascii_graphic() || b == b' ' { b } else { b'?' };
+                self.len += 1;
+            }
+            Ok(())
+        }
+    }
+    fn pause() {
+        cortex_m::asm::delay(480_000_000); // ~3 s at 160 MHz
+    }
+    fn show(step: &str, res: &Line) {
+        ui::show_status(step, res.as_str());
+        pause();
+    }
+    fn fmt_res<E: core::fmt::Debug>(r: &Result<(), E>) -> Line {
+        let mut l = Line::new();
+        match r {
+            Ok(()) => {
+                let _ = l.write_str("OK");
+            }
+            Err(e) => {
+                let _ = write!(l, "E:{:?}", e);
+            }
+        }
+        l
+    }
+
+    const N: usize = 8;
+    let names: [&str; N] = [
+        "1 TRNG",
+        "2 SE050 init",
+        "3 SE050 rand",
+        "4 OPT init",
+        "5 OPT pair",
+        "6 OPT shield",
+        "7 OPT rand",
+        "8 rng_strong",
+    ];
+    let mut res: [Line; N] = [
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+    ];
+
+    ui::show_status("SE DIAG", "starting");
+    pause();
+
+    // 1. platform TRNG
+    {
+        let mut b = [0u8; 32];
+        let r = rng::fill(&mut b);
+        let nz = b.iter().any(|&x| x != 0);
+        let mut l = Line::new();
+        let _ = match (r, nz) {
+            (Ok(()), true) => l.write_str("OK"),
+            (Ok(()), false) => l.write_str("E:all-zero"),
+            (Err(()), _) => l.write_str("E:fill"),
+        };
+        res[0] = l;
+        show(names[0], &res[0]);
+    }
+    // SAFETY: single-threaded boot; nothing else touches `SE` before the
+    // terminal loop below, and this function never returns.
+    let se = unsafe { &mut *core::ptr::addr_of_mut!(SE) };
+    // 2/3. SE050
+    res[1] = fmt_res(&se.se050.init());
+    show(names[1], &res[1]);
+    {
+        let mut b = [0u8; 16];
+        res[2] = fmt_res(&se.se050.random(&mut b));
+        show(names[2], &res[2]);
+    }
+    // 4..7. OPTIGA
+    res[3] = fmt_res(&se.optiga.init());
+    show(names[3], &res[3]);
+    res[4] = fmt_res(&se.optiga.pair_for_first_boot());
+    show(names[4], &res[4]);
+    res[5] = fmt_res(&se.optiga.ensure_shield());
+    show(names[5], &res[5]);
+    {
+        let mut b = [0u8; 16];
+        res[6] = fmt_res(&se.optiga.random(&mut b));
+        show(names[6], &res[6]);
+    }
+    // 8. the composite the wizard actually uses
+    {
+        let mut b = [0u8; 32];
+        res[7] = fmt_res(&rng_strong::fill(&mut b));
+        show(names[7], &res[7]);
+    }
+    // Summary, cycling forever: two steps per screen.
+    let mut i = 0usize;
+    loop {
+        let mut a = Line::new();
+        let mut b = Line::new();
+        let _ = write!(a, "{}:{}", &names[i][..1], res[i].as_str());
+        let j = (i + 1) % N;
+        let _ = write!(b, "{}:{}", &names[j][..1], res[j].as_str());
+        ui::show_status(a.as_str(), b.as_str());
+        pause();
+        i = (i + 2) % N;
+    }
+}
+
 #[cfg(not(test))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
@@ -998,6 +1131,10 @@ fn main() -> ! {
     unsafe {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
+        // `dev-dfu`: both buttons held at power-up → ROM USB-DFU bootloader.
+        // Deliberately the first thing after the clocks — see hw/dev_dfu.rs.
+        #[cfg(feature = "dev-dfu")]
+        hw::dev_dfu::check_and_enter();
         // Bring the debug USART up immediately after the clock tree, so every
         // `secure_log!` from here on reaches the wire. It MUST be after
         // `rcc::init` — `hw::uart::init` programs `board::CONSOLE_BRR`, which
@@ -1432,6 +1569,10 @@ fn main() -> ! {
     first_boot::run_pre_lock_and_maybe_lock();
 
     ui::splash();
+
+    // Probe-less SE diagnostic on the LCD (feature `se-lcd-diag`). Terminal.
+    #[cfg(all(feature = "se-lcd-diag", feature = "dual-se", feature = "stm32u585"))]
+    se_lcd_diag();
 
     // Start SysTick early on real hardware so measured_boot can use
     // timeout::now() for its 4-second auto-dismiss timer. On QEMU the

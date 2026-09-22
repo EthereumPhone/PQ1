@@ -163,6 +163,23 @@ lab/MP units, the pads stay) are the recovery path for a unit that fails
 mid-flash, since a partially-programmed device no longer auto-enters the
 bootloader.
 
+> **CORRECTION 2026-09-21 — there is no empty-check on the STM32U5, and the
+> sideband IS the ODM's flashing path.** AN2606 Rev 70 Table 2 assigns the
+> U575/585 to activation **Pattern 12**, whose clauses are only BOOT0(pin) /
+> nSWBOOT0 / nBOOT0 / NSBOOTADD / SECBOOTADD / RSSCMD combinations — no
+> "main flash memory empty" term (that clause exists in Patterns 11/13/16 for
+> the G0/L4/… families). RM0456 Table 25: with BOOT0 low the chip boots at
+> NSBOOTADD0, factory default `0x0800_0000`; a blank U585 with BOOT0 low simply
+> executes erased flash. The ST moderator on community thread 74870 confirms
+> the omission is deliberate. KC (F(x)tec, 2026-09-18) confirmed how the IDH
+> flashed the test image: a custom USB-C cable shorting **A8 (SBU1) to A9
+> (VBUS)**, i.e. the `SBU → U111 → BOOT0` path on this schematic; without it the
+> port is power-only. A 24-pin male↔female pass-through breakout with A8
+> bridged to the adjacent VCC hole does the same (used on EVT #1, see the
+> 2026-09-18/21 updates below). The MP decision to strap BOOT0 to GND therefore
+> removes USB flashing entirely (jig/SWD only), it does not preserve a
+> first-flash path.
+
 **The trap that follows from this:** a unit that ALREADY carries firmware — for
 example the ODM's own factory test image — has non-blank flash, so empty-check
 does not fire. With `BOOT0` strapped low, *neither* entry path works and the
@@ -199,6 +216,61 @@ One security consequence survives regardless of mechanism: a cable or dongle
 that asserts the sideband can change how the device boots. That is a security
 property, not a convenience — but first-flash and recovery are designed around
 empty-check and the SWD pads, and must not silently depend on it.
+
+> **Day-to-day re-flashing of a sealed unit without the adapter** (both buttons
+> at power-up → software DFU entry, `tools/evt-dev-flash.sh`) is the runbook in
+> [`evt-dev-loop.md`](evt-dev-loop.md). The sections below are the underlying
+> findings.
+
+### UPDATE 2026-09-18 — flashing over USB-C with no probe (ROM DFU)
+
+The SBU→U111→BOOT0 circuit above is the ODM's "flash over USB-C" path: a cable
+with SBU pulled high forces BOOT0=1 and the STM32 ROM bootloader enumerates as
+USB DFU (`0483:df11`) on D+/D-, which the AW35602 passes through unconditionally.
+A laptop never drives SBU on a non-PD sink, so on the bench pull BOOT0 high by
+hand instead: **TP103 (or `J211` pin 3) → `J210` pin 1 (VTref, 3.3 V via 10R)**,
+held while USB-C is plugged in. BOOT0 is only sampled at reset, so the wire can
+come off once `lsusb -d 0483:df11` shows the bootloader. The 10K pull-down
+(R121) and the 5.1K back into the (discharged) U111 output leave the pin at
+~3.29 V. Then:
+
+```
+evt-images/build.sh                                   # BOARD=pq1 images → evt-images/<name>/{secure,nonsecure}.bin
+tools/flash-evt-dfu.sh evt-images/lcd-test --erase    # first flash over ODM test firmware
+tools/flash-evt-dfu.sh evt-images/dual-se-standalone  # full wallet image (see optiga-hw-counter caveat in the recipe)
+```
+
+The script writes `nonsecure.bin` @ `0x08100000`, `secure.bin` @ `0x08000000`
+(physical address of the `0x0C000000` secure alias) and programs the usual
+TZEN/SECWM/SECBOOTADD0 option bytes over DFU via `STM32_Programmer_CLI -c
+port=USB1`. If the board boots its old firmware with BOOT0 high, `nSWBOOT0` is 0
+and only SWD on `J210` can recover it. Requires `RDP` ≤ 1 (level 1 is regressed
+with a mass erase; level 2 is final).
+
+#### UPDATE 2026-09-21 — first DFU flash on silicon: what the bootloader can and cannot do
+
+Done on EVT #1 (die UID serial `2068316E3046`, ODM option bytes were factory
+defaults: RDP 0, TZEN 0, nSWBOOT0 1, no WRP). The ODM test image is backed up
+at `evt-images/odm-test-image-2MB.bin` (SHA-256
+`5316cc30…dcfc36`). Findings that bind the flash order:
+
+- **With TZEN=1 the U5 ROM bootloader runs non-secure.** DFU writes to the
+  secure bank are silently dropped and reads return zeros (the `0x0C000000`
+  alias is rejected outright: "Data read failed"), while the non-secure bank 2
+  reads and verifies fine. So a secure image **must be written with TZEN=0 and
+  TZEN enabled afterwards**; activation keeps flash contents (RM0456 §3.5.6).
+- `SECWM*`/`SECBOOTADD0` do not exist as option bytes until TZEN=1 has taken
+  effect (programmer: "does not exist"). After TZEN=1: SECWM1 = bank 1 all
+  secure and SECBOOTADD0 = `0x180000` by default, but **SECWM2 also defaults to
+  all secure** — write `SECWM2_PSTRT=0x7F SECWM2_PEND=0x0` in a second step.
+- Undoing TZEN over DFU: `-ob RDP=0xBB` then `-tzenreg` (the AN2606 "TrustZone
+  disable" special command, valid only at RDP=1 — at RDP=0 it prints "successfully"
+  and does nothing). Mass-erases. At RDP=1 the programmer's connect warns
+  "Fail to read NVM Size" but the special command still runs.
+- The bootloader wedges (reports DevID 0x0000) after a failed upload; a power
+  cycle with the SBU bridge in place recovers it.
+
+`tools/flash-evt-dfu.sh` now encodes this order.
 
 ### Bench SSD1306 OLED (`make oled-bench-hw BOARD=pq1`)
 

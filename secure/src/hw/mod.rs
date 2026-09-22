@@ -129,6 +129,11 @@ pub mod i2c2_probe;
 #[cfg(feature = "gpio-buttons")]
 pub mod buttons;
 
+/// Bench: both buttons held at power-up → re-enter the ROM USB-DFU
+/// bootloader by clearing nSWBOOT0/nBOOT0 (no probe, no SBU cable).
+#[cfg(all(feature = "dev-dfu", feature = "stm32u585"))]
+pub mod dev_dfu;
+
 /// NV3007 SPI LCD driver for the ZT165M017AT module (142×428 TFT,
 /// RGB565, 4-line SPI). Phase A: byte-level command/data primitives
 /// + the production init sequence + set_window + fill_color +
@@ -136,6 +141,11 @@ pub mod buttons;
 /// See module docs for pin mapping + bring-up plan.
 #[cfg(feature = "ui-lcd")]
 pub mod lcd_nv3007;
+
+/// AW99703 backlight boost driver on pq1 (I2C2 @0x36, bit-banged PB13/PB14).
+/// `LCM_EN` alone leaves the chip in Standby; this writes the mode register.
+#[cfg(all(feature = "stm32u585", feature = "ui-lcd", feature = "board-pq1"))]
+pub mod aw99703;
 
 /// Independent watchdog (IWDG) — USB-path hang detection. Behind the
 /// `iwdg` feature (which implies `stm32u585`); compiles to no-op stubs

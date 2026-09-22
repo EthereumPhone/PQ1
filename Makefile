@@ -2605,7 +2605,7 @@ RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-
 # forbidden set. Independent of the `mode-production` compile fences in
 # nsc/mod.rs: this also catches a release built as `stm32u585,…` WITHOUT
 # mode-production. `make release` depends on it; CI runs it as a fast gate.
-override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key \
+override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key se-lcd-diag dev-dfu \
                  ui-capture bhk-hardcoded-master-key uart-console \
                  boot-pulse sca-trigger erc7730-dev-unattested optiga-reset-oids \
                  erc7730-forced-blind \
