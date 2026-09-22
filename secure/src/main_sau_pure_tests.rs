@@ -1850,3 +1850,72 @@ fn negative_wipe_on_duress_arm_failure_is_not_swallowed() {
         "F26/LIFE-1: the silent wipe→decoy downgrade must not come back"
     );
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// #728 — both unlock loops must reset the inactivity timer, and
+// `enter_pin()` must still NOT (X17-UI3).
+// ═════════════════════════════════════════════════════════════════════
+
+#[test]
+fn negative_both_unlock_loops_reset_activity_before_prompting() {
+    // `enter_pin()` samples `is_idle()` BEFORE waiting and resets only after a
+    // button event. So any loop that re-prompts on `IdleWipe` MUST reset the
+    // timer itself, or it spins Enter-PIN -> Locked -> Enter-PIN forever once
+    // the deadline has passed.
+    //
+    // This was fixed in the PendSV re-unlock loop and NOT in the boot-time one,
+    // and the asymmetry shipped: on pq1 silicon the panel flickered and the
+    // operator had to enter the PIN twice (#728). Assert BOTH, so fixing one
+    // report cannot leave the other behind again.
+    let mut sites = Vec::new();
+    let mut from = 0usize;
+    while let Some(i) = MAIN_SRC[from..].find(r#"show_status("Enter PIN", "to unlock")"#) {
+        sites.push(from + i);
+        from += i + 1;
+    }
+    assert_eq!(
+        sites.len(),
+        2,
+        "expected exactly two unlock prompts (boot + PendSV re-unlock); found {}. \
+         A new one must also reset the inactivity timer — see #728.",
+        sites.len()
+    );
+    for (n, &at) in sites.iter().enumerate() {
+        // The reset must appear between the prompt and the enter_pin() call.
+        let tail = &MAIN_SRC[at..];
+        // Anchor on the CALL, not the token: the explanatory comments around
+        // these sites mention `enter_pin()` in prose, and matching those would
+        // slice before the reset and fail spuriously.
+        let call = tail
+            .find("match enter_pin()")
+            .expect("prompt must be followed by a match on enter_pin()");
+        assert!(
+            tail[..call].contains("timeout::reset_activity();"),
+            "unlock prompt #{n} does not reset the inactivity timer before enter_pin() — \
+             it will spin Enter-PIN/Locked once the idle deadline has passed (#728)"
+        );
+    }
+}
+
+#[test]
+fn negative_the_728_fix_did_not_weaken_x17_ui3() {
+    // The obvious fix for #728 is to move the reset INSIDE `enter_pin()` so no
+    // call site can forget it. That is exactly the HIGH-13 / X17-UI3
+    // vulnerability: `enter_pin()` is driven by the NS-reachable REQUEST_UNLOCK
+    // veneer, so an entry-reset lets a hostile companion refresh the 120 s
+    // unlocked window by spamming prompts, with zero button presses.
+    //
+    // The boot loop is safe to reset because it is not NS-reachable and nothing
+    // is unlocked yet. This test exists so the distinction is not lost: it
+    // fails if a future #728-style fix migrates the reset into `enter_pin()`.
+    const PIN_ENTRY: &str = include_str!("ui/pin_entry.rs");
+    let start = PIN_ENTRY
+        .find("pub fn enter_pin() -> PinEntryResult {")
+        .expect("enter_pin must exist");
+    let loop_at = PIN_ENTRY[start..].find("loop {").expect("enter_pin must loop") + start;
+    assert!(
+        !PIN_ENTRY[start..loop_at].contains("timeout::reset_activity()"),
+        "X17-UI3 regression: enter_pin() must NOT reset activity before its input loop. \
+         Fix the CALL SITES (#728), not the callee."
+    );
+}

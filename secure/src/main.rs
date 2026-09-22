@@ -3937,6 +3937,34 @@ fn main() -> ! {
 
             loop {
                 ui::show_status("Enter PIN", "to unlock");
+
+                // #728: reset the inactivity timer for THIS prompt.
+                //
+                // `enter_pin()` samples `timeout::is_idle()` BEFORE waiting and
+                // only resets after a button event (`pin_entry.rs:112`). Without
+                // the line below, a deadline that has already passed when boot
+                // reaches here makes every iteration return `IdleWipe`
+                // immediately -> "Locked" -> `continue` -> re-prompt, forever.
+                // Observed on pq1 silicon: the panel flickers Enter-PIN/Locked
+                // and the operator must enter the PIN twice. No attempt is
+                // consumed (no PIN is submitted), so it does not walk toward the
+                // 10-attempt wipe — it just looks broken, on the first thing a
+                // user ever does with the device.
+                //
+                // The boundary is LOCKED vs UNLOCKED, not NS-reachable vs
+                // boot-only. Resetting while LOCKED arms an input window; there
+                // is no session to extend and no secret that idling out would
+                // protect. Resetting while UNLOCKED would prolong a live
+                // signing session, which is what X17-UI3 / HIGH-13 forbids
+                // `enter_pin()` from doing unconditionally.
+                //
+                // `cmd_request_unlock.rs` is the precedent: it returns Ok
+                // immediately when already unlocked (so a companion cannot spam
+                // prompts) and resets activity only on the locked path, for
+                // exactly this reason (#713). The PendSV re-unlock loop below
+                // does the same, bounded by PENDSV_MAX_REUNLOCK_ATTEMPTS.
+                timeout::reset_activity();
+
                 let mut pin = match enter_pin() {
                     PinEntryResult::Pin(p) => p,
                     PinEntryResult::Cancelled | PinEntryResult::IdleWipe => {

@@ -243,14 +243,37 @@ pub fn init() -> bool {
         );
     }
 
-    let mut ok = true;
     // Order: current/OVP limits first, brightness (LSB then MSB, per datasheet),
     // and only then leave Standby for Backlight mode.
-    ok &= write_reg(REG_LEDCUR, LEDCUR_CH1_20MA);
-    ok &= write_reg(REG_BSTCTR1, BSTCTR1_OVP24V);
-    ok &= write_reg(REG_LEDLSB, BRIGHTNESS_LSB);
-    ok &= write_reg(REG_LEDMSB, BRIGHTNESS_MSB);
-    ok &= write_reg(REG_MODE, MODE_I2C_LINEAR_BACKLIGHT);
+    //
+    // DO NOT ENABLE THE BOOST AFTER A FAILED PREREQUISITE. This used to be
+    // `ok &= write_reg(..)` five times, which wrote REG_MODE — the boost enable
+    // — unconditionally even when an earlier write had NACKed. Bailing avoids
+    // the worst case: enabling with REG_BSTCTR1 unwritten leaves OVP at the
+    // part's 38 V default, far above C140's 25 V rating.
+    //
+    // NOT a claim that OVPSEL=001 makes this safe. Awinic V1.2 specifies that
+    // setting as 22.5 V min / 24 V typ / **25.5 V max**, so the threshold's
+    // upper bound already exceeds a 25 V part before transient margin. The
+    // component margin is a separate hardware question and this early return
+    // does not close it.
+    //
+    // Nor does it guarantee the prerequisites actually landed: `write_byte`
+    // treats any low SDA as an ACK, so a stuck-low bus ACKs everything. Real
+    // assurance needs read-back verification of the critical registers before
+    // enable — required before any transplant into immutable FSBL code (#705).
+    for (reg, val) in [
+        (REG_LEDCUR, LEDCUR_CH1_20MA),
+        (REG_BSTCTR1, BSTCTR1_OVP24V),
+        (REG_LEDLSB, BRIGHTNESS_LSB),
+        (REG_LEDMSB, BRIGHTNESS_MSB),
+    ] {
+        if !write_reg(reg, val) {
+            secure_log!("[S] aw99703: NACK on reg {:#04x} — NOT enabling the boost", reg);
+            return false;
+        }
+    }
+    let ok = write_reg(REG_MODE, MODE_I2C_LINEAR_BACKLIGHT);
     secure_log!(
         "[S] aw99703: backlight init {}",
         if ok { "ACK" } else { "NACK" }

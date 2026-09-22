@@ -784,6 +784,10 @@ pub fn init() {
     // the backlight over I2C2 or the panel stays dark whatever SPI does.
     #[cfg(feature = "board-pq1")]
     {
+        // `init()` logs its own ACK/NACK. Deliberately NOT stored in a static
+        // here: a flag with no consumer changes nothing and reads as handling
+        // that does not exist. What this needs is a failure POLICY (does a dark
+        // panel block the boot?), which is the open owner decision in #705.
         let _ = crate::hw::aw99703::init();
     }
 
@@ -818,6 +822,10 @@ pub fn lcd_test_loop() -> ! {
     // the backlight over I2C2 or the panel stays dark whatever SPI does.
     #[cfg(feature = "board-pq1")]
     {
+        // `init()` logs its own ACK/NACK. Deliberately NOT stored in a static
+        // here: a flag with no consumer changes nothing and reads as handling
+        // that does not exist. What this needs is a failure POLICY (does a dark
+        // panel block the boot?), which is the open owner decision in #705.
         let _ = crate::hw::aw99703::init();
     }
     secure_log!("[LCD-TEST] dc gpio done");
