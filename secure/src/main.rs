@@ -543,6 +543,10 @@ struct ArchRegs {
     /// DHCSR.C_DEBUGEN — read-only from our point of view; we never write
     /// it (writes require an unlock key the firmware doesn't possess).
     dhcsr: hw::mmio::RoReg32,
+    /// SCB_SHPR3 — system-handler priorities for PendSV [23:16] and
+    /// SysTick [31:24]. Reset value is 0, i.e. both at the HIGHEST priority
+    /// and therefore mutually non-preempting (#729).
+    shpr3: hw::mmio::Reg32,
 }
 
 // SAFETY: each address is a real, 4-byte-aligned ARMv8-M architectural
@@ -560,6 +564,7 @@ const ARCH: ArchRegs = unsafe {
         dwt_ctrl: hw::mmio::Reg32::new(0xE000_1000),
         dwt_cyccnt: hw::mmio::Reg32::new(0xE000_1004),
         dhcsr: hw::mmio::RoReg32::new(0xE000_EDF0),
+        shpr3: hw::mmio::Reg32::new(0xE000_ED20),
     }
 };
 
@@ -834,6 +839,30 @@ fn setup_systick() {
     let reload = unsafe { SYSTICK_RELOAD };
     #[cfg(not(feature = "stm32u585"))]
     let reload = SYSTICK_RELOAD;
+    // #729: give PendSV the LOWEST priority and SysTick the highest, BEFORE
+    // SysTick is enabled and before anything can pend PendSV.
+    //
+    // Two comments in this file have long asserted that "PendSV has the lowest
+    // priority so it won't block SysTick" — but nothing ever programmed it.
+    // SHPR3 resets to 0, so both sat at priority 0, and an exception cannot
+    // preempt another of EQUAL priority. SysTick therefore could not interrupt
+    // an active PendSV: while a PendSV-driven PIN prompt blocked in
+    // `enter_pin()`, the tick froze, `timeout::is_idle()` never became true,
+    // `wait_button` never returned `None`, and the re-unlock loop never reached
+    // its second iteration — so PENDSV_MAX_REUNLOCK_ATTEMPTS could not fire in
+    // the scenario it was written for. The IWDG is fed from the same tick path
+    // (`iwdg::systick_watch_and_kick`), so the stall also starved the watchdog.
+    //
+    // STM32U585 implements 4 priority bits (`__NVIC_PRIO_BITS = 4`), held in
+    // the UPPER bits of each byte. 0xFF is the lowest priority for any
+    // implemented width, so it stays correct if that ever changes; 0x00 is the
+    // highest. Bits [15:0] (DebugMonitor) are preserved.
+    const SHPR3_PENDSV_LOWEST: u32 = 0xFF << 16;
+    const SHPR3_SYSTICK_HIGHEST: u32 = 0x00 << 24;
+    ARCH.shpr3
+        .modify(|v| (v & 0x0000_FFFF) | SHPR3_PENDSV_LOWEST | SHPR3_SYSTICK_HIGHEST);
+    cortex_m::asm::dsb();
+
     ARCH.syst_rvr.write(reload);
     ARCH.syst_cvr.write(0);
     ARCH.syst_csr.write(0x07);
@@ -4150,7 +4179,9 @@ fn SysTick() {
         nsc::zeroize_sensitive_state();
 
         // Trigger PendSV to run the re-unlock flow outside the ISR.
-        // PendSV has the lowest priority so it won't block SysTick.
+        // PendSV runs at the lowest priority so it cannot block SysTick.
+        // Programmed in `setup_systick` via SHPR3 — this used to be asserted
+        // here and never configured, which is #729.
         // PendSV drives the PIN entry screen directly — no intermediate
         // "(idle wipe)" status page, which could otherwise get stuck
         // visible if PendSV is delayed.
@@ -4272,6 +4303,9 @@ const _: () = assert!(
 ///
 /// Triggered by SysTick when it detects idle timeout. Runs at the lowest
 /// exception priority so it doesn't block SysTick ticks or CMSE veneers.
+/// That ordering is established by the SHPR3 write in `setup_systick`; before
+/// #729 it was only claimed in comments, so SysTick could not preempt an
+/// active PendSV and this loop's runaway guard could never advance.
 /// The blocking PIN entry UI is safe here.
 ///
 /// HIGH-8 partial fix: add a re-entry guard — SysTick can re-pend

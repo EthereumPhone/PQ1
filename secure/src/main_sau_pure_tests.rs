@@ -1919,3 +1919,65 @@ fn negative_the_728_fix_did_not_weaken_x17_ui3() {
          Fix the CALL SITES (#728), not the callee."
     );
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// #729 — PendSV must actually be programmed lower-priority than SysTick.
+// ═════════════════════════════════════════════════════════════════════
+
+#[test]
+fn negative_pendsv_priority_is_programmed_not_merely_asserted() {
+    // Two comments in main.rs have long claimed "PendSV has the lowest priority
+    // so it won't block SysTick". Nothing set it. SHPR3 resets to 0, so both
+    // sat at priority 0 — equal, hence mutually non-preempting — and SysTick
+    // could not interrupt an active PendSV. A PendSV-driven PIN prompt froze
+    // the tick, so `is_idle()` never became true and the re-unlock runaway
+    // guard could never advance past its first iteration (#729).
+    //
+    // The comments were the whole basis for believing the design safe, which
+    // is exactly the shape a test should have had. This is that test.
+    assert!(
+        MAIN_SRC.contains("shpr3: hw::mmio::Reg32::new(0xE000_ED20)"),
+        "#729: SHPR3 must be mapped — it is where PendSV/SysTick priorities live"
+    );
+    assert!(
+        MAIN_SRC.contains("const SHPR3_PENDSV_LOWEST: u32 = 0xFF << 16;"),
+        "#729: PendSV must be given the LOWEST priority (SHPR3[23:16])"
+    );
+    assert!(
+        MAIN_SRC.contains("const SHPR3_SYSTICK_HIGHEST: u32 = 0x00 << 24;"),
+        "#729: SysTick must be given the HIGHEST priority (SHPR3[31:24])"
+    );
+    assert!(
+        MAIN_SRC.contains("ARCH.shpr3\n        .modify(|v| (v & 0x0000_FFFF) | SHPR3_PENDSV_LOWEST | SHPR3_SYSTICK_HIGHEST);"),
+        "#729: the priorities must actually be WRITTEN, preserving DebugMonitor in [15:0]"
+    );
+
+    // Ordering matters: priorities must be set BEFORE SysTick is enabled, or
+    // a tick can fire into the old configuration.
+    let prio = MAIN_SRC
+        .find("ARCH.shpr3")
+        .expect("SHPR3 write must exist");
+    let enable = MAIN_SRC
+        .find("ARCH.syst_csr.write(0x07);")
+        .expect("SysTick enable must exist");
+    assert!(
+        prio < enable,
+        "#729: SHPR3 must be programmed BEFORE SysTick is enabled"
+    );
+}
+
+#[test]
+fn negative_pendsv_lowest_priority_claims_have_backing_code() {
+    // The drift that produced #729 was a COMMENT asserting a configuration no
+    // code performed. If someone writes that claim again, this fails unless
+    // the programming is still present — so the claim can never again be the
+    // only thing holding the design up.
+    let claims = MAIN_SRC.matches("lowest priority").count();
+    if claims > 0 {
+        assert!(
+            MAIN_SRC.contains("ARCH.shpr3"),
+            "main.rs claims a PendSV priority ordering {claims} time(s) but never \
+             programs SHPR3 — that exact drift was #729"
+        );
+    }
+}
