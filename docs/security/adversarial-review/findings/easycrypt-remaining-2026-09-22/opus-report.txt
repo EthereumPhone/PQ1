@@ -1,0 +1,41 @@
+VERDICT: GO
+TARGET: 8d388d66123068b995827f76840b129d4491f4a9 / 3e1801909df0d61c481dac1bbc7a3754d2e0cb8d
+FINDINGS: none
+
+I went through all six checks by reading the source. I did not run the EasyCrypt gate myself. For compilation I relied on the green results you reported.
+
+1. **Bounded-hypertree five-term bound** (`C10HypertreeCharged.ec:10-61`). The proof chains two existing lemmas for the same adversary `A_ht`:
+   - `bounded_hypertree_win_le_total`, whose adversary restriction `{-FC.O_THFC_Default}` is covered by the larger one;
+   - `EUFNAGCMA_FLSLXMSSMTTWCESNPRF_charged`.
+
+   Every premise of the second lemma is kept word for word. The only new premise is `islossless forge`. The five terms are the actual reduction games, and the fifth still carries `res /\ gfail_of …`, so the failure charge is kept explicitly. The README says "N2 is absent, but the charge remains".
+
+2. **All-leaf path/cube indexing** (`C10HypertreeCoverage.ec`). `path_cell_fold` rewrites the indexing into the same `fold (edivz ·.1 l') (idx,0)` form used by the model (`FxChain.ec:865`, `FL_SL_XMSS_MT_ES.ec:796`). `all_paths_cover_cube` needs all `l` paths as a premise. Both the source comment and the README say this is address coverage only, not a probability coupling. The single-path negative control has a false conclusion under a true premise, so it cannot pass.
+
+3. **SharedROBounded and the C10 search tail.**
+   - `ro_search` stores each new answer in the history, and a cached failure is replayed rather than sampled again (`replay_failed_answer`).
+   - `history_search_exhaustion` holds for any entry history. It counts only inputs that were not already known, and a cached success only lowers the failure mass.
+   - `C10SharedSearch` uses the real `predC` through `acceptance_exact`. Its inputs are the distinct byte strings for counters 0..9,999,999, which matches the Rust loop in `wots.rs:62`.
+   - Each duplicate/known-input negative control has a positive twin that proves the true value (1/2 and 1). So they fail because the value is wrong, not because a tactic breaks.
+   - The README states the limits: no interleaved oracle calls, and no updated history returned.
+
+4. **Physical layouts, R truncation, Birthday clone, FORS sampler.**
+   - Hash lengths match the Rust code: H_msg 160 bytes, R derivation 103 or 119 (`fors.rs:98-125`: seed, `R_grind`, optional 16-byte random, message, 32-byte big-endian nonce), pair hashing 128.
+   - The address tag (bytes 12..16) is checked by the new Rust test.
+   - `truncate_r = drop 128` in the model's least-significant-bit-first order selects the digest's first 16 bytes, matching `digest[..N]` in Rust. The wrong-half control has a matching positive twin.
+   - The Birthday budget is stated as whole-experiment, with explicit losslessness and call-budget premises.
+   - `bounded_r` reuses the same `dmkey`, `good m` and `dcond`, and allows repeated R. The mixture lemma still depends on `good_pos`, and the README says so.
+
+5. **Numerical lemmas.**
+   - `shared_search_known_budget` keeps the freshness premise: 10,000,000 − 5,760 = 9,994,240 = 32,768 × 305.
+   - `acceptance ≈ 3.26e-5 ≥ 2^-15` holds.
+   - The README and the file headers disclaim any forgery bound, running-time bound, quantum claim or SHA-256 claim.
+
+6. **Dependencies, pins and controls.**
+   - The seven new files contain no `axiom` or `admit`.
+   - The baseline adds only defined operators, the Birthday clone operands/`realize ge0_q`, and one `op-annotation:smt_opaque` row. The body hash of `bounded` (`311ace66835f`) is unchanged.
+   - `rewrite /bounded` still works in the positive controls, and `C10FORSBoundedSMT` is the SMT-consumer regression.
+   - `fors.rs` and all eight affected theories are now source-bound.
+   - The pin, statement and control counts, and the 78-file count in the test, were updated consistently. None of the existing statement changes weaken anything; the `FORS_C10` edits are comment corrections plus added lemmas.
+
+GAPS: the Birthday instance reuses `signing_budget` (10M), which is the per-call loop bound, as the whole-experiment draw cap; at about 2^11 R tries per signature that covers only about 4.9k signatures. This is correctly worded, but no statement links it to real per-key usage.

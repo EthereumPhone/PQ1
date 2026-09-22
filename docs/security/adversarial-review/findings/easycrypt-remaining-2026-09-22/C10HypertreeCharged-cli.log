@@ -1,0 +1,325 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-PKCOC.O_THFC_Default, -PKCOC_TCR.O_SMDTTCR_Default, -TRHC.O_THFC_Default, -TRHC_TCR.O_SMDTTCR_Default, -FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -R_SMDTTCRCPKCO_C, -R_SMDTTCRCTRH_C, -O_MEUFGCMA_WOTSC_V}
+&m: {}
+------------------------------------------------------------------------
+islossless A_ht(FC.O_THFC_Default).forge =>
+c <= p_tgts =>
+(forall (a b : adrs),
+   valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)) =>
+(forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+dfC0 <> 8 * n =>
+dfC0 <> 8 * n * len =>
+dfC0 <> 8 * n * 2 =>
+hoare[ A_ht(O_THFC_MA).choose :
+        O_THFC_MA.tws_ma = [] ==>
+        all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma] =>
+hoare[ A_ht(FC.O_THFC_Default).choose :
+        FC.O_THFC_Default.tws = [] ==>
+        all (fun (ad : adrs) => get_typeidx ad <> chtype) FC.O_THFC_Default.
+          tws] =>
+hoare[
+        A_ht(
+          R_SMDTTCRCPKCO_C(A_ht, PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+            O_THFC_Default).O_THFC).choose :
+        R_SMDTTCRCPKCO_C.O_THFC.ads = [] ==>
+        all (fun (ad : adrs) => get_typeidx ad <> pkcotype) R_SMDTTCRCPKCO_C.
+          O_THFC.ads] =>
+hoare[
+        A_ht(
+          R_SMDTTCRCTRH_C(A_ht, TRHC_TCR.O_SMDTTCR_Default, TRHC.
+            O_THFC_Default).O_THFC).choose :
+        R_SMDTTCRCTRH_C.O_THFC.ads = [] ==>
+        all (fun (ad : adrs) => get_typeidx ad <> trhxtype) R_SMDTTCRCTRH_C.
+          O_THFC.ads] =>
+Pr[BoundedHypertreeGame(A_ht, FC.O_THFC_Default).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+     O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)), STCRC_WC.
+     O_STCRC_Default).main() @ &m :
+   res] +
+Pr[PKCOC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCPKCO_C(A_ht), PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[TRHC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCTRH_C(A_ht), TRHC_TCR.O_SMDTTCR_Default, TRHC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[GAME1_INT(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht), O_MEUFGCMA_WOTSC_Default, FC.
+     O_THFC_Default).main() @ &m :
+   res /\ gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[5|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-PKCOC.O_THFC_Default, -PKCOC_TCR.O_SMDTTCR_Default, -TRHC.O_THFC_Default, -TRHC_TCR.O_SMDTTCR_Default, -FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -R_SMDTTCRCPKCO_C, -R_SMDTTCRCTRH_C, -O_MEUFGCMA_WOTSC_V}
+&m: {}
+------------------------------------------------------------------------
+islossless A_ht(FC.O_THFC_Default).forge =>
+c <= p_tgts =>
+(forall (a b : adrs),
+   valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)) =>
+(forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+dfC0 <> 8 * n =>
+dfC0 <> 8 * n * len =>
+dfC0 <> 8 * n * 2 =>
+hoare[ A_ht(O_THFC_MA).choose :
+        O_THFC_MA.tws_ma = [] ==>
+        all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma] =>
+hoare[ A_ht(FC.O_THFC_Default).choose :
+        FC.O_THFC_Default.tws = [] ==>
+        all (fun (ad : adrs) => get_typeidx ad <> chtype) FC.O_THFC_Default.
+          tws] =>
+hoare[
+        A_ht(
+          R_SMDTTCRCPKCO_C(A_ht, PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+            O_THFC_Default).O_THFC).choose :
+        R_SMDTTCRCPKCO_C.O_THFC.ads = [] ==>
+        all (fun (ad : adrs) => get_typeidx ad <> pkcotype) R_SMDTTCRCPKCO_C.
+          O_THFC.ads] =>
+hoare[
+        A_ht(
+          R_SMDTTCRCTRH_C(A_ht, TRHC_TCR.O_SMDTTCR_Default, TRHC.
+            O_THFC_Default).O_THFC).choose :
+        R_SMDTTCRCTRH_C.O_THFC.ads = [] ==>
+        all (fun (ad : adrs) => get_typeidx ad <> trhxtype) R_SMDTTCRCTRH_C.
+          O_THFC.ads] =>
+Pr[BoundedHypertreeGame(A_ht, FC.O_THFC_Default).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+     O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)), STCRC_WC.
+     O_STCRC_Default).main() @ &m :
+   res] +
+Pr[PKCOC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCPKCO_C(A_ht), PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[TRHC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCTRH_C(A_ht), TRHC_TCR.O_SMDTTCR_Default, TRHC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[GAME1_INT(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht), O_MEUFGCMA_WOTSC_Default, FC.
+     O_THFC_Default).main() @ &m :
+   res /\ gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[6|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-PKCOC.O_THFC_Default, -PKCOC_TCR.O_SMDTTCR_Default, -TRHC.O_THFC_Default, -TRHC_TCR.O_SMDTTCR_Default, -FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -R_SMDTTCRCPKCO_C, -R_SMDTTCRCTRH_C, -O_MEUFGCMA_WOTSC_V}
+&m: {}
+hll: islossless A_ht(FC.O_THFC_Default).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hd0: dfC0 <> 8 * n
+hdlen: dfC0 <> 8 * n * len
+hd2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+hch: hoare[ A_ht(FC.O_THFC_Default).choose :
+             FC.O_THFC_Default.tws = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> chtype) FC.
+               O_THFC_Default.tws]
+hpk: hoare[
+             A_ht(
+               R_SMDTTCRCPKCO_C(A_ht, PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+                 O_THFC_Default).O_THFC).choose :
+             R_SMDTTCRCPKCO_C.O_THFC.ads = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> pkcotype)
+               R_SMDTTCRCPKCO_C.O_THFC.ads]
+htr: hoare[
+             A_ht(
+               R_SMDTTCRCTRH_C(A_ht, TRHC_TCR.O_SMDTTCR_Default, TRHC.
+                 O_THFC_Default).O_THFC).choose :
+             R_SMDTTCRCTRH_C.O_THFC.ads = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> trhxtype)
+               R_SMDTTCRCTRH_C.O_THFC.ads]
+------------------------------------------------------------------------
+Pr[BoundedHypertreeGame(A_ht, FC.O_THFC_Default).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+     O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)), STCRC_WC.
+     O_STCRC_Default).main() @ &m :
+   res] +
+Pr[PKCOC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCPKCO_C(A_ht), PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[TRHC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCTRH_C(A_ht), TRHC_TCR.O_SMDTTCR_Default, TRHC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[GAME1_INT(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht), O_MEUFGCMA_WOTSC_Default, FC.
+     O_THFC_Default).main() @ &m :
+   res /\ gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[7|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-PKCOC.O_THFC_Default, -PKCOC_TCR.O_SMDTTCR_Default, -TRHC.O_THFC_Default, -TRHC_TCR.O_SMDTTCR_Default, -FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -R_SMDTTCRCPKCO_C, -R_SMDTTCRCTRH_C, -O_MEUFGCMA_WOTSC_V}
+&m: {}
+hll: islossless A_ht(FC.O_THFC_Default).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hd0: dfC0 <> 8 * n
+hdlen: dfC0 <> 8 * n * len
+hd2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+hch: hoare[ A_ht(FC.O_THFC_Default).choose :
+             FC.O_THFC_Default.tws = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> chtype) FC.
+               O_THFC_Default.tws]
+hpk: hoare[
+             A_ht(
+               R_SMDTTCRCPKCO_C(A_ht, PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+                 O_THFC_Default).O_THFC).choose :
+             R_SMDTTCRCPKCO_C.O_THFC.ads = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> pkcotype)
+               R_SMDTTCRCPKCO_C.O_THFC.ads]
+htr: hoare[
+             A_ht(
+               R_SMDTTCRCTRH_C(A_ht, TRHC_TCR.O_SMDTTCR_Default, TRHC.
+                 O_THFC_Default).O_THFC).choose :
+             R_SMDTTCRCTRH_C.O_THFC.ads = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> trhxtype)
+               R_SMDTTCRCTRH_C.O_THFC.ads]
+hb: Pr[BoundedHypertreeGame(A_ht, FC.O_THFC_Default).main() @ &m : res] <=
+    Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A_ht, FC.O_THFC_Default).main() @ &m :
+       res]
+------------------------------------------------------------------------
+Pr[BoundedHypertreeGame(A_ht, FC.O_THFC_Default).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+     O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)), STCRC_WC.
+     O_STCRC_Default).main() @ &m :
+   res] +
+Pr[PKCOC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCPKCO_C(A_ht), PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[TRHC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCTRH_C(A_ht), TRHC_TCR.O_SMDTTCR_Default, TRHC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[GAME1_INT(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht), O_MEUFGCMA_WOTSC_Default, FC.
+     O_THFC_Default).main() @ &m :
+   res /\ gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[8|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-PKCOC.O_THFC_Default, -PKCOC_TCR.O_SMDTTCR_Default, -TRHC.O_THFC_Default, -TRHC_TCR.O_SMDTTCR_Default, -FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -R_SMDTTCRCPKCO_C, -R_SMDTTCRCTRH_C, -O_MEUFGCMA_WOTSC_V}
+&m: {}
+hll: islossless A_ht(FC.O_THFC_Default).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hd0: dfC0 <> 8 * n
+hdlen: dfC0 <> 8 * n * len
+hd2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+hch: hoare[ A_ht(FC.O_THFC_Default).choose :
+             FC.O_THFC_Default.tws = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> chtype) FC.
+               O_THFC_Default.tws]
+hpk: hoare[
+             A_ht(
+               R_SMDTTCRCPKCO_C(A_ht, PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+                 O_THFC_Default).O_THFC).choose :
+             R_SMDTTCRCPKCO_C.O_THFC.ads = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> pkcotype)
+               R_SMDTTCRCPKCO_C.O_THFC.ads]
+htr: hoare[
+             A_ht(
+               R_SMDTTCRCTRH_C(A_ht, TRHC_TCR.O_SMDTTCR_Default, TRHC.
+                 O_THFC_Default).O_THFC).choose :
+             R_SMDTTCRCTRH_C.O_THFC.ads = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> trhxtype)
+               R_SMDTTCRCTRH_C.O_THFC.ads]
+hb: Pr[BoundedHypertreeGame(A_ht, FC.O_THFC_Default).main() @ &m : res] <=
+    Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A_ht, FC.O_THFC_Default).main() @ &m :
+       res]
+ht: Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A_ht, FC.O_THFC_Default).main() @ &m :
+       res] <=
+    Pr[M_EUF_GCMA_WOTSTWESNPRF(
+         R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+         O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+       res] +
+    Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+         STCRC_WC.O_STCRC_Default).main() @ &m :
+       res] +
+    Pr[PKCOC_TCR.
+       SM_DT_TCR_C(R_SMDTTCRCPKCO_C(A_ht), PKCOC_TCR.O_SMDTTCR_Default,
+         PKCOC.O_THFC_Default).main() @ &m :
+       res] +
+    Pr[TRHC_TCR.
+       SM_DT_TCR_C(R_SMDTTCRCTRH_C(A_ht), TRHC_TCR.O_SMDTTCR_Default, TRHC.
+         O_THFC_Default).main() @ &m :
+       res] +
+    Pr[GAME1_INT(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht), O_MEUFGCMA_WOTSC_Default,
+         FC.O_THFC_Default).main() @ &m :
+       res /\
+       gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+Pr[BoundedHypertreeGame(A_ht, FC.O_THFC_Default).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+     O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)), STCRC_WC.
+     O_STCRC_Default).main() @ &m :
+   res] +
+Pr[PKCOC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCPKCO_C(A_ht), PKCOC_TCR.O_SMDTTCR_Default, PKCOC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[TRHC_TCR.
+   SM_DT_TCR_C(R_SMDTTCRCTRH_C(A_ht), TRHC_TCR.O_SMDTTCR_Default, TRHC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[GAME1_INT(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht), O_MEUFGCMA_WOTSC_Default, FC.
+     O_THFC_Default).main() @ &m :
+   res /\ gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[9|check]>
+No more goals
+[10|check]>
+[11|check]>
+added lemma: `bounded_hypertree_charged'

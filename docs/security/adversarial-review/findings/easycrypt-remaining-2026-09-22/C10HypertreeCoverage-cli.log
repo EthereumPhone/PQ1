@@ -1,0 +1,422 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+2 ^ 9 = 512
+[4|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+2 ^ 9 = 512
+[5|check]>
+No more goals
+[6|check]>
+added lemma: `pow2_9'
+[7|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+l = 262144
+[8|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+l = 262144
+[9|check]>
+No more goals
+[10|check]>
+[11|check]>
+added lemma: `ht_capacity'
+[12|check]>
+added operator path_cell : int -> int -> int * int
+added operator covering_index : int -> int -> int -> int
+[13|check]>
+Current goal
+
+Type variables: <none>
+
+idx: int
+layer: int
+------------------------------------------------------------------------
+0 <= layer < d =>
+path_cell idx layer =
+fold (fun (tk : int * int) => edivz tk.`1 l') (idx, 0) (layer + 1)
+[14|check]>
+Current goal
+
+Type variables: <none>
+
+idx: int
+layer: int
+------------------------------------------------------------------------
+0 <= layer < d =>
+path_cell idx layer =
+fold (fun (tk : int * int) => edivz tk.`1 l') (idx, 0) (layer + 1)
+[15|check]>
+Current goal
+
+Type variables: <none>
+
+idx: int
+layer: int
+hl: 0 <= layer < 2
+hc: layer = 0 \/ layer = 1
+------------------------------------------------------------------------
+path_cell idx layer =
+fold (fun (tk : int * int) => edivz tk.`1 l') (idx, 0) (layer + 1)
+[16|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+idx: int
+layer: int
+hl: 0 <= layer < 2
+------------------------------------------------------------------------
+path_cell idx 0 =
+fold (fun (tk : int * int) => edivz tk.`1 l') (idx, 0) (0 + 1)
+[17|check]>
+Current goal
+
+Type variables: <none>
+
+idx: int
+layer: int
+hl: 0 <= layer < 2
+------------------------------------------------------------------------
+path_cell idx 1 =
+fold (fun (tk : int * int) => edivz tk.`1 l') (idx, 0) (1 + 1)
+[18|check]>
+No more goals
+[19|check]>
+[20|check]>
+added lemma: `path_cell_fold'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+l' = 512
+[21|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+l' = 512
+[22|check]>
+No more goals
+[23|check]>
+[24|check]>
+added lemma: `subtree_width'
+Current goal
+
+Type variables: <none>
+
+layer: int
+------------------------------------------------------------------------
+0 <= layer < d => nr_trees layer = if layer = 0 then 512 else 1
+[25|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+------------------------------------------------------------------------
+0 <= layer < d => nr_trees layer = if layer = 0 then 512 else 1
+[26|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+hl: 0 <= layer < 2
+hc: layer = 0 \/ layer = 1
+------------------------------------------------------------------------
+nr_trees layer = if layer = 0 then 512 else 1
+[27|check]>
+No more goals
+[28|check]>
+[29|check]>
+added lemma: `tree_count'
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+------------------------------------------------------------------------
+0 <= layer < d =>
+0 <= tree < nr_trees layer =>
+0 <= key < l' => 0 <= covering_index layer tree key < l
+[30|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+------------------------------------------------------------------------
+0 <= layer < d =>
+0 <= tree < nr_trees layer =>
+0 <= key < l' => 0 <= covering_index layer tree key < l
+[31|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+------------------------------------------------------------------------
+0 <= tree < if layer = 0 then 512 else 1 =>
+0 <= key < 512 =>
+0 <= (tree * 512 + key) * if layer = 0 then 1 else 512 < 262144
+[32|check]>
+No more goals
+[33|check]>
+[34|check]>
+added lemma: `covering_index_range'
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+------------------------------------------------------------------------
+0 <= layer < d =>
+0 <= tree < nr_trees layer =>
+0 <= key < l' =>
+path_cell (covering_index layer tree key) layer = (tree, key)
+[35|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+------------------------------------------------------------------------
+0 <= layer < d =>
+0 <= tree < nr_trees layer =>
+0 <= key < l' =>
+path_cell (covering_index layer tree key) layer = (tree, key)
+[36|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+------------------------------------------------------------------------
+0 <= tree < if layer = 0 then 512 else 1 =>
+0 <= key < 512 =>
+edivz
+  (if layer = 0 then (tree * 512 + key) * if layer = 0 then 1 else 512
+   else ((tree * 512 + key) * if layer = 0 then 1 else 512) %/ 512) 512 =
+(tree, key)
+[37|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+he: layer = 0
+ht: 0 <= tree < 512
+hk: 0 <= key < 512
+------------------------------------------------------------------------
+edivz (tree * 512 + key) 512 = (tree, key)
+[38|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+he: layer = 0
+ht: 0 <= tree < 512
+hk: 0 <= key < 512
+hq: (tree * 512 + key) %/ 512 = tree
+------------------------------------------------------------------------
+edivz (tree * 512 + key) 512 = (tree, key)
+[39|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+he: layer = 0
+ht: 0 <= tree < 512
+hk: 0 <= key < 512
+hq: (tree * 512 + key) %/ 512 = tree
+hr: (tree * 512 + key) %% 512 = key
+------------------------------------------------------------------------
+edivz (tree * 512 + key) 512 = (tree, key)
+[40|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+he: layer <> 0
+ht: 0 <= tree < 1
+hk: 0 <= key < 512
+------------------------------------------------------------------------
+edivz ((tree * 512 + key) * 512 %/ 512) 512 = (tree, key)
+[41|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+he: layer <> 0
+ht: 0 <= tree < 1
+hk: 0 <= key < 512
+------------------------------------------------------------------------
+edivz (tree * 512 + key) 512 = (tree, key)
+[42|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+he: layer <> 0
+ht: 0 <= tree < 1
+hk: 0 <= key < 512
+hq: (tree * 512 + key) %/ 512 = tree
+------------------------------------------------------------------------
+edivz (tree * 512 + key) 512 = (tree, key)
+[43|check]>
+Current goal
+
+Type variables: <none>
+
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+he: layer <> 0
+ht: 0 <= tree < 1
+hk: 0 <= key < 512
+hq: (tree * 512 + key) %/ 512 = tree
+hr: (tree * 512 + key) %% 512 = key
+------------------------------------------------------------------------
+edivz (tree * 512 + key) 512 = (tree, key)
+[44|check]>
+No more goals
+[45|check]>
+[46|check]>
+added lemma: `covering_index_cell'
+Current goal
+
+Type variables: <none>
+
+good: int -> int -> int -> bool
+------------------------------------------------------------------------
+(forall (idx layer : int),
+   0 <= idx < l =>
+   0 <= layer < d =>
+   good layer (path_cell idx layer).`1 (path_cell idx layer).`2) =>
+forall (layer tree key : int),
+  0 <= layer < d =>
+  0 <= tree < nr_trees layer => 0 <= key < l' => good layer tree key
+[47|check]>
+Current goal
+
+Type variables: <none>
+
+good: int -> int -> int -> bool
+------------------------------------------------------------------------
+(forall (idx layer : int),
+   0 <= idx < l =>
+   0 <= layer < d =>
+   good layer (path_cell idx layer).`1 (path_cell idx layer).`2) =>
+forall (layer tree key : int),
+  0 <= layer < d =>
+  0 <= tree < nr_trees layer => 0 <= key < l' => good layer tree key
+[48|check]>
+Current goal
+
+Type variables: <none>
+
+good: int -> int -> int -> bool
+hp: forall (idx layer : int),
+      0 <= idx < l =>
+      0 <= layer < d =>
+      good layer (path_cell idx layer).`1 (path_cell idx layer).`2
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+ht: 0 <= tree < nr_trees layer
+hk: 0 <= key < l'
+------------------------------------------------------------------------
+good layer tree key
+[49|check]>
+Current goal
+
+Type variables: <none>
+
+good: int -> int -> int -> bool
+hp: forall (idx layer : int),
+      0 <= idx < l =>
+      0 <= layer < d =>
+      good layer (path_cell idx layer).`1 (path_cell idx layer).`2
+layer: int
+tree: int
+key: int
+hl: 0 <= layer < d
+ht: 0 <= tree < nr_trees layer
+hk: 0 <= key < l'
+------------------------------------------------------------------------
+good layer (path_cell (covering_index layer tree key) layer).`1
+  (path_cell (covering_index layer tree key) layer).`2 =>
+good layer tree key
+[50|check]>
+No more goals
+[51|check]>
+[52|check]>
+added lemma: `all_paths_cover_cube'

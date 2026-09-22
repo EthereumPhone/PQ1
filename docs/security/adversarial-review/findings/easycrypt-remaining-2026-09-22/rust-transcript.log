@@ -1,0 +1,11 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.09s
+     Running tests/easycrypt_transcript.rs (target/x86_64-unknown-linux-gnu/debug/deps/easycrypt_transcript-dcf76e94d34527c4)
+
+running 4 tests
+test concrete_hash_domains_match_easycrypt_layouts ... ok
+test concrete_digits_match_easycrypt_bit_order_and_target ... ok
+test concrete_fors_and_hypertree_fields_match_lsb_model ... ok
+test concrete_digest_matches_easycrypt_byte_adapter ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

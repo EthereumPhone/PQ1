@@ -4834,3 +4834,8 @@ cloned-consumer regression fails with the original export and passes with the
 annotation; it is enrolled as a positive control. The failed replay and first
 source-review wave are superseded, not counted as completed evidence. The fixed
 snapshot requires a fresh review and complete cold replay.
+
+The remaining-research Phase D evidence is complete: all 78 files pass both
+drivers and all 90 controls meet their expected outcomes. See the
+[remaining-research receipt](../security/adversarial-review/findings/easycrypt-remaining-2026-09-22/README.md)
+for exact review dispositions and the unresolved statements above.

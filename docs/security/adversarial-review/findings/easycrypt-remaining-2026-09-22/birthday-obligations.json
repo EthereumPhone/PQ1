@@ -1,0 +1,9 @@
+{
+  "source_image": "ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3",
+  "source_path": "/home/charlie/.opam/ocaml-base-compiler.4.14.2/lib/easycrypt/theories/crypto/Birthday.eca",
+  "sha256": "02fe6775a829c6c5bd181e9b9f167c9a528f199b7e6ab655df7f5dcdf4c9dc0b",
+  "clone_obligation": "ge0_q: 0 <= q, realized at q=10000000",
+  "section_hypotheses": "A_ll and A_bounded generalize into explicit pr_collision premises; both appear in the candidate theorem and are passed as hll/hb. They are not discharged by proof * or silently assumed.",
+  "evidence": "Pinned source inspection and printed instantiated theorem signatures in birthday-obligations.log; mandatory cold replay separately validates the complete clone.",
+  "verdict": "Opus source-inspection gap resolved; full replay still pending."
+}

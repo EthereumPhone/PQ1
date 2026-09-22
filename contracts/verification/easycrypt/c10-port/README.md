@@ -4426,3 +4426,8 @@ replay and all 75 controls. Opus returned GO; the sole Astra pending-replay gap
 is now discharged by unchanged-source evidence. Its exact proof scope
 and remaining cube/collision join are recorded in the
 [hypertree September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-hypertree-2026-09-22/README.md).
+
+The remaining-research batch passes the cold 78-file two-driver replay and all
+90 controls. Its bounded Astra/Opus review, exact source identity and unresolved
+statements are recorded in the
+[remaining-research receipt](../../../../docs/security/adversarial-review/findings/easycrypt-remaining-2026-09-22/README.md).

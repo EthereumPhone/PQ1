@@ -1,0 +1,452 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+added operator k : int
+added operator a : int
+[5|check]>
+[6|check]>
+added operator t : int
+[7|check]>
+[8|check]>
+[9|check]>
+added type: `mkey'
+added type: `msg'
+added type: `out_t'
+[10|check]>
+added operator dmkey : mkey Distr.distr
+[11|check]>
+[12|check]>
+added axiom: `dmkey_ll'
+added operator mco : mkey -> msg -> out_t
+added operator g : out_t -> (int * int * int) list
+[13|check]>
+[14|check]>
+added axiom: `size_g'
+added axiom: `eqiks_g'
+[15|check]>
+[16|check]>
+added axiom: `neqisvs_g'
+added axiom: `rng_g'
+[17|check]>
+added axiom: `uniq_g'
+[18|check]>
+[19|check]>
+added operator predC_fors : out_t -> bool
+[20|check]>
+added operator good : msg -> mkey -> bool
+added axiom: `good_pos'
+[21|check]>
+[22|check]>
+added operator bounded_r : msg -> unit list -> mkey option Distr.distr
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+------------------------------------------------------------------------
+is_lossless (bounded_r m fuel)
+[23|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+------------------------------------------------------------------------
+is_lossless (bounded_r m fuel)
+[24|check]>
+No more goals
+[25|check]>
+added lemma: `bounded_r_ll'
+[26|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+------------------------------------------------------------------------
+mu1 (bounded_r m fuel) None = (1%r - mu dmkey (good m)) ^ size fuel
+[27|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+------------------------------------------------------------------------
+mu1 (bounded_r m fuel) None = (1%r - mu dmkey (good m)) ^ size fuel
+[28|check]>
+No more goals
+[29|check]>
+[30|check]>
+added lemma: `bounded_r_exhaustion'
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+event: mkey option -> bool
+------------------------------------------------------------------------
+mu (bounded_r m fuel) event =
+((1%r - mu dmkey (good m)) ^ size fuel * b2r (event None)) +
+(1%r - (1%r - mu dmkey (good m)) ^ size fuel) *
+mu (dcond dmkey (good m)) (fun (r : mkey) => event (Some r))
+[31|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+event: mkey option -> bool
+------------------------------------------------------------------------
+mu (bounded_r m fuel) event =
+((1%r - mu dmkey (good m)) ^ size fuel * b2r (event None)) +
+(1%r - (1%r - mu dmkey (good m)) ^ size fuel) *
+mu (dcond dmkey (good m)) (fun (r : mkey) => event (Some r))
+[32|check]>
+No more goals
+[33|check]>
+added lemma: `bounded_r_conditioned_mixture'
+[34|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+event: mkey -> bool
+------------------------------------------------------------------------
+mu (bounded_r m fuel) (fun (r : mkey option) => oapp event false r) <=
+mu (dcond dmkey (good m)) event
+[35|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+event: mkey -> bool
+------------------------------------------------------------------------
+mu (bounded_r m fuel) (fun (r : mkey option) => oapp event false r) <=
+mu (dcond dmkey (good m)) event
+[36|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+event: mkey -> bool
+------------------------------------------------------------------------
+(1%r - (1%r - mu dmkey (good m)) ^ size fuel) *
+mu (dcond dmkey (good m)) event <= mu (dcond dmkey (good m)) event
+[37|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+event: mkey -> bool
+hf: 0%r <= mu1 (bounded_r m fuel) None <= 1%r
+------------------------------------------------------------------------
+(1%r - (1%r - mu dmkey (good m)) ^ size fuel) *
+mu (dcond dmkey (good m)) event <= mu (dcond dmkey (good m)) event
+[38|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+event: mkey -> bool
+hf: 0%r <= (1%r - mu dmkey (good m)) ^ size fuel <= 1%r
+------------------------------------------------------------------------
+(1%r - (1%r - mu dmkey (good m)) ^ size fuel) *
+mu (dcond dmkey (good m)) event <= mu (dcond dmkey (good m)) event
+[39|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+fuel: unit list
+event: mkey -> bool
+hf: 0%r <= (1%r - mu dmkey (good m)) ^ size fuel <= 1%r
+he: 0%r <= mu (dcond dmkey (good m)) event <= 1%r
+------------------------------------------------------------------------
+(1%r - (1%r - mu dmkey (good m)) ^ size fuel) *
+mu (dcond dmkey (good m)) event <= mu (dcond dmkey (good m)) event
+[40|check]>
+No more goals
+[41|check]>
+[42|check]>
+added lemma: `bounded_r_success_le_conditioned'
+added operator hC : mkey -> msg -> (int * int * int) list
+[43|check]>
+[44|check]>
+[45|check]>
+[46|check]>
+[47|check]>
+[48|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = all (fun (km : mkey * msg) => good km.`2 km.`1) O_ITSRC10_Default.ts
+
+    O_ITSRC10_Default.query 
+
+post = all (fun (km : mkey * msg) => good km.`2 km.`1) O_ITSRC10_Default.ts
+[49|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = all (fun (km : mkey * msg) => good km.`2 km.`1) O_ITSRC10_Default.ts
+
+    O_ITSRC10_Default.query 
+
+post = all (fun (km : mkey * msg) => good km.`2 km.`1) O_ITSRC10_Default.ts
+[50|check]>
+No more goals
+[51|check]>
+[52|check]>
+added lemma: `query_targets_good'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = true
+
+    O_ITSRC10_Default.query 
+    [=] 1%r
+
+post = true
+[53|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = true
+
+    O_ITSRC10_Default.query 
+    [=] 1%r
+
+post = true
+[54|check]>
+No more goals
+[55|check]>
+[56|check]>
+added lemma: `query_ll'
+Current goal
+
+Type variables: <none>
+
+m: msg
+------------------------------------------------------------------------
+exists (mk : mkey), good m mk
+[57|check]>
+Current goal
+
+Type variables: <none>
+
+m: msg
+------------------------------------------------------------------------
+exists (mk : mkey), good m mk
+[58|check]>
+No more goals
+[59|check]>
+[60|check]>
+added lemma: `good_exists'
+Current goal
+
+Type variables: <none>
+
+mk: mkey
+m: msg
+------------------------------------------------------------------------
+size (hC mk m) = k
+[61|check]>
+Current goal
+
+Type variables: <none>
+
+mk: mkey
+m: msg
+------------------------------------------------------------------------
+size (hC mk m) = k
+[62|check]>
+No more goals
+[63|check]>
+[64|check]>
+added lemma: `hC_size'
+Current goal
+
+Type variables: <none>
+
+mk: mkey
+m: msg
+------------------------------------------------------------------------
+hC mk m <> []
+[65|check]>
+Current goal
+
+Type variables: <none>
+
+mk: mkey
+m: msg
+------------------------------------------------------------------------
+hC mk m <> []
+[66|check]>
+No more goals
+[67|check]>
+[68|check]>
+added lemma: `hC_nonempty'
+Current goal
+
+Type variables: <none>
+
+mk: mkey
+m: msg
+------------------------------------------------------------------------
+uniq (map (fun (x : int * int * int) => x.`2) (hC mk m))
+[69|check]>
+Current goal
+
+Type variables: <none>
+
+mk: mkey
+m: msg
+------------------------------------------------------------------------
+uniq (map (fun (x : int * int * int) => x.`2) (hC mk m))
+[70|check]>
+No more goals
+[71|check]>
+added lemma: `hC_trees_uniq'
+[72|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_ITSRC10) : Adv_ITSRC10{-O_ITSRC10_Default}
+&m: {}
+------------------------------------------------------------------------
+Pr[ITSRC10(A, O_ITSRC10_Default).main() @ &m : res] <=
+Pr[ITSRC10_noC(A, O_ITSRC10_Default).main() @ &m : res]
+[73|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_ITSRC10) : Adv_ITSRC10{-O_ITSRC10_Default}
+&m: {}
+------------------------------------------------------------------------
+Pr[ITSRC10(A, O_ITSRC10_Default).main() @ &m : res] <=
+Pr[ITSRC10_noC(A, O_ITSRC10_Default).main() @ &m : res]
+[74|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_ITSRC10) : Adv_ITSRC10{-O_ITSRC10_Default}
+&m: {}
+------------------------------------------------------------------------
+pre = (glob A){1} = (glob A){2}
+
+    ITSRC10(A, O_ITSRC10_Default).main ~ ITSRC10_noC(A, O_ITSRC10_Default).main 
+
+post = res{1} => res{2}
+[75|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_ITSRC10) : Adv_ITSRC10{-O_ITSRC10_Default}
+&m: {}
+------------------------------------------------------------------------
+&1 (left ) : {mk' : mkey, m' : msg,
+             cover_f, cover_q : (int * int * int) list,
+             ts : (mkey * msg) list}
+&2 (right) : {mk' : mkey, m' : msg,
+             cover_f, cover_q : (int * int * int) list,
+             ts : (mkey * msg) list}
+
+pre = (glob A){1} = (glob A){2}
+
+O_ITSRC10_Default.init()               (1)  O_ITSRC10_Default.init()             
+(mk', m') <@                           (2)  (mk', m') <@                         
+  A(O_ITSRC10_Default).find()          ( )    A(O_ITSRC10_Default).find()        
+cover_f <- hC mk' m'                   (3)  cover_f <- hC mk' m'                 
+ts <@ O_ITSRC10_Default.get_targets()  (4)  ts <@ O_ITSRC10_Default.get_targets()
+cover_q <-                             (5)  cover_q <-                           
+  flatten                              ( )    flatten                            
+    (map                               ( )      (map                             
+       (fun (km : mkey * msg) =>       ( )         (fun (km : mkey * msg) =>     
+          hC km.`1 km.`2) ts)          ( )            hC km.`1 km.`2) ts)        
+
+post =
+  predC_fors (mco mk'{1} m'{1}) /\
+  (forall (x : int * int * int), x \in cover_f{1} => x \in cover_q{1}) /\
+  ! ((mk'{1}, m'{1}) \in ts{1}) =>
+  (forall (x : int * int * int), x \in cover_f{2} => x \in cover_q{2}) /\
+  ! ((mk'{2}, m'{2}) \in ts{2})
+[76|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_ITSRC10) : Adv_ITSRC10{-O_ITSRC10_Default}
+&m: {}
+------------------------------------------------------------------------
+&1 (left ) : {mk' : mkey, m' : msg,
+             cover_f, cover_q : (int * int * int) list,
+             ts : (mkey * msg) list}
+&2 (right) : {mk' : mkey, m' : msg,
+             cover_f, cover_q : (int * int * int) list,
+             ts : (mkey * msg) list}
+
+pre =
+  (glob A){1} = (glob A){2} /\
+  O_ITSRC10_Default.ts{1} = O_ITSRC10_Default.ts{2} /\
+  mk'{1} = mk'{2} /\ m'{1} = m'{2}
+
+cover_f <- hC mk' m'                   (1)  cover_f <- hC mk' m'                 
+ts <@ O_ITSRC10_Default.get_targets()  (2)  ts <@ O_ITSRC10_Default.get_targets()
+cover_q <-                             (3)  cover_q <-                           
+  flatten                              ( )    flatten                            
+    (map                               ( )      (map                             
+       (fun (km : mkey * msg) =>       ( )         (fun (km : mkey * msg) =>     
+          hC km.`1 km.`2) ts)          ( )            hC km.`1 km.`2) ts)        
+
+post =
+  predC_fors (mco mk'{1} m'{1}) /\
+  (forall (x : int * int * int), x \in cover_f{1} => x \in cover_q{1}) /\
+  ! ((mk'{1}, m'{1}) \in ts{1}) =>
+  (forall (x : int * int * int), x \in cover_f{2} => x \in cover_q{2}) /\
+  ! ((mk'{2}, m'{2}) \in ts{2})
+[77|check]>
+No more goals
+[78|check]>
+[79|check]>
+added lemma: `ITSRC10_le_noC_SAME_ORACLE'
+[80|check]>

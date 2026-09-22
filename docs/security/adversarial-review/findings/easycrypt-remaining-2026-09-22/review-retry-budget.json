@@ -1,0 +1,7 @@
+{
+  "original_start_epoch": 1790108932.7272701,
+  "deadline_epoch": 1790109832.7272701,
+  "calculated_epoch": 1790109036.3571038,
+  "retry_seconds": 766,
+  "basis": "Immutable coordinator launch-start record, before original legs."
+}

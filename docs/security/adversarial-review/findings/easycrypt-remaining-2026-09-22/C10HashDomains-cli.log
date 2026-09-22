@@ -1,0 +1,505 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+added operator hmsg_input : int list ->
+                            int list -> int list -> int list -> int list
+added operator r_input : int list ->
+                         int list -> int list -> counter -> int list
+[5|check]>
+[6|check]>
+added operator pair_input : int list ->
+                            int list -> int list -> int list -> int list
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+r: int list
+message: int list
+------------------------------------------------------------------------
+size seed = 32 =>
+size root = 32 =>
+size r = 32 =>
+size message = 32 => size (hmsg_input seed root r message) = 160
+[7|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+r: int list
+message: int list
+------------------------------------------------------------------------
+size seed = 32 =>
+size root = 32 =>
+size r = 32 =>
+size message = 32 => size (hmsg_input seed root r message) = 160
+[8|check]>
+No more goals
+[9|check]>
+[10|check]>
+added lemma: `hmsg_width'
+Current goal
+
+Type variables: <none>
+
+secret: int list
+random: int list
+message: int list
+nonce: counter
+------------------------------------------------------------------------
+size secret = 32 =>
+size message = 32 =>
+size (r_input secret random message nonce) = 103 + size random
+[11|check]>
+Current goal
+
+Type variables: <none>
+
+secret: int list
+random: int list
+message: int list
+nonce: counter
+------------------------------------------------------------------------
+size secret = 32 =>
+size message = 32 =>
+size (r_input secret random message nonce) = 103 + size random
+[12|check]>
+No more goals
+[13|check]>
+[14|check]>
+added lemma: `r_width'
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+lhs: int list
+rhs: int list
+------------------------------------------------------------------------
+size seed = 32 =>
+size address = 32 =>
+size lhs = 32 =>
+size rhs = 32 => size (pair_input seed address lhs rhs) = 128
+[15|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+lhs: int list
+rhs: int list
+------------------------------------------------------------------------
+size seed = 32 =>
+size address = 32 =>
+size lhs = 32 =>
+size rhs = 32 => size (pair_input seed address lhs rhs) = 128
+[16|check]>
+No more goals
+[17|check]>
+[18|check]>
+added lemma: `pair_width'
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+message: int list
+r1: int list
+r2: int list
+------------------------------------------------------------------------
+hmsg_input seed root r1 message = hmsg_input seed root r2 message <=> r1 = r2
+[19|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+message: int list
+r1: int list
+r2: int list
+------------------------------------------------------------------------
+hmsg_input seed root r1 message = hmsg_input seed root r2 message <=> r1 = r2
+[20|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+message: int list
+r1: int list
+r2: int list
+------------------------------------------------------------------------
+hmsg_input seed root r1 message = hmsg_input seed root r2 message => r1 = r2
+[21|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+message: int list
+r1: int list
+r2: int list
+he: seed ++ root ++ r1 ++ message ++ nseq 32 255 =
+    seed ++ root ++ r2 ++ message ++ nseq 32 255
+------------------------------------------------------------------------
+r1 = r2
+[22|check]>
+No more goals
+[23|check]>
+[24|check]>
+added lemma: `hmsg_r_injective'
+Current goal
+
+Type variables: <none>
+
+secret: int list
+random: int list
+message: int list
+seed: int list
+root: int list
+r: int list
+nonce: counter
+------------------------------------------------------------------------
+size secret = 32 =>
+size message = 32 =>
+size random = 0 \/ size random = 16 =>
+size seed = 32 =>
+size root = 32 =>
+size r = 32 =>
+r_input secret random message nonce <> hmsg_input seed root r message
+[25|check]>
+Current goal
+
+Type variables: <none>
+
+secret: int list
+random: int list
+message: int list
+seed: int list
+root: int list
+r: int list
+nonce: counter
+------------------------------------------------------------------------
+size secret = 32 =>
+size message = 32 =>
+size random = 0 \/ size random = 16 =>
+size seed = 32 =>
+size root = 32 =>
+size r = 32 =>
+r_input secret random message nonce <> hmsg_input seed root r message
+[26|check]>
+Current goal
+
+Type variables: <none>
+
+secret: int list
+random: int list
+message: int list
+seed: int list
+root: int list
+r: int list
+nonce: counter
+hs: size secret = 32
+hm: size message = 32
+hr: size random = 0 \/ size random = 16
+hseed: size seed = 32
+hroot: size root = 32
+hR: size r = 32
+------------------------------------------------------------------------
+r_input secret random message nonce <> hmsg_input seed root r message
+[27|check]>
+Current goal
+
+Type variables: <none>
+
+secret: int list
+random: int list
+message: int list
+seed: int list
+root: int list
+r: int list
+nonce: counter
+hs: size secret = 32
+hm: size message = 32
+hr: size random = 0 \/ size random = 16
+hseed: size seed = 32
+hroot: size root = 32
+hR: size r = 32
+h1: size (r_input secret random message nonce) = 103 + size random
+------------------------------------------------------------------------
+r_input secret random message nonce <> hmsg_input seed root r message
+[28|check]>
+Current goal
+
+Type variables: <none>
+
+secret: int list
+random: int list
+message: int list
+seed: int list
+root: int list
+r: int list
+nonce: counter
+hs: size secret = 32
+hm: size message = 32
+hr: size random = 0 \/ size random = 16
+hseed: size seed = 32
+hroot: size root = 32
+hR: size r = 32
+h1: size (r_input secret random message nonce) = 103 + size random
+h2: size (hmsg_input seed root r message) = 160
+------------------------------------------------------------------------
+r_input secret random message nonce <> hmsg_input seed root r message
+[29|check]>
+No more goals
+[30|check]>
+[31|check]>
+added lemma: `r_hmsg_separate'
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+r: int list
+message: int list
+address: int list
+m: dgstblock
+nonce: counter
+------------------------------------------------------------------------
+size seed = 32 =>
+size root = 32 =>
+size r = 32 =>
+size message = 32 =>
+size address = 32 =>
+hmsg_input seed root r message <> seed ++ address ++ c10_payload (m, nonce)
+[32|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+r: int list
+message: int list
+address: int list
+m: dgstblock
+nonce: counter
+------------------------------------------------------------------------
+size seed = 32 =>
+size root = 32 =>
+size r = 32 =>
+size message = 32 =>
+size address = 32 =>
+hmsg_input seed root r message <> seed ++ address ++ c10_payload (m, nonce)
+[33|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+r: int list
+message: int list
+address: int list
+m: dgstblock
+nonce: counter
+hs: size seed = 32
+hr: size root = 32
+hR: size r = 32
+hm: size message = 32
+ha: size address = 32
+------------------------------------------------------------------------
+hmsg_input seed root r message <> seed ++ address ++ c10_payload (m, nonce)
+[34|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+r: int list
+message: int list
+address: int list
+m: dgstblock
+nonce: counter
+hs: size seed = 32
+hr: size root = 32
+hR: size r = 32
+hm: size message = 32
+ha: size address = 32
+h1: size (hmsg_input seed root r message) = 160
+------------------------------------------------------------------------
+hmsg_input seed root r message <> seed ++ address ++ c10_payload (m, nonce)
+[35|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+root: int list
+r: int list
+message: int list
+address: int list
+m: dgstblock
+nonce: counter
+hs: size seed = 32
+hr: size root = 32
+hR: size r = 32
+hm: size message = 32
+ha: size address = 32
+h1: size (hmsg_input seed root r message) = 160
+h2: size (seed ++ address ++ c10_payload (m, nonce)) = 128
+------------------------------------------------------------------------
+hmsg_input seed root r message <> seed ++ address ++ c10_payload (m, nonce)
+[36|check]>
+No more goals
+[37|check]>
+[38|check]>
+added lemma: `hmsg_wots_separate'
+added operator address_tag : int list -> int list
+[39|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+payload: int list
+------------------------------------------------------------------------
+size seed = 32 =>
+size address = 32 => take 32 (drop 32 (seed ++ address ++ payload)) = address
+[40|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+payload: int list
+------------------------------------------------------------------------
+size seed = 32 =>
+size address = 32 => take 32 (drop 32 (seed ++ address ++ payload)) = address
+[41|check]>
+No more goals
+[42|check]>
+[43|check]>
+added lemma: `input_address'
+Current goal
+
+Type variables: <none>
+
+seed1: int list
+seed2: int list
+address1: int list
+address2: int list
+payload1: int list
+payload2: int list
+------------------------------------------------------------------------
+size seed1 = 32 =>
+size seed2 = 32 =>
+size address1 = 32 =>
+size address2 = 32 =>
+address_tag address1 <> address_tag address2 =>
+seed1 ++ address1 ++ payload1 <> seed2 ++ address2 ++ payload2
+[44|check]>
+Current goal
+
+Type variables: <none>
+
+seed1: int list
+seed2: int list
+address1: int list
+address2: int list
+payload1: int list
+payload2: int list
+------------------------------------------------------------------------
+size seed1 = 32 =>
+size seed2 = 32 =>
+size address1 = 32 =>
+size address2 = 32 =>
+address_tag address1 <> address_tag address2 =>
+seed1 ++ address1 ++ payload1 <> seed2 ++ address2 ++ payload2
+[45|check]>
+Current goal
+
+Type variables: <none>
+
+seed1: int list
+seed2: int list
+address1: int list
+address2: int list
+payload1: int list
+payload2: int list
+hs1: size seed1 = 32
+hs2: size seed2 = 32
+ha1: size address1 = 32
+ha2: size address2 = 32
+htags: address_tag address1 <> address_tag address2
+he: seed1 ++ address1 ++ payload1 = seed2 ++ address2 ++ payload2
+------------------------------------------------------------------------
+false
+[46|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+seed1: int list
+seed2: int list
+address1: int list
+address2: int list
+payload1: int list
+payload2: int list
+hs1: size seed1 = 32
+hs2: size seed2 = 32
+ha1: size address1 = 32
+ha2: size address2 = 32
+htags: address_tag address1 <> address_tag address2
+he: seed1 ++ address1 ++ payload1 = seed2 ++ address2 ++ payload2
+------------------------------------------------------------------------
+address1 = address2
+[47|check]>
+Current goal
+
+Type variables: <none>
+
+seed1: int list
+seed2: int list
+address1: int list
+address2: int list
+payload1: int list
+payload2: int list
+hs1: size seed1 = 32
+hs2: size seed2 = 32
+ha1: size address1 = 32
+ha2: size address2 = 32
+htags: address_tag address1 <> address_tag address2
+he: seed1 ++ address1 ++ payload1 = seed2 ++ address2 ++ payload2
+ha: address1 = address2
+------------------------------------------------------------------------
+false
+[48|check]>
+No more goals
+[49|check]>
+[50|check]>
+added lemma: `tagged_inputs_separate'

@@ -1,0 +1,522 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+added operator bounded ['a] :
+                         'a Distr.distr ->
+                         ('a -> bool) -> unit list -> 'a option Distr.distr.
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+mu (bounded d p (tt :: fuel)) e =
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+mu d (predC p) * mu (bounded d p fuel) e
+[4|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+mu (bounded d p (tt :: fuel)) e =
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+mu d (predC p) * mu (bounded d p fuel) e
+[5|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+sum
+  (fun (x : 'a) =>
+     mu1 d x *
+     mu
+       ((fun (x0 : 'a) => if p x0 then dunit (Some x0) else bounded d p fuel)
+          x) e) =
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+mu d (predC p) * mu (bounded d p fuel) e
+[6|check]>
+Current goal (remaining: 2)
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+forall (x : 'a),
+  (fun (x0 : 'a) =>
+     mu1 d x0 *
+     mu
+       ((fun (x1 : 'a) => if p x1 then dunit (Some x1) else bounded d p fuel)
+          x0) e) x =
+  (fun (x0 : 'a) =>
+     (if p x0 /\ e (Some x0) then mu1 d x0 else 0%r) +
+     (if ! p x0 then mu1 d x0 else 0%r) * mu (bounded d p fuel) e) x
+[7|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+sum
+  (fun (x : 'a) =>
+     (if p x /\ e (Some x) then mu1 d x else 0%r) +
+     (if ! p x then mu1 d x else 0%r) * mu (bounded d p fuel) e) =
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+mu d (predC p) * mu (bounded d p fuel) e
+[8|check]>
+Current goal (remaining: 3)
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+summable (fun (x : 'a) => if p x /\ e (Some x) then mu1 d x else 0%r)
+[9|check]>
+Current goal (remaining: 2)
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+summable
+  (fun (x : 'a) => (if ! p x then mu1 d x else 0%r) * mu (bounded d p fuel) e)
+[10|check]>
+Current goal (remaining: 3)
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+forall (x : 'a),
+  (fun (x0 : 'a) =>
+     (if ! p x0 then mu1 d x0 else 0%r) * mu (bounded d p fuel) e) x =
+  (fun (x0 : 'a) =>
+     mu (bounded d p fuel) e * if ! p x0 then mu1 d x0 else 0%r) x
+[11|check]>
+Current goal (remaining: 2)
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+summable
+  (fun (x : 'a) => mu (bounded d p fuel) e * if ! p x then mu1 d x else 0%r)
+[12|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+sum (fun (x : 'a) => if p x /\ e (Some x) then mu1 d x else 0%r) +
+sum
+  (fun (x : 'a) => (if ! p x then mu1 d x else 0%r) * mu (bounded d p fuel) e) =
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+mu d (predC p) * mu (bounded d p fuel) e
+[13|check]>
+No more goals
+[14|check]>
+[15|check]>
+added lemma: `bounded_step'
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+------------------------------------------------------------------------
+is_lossless d => mu1 (bounded d p fuel) None = (1%r - mu d p) ^ size fuel
+[16|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+------------------------------------------------------------------------
+is_lossless d => mu1 (bounded d p fuel) None = (1%r - mu d p) ^ size fuel
+[17|check]>
+Current goal (remaining: 2)
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+dll: is_lossless d
+------------------------------------------------------------------------
+mu1 (bounded d p []) None = (1%r - mu d p) ^ size []
+[18|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+dll: is_lossless d
+u: unit
+fuel: unit list
+ih: mu1 (bounded d p fuel) None = (1%r - mu d p) ^ size fuel
+------------------------------------------------------------------------
+mu1 (bounded d p (u :: fuel)) None = (1%r - mu d p) ^ size (u :: fuel)
+[19|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+dll: is_lossless d
+fuel: unit list
+ih: mu1 (bounded d p fuel) None = (1%r - mu d p) ^ size fuel
+------------------------------------------------------------------------
+mu1 (bounded d p (tt :: fuel)) None = (1%r - mu d p) ^ size (tt :: fuel)
+[20|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+dll: is_lossless d
+fuel: unit list
+ih: mu1 (bounded d p fuel) None = (1%r - mu d p) ^ size fuel
+------------------------------------------------------------------------
+(1%r - mu d p) * (1%r - mu d p) ^ size fuel =
+(1%r - mu d p) ^ (1 + size fuel)
+[21|check]>
+No more goals
+[22|check]>
+[23|check]>
+added lemma: `bounded_exhaustion'
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+is_lossless d =>
+0%r < mu d p =>
+mu (bounded d p fuel) e =
+((1%r - mu d p) ^ size fuel * b2r (e None)) +
+(1%r - (1%r - mu d p) ^ size fuel) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[24|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+------------------------------------------------------------------------
+is_lossless d =>
+0%r < mu d p =>
+mu (bounded d p fuel) e =
+((1%r - mu d p) ^ size fuel * b2r (e None)) +
+(1%r - (1%r - mu d p) ^ size fuel) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[25|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a option -> bool
+dll: is_lossless d
+posp: 0%r < mu d p
+------------------------------------------------------------------------
+mu (bounded d p fuel) e =
+((1%r - mu d p) ^ size fuel * b2r (e None)) +
+(1%r - (1%r - mu d p) ^ size fuel) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[26|check]>
+Current goal (remaining: 2)
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+e: 'a option -> bool
+dll: is_lossless d
+posp: 0%r < mu d p
+------------------------------------------------------------------------
+mu (bounded d p []) e =
+((1%r - mu d p) ^ size [] * b2r (e None)) +
+(1%r - (1%r - mu d p) ^ size []) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[27|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+e: 'a option -> bool
+dll: is_lossless d
+posp: 0%r < mu d p
+u: unit
+fuel: unit list
+ih: mu (bounded d p fuel) e =
+    ((1%r - mu d p) ^ size fuel * b2r (e None)) +
+    (1%r - (1%r - mu d p) ^ size fuel) *
+    mu (dcond d p) (fun (x : 'a) => e (Some x))
+------------------------------------------------------------------------
+mu (bounded d p (u :: fuel)) e =
+((1%r - mu d p) ^ size (u :: fuel) * b2r (e None)) +
+(1%r - (1%r - mu d p) ^ size (u :: fuel)) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[28|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+e: 'a option -> bool
+dll: is_lossless d
+posp: 0%r < mu d p
+fuel: unit list
+ih: mu (bounded d p fuel) e =
+    ((1%r - mu d p) ^ size fuel * b2r (e None)) +
+    (1%r - (1%r - mu d p) ^ size fuel) *
+    mu (dcond d p) (fun (x : 'a) => e (Some x))
+------------------------------------------------------------------------
+mu (bounded d p (tt :: fuel)) e =
+((1%r - mu d p) ^ size (tt :: fuel) * b2r (e None)) +
+(1%r - (1%r - mu d p) ^ size (tt :: fuel)) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[29|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+e: 'a option -> bool
+dll: is_lossless d
+posp: 0%r < mu d p
+fuel: unit list
+ih: mu (bounded d p fuel) e =
+    ((1%r - mu d p) ^ size fuel * b2r (e None)) +
+    (1%r - (1%r - mu d p) ^ size fuel) *
+    mu (dcond d p) (fun (x : 'a) => e (Some x))
+------------------------------------------------------------------------
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+(1%r - mu d p) *
+(((1%r - mu d p) ^ size fuel * b2r (e None)) +
+ (1%r - (1%r - mu d p) ^ size fuel) *
+ mu (dcond d p) (fun (x : 'a) => e (Some x))) =
+((1%r - mu d p) ^ (1 + size fuel) * b2r (e None)) +
+(1%r - (1%r - mu d p) ^ (1 + size fuel)) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[30|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+e: 'a option -> bool
+dll: is_lossless d
+posp: 0%r < mu d p
+fuel: unit list
+------------------------------------------------------------------------
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+(1%r - mu d p) *
+(((1%r - mu d p) ^ size fuel * b2r (e None)) +
+ (1%r - (1%r - mu d p) ^ size fuel) *
+ mu (dcond d p) (fun (x : 'a) => e (Some x))) =
+((1%r - mu d p) ^ (1 + size fuel) * b2r (e None)) +
+(1%r - (1%r - mu d p) ^ (1 + size fuel)) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[31|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+e: 'a option -> bool
+dll: is_lossless d
+posp: 0%r < mu d p
+fuel: unit list
+------------------------------------------------------------------------
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+(1%r - mu d p) *
+(((1%r - mu d p) ^ size fuel * b2r (e None)) +
+ (1%r - (1%r - mu d p) ^ size fuel) *
+ mu (dcond d p) (fun (x : 'a) => e (Some x))) =
+((1%r - mu d p) * (1%r - mu d p) ^ size fuel * b2r (e None)) +
+(1%r - (1%r - mu d p) * (1%r - mu d p) ^ size fuel) *
+mu (dcond d p) (fun (x : 'a) => e (Some x))
+[32|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+e: 'a option -> bool
+dll: is_lossless d
+posp: 0%r < mu d p
+fuel: unit list
+------------------------------------------------------------------------
+mu d (fun (x : 'a) => p x /\ e (Some x)) +
+(1%r - mu d p) *
+(((1%r - mu d p) ^ size fuel * b2r (e None)) +
+ (1%r - (1%r - mu d p) ^ size fuel) *
+ (mu d (fun (x : 'a) => p x /\ e (Some x)) / mu d p)) =
+((1%r - mu d p) * (1%r - mu d p) ^ size fuel * b2r (e None)) +
+(1%r - (1%r - mu d p) * (1%r - mu d p) ^ size fuel) *
+(mu d (fun (x : 'a) => p x /\ e (Some x)) / mu d p)
+[33|check]>
+No more goals
+[34|check]>
+[35|check]>
+added lemma: `bounded_as_conditioned_mixture'
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a -> bool
+------------------------------------------------------------------------
+is_lossless d =>
+0%r < mu d p =>
+mu (bounded d p fuel) (fun (r : 'a option) => oapp e false r) =
+(1%r - (1%r - mu d p) ^ size fuel) * mu (dcond d p) e
+[36|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+e: 'a -> bool
+------------------------------------------------------------------------
+is_lossless d =>
+0%r < mu d p =>
+mu (bounded d p fuel) (fun (r : 'a option) => oapp e false r) =
+(1%r - (1%r - mu d p) ^ size fuel) * mu (dcond d p) e
+[37|check]>
+No more goals
+[38|check]>
+[39|check]>
+added lemma: `bounded_success_mass'
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+------------------------------------------------------------------------
+is_lossless d => is_lossless (bounded d p fuel)
+[40|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+fuel: unit list
+------------------------------------------------------------------------
+is_lossless d => is_lossless (bounded d p fuel)
+[41|check]>
+Current goal (remaining: 2)
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+dll: is_lossless d
+------------------------------------------------------------------------
+is_lossless (bounded d p [])
+[42|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+dll: is_lossless d
+u: unit
+fuel: unit list
+ih: is_lossless (bounded d p fuel)
+------------------------------------------------------------------------
+is_lossless (bounded d p (u :: fuel))
+[43|check]>
+Current goal
+
+Type variables: 'a
+
+d: 'a Distr.distr
+p: 'a -> bool
+dll: is_lossless d
+fuel: unit list
+ih: is_lossless (bounded d p fuel)
+x: 'a
+hx: x \in d
+------------------------------------------------------------------------
+is_lossless
+  ((fun (x0 : 'a) => if p x0 then dunit (Some x0) else bounded d p fuel) x)
+[44|check]>
+No more goals
+[45|check]>
+[46|check]>
+added lemma: `bounded_ll'

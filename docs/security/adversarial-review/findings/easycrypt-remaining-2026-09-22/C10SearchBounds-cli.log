@@ -1,0 +1,438 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+n: int
+------------------------------------------------------------------------
+0%r <= x <= 1%r => 0 <= n => (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+[5|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+n: int
+------------------------------------------------------------------------
+0%r <= x <= 1%r => 0 <= n => (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+[6|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+------------------------------------------------------------------------
+(1%r - x) ^ (n + 1) * (1%r + (n + 1)%r * x) <= 1%r
+[7|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ n
+------------------------------------------------------------------------
+(1%r - x) ^ (n + 1) * (1%r + (n + 1)%r * x) <= 1%r
+[8|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ n
+------------------------------------------------------------------------
+(1%r - x) * (1%r + (n + 1)%r * x) <= 1%r + n%r * x
+[9|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ n
+------------------------------------------------------------------------
+(1%r - x) * (1%r + (n%r + 1%r) * x) <= 1%r + n%r * x
+[10|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ n
+hsq: 0%r <= (n%r + 1%r) * x * x
+------------------------------------------------------------------------
+(1%r - x) * (1%r + (n%r + 1%r) * x) <= 1%r + n%r * x
+[11|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ n
+hsq: 0%r <= (n%r + 1%r) * x * x
+he: (1%r - x) * (1%r + (n%r + 1%r) * x) = 1%r + n%r * x - (n%r + 1%r) * x * x
+------------------------------------------------------------------------
+(1%r - x) * (1%r + (n%r + 1%r) * x) <= 1%r + n%r * x
+[12|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ n
+hs: (1%r - x) * (1%r + (n + 1)%r * x) <= 1%r + n%r * x
+------------------------------------------------------------------------
+(1%r - x) ^ (n + 1) * (1%r + (n + 1)%r * x) <= 1%r
+[13|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ n
+hs: (1%r - x) * (1%r + (n + 1)%r * x) <= 1%r + n%r * x
+------------------------------------------------------------------------
+(1%r - x) ^ n * ((1%r - x) * (1%r + (n + 1)%r * x)) <= 1%r
+[14|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 0%r <= x <= 1%r
+n: int
+hn: 0 <= n
+ih: (1%r - x) ^ n * (1%r + n%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ n
+hs: (1%r - x) * (1%r + (n + 1)%r * x) <= 1%r + n%r * x
+hm: (1%r - x) ^ n * ((1%r - x) * (1%r + (n + 1)%r * x)) <=
+    (1%r - x) ^ n * (1%r + n%r * x)
+------------------------------------------------------------------------
+(1%r - x) ^ n * ((1%r - x) * (1%r + (n + 1)%r * x)) <= 1%r
+[15|check]>
+No more goals
+[16|check]>
+[17|check]>
+added lemma: `reciprocal_tail'
+Current goal
+
+Type variables: <none>
+
+x: real
+------------------------------------------------------------------------
+1%r / 32768%r <= x <= 1%r => (1%r - x) ^ 32768 <= 1%r / 2%r
+[18|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+------------------------------------------------------------------------
+1%r / 32768%r <= x <= 1%r => (1%r - x) ^ 32768 <= 1%r / 2%r
+[19|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 1%r / 32768%r <= x <= 1%r
+------------------------------------------------------------------------
+(1%r - x) ^ 32768 <= 1%r / 2%r
+[20|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 1%r / 32768%r <= x <= 1%r
+hx0: 0%r <= x <= 1%r
+------------------------------------------------------------------------
+(1%r - x) ^ 32768 <= 1%r / 2%r
+[21|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 1%r / 32768%r <= x <= 1%r
+hx0: 0%r <= x <= 1%r
+h: (1%r - x) ^ 32768 * (1%r + 32768%r * x) <= 1%r
+------------------------------------------------------------------------
+(1%r - x) ^ 32768 <= 1%r / 2%r
+[22|check]>
+Current goal
+
+Type variables: <none>
+
+x: real
+hx: 1%r / 32768%r <= x <= 1%r
+hx0: 0%r <= x <= 1%r
+h: (1%r - x) ^ 32768 * (1%r + 32768%r * x) <= 1%r
+hp: 0%r <= (1%r - x) ^ 32768
+------------------------------------------------------------------------
+(1%r - x) ^ 32768 <= 1%r / 2%r
+[23|check]>
+No more goals
+[24|check]>
+[25|check]>
+added lemma: `one_block_half'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+1%r / 32768%r <= acceptance <= 1%r
+[26|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+1%r / 32768%r <= acceptance <= 1%r
+[27|check]>
+No more goals
+[28|check]>
+[29|check]>
+added lemma: `acceptance_lower'
+Current goal
+
+Type variables: <none>
+
+fresh: int
+------------------------------------------------------------------------
+9994240 <= fresh => (1%r - acceptance) ^ fresh <= (1%r / 2%r) ^ 305
+[30|check]>
+Current goal
+
+Type variables: <none>
+
+fresh: int
+------------------------------------------------------------------------
+9994240 <= fresh => (1%r - acceptance) ^ fresh <= (1%r / 2%r) ^ 305
+[31|check]>
+Current goal
+
+Type variables: <none>
+
+fresh: int
+hf: 9994240 <= fresh
+hx: 1%r / 32768%r <= acceptance <= 1%r
+------------------------------------------------------------------------
+(1%r - acceptance) ^ fresh <= (1%r / 2%r) ^ 305
+[32|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+fresh: int
+hf: 9994240 <= fresh
+hx: 1%r / 32768%r <= acceptance <= 1%r
+------------------------------------------------------------------------
+(1%r - acceptance) ^ fresh <= (1%r - acceptance) ^ (32768 * 305)
+[33|check]>
+Current goal
+
+Type variables: <none>
+
+fresh: int
+hf: 9994240 <= fresh
+hx: 1%r / 32768%r <= acceptance <= 1%r
+------------------------------------------------------------------------
+(1%r - acceptance) ^ (32768 * 305) <= (1%r / 2%r) ^ 305
+[34|check]>
+Current goal
+
+Type variables: <none>
+
+fresh: int
+hf: 9994240 <= fresh
+hx: 1%r / 32768%r <= acceptance <= 1%r
+------------------------------------------------------------------------
+(1%r - acceptance) ^ 32768 ^ 305 <= (1%r / 2%r) ^ 305
+[35|check]>
+Current goal
+
+Type variables: <none>
+
+fresh: int
+hf: 9994240 <= fresh
+hx: 1%r / 32768%r <= acceptance <= 1%r
+------------------------------------------------------------------------
+0%r <= (1%r - acceptance) ^ 32768 <= 1%r / 2%r
+[36|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+fresh: int
+hf: 9994240 <= fresh
+hx: 1%r / 32768%r <= acceptance <= 1%r
+------------------------------------------------------------------------
+0%r <= (1%r - acceptance) ^ 32768
+[37|check]>
+Current goal
+
+Type variables: <none>
+
+fresh: int
+hf: 9994240 <= fresh
+hx: 1%r / 32768%r <= acceptance <= 1%r
+------------------------------------------------------------------------
+0%r <= (1%r - acceptance) ^ 32768 => (1%r - acceptance) ^ 32768 <= 1%r / 2%r
+[38|check]>
+No more goals
+[39|check]>
+[40|check]>
+added lemma: `fresh_trials_bound'
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+9994240 <= fresh_count history (counter_inputs seed address m) =>
+mu1 (shared_search seed address m history) None <= (1%r / 2%r) ^ 305
+[41|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+9994240 <= fresh_count history (counter_inputs seed address m) =>
+mu1 (shared_search seed address m history) None <= (1%r / 2%r) ^ 305
+[42|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+hf: 9994240 <= fresh_count history (counter_inputs seed address m)
+------------------------------------------------------------------------
+mu1 (shared_search seed address m history) None <= (1%r / 2%r) ^ 305
+[43|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+hf: 9994240 <= fresh_count history (counter_inputs seed address m)
+------------------------------------------------------------------------
+mu1 (shared_search seed address m history) None <=
+(1%r - acceptance) ^ fresh_count history (counter_inputs seed address m)
+[44|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+hf: 9994240 <= fresh_count history (counter_inputs seed address m)
+------------------------------------------------------------------------
+(1%r - acceptance) ^ fresh_count history (counter_inputs seed address m) <=
+(1%r / 2%r) ^ 305
+[45|check]>
+No more goals
+[46|check]>
+[47|check]>
+added lemma: `shared_exhaustion_305_bits'
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+size (counter_inputs seed address m) -
+fresh_count history (counter_inputs seed address m) <= 5760 =>
+mu1 (shared_search seed address m history) None <= (1%r / 2%r) ^ 305
+[48|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+size (counter_inputs seed address m) -
+fresh_count history (counter_inputs seed address m) <= 5760 =>
+mu1 (shared_search seed address m history) None <= (1%r / 2%r) ^ 305
+[49|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+hb: 10000000 - fresh_count history (counter_inputs seed address m) <= 5760
+------------------------------------------------------------------------
+mu1 (shared_search seed address m history) None <= (1%r / 2%r) ^ 305
+[50|check]>
+No more goals
+[51|check]>
+[52|check]>
+added lemma: `shared_search_known_budget'

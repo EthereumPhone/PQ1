@@ -1,0 +1,286 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+added operator counter_inputs : int list ->
+                                int list -> dgstblock -> int list list
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+------------------------------------------------------------------------
+size (counter_inputs seed address m) = signing_budget
+[5|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+------------------------------------------------------------------------
+size (counter_inputs seed address m) = signing_budget
+[6|check]>
+No more goals
+[7|check]>
+added lemma: `counter_inputs_size'
+[8|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+------------------------------------------------------------------------
+uniq (counter_inputs seed address m)
+[9|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+------------------------------------------------------------------------
+uniq (counter_inputs seed address m)
+[10|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+------------------------------------------------------------------------
+forall (x y : int),
+  x \in range 0 signing_budget =>
+  y \in range 0 signing_budget =>
+  (fun (i : int) => seed ++ address ++ c10_payload (m, of_int i)) x =
+  (fun (i : int) => seed ++ address ++ c10_payload (m, of_int i)) y => 
+  x = y
+[11|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+i: int
+j: int
+hi: 0 <= i < signing_budget
+hj: 0 <= j < signing_budget
+he: seed ++ address ++ c10_payload (m, of_int i) =
+    seed ++ address ++ c10_payload (m, of_int j)
+------------------------------------------------------------------------
+i = j
+[12|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+i: int
+j: int
+hi: 0 <= i < signing_budget
+hj: 0 <= j < signing_budget
+he: seed ++ address ++ c10_payload (m, of_int i) =
+    seed ++ address ++ c10_payload (m, of_int j)
+------------------------------------------------------------------------
+c10_payload (m, of_int i) = c10_payload (m, of_int j)
+[13|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+i: int
+j: int
+hi: 0 <= i < signing_budget
+hj: 0 <= j < signing_budget
+he: seed ++ address ++ c10_payload (m, of_int i) =
+    seed ++ address ++ c10_payload (m, of_int j)
+hp: c10_payload (m, of_int i) = c10_payload (m, of_int j)
+------------------------------------------------------------------------
+i = j
+[14|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+i: int
+j: int
+hi: 0 <= i < signing_budget
+hj: 0 <= j < signing_budget
+he: seed ++ address ++ c10_payload (m, of_int i) =
+    seed ++ address ++ c10_payload (m, of_int j)
+hp: c10_payload (m, of_int i) = c10_payload (m, of_int j)
+hc: (m, of_int i) = (m, of_int j)
+------------------------------------------------------------------------
+i = j
+[15|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+i: int
+j: int
+hi: 0 <= i < signing_budget
+hj: 0 <= j < signing_budget
+he: seed ++ address ++ c10_payload (m, of_int i) =
+    seed ++ address ++ c10_payload (m, of_int j)
+hp: c10_payload (m, of_int i) = c10_payload (m, of_int j)
+hc: (m, of_int i) = (m, of_int j)
+hi32: 0 <= i < 4294967296
+------------------------------------------------------------------------
+i = j
+[16|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+i: int
+j: int
+hi: 0 <= i < signing_budget
+hj: 0 <= j < signing_budget
+he: seed ++ address ++ c10_payload (m, of_int i) =
+    seed ++ address ++ c10_payload (m, of_int j)
+hp: c10_payload (m, of_int i) = c10_payload (m, of_int j)
+hc: (m, of_int i) = (m, of_int j)
+hi32: 0 <= i < 4294967296
+hj32: 0 <= j < 4294967296
+------------------------------------------------------------------------
+i = j
+[17|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+i: int
+j: int
+hi: 0 <= i < signing_budget
+hj: 0 <= j < signing_budget
+he: seed ++ address ++ c10_payload (m, of_int i) =
+    seed ++ address ++ c10_payload (m, of_int j)
+hp: c10_payload (m, of_int i) = c10_payload (m, of_int j)
+hc: (m, of_int i) = (m, of_int j)
+hi32: 0 <= i < 4294967296
+hj32: 0 <= j < 4294967296
+hcounter: of_int i = of_int j
+------------------------------------------------------------------------
+i = j
+[18|check]>
+No more goals
+[19|check]>
+[20|check]>
+added lemma: `counter_inputs_unique'
+added operator shared_search : int list ->
+                               int list ->
+                               dgstblock ->
+                               (int list * msgWOTS) list ->
+                               MDigestBlock.sT option Distr.distr
+[21|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+mu1 (shared_search seed address m history) None <=
+(1%r - acceptance) ^ fresh_count history (counter_inputs seed address m)
+[22|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+mu1 (shared_search seed address m history) None <=
+(1%r - acceptance) ^ fresh_count history (counter_inputs seed address m)
+[23|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+mu1 (ro_search uniform_digest predC history (counter_inputs seed address m))
+  None <=
+(1%r - mu uniform_digest predC) ^
+fresh_count history (counter_inputs seed address m)
+[24|check]>
+No more goals
+[25|check]>
+[26|check]>
+added lemma: `shared_history_exhaustion'
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+(forall (x : int list),
+   x \in counter_inputs seed address m => assoc history x = None) =>
+mu1 (shared_search seed address m history) None =
+(1%r - acceptance) ^ signing_budget
+[27|check]>
+Current goal
+
+Type variables: <none>
+
+seed: int list
+address: int list
+m: dgstblock
+history: (int list * msgWOTS) list
+------------------------------------------------------------------------
+(forall (x : int list),
+   x \in counter_inputs seed address m => assoc history x = None) =>
+mu1 (shared_search seed address m history) None =
+(1%r - acceptance) ^ signing_budget
+[28|check]>
+No more goals
+[29|check]>
+added lemma: `shared_fresh_exhaustion'
+[30|check]>

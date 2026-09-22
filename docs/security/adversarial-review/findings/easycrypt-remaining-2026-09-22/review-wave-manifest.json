@@ -1,0 +1,206 @@
+{
+  "base": "bd9b8a889da225238a52ca896b8fa1735262b9b4",
+  "created_at": "2026-09-22T20:31:27.759359+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "1e08503dbdf3c2cb0d706d32f3408277388d1c76ef108673e8fe42c1b322925b",
+      "version": "2.1.280 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "0753dfe1d8b87a52436deb13eb1c549661ef4c84fee2c5aa688385eebeccb761",
+      "version": "codex-cli 0.155.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.000494,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-prompt.txt",
+    "sha256": "32e2fa7d16b3a0a309db39aa86c79457fa45935233e259bd400ead5d0157d2da"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 10378,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 153.811,
+      "ended_at": "2026-09-22T20:31:27.538062+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "32e2fa7d16b3a0a309db39aa86c79457fa45935233e259bd400ead5d0157d2da",
+        "report_sha256": "3c532045da5907f5d755b017a614b0fdb573f6e8e311dca7c9c9b2bcd7371dda",
+        "runtime_sha256": "757eb3ec145edb4a05d738b193cebe8eef2bf232f127297e1ed8ed17a23fb0b4",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/claude",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/claude/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/claude/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/claude/stderr.txt"
+      },
+      "report_words": 608,
+      "started_at": "2026-09-22T20:28:53.726893+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 31436,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 47.673,
+      "ended_at": "2026-09-22T20:29:41.399119+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "32e2fa7d16b3a0a309db39aa86c79457fa45935233e259bd400ead5d0157d2da",
+        "report_sha256": "354cf00ebd9f3012e3581d0591a603a6cb71aca4f6b710c123ab46767a0c8eed",
+        "runtime_sha256": "8e07634ec3b12b241e6ad0fd0b7cf40db198e8aa176dd9da9eaa1dfb96593dde",
+        "stderr_sha256": "4e288a38bbf9c1c4ceffe7eccc375e9a1d5255f9388b5519d2a8d3647fe7a0ac"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-wave-v2/codex/stderr.txt"
+      },
+      "report_words": 33,
+      "started_at": "2026-09-22T20:28:53.726402+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "EasyCrypt remaining C10 research",
+  "target": {
+    "commit_after": "8d388d66123068b995827f76840b129d4491f4a9",
+    "commit_before": "8d388d66123068b995827f76840b129d4491f4a9",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-remaining-20260922-m94hajl2/review-target-v2",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "3e1801909df0d61c481dac1bbc7a3754d2e0cb8d",
+    "tree_before": "3e1801909df0d61c481dac1bbc7a3754d2e0cb8d"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.280 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.155.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-22T20:28:53.726335+00:00"
+}

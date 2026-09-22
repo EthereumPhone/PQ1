@@ -1,0 +1,2 @@
+[-] [0002] 16.0% (-1.0B / [frag -1.0B])[\] [0004] 37.7% (-1.0B / [frag -1.0B])[|] [0005] 39.4% (-1.0B / [frag -1.0B])[/] [0006] 56.1% (-1.0B / [frag -1.0B])[-] [0007] 76.2% (-1.0B / [frag -1.0B])[\] [0008] 80.0% (-1.0B / [frag -1.0B])[|] [0009] 98.8% (-1.0B / [frag -1.0B])                                                                                                      [critical] [scratch/SharedRODuplicateNotFresh.ec: line 8 (0-79)] [by]: cannot close goals
+[/] [0009] 98.8% (-1.0B / [frag -1.0B])[-] [0009] 98.8% (-1.0B / [frag -1.0B])
