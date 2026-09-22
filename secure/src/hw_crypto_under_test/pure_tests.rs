@@ -49,6 +49,15 @@ const OTP_SRC: &str = include_str!("../hw/otp.rs");
 /// of this slice it is MMIO-free, so its behaviour is tested for real in its
 /// own module — these text pins only hold the *shape* of the D4 rule in place.
 const OTP_STATE_SRC: &str = include_str!("../otp_state.rs");
+/// The OTP geometry exists in FOUR places, and until now only one pair was
+/// cross-checked. The FSBL reads the rollback tally with its own hardcoded
+/// copy of the base and word count (it cannot import from the secure crate),
+/// and the factory verification script decodes the sentinel over SWD with its
+/// own hardcoded address. A drift in any one of them is a silent
+/// disagreement about what a burned OTP word means.
+const FSBL_OTP_SRC: &str = include_str!("../../../fsbl/src/otp.rs");
+const FACTORY_VERIFY_SH: &str =
+    include_str!("../../../tools/factory-provisioning-verify.sh");
 const BHK_SRC: &str = include_str!("../hw/bhk.rs");
 const MMIO_SRC: &str = include_str!("../hw/mmio.rs");
 
@@ -188,6 +197,107 @@ fn positive_otp_layout_constants() {
     assert!(OTP_SRC.contains("pub const MAX_FW_VERSION: u32 = ROLLBACK_WORDS * 32;"));
     assert!(OTP_SRC.contains("pub const MASTER_KEY_OFFSET: u32 = ROLLBACK_WORDS * 4;"));
     assert!(OTP_SRC.contains("pub const MASTER_KEY_SIZE: usize = 32;"));
+}
+
+#[test]
+fn positive_otp_factory_sentinel_layout_is_pinned() {
+    // #723: these five declarations were asserted ONLY by
+    // `secure/src/hw/otp.rs`'s own `#[cfg(test)] mod tests`, which has never
+    // run — `mod hw;` is `#[cfg(not(test))]` in main.rs, so no feature flag
+    // can reach it. They are consumed by `factory_provisioning.rs` (the
+    // sentinel masks gate the first-boot production path), and the deleted
+    // test's own comment said drift here "would make field reports and the
+    // host fixture's ship-gate misinterpret the OTP state."
+    //
+    // Text pinning is COMPLETE for a constant, which is why it is the right
+    // tool here and the wrong one for a branch chain: the declaration text
+    // determines the value, whereas pinning one arm of an if-chain says
+    // nothing about its position (see #723's reset_cause differential).
+    assert!(OTP_SRC.contains(
+        "pub const FACTORY_SENTINEL_OFFSET: u32 = MASTER_KEY_OFFSET + MASTER_KEY_SIZE as u32;"
+    ));
+    assert!(OTP_SRC.contains(
+        "pub const FACTORY_SENTINEL_ADDR: u32 = OTP_BASE + FACTORY_SENTINEL_OFFSET;"
+    ));
+    assert!(OTP_SRC.contains("pub const FACTORY_SENTINEL_SIZE: u32 = 16;"));
+    assert!(OTP_SRC.contains("pub const FACTORY_SENTINEL_BIT_RAN: u32 = 1 << 0;"));
+    assert!(OTP_SRC.contains("pub const FACTORY_SENTINEL_BIT_REHEARSAL: u32 = 1 << 1;"));
+    assert!(OTP_SRC.contains("pub const FACTORY_SENTINEL_BIT_PRODUCTION: u32 = 1 << 2;"));
+
+    // The three masks must stay disjoint single bits: the script decodes the
+    // word by AND-ing them, so an overlap reports two ceremony states at once.
+    let bits = [1u32 << 0, 1 << 1, 1 << 2];
+    for (i, a) in bits.iter().enumerate() {
+        assert_eq!(a.count_ones(), 1, "sentinel masks must be single bits");
+        for b in &bits[i + 1..] {
+            assert_eq!(a & b, 0, "sentinel masks must be disjoint");
+        }
+    }
+}
+
+#[test]
+fn positive_otp_absolute_addresses_not_just_offsets() {
+    // Every offset here is expressed relative to OTP_BASE, so a suite that
+    // only checked offsets would still pass with the WRONG base — the whole
+    // region would move together and every relative assertion would hold.
+    // Pin the absolute values the outside world actually uses.
+    //
+    //   MASTER_KEY_ADDR      = 0x0BFA_0000 + 128 = 0x0BFA_0080
+    //   FACTORY_SENTINEL_ADDR= 0x0BFA_0000 + 160 = 0x0BFA_00A0
+    assert!(OTP_SRC.contains("pub const OTP_BASE: u32 = 0x0BFA_0000;"));
+    assert_eq!(0x0BFA_0000u32 + 128, 0x0BFA_0080);
+    assert_eq!(0x0BFA_0000u32 + 160, 0x0BFA_00A0);
+    // Private, not `pub`, and wrapped across two lines — pin the real text.
+    assert!(OTP_SRC.contains(
+        "const OTP_RESERVED_BYTES: u32 =\n    FACTORY_SENTINEL_OFFSET + FACTORY_SENTINEL_SIZE;"
+    ));
+    // 32 rollback words (128 B) + 32 B master key + 16 B sentinel = 176.
+    assert_eq!(32 * 4 + 32 + 16, 176);
+}
+
+#[test]
+fn negative_otp_geometry_agrees_across_all_four_copies() {
+    // The secure driver, the pure classifier, the FSBL and the factory shell
+    // script each carry their own copy of this geometry. Nothing compared
+    // them. The FSBL cannot import from the secure crate and the script is
+    // not Rust at all, so a cross-copy assertion is the only place the four
+    // can be held together.
+
+    // (1) secure driver  vs  (2) pure classifier: MASTER_KEY_SIZE is declared
+    //     in BOTH `hw/otp.rs` and `otp_state.rs`, independently.
+    assert!(OTP_SRC.contains("pub const MASTER_KEY_SIZE: usize = 32;"));
+    assert!(
+        OTP_STATE_SRC.contains("pub(crate) const MASTER_KEY_SIZE: usize = 32;"),
+        "otp_state.rs holds a SECOND definition of MASTER_KEY_SIZE; the two \
+         must agree or the classifier and the driver disagree about how many \
+         quad-words a complete master key occupies"
+    );
+
+    // (3) FSBL's independent copy — it reads the rollback tally pre-PIN and
+    //     cannot link against the secure crate.
+    assert!(
+        FSBL_OTP_SRC.contains("const OTP_BASE: usize = 0x0BFA_0000;"),
+        "fsbl/src/otp.rs must agree with the secure driver's OTP_BASE"
+    );
+    assert!(
+        FSBL_OTP_SRC.contains("const ROLLBACK_WORDS: usize = 32;"),
+        "fsbl/src/otp.rs must agree with the secure driver's ROLLBACK_WORDS"
+    );
+
+    // (4) The factory verification script decodes the sentinel over SWD using
+    //     a hardcoded absolute address. Same class as the BUTTON_STEP_DECODE
+    //     mirror: a number two programs must agree on, in two languages.
+    assert!(
+        FACTORY_VERIFY_SH.contains("OTP_SENTINEL_ADDR:-0x0BFA00A0"),
+        "tools/factory-provisioning-verify.sh reads a different sentinel \
+         address than OTP_BASE + FACTORY_SENTINEL_OFFSET (0x0BFA00A0)"
+    );
+
+    // Guard the oracle: an include that resolved to something unrelated would
+    // make every `contains` above vacuously false-negative-proof only because
+    // the assertions are positive — so check the fixtures are the real files.
+    assert!(FSBL_OTP_SRC.contains("fn "), "FSBL OTP fixture looks empty");
+    assert!(FACTORY_VERIFY_SH.contains("probe-rs"), "factory script fixture looks wrong");
 }
 
 #[test]

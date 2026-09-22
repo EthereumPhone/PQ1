@@ -1181,30 +1181,6 @@
       "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
     },
     {
-      "file": "secure/src/hw/otp.rs",
-      "test": "factory_sentinel_bit_layout",
-      "issue": "#723",
-      "why": "`hw/mod.rs` gates `pub mod otp;` on `stm32u585`, absent from the host test build \u2014 though the tests themselves say they are pure math that does not touch hardware."
-    },
-    {
-      "file": "secure/src/hw/otp.rs",
-      "test": "lsb_first_walk_is_contiguous",
-      "issue": "#723",
-      "why": "`hw/mod.rs` gates `pub mod otp;` on `stm32u585`, absent from the host test build \u2014 though the tests themselves say they are pure math that does not touch hardware."
-    },
-    {
-      "file": "secure/src/hw/otp.rs",
-      "test": "master_key_layout",
-      "issue": "#723",
-      "why": "`hw/mod.rs` gates `pub mod otp;` on `stm32u585`, absent from the host test build \u2014 though the tests themselves say they are pure math that does not touch hardware."
-    },
-    {
-      "file": "secure/src/hw/otp.rs",
-      "test": "max_fw_version",
-      "issue": "#723",
-      "why": "`hw/mod.rs` gates `pub mod otp;` on `stm32u585`, absent from the host test build \u2014 though the tests themselves say they are pure math that does not touch hardware."
-    },
-    {
       "file": "secure/src/hw/tamp.rs",
       "test": "reason_strings_cover_every_itamp_bit",
       "issue": "#723",

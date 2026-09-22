@@ -64,6 +64,7 @@ import os
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -111,8 +112,8 @@ def ci_test_commands() -> list[tuple[str, list[str]]]:
     return out
 
 
-def list_tests(cwd: str, argv: list[str]) -> tuple[set[str], str]:
-    """Names `cargo test -- --list` reports. Returns (bare fn names, error)."""
+def list_tests(cwd: str, argv: list[str]) -> tuple[Counter[str], str]:
+    """Names `cargo test -- --list` reports, COUNTED by bare fn name."""
     env = {k: v for k, v in os.environ.items() if k != "RUSTFLAGS"}
     # Firmware linker flags in RUSTFLAGS break host build scripts; that run
     # would be void rather than merely failing.
@@ -120,12 +121,26 @@ def list_tests(cwd: str, argv: list[str]) -> tuple[set[str], str]:
     proc = subprocess.run(
         cmd, cwd=REPO / cwd, env=env, capture_output=True, text=True, check=False
     )
-    names = {
+    # Counted, not set-collected. 26 bare names are declared in more than one
+    # file (53 tests), so a set would let a DIFFERENT test of the same name
+    # satisfy an unreachable declaration. Requiring
+    #     runnable_count[name] >= declared_count[name]
+    # closes that: three declarations of `negative_build_db_empty_json_rejected`
+    # need three listed occurrences, not one.
+    #
+    # Module-qualified matching would be exact, but the declared side only has
+    # (file, fn) and this repo's `#[path]`-mounted `*_under_test` modules do not
+    # map file stem -> module path reliably. Counting is sound without that map.
+    names: Counter[str] = Counter(
         line[: -len(": test")].split("::")[-1]
         for line in proc.stdout.splitlines()
         if line.endswith(": test")
-    }
-    if proc.returncode != 0 and not names:
+    )
+    if proc.returncode != 0:
+        # Previously this tolerated a nonzero exit whenever SOME names had been
+        # printed. A suite that fails to build half its targets still prints the
+        # half that built, so that leniency turned a partial listing into
+        # "these tests run" — the exact confusion this gate exists to prevent.
         return names, (proc.stderr.strip().splitlines() or ["(no stderr)"])[-1]
     return names, ""
 
@@ -178,7 +193,7 @@ def main() -> int:
         return 2
     print(f"== {len(commands)} cargo-test suite(s) derived from ci.yml")
 
-    runnable: set[str] = set()
+    runnable: Counter[str] = Counter()
     for cwd, argv in commands:
         names, err = list_tests(cwd, argv)
         label = " ".join(argv[:6]) + (" ..." if len(argv) > 6 else "")
@@ -186,13 +201,14 @@ def main() -> int:
             print(f"!! could not list tests for `{label}` (cwd={cwd}): {err}",
                   file=sys.stderr)
             return 2
-        print(f"   {len(names):>5} tests  {label}")
-        runnable |= names
+        print(f"   {sum(names.values()):>5} tests  {label}")
+        runnable += names
 
     declared = declared_tests()
     n_ignored = sum(1 for _, _, ig in declared if ig)
     print(f"\n== declared #[test] fns: {len(declared)}  ({n_ignored} marked #[ignore])")
-    print(f"== distinct runnable names: {len(runnable)}")
+    print(f"== distinct runnable names: {len(runnable)} "
+          f"({sum(runnable.values())} listed occurrences)")
 
     if len(declared) < MIN_DECLARED or len(runnable) < MIN_RUNNABLE:
         print(f"!! extraction looks broken (declared={len(declared)} "
@@ -201,11 +217,16 @@ def main() -> int:
         return 2
 
     allow = load_allowlist()
+    declared_counts = Counter(name for _, name, _ in declared)
+    collisions = {n for n, k in declared_counts.items() if k > 1}
+    if collisions:
+        print(f"== {len(collisions)} bare name(s) declared in more than one file "
+              f"— matched by COUNT, not membership")
     violations, exempted_hits = [], set()
     for rel, name, ignored in declared:
         # `--list` cannot distinguish an ignored test from a running one, so
         # the source-side `#[ignore]` is the only signal there is.
-        if name in runnable and not ignored:
+        if runnable[name] >= declared_counts[name] and not ignored:
             continue
         key = f"{rel}::{name}"
         if key in allow:

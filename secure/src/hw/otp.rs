@@ -849,48 +849,23 @@ pub unsafe fn factory_sentinel_record(bits_to_clear: u32) -> Result<(), OtpError
     unsafe { program_otp_qw(FACTORY_SENTINEL_ADDR, &qw_bytes) }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Pure-math test for the bump-planning helper: walk bits LSB-first
-    // across words. Doesn't touch hardware.
-    #[test]
-    fn lsb_first_walk_is_contiguous() {
-        // Simulate: current word = 0xFFFF_FFFF (32 set bits). Clear 3
-        // bits LSB-first → should yield 0xFFFF_FFF8.
-        let mut w: u32 = 0xFFFF_FFFF;
-        for _ in 0..3 {
-            let bit = w.trailing_zeros();
-            w &= !(1u32 << bit);
-        }
-        assert_eq!(w, 0xFFFF_FFF8);
-    }
-
-    #[test]
-    fn max_fw_version() {
-        assert_eq!(MAX_FW_VERSION, 1024);
-    }
-
-    #[test]
-    fn master_key_layout() {
-        assert_eq!(MASTER_KEY_OFFSET, 128);
-        assert_eq!(MASTER_KEY_SIZE, 32);
-        assert_eq!(MASTER_KEY_ADDR, OTP_BASE + 128);
-        assert_eq!(FACTORY_SENTINEL_OFFSET, 160);
-        assert_eq!(FACTORY_SENTINEL_ADDR, OTP_BASE + 160);
-        assert_eq!(FACTORY_SENTINEL_SIZE, 16);
-        assert_eq!(OTP_RESERVED_BYTES, 176);
-    }
-
-    #[test]
-    fn factory_sentinel_bit_layout() {
-        // Encoding contract — silent drift in these constants would
-        // make field reports (and the host fixture's ship-gate; no
-        // fixture RDP2 bump exists per work-todo #36)
-        // misinterpret the OTP state.
-        assert_eq!(FACTORY_SENTINEL_BIT_RAN, 0x01);
-        assert_eq!(FACTORY_SENTINEL_BIT_REHEARSAL, 0x02);
-        assert_eq!(FACTORY_SENTINEL_BIT_PRODUCTION, 0x04);
-    }
-}
+// Host tests for this module's layout live in
+// `secure/src/hw_crypto_under_test/pure_tests.rs`, NOT here.
+//
+// #723: a `#[cfg(test)] mod tests` at this spot could never run. `mod hw;` is
+// `#[cfg(not(test))]` in main.rs, so the whole `hw` tree is absent from every
+// host test build — no feature flag reaches it. Four tests sat here reporting
+// neither pass nor fail.
+//
+// Three were constant pins and are now asserted, with the absolute addresses
+// and the three other copies of this geometry, by `positive_otp_*` and
+// `negative_otp_geometry_agrees_across_all_four_copies` over there.
+//
+// The fourth, `lsb_first_walk_is_contiguous`, is deliberately NOT carried
+// over. It reimplemented `bump_to`'s three-line clear loop locally and
+// asserted on its own copy: it called nothing in this module, would have
+// passed had this file been deleted, and was in substance a test of
+// `u32::trailing_zeros`. `bump_to` is the rejected legacy unary tally, has no
+// Rust call sites, and `cmd_fw_commit.rs` documents the writer's removal and
+// refuses — extracting a helper out of fenced legacy code to serve a test
+// would be churn on a path nobody may call.
