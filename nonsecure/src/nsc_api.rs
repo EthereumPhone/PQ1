@@ -34,6 +34,7 @@ mod transport {
 
     const CMD_GET_REMAINING: u32 = 1;
     const CMD_REQUEST_UNLOCK: u32 = 2;
+    const CMD_GET_PIN_ATTEMPT_LOG: u32 = 4;
     const CMD_SIGN_USEROP: u32 = 7;
     const CMD_IS_UNLOCKED: u32 = 11;
     const CMD_LOCK: u32 = 12;
@@ -137,6 +138,14 @@ mod transport {
     #[inline]
     pub(super) fn offchain_sync_call(in_ptr: *const u8, in_len: u32) -> u32 {
         unsafe { gateway_call(CMD_OFFCHAIN_SYNC, in_ptr as u32, 0, in_len) }
+    }
+
+    /// PIN-attempt reason log readback (bench reader). Mirrors the CMSE
+    /// veneer transport below so the QEMU build of `nsc_api` links; the
+    /// mailbox dispatcher answers `Unsupported` where the log is absent.
+    #[inline]
+    pub(super) fn get_pin_attempt_log_call(out_ptr: *mut u8) -> u32 {
+        unsafe { gateway_call(CMD_GET_PIN_ATTEMPT_LOG, out_ptr as u32, 0, 0) }
     }
 
     #[cfg(feature = "e2e-test")]

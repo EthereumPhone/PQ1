@@ -57,22 +57,32 @@
 ///
 /// A board with no bonded trigger pin leaves every entry point a no-op rather
 /// than writing to a pad that does not exist.
-const HAS_TRIG: bool = crate::board::SCA_TRIGGER.is_some();
-const TRIG_GPIO_PORT_BASE: u32 = match crate::board::SCA_TRIGGER {
-    Some((port, _)) => port,
-    None => crate::board::GPIOA_S, // never touched; `HAS_TRIG` gates every use
-};
-const TRIG_PIN: u8 = match crate::board::SCA_TRIGGER {
-    Some((_, pin)) => pin as u8,
-    None => 0,
-};
+// The `board` module only exists on `stm32u585` builds (every constant is an
+// MCU address). The `sca-trigger` feature implies `stm32u585`, so the real
+// constants are gated on the feature; QEMU / host builds get the no-op stubs
+// below and never read them.
+#[cfg(feature = "sca-trigger")]
+mod pins {
+    pub(super) const HAS_TRIG: bool = crate::board::SCA_TRIGGER.is_some();
+    pub(super) const TRIG_GPIO_PORT_BASE: u32 = match crate::board::SCA_TRIGGER {
+        Some((port, _)) => port,
+        None => crate::board::GPIOA_S, // never touched; `HAS_TRIG` gates every use
+    };
+    pub(super) const TRIG_PIN: u8 = match crate::board::SCA_TRIGGER {
+        Some((_, pin)) => pin as u8,
+        None => 0,
+    };
 
-const TRIG_BSRR: *mut u32 = (TRIG_GPIO_PORT_BASE + 0x18) as *mut u32;
-const TRIG_MODER: *mut u32 = (TRIG_GPIO_PORT_BASE + 0x00) as *mut u32;
+    pub(super) const TRIG_BSRR: *mut u32 = (TRIG_GPIO_PORT_BASE + 0x18) as *mut u32;
+    pub(super) const TRIG_MODER: *mut u32 = (TRIG_GPIO_PORT_BASE + 0x00) as *mut u32;
 
-const RCC_AHB2ENR1: *mut u32 =
-    (crate::board::RCC_S + crate::board::RCC_AHB2ENR1_OFF) as *mut u32;
-const TRIG_PORT_EN_BIT: u32 = crate::board::gpio_rcc_bit(TRIG_GPIO_PORT_BASE);
+    pub(super) const RCC_AHB2ENR1: *mut u32 =
+        (crate::board::RCC_S + crate::board::RCC_AHB2ENR1_OFF) as *mut u32;
+    pub(super) const TRIG_PORT_EN_BIT: u32 = crate::board::gpio_rcc_bit(TRIG_GPIO_PORT_BASE);
+}
+#[cfg(feature = "sca-trigger")]
+use pins::*;
+
 
 /// One-time GPIO init. Call from boot before any [`trig_high`] /
 /// [`trig_low`]. Configures TRIG_PIN as a GPIO output (MODER = 01).
