@@ -4615,3 +4615,59 @@ uniform sampler is not the shared SHA-256 transcript process. The next research
 boundary remains a failure-aware end-to-end reduction and a resource-accounted
 shared-oracle/adaptive-history argument, especially the FORS truncated-R reuse
 and conditional acceptance probabilities. Keep #100 and #295 open.
+
+
+## 2026-09-22 implementation: bounded WOTS game probability bridge
+
+Active surface: EasyCrypt C10 bounded-signing game composition. Base is master
+`d947c04780a156853160bef32882b158518c90b7`; work is isolated on
+`feat/easycrypt-bounded-game-20260922`, preserving the unrelated dirty board
+worktree. The selected existing contract rejects an entire experiment after
+search exhaustion. No firmware, API, parameter, hardware, or deployment change
+is part of this batch.
+
+The three bounded slices are the oracle/adaptive-game coupling, composition
+with the existing WOTS reduction, and pin/control/source enrollment. The
+smallest selected argument is an up-to-bad relation, using EasyCrypt's standard
+rule ([reference manual](https://www.easycrypt.info/easycrypt-doc/refman.pdf),
+`proc` / `call` up to bad); it avoids adding a random-oracle model or estimating
+abort probability. `C10BoundedGame.bounded_win_le_total` relates the exact
+existing bounded and total games for one adversary, including repeated adaptive
+queries to both oracle interfaces. Private oracle globals are excluded and
+adversary losslessness is an explicit premise. Failure is absorbing; a later
+request releases no signature and appends no record. Neither IID sampling nor
+successful search for every input is assumed by this comparison.
+
+`C10BoundedReduction.bounded_interactive_D1` composes the probability inequality
+with the existing two-term interactive WOTS bound. It retains the target cap,
+address separation, encoder bridge, universal counter reachability (N2), and
+original collection-tweak well-formedness premises. The new losslessness
+premises are stated alongside them. The old WOTS-level well-formedness premise
+is not the member-aware hypertree interface. This is a checked **conditional
+WOTS corollary**, not closure of N2, the whole deployed SPHINCS+C reduction, or
+the existing capstones. A future abort-restricted/member-aware hop must remove
+N2 on its own proof terms; composing with a conditional theorem cannot do so.
+
+Focused evidence checks both new proof roots and an actual-query absorbing-
+failure contract. Deliberate false variants remove the relational failure guard
+or clear the flag after a query; both must fail for the registered proof
+obligation. The inventory becomes 68 files / 56 roots / 1,339 declaration pins /
+1,208 statements / 67 controls. The project assumption census is unchanged;
+no project axiom or admit is introduced. The source correspondence remains a
+manually linked model, not a Rust extraction or cross-assistant theorem.
+
+Phase D's closed checklist is: focused dual-driver replay and controls; exact
+pins/census/source binding; frozen clean commit/tree/input identity; full cold
+two-driver replay and all controls; one simultaneous bounded Astra/Opus review
+under standing owner substitutions (Astra for SOL, Kimi omitted); fix blockers
+and re-freeze/re-review material corrections; land under standing push
+authorization; publish compact receipts and update #100/#295. Existing unchanged
+Rust/Lean correspondence is reusable; the full wrapper also reruns the Rust
+host transcript check. No additional review campaign is authorized here.
+
+Remaining research: remove the total-success premise in an abort-restricted
+member-aware reduction and compose through the hypertree; account for the real
+shared-hash/adaptive-history process, FORS truncated-R reuse, and numerical
+resources. #100 and #295 remain open. #509 remains the deferred owner-triggered
+combined assurance pass. No hardware, shipment, or irreversible action is
+licensed by this source-proof batch.

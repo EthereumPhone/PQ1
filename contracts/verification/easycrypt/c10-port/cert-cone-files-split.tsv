@@ -1,5 +1,5 @@
-# Certified dependency cone: 66 files, 54 roots.
-# 2026-09-21 encoder/count and bounded-failure batch.
+# Certified dependency cone: 68 files, 56 roots.
+# 2026-09-22 bounded-game probability bridge.
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -16,8 +16,10 @@ cdrafts-split/BadEncSplit.ec
 cdrafts-split/BadEncStep4.ec
 cdrafts-split/BadEncToTColl.ec
 cdrafts-split/BoundedIID.ec
+cdrafts-split/C10BoundedGame.ec
 cdrafts-split/C10BoundedGrind.ec
 cdrafts-split/C10BoundedIID.ec
+cdrafts-split/C10BoundedReduction.ec
 cdrafts-split/C10BoundedSigning.ec
 cdrafts-split/C10Bytes.ec
 cdrafts-split/C10Counter.ec

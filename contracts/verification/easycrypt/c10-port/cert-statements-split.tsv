@@ -1432,3 +1432,12 @@ op:cdrafts-split/C10BoundedIID.ec::iid_search	65e9dcedd7ddb6be5a4fed26aaa30fea
 op:cdrafts-split/C10BoundedSigning.ec::prefix_hit	45e6a02a0304432851c2c0604aecd633
 op:cdrafts-split/C10BoundedSigning.ec::search_result	c1035c270679427f43a829d611a52a55
 op:cdrafts-split/C10Encoding.ec::uniform_digest	a7067bf53ef8b7db3487dc9b80f4bb16
+
+# 2026-09-22 bounded-game comparison and conditional WOTS composition.
+cdrafts-split/C10BoundedGame.ec::bounded_choose	cd23ed2995402588c248d58aebb09c4c
+cdrafts-split/C10BoundedGame.ec::bounded_failed_query_stops	20463f5606b17275abbcd72b3f6b1b81
+cdrafts-split/C10BoundedGame.ec::bounded_verify_ll	73a9dd098ae2f4bf3fb862c28485a623
+cdrafts-split/C10BoundedGame.ec::bounded_win_le_total	250136fb518b77e5e3f2827a995b2aa6
+cdrafts-split/C10BoundedGame.ec::total_bounded_main	db8dabb92ef3c3034b6579d096d15fe1
+cdrafts-split/C10BoundedGame.ec::total_bounded_query	841b66cf056b82b3357cf90dd7a025bc
+cdrafts-split/C10BoundedReduction.ec::bounded_interactive_D1	4e6faf22ae0fe16b0b44cc7ecb6628db

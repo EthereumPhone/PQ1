@@ -163,3 +163,8 @@ scratch/C10EncoderWrongOrder.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10EncoderWrongTarget.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10IIDErasedFailure.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10IIDMissingSuccessFactor.ec	MUST-FAIL	[by]: cannot close goals
+
+# Absorbing failure and the indispensable guarded game relation.
+scratch/C10BoundedGamePositive.ec	MUST-PASS	-
+scratch/C10BoundedGameNoGuard.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10BoundedGameResetFailure.ec	MUST-FAIL	[by]: cannot close goals

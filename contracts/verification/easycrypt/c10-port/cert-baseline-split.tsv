@@ -1,4 +1,4 @@
-# 2026-09-21: concrete digit encoder/witness and bounded-failure experiments.
+# 2026-09-22: bounded-game comparison; existing assumptions unchanged.
 # No new project axiom or admit; full raw census includes resolved clone obligations.
 base-c10-split/BinaryTrees.ec	defined-op:7ad6319948b8	height	# line 16
 base-c10-split/BinaryTrees.ec	defined-op:ddd3b90ca64e	fully_balanced	# line 39

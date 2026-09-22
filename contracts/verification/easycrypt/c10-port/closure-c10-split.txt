@@ -54,3 +54,7 @@ C10Surface
 C10Encoding
 C10BoundedSigning
 C10BoundedIID
+
+# Adaptive bounded-game comparison and conditional WOTS reduction.
+C10BoundedGame
+C10BoundedReduction

@@ -80,6 +80,24 @@ from admissible adversaries, as in the existing game reductions. Dummy replies
 after failure are an experiment device; the Rust implementation panics. These
 models do not claim a recoverable firmware error API or physical fault behavior.
 
+`C10BoundedGame.bounded_win_le_total` proves that the guarded bounded WOTS
+game's winning probability is at most the existing total game's, for the **same
+adversary**. The oracle and adaptive `choose` executions agree until failure;
+`bounded_failed_query_stops` proves that subsequent requests preserve failure,
+return only the dummy reply, and append no signature record. The comparison
+requires explicit adversary termination for lossless oracle implementations and
+excludes direct access to private signing/hash-oracle globals. It has no
+prefix-hit, IID, or real-hash probability premise and does not condition away
+failed runs.
+
+`C10BoundedReduction.bounded_interactive_D1` composes this inequality with the
+existing interactive WOTS reduction. It retains every premise of
+`interactive_D1`, including universal counter reachability and collection-tweak
+well-formedness. Those premises are **not discharged** by the comparison. The
+collection-tweak condition is the original WOTS-level restriction, not the
+member-aware condition needed by the hypertree reduction. This corollary does
+not close the failure-aware whole-scheme SPHINCS+C reduction.
+
 `BoundedIID` and `C10BoundedIID` separately formalize independent uniform draws.
 They preserve both exhaustion `(1-p)^B` and successful-event mass
 `(1-(1-p)^B) * Pr[conditioned event]`, with `p` supplied by the actual consumer
@@ -98,12 +116,14 @@ Rust extraction is implied. Both abstract digest members must be projections
 of the **same** SHA-256 result: dfC0 is the low half (bytes 16–31 in physical
 big-endian order), dfC1 the high half. The collection is still abstract.
 
-The current perimeter contains 66 proof files, 54 roots, 1,332 unique declaration
-pins, 1,201 statements and 64 controls. New controls reject a wrong target,
-dropped bit 128, erased exhaustion, and omitted successful-event mass. Full
-replay and bounded source review pass; see the
-[encoder/abort receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md)
-for the exact reviewed source, toolchain and remaining research boundary.
+The current perimeter contains 68 proof files, 56 roots, 1,339 unique declaration
+pins, 1,208 statements and 67 controls. The new controls preserve the guarded
+comparison and absorbing-failure contract, and reject dropping the guard or
+clearing the failure flag. The earlier encoder/abort replay and review remain
+recorded in the [September 21 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md).
+The bounded-game batch requires a fresh full replay and bounded source review;
+the [owner plan](../../../../docs/verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-22-implementation-bounded-wots-game-probability-bridge)
+records its completion boundary.
 
 * **`c <= p_tgts` is a reduction-side TARGET CAP — not a bound on how many messages a key
   may sign.** This is worth spelling out because the tree records mistaking it for a query
