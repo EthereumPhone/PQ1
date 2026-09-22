@@ -46,5 +46,14 @@
 #[path = "../ui/confirm_core.rs"]
 mod confirm_core;
 
+// #723: `hw/lcd_window.rs` is the pure half of the NV3007 driver (frame
+// geometry + the CASET/RASET builder). `lcd_nv3007.rs` is
+// `#![cfg(feature = "ui-lcd")]` and `mod hw;` is `#[cfg(not(test))]`, so four
+// tests lived there and never ran — including the cross-check against the
+// vendor bootloader's literal init bytes.
+#[cfg(test)]
+#[path = "../hw/lcd_window.rs"]
+mod lcd_window;
+
 #[cfg(test)]
 mod pure_tests;

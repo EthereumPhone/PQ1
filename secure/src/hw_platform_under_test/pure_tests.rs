@@ -51,6 +51,9 @@ const FLASH_SRC: &str = include_str!("../hw/flash.rs");
 /// `negative_hal_flash_contract_agrees_with_driver_on_quad_word_rule`.
 const HAL_SRC: &str = include_str!("../../../hal/src/lib.rs");
 const TAMP_SRC: &str = include_str!("../hw/tamp.rs");
+/// The decode body moved to `hw/tamp_reason.rs` (#723) so it could be tested
+/// against the real function; the label pins below moved with it.
+const TAMP_REASON_SRC: &str = include_str!("../hw/tamp_reason.rs");
 const CONSUMPTION_MASK_SRC: &str = include_str!("../hw/consumption_mask.rs");
 const CONSUMPTION_MASK_PRNG_SRC: &str = include_str!("../consumption_mask_prng.rs");
 const SCA_TRIGGER_SRC: &str = include_str!("../hw/sca_trigger.rs");
@@ -423,11 +426,15 @@ fn positive_tamp_reason_from_sr_covers_crypto_fault() {
     // ITAMP9 = CRYPTO_FAULT is the SAES/AES/PKA/TRNG glitch canary —
     // the highest-signal source. The mapping string must be findable
     // by name in post-mortem logs.
-    assert!(TAMP_SRC.contains(r#""CRYPTO_FAULT""#));
-    assert!(TAMP_SRC.contains(r#""VOLTAGE""#));
-    assert!(TAMP_SRC.contains(r#""LSE_CLOCK""#));
-    assert!(TAMP_SRC.contains(r#""IWDG""#));
-    assert!(TAMP_SRC.contains(r#""SWD_ACCESS""#));
+    // Retargeted in #723: the literals now live in `hw/tamp_reason.rs`.
+    // `positive_tamp_reason_decodes_every_itamp_flag` is the stronger check
+    // (all 11 labels, against the REAL function); this one survives because
+    // "findable by name in a postmortem log" is about the text, not the value.
+    assert!(TAMP_REASON_SRC.contains(r#""CRYPTO_FAULT""#));
+    assert!(TAMP_REASON_SRC.contains(r#""VOLTAGE""#));
+    assert!(TAMP_REASON_SRC.contains(r#""LSE_CLOCK""#));
+    assert!(TAMP_REASON_SRC.contains(r#""IWDG""#));
+    assert!(TAMP_REASON_SRC.contains(r#""SWD_ACCESS""#));
 }
 
 #[test]
@@ -2226,4 +2233,129 @@ fn negative_pq1_releases_ucpd_dead_battery_early_iota2_does_not() {
         USB_HW_SRC_PLAT.contains("REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS"),
         "iota2's init_ucpd must still release dead-battery after UCPD1_CR"
     );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// TAMP status decode (#723)
+//
+// `hw/tamp.rs` held one test for `reason_from_sr`, and it never ran:
+// `mod hw;` is `#[cfg(not(test))]` in main.rs, so no feature flag reaches
+// the module. It was also a spot-check of 4 flags under the name
+// `reason_strings_cover_every_itamp_bit`, for a decoder with 11.
+//
+// The decoder is now `hw/tamp_reason.rs`, mounted by `super`, so these run
+// against the REAL function rather than a copy. That distinction is the
+// whole point: `reason_from_sr` is an if-chain whose meaning is the ORDER
+// of its arms, and a source-text pin on one arm says nothing about where
+// that arm sits. 74d949e9 demonstrated the same shape on
+// `reset_cause::classify_bits`, where a swap silently disabled the
+// abnormal-reset secret scrub while every mirror test stayed green.
+// ═════════════════════════════════════════════════════════════════════
+
+use super::tamp_reason::{reason_from_sr, DECODE_ORDER};
+
+#[test]
+fn positive_tamp_reason_decodes_every_itamp_flag() {
+    // The name the old test claimed and did not deliver: all eleven.
+    for (bit, label) in DECODE_ORDER {
+        assert_eq!(
+            reason_from_sr(bit),
+            label,
+            "TAMP_SR bit {} must decode as {label}",
+            bit.trailing_zeros()
+        );
+    }
+    assert_eq!(DECODE_ORDER.len(), 11, "eleven documented internal-tamper flags");
+}
+
+#[test]
+fn negative_tamp_reason_is_unknown_for_no_flag_and_for_reserved_bits() {
+    assert_eq!(reason_from_sr(0), "UNKNOWN");
+    // Bits 19, 25 and 29..31 are not decoded; and the low half of TAMP_SR is
+    // external-tamper flags, which this decoder deliberately ignores.
+    for bit in [1u32 << 0, 1 << 15, 1 << 19, 1 << 25, 1 << 29, 1 << 31] {
+        assert_eq!(
+            reason_from_sr(bit),
+            "UNKNOWN",
+            "undecoded TAMP_SR bit {} must not claim a reason",
+            bit.trailing_zeros()
+        );
+    }
+}
+
+#[test]
+fn negative_tamp_reason_priority_order_is_exact() {
+    // THE assertion a text pin cannot make. For every pair, setting BOTH
+    // flags must yield the earlier one — which is false the moment two arms
+    // are swapped, and true for any suite that only checks one flag at a
+    // time. Multiple internal tampers latching together is the normal case
+    // for a real attack (glitch -> voltage AND crypto-fault), so the order
+    // decides what the postmortem inspector reports.
+    let mut pairs = 0usize;
+    for (i, (hi_bit, hi_label)) in DECODE_ORDER.iter().enumerate() {
+        for (lo_bit, _) in &DECODE_ORDER[i + 1..] {
+            assert_eq!(
+                reason_from_sr(hi_bit | lo_bit),
+                *hi_label,
+                "bit {} must outrank bit {}",
+                hi_bit.trailing_zeros(),
+                lo_bit.trailing_zeros()
+            );
+            pairs += 1;
+        }
+    }
+    // Guard the oracle: 11 choose 2. A loop that compared nothing would pass.
+    assert_eq!(pairs, 55, "must compare every ordered pair");
+}
+
+#[test]
+fn negative_tamp_reason_labels_are_distinct_and_log_safe() {
+    // The label goes into `secure_log!` and the postmortem inspector parses
+    // it by name, so duplicates would merge two different tamper causes.
+    for (i, (_, a)) in DECODE_ORDER.iter().enumerate() {
+        assert_ne!(*a, "UNKNOWN", "a decoded flag must not reuse the fallback");
+        assert!(!a.is_empty() && a.len() <= 16, "label must fit a log row: {a}");
+        assert!(
+            a.bytes().all(|c| c.is_ascii_uppercase() || c == b'_' || c.is_ascii_digit()),
+            "label must be log-safe ASCII: {a}"
+        );
+        for (_, b) in &DECODE_ORDER[i + 1..] {
+            assert_ne!(a, b, "duplicate TAMP reason label");
+        }
+    }
+}
+
+#[test]
+fn reason_from_sr_ref_matches_production_exhaustively() {
+    // `reason_from_sr_ref` above is a hand-written reimplementation that
+    // predates #723, from when the real decoder was unreachable host-side.
+    // It is now reachable, so rather than delete the copy this holds the two
+    // together — the same move made for `reset_cause::classify_bits` in
+    // 74d949e9, which turns a drift liability into an oracle.
+    //
+    // Every single bit, every decodable pair, and the empty word.
+    let mut compared = 0usize;
+    for bit in 0..32u32 {
+        let csr = 1u32 << bit;
+        assert_eq!(
+            reason_from_sr_ref(csr),
+            reason_from_sr(csr),
+            "mirror and production disagree for TAMP_SR bit {bit}"
+        );
+        compared += 1;
+    }
+    for (i, (a, _)) in DECODE_ORDER.iter().enumerate() {
+        for (b, _) in &DECODE_ORDER[i + 1..] {
+            let csr = a | b;
+            assert_eq!(
+                reason_from_sr_ref(csr),
+                reason_from_sr(csr),
+                "mirror and production disagree for TAMP_SR {csr:#010x}"
+            );
+            compared += 1;
+        }
+    }
+    assert_eq!(reason_from_sr_ref(0), reason_from_sr(0));
+    // Guard the oracle: 32 singles + 55 pairs.
+    assert_eq!(compared, 87, "differential must cover singles and pairs");
 }

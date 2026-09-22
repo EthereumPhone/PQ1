@@ -1157,36 +1157,6 @@
       "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
     },
     {
-      "file": "secure/src/hw/lcd_nv3007.rs",
-      "test": "negative_frame_geometry_constants_pinned",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
-    },
-    {
-      "file": "secure/src/hw/lcd_nv3007.rs",
-      "test": "negative_set_window_offset_matches_dgen1_bootloader_literal",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
-    },
-    {
-      "file": "secure/src/hw/lcd_nv3007.rs",
-      "test": "positive_full_screen_window_matches_production_bytes",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
-    },
-    {
-      "file": "secure/src/hw/lcd_nv3007.rs",
-      "test": "positive_inner_window_offsets_both_endpoints",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
-    },
-    {
-      "file": "secure/src/hw/tamp.rs",
-      "test": "reason_strings_cover_every_itamp_bit",
-      "issue": "#723",
-      "why": "`hw/mod.rs` gates `pub mod tamp;` on `all(stm32u585, tamp)`; neither is in the host test feature set."
-    },
-    {
       "file": "secure/src/nsc/state.rs",
       "test": "negative_charge_refuses_disarmed_spent_and_invalid_without_repair",
       "issue": "#724",

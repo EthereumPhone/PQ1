@@ -346,47 +346,16 @@ fn enable_tamp_irq() {
     REG.nvic_iser0.write(1 << TAMP_IRQN);
 }
 
-/// Return a short human-readable label for whichever TAMP source
-/// raised the IRQ. Exposed so other log paths can reuse the mapping.
+// `reason_from_sr` now lives in `hw/tamp_reason.rs` — a pure module with no
+// `#![cfg]` header, so it is reachable from the host test build. `mod hw;` is
+// `#[cfg(not(test))]` in main.rs, which is why the decoder could not be tested
+// here (#723). Re-exported so every existing `hw::tamp::reason_from_sr` call
+// site is unchanged.
+#[path = "tamp_reason.rs"]
+pub mod tamp_reason;
+
 #[cfg(feature = "tamp")]
-pub fn reason_from_sr(sr: u32) -> &'static str {
-    const ITAMP1F: u32 = 1 << 16;
-    const ITAMP2F: u32 = 1 << 17;
-    const ITAMP3F: u32 = 1 << 18;
-    const ITAMP5F: u32 = 1 << 20;
-    const ITAMP6F: u32 = 1 << 21;
-    const ITAMP7F: u32 = 1 << 22;
-    const ITAMP8F: u32 = 1 << 23;
-    const ITAMP9F: u32 = 1 << 24;
-    const ITAMP11F: u32 = 1 << 26;
-    const ITAMP12F: u32 = 1 << 27;
-    const ITAMP13F: u32 = 1 << 28;
-    if sr & ITAMP1F != 0 {
-        "VOLTAGE"
-    } else if sr & ITAMP2F != 0 {
-        "TEMPERATURE"
-    } else if sr & ITAMP3F != 0 {
-        "LSE_CLOCK"
-    } else if sr & ITAMP5F != 0 {
-        "RTC_OVERFLOW"
-    } else if sr & ITAMP6F != 0 {
-        "SWD_ACCESS"
-    } else if sr & ITAMP7F != 0 {
-        "ANALOG_WDG1"
-    } else if sr & ITAMP8F != 0 {
-        "MONO_COUNTER"
-    } else if sr & ITAMP9F != 0 {
-        "CRYPTO_FAULT"
-    } else if sr & ITAMP11F != 0 {
-        "IWDG"
-    } else if sr & ITAMP12F != 0 {
-        "ANALOG_WDG2"
-    } else if sr & ITAMP13F != 0 {
-        "ANALOG_WDG3"
-    } else {
-        "UNKNOWN"
-    }
-}
+pub use tamp_reason::reason_from_sr;
 
 /// TAMP IRQ handler. **Same log-only semantics as [`poll`]**:
 /// reads `TAMP_SR`, logs the trigger reason via `secure_log!`,
@@ -424,17 +393,8 @@ pub fn on_tamp_irq() {
     }
 }
 
-#[cfg(all(test, feature = "tamp"))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reason_strings_cover_every_itamp_bit() {
-        // Spot-check that the decoder maps specific flags to the
-        // strings the postmortem inspector expects.
-        assert_eq!(reason_from_sr(1 << 16), "VOLTAGE");
-        assert_eq!(reason_from_sr(1 << 24), "CRYPTO_FAULT");
-        assert_eq!(reason_from_sr(1 << 26), "IWDG");
-        assert_eq!(reason_from_sr(0), "UNKNOWN");
-    }
-}
+// Host tests for the TAMP decode live in
+// `secure/src/hw_platform_under_test/pure_tests.rs`, NOT here — see
+// `hw/tamp_reason.rs`. The `#[cfg(all(test, feature = "tamp"))] mod tests`
+// that used to sit here could never run, and its single test checked 4 of the
+// 11 ITAMP flags under the name `reason_strings_cover_every_itamp_bit`.

@@ -74,17 +74,22 @@ use crate::hw::spi_hw::{cs_assert, cs_deassert, SPI_BASE};
 // Display geometry
 // ---------------------------------------------------------------------------
 
-/// Visible pixel width (X axis).
-pub const FRAME_WIDTH: u16 = 142;
-/// Visible pixel height (Y axis).
-pub const FRAME_HEIGHT: u16 = 428;
+// Geometry + the pure CASET/RASET builder live in `hw/lcd_window.rs`, a
+// module with no `#![cfg]` header so the host test build can reach it. This
+// file is `#![cfg(feature = "ui-lcd")]` and `mod hw;` is `#[cfg(not(test))]`,
+// which is why four tests here could never run (#723). Re-exported, so every
+// `lcd_nv3007::FRAME_WIDTH` / `build_set_window_bytes` call site is unchanged.
+#[path = "lcd_window.rs"]
+pub mod lcd_window;
 
-/// X offset applied to all column-address commands. The NV3007's RAM
-/// extends past the visible window; the production driver's
-/// `BlockWrite()` adds `a=12` to every X coordinate. Replicated here.
-pub const X_OFFSET: u16 = 12;
-/// Y offset. The production driver uses `b=0`.
-pub const Y_OFFSET: u16 = 0;
+// Which of these the compiler sees used depends on the feature combination
+// (`ui/lcd.rs` and `ui/splash_test.rs` consume the geometry, `set_window`
+// consumes the builder), and `mod hw` is private in a binary crate, so the
+// unused-import lint cannot see the re-export's real callers.
+#[allow(unused_imports)]
+pub use lcd_window::{
+    build_set_window_bytes, SetWindowBytes, FRAME_HEIGHT, FRAME_WIDTH, X_OFFSET, Y_OFFSET,
+};
 
 // ---------------------------------------------------------------------------
 // GPIO — DC on GPIOE bit 7 (Arduino D4 / PE7), RES on GPIOE bit 14 (Arduino D12 / PE14)
@@ -626,23 +631,6 @@ pub fn set_window(x0: u16, y0: u16, x1: u16, y1: u16) {
     write_cmd(0x2C); // RAMWR — pixel data follows via write_pixels*
 }
 
-/// Pure-logic byte builder for [`set_window`] — host-testable.
-fn build_set_window_bytes(x0: u16, y0: u16, x1: u16, y1: u16) -> SetWindowBytes {
-    let x0 = x0 + X_OFFSET;
-    let x1 = x1 + X_OFFSET;
-    let y0 = y0 + Y_OFFSET;
-    let y1 = y1 + Y_OFFSET;
-    SetWindowBytes {
-        caset: [(x0 >> 8) as u8, x0 as u8, (x1 >> 8) as u8, x1 as u8],
-        raset: [(y0 >> 8) as u8, y0 as u8, (y1 >> 8) as u8, y1 as u8],
-    }
-}
-
-struct SetWindowBytes {
-    caset: [u8; 4],
-    raset: [u8; 4],
-}
-
 /// Write `n` pixels of `color` (RGB565, big-endian on the wire) to the current
 /// window. Chunked by pixel count — never builds a 121 KB buffer (no_std,
 /// stack-only). CS stays low across all chunks; only SPE toggles per chunk.
@@ -892,67 +880,8 @@ pub fn lcd_test_loop() -> ! {
 // Host tests — pure logic only (no MMIO access at test time)
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// `set_window(0, 0, FRAME_WIDTH-1, FRAME_HEIGHT-1)` should
-    /// produce CASET = X_OFFSET..X_OFFSET+FRAME_WIDTH-1 and
-    /// RASET = Y_OFFSET..Y_OFFSET+FRAME_HEIGHT-1 — matching the
-    /// production `BlockWrite(0, FRAME_WIDTH-1, 0, FRAME_HEIGHT-1)`.
-    #[test]
-    fn positive_full_screen_window_matches_production_bytes() {
-        let bytes = build_set_window_bytes(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
-        // X: 0+12 = 12 (0x000C); X1: 141+12 = 153 (0x0099)
-        assert_eq!(bytes.caset, [0x00, 0x0C, 0x00, 0x99]);
-        // Y: 0; Y1: 427 (0x01AB)
-        assert_eq!(bytes.raset, [0x00, 0x00, 0x01, 0xAB]);
-    }
-
-    /// Cross-check against the production driver's `nv3007_Init_lcm`
-    /// initial CASET/RASET values (the literal bytes the C code
-    /// writes after the init sequence). If our builder produces
-    /// different bytes, our pixel addressing would be off-by-N from
-    /// production, leading to a torn or shifted display.
-    #[test]
-    fn negative_set_window_offset_matches_dgen1_bootloader_literal() {
-        // From nv3007_142x428_4line_8bit.c::nv3007_Init_lcm():
-        //   SPI_WriteComm(0x2a);
-        //   SPI_WriteData(0x00); SPI_WriteData(0x0c);   // x0 = 12
-        //   SPI_WriteData(0x00); SPI_WriteData(0x99);   // x1 = 153
-        //   SPI_WriteComm(0x2b);
-        //   SPI_WriteData(0x00); SPI_WriteData(0x00);   // y0 = 0
-        //   SPI_WriteData(0x01); SPI_WriteData(0xab);   // y1 = 427
-        let bytes = build_set_window_bytes(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
-        assert_eq!(bytes.caset[0], 0x00);
-        assert_eq!(bytes.caset[1], 0x0C);
-        assert_eq!(bytes.caset[2], 0x00);
-        assert_eq!(bytes.caset[3], 0x99);
-        assert_eq!(bytes.raset[0], 0x00);
-        assert_eq!(bytes.raset[1], 0x00);
-        assert_eq!(bytes.raset[2], 0x01);
-        assert_eq!(bytes.raset[3], 0xAB);
-    }
-
-    /// A small inner window — e.g. drawing 16×24 starting at (10, 50)
-    /// — must apply the X offset but not double-count it. Catches
-    /// regressions where set_window forgets to add X_OFFSET to x1.
-    #[test]
-    fn positive_inner_window_offsets_both_endpoints() {
-        let bytes = build_set_window_bytes(10, 50, 25, 73);
-        // x0 = 10+12 = 22 (0x0016), x1 = 25+12 = 37 (0x0025)
-        assert_eq!(bytes.caset, [0x00, 0x16, 0x00, 0x25]);
-        // y0 = 50, y1 = 73
-        assert_eq!(bytes.raset, [0x00, 0x32, 0x00, 0x49]);
-    }
-
-    /// Frame geometry pins — silent drift in either constant would
-    /// invalidate every X/Y address we compute.
-    #[test]
-    fn negative_frame_geometry_constants_pinned() {
-        assert_eq!(FRAME_WIDTH, 142, "ZT165M017AT visible width is 142 px");
-        assert_eq!(FRAME_HEIGHT, 428, "ZT165M017AT visible height is 428 px");
-        assert_eq!(X_OFFSET, 12, "NV3007 X offset is 12 per production BlockWrite");
-        assert_eq!(Y_OFFSET, 0, "NV3007 Y offset is 0 per production BlockWrite");
-    }
-}
+// Host tests for the window-byte builder live in
+// `secure/src/ui_under_test/pure_tests.rs`, NOT here — see `hw/lcd_window.rs`.
+// The `mod tests` that used to sit here could never run: this file is
+// `#![cfg(feature = "ui-lcd")]`, the host suite builds `ui-semihosting`, and
+// `mod hw;` is `#[cfg(not(test))]` regardless (#723).
