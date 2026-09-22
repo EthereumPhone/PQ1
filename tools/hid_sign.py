@@ -132,6 +132,7 @@ def build_payload(sender: bytes, req: dict) -> bytes:
     `req` holds every signed field so the caller can record exactly what the
     device committed to (an on-chain UserOp must reuse these values verbatim:
     PQSmartWallet.sphincsDigest re-hashes all of them)."""
+    data = bytes.fromhex(req.get("data", "0x").removeprefix("0x"))
     p = b"".join(
         [
             u64(req["chain_id"]),               # 0
@@ -147,11 +148,23 @@ def build_payload(sender: bytes, req: dict) -> bytes:
             SHA256_EMPTY,                       # 244 paymaster_and_data_hash (no paymaster)
             bytes.fromhex(req["to"][2:]),       # 276 (20)
             u256(req["value"]),                 # 296
-            u16(0),                             # 328 data_len = 0
+            u16(len(data)),                     # 328 data_len
         ]
     )
     assert len(p) == SIGN_USEROP_HEADER_LEN, f"payload is {len(p)} B, want {SIGN_USEROP_HEADER_LEN}"
-    return p
+    # 330..N inner calldata. Without it the device can only render the
+    # value-transfer page; the ERC-20 / contract-call confirm families need
+    # real calldata to decode (#700).
+    # Trailers follow the inner calldata. The ERC-20 metadata bundle is read
+    # FIRST (cmd_sign_userop.rs:393); without it the device has only the pinned
+    # ERC20_DB_ROOT and correctly degrades to the loud "! unknown token" page.
+    # A missing trailer is absence, not an error, so later trailers can simply
+    # be omitted by running out of buffer.
+    trailer = bytes.fromhex(req.get("erc20_trailer", ""))
+    if trailer:
+        p = p + data + u16(len(trailer)) + trailer
+        return p
+    return p + data
 
 
 FAILURES: list[str] = []
@@ -180,6 +193,16 @@ def main() -> int:
     ap.add_argument("--max-fee", type=int, default=MAX_FEE)
     ap.add_argument("--max-prio", type=int, default=MAX_PRIORITY_FEE)
     ap.add_argument(
+        "--erc20-trailer", default=None, metavar="FILE",
+        help="ERC-20 metadata bundle from tools/companion-stub/db_trailers.py; "
+             "without it the device renders the unknown-token page (#700).",
+    )
+    ap.add_argument(
+        "--data", default=None,
+        help="hex inner calldata, e.g. ERC-20 transfer(address,uint256); drives "
+             "the contract-call confirm pages rather than value-transfer (#700).",
+    )
+    ap.add_argument(
         "--confirm-timeout",
         type=float,
         default=None,
@@ -205,7 +228,12 @@ def main() -> int:
         # Transport-only; not part of the signed payload (build_payload reads
         # the wire fields by name, never this key).
         "confirm_timeout": args.confirm_timeout,
-        "data": "0x",
+        "data": ("0x" + args.data.removeprefix("0x")) if args.data else "0x",
+        # hex, not bytes: this dict is JSON-dumped into the --req-out record.
+        "erc20_trailer": (
+            __import__("pathlib").Path(args.erc20_trailer).read_bytes().hex()
+            if args.erc20_trailer else ""
+        ),
     }
     want_init_len = INIT_CODE_LEN if args.deploy else 0
 
