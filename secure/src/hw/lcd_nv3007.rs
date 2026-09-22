@@ -264,6 +264,16 @@ fn res_high() {
 /// reset: on iota2 the pin is PE14, whose only other role is spi_hw's AF5
 /// (SPI1_MISO) on a write-only panel. Keeping the write preserves that board's
 /// register sequence exactly.
+/// LCM_EN/HWEN's level while still high-Z at boot — the board's passive bias.
+/// See the read site in `init_dc_res_gpios` (#705).
+static mut HWEN_FLOAT: bool = false;
+
+/// Level of LCM_EN/HWEN before anything drove it this boot. See [`HWEN_FLOAT`].
+pub fn hwen_float_level() -> bool {
+    // SAFETY: written once during boot before any reader runs.
+    unsafe { HWEN_FLOAT }
+}
+
 fn init_dc_res_gpios() {
     // Clock every port this module touches.
     let mut clocks = board::gpio_rcc_bit(DC_PORT) | board::gpio_rcc_bit(RES_PORT);
@@ -272,6 +282,25 @@ fn init_dc_res_gpios() {
     }
     REG.rcc_ahb2enr1.set_bits(clocks);
     cortex_m::asm::dsb();
+
+    // #705: read LCM_EN/HWEN while the pin is still HIGH-Z. The clock is on
+    // but MODER is untouched, and the AW99703 treats HWEN as an input, so IDR
+    // here is the BOARD'S PASSIVE NETWORK -- which is what decides HWEN's
+    // level whenever the MCU resets and releases the pin.
+    //
+    //   0 -> pulled down: every reset drops HWEN, the chip loses its
+    //        registers, and the FSBL's fingerprint window is ALWAYS dark
+    //   1 -> held up: configuration can survive a warm reset, so the window's
+    //        visibility depends on boot history
+    //
+    // Settles the schematic ambiguity (R112 10k at HWEN vs R124 100K at PWM)
+    // electrically, without a scope and without needing a warm reset.
+    if let Some((port, pin)) = board::LCD_BACKLIGHT_EN {
+        // SAFETY: IDR of a board-map GPIO port; read-only, no side effects.
+        let idr = unsafe { RoReg32::new(port + 0x10) };
+        // SAFETY: single-threaded boot, written once before any reader.
+        unsafe { HWEN_FLOAT = idr.read() & (1 << pin) != 0 };
+    }
 
     // DC: output, push-pull, very-high speed, no pull.
     let dc2 = DC_PIN * 2;

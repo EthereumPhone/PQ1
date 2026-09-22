@@ -212,10 +212,42 @@ pub fn run() {
     // words + gateway never appear). The TITLE_STALLED_TICK_SPINS fallback
     // detects the stopped tick source (counter never advances) and skips
     // the cosmetic delay instead of hanging.
+    // #705 diagnostic (dev images only): the AW99703 backlight chip's state
+    // BEFORE this boot reprogrammed it, shown in the otherwise-empty subtitle
+    // of a screen that already holds for TITLE_MS. Put here because the
+    // earlier BOOT-step screens are overwritten faster than a human can read.
+    //
+    //   AW=1 MSB=BF -> config survived this reset: the FSBL's fingerprint
+    //                  window would be VISIBLE
+    //   AW=0        -> HWEN went low, registers reset and I2C disabled: the
+    //                  window is DARK and the FSBL must program the part
+    #[cfg(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd"))]
+    {
+        let (acked, msb, _mode) = crate::hw::aw99703::pre_init_snapshot();
+        let hex = |n: u8| -> [u8; 2] {
+            let d = |x: u8| if x < 10 { b'0' + x } else { b'A' + (x - 10) };
+            [d(n >> 4), d(n & 0xF)]
+        };
+        let m = hex(msb);
+        let hw = crate::hw::lcd_nv3007::hwen_float_level();
+        let row = [
+            b'A', b'W', b'=', if acked { b'1' } else { b'0' },
+            b' ', b'M', b'S', b'B', b'=', m[0], m[1],
+            b' ', b'H', b'W', b'=', if hw { b'1' } else { b'0' },
+        ];
+        show_status("OS Fingerprint", crate::ui::ascii_str(&row));
+    }
+    #[cfg(not(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd")))]
     show_status("OS Fingerprint", "");
     let t0 = timeout::now();
     let mut spins: u32 = 0;
-    while timeout::now().wrapping_sub(t0) < TITLE_MS {
+    // The #705 subtitle is unreadable in 1.5 s; dev images hold longer.
+    let title_ms = if cfg!(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd")) {
+        8_000
+    } else {
+        TITLE_MS
+    };
+    while timeout::now().wrapping_sub(t0) < title_ms {
         cortex_m::asm::nop();
         spins = spins.saturating_add(1);
         if spins >= TITLE_STALLED_TICK_SPINS && timeout::now() == t0 {

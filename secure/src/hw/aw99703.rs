@@ -149,6 +149,72 @@ fn write_reg(reg: u8, val: u8) -> bool {
     ok
 }
 
+fn read_bit() -> bool {
+    release(SDA);
+    q();
+    release(SCL);
+    q();
+    let b = level(SDA);
+    q();
+    pull_low(SCL);
+    q();
+    b
+}
+
+fn read_byte(ack: bool) -> u8 {
+    let mut v = 0u8;
+    let mut i = 8;
+    while i > 0 {
+        i -= 1;
+        if read_bit() {
+            v |= 1 << i;
+        }
+    }
+    // The master drives the (N)ACK bit.
+    write_bit(!ack);
+    v
+}
+
+/// Read one register: write the address, repeated START, read one byte.
+///
+/// `None` means the chip did not ACK. Per the AW99703 datasheet a LOW HWEN
+/// resets every register AND disables the I2C interface, so "no ACK" and
+/// "registers at defaults" are the same observation: the part was reset.
+fn read_reg(reg: u8) -> Option<u8> {
+    start();
+    if !(write_byte(ADDR << 1) && write_byte(reg)) {
+        stop();
+        return None;
+    }
+    start(); // repeated START
+    if !write_byte((ADDR << 1) | 1) {
+        stop();
+        return None;
+    }
+    let v = read_byte(false); // NACK: single-byte read
+    stop();
+    Some(v)
+}
+
+/// What the backlight chip held BEFORE this boot reconfigured it (#705).
+///
+/// The question invariant #10 turns on is whether the AW99703 keeps its
+/// configuration across a reset. If it does, a warm reset leaves the panel lit
+/// and the FSBL's fingerprint window is visible; if it does not, the window is
+/// dark on every boot. That is the difference between a cold-boot-only defect
+/// and an always-defect, and it decides how much the FSBL has to do.
+///
+/// Latched at the top of `init()`, before any write, so reading it later cannot
+/// disturb the answer. `(acked, ledmsb, mode)`.
+static mut PRE_INIT: (bool, u8, u8) = (false, 0, 0);
+
+/// Snapshot of the chip state seen at the start of this boot. See [`PRE_INIT`].
+pub fn pre_init_snapshot() -> (bool, u8, u8) {
+    // SAFETY: single-threaded boot; written once at the top of `init()` before
+    // any reader can run.
+    unsafe { PRE_INIT }
+}
+
 /// Bring the backlight up. Call **after** `LCM_EN`/HWEN has been driven high
 /// (the LCD driver does that) — HWEN low resets every register and disables
 /// the I2C interface. Returns `true` if the chip ACKed every write.
@@ -163,6 +229,19 @@ pub fn init() -> bool {
     config_open_drain(SDA);
     // HWEN-high → I2C-ready settle (datasheet t_reset; generous at any SYSCLK).
     cortex_m::asm::delay(800_000);
+
+    // #705: latch what the chip held BEFORE we reconfigure it. Must happen
+    // after the pins are configured but before the first write.
+    let pre_msb = read_reg(REG_LEDMSB);
+    let pre_mode = read_reg(REG_MODE);
+    // SAFETY: single-threaded boot, written once before any reader.
+    unsafe {
+        PRE_INIT = (
+            pre_msb.is_some(),
+            pre_msb.unwrap_or(0),
+            pre_mode.unwrap_or(0),
+        );
+    }
 
     let mut ok = true;
     // Order: current/OVP limits first, brightness (LSB then MSB, per datasheet),
