@@ -50,6 +50,10 @@ pqsigner-tx       = { workspace = true }
 # rendering layer lives in `secure/src/tx/display/erc7730/` and
 # depends on this crate.
 pqsigner-erc7730  = { workspace = true }
+# Pixel trusted-UI substrate (Screen transcript, tier fitter, motion, input,
+# rasteriser). Always linked so the host test mounts see it; the `ui-px`
+# feature switches the firmware wiring on.
+pqsigner-ui-px = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c10 = { workspace = true }
@@ -184,6 +188,13 @@ debug-log = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested"]
 mock-se = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested"]
 ui-semihosting = []
 ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger)
+# Pixel trusted UI (PQ-UI design system port, pilot = the Safe sign flow).
+# Additive over the backend axis: with `ui-lcd` the strip rasteriser paints
+# the panel; with `ui-semihosting` the screens print as text for QEMU e2e.
+# Mutually exclusive with `ui-oled-bench` (16x4-only bench backend).
+ui-px = []
+# `ui-px` at SPI ÷4 = 40 MHz (production board without the dev kit's LED on SCK).
+ui-px-spi40 = ["ui-px", "ui-lcd"]
 # Real STM32U585 hardware target (vs QEMU mps2-an505). Pulls in `hw-sha256`
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.

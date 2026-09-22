@@ -55,6 +55,12 @@ fn main() {
         );
     }
 
+    // Pixel trusted-UI assets: refuse a malformed or unmanifested atlas, and
+    // the third-party Safe mark in a production image without sign-off.
+    if env::var_os("CARGO_FEATURE_UI_PX").is_some() && env::var_os("CARGO_FEATURE_UI_LCD").is_some() {
+        validate_ui_px_assets(mode_production);
+    }
+
     let out_dir_for_font = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     // Always generate the FONT_5X8 flat table, regardless of target. The
@@ -500,4 +506,39 @@ fn find_link_x(out_dir: &PathBuf) -> String {
         }
     }
     panic!("Could not find cortex-m-rt's link.x");
+}
+
+/// `secure/assets/ui-px/*` must match `manifest.json` (byte lengths and
+/// magic headers) — `make ui-px-assets-check` proves the bytes are the
+/// reproducible bake; this keeps a hand-edited or stale atlas out of the
+/// image. A `mode-production` image also requires the Safe brand mark's
+/// sign-off flag.
+fn validate_ui_px_assets(mode_production: bool) {
+    let dir = "assets/ui-px";
+    let manifest_path = format!("{dir}/manifest.json");
+    println!("cargo:rerun-if-changed={manifest_path}");
+    let manifest = fs::read_to_string(&manifest_path)
+        .unwrap_or_else(|e| panic!("UI_PX_ASSETS: {manifest_path} unreadable: {e} (run `make ui-px-assets`)"));
+    for (name, magic) in [
+        ("fonts.bin", &b"PQ1F"[..]),
+        ("safe.a4", &b"PQ1M"[..]),
+        ("mainnet.a4", &b"PQ1M"[..]),
+        ("base.a4", &b"PQ1M"[..]),
+    ] {
+        let path = format!("{dir}/{name}");
+        println!("cargo:rerun-if-changed={path}");
+        let bytes = fs::read(&path).unwrap_or_else(|e| panic!("UI_PX_ASSETS: {path} unreadable: {e}"));
+        assert!(bytes.starts_with(magic), "UI_PX_ASSETS: {path} has a wrong magic header");
+        // "<name>": {"bytes": N, ...} — locate the entry and its byte count.
+        let key = format!("\"{name}\"");
+        let entry = manifest.find(&key).unwrap_or_else(|| panic!("UI_PX_ASSETS: {name} missing from the manifest"));
+        let tail = &manifest[entry..];
+        let b = tail.find("\"bytes\":").expect("bytes field") + 8;
+        let digits: String = tail[b..].chars().skip_while(|c| c.is_whitespace()).take_while(|c| c.is_ascii_digit()).collect();
+        let want: usize = digits.parse().expect("bytes value");
+        assert_eq!(bytes.len(), want, "UI_PX_ASSETS: {name} length differs from the manifest (stale bake?)");
+    }
+    if mode_production && !manifest.contains("\"safe_logo_approved\": true") {
+        panic!("UI_PX_SAFE_MARK_UNAPPROVED: the Safe brand mark needs the owner sign-off in assets/ui-px/manifest.json before a mode-production image");
+    }
 }

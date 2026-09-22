@@ -44,6 +44,11 @@ pub use oled::{Display, Input};
 pub mod capture;
 
 pub mod confirm;
+/// Pixel trusted UI (`ui-px`): the screen-transcript confirm loop and its
+/// presenters. Phase 4 ships the text presenter (QEMU / bench fallback); the
+/// NV3007 rasteriser lands as the LCD presenter.
+#[cfg(feature = "ui-px")]
+pub mod px;
 mod confirm_core;
 // Render-only golden-screenshot harness (#21 — fast ui-golden).
 #[cfg(feature = "ui-golden-render")]

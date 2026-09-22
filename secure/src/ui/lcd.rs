@@ -151,6 +151,14 @@ impl Display {
     /// (it races the panel scan) and ~24 ms with no benefit. `draw_line`
     /// space-pads every row to 16 cols, so all 64 cells are overwritten.
     pub fn flush(&mut self) {
+        // Under `ui-px` every legacy 16×4 page is painted through the pixel
+        // engine (design typography) — the constant-time secret-row path
+        // below stays on the glyph blitter.
+        #[cfg(feature = "ui-px")]
+        {
+            crate::ui::px::lcd::paint_legacy(&self.rows);
+            return;
+        }
         for r in 0..DISPLAY_ROWS {
             for c in 0..DISPLAY_COLS {
                 let ch = self.rows[r][c];

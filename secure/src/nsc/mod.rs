@@ -883,6 +883,18 @@ compile_error!(
      Phase A/B `ui-oled-bench`+`ui-semihosting` pairing is no longer valid.)"
 );
 
+#[cfg(all(feature = "ui-px", feature = "ui-oled-bench"))]
+compile_error!(
+    "`ui-px` (pixel trusted UI) and `ui-oled-bench` (16x4-only bench backend) are \
+     incompatible: the OLED cannot present design screens."
+);
+
+#[cfg(all(feature = "mode-production", feature = "ui-px", not(feature = "ui-lcd")))]
+compile_error!(
+    "`ui-px` in a `mode-production` image requires the physical NV3007 (`ui-lcd`): \
+     the text presenter is a QEMU / bench aid, not a trusted display."
+);
+
 #[cfg(all(feature = "ui-oled-bench", feature = "ui-noop"))]
 compile_error!(
     "UI backends `ui-oled-bench` and `ui-noop` are mutually exclusive. Pick exactly \
@@ -1030,6 +1042,74 @@ pub(super) const SIGN_SNAP_BUF_LEN: usize =
 /// then wiped) inside a single handler invocation, under the non-reentrant
 /// dispatcher — never aliased across handlers.
 pub(super) static mut SIGN_SNAP_BUF: [u8; SIGN_SNAP_BUF_LEN] = [0u8; SIGN_SNAP_BUF_LEN];
+
+/// The pixel-UI screen transcript (`ui-px`) is NOT a static of its own: it
+/// overlays the tail of [`SIGN_SNAP_BUF`] that the single-sign handler never
+/// fills (its snapshot maximum is well below the batch maximum the buffer is
+/// sized for). Costing ~10 KB of BSS instead collided with the batch
+/// handler's stack on QEMU's 128 KB SRAM — the exact BSS-vs-stack class the
+/// shared buffer exists to prevent. The single handler splits its snapshot
+/// off the front of the buffer and hands the remainder here.
+#[cfg(feature = "ui-px")]
+const _: () = assert!(core::mem::align_of::<pqsigner_ui_px::Screens>() == 1);
+
+/// View a scratch byte region as the screen transcript (no copy). `None`
+/// when the region is too small.
+#[cfg(feature = "ui-px")]
+fn px_screens_view(scratch: &mut [u8]) -> Option<&mut pqsigner_ui_px::Screens> {
+    if scratch.len() < pqsigner_ui_px::SCREENS_BYTES {
+        return None;
+    }
+    let p = scratch.as_mut_ptr().cast::<pqsigner_ui_px::Screens>();
+    // SAFETY: `Screens` is `#[repr(C)]`, alignment 1 (asserted above), made
+    // only of `u8` arrays so every bit pattern is a valid value, and the
+    // region is at least `SCREENS_BYTES` long. The unique `&mut [u8]` borrow
+    // is reborrowed for the returned lifetime, so no other reference to those
+    // bytes is live meanwhile.
+    Some(unsafe { &mut *p })
+}
+
+/// Confirm a Safe sign request through the pixel UI: build the screen
+/// transcript from the SAME verified inputs the legacy pages were built from,
+/// bind it to the already-proven `pages`, and run the design's confirm loop.
+///
+/// The legacy `pages` stay the proof substrate: every dispatcher / trailer
+/// `*_proof` has already run over them. The lift (`tx::display::px_lift`)
+/// re-emits the Safe body as screens (twice, hash-compared), wraps every
+/// page after the body 1:1 as `Legacy` screens, appends the returning hero
+/// and the design's `Confirm?`, and proves the assembly before anything is
+/// shown. Any failure is a refusal — never a fall-back to the page dialog.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_safe(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    tx_chain_id: u64,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    resolver: &crate::names::NameResolver<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    use crate::tx::display::px_lift;
+    let screens = px_screens_view(scratch).ok_or("px scratch")?;
+    let meta = crate::tx::display::safe_route_meta(tx_chain_id, safe_v1, safe_exec, erc20);
+    let receipt = px_lift::emit_safe_body(screens, safe_v1, safe_exec, cow, meta, resolver)
+        .map_err(|()| "px body")?;
+    let body_len = receipt.legacy_pages;
+    px_lift::append_legacy_tail(screens, pages, body_len).map_err(|()| "px tail")?;
+    px_lift::append_returning_hero(screens).map_err(|()| "px hero")?;
+    let confirm_at = px_lift::insert_confirm(screens).map_err(|()| "px confirm")?;
+    crate::fi::scrub_sentinel_register();
+    let verdict = px_lift::transcript_proof(screens, pages, body_len, &receipt, confirm_at);
+    crate::fi::scrub_sentinel_register();
+    if verdict != crate::fi::OK_SENTINEL {
+        return Err("px transcript");
+    }
+    let out = crate::ui::px::confirm_screens_checked(screens);
+    // The transcript holds no secret, but leave nothing stale behind.
+    screens.volatile_poison_and_reset();
+    Ok(out)
+}
 
 /// HIGH-7 guard: depth counter incremented on handler entry,
 /// decremented on exit. SysTick refuses to wipe when depth > 0 so

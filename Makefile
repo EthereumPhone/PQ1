@@ -304,7 +304,32 @@ play-hw-lcd:
 	@echo "==> Drive the wizard with the physical buttons; streaming logs (Ctrl-C to quit)..."
 	@python3 tools/wallet_run_hw.py
 
-# §32 P4/P5 interactive UI test — drive JUST the duress-PIN setup dialogs
+.PHONY: play-hw-px
+play-hw-px: ## Interactive NV3007 play with the pixel trusted UI (ui-px), physical buttons
+	@echo "==> Building secure + nonsecure for interactive pixel-UI play (NV3007, ui-px)"
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-lcd,ui-px,stm32u585,dev-testkey,$(BOARD_FEATURE)$(PX_EXTRA_FEATURES)
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
+	@arm-none-eabi-size $(SECURE_ELF)
+	@echo "==> Flashing..."
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Drive the flow with the physical buttons; streaming logs (Ctrl-C to quit)..."
+	@python3 tools/wallet_run_hw.py
+
+# Extra features for play-hw-px (e.g. `,ui-px-spi40`).
+PX_EXTRA_FEATURES ?=
+
+
 # on the real OLED. No SE, no provisioning (mock-se + duress-ui-test
 # short-circuits into a dialog loop at boot). Driven by the PHYSICAL
 # perfboard buttons (gpio-buttons: LEFT=PC1/D8, RIGHT=PA8/D9; both = OK,
@@ -410,12 +435,20 @@ flash-hw: build-hw ## Flash + run on real STM32U585 (probe-rs/OpenOCD)
 # pre-sign, all through on-device native decode.
 #
 # Pass → exits 0. Any missing assertion or non-zero status → exits 1.
+# Extra secure-side features for the e2e build (e.g. `,ui-px`). Set by the
+# `e2e-px` alias below; leave empty for the byte-identical legacy run.
+E2E_EXTRA_FEATURES ?=
+
+.PHONY: e2e-px
+e2e-px: E2E_EXTRA_FEATURES = ,ui-px
+e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — Safe scenarios print [UI-PX]
+
 e2e: ## Automated unified-sign E2E (QEMU)
 	@echo "==> Building secure + nonsecure with e2e-test feature (QEMU mailbox transport)"
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-semihosting,e2e-test
+			--features mock-se,debug-log,ui-semihosting,e2e-test$(E2E_EXTRA_FEATURES)
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test

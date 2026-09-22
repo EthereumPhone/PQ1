@@ -4058,6 +4058,10 @@ fn SysTick() {
     let mut tick_health = crate::fi::FAIL_SENTINEL;
     let mut tick_cfi = crate::fi::FAIL_SENTINEL;
     timeout::tick_verified(&mut tick_health, &mut tick_cfi);
+    // Pixel trusted UI: record button edges with their exact millisecond
+    // while a flow is live (two IDR reads; no-op otherwise).
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    crate::ui::px::lcd::systick_sample();
     // SAFETY: these are valid stack locals. Independent volatile reads keep
     // the watchdog decision tied to what the helper actually published.
     let tick_health = unsafe { core::ptr::read_volatile(&tick_health) };

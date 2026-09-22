@@ -167,6 +167,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // slice below (with `total_len <= SNAP_LEN`, checked at the header
     // length gate above) can never overrun.
     const _: () = assert!(SNAP_LEN <= super::SIGN_SNAP_BUF_LEN);
+    // `ui-px`: the screen transcript overlays the buffer beyond SNAP_LEN.
+    #[cfg(feature = "ui-px")]
+    const _: () = assert!(super::SIGN_SNAP_BUF_LEN - SNAP_LEN >= pqsigner_ui_px::SCREENS_BYTES);
     // M1 fix: wipe any leftover payload from the PREVIOUS sign before
     // we fill it with this request.
     {
@@ -175,7 +178,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             *b = 0;
         }
     }
-    let snap_full = &mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF);
+    // The pixel UI (`ui-px`) overlays its screen transcript on the tail of the
+    // shared buffer beyond this handler's own snapshot maximum — disjoint
+    // bytes, split once here so no two live borrows overlap.
+    let (snap_full, px_scratch) =
+        (&mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF)).split_at_mut(SNAP_LEN);
     let snap = &mut snap_full[..total_len];
     for i in 0..total_len {
         snap[i] = core::ptr::read_volatile(payload_ptr.add(i));
@@ -1825,10 +1832,40 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign refused", "deploy changed");
         return NscStatus::InternalError as u32;
     }
-    let (cr, cr_verdict) = confirm_checked(pages.as_slice());
+    // Pixel trusted UI (`ui-px`, pilot = the Safe flow): the proven `pages`
+    // stay the proof substrate; the Safe route is re-emitted as design
+    // screens, bound to them by `px_lift::transcript_proof`, and confirmed
+    // through the design's grammar. Every other route — and every build
+    // without `ui-px` — keeps the page dialog.
+    let px_decision = px_route_confirm(
+        px_scratch,
+        &pages,
+        chain_id,
+        safe_v1_verified.as_ref(),
+        safe_exec_verified.as_ref(),
+        cow_order_verified.as_ref(),
+        chain_verified_meta.as_ref(),
+        &resolver,
+    );
+    // Whether the pixel UI owns this confirmation (and therefore its ending).
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    let px_route = px_decision.is_some();
+    let (cr, cr_verdict) = match px_decision {
+        Some(Ok(r)) => r,
+        Some(Err(reason)) => {
+            ui::show_status("Sign refused", reason);
+            return NscStatus::InternalError as u32;
+        }
+        None => confirm_checked(pages.as_slice()),
+    };
     match cr {
         ConfirmResult::Confirmed => {}
         ConfirmResult::Cancelled => {
+            #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+            if px_route {
+                crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Declined);
+                return NscStatus::UserRejected as u32;
+            }
             ui::show_status("Cancelled", "");
             return NscStatus::UserRejected as u32;
         }
@@ -2586,6 +2623,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     crate::timeout::reset_activity();
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_route {
+        crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Signed);
+    } else {
+        ui::show_status("Signed", "");
+    }
+    #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
     ui::show_status("Signed", "");
     for _ in 0..3_000_000u32 {
         cortex_m::asm::nop();
@@ -2657,4 +2701,39 @@ fn u128_saturating_from_u256(bytes: &[u8; 32]) -> u128 {
     let mut buf = [0u8; 16];
     buf.copy_from_slice(&bytes[16..32]);
     u128::from_be_bytes(buf)
+}
+
+/// Route a Safe sign confirmation through the pixel UI when `ui-px` is on.
+/// `None` means "use the page dialog" (non-Safe route, or the feature is
+/// off); `Some(Err(reason))` is a refusal, never a fall-back.
+#[cfg(feature = "ui-px")]
+fn px_route_confirm(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    resolver: &crate::names::NameResolver<'_>,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    if safe_v1.is_none() && safe_exec.is_none() {
+        return None;
+    }
+    Some(super::px_confirm_safe(scratch, pages, chain_id, safe_v1, safe_exec, cow, erc20, resolver))
+}
+
+#[cfg(not(feature = "ui-px"))]
+#[inline(always)]
+fn px_route_confirm(
+    _scratch: &mut [u8],
+    _pages: &crate::tx::display::Pages,
+    _chain_id: u64,
+    _safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    _safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    _cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    _erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    _resolver: &crate::names::NameResolver<'_>,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    None
 }
