@@ -1,0 +1,113 @@
+{
+  "source": "532c4b7a2b945566ce4e3b3247a9f50224883788",
+  "baseline": "8f739990d691a5b62b043b2fb6357e5500dabbae",
+  "checked_paths": [
+    ".github/workflows",
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "secure/data/erc7730/curations/manifest.json",
+    "proto",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "xtask",
+    "scripts/check_erc7730_descriptors.py"
+  ],
+  "changed_paths": [],
+  "known_issues": [
+    660,
+    711,
+    717
+  ],
+  "status": "Seven broad CI job failures match unchanged baseline inputs; not an all-CI-green claim",
+  "job_evidence": [
+    {
+      "name": "Invariant gates (#5 /",
+      "job": "106747520193",
+      "exit": 0,
+      "decisive": [
+        "2026-09-22T12:40:04.6038732Z anchors parsed: 19",
+        "2026-09-22T12:40:04.6041762Z     PASS \u2014 all 19 fragments' constants are justified by their anchored .sol lines",
+        "2026-09-22T12:40:04.6385485Z            operand-order swap inside any fragment would flip the tree and fail here.",
+        "2026-09-22T12:40:04.7256045Z     (each mutant must PASS the statistical lint yet FAIL the structural check)",
+        "2026-09-22T12:40:04.8855065Z   ok: a dropped field (length mismatch) is CAUGHT",
+        "2026-09-22T12:40:05.2374000Z SELF-TEST ABORTED: the live ledger is already failing:",
+        "2026-09-22T12:40:05.2375384Z     C3: HW-ASSUME-TRNG-ENTROPY: anchor not found in secure/src/hw/rng.rs: 'if sr & (SECS | CECS) != 0' \u2014 the code moved out from under this row; re-point it (do not delete the row)",
+        "2026-09-22T12:40:05.2376344Z === self-test FAIL ==="
+      ]
+    },
+    {
+      "name": "PR",
+      "job": "106747519191",
+      "exit": 0,
+      "decisive": [
+        "2026-09-22T12:39:46.9962809Z error: cannot update the lock file /src/pqsigner/fuzz/Cargo.lock because --locked was passed to prevent this",
+        "2026-09-22T12:39:48.6508173Z 2026-09-22 12:39:48,650 - root - ERROR - Building fuzzers failed."
+      ]
+    },
+    {
+      "name": "Production quarantine gates (rollback + ERC-7730 provenance OPEN)",
+      "job": "106747520067",
+      "exit": 0,
+      "decisive": [
+        "2026-09-22T12:40:02.3141849Z test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+        "2026-09-22T12:40:02.3218365Z ##[group]Run set -euo pipefail",
+        "2026-09-22T12:40:02.3218705Z \u001b[36;1mset -euo pipefail\u001b[0m",
+        "2026-09-22T12:40:02.3219806Z \u001b[36;1m  echo \"ERROR: ERC-7730 production provenance unexpectedly passed\"\u001b[0m",
+        "2026-09-22T12:40:02.3220935Z \u001b[36;1mgrep -Fq \"prod-erc7730-provenance-check: FAIL\" <<<\"$output\"\u001b[0m",
+        "2026-09-22T12:40:02.3284695Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}",
+        "2026-09-22T12:40:02.3286120Z   CACHE_ON_FAILURE: false",
+        "2026-09-22T12:40:36.6507965Z DRIFT: ERC-7730 curation overlay: curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977"
+      ]
+    },
+    {
+      "name": "Host unit tests (pure-logic crates)",
+      "job": "106747520572",
+      "exit": 0,
+      "decisive": [
+        "2026-09-22T12:40:15.4627746Z test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-09-22T12:40:15.4693023Z test erc7730_curation::tests::checked_in_manifest_replacements_and_curated_corpus_are_exact ... FAILED",
+        "2026-09-22T12:40:15.5271359Z test tests::vendor_install_second_move_failure_restores_both_prior_directories ... ok",
+        "2026-09-22T12:40:15.6022077Z failures:",
+        "2026-09-22T12:40:15.6025549Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\"",
+        "2026-09-22T12:40:15.6027044Z failures:",
+        "2026-09-22T12:40:15.6027937Z test result: FAILED. 65 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+        "2026-09-22T12:40:15.6028729Z \u001b[1m\u001b[91merror\u001b[0m: test failed, to rerun pass `-p pqsigner-xtask --bin pqsigner-xtask`"
+      ]
+    },
+    {
+      "name": "Line coverage (cargo llvm-cov \u2014 report-only baseline)",
+      "job": "106747520370",
+      "exit": 0,
+      "decisive": [
+        "2026-09-22T12:41:55.3270781Z test erc7730_curation::tests::checked_in_manifest_replacements_and_curated_corpus_are_exact ... FAILED",
+        "2026-09-22T12:41:55.3308534Z test tests::vendor_install_second_move_failure_restores_both_prior_directories ... ok",
+        "2026-09-22T12:41:55.3452073Z failures:",
+        "2026-09-22T12:41:55.3455113Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\"",
+        "2026-09-22T12:41:55.3456968Z failures:",
+        "2026-09-22T12:41:55.3458340Z test result: FAILED. 65 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "2026-09-22T12:41:55.3459780Z \u001b[1m\u001b[91merror\u001b[0m: test failed, to rerun pass `-p pqsigner-xtask --bin pqsigner-xtask`",
+        "2026-09-22T12:41:55.3497140Z error: process didn't exit successfully: `/home/runner/.rustup/toolchains/nightly-2026-04-06-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /home/runner/work/PQ1/PQ1/Cargo.toml --target-dir /home/runner/work/PQ1/PQ1/target/llvm-cov-target --locked --tests -p pqsigner-proto -p pqsigner-tx-core -p pqsigner-aa -p pqsigner-domain -p pqsigner-tx -p pqsigner-erc7730 -p sphincs-c10 -p pqsigner-fi -p sphincs-tz-bip39 -p fw-manifest -p sphincs-tz-shared -p pqsigner-hal -p pqsigner-pq-seal -p masked-sha2 -p pqsigner-xtask -p fwsign -p fwmeasure` (exit status: 101)"
+      ]
+    },
+    {
+      "name": "Slither (contracts static analysis)",
+      "job": "106747520373",
+      "exit": 0,
+      "decisive": [
+        "2026-09-22T12:38:22.7764799Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+        "2026-09-22T12:38:22.7775086Z ##[error]Error: Command failed: bash \"/home/runner/.foundry/bin/foundryup\" ",
+        "/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file"
+      ]
+    },
+    {
+      "name": "Contracts (forge test)",
+      "job": "106747520257",
+      "exit": 0,
+      "decisive": [
+        "2026-09-22T12:38:20.2019455Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+        "2026-09-22T12:38:20.2031013Z ##[error]Error: Command failed: bash \"/home/runner/.foundry/bin/foundryup\" ",
+        "/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file"
+      ]
+    }
+  ]
+}

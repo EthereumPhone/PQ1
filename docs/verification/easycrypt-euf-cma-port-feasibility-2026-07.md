@@ -4722,3 +4722,8 @@ separation and termination facts, followed by shared-hash/adaptive-history,
 FORS truncated-R and numerical resource accounting. #100 and #295 remain open;
 #509 remains deferred owner-triggered combined assurance. The model is manually
 linked to Rust, and this result grants no production or hardware authority.
+
+The bounded member-aware Phase D gates are complete: 69 files pass both drivers,
+all 70 controls pass, and Astra/Opus return GO. See the
+[member-aware receipt](../security/adversarial-review/findings/easycrypt-bounded-ma-2026-09-22/README.md)
+for the reviewed source and exact remaining boundary.

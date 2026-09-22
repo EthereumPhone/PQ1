@@ -4350,3 +4350,7 @@ OK   inputs unchanged across the run (a814f744...)
 ```
 
 Full log: `scratch/gate_20260921_surface_count.log`.
+
+The bounded member-aware batch passes both proof drivers and all 70 controls;
+its Astra/Opus review and exact source are recorded in the
+[member-aware September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-ma-2026-09-22/README.md).

@@ -1,0 +1,206 @@
+{
+  "base": "8f739990d691a5b62b043b2fb6357e5500dabbae",
+  "created_at": "2026-09-22T12:33:05.859895+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "8a56c8a14bd3cb246e2bdb7e60aefe0f609bff78c8bbcc5ea6b1817c111c6145",
+      "version": "2.1.276 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.000532,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-prompt.txt",
+    "sha256": "0253e16360b51d95dc5a581ee22c02db0fabc6b87b4c59b1b895e9008a885f4c"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 10943,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 135.206,
+      "ended_at": "2026-09-22T12:33:05.640845+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "0253e16360b51d95dc5a581ee22c02db0fabc6b87b4c59b1b895e9008a885f4c",
+        "report_sha256": "91d94654124603d63b8e29f8e208a83c9cda7a1deee0049896817616aaa5f87b",
+        "runtime_sha256": "15c76a8f28fa0595cbbcc02ef96501b736836eba7436aeb2018c5c45aa0a7fd4",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/claude",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/claude/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/claude/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/claude/stderr.txt"
+      },
+      "report_words": 595,
+      "started_at": "2026-09-22T12:30:50.434557+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 32001,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 42.869,
+      "ended_at": "2026-09-22T12:31:33.302612+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "0253e16360b51d95dc5a581ee22c02db0fabc6b87b4c59b1b895e9008a885f4c",
+        "report_sha256": "6ccf55460796c12a5f8a8eab0a672ecf43a4e31913da71dd7eb9b189c014182c",
+        "runtime_sha256": "5141770982dd2bfa0888c6d8a76b32ce8de6b8372c9a50b9a65c262eb962405b",
+        "stderr_sha256": "5558f11ec3528099f1f714aeb3382baf6899dc3bf58d7f84d06e96fe2190e80a"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-wave/codex/stderr.txt"
+      },
+      "report_words": 58,
+      "started_at": "2026-09-22T12:30:50.434027+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "Phase D source merge",
+  "surface": "EasyCrypt C10 bounded member-aware WOTS reduction",
+  "target": {
+    "commit_after": "532c4b7a2b945566ce4e3b3247a9f50224883788",
+    "commit_before": "532c4b7a2b945566ce4e3b3247a9f50224883788",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "2a32fd7af778c80c551a42fb2c4fce844a6317e0",
+    "tree_before": "2a32fd7af778c80c551a42fb2c4fce844a6317e0"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.276 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-22T12:30:50.433957+00:00"
+}

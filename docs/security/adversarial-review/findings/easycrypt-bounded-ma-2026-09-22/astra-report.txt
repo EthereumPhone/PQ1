@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 532c4b7a2b945566ce4e3b3247a9f50224883788 / 2a32fd7af778c80c551a42fb2c4fce844a6317e0
+FINDINGS: none
+GAPS: Full cold two-driver gate remains pending separately and must pass before landing.
