@@ -1869,13 +1869,16 @@ fn negative_both_unlock_loops_reset_activity_before_prompting() {
     // report cannot leave the other behind again.
     let mut sites = Vec::new();
     let mut from = 0usize;
-    while let Some(i) = MAIN_SRC[from..].find(r#"show_status("Enter PIN", "to unlock")"#) {
+    // Match the PROMPT, not its exact subtitle: the PendSV site carries an
+    // attempt counter on dev images (#729 verification aid), so pinning the
+    // literal string would miss it.
+    while let Some(i) = MAIN_SRC[from..].find(r#"show_status("Enter PIN","#) {
         sites.push(from + i);
         from += i + 1;
     }
     assert_eq!(
         sites.len(),
-        2,
+        3, // boot + PendSV dev-counter + PendSV plain fallback
         "expected exactly two unlock prompts (boot + PendSV re-unlock); found {}. \
          A new one must also reset the inactivity timer — see #728.",
         sites.len()
