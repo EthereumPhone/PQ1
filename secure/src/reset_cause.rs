@@ -153,7 +153,11 @@ pub unsafe fn classify_and_clear() -> (ResetCause, u32) {
 
 /// Pure classification: takes the raw RCC_CSR value, returns the cause.
 /// Factored out for testability.
-fn classify_bits(csr: u32) -> ResetCause {
+///
+/// `pub(crate)` so `main_sau_pure_tests.rs` can run its exhaustive mirror
+/// differentially against THIS function rather than only against its own
+/// copy of it (#723).
+pub(crate) fn classify_bits(csr: u32) -> ResetCause {
     let flags = csr & ANY_RESET_FLAG;
 
     if flags == 0 {

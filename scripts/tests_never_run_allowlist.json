@@ -1283,60 +1283,6 @@
       "why": "`#[cfg(feature = \"optiga-hw-counter\")]`; no CI suite enables it."
     },
     {
-      "file": "secure/src/reset_cause.rs",
-      "test": "abnormal_flags",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
-      "file": "secure/src/reset_cause.rs",
-      "test": "cold_is_bor_plus_pin_only",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
-      "file": "secure/src/reset_cause.rs",
-      "test": "low_power",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
-      "file": "secure/src/reset_cause.rs",
-      "test": "no_flags_is_unknown",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
-      "file": "secure/src/reset_cause.rs",
-      "test": "option_byte_reload",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
-      "file": "secure/src/reset_cause.rs",
-      "test": "software_reset",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
-      "file": "secure/src/reset_cause.rs",
-      "test": "watchdog_beats_bor_if_both_set",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
-      "file": "secure/src/reset_cause.rs",
-      "test": "watchdog_iwdg",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
-      "file": "secure/src/reset_cause.rs",
-      "test": "watchdog_wwdg",
-      "issue": "#723",
-      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
-    },
-    {
       "file": "secure/src/secure_crypto_glue_under_test/pure_tests.rs",
       "test": "forced_capacity_preflight_publishes_distinct_verdict_and_cfi",
       "issue": "#724",

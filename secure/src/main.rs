@@ -149,7 +149,6 @@ mod host_rng;
 // `hw` retains its own feature gate, so QEMU still only sees `mmio`.
 #[cfg(not(test))]
 mod hw;
-#[cfg(not(test))]
 mod reset_cause;
 /// Firmware-update state machine. Built on the STM32U585 hardware path
 /// because it uses the bank-2 flash primitives in `hw::flash` that only

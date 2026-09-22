@@ -1642,16 +1642,77 @@ fn negative_secure_log_macro_compiles_to_nop_without_debug_log() {
 }
 
 #[test]
-fn negative_reset_cause_module_declaration_is_test_excluded() {
-    // The `reset_cause` module pulls in raw MMIO and `cortex_m` —
-    // gating it `#[cfg(not(test))]` keeps host `cargo test` linkable.
-    // The host pure-logic mirror in this very file fills in the
-    // testing coverage. A refactor that removed the gate would
-    // break `cargo test -p sphincs-tz-secure` instantly.
+fn negative_reset_cause_module_stays_reachable_from_host_tests() {
+    // This assertion used to say the OPPOSITE: that `mod reset_cause;` must
+    // remain `#[cfg(not(test))]`, on the stated grounds that "a refactor that
+    // removed the gate would break `cargo test -p sphincs-tz-secure`
+    // instantly."
+    //
+    // That was measured and is false (#723). Removing the gate compiles and
+    // the module's own nine tests pass — the `#[cfg(not(feature =
+    // "stm32u585"))]` fallback arm of `classify_and_clear` keeps it
+    // host-linkable. The old assertion was pinning nine tests unreachable on
+    // a rationale that had gone stale underneath it.
+    //
+    // It now pins the opposite, so the exclusion cannot quietly come back and
+    // take `classify_bits_matches_production_exhaustively` with it.
     assert!(
-        MAIN_SRC.contains("#[cfg(not(test))]\nmod reset_cause;"),
-        "reset_cause must remain `#[cfg(not(test))] mod reset_cause;` in main.rs"
+        MAIN_SRC.contains("\nmod reset_cause;"),
+        "reset_cause must be declared in main.rs"
     );
+    assert!(
+        !MAIN_SRC.contains("#[cfg(not(test))]\nmod reset_cause;"),
+        "reset_cause must NOT be `#[cfg(not(test))]`-excluded: that makes its own \
+         tests unreachable and leaves only this file's hand-copied mirror, which \
+         cannot detect a reordering of the production branch chain (#723)"
+    );
+}
+
+#[test]
+fn classify_bits_matches_production_exhaustively() {
+    // WHY THIS EXISTS. The mirror above is a hand-written reimplementation of
+    // `reset_cause::classify_bits`. The module docs say the mirror is kept in
+    // sync by pinning its bit CONSTANTS against the production source text —
+    // and those pins are real (see `positive_reset_cause_*`). But constants
+    // are not the logic. Nothing pinned the ORDER of the production if-chain,
+    // so moving the `BORRSTF` arm above `SFTRSTF` would change what the device
+    // does while every test here kept passing against the unchanged copy.
+    //
+    // That is not a hypothetical shrug: `is_abnormal()` drives the abnormal-
+    // reset secret scrub (docs/security/brownout-hardening.md). A reset that
+    // silently reclassifies from Watchdog to Cold is a scrub that silently
+    // stops happening.
+    //
+    // Differential over every combination of the eight sticky flags — 256
+    // cases, the whole input space that `ANY_RESET_FLAG` can distinguish.
+    let bits = [RMVF, OBLRSTF, PINRSTF, BORRSTF, SFTRSTF, IWDGRSTF, WWDGRSTF, LPWRRSTF];
+    let mut compared = 0usize;
+    for mask in 0u32..(1 << 8) {
+        let csr = bits
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| mask & (1 << i) != 0)
+            .fold(0u32, |acc, (_, b)| acc | b);
+
+        let mine = classify_bits(csr);
+        let theirs = crate::reset_cause::classify_bits(csr);
+        let theirs_mirrored = match theirs {
+            crate::reset_cause::ResetCause::Cold => ResetCause::Cold,
+            crate::reset_cause::ResetCause::Software => ResetCause::Software,
+            crate::reset_cause::ResetCause::Watchdog => ResetCause::Watchdog,
+            crate::reset_cause::ResetCause::LowPower => ResetCause::LowPower,
+            crate::reset_cause::ResetCause::OptionByte => ResetCause::OptionByte,
+            crate::reset_cause::ResetCause::Unknown => ResetCause::Unknown,
+        };
+        assert_eq!(
+            mine, theirs_mirrored,
+            "mirror and production disagree for CSR {csr:#010x}: the copy in this \
+             file says {mine:?}, reset_cause.rs says {theirs_mirrored:?}"
+        );
+        compared += 1;
+    }
+    // Guard the oracle: a loop that compared nothing would pass silently.
+    assert_eq!(compared, 256, "differential must cover all 2^8 flag combinations");
 }
 
 #[test]
