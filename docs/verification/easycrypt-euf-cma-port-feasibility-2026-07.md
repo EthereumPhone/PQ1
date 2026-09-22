@@ -4770,3 +4770,9 @@ receipt/tracker handoff. #509 remains deferred. The following research remains
 shared-hash/adaptive-history coupling, FORS truncated-R and resource accounting.
 This is a manually linked sampled-key model: no Rust extraction, useful runtime
 bound, real SHA-256 independence, numerical claim or deployment authority.
+
+The bounded hypertree/leaf Phase D gates are complete: 71 files pass both
+drivers and all 75 controls pass. Opus returned GO; the sole Astra pending-replay
+gap is discharged on the unchanged reviewed source. See the
+[hypertree/leaf receipt](../security/adversarial-review/findings/easycrypt-bounded-hypertree-2026-09-22/README.md).
+The common cube/collision-branch join remains open.

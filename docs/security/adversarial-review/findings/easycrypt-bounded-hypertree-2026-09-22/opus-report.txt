@@ -1,0 +1,48 @@
+VERDICT: GO
+
+TARGET: 5c1770105acb81700d99eea8e917b1156b96e0db / 0f0990e1f83a5f0133da3e8633b741a8a1db45ef
+
+FINDINGS:
+
+1. **MEDIUM**: the hypertree comparison proves only one direction, and its failure flag can't be used in a probability statement.
+   - **Where:** `cdrafts-split/C10BoundedHypertree.ec:142` and `:181–186`.
+   - **Mechanism:** `bad` is declared as a local of `BoundedHypertreeGame.main`. `total_bounded_hypertree_main` proves only `res{2} => res{1}`, which gives bounded ≤ total. The WOTS-level game proves the companion statement (`total_bounded_main`, post `!O_Bounded.bad{2} => ={res}`) over a global flag. The hypertree has no such statement, so "total ≤ bounded + Pr[exhaustion]" cannot even be written.
+   - **Evidence:** the invariant at `:189–197` already carries `!bad{2} => ={sigl}` together with `={glob A, pk}`. So `!bad{2} => ={res}` follows immediately at the forge call, but it is neither stated nor pinned. No `Pr[... : bad]` over this module will typecheck, because `bad` is not in scope outside `main`.
+   - **Consequence:** this is not a soundness error, and the docs claim exactly what is proven. But a future N2-free bound on `BoundedHypertreeGame` would not transfer to the total/operational experiment. Adding the missing direction later means changing a module that is now pinned (`module:e6a0b1c1e8e0`).
+   - **Smallest correction:** either
+     - now: make the flag a module global and add `!BoundedHypertreeGame.bad{2} => ={res}` to the postcondition, plus a MUST-FAIL control that drops the guard; or
+     - at landing: record this explicitly as a join prerequisite.
+
+**Other checks came out clean:**
+
+- **Signer (check 1):**
+  - `BoundedHypertree.sign` repeats `FL_SL_XMSS_MT_C_ES_NPRF.sign` (`XmssmtCC_All.ec:256–293`) line for line. The only differences are the separate loop index `i` and the sticky `bad` guard.
+  - The return is `if bad then None else Some sapl`, and nothing ever resets `bad`. So a failure at any layer releases nothing, and after it no WOTS or leaf calls run.
+  - Agreement on success (`res{2} <> None => res{2} = Some res{1}`), losslessness, and `size = d` on success are all proven.
+  - "No output on failure" is proven as a theorem only for the first layer (`:231`). For later layers it holds by construction.
+- **Game (check 2):**
+  - `seq 6 8` couples `ad`, `ps`, `OC.init`, `A.choose` and keygen under `={glob A, glob FC.O_THFC_Default}`.
+  - The message and index match (`nth ml i` / `Index.insubd i` with `i = size sigl{1}`).
+  - The win condition matches the total game's `is_valid /\ is_fresh` term for term.
+  - The only termination premise is forge losslessness. It is stated explicitly and needed only for the one-sided call.
+- **Leaf wrapper (check 3):**
+  - `bounded_leaf_choose_ll` and `bounded_leaf_forge_ll` prove termination of the actual `R_MEUFGCMAWOTSC_EUFNAGCMA_C` for any lossless O/OC, with matching restriction sets.
+  - Member separation comes from the existing `XmssmtCC_All.R_leaf_C_A_wf_MA` under explicit premises: `dfC0 ≠ 8n, 8n·len, 8n·2` plus the adversary's `choose` never querying `dfC0`.
+  - `bounded_interactive_D1_MA` has no N2 or counter-reachability premise.
+- **Scope (check 4):**
+  - The two intermediate experiments are distinct: `BoundedHypertreeGame` vs the total game, and `BoundedGame(R(A_ht))` at the WOTS level.
+  - The README, FV_SURFACE_MAP and feasibility note all say the cube/collision-branch join is open, including the unused-cube-entry failure issue. None of them claim it.
+- **Enrollment (check 5):**
+  - No existing proof file changed; the diff only adds two files.
+  - The new files contain no axioms, admits, `declare` or clones.
+  - Counts all move by the right amounts: 12 statement rows = 12 lemmas; pins/statements +12; 2 module census rows; closure roots +2; cone 69→71; controls 70→75; source-binding hashes and tool lists updated; identity hash bumped.
+  - The controls are meaningful:
+    - NoGuard makes the success guard load-bearing.
+    - PartialRelease shows the first-failure contract rejects releasing `Some []`.
+    - NoPKSeparation would start passing if the `8n·len` premise were silently dropped from the leaf statement.
+- **Model boundary (check 6):**
+  - The docs correctly call this a sampled-key cube / manually linked model.
+  - `BoundedSign` succeeds via the total `WOTS_C_ES.sign`, whose counter is `grindC`, with no Rust extraction.
+  - They make no real shared-SHA-256, useful runtime, numerical or whole-scheme claim.
+
+GAPS: Landing still requires the full cold 71-file / 75-control two-driver replay to finish green; I did not re-run any proofs myself.

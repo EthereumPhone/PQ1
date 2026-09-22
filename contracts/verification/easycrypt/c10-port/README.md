@@ -4378,3 +4378,9 @@ Full log: `scratch/gate_20260921_surface_count.log`.
 The bounded member-aware batch passes both proof drivers and all 70 controls;
 its Astra/Opus review and exact source are recorded in the
 [member-aware September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-ma-2026-09-22/README.md).
+
+The bounded hypertree/leaf interface batch passes the full 71-file two-driver
+replay and all 75 controls. Opus returned GO; the sole Astra pending-replay gap
+is now discharged by unchanged-source evidence. Its exact proof scope
+and remaining cube/collision join are recorded in the
+[hypertree September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-hypertree-2026-09-22/README.md).

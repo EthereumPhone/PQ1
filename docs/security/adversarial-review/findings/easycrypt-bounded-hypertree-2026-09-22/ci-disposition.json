@@ -1,0 +1,134 @@
+{
+  "source": "5c1770105acb81700d99eea8e917b1156b96e0db",
+  "baseline": "044b3d200194687cb61b6d59984739169d451f67",
+  "checked_paths": [
+    ".github/workflows",
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "secure/data/erc7730/curations/manifest.json",
+    "proto",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "xtask",
+    "scripts/check_erc7730_descriptors.py"
+  ],
+  "changed_paths": [],
+  "known_issues": [
+    660,
+    711,
+    717
+  ],
+  "status": "Hosted results recorded; not an all-CI-green claim",
+  "runs": [
+    {
+      "conclusion": "failure",
+      "databaseId": 35743870285,
+      "headSha": "5c1770105acb81700d99eea8e917b1156b96e0db",
+      "name": "ClusterFuzzLite (PR)",
+      "status": "completed",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870285"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 35743870299,
+      "headSha": "5c1770105acb81700d99eea8e917b1156b96e0db",
+      "name": "Lean FV (SphincsCVerify)",
+      "status": "completed",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870299"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 35743870280,
+      "headSha": "5c1770105acb81700d99eea8e917b1156b96e0db",
+      "name": "Claude Security Review (advisory)",
+      "status": "completed",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870280"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 35743870379,
+      "headSha": "5c1770105acb81700d99eea8e917b1156b96e0db",
+      "name": "CI",
+      "status": "completed",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870379"
+    }
+  ],
+  "job_evidence": [
+    {
+      "name": "PR",
+      "job": 106800357893,
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870285/job/106800357893",
+      "decisive": [
+        "2026-09-22T14:58:24.4630513Z error: cannot update the lock file /src/pqsigner/fuzz/Cargo.lock because --locked was passed to prevent this"
+      ],
+      "status": "baseline signature observed"
+    },
+    {
+      "name": "Production quarantine gates (rollback + ERC-7730 provenance OPEN)",
+      "job": 106800293308,
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870379/job/106800293308",
+      "decisive": [
+        "2026-09-22T14:59:22.7056634Z DRIFT: ERC-7730 curation overlay: curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977"
+      ],
+      "status": "baseline signature observed"
+    },
+    {
+      "name": "Line coverage (cargo llvm-cov \u2014 report-only baseline)",
+      "job": 106800293697,
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870379/job/106800293697",
+      "decisive": [
+        "2026-09-22T14:59:19.4151849Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\""
+      ],
+      "status": "baseline signature observed"
+    },
+    {
+      "name": "Host unit tests (pure-logic crates)",
+      "job": 106800293719,
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870379/job/106800293719",
+      "decisive": [
+        "2026-09-22T14:58:59.9704853Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\""
+      ],
+      "status": "baseline signature observed"
+    },
+    {
+      "name": "Invariant gates (#5 /",
+      "job": 106800293796,
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870379/job/106800293796",
+      "decisive": [
+        "2026-09-22T14:58:23.0227921Z     C3: HW-ASSUME-TRNG-ENTROPY: anchor not found in secure/src/hw/rng.rs: 'if sr & (SECS | CECS) != 0' \u2014 the code moved out from under this row; re-point it (do not delete the row)"
+      ],
+      "status": "baseline signature observed"
+    },
+    {
+      "name": "Slither (contracts static analysis)",
+      "job": 106800293805,
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870379/job/106800293805",
+      "decisive": [
+        "2026-09-22T14:56:59.2599322Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+        "/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file"
+      ],
+      "status": "baseline signature observed"
+    },
+    {
+      "name": "Contracts (forge test)",
+      "job": 106800293943,
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35743870379/job/106800293943",
+      "decisive": [
+        "2026-09-22T14:57:00.2252818Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+        "/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file"
+      ],
+      "status": "baseline signature observed"
+    }
+  ],
+  "passed_jobs": [
+    "lake build + FV-lints + axiom audit",
+    "Claude security review",
+    "Secure-world unit tests (host)",
+    "cargo-vet (dependency audit attestation)",
+    "Miri (UB in host-reachable unsafe)",
+    "QEMU unified-sign E2E",
+    "G1 \u2014 gate-enforcement lint (every soundness gate fires on its surface)",
+    "Firmware-target gates (FSBL footprint + thumbv8m pair link)"
+  ],
+  "pending_jobs": []
+}

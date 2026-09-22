@@ -1,0 +1,2974 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+[5|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = sk{1} = sk{2} /\ m{1} = m{2}
+
+    WOTS_C_ES.sign ~ BoundedSign.sign 
+
+post = res{2} <> None => res{2} = Some res{1}
+[6|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = sk{1} = sk{2} /\ m{1} = m{2}
+
+    WOTS_C_ES.sign ~ BoundedSign.sign 
+
+post = res{2} <> None => res{2} = Some res{1}
+[7|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {m : dgstblock, sk : skWOTS * pseed * adrs, r : sigWOTS * cntr}
+&2 (right) : {r0 : int, m, m0 : dgstblock, sk, sk0 : skWOTS * pseed * adrs,
+             s : sigWOTS * cntr, r, result : (sigWOTS * cntr) option}
+
+pre =
+  (sk{1}, m{1}).`1 = (sk{2}, m{2}).`1 /\ (sk{1}, m{1}).`2 = (sk{2}, m{2}).`2
+
+r <@ WOTS_C_ES.sign(sk, m)  (1--)  sk0 <- sk                           
+                            (2--)  m0 <- m                             
+                            (3--)  r0 <@ Search.run(sk0.`2, sk0.`3, m0)
+                            (4--)  result <- None                      
+                            (5--)  if (r0 <> -1) {                     
+                            (5.1)    s <@ WOTS_C_ES.sign(sk0, m0)      
+                            (5.2)    result <- Some s                  
+                            (5--)  }                                   
+                            (6--)  r <- result                         
+
+post = r{2} <> None => r{2} = Some r{1}
+[8|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {m : dgstblock, sk : skWOTS * pseed * adrs, r : sigWOTS * cntr}
+&2 (right) : {r0 : int, m, m0 : dgstblock, sk, sk0 : skWOTS * pseed * adrs,
+             s : sigWOTS * cntr, r, result : (sigWOTS * cntr) option}
+
+pre =
+  sk0{2} = sk{2} /\
+  m0{2} = m{2} /\
+  (sk{1}, m{1}).`1 = (sk{2}, m{2}).`1 /\ (sk{1}, m{1}).`2 = (sk{2}, m{2}).`2
+
+r <@ WOTS_C_ES.sign(sk, m)  (1--)  r0 <@ Search.run(sk0.`2, sk0.`3, m0)
+                            (2--)  result <- None                      
+                            (3--)  if (r0 <> -1) {                     
+                            (3.1)    s <@ WOTS_C_ES.sign(sk0, m0)      
+                            (3.2)    result <- Some s                  
+                            (3--)  }                                   
+                            (4--)  r <- result                         
+
+post = r{2} <> None => r{2} = Some r{1}
+[9|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {m : dgstblock, sk : skWOTS * pseed * adrs, r : sigWOTS * cntr}
+&2 (right) : {r0 : int, m, m0 : dgstblock, sk, sk0 : skWOTS * pseed * adrs,
+             s : sigWOTS * cntr, r, result : (sigWOTS * cntr) option}
+
+pre =
+  sk0{2} = sk{2} /\
+  m0{2} = m{2} /\
+  (sk{1}, m{1}).`1 = (sk{2}, m{2}).`1 /\ (sk{1}, m{1}).`2 = (sk{2}, m{2}).`2
+
+                           (1)  r0 <@ Search.run(sk0.`2, sk0.`3, m0)
+
+post = sk{1} = sk0{2} /\ m{1} = m0{2}
+[10|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {m : dgstblock, sk : skWOTS * pseed * adrs, r : sigWOTS * cntr}
+&2 (right) : {r0 : int, m, m0 : dgstblock, sk, sk0 : skWOTS * pseed * adrs,
+             s : sigWOTS * cntr, r, result : (sigWOTS * cntr) option}
+
+pre = sk{1} = sk0{2} /\ m{1} = m0{2}
+
+r <@ WOTS_C_ES.sign(sk, m)  (1--)  result <- None                
+                            (2--)  if (r0 <> -1) {               
+                            (2.1)    s <@ WOTS_C_ES.sign(sk0, m0)
+                            (2.2)    result <- Some s            
+                            (2--)  }                             
+                            (3--)  r <- result                   
+
+post = r{2} <> None => r{2} = Some r{1}
+[11|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {m : dgstblock, sk : skWOTS * pseed * adrs, r : sigWOTS * cntr}
+&2 (right) : {r0 : int, m, m0 : dgstblock, sk, sk0 : skWOTS * pseed * adrs,
+             s : sigWOTS * cntr, r, result : (sigWOTS * cntr) option}
+
+pre = (result{2} = None /\ sk{1} = sk0{2} /\ m{1} = m0{2}) /\ r0{2} <> -1
+
+r <@ WOTS_C_ES.sign(sk, m)  (1)  s <@ WOTS_C_ES.sign(sk0, m0)
+                            (2)  result <- Some s            
+                            (3)  r <- result                 
+
+post = r{2} <> None => r{2} = Some r{1}
+[12|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {m : dgstblock, sk : skWOTS * pseed * adrs, r : sigWOTS * cntr}
+&2 (right) : {r0 : int, m, m0 : dgstblock, sk, sk0 : skWOTS * pseed * adrs,
+             s : sigWOTS * cntr, r, result : (sigWOTS * cntr) option}
+
+pre = (result{2} = None /\ sk{1} = sk0{2} /\ m{1} = m0{2}) /\ r0{2} <> -1
+
+
+post =
+  (sk{1}, m{1}) = (sk0{2}, m0{2}) &&
+  forall (result_L result_R : sigWOTS * cntr),
+    result_L = result_R =>
+    let r_R = Some result_R in r_R <> None => r_R = Some result_L
+[13|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {m : dgstblock, sk : skWOTS * pseed * adrs, r : sigWOTS * cntr}
+&2 (right) : {r0 : int, m, m0 : dgstblock, sk, sk0 : skWOTS * pseed * adrs,
+             s : sigWOTS * cntr, r, result : (sigWOTS * cntr) option}
+
+pre = (result{2} = None /\ sk{1} = sk0{2} /\ m{1} = m0{2}) /\ ! r0{2} <> -1
+
+r <@ WOTS_C_ES.sign(sk, m)  (1)  r <- result              
+
+post = r{2} <> None => r{2} = Some r{1}
+[14|check]>
+No more goals
+[15|check]>
+[16|check]>
+added lemma: `total_bounded_wots_sign'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = true
+
+    BoundedHypertree.sign 
+    [=] 1%r
+
+post = true
+[17|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = true
+
+    BoundedHypertree.sign 
+    [=] 1%r
+
+post = true
+[18|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+forall (z : int),
+  phoare[ if (!bad) {...}; i <- i + 1 : i < d /\ d - i = z ==> d - i < z] = 1%r
+[19|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+Bound   : [=] 1%r
+
+pre = (i < d /\ d - i = z) /\ !bad
+
+(1--)  (tidx, kpidx) <- edivz tidx l'                                            
+(2--)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(3--)  skWOTS <- nth witness skWOTSlp kpidx                                      
+(4--)  result <@                                                                 
+(  -)    BoundedSign.sign((skWOTS, ps,                                           
+(  -)                      set_kpidx                                             
+(  -)                        (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(  -)                        kpidx), root)                                       
+(5--)  if (result = None) {                                                      
+(5.1)    bad <- true                                                             
+(5--)  } else {                                                                  
+(5?1)    (sigWOTS, counter) <- oget result                                       
+(5?2)    leaves <@                                                               
+(   )      BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(   )        set_ltidx ad (size sapl) tidx)                                      
+(5?3)    ap <-                                                                   
+(   )      cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(   )        (list2tree leaves) kpidx                                            
+(5?4)    root <-                                                                 
+(   )      val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(   )        (list2tree leaves)                                                  
+(5?5)    sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(5--)  }                                                                         
+
+post = d - (i + 1) < z
+[20|check]>
+Current goal (remaining: 7)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = (i < d /\ d - i = z) /\ !bad
+
+(1)  (tidx, kpidx) <- edivz tidx l'                                            
+(2)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(3)  skWOTS <- nth witness skWOTSlp kpidx                                      
+(4)  result <@                                                                 
+( )    BoundedSign.sign((skWOTS, ps,                                           
+( )                      set_kpidx                                             
+( )                        (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+( )                        kpidx), root)                                       
+
+post = true
+[21|check]>
+Current goal (remaining: 7)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = (i < d /\ d - i = z) /\ !bad
+
+(1)  (tidx, kpidx) <- edivz tidx l'                                 
+(2)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx
+(3)  skWOTS <- nth witness skWOTSlp kpidx                           
+
+post = true
+[22|check]>
+Current goal (remaining: 6)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+Bound   : [=] 1%r
+
+pre = (i < d /\ d - i = z) /\ !bad
+
+(1)  (tidx, kpidx) <- edivz tidx l'                                            
+(2)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(3)  skWOTS <- nth witness skWOTSlp kpidx                                      
+(4)  result <@                                                                 
+( )    BoundedSign.sign((skWOTS, ps,                                           
+( )                      set_kpidx                                             
+( )                        (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+( )                        kpidx), root)                                       
+
+post = d - i = z
+[23|check]>
+Current goal (remaining: 5)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+Bound   : [=] 1%r
+
+pre = d - i = z
+
+(1--)  if (result = None) {                                                     
+(1.1)    bad <- true                                                            
+(1--)  } else {                                                                 
+(1?1)    (sigWOTS, counter) <- oget result                                      
+(1?2)    leaves <@                                                              
+(   )      BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                   
+(   )        set_ltidx ad (size sapl) tidx)                                     
+(1?3)    ap <-                                                                  
+(   )      cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)
+(   )        (list2tree leaves) kpidx                                           
+(1?4)    root <-                                                                
+(   )      val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(   )        (list2tree leaves)                                                 
+(1?5)    sapl <- rcons sapl ((sigWOTS, counter), ap)                            
+(1--)  }                                                                        
+
+post = d - (i + 1) < z
+[24|check]>
+Current goal (remaining: 5)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+Bound   : [=] 1%r
+
+pre = d - i = z /\ result <> None
+
+(1)  (sigWOTS, counter) <- oget result                                      
+(2)  leaves <@                                                              
+( )    BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                   
+( )      set_ltidx ad (size sapl) tidx)                                     
+(3)  ap <-                                                                  
+( )    cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)
+( )      (list2tree leaves) kpidx                                           
+(4)  root <-                                                                
+( )    val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+( )      (list2tree leaves)                                                 
+(5)  sapl <- rcons sapl ((sigWOTS, counter), ap)                            
+
+post = d - (i + 1) < z
+[25|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+Bound   : [=] 0%r
+
+pre = (i < d /\ d - i = z) /\ !bad
+
+(1)  (tidx, kpidx) <- edivz tidx l'                                            
+(2)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(3)  skWOTS <- nth witness skWOTSlp kpidx                                      
+(4)  result <@                                                                 
+( )    BoundedSign.sign((skWOTS, ps,                                           
+( )                      set_kpidx                                             
+( )                        (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+( )                        kpidx), root)                                       
+
+post = d - i <> z
+[26|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = (i < d /\ d - i = z) /\ !bad
+
+(1)  (tidx, kpidx) <- edivz tidx l'                                 
+(2)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx
+(3)  skWOTS <- nth witness skWOTSlp kpidx                           
+
+post = ! d - i <> z
+[27|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+forall &hr, (i{hr} < d /\ d - i{hr} = z) /\ !bad{hr} => 1%r = 1%r
+[28|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+Bound   : [=] 1%r
+
+pre = (i < d /\ d - i = z) /\ ! !bad
+
+
+post = d - (i + 1) < z
+[29|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+Bound   : [=] 1%r
+
+pre = true
+
+(1)  (skWOTStd, ps, ad) <- sk           
+(2)  i <- 0                             
+(3)  bad <- false                       
+(4)  root <- m                          
+(5)  sapl <- []                         
+(6)  (tidx, kpidx) <- (Index.val idx, 0)
+
+post = forall (i0 : int), (d - i0 <= 0 => ! i0 < d) /\ true
+[30|check]>
+No more goals
+[31|check]>
+[32|check]>
+added lemma: `bounded_hypertree_sign_ll'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = true
+
+    BoundedHypertree.sign 
+
+post = res <> None => size (oget res) = d
+[33|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = true
+
+    BoundedHypertree.sign 
+
+post = res <> None => size (oget res) = d
+[34|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = (0 <= i <= d /\ (!bad => size sapl = i)) /\ i < d
+
+(1----)  if (!bad) {                                                                 
+(1.1--)    (tidx, kpidx) <- edivz tidx l'                                            
+(1.2--)    skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(1.3--)    skWOTS <- nth witness skWOTSlp kpidx                                      
+(1.4--)    result <@                                                                 
+(    -)      BoundedSign.sign((skWOTS, ps,                                           
+(    -)                        set_kpidx                                             
+(    -)                          (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(    -)                          kpidx), root)                                       
+(1.5--)    if (result = None) {                                                      
+(1.5.1)      bad <- true                                                             
+(1.5--)    } else {                                                                  
+(1.5?1)      (sigWOTS, counter) <- oget result                                       
+(1.5?2)      leaves <@                                                               
+(     )        BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(     )          set_ltidx ad (size sapl) tidx)                                      
+(1.5?3)      ap <-                                                                   
+(     )        cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(     )          (list2tree leaves) kpidx                                            
+(1.5?4)      root <-                                                                 
+(     )        val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(     )          (list2tree leaves)                                                  
+(1.5?5)      sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(1.5--)    }                                                                         
+(1----)  }                                                                           
+(2----)  i <- i + 1                                                                  
+
+post = 0 <= i <= d /\ (!bad => size sapl = i)
+[35|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = ((0 <= i <= d /\ (!bad => size sapl = i)) /\ i < d) /\ !bad
+
+(1--)  (tidx, kpidx) <- edivz tidx l'                                            
+(2--)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(3--)  skWOTS <- nth witness skWOTSlp kpidx                                      
+(4--)  result <@                                                                 
+(  -)    BoundedSign.sign((skWOTS, ps,                                           
+(  -)                      set_kpidx                                             
+(  -)                        (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(  -)                        kpidx), root)                                       
+(5--)  if (result = None) {                                                      
+(5.1)    bad <- true                                                             
+(5--)  } else {                                                                  
+(5?1)    (sigWOTS, counter) <- oget result                                       
+(5?2)    leaves <@                                                               
+(   )      BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(   )        set_ltidx ad (size sapl) tidx)                                      
+(5?3)    ap <-                                                                   
+(   )      cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(   )        (list2tree leaves) kpidx                                            
+(5?4)    root <-                                                                 
+(   )      val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(   )        (list2tree leaves)                                                  
+(5?5)    sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(5--)  }                                                                         
+
+post = let i0 = i + 1 in 0 <= i0 <= d /\ (!bad => size sapl = i0)
+[36|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = ((0 <= i <= d /\ (!bad => size sapl = i)) /\ i < d) /\ !bad
+
+(1)  (tidx, kpidx) <- edivz tidx l'                                            
+(2)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(3)  skWOTS <- nth witness skWOTSlp kpidx                                      
+(4)  result <@                                                                 
+( )    BoundedSign.sign((skWOTS, ps,                                           
+( )                      set_kpidx                                             
+( )                        (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+( )                        kpidx), root)                                       
+
+post = 0 <= i < d /\ !bad /\ size sapl = i
+[37|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = ((0 <= i <= d /\ (!bad => size sapl = i)) /\ i < d) /\ !bad
+
+(1)  (tidx, kpidx) <- edivz tidx l'                                 
+(2)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx
+(3)  skWOTS <- nth witness skWOTSlp kpidx                           
+
+post = 0 <= i < d /\ !bad /\ size sapl = i
+[38|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = 0 <= i < d /\ !bad /\ size sapl = i
+
+(1--)  if (result = None) {                                                     
+(1.1)    bad <- true                                                            
+(1--)  } else {                                                                 
+(1?1)    (sigWOTS, counter) <- oget result                                      
+(1?2)    leaves <@                                                              
+(   )      BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                   
+(   )        set_ltidx ad (size sapl) tidx)                                     
+(1?3)    ap <-                                                                  
+(   )      cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)
+(   )        (list2tree leaves) kpidx                                           
+(1?4)    root <-                                                                
+(   )      val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(   )        (list2tree leaves)                                                 
+(1?5)    sapl <- rcons sapl ((sigWOTS, counter), ap)                            
+(1--)  }                                                                        
+
+post = let i0 = i + 1 in 0 <= i0 <= d /\ (!bad => size sapl = i0)
+[39|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = (0 <= i < d /\ !bad /\ size sapl = i) /\ result <> None
+
+(1)  (sigWOTS, counter) <- oget result                                      
+(2)  leaves <@                                                              
+( )    BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                   
+( )      set_ltidx ad (size sapl) tidx)                                     
+(3)  ap <-                                                                  
+( )    cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)
+( )      (list2tree leaves) kpidx                                           
+(4)  root <-                                                                
+( )    val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+( )      (list2tree leaves)                                                 
+(5)  sapl <- rcons sapl ((sigWOTS, counter), ap)                            
+
+post = let i0 = i + 1 in 0 <= i0 <= d /\ (!bad => size sapl = i0)
+[40|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = ((0 <= i <= d /\ (!bad => size sapl = i)) /\ i < d) /\ ! !bad
+
+
+post = let i0 = i + 1 in 0 <= i0 <= d /\ (!bad => size sapl = i0)
+[41|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = true
+
+(1)  (skWOTStd, ps, ad) <- sk           
+(2)  i <- 0                             
+(3)  bad <- false                       
+(4)  root <- m                          
+(5)  sapl <- []                         
+(6)  (tidx, kpidx) <- (Index.val idx, 0)
+
+post =
+  (0 <= i <= d /\ (!bad => size sapl = i)) /\
+  forall (bad0 : bool) (i0 : int) (sapl0 : sigFLSLXMSSMTTWC),
+    ! i0 < d =>
+    0 <= i0 <= d /\ (!bad0 => size sapl0 = i0) =>
+    (if bad0 then None else Some sapl0) <> None =>
+    size (oget (if bad0 then None else Some sapl0)) = d
+[42|check]>
+No more goals
+[43|check]>
+[44|check]>
+added lemma: `bounded_hypertree_sign_size'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = sk{1} = sk{2} /\ m{1} = m{2} /\ idx{1} = idx{2}
+
+    FL_SL_XMSS_MT_C_ES_NPRF.sign ~ BoundedHypertree.sign 
+
+post = res{2} <> None => res{2} = Some res{1}
+[45|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = sk{1} = sk{2} /\ m{1} = m{2} /\ idx{1} = idx{2}
+
+    FL_SL_XMSS_MT_C_ES_NPRF.sign ~ BoundedHypertree.sign 
+
+post = res{2} <> None => res{2} = Some res{1}
+[46|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  (sk{1}, m{1}, idx{1}).`1 = (sk{2}, m{2}, idx{2}).`1 /\
+  (sk{1}, m{1}, idx{1}).`2 = (sk{2}, m{2}, idx{2}).`2 /\
+  (sk{1}, m{1}, idx{1}).`3 = (sk{2}, m{2}, idx{2}).`3
+
+(skWOTStd, ps, ad) <- sk                                   (1------)  (skWOTStd, ps, ad) <- sk                              
+root <- m                                                  (2------)  i <- 0                                                
+sapl <- []                                                 (3------)  bad <- false                                          
+(tidx, kpidx) <- (Index.val idx, 0)                        (4------)  root <- m                                             
+while (size sapl < d) {                                    (5------)  sapl <- []                                            
+  (tidx, kpidx) <- edivz tidx l'                           (5.1----)                                                        
+  skWOTSlp <-                                              (5.2----)                                                        
+    nth witness                                            (    ---)                                                        
+      (nth witness skWOTStd (size sapl))                   (    ---)                                                        
+      tidx                                                 (    ---)                                                        
+  skWOTS <- nth witness skWOTSlp kpidx                     (5.3----)                                                        
+  (sigWOTS, counter) <@                                    (5.4----)                                                        
+    WOTS_C_ES.sign((skWOTS, ps,                            (    ---)                                                        
+                    set_kpidx                              (    ---)                                                        
+                      (set_typeidx                         (    ---)                                                        
+                         (set_ltidx ad                     (    ---)                                                        
+                            (size sapl)                    (    ---)                                                        
+                            tidx) chtype)                  (    ---)                                                        
+                      kpidx), root)                        (    ---)                                                        
+  leaves <@                                                (5.5----)                                                        
+    FL_SL_XMSS_MT_C_ES_NPRF.leaves_from_sklpsad(skWOTSlp,  (    ---)                                                        
+      ps, set_ltidx ad (size sapl) tidx)                   (    ---)                                                        
+  ap <-                                                    (5.6----)                                                        
+    cons_ap_trh ps                                         (    ---)                                                        
+      (set_typeidx                                         (    ---)                                                        
+         (set_ltidx ad (size sapl) tidx)                   (    ---)                                                        
+         trhxtype) (list2tree leaves)                      (    ---)                                                        
+      kpidx                                                (    ---)                                                        
+  root <-                                                  (5.7----)                                                        
+    val_bt_trh ps                                          (    ---)                                                        
+      (set_typeidx                                         (    ---)                                                        
+         (set_ltidx ad (size sapl) tidx)                   (    ---)                                                        
+         trhxtype) (list2tree leaves)                      (    ---)                                                        
+  sapl <-                                                  (5.8----)                                                        
+    rcons sapl ((sigWOTS, counter), ap)                    (    ---)                                                        
+}                                                          (5------)                                                        
+                                                           (6------)  (tidx, kpidx) <- (Index.val idx, 0)                   
+                                                           (7------)  while (i < d) {                                       
+                                                           (7.1----)    if (!bad) {                                         
+                                                           (7.1.1--)      (tidx, kpidx) <- edivz tidx l'                    
+                                                           (7.1.2--)      skWOTSlp <-                                       
+                                                           (      -)        nth witness                                     
+                                                           (      -)          (nth witness skWOTStd (size sapl))            
+                                                           (      -)          tidx                                          
+                                                           (7.1.3--)      skWOTS <- nth witness skWOTSlp kpidx              
+                                                           (7.1.4--)      result <@                                         
+                                                           (      -)        BoundedSign.sign((skWOTS, ps,                   
+                                                           (      -)                          set_kpidx                     
+                                                           (      -)                            (set_typeidx                
+                                                           (      -)                               (set_ltidx ad            
+                                                           (      -)                                  (size sapl)           
+                                                           (      -)                                  tidx)                 
+                                                           (      -)                               chtype) kpidx),          
+                                                           (      -)          root)                                         
+                                                           (7.1.5--)      if (result = None) {                              
+                                                           (7.1.5.1)        bad <- true                                     
+                                                           (7.1.5--)      } else {                                          
+                                                           (7.1.5?1)        (sigWOTS, counter) <- oget result               
+                                                           (7.1.5?2)        leaves <@                                       
+                                                           (       )          BoundedHypertree.leaves_from_sklpsad(skWOTSlp,
+                                                           (       )            ps, set_ltidx ad (size sapl) tidx)          
+                                                           (7.1.5?3)        ap <-                                           
+                                                           (       )          cons_ap_trh ps                                
+                                                           (       )            (set_typeidx                                
+                                                           (       )               (set_ltidx ad (size sapl) tidx)          
+                                                           (       )               trhxtype) (list2tree leaves)             
+                                                           (       )            kpidx                                       
+                                                           (7.1.5?4)        root <-                                         
+                                                           (       )          val_bt_trh ps                                 
+                                                           (       )            (set_typeidx                                
+                                                           (       )               (set_ltidx ad (size sapl) tidx)          
+                                                           (       )               trhxtype) (list2tree leaves)             
+                                                           (7.1.5?5)        sapl <-                                         
+                                                           (       )          rcons sapl ((sigWOTS, counter), ap)           
+                                                           (7.1.5--)      }                                                 
+                                                           (7.1----)    }                                                   
+                                                           (7.2----)    i <- i + 1                                          
+                                                           (7------)  }                                                     
+
+post =
+  (if bad{2} then None else Some sapl{2}) <> None =>
+  (if bad{2} then None else Some sapl{2}) = Some sapl{1}
+[47|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i{2} = size sapl{1} /\
+   (!bad{2} =>
+    root{1} = root{2} /\
+    sapl{1} = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+  size sapl{1} < d /\ i{2} < d
+
+(tidx, kpidx) <- edivz tidx l'                           (1----)  if (!bad) {                                         
+                                                         (1.1--)    (tidx, kpidx) <- edivz tidx l'                    
+                                                         (1.2--)    skWOTSlp <-                                       
+                                                         (    -)      nth witness                                     
+                                                         (    -)        (nth witness skWOTStd (size sapl))            
+                                                         (    -)        tidx                                          
+                                                         (1.3--)    skWOTS <- nth witness skWOTSlp kpidx              
+                                                         (1.4--)    result <@                                         
+                                                         (    -)      BoundedSign.sign((skWOTS, ps,                   
+                                                         (    -)                        set_kpidx                     
+                                                         (    -)                          (set_typeidx                
+                                                         (    -)                             (set_ltidx ad            
+                                                         (    -)                                (size sapl)           
+                                                         (    -)                                tidx)                 
+                                                         (    -)                             chtype) kpidx),          
+                                                         (    -)        root)                                         
+                                                         (1.5--)    if (result = None) {                              
+                                                         (1.5.1)      bad <- true                                     
+                                                         (1.5--)    } else {                                          
+                                                         (1.5?1)      (sigWOTS, counter) <- oget result               
+                                                         (1.5?2)      leaves <@                                       
+                                                         (     )        BoundedHypertree.leaves_from_sklpsad(skWOTSlp,
+                                                         (     )          ps, set_ltidx ad (size sapl) tidx)          
+                                                         (1.5?3)      ap <-                                           
+                                                         (     )        cons_ap_trh ps                                
+                                                         (     )          (set_typeidx                                
+                                                         (     )             (set_ltidx ad (size sapl) tidx)          
+                                                         (     )             trhxtype) (list2tree leaves)             
+                                                         (     )          kpidx                                       
+                                                         (1.5?4)      root <-                                         
+                                                         (     )        val_bt_trh ps                                 
+                                                         (     )          (set_typeidx                                
+                                                         (     )             (set_ltidx ad (size sapl) tidx)          
+                                                         (     )             trhxtype) (list2tree leaves)             
+                                                         (1.5?5)      sapl <-                                         
+                                                         (     )        rcons sapl ((sigWOTS, counter), ap)           
+                                                         (1.5--)    }                                                 
+                                                         (1----)  }                                                   
+skWOTSlp <-                                              (2----)  i <- i + 1                                          
+  nth witness                                            (  ---)                                                      
+    (nth witness skWOTStd (size sapl))                   (  ---)                                                      
+    tidx                                                 (  ---)                                                      
+skWOTS <- nth witness skWOTSlp kpidx                     (3----)                                                      
+(sigWOTS, counter) <@                                    (4----)                                                      
+  WOTS_C_ES.sign((skWOTS, ps,                            (  ---)                                                      
+                  set_kpidx                              (  ---)                                                      
+                    (set_typeidx                         (  ---)                                                      
+                       (set_ltidx ad                     (  ---)                                                      
+                          (size sapl)                    (  ---)                                                      
+                          tidx) chtype)                  (  ---)                                                      
+                    kpidx), root)                        (  ---)                                                      
+leaves <@                                                (5----)                                                      
+  FL_SL_XMSS_MT_C_ES_NPRF.leaves_from_sklpsad(skWOTSlp,  (  ---)                                                      
+    ps, set_ltidx ad (size sapl) tidx)                   (  ---)                                                      
+ap <-                                                    (6----)                                                      
+  cons_ap_trh ps                                         (  ---)                                                      
+    (set_typeidx                                         (  ---)                                                      
+       (set_ltidx ad (size sapl) tidx)                   (  ---)                                                      
+       trhxtype) (list2tree leaves)                      (  ---)                                                      
+    kpidx                                                (  ---)                                                      
+root <-                                                  (7----)                                                      
+  val_bt_trh ps                                          (  ---)                                                      
+    (set_typeidx                                         (  ---)                                                      
+       (set_ltidx ad (size sapl) tidx)                   (  ---)                                                      
+       trhxtype) (list2tree leaves)                      (  ---)                                                      
+sapl <-                                                  (8----)                                                      
+  rcons sapl ((sigWOTS, counter), ap)                    (  ---)                                                      
+
+post =
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i{2} = size sapl{1} /\
+   (!bad{2} =>
+    root{1} = root{2} /\
+    sapl{1} = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+  (size sapl{1} < d <=> i{2} < d)
+[48|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  (((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+    i{2} = size sapl{1} /\
+    (!bad{2} =>
+     root{1} = root{2} /\
+     sapl{1} = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+   size sapl{1} < d /\ i{2} < d) /\
+  !bad{2}
+
+(tidx, kpidx) <- edivz tidx l'                           (1--)  (tidx, kpidx) <- edivz tidx l'                    
+skWOTSlp <-                                              (2--)  skWOTSlp <-                                       
+  nth witness                                            (  -)    nth witness                                     
+    (nth witness skWOTStd (size sapl))                   (  -)      (nth witness skWOTStd (size sapl))            
+    tidx                                                 (  -)      tidx                                          
+skWOTS <- nth witness skWOTSlp kpidx                     (3--)  skWOTS <- nth witness skWOTSlp kpidx              
+(sigWOTS, counter) <@                                    (4--)  result <@                                         
+  WOTS_C_ES.sign((skWOTS, ps,                            (  -)    BoundedSign.sign((skWOTS, ps,                   
+                  set_kpidx                              (  -)                      set_kpidx                     
+                    (set_typeidx                         (  -)                        (set_typeidx                
+                       (set_ltidx ad                     (  -)                           (set_ltidx ad            
+                          (size sapl)                    (  -)                              (size sapl)           
+                          tidx) chtype)                  (  -)                              tidx)                 
+                    kpidx), root)                        (  -)                           chtype) kpidx),          
+                                                         (  -)      root)                                         
+leaves <@                                                (5--)  if (result = None) {                              
+  FL_SL_XMSS_MT_C_ES_NPRF.leaves_from_sklpsad(skWOTSlp,  (  -)                                                    
+    ps, set_ltidx ad (size sapl) tidx)                   (  -)                                                    
+                                                         (5.1)    bad <- true                                     
+                                                         (5--)  } else {                                          
+                                                         (5?1)    (sigWOTS, counter) <- oget result               
+                                                         (5?2)    leaves <@                                       
+                                                         (   )      BoundedHypertree.leaves_from_sklpsad(skWOTSlp,
+                                                         (   )        ps, set_ltidx ad (size sapl) tidx)          
+                                                         (5?3)    ap <-                                           
+                                                         (   )      cons_ap_trh ps                                
+                                                         (   )        (set_typeidx                                
+                                                         (   )           (set_ltidx ad (size sapl) tidx)          
+                                                         (   )           trhxtype) (list2tree leaves)             
+                                                         (   )        kpidx                                       
+                                                         (5?4)    root <-                                         
+                                                         (   )      val_bt_trh ps                                 
+                                                         (   )        (set_typeidx                                
+                                                         (   )           (set_ltidx ad (size sapl) tidx)          
+                                                         (   )           trhxtype) (list2tree leaves)             
+                                                         (5?5)    sapl <-                                         
+                                                         (   )      rcons sapl ((sigWOTS, counter), ap)           
+                                                         (5--)  }                                                 
+
+post =
+  let i_R = i{2} + 1 in
+  let sapl_L =
+    rcons sapl{1}
+      ((sigWOTS{1}, counter{1}),
+       cons_ap_trh ps{1}
+         (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+         (list2tree leaves{1}) kpidx{1}) in
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i_R = size sapl_L /\
+   (!bad{2} =>
+    val_bt_trh ps{1}
+      (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+      (list2tree leaves{1}) =
+    root{2} /\ sapl_L = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+  (size sapl_L < d <=> i_R < d)
+[49|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  (((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+    i{2} = size sapl{1} /\
+    (!bad{2} =>
+     root{1} = root{2} /\
+     sapl{1} = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+   size sapl{1} < d /\ i{2} < d) /\
+  !bad{2}
+
+(tidx, kpidx) <- edivz tidx l'           (1)  (tidx, kpidx) <- edivz tidx l'          
+skWOTSlp <-                              (2)  skWOTSlp <-                             
+  nth witness                            ( )    nth witness                           
+    (nth witness skWOTStd (size sapl))   ( )      (nth witness skWOTStd (size sapl))  
+    tidx                                 ( )      tidx                                
+skWOTS <- nth witness skWOTSlp kpidx     (3)  skWOTS <- nth witness skWOTSlp kpidx    
+(sigWOTS, counter) <@                    (4)  result <@                               
+  WOTS_C_ES.sign((skWOTS, ps,            ( )    BoundedSign.sign((skWOTS, ps,         
+                  set_kpidx              ( )                      set_kpidx           
+                    (set_typeidx         ( )                        (set_typeidx      
+                       (set_ltidx ad     ( )                           (set_ltidx ad  
+                          (size sapl)    ( )                              (size sapl) 
+                          tidx) chtype)  ( )                              tidx)       
+                    kpidx), root)        ( )                           chtype) kpidx),
+                                         ( )      root)                               
+
+post =
+  (skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+  i{2} = size sapl{1} /\
+  !bad{2} /\
+  (root{1} = root{2} /\
+   sapl{1} = sapl{2} /\
+   tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2} /\ skWOTSlp{1} = skWOTSlp{2}) /\
+  (result{2} <> None => result{2} = Some (sigWOTS{1}, counter{1}))
+[50|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  (skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+  i{2} = size sapl{1} /\
+  !bad{2} /\
+  (root{1} = root{2} /\
+   sapl{1} = sapl{2} /\
+   tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2} /\ skWOTSlp{1} = skWOTSlp{2}) /\
+  (result{2} <> None => result{2} = Some (sigWOTS{1}, counter{1}))
+
+leaves <@                                                (1--)  if (result = None) {                              
+  FL_SL_XMSS_MT_C_ES_NPRF.leaves_from_sklpsad(skWOTSlp,  (  -)                                                    
+    ps, set_ltidx ad (size sapl) tidx)                   (  -)                                                    
+                                                         (1.1)    bad <- true                                     
+                                                         (1--)  } else {                                          
+                                                         (1?1)    (sigWOTS, counter) <- oget result               
+                                                         (1?2)    leaves <@                                       
+                                                         (   )      BoundedHypertree.leaves_from_sklpsad(skWOTSlp,
+                                                         (   )        ps, set_ltidx ad (size sapl) tidx)          
+                                                         (1?3)    ap <-                                           
+                                                         (   )      cons_ap_trh ps                                
+                                                         (   )        (set_typeidx                                
+                                                         (   )           (set_ltidx ad (size sapl) tidx)          
+                                                         (   )           trhxtype) (list2tree leaves)             
+                                                         (   )        kpidx                                       
+                                                         (1?4)    root <-                                         
+                                                         (   )      val_bt_trh ps                                 
+                                                         (   )        (set_typeidx                                
+                                                         (   )           (set_ltidx ad (size sapl) tidx)          
+                                                         (   )           trhxtype) (list2tree leaves)             
+                                                         (1?5)    sapl <-                                         
+                                                         (   )      rcons sapl ((sigWOTS, counter), ap)           
+                                                         (1--)  }                                                 
+
+post =
+  let i_R = i{2} + 1 in
+  let sapl_L =
+    rcons sapl{1}
+      ((sigWOTS{1}, counter{1}),
+       cons_ap_trh ps{1}
+         (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+         (list2tree leaves{1}) kpidx{1}) in
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i_R = size sapl_L /\
+   (!bad{2} =>
+    val_bt_trh ps{1}
+      (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+      (list2tree leaves{1}) =
+    root{2} /\ sapl_L = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+  (size sapl_L < d <=> i_R < d)
+[51|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i{2} = size sapl{1} /\
+   !bad{2} /\
+   (root{1} = root{2} /\
+    sapl{1} = sapl{2} /\
+    tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2} /\ skWOTSlp{1} = skWOTSlp{2}) /\
+   (result{2} <> None => result{2} = Some (sigWOTS{1}, counter{1}))) /\
+  result{2} = None
+
+leaves <@                                                (1)  bad <- true              
+  FL_SL_XMSS_MT_C_ES_NPRF.leaves_from_sklpsad(skWOTSlp,  ( )                           
+    ps, set_ltidx ad (size sapl) tidx)                   ( )                           
+
+post =
+  let i_R = i{2} + 1 in
+  let sapl_L =
+    rcons sapl{1}
+      ((sigWOTS{1}, counter{1}),
+       cons_ap_trh ps{1}
+         (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+         (list2tree leaves{1}) kpidx{1}) in
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i_R = size sapl_L /\
+   (!bad{2} =>
+    val_bt_trh ps{1}
+      (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+      (list2tree leaves{1}) =
+    root{2} /\ sapl_L = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+  (size sapl_L < d <=> i_R < d)
+[52|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i{2} = size sapl{1} /\
+   !bad{2} /\
+   (root{1} = root{2} /\
+    sapl{1} = sapl{2} /\
+    tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2} /\ skWOTSlp{1} = skWOTSlp{2}) /\
+   (result{2} <> None => result{2} = Some (sigWOTS{1}, counter{1}))) /\
+  result{2} <> None
+
+leaves <@                                                (1)  (sigWOTS, counter) <- oget result               
+  FL_SL_XMSS_MT_C_ES_NPRF.leaves_from_sklpsad(skWOTSlp,  ( )                                                  
+    ps, set_ltidx ad (size sapl) tidx)                   ( )                                                  
+                                                         (2)  leaves <@                                       
+                                                         ( )    BoundedHypertree.leaves_from_sklpsad(skWOTSlp,
+                                                         ( )      ps, set_ltidx ad (size sapl) tidx)          
+                                                         (3)  ap <-                                           
+                                                         ( )    cons_ap_trh ps                                
+                                                         ( )      (set_typeidx                                
+                                                         ( )         (set_ltidx ad (size sapl) tidx)          
+                                                         ( )         trhxtype) (list2tree leaves)             
+                                                         ( )      kpidx                                       
+                                                         (4)  root <-                                         
+                                                         ( )    val_bt_trh ps                                 
+                                                         ( )      (set_typeidx                                
+                                                         ( )         (set_ltidx ad (size sapl) tidx)          
+                                                         ( )         trhxtype) (list2tree leaves)             
+                                                         (5)  sapl <-                                         
+                                                         ( )    rcons sapl ((sigWOTS, counter), ap)           
+
+post =
+  let i_R = i{2} + 1 in
+  let sapl_L =
+    rcons sapl{1}
+      ((sigWOTS{1}, counter{1}),
+       cons_ap_trh ps{1}
+         (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+         (list2tree leaves{1}) kpidx{1}) in
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i_R = size sapl_L /\
+   (!bad{2} =>
+    val_bt_trh ps{1}
+      (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+      (list2tree leaves{1}) =
+    root{2} /\ sapl_L = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+  (size sapl_L < d <=> i_R < d)
+[53|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i{2} = size sapl{1} /\
+   !bad{2} /\
+   (root{1} = root{2} /\
+    sapl{1} = sapl{2} /\
+    tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2} /\ skWOTSlp{1} = skWOTSlp{2}) /\
+   (result{2} <> None => result{2} = Some (sigWOTS{1}, counter{1}))) /\
+  result{2} <> None
+
+                           (1)  (sigWOTS, counter) <- oget result
+
+post =
+  (skWOTSlp{1}, ps{1}, set_ltidx ad{1} (size sapl{1}) tidx{1}) =
+  (skWOTSlp{2}, ps{2}, set_ltidx ad{2} (size sapl{2}) tidx{2}) &&
+  forall (result_L result_R : dgstblock list),
+    result_L = result_R =>
+    let i_R = i{2} + 1 in
+    let sapl_L =
+      rcons sapl{1}
+        ((sigWOTS{1}, counter{1}),
+         cons_ap_trh ps{1}
+           (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+           (list2tree result_L) kpidx{1}) in
+    ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+     i_R = size sapl_L /\
+     (!bad{2} =>
+      val_bt_trh ps{1}
+        (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+        (list2tree result_L) =
+      val_bt_trh ps{2}
+        (set_typeidx (set_ltidx ad{2} (size sapl{2}) tidx{2}) trhxtype)
+        (list2tree result_R) /\
+      sapl_L =
+      rcons sapl{2}
+        ((sigWOTS{2}, counter{2}),
+         cons_ap_trh ps{2}
+           (set_typeidx (set_ltidx ad{2} (size sapl{2}) tidx{2}) trhxtype)
+           (list2tree result_R) kpidx{2}) /\
+      tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+    (size sapl_L < d <=> i_R < d)
+[54|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  (((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+    i{2} = size sapl{1} /\
+    (!bad{2} =>
+     root{1} = root{2} /\
+     sapl{1} = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+   size sapl{1} < d /\ i{2} < d) /\
+  ! !bad{2}
+
+(tidx, kpidx) <- edivz tidx l'                           (1)                           
+skWOTSlp <-                                              (2)                           
+  nth witness                                            ( )                           
+    (nth witness skWOTStd (size sapl))                   ( )                           
+    tidx                                                 ( )                           
+skWOTS <- nth witness skWOTSlp kpidx                     (3)                           
+(sigWOTS, counter) <@                                    (4)                           
+  WOTS_C_ES.sign((skWOTS, ps,                            ( )                           
+                  set_kpidx                              ( )                           
+                    (set_typeidx                         ( )                           
+                       (set_ltidx ad                     ( )                           
+                          (size sapl)                    ( )                           
+                          tidx) chtype)                  ( )                           
+                    kpidx), root)                        ( )                           
+leaves <@                                                (5)                           
+  FL_SL_XMSS_MT_C_ES_NPRF.leaves_from_sklpsad(skWOTSlp,  ( )                           
+    ps, set_ltidx ad (size sapl) tidx)                   ( )                           
+
+post =
+  let i_R = i{2} + 1 in
+  let sapl_L =
+    rcons sapl{1}
+      ((sigWOTS{1}, counter{1}),
+       cons_ap_trh ps{1}
+         (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+         (list2tree leaves{1}) kpidx{1}) in
+  ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+   i_R = size sapl_L /\
+   (!bad{2} =>
+    val_bt_trh ps{1}
+      (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+      (list2tree leaves{1}) =
+    root{2} /\ sapl_L = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+  (size sapl_L < d <=> i_R < d)
+[55|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  (((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+    i{2} = size sapl{1} /\
+    (!bad{2} =>
+     root{1} = root{2} /\
+     sapl{1} = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+   size sapl{1} < d /\ i{2} < d) /\
+  ! !bad{2}
+
+(tidx, kpidx) <- edivz tidx l'          (1)                           
+skWOTSlp <-                             (2)                           
+  nth witness                           ( )                           
+    (nth witness skWOTStd (size sapl))  ( )                           
+    tidx                                ( )                           
+skWOTS <- nth witness skWOTSlp kpidx    (3)                           
+
+post =
+  forall (result0 : sigWOTS * cntr) (result1 : dgstblock list),
+    let i_R = i{2} + 1 in
+    let sapl_L =
+      rcons sapl{1}
+        ((result0.`1, result0.`2),
+         cons_ap_trh ps{1}
+           (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+           (list2tree result1) kpidx{1}) in
+    ((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+     i_R = size sapl_L /\
+     (!bad{2} =>
+      val_bt_trh ps{1}
+        (set_typeidx (set_ltidx ad{1} (size sapl{1}) tidx{1}) trhxtype)
+        (list2tree result1) =
+      root{2} /\ sapl_L = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+    (size sapl_L < d <=> i_R < d)
+[56|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+&1 (left ) : {tidx, kpidx : int, root : dgstblock, leaves : dgstblock list,
+             ps : pseed, ad : adrs, idx : index, sigWOTS : sigWOTS,
+             skWOTS : skWOTS, ap : apFLXMSSTW, m : msgFLSLXMSSMTTW,
+             counter : cntr, sapl : sigFLSLXMSSMTTWC, skWOTSlp : skWOTS list,
+             skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+&2 (right) : {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+             leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+             sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+             m : msgFLSLXMSSMTTW, counter : cntr,
+             result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+             skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+             sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  (sk{1}, m{1}, idx{1}).`1 = (sk{2}, m{2}, idx{2}).`1 /\
+  (sk{1}, m{1}, idx{1}).`2 = (sk{2}, m{2}, idx{2}).`2 /\
+  (sk{1}, m{1}, idx{1}).`3 = (sk{2}, m{2}, idx{2}).`3
+
+(skWOTStd, ps, ad) <- sk             (1)  (skWOTStd, ps, ad) <- sk           
+root <- m                            (2)  i <- 0                             
+sapl <- []                           (3)  bad <- false                       
+(tidx, kpidx) <- (Index.val idx, 0)  (4)  root <- m                          
+                                     (5)  sapl <- []                         
+                                     (6)  (tidx, kpidx) <- (Index.val idx, 0)
+
+post =
+  (((skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+    i{2} = size sapl{1} /\
+    (!bad{2} =>
+     root{1} = root{2} /\
+     sapl{1} = sapl{2} /\ tidx{1} = tidx{2} /\ kpidx{1} = kpidx{2})) /\
+   (size sapl{1} < d <=> i{2} < d)) /\
+  forall (kpidx_L : int) (root_L : dgstblock) (sapl_L : sigFLSLXMSSMTTWC)
+    (tidx_L : int) (bad_R : bool) (i_R kpidx_R : int) (root_R : dgstblock)
+    (sapl_R : sigFLSLXMSSMTTWC) (tidx_R : int),
+    ! size sapl_L < d =>
+    ! i_R < d =>
+    (skWOTStd{1} = skWOTStd{2} /\ ps{1} = ps{2} /\ ad{1} = ad{2}) /\
+    i_R = size sapl_L /\
+    (!bad_R =>
+     root_L = root_R /\
+     sapl_L = sapl_R /\ tidx_L = tidx_R /\ kpidx_L = kpidx_R) =>
+    (if bad_R then None else Some sapl_R) <> None =>
+    (if bad_R then None else Some sapl_R) = Some sapl_L
+[57|check]>
+No more goals
+[58|check]>
+added lemma: `total_bounded_hypertree_sign'
+[59|check]>
+[60|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = true
+
+    FL_SL_XMSS_MT_C_ES_NPRF.verify 
+    [=] 1%r
+
+post = true
+[61|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = true
+
+    FL_SL_XMSS_MT_C_ES_NPRF.verify 
+    [=] 1%r
+
+post = true
+[62|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+forall (z : int),
+  phoare[ (tidx, kpidx) <- edivz tidx l'; ...; i <- i + 1 :
+           i < d /\ d - i = z ==> d - i < z] = 1%r
+[63|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+forall (z0 : int),
+  phoare[ sig_ele <- nth witness (DBLL.val sigWOTS0) (size pkWOTS_l); ...;
+           pkWOTS_l <- rcons pkWOTS_l pkWOTS_ele :
+           size pkWOTS_l < len /\ len - size pkWOTS_l = z0 ==>
+           len - size pkWOTS_l < z0] = 1%r
+[64|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+z: int
+------------------------------------------------------------------------
+Context : hr: {allOkC, okC, allOkC0, okC0 : bool,
+              tidx, kpidx, i, em_ele : int,
+              root, root', root0, leaf, m1, sig_ele, pkWOTS_ele : dgstblock,
+              pkWOTS_l : dgstblock list, ps, ps0, ps1 : pseed,
+              ad, ad0, ad1 : adrs, idx, idx0 : index, em : EmsgWOTS.emsgWOTS,
+              sigWOTS, sigWOTS0 : sigWOTS, pkWOTS : pkWOTS,
+              pk : dgstblock * pseed * adrs, ap : apFLXMSSTW,
+              m, m0 : msgFLSLXMSSMTTW, counter, counter0 : cntr,
+              sc : sigWOTS * cntr, sig, sig0 : sigFLSLXMSSMTTWC}
+Bound   : [=] 1%r
+
+pre = i < d /\ d - i = z
+
+( 1)  (tidx, kpidx) <- edivz tidx l'                                    
+( 2)  (sc, ap) <- nth witness sig0 i                                    
+( 3)  sigWOTS <- sc.`1                                                  
+( 4)  counter <- sc.`2                                                  
+( 5)  m1 <- root0                                                       
+( 6)  sigWOTS0 <- sigWOTS                                               
+( 7)  counter0 <- counter                                               
+( 8)  ps1 <- ps0                                                        
+( 9)  ad1 <- set_kpidx (set_typeidx (set_ltidx ad0 i tidx) chtype) kpidx
+(10)  em <- encode_msgWOTS_C ps1 ad1 m1 counter0                        
+(11)  pkWOTS_l <- []                                                    
+
+post =
+  forall (pkWOTS_l0 : dgstblock list),
+    (len - size pkWOTS_l0 <= 0 => ! size pkWOTS_l0 < len) /\
+    (! size pkWOTS_l0 < len => d - (i + 1) < z)
+[65|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {allOkC, okC, allOkC0, okC0 : bool,
+              tidx, kpidx, i, em_ele : int,
+              root, root', root0, leaf, m1, sig_ele, pkWOTS_ele : dgstblock,
+              pkWOTS_l : dgstblock list, ps, ps0, ps1 : pseed,
+              ad, ad0, ad1 : adrs, idx, idx0 : index, em : EmsgWOTS.emsgWOTS,
+              sigWOTS, sigWOTS0 : sigWOTS, pkWOTS : pkWOTS,
+              pk : dgstblock * pseed * adrs, ap : apFLXMSSTW,
+              m, m0 : msgFLSLXMSSMTTW, counter, counter0 : cntr,
+              sc : sigWOTS * cntr, sig, sig0 : sigFLSLXMSSMTTWC}
+Bound   : [=] 1%r
+
+pre = true
+
+( 1)  (root, ps, ad) <- pk                
+( 2)  m0 <- m                             
+( 3)  sig0 <- sig                         
+( 4)  idx0 <- idx                         
+( 5)  ps0 <- ps                           
+( 6)  ad0 <- ad                           
+( 7)  i <- 0                              
+( 8)  root0 <- m0                         
+( 9)  allOkC0 <- true                     
+(10)  (tidx, kpidx) <- (Index.val idx0, 0)
+
+post = forall (i0 : int), (d - i0 <= 0 => ! i0 < d) /\ true
+[66|check]>
+No more goals
+[67|check]>
+[68|check]>
+added lemma: `hypertree_verify_ll'
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+------------------------------------------------------------------------
+islossless A(FC.O_THFC_Default).forge =>
+equiv[ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, FC.O_THFC_Default).main  ~
+        BoundedHypertreeGame(A, FC.O_THFC_Default).main :
+        (glob A){1} = (glob A){2} ==> res{2} => res{1}]
+[69|check]>
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+------------------------------------------------------------------------
+islossless A(FC.O_THFC_Default).forge =>
+equiv[ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, FC.O_THFC_Default).main  ~
+        BoundedHypertreeGame(A, FC.O_THFC_Default).main :
+        (glob A){1} = (glob A){2} ==> res{2} => res{1}]
+[70|check]>
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre = (glob A){1} = (glob A){2}
+
+ad <- adz                                ( 1------)  ad <- adz                                
+ps <$ dpseed                             ( 2------)  ps <$ dpseed                             
+FC.O_THFC_Default.init(ps)               ( 3------)  FC.O_THFC_Default.init(ps)               
+ml <@ A(FC.O_THFC_Default).choose()      ( 4------)  ml <@ A(FC.O_THFC_Default).choose()      
+(pk, sk) <@                              ( 5------)  (pk, sk) <@                              
+  FL_SL_XMSS_MT_C_ES_NPRF.keygen(ps,     (   -----)    FL_SL_XMSS_MT_C_ES_NPRF.keygen(ps,     
+    ad)                                  (   -----)      ad)                                  
+sigl <- []                               ( 6------)  sigl <- []                               
+while (size sigl < l) {                  ( 7------)  i <- 0                                   
+  m <- nth witness ml (size sigl)        ( 7.1----)                                           
+  sig <@                                 ( 7.2----)                                           
+    FL_SL_XMSS_MT_C_ES_NPRF.sign(sk, m,  (     ---)                                           
+      Index.insubd (size sigl))          (     ---)                                           
+  sigl <- rcons sigl sig                 ( 7.3----)                                           
+}                                        ( 7------)                                           
+(m', sig', idx') <@                      ( 8------)  bad <- false                             
+  A(FC.O_THFC_Default).forge(pk, sigl)   (   -----)                                           
+is_valid <@                              ( 9------)  while (i < l) {                          
+  FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,     (   -----)                                           
+    m', sig', idx')                      (   -----)                                           
+                                         ( 9.1----)    if (!bad) {                            
+                                         ( 9.1.1--)      m <- nth witness ml i                
+                                         ( 9.1.2--)      result <@                            
+                                         (       -)        BoundedHypertree.sign(sk, m,       
+                                         (       -)          Index.insubd i)                  
+                                         ( 9.1.3--)      if (result = None) {                 
+                                         ( 9.1.3.1)        bad <- true                        
+                                         ( 9.1.3--)      } else {                             
+                                         ( 9.1.3?1)        sigl <- rcons sigl (oget result)   
+                                         ( 9.1.3--)      }                                    
+                                         ( 9.1----)    }                                      
+                                         ( 9.2----)    i <- i + 1                             
+                                         ( 9------)  }                                        
+is_fresh <-                              (10------)  win <- false                             
+  m' <> nth witness ml (Index.val idx')  (   -----)                                           
+                                         (11------)  if (!bad) {                              
+                                         (11.1----)    (m', sig', idx') <@                    
+                                         (     ---)      A(FC.O_THFC_Default).forge(pk, sigl) 
+                                         (11.2----)    is_valid <@                            
+                                         (     ---)      FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,   
+                                         (     ---)        m', sig', idx')                    
+                                         (11.3----)    win <-                                 
+                                         (     ---)      is_valid /\                          
+                                         (     ---)      m' <> nth witness ml (Index.val idx')
+                                         (11------)  }                                        
+
+post = win{2} => is_valid{1} /\ is_fresh{1}
+[71|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre = (glob A){1} = (glob A){2}
+
+ad <- adz                             (1)  ad <- adz                           
+ps <$ dpseed                          (2)  ps <$ dpseed                        
+FC.O_THFC_Default.init(ps)            (3)  FC.O_THFC_Default.init(ps)          
+ml <@ A(FC.O_THFC_Default).choose()   (4)  ml <@ A(FC.O_THFC_Default).choose() 
+(pk, sk) <@                           (5)  (pk, sk) <@                         
+  FL_SL_XMSS_MT_C_ES_NPRF.keygen(ps,  ( )    FL_SL_XMSS_MT_C_ES_NPRF.keygen(ps,
+    ad)                               ( )      ad)                             
+sigl <- []                            (6)  sigl <- []                          
+                                      (7)  i <- 0                              
+                                      (8)  bad <- false                        
+
+post =
+  (pk{1} = pk{2} /\
+   sk{1} = sk{2} /\
+   ml{1} = ml{2} /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})
+[72|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre = (glob A){1} = (glob A){2}
+
+ad <- adz                            (1)  ad <- adz                          
+ps <$ dpseed                         (2)  ps <$ dpseed                       
+FC.O_THFC_Default.init(ps)           (3)  FC.O_THFC_Default.init(ps)         
+ml <@ A(FC.O_THFC_Default).choose()  (4)  ml <@ A(FC.O_THFC_Default).choose()
+
+post =
+  (ps{1}, ad{1}) = (ps{2}, ad{2}) &&
+  forall (result_L result_R : pkFLSLXMSSMTTW * (skWOTS list list list *
+    pseed * adrs)),
+    result_L = result_R =>
+    (result_L.`1 = result_R.`1 /\
+     result_L.`2 = result_R.`2 /\
+     ml{1} = ml{2} /\
+     (glob A){1} = (glob A){2} /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    0 = size [] /\ (!false => [] = [])
+[73|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre = (glob A){1} = (glob A){2}
+
+ad <- adz                   (1)  ad <- adz                 
+ps <$ dpseed                (2)  ps <$ dpseed              
+FC.O_THFC_Default.init(ps)  (3)  FC.O_THFC_Default.init(ps)
+
+post =
+  (true /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) &&
+  forall (result_L result_R : msgFLSLXMSSMTTW list) (A_L : (glob A))
+    (tws_L : adrs list) (A_R : (glob A)) (tws_R : adrs list),
+    result_L = result_R /\
+    A_L = A_R /\
+    (FC.O_THFC_Default.pp{1}, tws_L) = (FC.O_THFC_Default.pp{2}, tws_R) =>
+    (ps{1}, ad{1}) = (ps{2}, ad{2}) &&
+    forall (result_L0 result_R0 : pkFLSLXMSSMTTW * (skWOTS list list list *
+      pseed * adrs)),
+      result_L0 = result_R0 =>
+      (result_L0.`1 = result_R0.`1 /\
+       result_L0.`2 = result_R0.`2 /\
+       result_L = result_R /\
+       A_L = A_R /\
+       (FC.O_THFC_Default.pp{1}, tws_L) = (FC.O_THFC_Default.pp{2}, tws_R)) /\
+      0 = size [] /\ (!false => [] = [])
+[74|check]>
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (pk{1} = pk{2} /\
+   sk{1} = sk{2} /\
+   ml{1} = ml{2} /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})
+
+while (size sigl < l) {                  (1------)  while (i < l) {                          
+  m <- nth witness ml (size sigl)        (1.1----)    if (!bad) {                            
+                                         (1.1.1--)      m <- nth witness ml i                
+                                         (1.1.2--)      result <@                            
+                                         (      -)        BoundedHypertree.sign(sk, m,       
+                                         (      -)          Index.insubd i)                  
+                                         (1.1.3--)      if (result = None) {                 
+                                         (1.1.3.1)        bad <- true                        
+                                         (1.1.3--)      } else {                             
+                                         (1.1.3?1)        sigl <- rcons sigl (oget result)   
+                                         (1.1.3--)      }                                    
+                                         (1.1----)    }                                      
+  sig <@                                 (1.2----)    i <- i + 1                             
+    FL_SL_XMSS_MT_C_ES_NPRF.sign(sk, m,  (    ---)                                           
+      Index.insubd (size sigl))          (    ---)                                           
+  sigl <- rcons sigl sig                 (1.3----)                                           
+}                                        (1------)  }                                        
+(m', sig', idx') <@                      (2------)  win <- false                             
+  A(FC.O_THFC_Default).forge(pk, sigl)   (  -----)                                           
+is_valid <@                              (3------)  if (!bad) {                              
+  FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,     (  -----)                                           
+    m', sig', idx')                      (  -----)                                           
+                                         (3.1----)    (m', sig', idx') <@                    
+                                         (    ---)      A(FC.O_THFC_Default).forge(pk, sigl) 
+                                         (3.2----)    is_valid <@                            
+                                         (    ---)      FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,   
+                                         (    ---)        m', sig', idx')                    
+                                         (3.3----)    win <-                                 
+                                         (    ---)      is_valid /\                          
+                                         (    ---)      m' <> nth witness ml (Index.val idx')
+                                         (3------)  }                                        
+is_fresh <-                              (4------)                                           
+  m' <> nth witness ml (Index.val idx')  (  -----)                                           
+
+post = win{2} => is_valid{1} /\ is_fresh{1}
+[75|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (pk{1} = pk{2} /\
+   sk{1} = sk{2} /\
+   ml{1} = ml{2} /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})
+
+while (size sigl < l) {                  (1------)  while (i < l) {                       
+  m <- nth witness ml (size sigl)        (1.1----)    if (!bad) {                         
+                                         (1.1.1--)      m <- nth witness ml i             
+                                         (1.1.2--)      result <@                         
+                                         (      -)        BoundedHypertree.sign(sk, m,    
+                                         (      -)          Index.insubd i)               
+                                         (1.1.3--)      if (result = None) {              
+                                         (1.1.3.1)        bad <- true                     
+                                         (1.1.3--)      } else {                          
+                                         (1.1.3?1)        sigl <- rcons sigl (oget result)
+                                         (1.1.3--)      }                                 
+                                         (1.1----)    }                                   
+  sig <@                                 (1.2----)    i <- i + 1                          
+    FL_SL_XMSS_MT_C_ES_NPRF.sign(sk, m,  (    ---)                                        
+      Index.insubd (size sigl))          (    ---)                                        
+  sigl <- rcons sigl sig                 (1.3----)                                        
+}                                        (1------)  }                                     
+
+post =
+  (pk{1} = pk{2} /\
+   sk{1} = sk{2} /\
+   ml{1} = ml{2} /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})
+[76|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  ((pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+  size sigl{1} < l /\ i{2} < l
+
+m <- nth witness ml (size sigl)        (1----)  if (!bad) {                         
+                                       (1.1--)    m <- nth witness ml i             
+                                       (1.2--)    result <@                         
+                                       (    -)      BoundedHypertree.sign(sk, m,    
+                                       (    -)        Index.insubd i)               
+                                       (1.3--)    if (result = None) {              
+                                       (1.3.1)      bad <- true                     
+                                       (1.3--)    } else {                          
+                                       (1.3?1)      sigl <- rcons sigl (oget result)
+                                       (1.3--)    }                                 
+                                       (1----)  }                                   
+sig <@                                 (2----)  i <- i + 1                          
+  FL_SL_XMSS_MT_C_ES_NPRF.sign(sk, m,  (  ---)                                      
+    Index.insubd (size sigl))          (  ---)                                      
+sigl <- rcons sigl sig                 (3----)                                      
+
+post =
+  ((pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+  (size sigl{1} < l <=> i{2} < l)
+[77|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (((pk{1} = pk{2} /\
+     sk{1} = sk{2} /\
+     ml{1} = ml{2} /\
+     (glob A){1} = (glob A){2} /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+   size sigl{1} < l /\ i{2} < l) /\
+  !bad{2}
+
+m <- nth witness ml (size sigl)        (1--)  m <- nth witness ml i             
+sig <@                                 (2--)  result <@                         
+  FL_SL_XMSS_MT_C_ES_NPRF.sign(sk, m,  (  -)    BoundedHypertree.sign(sk, m,    
+    Index.insubd (size sigl))          (  -)      Index.insubd i)               
+                                       (3--)  if (result = None) {              
+                                       (3.1)    bad <- true                     
+                                       (3--)  } else {                          
+                                       (3?1)    sigl <- rcons sigl (oget result)
+                                       (3--)  }                                 
+
+post =
+  let i_R = i{2} + 1 in
+  let sigl_L = rcons sigl{1} sig{1} in
+  ((pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i_R = size sigl_L /\ (!bad{2} => sigl_L = sigl{2})) /\
+  (size sigl_L < l <=> i_R < l)
+[78|check]>
+Current goal (remaining: 5)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (((pk{1} = pk{2} /\
+     sk{1} = sk{2} /\
+     ml{1} = ml{2} /\
+     (glob A){1} = (glob A){2} /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+   size sigl{1} < l /\ i{2} < l) /\
+  !bad{2}
+
+m <- nth witness ml (size sigl)        (1)  m <- nth witness ml i         
+sig <@                                 (2)  result <@                     
+  FL_SL_XMSS_MT_C_ES_NPRF.sign(sk, m,  ( )    BoundedHypertree.sign(sk, m,
+    Index.insubd (size sigl))          ( )      Index.insubd i)           
+
+post =
+  (pk{1} = pk{2} /\
+   sk{1} = sk{2} /\
+   ml{1} = ml{2} /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  i{2} = size sigl{1} /\
+  !bad{2} /\
+  sigl{1} = sigl{2} /\ (result{2} <> None => result{2} = Some sig{1})
+[79|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (pk{1} = pk{2} /\
+   sk{1} = sk{2} /\
+   ml{1} = ml{2} /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  i{2} = size sigl{1} /\
+  !bad{2} /\
+  sigl{1} = sigl{2} /\ (result{2} <> None => result{2} = Some sig{1})
+
+                           (1--)  if (result = None) {              
+                           (1.1)    bad <- true                     
+                           (1--)  } else {                          
+                           (1?1)    sigl <- rcons sigl (oget result)
+                           (1--)  }                                 
+
+post =
+  let i_R = i{2} + 1 in
+  let sigl_L = rcons sigl{1} sig{1} in
+  ((pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i_R = size sigl_L /\ (!bad{2} => sigl_L = sigl{2})) /\
+  (size sigl_L < l <=> i_R < l)
+[80|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (((pk{1} = pk{2} /\
+     sk{1} = sk{2} /\
+     ml{1} = ml{2} /\
+     (glob A){1} = (glob A){2} /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+   size sigl{1} < l /\ i{2} < l) /\
+  ! !bad{2}
+
+m <- nth witness ml (size sigl)        (1)                           
+sig <@                                 (2)                           
+  FL_SL_XMSS_MT_C_ES_NPRF.sign(sk, m,  ( )                           
+    Index.insubd (size sigl))          ( )                           
+
+post =
+  let i_R = i{2} + 1 in
+  let sigl_L = rcons sigl{1} sig{1} in
+  ((pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i_R = size sigl_L /\ (!bad{2} => sigl_L = sigl{2})) /\
+  (size sigl_L < l <=> i_R < l)
+[81|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (pk{1} = pk{2} /\
+   sk{1} = sk{2} /\
+   ml{1} = ml{2} /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})
+
+
+post =
+  ((pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+  (size sigl{1} < l <=> i{2} < l)
+[82|check]>
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (pk{1} = pk{2} /\
+   sk{1} = sk{2} /\
+   ml{1} = ml{2} /\
+   (glob A){1} = (glob A){2} /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})
+
+(m', sig', idx') <@                      (1--)  win <- false                             
+  A(FC.O_THFC_Default).forge(pk, sigl)   (  -)                                           
+is_valid <@                              (2--)  if (!bad) {                              
+  FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,     (  -)                                           
+    m', sig', idx')                      (  -)                                           
+                                         (2.1)    (m', sig', idx') <@                    
+                                         (   )      A(FC.O_THFC_Default).forge(pk, sigl) 
+                                         (2.2)    is_valid <@                            
+                                         (   )      FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,   
+                                         (   )        m', sig', idx')                    
+                                         (2.3)    win <-                                 
+                                         (   )      is_valid /\                          
+                                         (   )      m' <> nth witness ml (Index.val idx')
+                                         (2--)  }                                        
+is_fresh <-                              (3--)                                           
+  m' <> nth witness ml (Index.val idx')  (  -)                                           
+
+post = win{2} => is_valid{1} /\ is_fresh{1}
+[83|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (win{2} = false /\
+   (pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+  !bad{2}
+
+(m', sig', idx') <@                      (1)  (m', sig', idx') <@                    
+  A(FC.O_THFC_Default).forge(pk, sigl)   ( )    A(FC.O_THFC_Default).forge(pk, sigl) 
+is_valid <@                              (2)  is_valid <@                            
+  FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,     ( )    FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,   
+    m', sig', idx')                      ( )      m', sig', idx')                    
+is_fresh <-                              (3)  win <-                                 
+  m' <> nth witness ml (Index.val idx')  ( )    is_valid /\                          
+                                         ( )    m' <> nth witness ml (Index.val idx')
+
+post = win{2} => is_valid{1} /\ is_fresh{1}
+[84|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (win{2} = false /\
+   (pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+  !bad{2}
+
+(m', sig', idx') <@                     (1)  (m', sig', idx') <@                   
+  A(FC.O_THFC_Default).forge(pk, sigl)  ( )    A(FC.O_THFC_Default).forge(pk, sigl)
+
+post =
+  (pk{1}, m'{1}, sig'{1}, idx'{1}) = (pk{2}, m'{2}, sig'{2}, idx'{2}) &&
+  forall (result_L result_R : bool),
+    result_L = result_R =>
+    result_R /\ m'{2} <> nth witness ml{2} (Index.val idx'{2}) =>
+    result_L /\ m'{1} <> nth witness ml{1} (Index.val idx'{1})
+[85|check]>
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh : bool, ps : pseed, ad : adrs, idx' : index,
+             m, m' : msgFLSLXMSSMTTW, ml : msgFLSLXMSSMTTW list,
+             pk : pkFLSLXMSSMTTW, sig, sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list}
+&2 (right) : {bad, win, is_valid : bool, i : int, ps : pseed, ad : adrs,
+             idx' : index, m, m' : msgFLSLXMSSMTTW,
+             ml : msgFLSLXMSSMTTW list, pk : pkFLSLXMSSMTTW,
+             sig' : sigFLSLXMSSMTTWC,
+             sk : skWOTS list list list * pseed * adrs,
+             sigl : sigFLSLXMSSMTTWC list, result : sigFLSLXMSSMTTWC option}
+
+pre =
+  (win{2} = false /\
+   (pk{1} = pk{2} /\
+    sk{1} = sk{2} /\
+    ml{1} = ml{2} /\
+    (glob A){1} = (glob A){2} /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   i{2} = size sigl{1} /\ (!bad{2} => sigl{1} = sigl{2})) /\
+  ! !bad{2}
+
+(m', sig', idx') <@                      (1)                           
+  A(FC.O_THFC_Default).forge(pk, sigl)   ( )                           
+is_valid <@                              (2)                           
+  FL_SL_XMSS_MT_C_ES_NPRF.verify(pk,     ( )                           
+    m', sig', idx')                      ( )                           
+is_fresh <-                              (3)                           
+  m' <> nth witness ml (Index.val idx')  ( )                           
+
+post = win{2} => is_valid{1} /\ is_fresh{1}
+[86|check]>
+No more goals
+[87|check]>
+[88|check]>
+added lemma: `total_bounded_hypertree_main'
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+&m: {}
+------------------------------------------------------------------------
+islossless A(FC.O_THFC_Default).forge =>
+Pr[BoundedHypertreeGame(A, FC.O_THFC_Default).main() @ &m : res] <=
+Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, FC.O_THFC_Default).main() @ &m : res]
+[89|check]>
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+&m: {}
+------------------------------------------------------------------------
+islossless A(FC.O_THFC_Default).forge =>
+Pr[BoundedHypertreeGame(A, FC.O_THFC_Default).main() @ &m : res] <=
+Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, FC.O_THFC_Default).main() @ &m : res]
+[90|check]>
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+&m: {}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+Pr[BoundedHypertreeGame(A, FC.O_THFC_Default).main() @ &m : res] <=
+Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, FC.O_THFC_Default).main() @ &m : res]
+[91|check]>
+Current goal
+
+Type variables: <none>
+
+A(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default}
+&m: {}
+A_forge_ll: islossless A(FC.O_THFC_Default).forge
+------------------------------------------------------------------------
+pre = (glob A){1} = (glob A){2}
+
+    BoundedHypertreeGame(A, FC.O_THFC_Default).main ~ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(
+                                                        A, FC.O_THFC_Default).main 
+
+post = res{1} => res{2}
+[92|check]>
+No more goals
+[93|check]>
+[94|check]>
+added lemma: `bounded_hypertree_win_le_total'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = ! prefix_hit sk.`2 sk.`3 m
+
+    BoundedSign.sign 
+
+post = res = None
+[95|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre = ! prefix_hit sk.`2 sk.`3 m
+
+    BoundedSign.sign 
+
+post = res = None
+[96|check]>
+Current goal
+
+Type variables: <none>
+
+sk0: skWOTS * pseed * adrs
+m0: dgstblock
+------------------------------------------------------------------------
+Context : hr: {m : dgstblock, sk : skWOTS * pseed * adrs,
+              r : (sigWOTS * cntr) option}
+
+pre =
+  (sk0 = sk /\ m0 = m) /\ ! prefix_hit (sk, m).`1.`2 (sk, m).`1.`3 (sk, m).`2
+
+(1)  r <@ BoundedSign.sign(sk, m)
+
+post = r = None
+[97|check]>
+No more goals
+[98|check]>
+[99|check]>
+added lemma: `bounded_wots_miss'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre =
+  ! prefix_hit sk.`2
+      (set_kpidx
+         (set_typeidx (set_ltidx sk.`3 0 (Index.val idx %/ l')) chtype)
+         (Index.val idx %% l')) m
+
+    BoundedHypertree.sign 
+
+post = res = None
+[100|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre =
+  ! prefix_hit sk.`2
+      (set_kpidx
+         (set_typeidx (set_ltidx sk.`3 0 (Index.val idx %/ l')) chtype)
+         (Index.val idx %% l')) m
+
+    BoundedHypertree.sign 
+
+post = res = None
+[101|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ! prefix_hit (sk, m, idx).`1.`2
+      (set_kpidx
+         (set_typeidx
+            (set_ltidx (sk, m, idx).`1.`3 0 (Index.val (sk, m, idx).`3 %/ l'))
+            chtype) (Index.val (sk, m, idx).`3 %% l')) (sk, m, idx).`2
+
+(1------)  (skWOTStd, ps, ad) <- sk                                                      
+(2------)  i <- 0                                                                        
+(3------)  bad <- false                                                                  
+(4------)  root <- m                                                                     
+(5------)  sapl <- []                                                                    
+(6------)  (tidx, kpidx) <- (Index.val idx, 0)                                           
+(7------)  if (i < d) {                                                                  
+(7.1----)    if (!bad) {                                                                 
+(7.1.1--)      (tidx, kpidx) <- edivz tidx l'                                            
+(7.1.2--)      skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(7.1.3--)      skWOTS <- nth witness skWOTSlp kpidx                                      
+(7.1.4--)      result <@                                                                 
+(      -)        BoundedSign.sign((skWOTS, ps,                                           
+(      -)                          set_kpidx                                             
+(      -)                            (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(      -)                            kpidx), root)                                       
+(7.1.5--)      if (result = None) {                                                      
+(7.1.5.1)        bad <- true                                                             
+(7.1.5--)      } else {                                                                  
+(7.1.5?1)        (sigWOTS, counter) <- oget result                                       
+(7.1.5?2)        leaves <@                                                               
+(       )          BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(       )            set_ltidx ad (size sapl) tidx)                                      
+(7.1.5?3)        ap <-                                                                   
+(       )          cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(       )            (list2tree leaves) kpidx                                            
+(7.1.5?4)        root <-                                                                 
+(       )          val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(       )            (list2tree leaves)                                                  
+(7.1.5?5)        sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(7.1.5--)      }                                                                         
+(7.1----)    }                                                                           
+(7.2----)    i <- i + 1                                                                  
+(7------)  }                                                                             
+(8------)  while (i < d) {                                                               
+(8.1----)    if (!bad) {                                                                 
+(8.1.1--)      (tidx, kpidx) <- edivz tidx l'                                            
+(8.1.2--)      skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(8.1.3--)      skWOTS <- nth witness skWOTSlp kpidx                                      
+(8.1.4--)      result <@                                                                 
+(      -)        BoundedSign.sign((skWOTS, ps,                                           
+(      -)                          set_kpidx                                             
+(      -)                            (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(      -)                            kpidx), root)                                       
+(8.1.5--)      if (result = None) {                                                      
+(8.1.5.1)        bad <- true                                                             
+(8.1.5--)      } else {                                                                  
+(8.1.5?1)        (sigWOTS, counter) <- oget result                                       
+(8.1.5?2)        leaves <@                                                               
+(       )          BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(       )            set_ltidx ad (size sapl) tidx)                                      
+(8.1.5?3)        ap <-                                                                   
+(       )          cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(       )            (list2tree leaves) kpidx                                            
+(8.1.5?4)        root <-                                                                 
+(       )          val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(       )            (list2tree leaves)                                                  
+(8.1.5?5)        sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(8.1.5--)      }                                                                         
+(8.1----)    }                                                                           
+(8.2----)    i <- i + 1                                                                  
+(8------)  }                                                                             
+
+post = (if bad then None else Some sapl) = None
+[102|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = bad /\ i < d
+
+(1----)  if (!bad) {                                                                 
+(1.1--)    (tidx, kpidx) <- edivz tidx l'                                            
+(1.2--)    skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(1.3--)    skWOTS <- nth witness skWOTSlp kpidx                                      
+(1.4--)    result <@                                                                 
+(    -)      BoundedSign.sign((skWOTS, ps,                                           
+(    -)                        set_kpidx                                             
+(    -)                          (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(    -)                          kpidx), root)                                       
+(1.5--)    if (result = None) {                                                      
+(1.5.1)      bad <- true                                                             
+(1.5--)    } else {                                                                  
+(1.5?1)      (sigWOTS, counter) <- oget result                                       
+(1.5?2)      leaves <@                                                               
+(     )        BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(     )          set_ltidx ad (size sapl) tidx)                                      
+(1.5?3)      ap <-                                                                   
+(     )        cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(     )          (list2tree leaves) kpidx                                            
+(1.5?4)      root <-                                                                 
+(     )        val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(     )          (list2tree leaves)                                                  
+(1.5?5)      sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(1.5--)    }                                                                         
+(1----)  }                                                                           
+(2----)  i <- i + 1                                                                  
+
+post = bad
+[103|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ! prefix_hit (sk, m, idx).`1.`2
+      (set_kpidx
+         (set_typeidx
+            (set_ltidx (sk, m, idx).`1.`3 0 (Index.val (sk, m, idx).`3 %/ l'))
+            chtype) (Index.val (sk, m, idx).`3 %% l')) (sk, m, idx).`2
+
+(1------)  (skWOTStd, ps, ad) <- sk                                                      
+(2------)  i <- 0                                                                        
+(3------)  bad <- false                                                                  
+(4------)  root <- m                                                                     
+(5------)  sapl <- []                                                                    
+(6------)  (tidx, kpidx) <- (Index.val idx, 0)                                           
+(7------)  if (i < d) {                                                                  
+(7.1----)    if (!bad) {                                                                 
+(7.1.1--)      (tidx, kpidx) <- edivz tidx l'                                            
+(7.1.2--)      skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(7.1.3--)      skWOTS <- nth witness skWOTSlp kpidx                                      
+(7.1.4--)      result <@                                                                 
+(      -)        BoundedSign.sign((skWOTS, ps,                                           
+(      -)                          set_kpidx                                             
+(      -)                            (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(      -)                            kpidx), root)                                       
+(7.1.5--)      if (result = None) {                                                      
+(7.1.5.1)        bad <- true                                                             
+(7.1.5--)      } else {                                                                  
+(7.1.5?1)        (sigWOTS, counter) <- oget result                                       
+(7.1.5?2)        leaves <@                                                               
+(       )          BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(       )            set_ltidx ad (size sapl) tidx)                                      
+(7.1.5?3)        ap <-                                                                   
+(       )          cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(       )            (list2tree leaves) kpidx                                            
+(7.1.5?4)        root <-                                                                 
+(       )          val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(       )            (list2tree leaves)                                                  
+(7.1.5?5)        sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(7.1.5--)      }                                                                         
+(7.1----)    }                                                                           
+(7.2----)    i <- i + 1                                                                  
+(7------)  }                                                                             
+
+post =
+  bad /\
+  forall (bad0 : bool) (i0 : int) (sapl0 : sigFLSLXMSSMTTWC),
+    ! i0 < d => bad0 => (if bad0 then None else Some sapl0) = None
+[104|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ! prefix_hit (sk, m, idx).`1.`2
+      (set_kpidx
+         (set_typeidx
+            (set_ltidx (sk, m, idx).`1.`3 0 (Index.val (sk, m, idx).`3 %/ l'))
+            chtype) (Index.val (sk, m, idx).`3 %% l')) (sk, m, idx).`2
+
+(1----)  (skWOTStd, ps, ad) <- sk                                                    
+(2----)  i <- 0                                                                      
+(3----)  bad <- false                                                                
+(4----)  root <- m                                                                   
+(5----)  sapl <- []                                                                  
+(6----)  (tidx, kpidx) <- (Index.val idx, 0)                                         
+(7----)  if (!bad) {                                                                 
+(7.1--)    (tidx, kpidx) <- edivz tidx l'                                            
+(7.2--)    skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+(7.3--)    skWOTS <- nth witness skWOTSlp kpidx                                      
+(7.4--)    result <@                                                                 
+(    -)      BoundedSign.sign((skWOTS, ps,                                           
+(    -)                        set_kpidx                                             
+(    -)                          (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(    -)                          kpidx), root)                                       
+(7.5--)    if (result = None) {                                                      
+(7.5.1)      bad <- true                                                             
+(7.5--)    } else {                                                                  
+(7.5?1)      (sigWOTS, counter) <- oget result                                       
+(7.5?2)      leaves <@                                                               
+(     )        BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(     )          set_ltidx ad (size sapl) tidx)                                      
+(7.5?3)      ap <-                                                                   
+(     )        cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(     )          (list2tree leaves) kpidx                                            
+(7.5?4)      root <-                                                                 
+(     )        val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(     )          (list2tree leaves)                                                  
+(7.5?5)      sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(7.5--)    }                                                                         
+(7----)  }                                                                           
+(8----)  i <- i + 1                                                                  
+
+post =
+  bad /\
+  forall (bad0 : bool) (i0 : int) (sapl0 : sigFLSLXMSSMTTWC),
+    ! i0 < d => bad0 => (if bad0 then None else Some sapl0) = None
+[105|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ! prefix_hit (sk, m, idx).`1.`2
+      (set_kpidx
+         (set_typeidx
+            (set_ltidx (sk, m, idx).`1.`3 0 (Index.val (sk, m, idx).`3 %/ l'))
+            chtype) (Index.val (sk, m, idx).`3 %% l')) (sk, m, idx).`2
+
+( 1--)  (skWOTStd, ps, ad) <- sk                                                  
+( 2--)  i <- 0                                                                    
+( 3--)  bad <- false                                                              
+( 4--)  root <- m                                                                 
+( 5--)  sapl <- []                                                                
+( 6--)  (tidx, kpidx) <- (Index.val idx, 0)                                       
+( 7--)  (tidx, kpidx) <- edivz tidx l'                                            
+( 8--)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+( 9--)  skWOTS <- nth witness skWOTSlp kpidx                                      
+(10--)  result <@                                                                 
+(   -)    BoundedSign.sign((skWOTS, ps,                                           
+(   -)                      set_kpidx                                             
+(   -)                        (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(   -)                        kpidx), root)                                       
+(11--)  if (result = None) {                                                      
+(11.1)    bad <- true                                                             
+(11--)  } else {                                                                  
+(11?1)    (sigWOTS, counter) <- oget result                                       
+(11?2)    leaves <@                                                               
+(    )      BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                    
+(    )        set_ltidx ad (size sapl) tidx)                                      
+(11?3)    ap <-                                                                   
+(    )      cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(    )        (list2tree leaves) kpidx                                            
+(11?4)    root <-                                                                 
+(    )      val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)  
+(    )        (list2tree leaves)                                                  
+(11?5)    sapl <- rcons sapl ((sigWOTS, counter), ap)                             
+(11--)  }                                                                         
+(12--)  i <- i + 1                                                                
+
+post =
+  bad /\
+  forall (bad0 : bool) (i0 : int) (sapl0 : sigFLSLXMSSMTTWC),
+    ! i0 < d => bad0 => (if bad0 then None else Some sapl0) = None
+[106|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre =
+  ! prefix_hit (sk, m, idx).`1.`2
+      (set_kpidx
+         (set_typeidx
+            (set_ltidx (sk, m, idx).`1.`3 0 (Index.val (sk, m, idx).`3 %/ l'))
+            chtype) (Index.val (sk, m, idx).`3 %% l')) (sk, m, idx).`2
+
+( 1)  (skWOTStd, ps, ad) <- sk                                                  
+( 2)  i <- 0                                                                    
+( 3)  bad <- false                                                              
+( 4)  root <- m                                                                 
+( 5)  sapl <- []                                                                
+( 6)  (tidx, kpidx) <- (Index.val idx, 0)                                       
+( 7)  (tidx, kpidx) <- edivz tidx l'                                            
+( 8)  skWOTSlp <- nth witness (nth witness skWOTStd (size sapl)) tidx           
+( 9)  skWOTS <- nth witness skWOTSlp kpidx                                      
+(10)  result <@                                                                 
+(  )    BoundedSign.sign((skWOTS, ps,                                           
+(  )                      set_kpidx                                             
+(  )                        (set_typeidx (set_ltidx ad (size sapl) tidx) chtype)
+(  )                        kpidx), root)                                       
+
+post = result = None
+[107|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {bad : bool, i, tidx, kpidx : int, root : dgstblock,
+              leaves : dgstblock list, ps : pseed, ad : adrs, idx : index,
+              sigWOTS : sigWOTS, skWOTS : skWOTS, ap : apFLXMSSTW,
+              m : msgFLSLXMSSMTTW, counter : cntr,
+              result : (sigWOTS * cntr) option, sapl : sigFLSLXMSSMTTWC,
+              skWOTSlp : skWOTS list, skWOTStd : skWOTS list list list,
+              sk : skWOTS list list list * pseed * adrs}
+
+pre = result = None
+
+(1--)  if (result = None) {                                                     
+(1.1)    bad <- true                                                            
+(1--)  } else {                                                                 
+(1?1)    (sigWOTS, counter) <- oget result                                      
+(1?2)    leaves <@                                                              
+(   )      BoundedHypertree.leaves_from_sklpsad(skWOTSlp, ps,                   
+(   )        set_ltidx ad (size sapl) tidx)                                     
+(1?3)    ap <-                                                                  
+(   )      cons_ap_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype)
+(   )        (list2tree leaves) kpidx                                           
+(1?4)    root <-                                                                
+(   )      val_bt_trh ps (set_typeidx (set_ltidx ad (size sapl) tidx) trhxtype) 
+(   )        (list2tree leaves)                                                 
+(1?5)    sapl <- rcons sapl ((sigWOTS, counter), ap)                            
+(1--)  }                                                                        
+(2--)  i <- i + 1                                                               
+
+post =
+  bad /\
+  forall (bad0 : bool) (i0 : int) (sapl0 : sigFLSLXMSSMTTWC),
+    ! i0 < d => bad0 => (if bad0 then None else Some sapl0) = None
+[108|check]>
+added lemma: `bounded_hypertree_first_failure'
+No more goals
+[109|check]>
+[110|check]>

@@ -1,0 +1,206 @@
+{
+  "base": "044b3d200194687cb61b6d59984739169d451f67",
+  "created_at": "2026-09-22T14:51:27.192556+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "8a56c8a14bd3cb246e2bdb7e60aefe0f609bff78c8bbcc5ea6b1817c111c6145",
+      "version": "2.1.276 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "0753dfe1d8b87a52436deb13eb1c549661ef4c84fee2c5aa688385eebeccb761",
+      "version": "codex-cli 0.155.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.000535,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-prompt.txt",
+    "sha256": "9ae6c3991058572806b76bfbf79e7eec21c844d8bedb9d50eae71f7848183b7e"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 11418,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 196.878,
+      "ended_at": "2026-09-22T14:51:26.970615+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9ae6c3991058572806b76bfbf79e7eec21c844d8bedb9d50eae71f7848183b7e",
+        "report_sha256": "6cac12c7f85992c0ad3f385e7161b191029169201cbac49d5e2a60c44f27d7e3",
+        "runtime_sha256": "e0696822abba39a0917bb9c15e0010569c6132f80471a898d02e3b5f8ed8f945",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/claude",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/claude/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/claude/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/claude/stderr.txt"
+      },
+      "report_words": 665,
+      "started_at": "2026-09-22T14:48:10.092533+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 31462,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 34.654,
+      "ended_at": "2026-09-22T14:48:44.745695+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9ae6c3991058572806b76bfbf79e7eec21c844d8bedb9d50eae71f7848183b7e",
+        "report_sha256": "e14d610c8d0c0accf7ab4acded32dfdf63214b1125f58bb43b6211c6de9e9fa2",
+        "runtime_sha256": "9f6436d4f027eacdd33024b72a2270423cf7b8f8b53884f7889703e37f356c9b",
+        "stderr_sha256": "cb9bec1865b5e730fcf4169c147aef9eebb5fc9040ba12f7f832260bc1f17be8"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-wave/codex/stderr.txt"
+      },
+      "report_words": 39,
+      "started_at": "2026-09-22T14:48:10.092001+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "EasyCrypt bounded hypertree and leaf interfaces",
+  "target": {
+    "commit_after": "5c1770105acb81700d99eea8e917b1156b96e0db",
+    "commit_before": "5c1770105acb81700d99eea8e917b1156b96e0db",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "0f0990e1f83a5f0133da3e8633b741a8a1db45ef",
+    "tree_before": "0f0990e1f83a5f0133da3e8633b741a8a1db45ef"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.276 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.155.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-22T14:48:10.091940+00:00"
+}
