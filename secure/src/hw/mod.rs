@@ -137,6 +137,11 @@ pub mod buttons;
 #[cfg(feature = "ui-lcd")]
 pub mod lcd_nv3007;
 
+/// AW99703 backlight boost driver on pq1 (I2C2 @0x36, bit-banged PB13/PB14).
+/// `LCM_EN` alone leaves the chip in Standby; this writes the mode register.
+#[cfg(all(feature = "stm32u585", feature = "ui-lcd", feature = "board-pq1"))]
+pub mod aw99703;
+
 /// Independent watchdog (IWDG) — USB-path hang detection. Behind the
 /// `iwdg` feature (which implies `stm32u585`); compiles to no-op stubs
 /// otherwise, so call sites in `main` stay cfg-free. The off-build's

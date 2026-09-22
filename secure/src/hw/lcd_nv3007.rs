@@ -751,6 +751,12 @@ pub fn init() {
     // main.rs does not init SPI for ui-lcd, so do it here.
     crate::hw::spi_hw::init();
     init_dc_res_gpios();
+    // pq1: LCM_EN (asserted just above) is only the AW99703's HWEN. Program
+    // the backlight over I2C2 or the panel stays dark whatever SPI does.
+    #[cfg(feature = "board-pq1")]
+    {
+        let _ = crate::hw::aw99703::init();
+    }
 
     // Reset the panel the way this board can. iota2 has its RES strapped to
     // 3V3 (PD15 and PE14 both proved un-drivable during bring-up), so it
@@ -779,6 +785,12 @@ pub fn lcd_test_loop() -> ! {
     crate::hw::spi_hw::init();
     secure_log!("[LCD-TEST] spi_hw::init done");
     init_dc_res_gpios(); // DC = PE7 (the PE14/RES config is now unused)
+    // pq1: LCM_EN (asserted just above) is only the AW99703's HWEN. Program
+    // the backlight over I2C2 or the panel stays dark whatever SPI does.
+    #[cfg(feature = "board-pq1")]
+    {
+        let _ = crate::hw::aw99703::init();
+    }
     secure_log!("[LCD-TEST] dc gpio done");
     // Software reset first (RES is tied to 3V3, so no hardware-reset pulse).
     write_cmd(0x01); // SWRESET
