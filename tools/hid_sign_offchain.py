@@ -185,6 +185,11 @@ def main() -> int:
     ap.add_argument("--nested-blob", default=None,
                     help="hex display-witness stream for --eip712-v3 (default: "
                          "empty, i.e. a descriptor that selects no witnesses)")
+    ap.add_argument("--confirm-timeout", type=float, default=45.0,
+                    help="seconds to wait for the on-device confirm. The 45 s "
+                         "default suits an e2e-test image (confirm() is "
+                         "short-circuited); a real interactive build needs ~300 "
+                         "because a human is reading the pages (#700).")
     ap.add_argument("--out", default="offchain_response.bin")
     args = ap.parse_args()
 
@@ -257,7 +262,7 @@ def main() -> int:
     if node is None:
         print("!! no PQSigner hidraw node — board not enumerated")
         return 2
-    hid = HidRaw(node, 12.0)
+    hid = HidRaw(node, args.confirm_timeout)
     try:
         sw, data = send(hid, INS_GET_WALLET_ADDRESS, u32(0))
         sw, data = drain_response(hid, sw, data)
