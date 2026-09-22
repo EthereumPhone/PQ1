@@ -1,0 +1,1417 @@
+{
+  "_comment": [
+    "Tests that exist but execute in NO CI suite. Consumed by",
+    "scripts/check_tests_actually_run.py. This is a RATCHET, not an amnesty: the",
+    "listed tests are known debt with a tracking issue, and the gate fails if a",
+    "NEW one appears, if a listed test disappears, or if a listed test starts",
+    "running (at which point the exemption must go so it is gated for real).",
+    "Every `why` below was verified by reading the actual cfg/declaration, not",
+    "inferred from the file name."
+  ],
+  "exempt": [
+    {
+      "file": "fsbl-tests/tests/geometry_consistency.rs",
+      "test": "fsbl_linker_32k_flash_region_is_deliberate_legacy",
+      "issue": "#721",
+      "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "fsbl-tests/tests/geometry_consistency.rs",
+      "test": "fsbl_slot_layout_constants_are_deliberate_legacy",
+      "issue": "#721",
+      "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "fsbl-tests/tests/geometry_consistency.rs",
+      "test": "nonsecure_linker_whole_bank_link_is_deliberate_legacy",
+      "issue": "#721",
+      "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "fsbl-tests/tests/geometry_consistency.rs",
+      "test": "secure_linker_comment_page_table_matches_registry_owners",
+      "issue": "#721",
+      "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "fsbl-tests/tests/geometry_consistency.rs",
+      "test": "secure_linker_flash_origin_and_length_match_registry",
+      "issue": "#721",
+      "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "fsbl-tests/tests/qemu_integration.rs",
+      "test": "qemu_fsbl_frame_matches_secure_world_frame",
+      "issue": "#721",
+      "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "fsbl-tests/tests/qemu_integration.rs",
+      "test": "qemu_fsbl_row_changes_after_alternate_image_install",
+      "issue": "#721",
+      "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "fsbl-tests/tests/qemu_integration.rs",
+      "test": "qemu_malicious_slot_cannot_forge_fsbl_row",
+      "issue": "#721",
+      "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "geometry/tests/registry.rs",
+      "test": "every_one_of_256_pages_has_exactly_one_owner",
+      "issue": "#720",
+      "why": "`pqsigner-geometry` is named in no CI workflow, and neither `make fsbl` nor check_fsbl_geometry.py runs in one. Invariant #10 calls this registry 'CI-pinned'; it is not."
+    },
+    {
+      "file": "geometry/tests/registry.rs",
+      "test": "exact_address_map_matches_section_5",
+      "issue": "#720",
+      "why": "`pqsigner-geometry` is named in no CI workflow, and neither `make fsbl` nor check_fsbl_geometry.py runs in one. Invariant #10 calls this registry 'CI-pinned'; it is not."
+    },
+    {
+      "file": "geometry/tests/registry.rs",
+      "test": "frozen_row_ownership",
+      "issue": "#720",
+      "why": "`pqsigner-geometry` is named in no CI workflow, and neither `make fsbl` nor check_fsbl_geometry.py runs in one. Invariant #10 calls this registry 'CI-pinned'; it is not."
+    },
+    {
+      "file": "geometry/tests/registry.rs",
+      "test": "out_of_range_pages_have_no_owner",
+      "issue": "#720",
+      "why": "`pqsigner-geometry` is named in no CI workflow, and neither `make fsbl` nor check_fsbl_geometry.py runs in one. Invariant #10 calls this registry 'CI-pinned'; it is not."
+    },
+    {
+      "file": "geometry/tests/registry.rs",
+      "test": "registry_rows_cover_each_bank_contiguously",
+      "issue": "#720",
+      "why": "`pqsigner-geometry` is named in no CI workflow, and neither `make fsbl` nor check_fsbl_geometry.py runs in one. Invariant #10 calls this registry 'CI-pinned'; it is not."
+    },
+    {
+      "file": "geometry/tests/registry.rs",
+      "test": "route1_pages_are_bank1_pairwise_disjoint",
+      "issue": "#720",
+      "why": "`pqsigner-geometry` is named in no CI workflow, and neither `make fsbl` nor check_fsbl_geometry.py runs in one. Invariant #10 calls this registry 'CI-pinned'; it is not."
+    },
+    {
+      "file": "geometry/tests/registry.rs",
+      "test": "slot_and_fsbl_spans",
+      "issue": "#720",
+      "why": "`pqsigner-geometry` is named in no CI workflow, and neither `make fsbl` nor check_fsbl_geometry.py runs in one. Invariant #10 calls this registry 'CI-pinned'; it is not."
+    },
+    {
+      "file": "geometry/tests/registry.rs",
+      "test": "updater_preserve_rule_matches_section_5",
+      "issue": "#720",
+      "why": "`pqsigner-geometry` is named in no CI workflow, and neither `make fsbl` nor check_fsbl_geometry.py runs in one. Invariant #10 calls this registry 'CI-pinned'; it is not."
+    },
+    {
+      "file": "proto/tests/negative_memory_layout.rs",
+      "test": "negative_stm32u585_addresses_are_in_silicon_aliases",
+      "issue": "#724",
+      "why": "`#[cfg(feature = \"stm32u585\")]`; the host proto suite does not enable it."
+    },
+    {
+      "file": "rollback/src/evidence.rs",
+      "test": "accepted_artifact_rejects_cross_pass_key_join",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/src/journal.rs",
+      "test": "install_generation_full_and_forbidden",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/src/journal.rs",
+      "test": "surviving_install_generation_requires_evidence_and_rejects_impossible",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/src/journal.rs",
+      "test": "terminal_set_full_surviving_and_rejections",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "cross_epoch_terminal_reads_are_rejected",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "cross_slot_terminal_qws_are_rejected",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "generation_minted_for_a_rejected_for_b",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "malformed_binding_mismatched_token",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "malformed_conflicting_install_halves",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "malformed_floor_relation_on_probation",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "malformed_impossible_writer_order_terminal",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "malformed_missing_token_on_probation_branch",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "malformed_probation_session_bound_to_another_artifact",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "malformed_torn_terminal_never_falls_through_to_pending",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "out_of_range_version_is_caught_at_manifest_layer",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "row_attempted",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "row_confirmed_robust",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "row_confirmed_robust_rejects_f_greater_than_t",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "row_degraded_confirmed_repair_target_only",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "row_degraded_epoch_candidate_repair_target_only",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "row_pending",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "row_uninstalled",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "row_uninstalled_requires_full_generation",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/acceptance.rs",
+      "test": "terminal_row_ignores_pending_evidence_entirely",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/arm_token.rs",
+      "test": "golden_arm_token_binding_digest",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/arm_token.rs",
+      "test": "token_decode_negatives",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/arm_token.rs",
+      "test": "token_encode_decode_round_trip",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/arm_token.rs",
+      "test": "token_layout_and_state_hamming",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "aborted_boot_artifact_drift_rejected",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "aborted_boot_rejects_floor_drift",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "aborted_boots_only_exact_f_artifact_with_zero_writes",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "aborted_rejects_non_exact_f_artifact_and_new_release",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "absorption_without_real_residue_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "active_plan_overlapping_committed_role_map_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "binding_keyed_to_uncommitted_group_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "cross_epoch_install_halves_are_rejected_in_both_decode_paths",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "degraded_history_rejects_cross_artifact_evidence",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "degraded_repair_epoch_bump_requires_receipt",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "degraded_repair_rejects_fresh_target_without_history",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "degraded_repair_rejects_higher_epoch_source",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "degraded_repair_rejects_stale_install_identity",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "degraded_repair_source_drift_rejected_at_entry",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "degraded_repair_steady_floor_relations",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "degraded_repair_under_aborted_requires_exact_f",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "duplicate_keyed_committed_binding_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "entry_recheck_rejects_forged_signature_and_tampered_digest",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "first_bump_phantom_committed_binding_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "handoff_rejects_token_with_mismatched_target",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "ninth_committed_plan_binding_fails_closed_not_panics",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "overlapping_committed_role_maps_are_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "peer_repair_equal_release_set_arms_and_writes_no_backend",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "peer_repair_floor_drift_rejects_handoff",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "peer_repair_rejects_non_twin",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "peer_repair_rejects_stale_twin_install_identity",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "peer_repair_rejects_twin_without_valid_restage_receipt",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "peer_repair_source_drift_rejected_at_entry",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "phantom_binding_without_any_stage_record_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "preflight_receipt_is_bound_to_its_candidate",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "probation_arm_attempted_once_never_retries",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "probation_artifact_drift_rejects_handoff",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "probation_epoch_bump_receipt_rules",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "probation_fallback_terminal_drift_rejects_handoff",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "probation_floor_drift_rejects_handoff",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "probation_requires_exact_f_fallback",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "probation_requires_strictly_newer_candidate",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "probation_surviving_install_generation_candidate_hands_off",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "receipt_allocation_group_mismatch_rejected",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "recheck_rejects_generation_for_a_different_install_id",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "recheck_rejects_terminals_at_another_artifacts_addresses",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "recovery_join_mismatch_is_blocked",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "recovery_join_rejects_other_generation_of_same_manifest",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "resume_artifact_drift_rejects_resume",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "resume_floor_drift_rejects_resume",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "resume_from_recovery_resumes_bound_plan_only",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "resume_stage_binding_drift_rejected",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "robust_recheck_ignores_pending_but_pending_candidate_rejects_it",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "robust_recheck_rejects_conflicting_install_generation",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "robust_recheck_succeeds_with_faulting_pending_qw",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "second_bump_with_prior_consumed_residue_recovers",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "start_epoch_bump_accounts_measured_five_component_cost",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "start_epoch_bump_artifact_drift_rejects_begin",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "start_epoch_bump_floor_drift_rejects_begin",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "start_epoch_bump_invokes_begin_exactly_once",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "start_epoch_bump_same_target_never_begins_a_second_plan",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "start_same_epoch_has_zero_mutable_backend_effects",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "start_same_epoch_is_idempotent_and_never_touches_the_backend",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "start_t_less_than_f_fails_closed",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "terminal_rows_pass_no_pending_evidence",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/entries.rs",
+      "test": "two_generation_residue_recovers_third_bump",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/evidence.rs",
+      "test": "in_range_signed_manifest_derives_checked_t",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/evidence.rs",
+      "test": "max_epoch_sentinel_yields_none",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/evidence.rs",
+      "test": "unsigned_struct_literal_is_rejected",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/evidence.rs",
+      "test": "verify_artifact_runs_real_verification",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/evidence.rs",
+      "test": "zero_epoch_yields_none_not_panic",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/evidence.rs",
+      "test": "zero_release_version_yields_none",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "canonical_base0_requires_route1_pair_and_blank_bank",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "classification_priority_unresolved_stage_outranks_plain_steady",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "committed_group_with_torn_consumed_cell_stays_steady",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "committed_group_with_unmapped_uncertain_cell_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "completable_stage_is_recovering",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "completable_witnesses_with_complete_marker_cell_recovers",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "completable_witnesses_without_complete_marker_cell_is_dead",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "complete_with_zero_witnesses_is_unknown_never_lower",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "conflicting_completion_authority_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "contradictory_binding_without_active_stage_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "dead_stage_with_no_completion_launch_is_aborted",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "dead_stage_with_possible_completion_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "duplicate_clean_index_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "duplicate_committed_group_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "empty_map_with_exact_route1_is_not_steady_zero",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "first_bump_stage_requires_base0_proof",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "first_bump_stage_with_anomalous_route1_pair_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "first_bump_stage_with_exact_base0_pair_still_recovers",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "floor_record_overflow_never_admits_a_lower_floor",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "full_bank_of_floor_records_does_not_overflow",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "garbage_route1_with_committed_group_is_diagnostic_only",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "generation_skipping_stage_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "group_zero_complete_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "index_address_mismatch_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "monotone_two_group_history_yields_highest_target",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "next_generation_stage_still_recovers",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "non_adjacent_duplicate_group_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "non_monotone_committed_history_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "orphan_cell_forces_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "orphan_role_in_committed_steady_arm_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "plan_cell_not_matching_physical_reality_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "prefix_snapshot_omitting_newer_complete_is_incomplete",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "preflight_group_overflow_fail_closed",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "preflight_margin_is_proof_bound_not_caller_asserted",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "preflight_requires_plan_cells_of_virgins",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "probe_epoch_inconsistency_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "route1_pair_must_be_two_distinct_qws",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "route1_read_with_bank_index_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "second_epoch_bump_with_persisted_stage_residue_recovers",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "stage_for_committed_group_is_superseded_or_conflicting",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "stage_record_overflow_fails_closed",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "stage_target_not_above_floor_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "steady_degraded_group_down_to_one_witness",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "steady_from_committed_group",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "t_classification_and_preflight",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "torn_newer_group_cell_is_not_absorbed_into_old_plan",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "two_active_stages_are_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "uncertain_cell_outside_stage_forces_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "uncertain_qw_inside_role_map_still_recovers",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "uncertain_qw_outside_role_map_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "witnessed_record_disagreeing_with_binding_is_unknown",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "zero_witness_stage_with_full_virgin_plan_recovers",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/floor.rs",
+      "test": "zero_witness_stage_with_insufficient_virgins_is_dead",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/journal.rs",
+      "test": "blank_virgin_requires_clean_erased_and_no_launch",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/journal.rs",
+      "test": "codeword_hamming_properties",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/journal.rs",
+      "test": "pending_marker_observation",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/journal.rs",
+      "test": "probe_classification_is_canonical_not_scriptable",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/transitions.rs",
+      "test": "every_illegal_transition_is_rejected",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/transitions.rs",
+      "test": "malformed_has_no_marker_only_outgoing_transition",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/transitions.rs",
+      "test": "no_skips_no_retries_no_reverse",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "rollback/tests/transitions.rs",
+      "test": "the_legal_chain_end_to_end",
+      "issue": "#720",
+      "why": "`pqsigner-rollback` is named in no CI workflow. Its tests run only under `cargo test --workspace` inside the local-only `make test-all` \u2014 the same gap ci.yml:318 records fixing for the fuzz suites alone."
+    },
+    {
+      "file": "secure/src/display_under_test/erc7730_nested_dispatch_pure_tests.rs",
+      "test": "production_dispatcher_legacy_one_bundle_stays_v1",
+      "issue": "#724",
+      "why": "declared `#[cfg(all(test, feature = \"erc7730-nested-calldata-test-fixture\"))]`; the secure-crate host suite does not enable that fixture feature."
+    },
+    {
+      "file": "secure/src/display_under_test/erc7730_nested_dispatch_pure_tests.rs",
+      "test": "production_dispatcher_nested_fixture_uses_v2_and_refuses_binding_or_commitment_faults",
+      "issue": "#724",
+      "why": "declared `#[cfg(all(test, feature = \"erc7730-nested-calldata-test-fixture\"))]`; the secure-crate host suite does not enable that fixture feature."
+    },
+    {
+      "file": "secure/src/display_under_test/erc7730_nested_dispatch_pure_tests.rs",
+      "test": "reserved_child_selectors_refuse_at_shared_single_batch_derivation_seam",
+      "issue": "#724",
+      "why": "declared `#[cfg(all(test, feature = \"erc7730-nested-calldata-test-fixture\"))]`; the secure-crate host suite does not enable that fixture feature."
+    },
+    {
+      "file": "secure/src/display_under_test/erc7730_nested_dispatch_pure_tests.rs",
+      "test": "rooted_multi_tail_fixture_renders_both_exact_strings",
+      "issue": "#724",
+      "why": "declared `#[cfg(all(test, feature = \"erc7730-nested-calldata-test-fixture\"))]`; the secure-crate host suite does not enable that fixture feature."
+    },
+    {
+      "file": "secure/src/display_under_test/erc7730_nested_dispatch_pure_tests.rs",
+      "test": "valid_generic_evidence_beside_safe_preserves_native_precedence",
+      "issue": "#724",
+      "why": "declared `#[cfg(all(test, feature = \"erc7730-nested-calldata-test-fixture\"))]`; the secure-crate host suite does not enable that fixture feature."
+    },
+    {
+      "file": "secure/src/factory_provisioning.rs",
+      "test": "negative_error_code_hints_fit_oled_row",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/factory_provisioning.rs",
+      "test": "negative_format_step_err_handles_all_error_codes",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/factory_provisioning.rs",
+      "test": "negative_step_labels_fit_oled_row_with_prefix",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/factory_provisioning.rs",
+      "test": "positive_error_codes_are_distinct",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/factory_provisioning.rs",
+      "test": "positive_format_step_err_layout",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/factory_provisioning.rs",
+      "test": "positive_step_total_matches_enum_count",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/hw/lcd_nv3007.rs",
+      "test": "negative_frame_geometry_constants_pinned",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
+    },
+    {
+      "file": "secure/src/hw/lcd_nv3007.rs",
+      "test": "negative_set_window_offset_matches_dgen1_bootloader_literal",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
+    },
+    {
+      "file": "secure/src/hw/lcd_nv3007.rs",
+      "test": "positive_full_screen_window_matches_production_bytes",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
+    },
+    {
+      "file": "secure/src/hw/lcd_nv3007.rs",
+      "test": "positive_inner_window_offsets_both_endpoints",
+      "issue": "#723",
+      "why": "`#![cfg(feature = \"ui-lcd\")]`; the host test build uses `ui-semihosting`."
+    },
+    {
+      "file": "secure/src/hw/otp.rs",
+      "test": "factory_sentinel_bit_layout",
+      "issue": "#723",
+      "why": "`hw/mod.rs` gates `pub mod otp;` on `stm32u585`, absent from the host test build \u2014 though the tests themselves say they are pure math that does not touch hardware."
+    },
+    {
+      "file": "secure/src/hw/otp.rs",
+      "test": "lsb_first_walk_is_contiguous",
+      "issue": "#723",
+      "why": "`hw/mod.rs` gates `pub mod otp;` on `stm32u585`, absent from the host test build \u2014 though the tests themselves say they are pure math that does not touch hardware."
+    },
+    {
+      "file": "secure/src/hw/otp.rs",
+      "test": "master_key_layout",
+      "issue": "#723",
+      "why": "`hw/mod.rs` gates `pub mod otp;` on `stm32u585`, absent from the host test build \u2014 though the tests themselves say they are pure math that does not touch hardware."
+    },
+    {
+      "file": "secure/src/hw/otp.rs",
+      "test": "max_fw_version",
+      "issue": "#723",
+      "why": "`hw/mod.rs` gates `pub mod otp;` on `stm32u585`, absent from the host test build \u2014 though the tests themselves say they are pure math that does not touch hardware."
+    },
+    {
+      "file": "secure/src/hw/tamp.rs",
+      "test": "reason_strings_cover_every_itamp_bit",
+      "issue": "#723",
+      "why": "`hw/mod.rs` gates `pub mod tamp;` on `all(stm32u585, tamp)`; neither is in the host test feature set."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "negative_charge_refuses_disarmed_spent_and_invalid_without_repair",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "negative_every_single_bit_mutation_of_every_codeword_is_invalid",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "negative_mixed_valid_halves_and_single_zero_words_are_invalid",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "negative_pin_arm_refuses_spent_and_invalid_without_repair",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "positive_charge_is_one_voted_armed_to_spent_transition",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "positive_forced_attempt_codewords_have_pairwise_distance_32",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "positive_forced_attempt_codewords_match_owner_contract",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "positive_forced_attempt_is_exactly_two_words_and_bss_disarmed",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "positive_generic_unlock_and_zeroize_always_select_disarmed",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc/state.rs",
+      "test": "positive_pin_arm_is_disarmed_to_armed_only_and_cannot_rearm",
+      "issue": "#724",
+      "why": "each test is `#[cfg(feature = \"erc7730-forced-blind\")]`; no CI suite enables that feature, so the forced-blind guard rails are ungated."
+    },
+    {
+      "file": "secure/src/nsc_sign_userop_pure_tests.rs",
+      "test": "production_exact_f_contains_reachable_protected_intersections",
+      "issue": "#724",
+      "why": "`erc7730-forced-blind`-gated; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/optiga_under_test/pure_tests.rs",
+      "test": "positive_build_metadata_auth_ref_luc_change_auto_exact_bytes",
+      "issue": "#724",
+      "why": "`#[cfg(feature = \"optiga-hw-counter\")]`; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "abnormal_flags",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "cold_is_bor_plus_pin_only",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "low_power",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "no_flags_is_unknown",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "option_byte_reload",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "software_reset",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "watchdog_beats_bor_if_both_set",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "watchdog_iwdg",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/reset_cause.rs",
+      "test": "watchdog_wwdg",
+      "issue": "#723",
+      "why": "`main.rs` declares `#[cfg(not(test))] mod reset_cause;`, so the module is absent from every host test build. `main_sau_pure_tests.rs:1652` pins that declaration, which pins these nine tests unreachable."
+    },
+    {
+      "file": "secure/src/secure_crypto_glue_under_test/pure_tests.rs",
+      "test": "forced_capacity_preflight_publishes_distinct_verdict_and_cfi",
+      "issue": "#724",
+      "why": "`erc7730-forced-blind`-gated; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/tx/erc7730.rs",
+      "test": "clear_capable_and_unknown_tuples_never_gain_forced_authority",
+      "issue": "#724",
+      "why": "`erc7730-forced-blind`-gated; no CI suite enables it."
+    },
+    {
+      "file": "secure/src/tx/erc7730.rs",
+      "test": "forced_membership_has_a_distinct_cfi_transcript_and_positive_proof",
+      "issue": "#724",
+      "why": "`erc7730-forced-blind`-gated; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_forgery_resistance.rs",
+      "test": "cross_position_tree_splice_is_rejected",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_forgery_resistance.rs",
+      "test": "forgery_work_at_onchain_cap_exceeds_128_bits",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_forgery_resistance.rs",
+      "test": "reassembly_roundtrip_is_byte_exact",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_forgery_resistance.rs",
+      "test": "shared_forest_reassembly_forgery_is_defeated",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_model_bridge.rs",
+      "test": "negative_control_perturbed_offset_is_not_universal",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_model_bridge.rs",
+      "test": "predC_grounded_on_real_grind_outputs",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_model_bridge.rs",
+      "test": "structural_axioms_and_read_bits_faithfulness",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_position_binding.rs",
+      "test": "fors_adrs_encodes_ht_idx_in_the_tree_field",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_position_binding.rs",
+      "test": "fors_pk_is_unique_per_ht_idx",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_position_binding.rs",
+      "test": "fors_secret_is_deterministic_and_distinct_within_a_position",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_position_binding.rs",
+      "test": "fors_secret_is_unique_per_ht_idx",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/fors_position_binding.rs",
+      "test": "fors_tree_root_is_unique_per_ht_idx",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/hash_counts.rs",
+      "test": "count_secret_touching_hashes_per_sign",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"hash-counters\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/near_miss_validate.rs",
+      "test": "nm1_wots_digit_sum_is_a_clean_near_miss",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"near-miss-gen\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/near_miss_validate.rs",
+      "test": "nm2_fors_forced_zero_is_a_clean_near_miss",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"near-miss-gen\")]`; no CI suite enables it."
+    },
+    {
+      "file": "sphincs-c10/tests/primitive_kat.rs",
+      "test": "recompute_matches_committed_golden",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it. This is the C10 primitive KAT its own header describes as a three-way cross-check anchor."
+    },
+    {
+      "file": "sphincs-c10/tests/primitive_kat.rs",
+      "test": "regenerate",
+      "issue": "#722",
+      "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it. This is the C10 primitive KAT its own header describes as a three-way cross-check anchor."
+    }
+  ]
+}
