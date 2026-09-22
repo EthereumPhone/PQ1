@@ -146,7 +146,7 @@ pub fn amount_is_exact_at_fraction_digits(
 /// at most 18 displayed decimals, while larger-decimal assets must have enough
 /// trailing zero base units to fit that exact envelope or be refused.
 #[must_use]
-fn exact_fraction_digits(value: &U256, decimals: u32, preferred: u32, maximum: u32) -> Option<u32> {
+pub fn exact_fraction_digits(value: &U256, decimals: u32, preferred: u32, maximum: u32) -> Option<u32> {
     let mut fraction_digits = core::cmp::min(decimals, preferred);
     let maximum = core::cmp::min(decimals, maximum);
     while fraction_digits <= maximum {
@@ -372,7 +372,7 @@ pub fn write_amount_single_or_two_rows(
 /// are unchanged — casing only — so there is NO WYSIWYS change, just a more
 /// verifiable rendering. Uppercases hex letter `i` iff nibble `i` of
 /// `keccak256(lowercase_ascii_hex)` is ≥ 8 (digits are never cased).
-fn eip55_hex(addr: &[u8; 20]) -> [u8; 40] {
+pub fn eip55_hex(addr: &[u8; 20]) -> [u8; 40] {
     let mut hex = [0u8; 40];
     for (i, &b) in addr.iter().enumerate() {
         hex[i * 2] = hex_nibble(b >> 4);

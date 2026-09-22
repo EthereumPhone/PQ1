@@ -1,0 +1,119 @@
+{
+  "alpha_levels": 16,
+  "format_version": 1,
+  "inputs": {
+    "tools/pq-ui/pq1/assets/Aileron-Regular.otf": "5d8c1ab7cf7c25787f96a05b076602897fe38b47e21fe8954a4e4cbd7ae83d0a",
+    "tools/pq-ui/pq1/assets/Aileron-SemiBold.otf": "f71260882efb77bac6bd987eeafc4f8831e82827f81f35e447b62c37cb40f866",
+    "tools/pq-ui/pq1/assets/safe.png": "249f5b4d3b85c1910310827de29d898e04b9d337ebd9ceb3ac6f97f1fe1f9c34"
+  },
+  "outputs": {
+    "base.a4": {
+      "bytes": 1690,
+      "sha256": "4bc34067299355400ddc62e6cb19c5724c106818dfe516f6f01086daa2b901b1"
+    },
+    "fonts.bin": {
+      "bytes": 68867,
+      "sha256": "ce8aa3bcb8f2682b7990c7c735eb658507de48ab9d63635b34c2f1a9a68999cc"
+    },
+    "mainnet.a4": {
+      "bytes": 1690,
+      "sha256": "0672ad610a2f28f94499bef67b769c2bd0703473b12f447a18ec53f627583ed2"
+    },
+    "safe.a4": {
+      "bytes": 1690,
+      "sha256": "50d9d44e0195aee2134137f8dff4e0b543f558f8676df7ec54fe8dc93cb5af7c"
+    }
+  },
+  "pillow": "10.2.0",
+  "safe_logo_approved": false,
+  "tiers": [
+    {
+      "ascent_q6": 2240,
+      "bitmap_bytes": 16879,
+      "descent_q6": 533,
+      "glyphs": 76,
+      "max_h": 34,
+      "max_w": 33,
+      "px": 36,
+      "table_bytes": 728,
+      "weight": 0
+    },
+    {
+      "ascent_q6": 2005,
+      "bitmap_bytes": 13420,
+      "descent_q6": 491,
+      "glyphs": 76,
+      "max_h": 30,
+      "max_w": 31,
+      "px": 32,
+      "table_bytes": 728,
+      "weight": 0
+    },
+    {
+      "ascent_q6": 1749,
+      "bitmap_bytes": 10496,
+      "descent_q6": 427,
+      "glyphs": 76,
+      "max_h": 26,
+      "max_w": 27,
+      "px": 28,
+      "table_bytes": 728,
+      "weight": 0
+    },
+    {
+      "ascent_q6": 1387,
+      "bitmap_bytes": 7799,
+      "descent_q6": 341,
+      "glyphs": 95,
+      "max_h": 23,
+      "max_w": 21,
+      "px": 22,
+      "table_bytes": 760,
+      "weight": 0
+    },
+    {
+      "ascent_q6": 1387,
+      "bitmap_bytes": 8140,
+      "descent_q6": 341,
+      "glyphs": 95,
+      "max_h": 23,
+      "max_w": 22,
+      "px": 22,
+      "table_bytes": 760,
+      "weight": 1
+    },
+    {
+      "ascent_q6": 1131,
+      "bitmap_bytes": 3238,
+      "descent_q6": 277,
+      "glyphs": 51,
+      "max_h": 16,
+      "max_w": 17,
+      "px": 18,
+      "table_bytes": 768,
+      "weight": 0
+    },
+    {
+      "ascent_q6": 1003,
+      "bitmap_bytes": 2790,
+      "descent_q6": 256,
+      "glyphs": 51,
+      "max_h": 15,
+      "max_w": 16,
+      "px": 16,
+      "table_bytes": 768,
+      "weight": 1
+    },
+    {
+      "ascent_q6": 1003,
+      "bitmap_bytes": 637,
+      "descent_q6": 256,
+      "glyphs": 11,
+      "max_h": 13,
+      "max_w": 9,
+      "px": 16,
+      "table_bytes": 88,
+      "weight": 0
+    }
+  ]
+}

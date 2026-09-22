@@ -52,6 +52,11 @@ members = [
     # no_std, no heap. Companion ships compiled IR + Merkle proof in a
     # trailer on every sign; this crate parses & binds it.
     "pqsigner-erc7730",
+    # Pixel trusted-UI substrate: 256-byte printable-ASCII `Screen` transcript
+    # records, the design tier fitter, fixed-point motion, the two-button
+    # input grammar and the strip rasteriser for the NV3007. Pure-logic,
+    # no_std, no heap, no unsafe. Feature-gated into `secure` by `ui-px`.
+    "pqsigner-ui-px",
     # Trait-only HAL surface (Rng / Sha256 / Saes / Flash / Otp / Tamp
     # / ConsumptionMask / I2cBus / SpiBus / Buttons / Uart + Platform
     # aggregate + BootStage). Phase 6 PR 1 of the modularity refactor.
@@ -117,6 +122,7 @@ pqsigner-tx-core  = { path = "tx-core" }
 pqsigner-aa       = { path = "aa" }
 pqsigner-domain   = { path = "domain" }
 pqsigner-tx       = { path = "tx" }
+pqsigner-ui-px    = { path = "pqsigner-ui-px" }
 pqsigner-erc7730  = { path = "pqsigner-erc7730" }
 pqsigner-hal      = { path = "hal" }
 sphincs-tz-shared = { path = "shared" }

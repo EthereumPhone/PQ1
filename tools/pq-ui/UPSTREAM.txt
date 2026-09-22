@@ -1,0 +1,12 @@
+# Vendored subset of the PQ-UI design system (Elie Munsi, EthereumPhone/PQ-UI).
+# Only the design-system package, the Safe + fingerprint flow families and the
+# flow loader are vendored; renders/, screens/, archive/ and tools/ are not
+# (upstream tracks ~380 MB of GIF renders, so a submodule is not an option).
+#
+# Re-sync with ./sync.sh <path-to-PQ-UI-checkout>; it refuses to copy from a
+# checkout that is not at the pinned commit unless UPSTREAM_SHA is updated first.
+repo   = https://github.com/EthereumPhone/PQ-UI
+commit = d9f1468e1fd1696f9de6e2eac216dabd7a7406c6
+date   = 2026-09-18T17:53:54+02:00
+# Deliberate local deviation: upstream ships pq1/assets/OFL.txt, which is the
+# Chakra Petch OFL text (wrong file); Aileron is CC0 — see LICENSES/Aileron.md.

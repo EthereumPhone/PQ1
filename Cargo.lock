@@ -1278,6 +1278,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pqsigner-ui-px"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "pqsigner-erc7730",
+ "sha2",
+]
+
+[[package]]
 name = "pqsigner-xtask"
 version = "0.1.0"
 dependencies = [
@@ -1698,6 +1707,7 @@ dependencies = [
  "pqsigner-pq-seal",
  "pqsigner-tx",
  "pqsigner-tx-core",
+ "pqsigner-ui-px",
  "proptest",
  "sha2",
  "sha3 0.10.8",

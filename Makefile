@@ -4393,6 +4393,8 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
 	@echo "         + Safe management-op decoder (classify_safe_mgmt: accept => length-exact + selector-match + canonical address words + faithful threshold, reconstructed from original bytes; selector-gating reject + accept/reject controls)"
 	cargo kani -p pqsigner-tx
+	@echo "==> Kani: pixel trusted-UI tier fitter / splitters (total, lossless) + FlowDriver arming"
+	cargo kani -p pqsigner-ui-px
 	@echo "==> Kani: ERC-7730 IR header parser (offset-bounds safety)"
 	@echo "         + TLV param parser (panic/OOB-free over symbolic pool+offset; per-tag width/value soundness: enum_ref/decimals/token/visibility; reject unknown-tag + out-of-range visibility byte)"
 	@echo "         + visibility evaluator (should_render_with_mode total + spec-exact over all (visibility,compact))"
@@ -4560,6 +4562,24 @@ ui-golden:
 # in seconds.
 #   make ui-golden-render               # check vs tests/ui_golden_render_fixtures.json
 #   make ui-golden-render-bless         # re-baseline after an intentional UI change
+# ---------------------------------------------------------------------------
+# Pixel trusted-UI assets (`ui-px`): Aileron glyph atlases + disc marks baked
+# from the vendored PQ-UI design system (tools/pq-ui/, pinned in UPSTREAM.txt).
+# The outputs are committed; `ui-px-assets-check` re-bakes into a temp dir and
+# diffs the manifest so a stale or hand-edited atlas fails CI.
+.PHONY: ui-px-assets ui-px-assets-check
+ui-px-assets: ## Re-bake secure/assets/ui-px/* + pqsigner-ui-px/src/metrics_gen.rs
+	@python3 tools/ui_px_assets.py
+
+ui-px-assets-check: ## Verify the committed ui-px assets are reproducible
+	@tmp=$$(mktemp -d); \
+	python3 tools/ui_px_assets.py --out $$tmp --metrics $$tmp/metrics_gen.rs >/dev/null && \
+	for f in fonts.bin safe.a4 mainnet.a4 base.a4 manifest.json; do \
+	  cmp -s $$tmp/$$f secure/assets/ui-px/$$f || { echo "ui-px asset drift: $$f (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	done; \
+	cmp -s $$tmp/metrics_gen.rs pqsigner-ui-px/src/metrics_gen.rs || { echo "ui-px metrics drift (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	rm -rf $$tmp; echo "ui-px assets reproducible"
+
 .PHONY: ui-golden-render ui-golden-render-bless
 ui-golden-render: ## Render UI golden frames + compare to baseline
 	@echo "==> Building secure (ui-golden-render harness) + NS loader payload"

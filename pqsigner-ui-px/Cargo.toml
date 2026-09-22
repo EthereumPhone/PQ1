@@ -1,0 +1,41 @@
+# pqsigner-ui-px — pixel trusted-UI substrate for the NV3007 panel.
+#
+# Owns four things, all pure logic:
+#
+#   1. The `Screen` / `Screens` transcript: 256-byte printable-ASCII records
+#      (kind, icon, side, tier, commit, label, caption, up to two pages of
+#      three lines) that the secure world builds from a verified transaction,
+#      proves byte-exactly (the same `0xA5` poison / exact-occurrence shape as
+#      `pqsigner_erc7730::display::Pages`), hashes for `ui-capture`, and hands
+#      to a presenter. Every byte is `0x20..=0x7E` by construction.
+#   2. The design tier fitter (`fit`): the DESIGN.md "largest tier that fits"
+#      rule with baked advance widths, and the address / hash / amount line
+#      splitters. Never truncates: a value that does not fit is an `Err`.
+#   3. The Q16 fixed-point motion + input grammar (`motion`, `input`,
+#      `driver`): springs, follower chain, hold fill, the two-button FSM and
+#      the flow driver — a port of the PQ-UI reference (`tools/pq-ui/pq1/`).
+#   4. The strip rasteriser (`frame`, `prim`, `font`): renders a display list
+#      into a caller-provided 428×N RGB565 strip so host tests write PNGs and
+#      the firmware streams strips to the panel.
+#
+# no_std, no heap, no unsafe (`#![forbid(unsafe_code)]`), no dependencies
+# beyond the erc7730 display substrate (for the legacy `Page` type and the
+# shared volatile poison helper). Feature-gated into `secure` by `ui-px`.
+
+[package]
+name = "pqsigner-ui-px"
+version = "0.1.0"
+edition.workspace = true
+
+[features]
+default = []
+
+[dependencies]
+pqsigner-erc7730 = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+sha2 = { version = "0.10", default-features = false }
+
+[lints]
+workspace = true

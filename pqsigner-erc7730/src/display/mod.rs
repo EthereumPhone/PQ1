@@ -170,19 +170,12 @@ impl Pages {
     pub fn volatile_poison_and_reset(&mut self) {
         for page in &mut self.buf {
             for row in page {
-                for byte in row {
-                    // SAFETY: every pointer comes from this unique mutable
-                    // borrow and remains within the live fixed-size buffer.
-                    unsafe { core::ptr::write_volatile(byte, TRANSCRIPT_POISON) };
-                }
+                volatile_poison_bytes(row);
             }
         }
         // Write the length last: a skipped second render then exposes either a
         // zero count or poison bytes, both of which fail the transcript proof.
-        // SAFETY: `self.len` is uniquely borrowed and remains live for this
-        // in-place reset.
-        unsafe { core::ptr::write_volatile(&mut self.len, 0) };
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        volatile_reset_len(&mut self.len);
     }
 
     /// Readback used before granting the reset CFI step.
@@ -197,6 +190,46 @@ impl Pages {
                 .flat_map(|row| row.iter())
                 .all(|byte| *byte == TRANSCRIPT_POISON)
     }
+}
+
+/// Volatile-fill a display byte buffer with [`TRANSCRIPT_POISON`].
+///
+/// Shared by [`Pages::volatile_poison_and_reset`] and the pixel-UI `Screens`
+/// transcript in `pqsigner-ui-px` (whose records are printable ASCII by
+/// construction, exactly like `Page`, so the same poison byte is unreachable
+/// there too). Lives here so that crate can stay 100% safe Rust: this file is
+/// one of the three documented host-verified `unsafe` exceptions in the
+/// `no-unsafe-in-pure-logic-crates` semgrep gate. Volatile writes prevent LLVM
+/// from deleting the poison as dead stores before the next render.
+#[inline(never)]
+pub fn volatile_poison_bytes(buf: &mut [u8]) {
+    for byte in buf {
+        // SAFETY: `byte` comes from this unique mutable borrow of a live slice
+        // element; a volatile write of a `u8` through it is always valid.
+        unsafe { core::ptr::write_volatile(byte, TRANSCRIPT_POISON) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+/// Volatile-zero a byte buffer and fence (the alignment-free twin of
+/// [`volatile_reset_len`] for byte-encoded length fields).
+#[inline(never)]
+pub fn volatile_zero_bytes(buf: &mut [u8]) {
+    for byte in buf {
+        // SAFETY: `byte` is a unique live mutable borrow of a slice element.
+        unsafe { core::ptr::write_volatile(byte, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+/// Volatile-zero a transcript length word and fence, so a skipped re-render
+/// exposes a zero count (or the poison bytes) to the transcript proof.
+#[inline(never)]
+pub fn volatile_reset_len(len: &mut usize) {
+    // SAFETY: `len` is a unique live mutable borrow; a volatile store through
+    // it is always valid.
+    unsafe { core::ptr::write_volatile(len, 0) };
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }
 
 /// Convert an ASCII-by-construction byte buffer into a `&str` without `unsafe`.
