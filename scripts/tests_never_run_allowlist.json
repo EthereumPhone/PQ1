@@ -1121,42 +1121,6 @@
       "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
     },
     {
-      "file": "secure/src/factory_provisioning.rs",
-      "test": "negative_error_code_hints_fit_oled_row",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
-    },
-    {
-      "file": "secure/src/factory_provisioning.rs",
-      "test": "negative_format_step_err_handles_all_error_codes",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
-    },
-    {
-      "file": "secure/src/factory_provisioning.rs",
-      "test": "negative_step_labels_fit_oled_row_with_prefix",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
-    },
-    {
-      "file": "secure/src/factory_provisioning.rs",
-      "test": "positive_error_codes_are_distinct",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
-    },
-    {
-      "file": "secure/src/factory_provisioning.rs",
-      "test": "positive_format_step_err_layout",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
-    },
-    {
-      "file": "secure/src/factory_provisioning.rs",
-      "test": "positive_step_total_matches_enum_count",
-      "issue": "#723",
-      "why": "`#![cfg(feature = \"factory-provisioning\")]`; no CI suite enables it."
-    },
-    {
       "file": "secure/src/nsc/state.rs",
       "test": "negative_charge_refuses_disarmed_spent_and_invalid_without_repair",
       "issue": "#724",

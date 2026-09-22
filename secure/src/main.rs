@@ -270,6 +270,14 @@ mod ui;
 #[cfg(feature = "factory-provisioning")]
 mod factory_provisioning;
 
+/// Pure step/error/format surface of the factory ceremony. Mounted under
+/// `test` as well as the feature, because `factory_provisioning` itself
+/// cannot compile host-side (it reaches `crate::hw` / `crate::ui`, both
+/// `#[cfg(not(test))]`) and its display logic had therefore never been
+/// tested (#723).
+#[cfg(any(feature = "factory-provisioning", test))]
+mod factory_ui;
+
 /// Masked-SHA-256 overhead bench (`bench-masked-sha` feature). Runs
 /// once at boot, measures the first-order-masked gate cost vs the HASH
 /// peripheral, prints the projected slowdown, halts. See module docs
