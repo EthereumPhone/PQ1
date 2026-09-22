@@ -52,6 +52,7 @@ const BOARD_IOTA2_SRC: &str = include_str!("../board/iota2.rs");
 const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
 const BOARD_MOD_SRC: &str = include_str!("../board/mod.rs");
 const LCD_NV3007_SRC: &str = include_str!("../hw/lcd_nv3007.rs");
+const AW99703_SRC: &str = include_str!("../hw/aw99703.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
 
@@ -1910,4 +1911,87 @@ fn negative_lcd_nv3007_control_pins_come_from_the_board() {
     assert!(BOARD_PQ1_SRC.contains("pub const LCD_RST_IS_DRIVABLE: bool = true;"));
     assert!(BOARD_PQ1_SRC.contains("pub const LCD_DC_PIN: u32 = 0;"));
     assert!(BOARD_PQ1_SRC.contains("pub const LCD_RST_PIN: u32 = 1;"));
+}
+
+/// `src` with every `//` comment removed, line structure kept. Positions are
+/// then taken on code only — the #730 comments in `lcd_nv3007::init` name
+/// `fill_screen` and DISPON in prose, and an ordering check that matched
+/// those would pass or fail on the wording of a comment.
+fn strip_line_comments(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    for line in src.lines() {
+        out.push_str(match line.find("//") {
+            Some(i) => &line[..i],
+            None => line,
+        });
+        out.push('\n');
+    }
+    out
+}
+
+/// The body of the top-level fn whose header is `header`, up to the first
+/// column-0 `}`. Panics if the header is absent or not unique.
+fn top_level_fn_body<'a>(code: &'a str, header: &str) -> &'a str {
+    assert_eq!(code.matches(header).count(), 1, "expected exactly one `{header}`");
+    let start = code.find(header).unwrap();
+    let len = code[start..].find("\n}\n").expect("unterminated fn body");
+    &code[start..start + len]
+}
+
+/// #730: on pq1 the backlight must light only AFTER the panel content is defined.
+///
+/// `DISPON` is the last command of `run_init_sequence`. The old one-shot
+/// `aw99703::init()` left Standby before the panel was even reset, so for the
+/// ~170 ms between DISPON and the first `fill_screen` a lit panel showed
+/// whatever GRAM held. The fix splits the chip bring-up: `configure()` (limits
+/// and brightness, chip still dark) stays early for its settle delay, and
+/// `enable()` — the one write that emits light — moves after the fill.
+///
+/// What this checks is statement ORDER in a straight-line body, which source
+/// positions do capture (unlike the arm order of a branch chain, where a text
+/// pin is unsound). "Enable only after a successful configure" is not tested
+/// here because the compiler already enforces it: `enable` takes a
+/// `Configured` token only `configure` can construct.
+#[test]
+fn negative_backlight_enables_only_after_the_panel_is_painted() {
+    let lcd = strip_line_comments(LCD_NV3007_SRC);
+    let body = top_level_fn_body(&lcd, "pub fn init() {");
+    let pos = |needle: &str| {
+        body.find(needle)
+            .unwrap_or_else(|| panic!("lcd_nv3007::init: missing `{needle}`"))
+    };
+    let configure = pos("aw99703::configure()");
+    let reset = pos("hard_reset();");
+    let fill = pos("fill_screen(0x0000);");
+    let enable = pos("aw99703::enable(");
+    assert!(
+        configure < reset,
+        "configure() must run early: it carries the HWEN settle delay and leaves the chip dark"
+    );
+    assert!(
+        fill < enable,
+        "#730: aw99703::enable() must come AFTER fill_screen — enabling earlier lights \
+         undefined GRAM between DISPON and the first fill"
+    );
+    assert!(
+        !contains_in_code(LCD_NV3007_SRC, "aw99703::init("),
+        "the one-shot init that bundled the enable must not return"
+    );
+
+    // Driver side: the light-emitting write lives in `enable` and nowhere else.
+    let drv = strip_line_comments(AW99703_SRC);
+    let cfg = top_level_fn_body(&drv, "pub fn configure() -> Option<Configured> {");
+    assert!(
+        !cfg.contains("write_reg(REG_MODE"),
+        "configure() must leave the chip in Standby — it must not write REG_MODE"
+    );
+    let en = top_level_fn_body(&drv, "pub fn enable(_proof: Configured) -> bool {");
+    assert!(en.contains("write_reg(REG_MODE, MODE_I2C_LINEAR_BACKLIGHT)"));
+    assert_eq!(
+        drv.matches("write_reg(REG_MODE").count(),
+        1,
+        "REG_MODE (the boost enable) must be written from exactly one place"
+    );
+    // The private field is what makes the token unforgeable outside the module.
+    assert!(drv.contains("pub struct Configured(());"));
 }

@@ -204,28 +204,48 @@ fn read_reg(reg: u8) -> Option<u8> {
 /// dark on every boot. That is the difference between a cold-boot-only defect
 /// and an always-defect, and it decides how much the FSBL has to do.
 ///
-/// Latched at the top of `init()`, before any write, so reading it later cannot
+/// Latched at the top of `configure()`, before any write, so reading it later cannot
 /// disturb the answer. `(acked, ledmsb, mode)`.
 static mut PRE_INIT: (bool, u8, u8) = (false, 0, 0);
 
 /// Snapshot of the chip state seen at the start of this boot. See [`PRE_INIT`].
 pub fn pre_init_snapshot() -> (bool, u8, u8) {
-    // SAFETY: single-threaded boot; written once at the top of `init()` before
+    // SAFETY: single-threaded boot; written once at the top of `configure()` before
     // any reader can run.
     unsafe { PRE_INIT }
 }
 
-/// Bring the backlight up. Call **after** `LCM_EN`/HWEN has been driven high
-/// (the LCD driver does that) — HWEN low resets every register and disables
-/// the I2C interface. Returns `true` if the chip ACKed every write.
-pub fn init() -> bool {
-    // #705, settled by experiment 2026-09-22: the panel is DARK until this
-    // function runs. A dev build that stalled 5 s here showed a blank screen
-    // for exactly that window, then light — so the backlight is off until the
-    // I2C write moves the AW99703 out of Standby (MODE.WORKMODE defaults to
-    // 00). Any stage running earlier — notably the FSBL, which has no I2C —
-    // therefore renders onto a dark panel. The delay has been removed; do not
-    // re-add it to a shipping path.
+/// Proof that [`configure`] programmed every prerequisite register.
+///
+/// The private field means only this module can make one, so [`enable`] —
+/// the write that actually turns the boost on — cannot be reached after a
+/// failed prerequisite write. That used to be an early `return` inside one
+/// function; once the enable moved to a different call site (#730) the
+/// guarantee had to travel with it, and a `bool` the caller could ignore
+/// would not have carried it.
+pub struct Configured(());
+
+/// Stage 1 of 2: program the limits and brightness, leaving the chip in
+/// **Standby** — no LED current flows and the panel stays dark.
+///
+/// Call **after** `LCM_EN`/HWEN has been driven high (the LCD driver does
+/// that) — HWEN low resets every register and disables the I2C interface.
+/// `None` if any write NACKed; the boost must then stay off.
+///
+/// WHY TWO STAGES (#730). This used to be a single `init()` that ended by
+/// leaving Standby, called before the panel was reset, initialised and
+/// cleared. `DISPON` is the last command of the init sequence, so for the
+/// ~170 ms between it and the first `fill_screen` a LIT panel showed
+/// whatever its GRAM held. Configuring here keeps the settle delay and the
+/// safety-limit writes early; [`enable`] goes after the panel is painted.
+pub fn configure() -> Option<Configured> {
+    // #705, settled by experiment 2026-09-22: the panel is DARK until the
+    // chip leaves Standby. A dev build that stalled 5 s here showed a blank
+    // screen for exactly that window, then light — MODE.WORKMODE defaults to
+    // 00, and only the I2C write in `enable()` sets 01. Any stage running
+    // earlier — notably the FSBL, which has no I2C — therefore renders onto a
+    // dark panel. The delay has been removed; do not re-add it to a shipping
+    // path.
 
     // SAFETY: the secure-alias RCC AHB2ENR1; `gpio_rcc_bit` maps the port to
     // its own enable bit, so this RMW touches no other driver's bit.
@@ -251,13 +271,14 @@ pub fn init() -> bool {
         );
     }
 
-    // Order: current/OVP limits first, brightness (LSB then MSB, per datasheet),
-    // and only then leave Standby for Backlight mode.
+    // Order: current/OVP limits first, brightness (LSB then MSB, per datasheet).
+    // Leaving Standby for Backlight mode is `enable()`'s job, not this one's.
     //
     // DO NOT ENABLE THE BOOST AFTER A FAILED PREREQUISITE. This used to be
     // `ok &= write_reg(..)` five times, which wrote REG_MODE — the boost enable
-    // — unconditionally even when an earlier write had NACKed. Bailing avoids
-    // the worst case: enabling with REG_BSTCTR1 unwritten leaves OVP at the
+    // — unconditionally even when an earlier write had NACKed. Returning `None`
+    // withholds the `Configured` token `enable()` requires, which avoids the
+    // worst case: enabling with REG_BSTCTR1 unwritten leaves OVP at the
     // part's 38 V default, far above C140's 25 V rating.
     //
     // NOT a claim that OVPSEL=001 makes this safe. Awinic V1.2 specifies that
@@ -278,12 +299,20 @@ pub fn init() -> bool {
     ] {
         if !write_reg(reg, val) {
             secure_log!("[S] aw99703: NACK on reg {:#04x} — NOT enabling the boost", reg);
-            return false;
+            return None;
         }
     }
+    Some(Configured(()))
+}
+
+/// Stage 2 of 2: leave Standby for Backlight mode — the write that emits
+/// light. Call only once the panel shows content the caller has defined
+/// (#730). Consumes the [`Configured`] token, so it is unreachable after a
+/// failed [`configure`]. Returns `true` if the chip ACKed.
+pub fn enable(_proof: Configured) -> bool {
     let ok = write_reg(REG_MODE, MODE_I2C_LINEAR_BACKLIGHT);
     secure_log!(
-        "[S] aw99703: backlight init {}",
+        "[S] aw99703: backlight enable {}",
         if ok { "ACK" } else { "NACK" }
     );
     ok

@@ -438,6 +438,13 @@ fn init_dc_res_gpios() {
     // NOTE: on pq1 this alone may not light the panel — LCM_EN gates an
     // AW99703 whose brightness is set over I2C2 at 0x36, and the FSBL has no
     // I2C stage. Necessary, not sufficient; see the module header.
+    //
+    // HWEN high only reaches Standby, which emits no light, so asserting it
+    // HERE — before reset/init/fill — is correct. When #705 adds the I2C
+    // stage, the write that leaves Standby must NOT go here: it belongs after
+    // `fill_screen` in `Lcd::init`, because DISPON (end of the init sequence)
+    // would otherwise show undefined GRAM on a lit panel (#730). The secure
+    // driver's `aw99703::configure()` / `enable()` split is the shape to copy.
     if let Some((port, pin)) = board::LCD_BACKLIGHT_EN {
         wr(greg(port, board::GPIO_BSRR_OFF), 1 << pin);
         config_output_pin(port, pin);

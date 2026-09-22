@@ -789,14 +789,9 @@ pub fn init() {
     init_dc_res_gpios();
     // pq1: LCM_EN (asserted just above) is only the AW99703's HWEN. Program
     // the backlight over I2C2 or the panel stays dark whatever SPI does.
+    // Stage 1 only: limits + brightness, chip left in Standby (still dark).
     #[cfg(feature = "board-pq1")]
-    {
-        // `init()` logs its own ACK/NACK. Deliberately NOT stored in a static
-        // here: a flag with no consumer changes nothing and reads as handling
-        // that does not exist. What this needs is a failure POLICY (does a dark
-        // panel block the boot?), which is the open owner decision in #705.
-        let _ = crate::hw::aw99703::init();
-    }
+    let backlight = crate::hw::aw99703::configure();
 
     // Reset the panel the way this board can. iota2 has its RES strapped to
     // 3V3 (PD15 and PE14 both proved un-drivable during bring-up), so it
@@ -810,6 +805,25 @@ pub fn init() {
     delay_ms(150);
     run_init_sequence();
     fill_screen(0x0000);
+
+    // #730: light the panel only NOW, once its content is defined. DISPON is
+    // the last command of `run_init_sequence`, so enabling the backlight
+    // before `fill_screen` lit whatever GRAM held for ~170 ms. Same shape is
+    // required of the FSBL driver #705 will add — that one cannot be patched.
+    //
+    // The ACK is logged inside `enable()` and deliberately not stored: a flag
+    // with no consumer reads as handling that does not exist. What this needs
+    // is a failure POLICY (does a dark panel block the boot?), the open owner
+    // decision in #705.
+    #[cfg(feature = "board-pq1")]
+    if let Some(configured) = backlight {
+        let _ = crate::hw::aw99703::enable(configured);
+    }
+    // iota2 is NOT covered by this fix: its ER-TFTM1.65-2 backlight is
+    // hard-wired on (`board::LCD_BACKLIGHT_EN == None`), so the same
+    // DISPON -> fill window is lit there. Bench-only board; closing it would
+    // mean moving DISPON after the first fill, which re-validates the vendor
+    // init sequence.
 }
 
 /// Phase-B bench bring-up (`lcd-test` feature): set up SPI1 + the LCD, then
@@ -827,14 +841,9 @@ pub fn lcd_test_loop() -> ! {
     init_dc_res_gpios(); // DC = PE7 (the PE14/RES config is now unused)
     // pq1: LCM_EN (asserted just above) is only the AW99703's HWEN. Program
     // the backlight over I2C2 or the panel stays dark whatever SPI does.
+    // Stage 1 only (#730) — enabled after the first fill below.
     #[cfg(feature = "board-pq1")]
-    {
-        // `init()` logs its own ACK/NACK. Deliberately NOT stored in a static
-        // here: a flag with no consumer changes nothing and reads as handling
-        // that does not exist. What this needs is a failure POLICY (does a dark
-        // panel block the boot?), which is the open owner decision in #705.
-        let _ = crate::hw::aw99703::init();
-    }
+    let backlight = crate::hw::aw99703::configure();
     secure_log!("[LCD-TEST] dc gpio done");
     // Software reset first (RES is tied to 3V3, so no hardware-reset pulse).
     write_cmd(0x01); // SWRESET
@@ -873,6 +882,10 @@ pub fn lcd_test_loop() -> ! {
     let t0 = unsafe { core::ptr::read_volatile(0xE000_1004 as *mut u32) };
     fill_screen(0x07E0); // measured green repaint
     let dt = unsafe { core::ptr::read_volatile(0xE000_1004 as *mut u32) }.wrapping_sub(t0);
+    #[cfg(feature = "board-pq1")]
+    if let Some(configured) = backlight {
+        let _ = crate::hw::aw99703::enable(configured);
+    }
     let us = dt / 160; // 160 cycles/µs @160 MHz
     secure_log!(
         "[LCD-TEST] full repaint = {} us ({} cyc) ~ {} fps",
