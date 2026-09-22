@@ -40,10 +40,69 @@ INS_V2_SIGN_OFFCHAIN = 0x62
 OFFCHAIN_KIND_RAW32 = 0
 OFFCHAIN_KIND_PERSONAL_SIGN = 1
 OFFCHAIN_KIND_EIP712_TYPED = 2
+OFFCHAIN_KIND_EIP712_TYPED_V3 = 3
 OFFCHAIN_FLAG_ACCOUNT_DEPLOYED = 0x01
+
+# proto/src/lib.rs bounds. The device refuses a payload past these, so building
+# one is a client bug worth catching here rather than as a gateway refusal.
+MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN = 512
+MAX_OFFCHAIN_EIP712_NESTED_LEN = 2048
 C10_SIG_LEN = 4008
 EIP6492_BLOB_LEN = 8608
 EIP6492_MAGIC = bytes.fromhex("6492649264926492649264926492649264926492649264926492649264926492")
+
+
+def build_eip712_payload(
+    domain_separator: bytes,
+    primary_type_hash: bytes,
+    encoded_data: bytes,
+    trailer: bytes,
+    nested_blob: bytes | None = None,
+) -> bytes:
+    """Build a kind-2 or kind-3 `CMD_SIGN_OFFCHAIN` payload.
+
+    Layouts, from `proto/src/lib.rs::MAX_OFFCHAIN_EIP712_TYPED{,_V3}_LEN`:
+
+        kind 2  domainSep_present(2) | domainSeparator(32) | primaryTypeHash(32)
+                | encoded_data_len(2) | encoded_data
+                | trailer_len(2) | trailer
+
+        kind 3  ... | encoded_data
+                | nested_blob_len(2) | nested_blob          <- V3 only
+                | trailer_len(2) | trailer
+
+    `nested_blob is None` selects kind 2; any bytes value (including `b""`)
+    selects kind 3, because an EMPTY witness section is a meaningful V3 request
+    and must stay distinguishable from "no section at all".
+
+    Pure so `tools/test_hid_sign_offchain.py` can pin the layout without a
+    device — kinds 2 and 3 have never run on silicon (#693), so the wire
+    construction is currently unverified by anything else.
+    """
+    if len(domain_separator) != 32:
+        raise ValueError(f"domain_separator must be 32 B, got {len(domain_separator)}")
+    if len(primary_type_hash) != 32:
+        raise ValueError(f"primary_type_hash must be 32 B, got {len(primary_type_hash)}")
+    if len(encoded_data) > MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN:
+        raise ValueError(
+            f"encoded_data is {len(encoded_data)} B, device cap is "
+            f"{MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN}"
+        )
+    if not trailer:
+        # The ERC-7730 trailer is what binds the typed data to an authenticated
+        # descriptor. Without it the device has nothing to render and refuses.
+        raise ValueError("an ERC-7730 trailer is required for kinds 2 and 3")
+    out = u16(1) + domain_separator + primary_type_hash
+    out += u16(len(encoded_data)) + encoded_data
+    if nested_blob is not None:
+        if len(nested_blob) > MAX_OFFCHAIN_EIP712_NESTED_LEN:
+            raise ValueError(
+                f"nested_blob is {len(nested_blob)} B, device cap is "
+                f"{MAX_OFFCHAIN_EIP712_NESTED_LEN}"
+            )
+        out += u16(len(nested_blob)) + nested_blob
+    out += u16(len(trailer)) + trailer
+    return out
 
 
 def main() -> int:
@@ -60,9 +119,16 @@ def main() -> int:
                       help="EIP-712 typed data (kind 2). FIXTURE is "
                            "[domain_separator(32) | primary_type_hash(32) | ERC-7730 trailer], "
                            "the layout build.rs emits from the catalogue")
+    kind.add_argument("--eip712-v3", default=None, metavar="FIXTURE",
+                      help="same fixture layout as --eip712, sent as kind 3 "
+                           "(EIP712_TYPED_V3): inserts the descriptor-selected "
+                           "display-witness section before the trailer")
     ap.add_argument("--encoded-data", default=None,
                     help="hex EIP-712 encodeData body for --eip712 (no type hash); default is the "
                          "e2e Delegation body abi.encode(0x42*20, 7, 2000000000)")
+    ap.add_argument("--nested-blob", default=None,
+                    help="hex display-witness stream for --eip712-v3 (default: "
+                         "empty, i.e. a descriptor that selects no witnesses)")
     ap.add_argument("--out", default="offchain_response.bin")
     args = ap.parse_args()
 
@@ -80,8 +146,9 @@ def main() -> int:
         # usb-protocol-v2.md §0x62 kind 2:
         #   [u16 BE = 1][domain_separator 32][primary_type_hash 32]
         #   [u16 BE encoded_data_len][encoded_data][u16 BE trailer_len][trailer]
-        k = OFFCHAIN_KIND_EIP712_TYPED
-        fixture = open(args.eip712, "rb").read()
+        is_v3 = args.eip712_v3 is not None
+        k = OFFCHAIN_KIND_EIP712_TYPED_V3 if is_v3 else OFFCHAIN_KIND_EIP712_TYPED
+        fixture = open(args.eip712_v3 if is_v3 else args.eip712, "rb").read()
         if len(fixture) <= 64:
             print(f"!! fixture must carry a trailer, got {len(fixture)} B")
             return 2
@@ -92,9 +159,16 @@ def main() -> int:
             encoded_data = (bytes(12) + bytes([0x42] * 20)
                             + (7).to_bytes(32, "big")
                             + (2_000_000_000).to_bytes(32, "big"))
-        payload = (u16(1) + domain_separator + primary_type_hash
-                   + u16(len(encoded_data)) + encoded_data
-                   + u16(len(trailer)) + trailer)
+        nested = None
+        if is_v3:
+            nested = bytes.fromhex((args.nested_blob or "").removeprefix("0x"))
+        try:
+            payload = build_eip712_payload(
+                domain_separator, primary_type_hash, encoded_data, trailer, nested
+            )
+        except ValueError as e:
+            print(f"!! {e}")
+            return 2
     flags = OFFCHAIN_FLAG_ACCOUNT_DEPLOYED if args.deployed else 0
     want_len = 8 + (C10_SIG_LEN if args.deployed else EIP6492_BLOB_LEN)
 
@@ -142,7 +216,7 @@ def main() -> int:
         "sender": "0x" + sender.hex(),
         "newLocalOffchainCount": count,
     }
-    if k == OFFCHAIN_KIND_EIP712_TYPED:
+    if k in (OFFCHAIN_KIND_EIP712_TYPED, OFFCHAIN_KIND_EIP712_TYPED_V3):
         # The verifier recomputes the dapp-level hash from these:
         # H = keccak256(0x1901 || domain_separator || keccak256(primary_type_hash || encoded_data))
         rec["domainSeparator"] = "0x" + domain_separator.hex()
