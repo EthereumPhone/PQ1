@@ -21,8 +21,10 @@
 //!   own lockout had a release-side hole — taps were swallowed.)
 //! * **The loop.** `run_flow` mirrors `confirm_px`'s text loop point for
 //!   point (guard, idle, deadline, single sentinel site) but animates: the
-//!   disc springs between screens, the trail follows, the hold floods the
-//!   disc, the returning ask sweeps and hints.
+//!   disc springs between screens, the trail follows, the chord floods the
+//!   disc, the returning ask sweeps and hints. Signing is the two-button
+//!   chord click on a commit-armed screen; hold-left declines; hold-right
+//!   does nothing.
 //!
 //! Nothing here touches the transcript's bytes: it reads the proven
 //! `Screens` and paints.
@@ -511,7 +513,22 @@ pub fn run_flow(screens: &Screens, deadline_expired: &mut dyn FnMut() -> bool) -
                         NavResult::Decline => {
                             decided = Some((PxOutcome::Declined, crate::fi::FAIL_SENTINEL));
                         }
+                        // Hold-right never signs on this path (the chord does).
+                        _ => anim.hold_release(now),
+                    }
+                }
+                // Both buttons down together: flood the disc as feedback while
+                // the chord is held (only where a sign is armed).
+                Gesture::Chord => {
+                    if sign_ok {
+                        anim.hold(Btn::Right, pqsigner_ui_px::motion::HOLD_COMMIT_MS, now);
+                    }
+                }
+                // Both released: the sign gesture (owner decision 2026-09-22).
+                Gesture::ChordClick => {
+                    match driver.apply(visible, NavGesture::Chord) {
                         NavResult::Sign => {
+                            anim.hold_commit(now);
                             // The ONE affirmative site.
                             let gate = commit_armed.check_sentinel();
                             if gate == crate::fi::OK_SENTINEL && !deadline_expired() {
@@ -529,17 +546,18 @@ pub fn run_flow(screens: &Screens, deadline_expired: &mut dyn FnMut() -> bool) -
                     NavResult::PageTurned => anim.flip_page(driver.page(), now),
                     _ => {}
                 },
-                Gesture::HoldStart(_) | Gesture::Release(_) | Gesture::DoubleTap(_) | Gesture::Chord => {}
+                Gesture::HoldStart(_) | Gesture::Release(_) | Gesture::DoubleTap(_) => {}
             }
         }
         if let Some(d) = decided {
             break d;
         }
-        // Hold fill: only on an armed side ("nothing draws on an unarmed side").
+        // Hold fill: only on an armed side ("nothing draws on an unarmed
+        // side") — hold-left declines; hold-right is armed nowhere.
         if let Some((side, held)) = fsm.hold_progress(now) {
             let show = match side {
                 Btn::Left => armed.decline,
-                Btn::Right => sign_ok,
+                Btn::Right => false,
             };
             if show {
                 anim.hold(side, held, now);

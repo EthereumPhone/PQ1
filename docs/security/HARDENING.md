@@ -47,10 +47,25 @@ There is no legitimate NSC call that returns the seed, the mnemonic, the SPHINCS
 
 Two consent policies coexist, by path, since 2026-09-22:
 
-| Path | Hold-right-to-sign is armed… | Since |
+| Path | The sign gesture is armed… | Since |
 |---|---|---|
-| Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
+| Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right / chord is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
 | Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`, pilot = Safe flow) | on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) and the returning ask; **never on a detail** | owner decision 2026-09-22, following PQ-UI `DESIGN.md` § Input "Commit arming" |
+
+**UPDATE 2026-09-22 (later the same day, owner decision on the EVT):** on the
+pixel path the sign gesture is the **two-button chord click** — both buttons
+down together, the sign fires when both are released
+(`InputFsm` → `Gesture::ChordClick` → `FlowDriver` `Gesture::Chord` →
+`NavResult::Sign`) — not the design's 2 s hold-right, which is now a no-op
+everywhere on that path (hold-left still declines everywhere). Rationale:
+parity with the legacy dialog, whose `hw::buttons::wait_event` has always
+synthesised the two-button chord as the confirm. Residual accepted: the sign
+is an instantaneous gesture rather than a 2 s deliberate hold, so a squeeze
+on a commit-armed screen signs; a chord formed from the post-tap window (one
+side already up) never clicks, so a fast left-tap-then-right-tap cannot
+sign, and details remain unarmed. The `FihBool` gate and single
+`OK_SENTINEL` site are unchanged. PQ-UI `DESIGN.md` § Input (vendored) still
+describes hold-right; the device deviates here and in `TAP_MAX_MS` (500 ms).
 
 The pixel path intentionally re-opens the class the 2026-06-26 fix closed for
 that path only: a user can sign from the opening ask without paging through

@@ -106,15 +106,18 @@ per side, first edge exact), replayed with their timestamps, and the frame
 clock is read after the replay. `TAP_MAX_MS` is **500 ms on the device**
 (the PQ-UI reference says 250): deliberate presses on the pq1 switches run
 250–400 ms and were being demoted to aborted holds ("only a double-click
-advances", EVT #1 2026-09-22). Hold-to-sign still commits at 2000 ms; the
-fill rises from 500 to 2000 ms.
+advances", EVT #1 2026-09-22). **The sign gesture on the device is the
+two-button chord click** (both down together, fires on release; owner
+decision 2026-09-22 for parity with the legacy dialog) — hold-right is a
+no-op, hold-left declines; the disc floods while the chord is held. See
+`docs/security/HARDENING.md` § 2.4.
 
 ## Known gaps / next steps
 
 1. ~~Run on the EVT~~ — done 2026-09-22 over the cable-free DFU loop
    (`FEAT_S=... tools/evt-dev-flash.sh`, `tools/hid_sign_safe.py`): strip
    orientation correct, `ui-px-spi40` clean, ≈ 40 fps on the sweep, taps and
-   hold-right verified after the fixes above. Next lever if more is wanted:
+   the chord sign verified after the fixes above. Next lever if more is wanted:
    GPDMA for the SPI stream so render and blit overlap (≈ 13 ms frames).
 2. **Endings during the sign:** the design's qubit loading film is not
    implemented; signing shows the legacy progress text painted through the

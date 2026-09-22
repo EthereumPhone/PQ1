@@ -8,11 +8,13 @@
 //! * **A tap turns the page first**: right shows the next page until the
 //!   last, then the next screen; left the previous page until the first,
 //!   then the previous screen, entered on its LAST page (left undoes right).
-//! * **Declining is always cheap; signing is not**: hold-left is armed on
-//!   every navigable screen; hold-right only where the screen carries
-//!   `commit` (a hero or the `Confirm?`). A hold on an unarmed side is a
-//!   no-op — never demoted into navigation, so a stray long press can neither
-//!   sign nor skip content.
+//! * **Declining is always cheap**: hold-left is armed on every navigable
+//!   screen. **Signing is the two-button chord click** (both sides down
+//!   together, fires when both are released — owner decision 2026-09-22,
+//!   parity with the legacy dialog), and only where the screen carries
+//!   `commit` (a hero or the `Confirm?`). Hold-right is a no-op everywhere,
+//!   as is any hold on an unarmed side — never demoted into navigation, so
+//!   a stray long press can neither sign nor skip content.
 //! * Status screens are not part of a confirmation transcript; every screen
 //!   here is navigable.
 //!
@@ -36,6 +38,8 @@ pub enum Gesture {
     Tap(Btn),
     /// A hold that reached `HOLD_COMMIT_MS` and fired.
     HoldCommit(Btn),
+    /// The two-button click (both down together, both released).
+    Chord,
 }
 
 /// What a gesture did.
@@ -47,7 +51,7 @@ pub enum NavResult {
     Moved,
     /// Turned a page within the current screen.
     PageTurned,
-    /// Hold-right on a commit-armed screen.
+    /// The chord click on a commit-armed screen.
     Sign,
     /// Hold-left anywhere.
     Decline,
@@ -157,7 +161,10 @@ impl FlowDriver {
         }
         match g {
             Gesture::HoldCommit(Btn::Left) => NavResult::Decline,
-            Gesture::HoldCommit(Btn::Right) => {
+            // Hold-right signs nothing (the chord does); it is not navigation
+            // either.
+            Gesture::HoldCommit(Btn::Right) => NavResult::Ignored,
+            Gesture::Chord => {
                 if self.armed(screens).sign {
                     NavResult::Sign
                 } else {
@@ -234,11 +241,12 @@ mod kani_harnesses {
         let screens = &buf[..n];
         let mut d = FlowDriver::new(screens).unwrap();
         for _ in 0..12 {
-            let g = match kani::any::<u8>() % 4 {
+            let g = match kani::any::<u8>() % 5 {
                 0 => Gesture::Tap(Btn::Left),
                 1 => Gesture::Tap(Btn::Right),
                 2 => Gesture::HoldCommit(Btn::Left),
-                _ => Gesture::HoldCommit(Btn::Right),
+                3 => Gesture::HoldCommit(Btn::Right),
+                _ => Gesture::Chord,
             };
             let before = d.index();
             let r = d.apply(screens, g);
@@ -320,14 +328,17 @@ mod tests {
     fn arming_follows_the_design() {
         let f = flow();
         let mut d = FlowDriver::new(&f).unwrap();
-        // Opening hero arms sign.
+        // Opening hero arms sign: the chord signs, hold-right never does.
         assert!(d.armed(&f).sign);
-        assert_eq!(d.apply(&f, Gesture::HoldCommit(Btn::Right)), NavResult::Sign);
-        // Details never do; the hold is a no-op, not navigation.
+        assert_eq!(d.apply(&f, Gesture::HoldCommit(Btn::Right)), NavResult::Ignored);
+        assert_eq!(d.index(), 0);
+        assert_eq!(d.apply(&f, Gesture::Chord), NavResult::Sign);
+        // Details never do; the chord and the hold are no-ops, not navigation.
         d.apply(&f, Gesture::Tap(Btn::Right));
         assert!(!d.armed(&f).sign);
         let before = (d.index(), d.page());
         assert_eq!(d.apply(&f, Gesture::HoldCommit(Btn::Right)), NavResult::Ignored);
+        assert_eq!(d.apply(&f, Gesture::Chord), NavResult::Ignored);
         assert_eq!((d.index(), d.page()), before);
         // Decline everywhere.
         assert!(d.armed(&f).decline);
@@ -338,7 +349,8 @@ mod tests {
         d.apply(&f, Gesture::Tap(Btn::Right));
         assert_eq!(d.index(), 3);
         assert!(d.armed(&f).sign);
-        assert_eq!(d.apply(&f, Gesture::HoldCommit(Btn::Right)), NavResult::Sign);
+        assert_eq!(d.apply(&f, Gesture::HoldCommit(Btn::Right)), NavResult::Ignored);
+        assert_eq!(d.apply(&f, Gesture::Chord), NavResult::Sign);
     }
 
     #[test]
@@ -363,6 +375,7 @@ mod tests {
         let f = [hero(), hero()];
         let mut d = FlowDriver::new(&f).unwrap();
         assert_eq!(d.apply(&f, Gesture::Tap(Btn::Right)), NavResult::Ignored);
-        assert_eq!(d.apply(&f, Gesture::HoldCommit(Btn::Right)), NavResult::Sign);
+        assert_eq!(d.apply(&f, Gesture::HoldCommit(Btn::Right)), NavResult::Ignored);
+        assert_eq!(d.apply(&f, Gesture::Chord), NavResult::Sign);
     }
 }

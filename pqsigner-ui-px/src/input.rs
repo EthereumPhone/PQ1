@@ -11,9 +11,12 @@
 //!   earlier release (the fill snaps back);
 //! * `Chord` when the other side goes down while one is down, or within
 //!   `CHORD_MS` of its tap — both sides are consumed and **both hold clocks
-//!   stop**, so a two-thumb press can never complete a sign. Navigation
-//!   screens leave the chord unbound (`InputCtx::chord_bound = false`), in
-//!   which case it is reported and ignored by the driver;
+//!   stop**, so a two-thumb press never completes a *hold*;
+//! * `ChordClick` when a chord that was formed with **both sides physically
+//!   down together** has released both sides. This is the sign gesture on
+//!   the device (owner decision 2026-09-22, parity with the legacy dialog's
+//!   two-button confirm); a chord formed from the post-tap window never
+//!   clicks, so a fast left-tap-then-right-tap cannot sign;
 //! * `DoubleTap` only in entry contexts (`double_tap_bound`), so navigation
 //!   taps never wait (DESIGN.md: "double-tap never delays a tap").
 //!
@@ -38,6 +41,8 @@ pub enum Gesture {
     HoldCommit(Btn),
     HoldCancel(Btn),
     Chord,
+    /// Both sides were down together and both have been released.
+    ChordClick,
 }
 
 /// Up to four gestures per poll.
@@ -112,6 +117,9 @@ pub struct InputFsm {
     left: SideState,
     right: SideState,
     ctx: InputCtx,
+    /// A chord is live (both sides consumed) and it was formed with both
+    /// sides physically down — releasing both will be a `ChordClick`.
+    chord_overlap: bool,
     /// Latest `now` seen; `poll` never lets time run backwards (a presenter
     /// that replays timestamped edges and then polls with a stale clock
     /// would otherwise measure a wrapped, multi-hour hold and fire a commit).
@@ -148,6 +156,7 @@ impl InputFsm {
                 last_tap_at: None,
             },
             ctx,
+            chord_overlap: false,
             last_now: 0,
             started: false,
         }
@@ -250,8 +259,8 @@ impl InputFsm {
         if level {
             // ---- press ----
             let other = *self.side(Self::other(btn));
-            let chord = other.down
-                || other.last_tap_at.is_some_and(|t| after(now, t) <= CHORD_MS);
+            let overlap = other.down;
+            let chord = overlap || other.last_tap_at.is_some_and(|t| after(now, t) <= CHORD_MS);
             let s = self.side_mut(btn);
             s.down = true;
             s.t_edge = now;
@@ -270,6 +279,7 @@ impl InputFsm {
                 if was_holding {
                     ev.push(Gesture::HoldCancel(Self::other(btn)));
                 }
+                self.chord_overlap = overlap;
                 ev.push(Gesture::Chord);
                 return;
             }
@@ -296,6 +306,16 @@ impl InputFsm {
             if s.consumed {
                 s.consumed = false;
                 ev.push(Gesture::Release(btn));
+                // The click fires when the LAST side of an overlapping chord
+                // comes up; a chord entered from the post-tap window (the
+                // other side is already up) only ever reports `Chord`.
+                let other_down = self.side(Self::other(btn)).down;
+                if !other_down {
+                    if self.chord_overlap {
+                        ev.push(Gesture::ChordClick);
+                    }
+                    self.chord_overlap = false;
+                }
                 return;
             }
             ev.push(Gesture::Release(btn));
@@ -370,12 +390,43 @@ mod tests {
         assert!(f.poll(3500, true, true).is_empty());
         assert!(f.hold_progress(3500).is_none());
         let ev = collect(f.poll(3600, false, false));
-        assert_eq!(ev, [Gesture::Release(Btn::Left), Gesture::Release(Btn::Right)]);
-        // Chord within CHORD_MS of the other side's tap.
+        assert_eq!(ev, [Gesture::Release(Btn::Left), Gesture::Release(Btn::Right), Gesture::ChordClick]);
+        // Chord within CHORD_MS of the other side's tap: reported, never clicks.
         let mut f = InputFsm::new(InputCtx::NAV);
         f.poll(0, true, false);
         f.poll(100, false, false); // tap left at 100
         assert_eq!(collect(f.poll(200, false, true)), [Gesture::Chord]);
+        assert_eq!(collect(f.poll(300, false, false)), [Gesture::Release(Btn::Right)]);
+        assert!(f.poll(400, false, false).is_empty());
+    }
+
+    #[test]
+    fn chord_click_fires_on_the_last_release_only() {
+        // Both down together (skewed thumbs), released in either order: one
+        // ChordClick, on the second release, then nothing.
+        for right_first in [false, true] {
+            let mut f = InputFsm::new(InputCtx::NAV);
+            assert_eq!(collect(f.poll(0, true, false)), [Gesture::Press(Btn::Left)]);
+            assert_eq!(collect(f.poll(40, true, true)), [Gesture::Chord]);
+            assert!(f.poll(300, true, true).is_empty());
+            let (a, b) = if right_first { ((true, false), Btn::Right) } else { ((false, true), Btn::Left) };
+            assert_eq!(collect(f.poll(400, a.0, a.1)), [Gesture::Release(b)]);
+            let last = if right_first { Btn::Left } else { Btn::Right };
+            assert_eq!(collect(f.poll(500, false, false)), [Gesture::Release(last), Gesture::ChordClick]);
+            assert!(f.poll(600, false, false).is_empty());
+            // A following ordinary tap is unaffected.
+            assert_eq!(collect(f.poll(700, false, true)), [Gesture::Press(Btn::Right)]);
+            assert_eq!(collect(f.poll(800, false, false)), [Gesture::Release(Btn::Right), Gesture::Tap(Btn::Right)]);
+        }
+        // A chord never clicks while either side is still down, and never
+        // becomes a hold no matter how long it is held.
+        let mut f = InputFsm::new(InputCtx::NAV);
+        f.poll(0, false, true);
+        f.poll(30, true, true);
+        assert!(f.poll(5000, true, true).is_empty());
+        assert!(f.hold_progress(5000).is_none());
+        assert_eq!(collect(f.poll(5100, true, false)), [Gesture::Release(Btn::Right)]);
+        assert!(f.poll(5200, true, false).is_empty());
     }
 
     #[test]

@@ -8,13 +8,16 @@
 //! return, and the `OK_SENTINEL` is minted at exactly one site — but the
 //! navigation is DESIGN.md § Input (`FlowDriver`), not the 16×4 page grammar.
 //!
-//! # Consent policy (owner decision 2026-09-22)
+//! # Consent policy (owner decisions 2026-09-22)
 //!
-//! The design arms hold-right-to-sign on the opening ask, the auto-inserted
-//! `Confirm?` and the returning ask — never on a detail. The legacy 16×4
-//! path keeps its 2026-06-26 scroll-to-end gate (`confirm_core::seen_last`);
-//! this path follows the design. [`PX_COMMIT_REQUIRES_SEEN_LAST`] is the one
-//! switch: `true` demotes a hold-right before the returning ask has been
+//! Signing is armed on the opening ask, the auto-inserted `Confirm?` and the
+//! returning ask — never on a detail. The sign gesture on the device is the
+//! **two-button chord click** (both down together, fires on release; parity
+//! with the legacy dialog's two-button confirm); hold-right is a no-op and
+//! hold-left declines everywhere. The legacy 16×4 path keeps its 2026-06-26
+//! scroll-to-end gate (`confirm_core::seen_last`); this path follows the
+//! design's arming. [`PX_COMMIT_REQUIRES_SEEN_LAST`] is the one switch:
+//! `true` demotes a sign gesture before the returning ask has been
 //! displayed to a no-op, restoring scroll-to-end semantics on this path too.
 //! The loop maintains `seen_last` either way so the flip needs no other
 //! change. Recorded in `docs/security/HARDENING.md` § 2.4.
@@ -28,8 +31,8 @@ use pqsigner_ui_px::driver::{Btn, FlowDriver, Gesture, NavResult};
 use pqsigner_ui_px::Screens;
 
 /// `true` restores the 2026-06-26 scroll-to-end gate on the pixel path:
-/// hold-right signs only after the returning ask has been displayed. Owner
-/// decision 2026-09-22: follow the design (`false`).
+/// the sign chord works only after the returning ask has been displayed.
+/// Owner decision 2026-09-22: follow the design (`false`).
 pub const PX_COMMIT_REQUIRES_SEEN_LAST: bool = false;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -142,11 +145,14 @@ fn confirm_inner(screens: &Screens, deadline_expired: &mut dyn FnMut() -> bool) 
             // A button event IS real user activity — the only reset site.
             timeout::reset_activity();
 
+            // The legacy input backends encode the two-button confirm chord
+            // as `(Right, Long)` (`hw::buttons::wait_event`; semihosting `L`),
+            // so on this text path that event IS the chord.
             let gesture = match event {
                 (Button::Left, Press::Short) => Gesture::Tap(Btn::Left),
                 (Button::Right, Press::Short) => Gesture::Tap(Btn::Right),
                 (Button::Left, Press::Long) => Gesture::HoldCommit(Btn::Left),
-                (Button::Right, Press::Long) => Gesture::HoldCommit(Btn::Right),
+                (Button::Right, Press::Long) => Gesture::Chord,
             };
             match driver.apply(visible, gesture) {
                 NavResult::Decline => return (LoopResult::Cancelled, crate::fi::FAIL_SENTINEL),
