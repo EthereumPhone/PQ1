@@ -41,18 +41,18 @@ use super::GatewayArgs;
 /// Prodtest firmware version. Bumped on every prodtest behavioral
 /// change so the factory's traceability DB can correlate per-unit
 /// diagnostic data with the firmware version that produced it.
-const PRODTEST_FW_VERSION: u32 = 5;
+const PRODTEST_FW_VERSION: u32 = sphincs_tz_shared::PRODTEST_FW_VERSION;
 
 /// STM32U585 chip UID, 96 bits at `0x0BFA_0700` per RM0456 §28.10.
 const STM32_UID_ADDR: u32 = 0x0BFA_0700;
-const STM32_UID_LEN: usize = 12;
+const STM32_UID_LEN: usize = sphincs_tz_shared::PRODTEST_STM32_UID_LEN;
 
 // ---------------------------------------------------------------------------
 // CMD_PRODTEST_GET_ID (100)
 // ---------------------------------------------------------------------------
 
 /// Output layout: 12 B UID || 4 B fw version (LE) || 8 B reserved.
-const GET_ID_OUT_LEN: usize = 24;
+const GET_ID_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_GET_ID_OUT_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — NS pointer derefs only after
@@ -198,7 +198,7 @@ fn render_lcd_pattern(pattern: u32) {
 // CMD_PRODTEST_SAES_SELFTEST (102) — Phase B
 // ---------------------------------------------------------------------------
 
-const SAES_FINGERPRINT_LEN: usize = 8;
+const SAES_FINGERPRINT_LEN: usize = sphincs_tz_shared::PRODTEST_SAES_FINGERPRINT_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — writes 8 bytes to NS after
@@ -249,7 +249,7 @@ pub(super) unsafe fn cmd_saes_selftest_run(args: &GatewayArgs) -> u32 {
 // CMD_PRODTEST_BHK_SELFTEST (103) — Phase B
 // ---------------------------------------------------------------------------
 
-const BHK_FINGERPRINT_LEN: usize = 8;
+const BHK_FINGERPRINT_LEN: usize = sphincs_tz_shared::PRODTEST_BHK_FINGERPRINT_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — writes an eight-byte zero diagnostic after
@@ -368,7 +368,7 @@ pub(super) unsafe fn cmd_trng_sample_run(args: &GatewayArgs) -> u32 {
 // minimum (8 bytes) without padding overhead. Tests can also feed
 // these bytes into the fixture's per-die uniqueness DB.
 
-const OPTIGA_HANDSHAKE_RNG_LEN: usize = 16;
+const OPTIGA_HANDSHAKE_RNG_LEN: usize = sphincs_tz_shared::PRODTEST_OPTIGA_HANDSHAKE_RNG_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — writes 16 bytes to NS after
@@ -420,7 +420,7 @@ pub(super) unsafe fn cmd_optiga_handshake_run(args: &GatewayArgs) -> u32 {
 //   - default SCP03 keys missing / pre-rotated (factory replacement)
 //   - chip RNG defect
 
-const SE050_HANDSHAKE_RNG_LEN: usize = 16;
+const SE050_HANDSHAKE_RNG_LEN: usize = sphincs_tz_shared::PRODTEST_SE050_HANDSHAKE_RNG_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — writes 16 bytes to NS after
@@ -529,20 +529,20 @@ pub(super) unsafe fn cmd_usb_loopback_run(args: &GatewayArgs) -> u32 {
 // that the press registered at all is the diagnostic signal; precise
 // µs timing adds no information.
 
-const BUTTON_TEST_TIMEOUT_MS: u32 = 10_000;
+const BUTTON_TEST_TIMEOUT_MS: u32 = sphincs_tz_shared::PRODTEST_BUTTON_TEST_TIMEOUT_MS;
 const BUTTON_TEST_DEBOUNCE_MS: u32 = 30;
 const BUTTON_TEST_POLL_MS: u32 = 5;
-const BUTTON_TEST_OUT_LEN: usize = 4;
+const BUTTON_TEST_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_BUTTON_TEST_OUT_LEN;
 
-const STEP_OK: u8 = 0x00;
-const STEP_LEFT_TIMEOUT: u8 = 0x11;
-const STEP_LEFT_WRONG: u8 = 0x12;
-const STEP_LEFT_STUCK: u8 = 0x13;
-const STEP_RIGHT_TIMEOUT: u8 = 0x21;
-const STEP_RIGHT_WRONG: u8 = 0x22;
-const STEP_RIGHT_STUCK: u8 = 0x23;
-const STEP_BOTH_TIMEOUT: u8 = 0x31;
-const STEP_BOTH_STUCK: u8 = 0x33;
+const STEP_OK: u8 = sphincs_tz_shared::PRODTEST_STEP_OK;
+const STEP_LEFT_TIMEOUT: u8 = sphincs_tz_shared::PRODTEST_STEP_LEFT_TIMEOUT;
+const STEP_LEFT_WRONG: u8 = sphincs_tz_shared::PRODTEST_STEP_LEFT_WRONG;
+const STEP_LEFT_STUCK: u8 = sphincs_tz_shared::PRODTEST_STEP_LEFT_STUCK;
+const STEP_RIGHT_TIMEOUT: u8 = sphincs_tz_shared::PRODTEST_STEP_RIGHT_TIMEOUT;
+const STEP_RIGHT_WRONG: u8 = sphincs_tz_shared::PRODTEST_STEP_RIGHT_WRONG;
+const STEP_RIGHT_STUCK: u8 = sphincs_tz_shared::PRODTEST_STEP_RIGHT_STUCK;
+const STEP_BOTH_TIMEOUT: u8 = sphincs_tz_shared::PRODTEST_STEP_BOTH_TIMEOUT;
+const STEP_BOTH_STUCK: u8 = sphincs_tz_shared::PRODTEST_STEP_BOTH_STUCK;
 
 #[cfg(all(feature = "gpio-buttons", feature = "ui-lcd"))]
 fn show_button_prompt(line0: &str, line1: &str) {
@@ -963,101 +963,16 @@ pub(super) unsafe fn cmd_rng_config_run(args: &GatewayArgs) -> u32 {
     NscStatus::Ok as u32
 }
 
-// ---------------------------------------------------------------------------
-// Host tests — pure helpers
-// ---------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn positive_get_id_output_layout() {
-        // 12 B UID + 4 B version + 8 B reserved = 24 B total. Pin
-        // the constant so a future re-shuffle of fields breaks the
-        // build (fixture parses on byte offsets).
-        assert_eq!(GET_ID_OUT_LEN, 24);
-        assert_eq!(STM32_UID_LEN, 12);
-    }
-
-    #[test]
-    fn positive_prodtest_fw_version_pinned() {
-        // The factory's traceability DB correlates this with
-        // per-unit diagnostic data. Drop a row in the operator
-        // manual every time this bumps.
-        assert_eq!(PRODTEST_FW_VERSION, 3);
-    }
-
-    #[test]
-    fn positive_trng_sample_cap_matches_proto_doc() {
-        assert_eq!(TRNG_SAMPLE_MAX, PRODTEST_MAX_RESPONSE_DATA_LEN);
-        assert_eq!(TRNG_SAMPLE_MAX, 254);
-    }
-
-    #[test]
-    fn positive_saes_fingerprint_len_matches_existing_self_test() {
-        // The existing `hw::saes::self_test` returns an 8-byte
-        // fingerprint. Prodtest mirrors that contract so the
-        // fixture's reference values stay reusable across builds.
-        assert_eq!(SAES_FINGERPRINT_LEN, 8);
-        assert_eq!(BHK_FINGERPRINT_LEN, 8);
-    }
-
-    #[test]
-    fn positive_phase_c_handshake_rng_lens_pinned() {
-        // Both handshake commands return 16 bytes — the fixture
-        // parses on these offsets in its per-die uniqueness DB. Any
-        // change here must also update `docs/provisioning/factory-prodtest.md`
-        // and the host runner.
-        assert_eq!(OPTIGA_HANDSHAKE_RNG_LEN, 16);
-        assert_eq!(SE050_HANDSHAKE_RNG_LEN, 16);
-    }
-
-    #[test]
-    fn positive_usb_loopback_cap_matches_proto_doc() {
-        // Cap matches TRNG_SAMPLE_MAX so the same caller-side buffer
-        // can be reused for both commands.
-        assert_eq!(USB_LOOPBACK_MAX, PRODTEST_MAX_RESPONSE_DATA_LEN);
-    }
-
-    #[test]
-    fn positive_button_test_step_codes_have_compact_layout() {
-        // Upper nibble = step (1, 2, 3); lower nibble = error kind
-        // (1=timeout, 2=wrong button, 3=release stuck — #453). The
-        // fixture's error table depends on this — change the encoding
-        // and the operator manual decoder also has to change.
-        assert_eq!(STEP_OK, 0x00);
-        assert_eq!(STEP_LEFT_TIMEOUT, 0x11);
-        assert_eq!(STEP_LEFT_WRONG, 0x12);
-        assert_eq!(STEP_LEFT_STUCK, 0x13);
-        assert_eq!(STEP_RIGHT_TIMEOUT, 0x21);
-        assert_eq!(STEP_RIGHT_WRONG, 0x22);
-        assert_eq!(STEP_RIGHT_STUCK, 0x23);
-        assert_eq!(STEP_BOTH_TIMEOUT, 0x31);
-        assert_eq!(STEP_BOTH_STUCK, 0x33);
-        // Compact-encoding invariant: per-step error nibbles are
-        // distinct and non-overlapping with success.
-        for code in [
-            STEP_LEFT_TIMEOUT,
-            STEP_LEFT_WRONG,
-            STEP_LEFT_STUCK,
-            STEP_RIGHT_TIMEOUT,
-            STEP_RIGHT_WRONG,
-            STEP_RIGHT_STUCK,
-            STEP_BOTH_TIMEOUT,
-            STEP_BOTH_STUCK,
-        ] {
-            assert_ne!(code, STEP_OK);
-            assert!((code >> 4) >= 1 && (code >> 4) <= 3);
-            assert!((code & 0x0F) >= 1 && (code & 0x0F) <= 3);
-        }
-    }
-
-    #[test]
-    fn positive_button_test_timeout_is_operator_friendly() {
-        // 10 s per step gives the operator enough time without
-        // making the per-unit test take forever (30 s total budget).
-        assert_eq!(BUTTON_TEST_TIMEOUT_MS, 10_000);
-        assert_eq!(BUTTON_TEST_OUT_LEN, 4);
-    }
-}
+// Host tests for this module's wire contract live in
+// `proto/src/lib.rs`'s `tests` module (`prodtest_*`), NOT here.
+//
+// #708: a `#[cfg(test)] mod tests` at this spot never compiled. The module is
+// `#![cfg(feature = "prodtest")]`, `prodtest` implies `stm32u585`, and that
+// does not build for the host — so eight tests reported neither pass nor fail
+// for as long as they existed. One asserted `PRODTEST_FW_VERSION == 3` while
+// the constant was already 5, and the operator manual had drifted with it.
+//
+// The constants above are now ALIASES over `pqsigner-proto`, so the values the
+// host tests pin are the values this firmware compiles. Anything asserted here
+// instead of there is asserted nowhere; `scripts/check_tests_actually_run.py`
+// fails the build if a `#[test]` reappears in an unreachable module.

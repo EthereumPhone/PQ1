@@ -51,7 +51,7 @@ irreversible authority from an exit-zero result.
 
 ## Command reference
 
-The prodtest firmware exposes 10 USB HID commands. All commands map
+The prodtest firmware exposes 13 USB HID commands. All commands map
 to `proto/src/lib.rs::CMD_PRODTEST_*`; keep these IDs STABLE so old
 field reports stay interpretable.
 
@@ -67,13 +67,16 @@ field reports stay interpretable.
 | 107 | `SE050_HANDSHAKE` | — | 16 B SE050 RNG | required |
 | 108 | `USB_LOOPBACK` | N B input (1..=254) | N B echo | required |
 | 109 | `BUTTON_TEST` | — | 4 B step_status | required |
+| 110 | `RGB_TEST` | 6 B `[r,g,b,gcc,en,rsv]` | 24 B scan ‖ ids ‖ reserved | required (pq1) |
+| 111 | `RGB_OSD` | 4 B `[gcc,en,rsv,rsv]` | 24 B open/short scan | required (pq1) |
+| 112 | `RNG_CONFIG` | — | 20 B `CR‖NSCR‖HTCR‖VER‖IDCODE` | required |
 
 The runner emits this matrix, the host-required secure/nonsecure feature lists,
-the 254-byte cap, and expected prodtest firmware version 3 in every JSON
+the 254-byte cap, and expected prodtest firmware version 5 in every JSON
 receipt. The feature lists state fixture/build policy; they are not a
 device-attested manifest. The versioned firmware behavior is bound separately
 by the `GET_ID` result.
-Its machine-readable policy classes are eight `required`, zero `optional`, and
+Its machine-readable policy classes are eleven `required`, zero `optional`, and
 two `unsupported` commands. An
 unexpected `Ok` from either unsupported command is profile drift and fails
 acceptance.
@@ -105,7 +108,7 @@ bytes 16..24  Reserved (zeroed; future: build-hash prefix)
 ```
 
 Pass criterion: UID is neither all-zero nor all-`0xFF` (factory-blank or
-fully-erased silicon), and the reported firmware version is exactly 3. A
+fully-erased silicon), and the reported firmware version is exactly 5. A
 different version is not interpreted under this profile: the runner records a
 firmware/profile mismatch, emits the atomic non-green receipt, and sends no
 subsequent command.

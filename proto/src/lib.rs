@@ -874,6 +874,84 @@ pub const PRODTEST_RNG_CONFIG_LEN: usize = 20;
 pub const PRODTEST_RGB_OSD_IN_LEN: usize = 4;
 pub const PRODTEST_RGB_OSD_OUT_LEN: usize = 24;
 
+// ---------------------------------------------------------------------------
+// Prodtest wire contract — buffer sizes, the fw-version stamp, and the
+// BUTTON_TEST step-status encoding.
+//
+// These live HERE rather than in `secure/src/nsc/prodtest.rs` because that
+// module is `#![cfg(feature = "prodtest")]`, `prodtest` implies `stm32u585`,
+// and `stm32u585` does not build for the host — so its `#[cfg(test)] mod
+// tests` never compiled and its eight tests never ran (#708). One of them
+// asserted `PRODTEST_FW_VERSION == 3` long after the constant reached 5: a
+// must-fail test reporting green for two releases.
+//
+// They are also wire facts in the strict sense: `tools/factory-prodtest-
+// runner.py` parses the responses on these byte offsets and decodes the step
+// codes by number, so the firmware and the fixture have to agree. A constant
+// that two programs must agree on belongs where both can see it tested.
+// ---------------------------------------------------------------------------
+
+/// Prodtest firmware version, stamped into [`CMD_PRODTEST_GET_ID`]'s response.
+///
+/// Bumped on every prodtest behavioural change so the factory's traceability
+/// DB can correlate per-unit diagnostic data with the firmware that produced
+/// it. `docs/provisioning/factory-prodtest.md` carries the per-version row;
+/// `prodtest_fw_version_is_documented` holds the two together.
+pub const PRODTEST_FW_VERSION: u32 = 5;
+
+/// STM32U585 chip UID: 96 bits at `0x0BFA_0700` (RM0456 §28.10).
+pub const PRODTEST_STM32_UID_LEN: usize = 12;
+
+/// [`CMD_PRODTEST_GET_ID`] response: 12 B UID || 4 B fw version (LE) || 8 B reserved.
+pub const PRODTEST_GET_ID_OUT_LEN: usize = 24;
+
+/// SAES self-test fingerprint width, mirroring `hw::saes::self_test` so the
+/// fixture's reference values stay reusable across builds.
+pub const PRODTEST_SAES_FINGERPRINT_LEN: usize = 8;
+
+/// BHK self-test diagnostic width — the negative-capability probe still has to
+/// return a well-formed buffer.
+pub const PRODTEST_BHK_FINGERPRINT_LEN: usize = 8;
+
+/// Bytes of SE-sourced randomness returned by each secure-element handshake.
+/// The fixture files these into its per-die uniqueness DB.
+pub const PRODTEST_OPTIGA_HANDSHAKE_RNG_LEN: usize = 16;
+pub const PRODTEST_SE050_HANDSHAKE_RNG_LEN: usize = 16;
+
+/// [`CMD_PRODTEST_BUTTON_TEST`] response width.
+pub const PRODTEST_BUTTON_TEST_OUT_LEN: usize = 4;
+
+/// Per-step operator patience budget. Three steps, so the whole interactive
+/// button test is bounded by three times this.
+pub const PRODTEST_BUTTON_TEST_TIMEOUT_MS: u32 = 10_000;
+
+/// BUTTON_TEST step-status byte: upper nibble = step (1 LEFT, 2 RIGHT, 3 BOTH),
+/// lower nibble = error kind (1 timeout, 2 wrong button, 3 release stuck, #453).
+/// Decoded by number in `tools/factory-prodtest-runner.py::BUTTON_STEP_DECODE`;
+/// changing the encoding means changing the operator manual's decoder too.
+pub const PRODTEST_STEP_OK: u8 = 0x00;
+pub const PRODTEST_STEP_LEFT_TIMEOUT: u8 = 0x11;
+pub const PRODTEST_STEP_LEFT_WRONG: u8 = 0x12;
+pub const PRODTEST_STEP_LEFT_STUCK: u8 = 0x13;
+pub const PRODTEST_STEP_RIGHT_TIMEOUT: u8 = 0x21;
+pub const PRODTEST_STEP_RIGHT_WRONG: u8 = 0x22;
+pub const PRODTEST_STEP_RIGHT_STUCK: u8 = 0x23;
+pub const PRODTEST_STEP_BOTH_TIMEOUT: u8 = 0x31;
+pub const PRODTEST_STEP_BOTH_STUCK: u8 = 0x33;
+
+/// Every defined BUTTON_TEST failure code, for exhaustive iteration in tests
+/// and in the fixture's decode-table completeness check.
+pub const PRODTEST_STEP_FAILURES: [u8; 8] = [
+    PRODTEST_STEP_LEFT_TIMEOUT,
+    PRODTEST_STEP_LEFT_WRONG,
+    PRODTEST_STEP_LEFT_STUCK,
+    PRODTEST_STEP_RIGHT_TIMEOUT,
+    PRODTEST_STEP_RIGHT_WRONG,
+    PRODTEST_STEP_RIGHT_STUCK,
+    PRODTEST_STEP_BOTH_TIMEOUT,
+    PRODTEST_STEP_BOTH_STUCK,
+];
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks
@@ -2181,6 +2259,117 @@ mod tests {
         // 5 bytes must cover all 36 channels, with room to spare in the last.
         assert!(5 * 8 >= 36);
         assert!(PRODTEST_RGB_OSD_OUT_LEN <= PRODTEST_MAX_RESPONSE_DATA_LEN);
+    }
+
+    // -----------------------------------------------------------------------
+    // #708: migrated from `secure/src/nsc/prodtest.rs`, where they had never
+    // executed — that module is `#![cfg(feature = "prodtest")]` and `prodtest`
+    // implies `stm32u585`, so its `#[cfg(test)]` block never compiled on the
+    // host. `scripts/check_tests_actually_run.py` is the gate that now makes
+    // that failure mode loud instead of green.
+    // -----------------------------------------------------------------------
+
+    /// GET_ID is parsed by byte offset in the fixture, so the field widths are
+    /// a wire contract, not an implementation detail.
+    #[test]
+    fn prodtest_get_id_output_layout() {
+        assert_eq!(PRODTEST_GET_ID_OUT_LEN, 24);
+        assert_eq!(PRODTEST_STM32_UID_LEN, 12);
+        // 12 B UID + 4 B version + 8 B reserved, exactly filling the response.
+        assert_eq!(PRODTEST_STM32_UID_LEN + 4 + 8, PRODTEST_GET_ID_OUT_LEN);
+        assert!(PRODTEST_GET_ID_OUT_LEN <= PRODTEST_MAX_RESPONSE_DATA_LEN);
+    }
+
+    /// The version stamp only earns its keep if the operator manual moves with
+    /// it — that was the whole point of the original (never-run) test, and the
+    /// doc had drifted two versions behind by the time this was noticed.
+    ///
+    /// Binding it to the document rather than to a literal means the next bump
+    /// fails here until the manual is updated, instead of re-pinning a number
+    /// against itself.
+    #[test]
+    fn prodtest_fw_version_is_documented() {
+        // `proto` is `no_std`; the test harness can still link std for this.
+        extern crate std;
+        use std::format;
+
+        const DOC: &str = include_str!("../../docs/provisioning/factory-prodtest.md");
+        // Guard the oracle first: if the include ever resolves to something
+        // empty or unrelated, the search below would pass vacuously.
+        assert!(
+            DOC.contains("CMD_PRODTEST_GET_ID"),
+            "factory-prodtest.md does not look like the prodtest manual"
+        );
+        let expected = format!("firmware version is exactly {PRODTEST_FW_VERSION}.");
+        assert!(
+            DOC.contains(&expected),
+            "docs/provisioning/factory-prodtest.md must state {expected:?} — bump the \
+             manual in the same commit as PRODTEST_FW_VERSION"
+        );
+        // And the receipt sentence the runner emits alongside it.
+        assert!(
+            DOC.contains(&format!("prodtest firmware version {PRODTEST_FW_VERSION} in every JSON")),
+            "the receipt paragraph still names a different prodtest firmware version"
+        );
+    }
+
+    /// Both caps are the same response ceiling so one host-side buffer serves
+    /// TRNG_SAMPLE and USB_LOOPBACK alike.
+    #[test]
+    fn prodtest_sample_and_loopback_share_the_response_cap() {
+        assert_eq!(PRODTEST_MAX_RESPONSE_DATA_LEN, 254);
+    }
+
+    /// Mirrors `hw::saes::self_test`'s 8-byte fingerprint so the fixture's
+    /// reference values stay comparable across builds.
+    #[test]
+    fn prodtest_fingerprint_widths_match_the_saes_self_test() {
+        assert_eq!(PRODTEST_SAES_FINGERPRINT_LEN, 8);
+        assert_eq!(PRODTEST_BHK_FINGERPRINT_LEN, 8);
+    }
+
+    /// The fixture files these into a per-die uniqueness DB by offset.
+    #[test]
+    fn prodtest_handshake_rng_lens_pinned() {
+        assert_eq!(PRODTEST_OPTIGA_HANDSHAKE_RNG_LEN, 16);
+        assert_eq!(PRODTEST_SE050_HANDSHAKE_RNG_LEN, 16);
+    }
+
+    /// Upper nibble = step, lower = error kind. `factory-prodtest-runner.py`
+    /// decodes these by number, so the encoding is a cross-language contract.
+    #[test]
+    fn prodtest_button_step_codes_have_compact_layout() {
+        assert_eq!(PRODTEST_STEP_OK, 0x00);
+        assert_eq!(PRODTEST_STEP_LEFT_TIMEOUT, 0x11);
+        assert_eq!(PRODTEST_STEP_LEFT_WRONG, 0x12);
+        assert_eq!(PRODTEST_STEP_LEFT_STUCK, 0x13);
+        assert_eq!(PRODTEST_STEP_RIGHT_TIMEOUT, 0x21);
+        assert_eq!(PRODTEST_STEP_RIGHT_WRONG, 0x22);
+        assert_eq!(PRODTEST_STEP_RIGHT_STUCK, 0x23);
+        assert_eq!(PRODTEST_STEP_BOTH_TIMEOUT, 0x31);
+        assert_eq!(PRODTEST_STEP_BOTH_STUCK, 0x33);
+
+        for (i, &code) in PRODTEST_STEP_FAILURES.iter().enumerate() {
+            assert_ne!(code, PRODTEST_STEP_OK, "failure code collides with success");
+            assert!((1..=3).contains(&(code >> 4)), "step nibble out of range");
+            assert!((1..=3).contains(&(code & 0x0F)), "error nibble out of range");
+            // Distinctness: a duplicated code would silently merge two
+            // different operator diagnoses into one.
+            for &other in &PRODTEST_STEP_FAILURES[i + 1..] {
+                assert_ne!(code, other, "duplicate step-status code");
+            }
+        }
+    }
+
+    /// 10 s per step is enough for an operator without making the per-unit
+    /// test take forever; three steps bounds the whole interaction at 30 s.
+    #[test]
+    fn prodtest_button_test_timeout_is_operator_friendly() {
+        assert_eq!(PRODTEST_BUTTON_TEST_TIMEOUT_MS, 10_000);
+        assert_eq!(PRODTEST_BUTTON_TEST_OUT_LEN, 4);
+        // The host transport's read timeout has to outlast all three steps or
+        // a legitimately slow operator reads as a dead device.
+        assert!(3 * PRODTEST_BUTTON_TEST_TIMEOUT_MS < 60_000);
     }
 
     use super::*;
