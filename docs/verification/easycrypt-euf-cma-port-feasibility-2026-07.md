@@ -4825,3 +4825,12 @@ controls, exact pins/census/source binding, full cold two-driver replay, one
 bounded Astra/Opus wave under the user's substitutions, blocker reconciliation,
 authorized normal master push, and exact receipts/#100/#295 handoff. #509 stays
 deferred; this batch adds no hardware or deployment authority.
+
+The first cold replay of this batch found an r2026.02 SMT export error in
+`GprocT2Trh`: adding the FORS bounded sampler exposed the recursive `BoundedIID`
+operator to the solver. The correction marks that operator `smt_opaque`, retaining
+its definition for EasyCrypt rewriting and every theorem statement. A six-line
+cloned-consumer regression fails with the original export and passes with the
+annotation; it is enrolled as a positive control. The failed replay and first
+source-review wave are superseded, not counted as completed evidence. The fixed
+snapshot requires a fresh review and complete cold replay.

@@ -4,7 +4,10 @@
 require import AllCore List Distr RealSeries.
 import RField.
 
-op bounded ['a] (d : 'a distr) (p : 'a -> bool)
+(* r2026.02 cannot export this recursive distribution after the FORS clone.
+   Keep its definition available for checked rewriting, but expose only the
+   operator signature to SMT. Proven lemmas supply the needed properties. *)
+op [smt_opaque] bounded ['a] (d : 'a distr) (p : 'a -> bool)
   (fuel : unit list) : 'a option distr =
   with fuel = [] => dunit None
   with fuel = _ :: rest =>

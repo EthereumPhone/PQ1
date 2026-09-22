@@ -57,7 +57,7 @@ EXPECT_STMTS=1271
 # nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
 # itself, authored in this tree.  Now an equality against a committed constant, the
 # same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
-EXPECT_CTLS=89
+EXPECT_CTLS=90
 # 44 -> 49 on 2026-09-15 (later): a per-file scope negative for each of the other five headline
 # files.  Kimi K3 review: they had inherited isolation through GprocTCollNamed's require chain,
 # which nothing gated (all six are closure roots).

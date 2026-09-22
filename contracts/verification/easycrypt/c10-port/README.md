@@ -188,7 +188,7 @@ of the **same** SHA-256 result: dfC0 is the low half (bytes 16–31 in physical
 big-endian order), dfC1 the high half. The collection is still abstract.
 
 The current perimeter contains 78 proof files, 66 roots, 1,422 unique declaration
-pins, 1,271 statements and 89 controls. The new controls preserve the guarded
+pins, 1,271 statements and 90 controls. The new controls preserve the guarded
 comparison and absorbing-failure contract, and reject dropping the guard or
 clearing the failure flag. The member-aware controls also reject erasing the
 good-history premise and appending a failed-query record; a positive control
@@ -197,8 +197,8 @@ erasing successful-output conditioning, releasing an empty signature after
 exhaustion, and omitting the leaf wrapper's PK-compression member separation.
 The new history/domain/randomizer controls also reject independent resampling
 of cached or duplicate inputs, single-path cube coverage, the wrong H_msg width,
-truncating the low half, and erased FORS exhaustion. The raw census adds only
-defined operators and the fully instantiated Birthday clone, with its explicit
+truncating the low half, and erased FORS exhaustion. The raw census adds defined operators, one SMT-export annotation, and the
+fully instantiated Birthday clone, with its explicit
 losslessness/call-budget premises; existing axioms/admits are unchanged.
 The earlier encoder/abort replay and review remain
 recorded in the [September 21 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md).

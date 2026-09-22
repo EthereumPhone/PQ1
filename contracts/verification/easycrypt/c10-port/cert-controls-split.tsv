@@ -196,3 +196,4 @@ scratch/C10CoverageSinglePath.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10FORSBoundedPositive.ec	MUST-PASS	-
 scratch/C10FORSNoExhaustion.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10RandomizerWrongHalf.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10FORSBoundedSMT.ec	MUST-PASS	-

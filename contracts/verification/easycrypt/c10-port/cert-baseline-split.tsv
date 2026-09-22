@@ -1158,7 +1158,8 @@ cdrafts-split/BadEncToTColl.ec	module:3ab8854e6791	R_TCOLL	# line 100
 cdrafts-split/BadEncToTColl.ec	module:66df9a626025	O_wrap	# line 103
 cdrafts-split/BadEncToTColl.ec	module:83e1f9184386	AA	# line 160
 cdrafts-split/BadEncToTColl.ec	module:d5b79be98dff	A	# line 310
-cdrafts-split/BoundedIID.ec	defined-op:311ace66835f	bounded	# line 7
+cdrafts-split/BoundedIID.ec	op-annotation:smt_opaque	bounded	# line 10
+cdrafts-split/BoundedIID.ec	defined-op:311ace66835f	bounded	# line 10
 cdrafts-split/C10BoundedGrind.ec	defined-op:13312df50453	of_int	# line 9
 cdrafts-split/C10BoundedGrind.ec	defined-op:1d345d1e1b5a	hit	# line 10
 cdrafts-split/C10BoundedGrind.ec	module:5d49d49f44a0	Search	# line 13
