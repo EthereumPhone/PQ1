@@ -39,6 +39,26 @@ const REG: RngRegs = unsafe {
 
 // CR bits
 const RNGEN: u32 = 1 << 2;
+// CONFIGLOCK (bit 31). RM0456 §48.7.1: with it set, writes to RNG_NSCR,
+// RNG_HTCR and RNG_CR bits [29:4] are ignored until the next RNG reset, and it
+// can only be cleared by resetting the peripheral.
+//
+// Two reasons this is set rather than left clear, beyond matching the ESV
+// certificate (E11 Table 2 gives RNG_CR = 0x80F00DXX):
+//
+//  1. RM0456 §48.3.4: "When the RNG peripheral is reset through RCC (hardware
+//     reset), the RNG configuration for optimal randomness is lost ... Software
+//     reset with CONFIGLOCK set PRESERVES the RNG configuration." Our
+//     seed-error recovery is exactly such a software reset.
+//  2. It stops any later code — including a compromised path — from silently
+//     re-pointing the noise source. The entropy configuration becomes
+//     immutable for the life of the power cycle.
+//
+// It does NOT interfere with recovery: CONDRST is bit 30 and RNGEN is bit 2,
+// both outside the locked [29:4] window, so the conditioning soft reset and
+// enable/disable still work. Set LAST, after every read-back has passed, so a
+// partially-failed init can never lock a wrong configuration in place.
+const CONFIGLOCK: u32 = 1 << 31;
 // CONDRST lives at bit 30 on STM32U5, not bit 6 (bit 6 is part of CONFIG1).
 const CONDRST: u32 = 1 << 30;
 
@@ -515,8 +535,19 @@ fn init_locked() -> Result<(), ()> {
     // 3. Clear any latched seed / clock error interrupts from pre-init.
     let sr = REG.sr.read();
     REG.sr.write(sr & !(SEIS | CEIS));
-    // 4. Enable the RNG.
-    REG.cr.write(RNG_CR_NIST_DEFAULT | RNGEN);
+    // 4. Enable the RNG and lock the configuration. E11 Table 2's CR is
+    //    0x80F00DXX, where the low byte is application-dependent (bit 2 = RNGEN
+    //    when the peripheral is needed). Locking last means the values just
+    //    read back are the ones being frozen.
+    REG.cr.write(RNG_CR_NIST_DEFAULT | RNGEN | CONFIGLOCK);
+    let cr_locked = REG.cr.read();
+    secure_log!("[S] rng: CR after lock = 0x{:08x}", cr_locked);
+    if cr_locked & CONFIGLOCK == 0 {
+        // On a re-init the bit is already set and this is a no-op; if it reads
+        // clear here the lock did not take, so the noise configuration is still
+        // mutable and we are not in the certified configuration.
+        return Err(());
+    }
 
     // 5. Wait for one fully checked random number and discard it. Using the
     // same read path pins the post-warm-up SEIS/SECS/CEIS/CECS assertion and

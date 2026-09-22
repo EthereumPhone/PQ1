@@ -2535,6 +2535,27 @@ fn positive_trng_uses_this_parts_an4230_values() {
         "a silently-ignored NSCR write must fail closed, like HTCR's"
     );
 
+    // CONFIGLOCK completes E11 Table 2's RNG_CR (0x80F00DXX) and, per RM0456
+    // 48.3.4, is what preserves the configuration across the software reset our
+    // seed-error recovery performs. It must be the LAST write: locking before
+    // the read-backs have passed would freeze a configuration nobody verified.
+    assert!(
+        HW_RNG_SRC.contains("const CONFIGLOCK: u32 = 1 << 31;"),
+        "CONFIGLOCK is bit 31 per RM0456 48.7.1"
+    );
+    assert!(
+        HW_RNG_SRC.contains("if cr_locked & CONFIGLOCK == 0 {"),
+        "a lock that did not take must fail closed"
+    );
+    let htcr_check = HW_RNG_SRC.find("if htcr_after != RNG_HTCR_AN4230 {");
+    let nscr_check = HW_RNG_SRC.find("if nscr_after != RNG_NSCR_AN4230 {");
+    let lock = HW_RNG_SRC.find("REG.cr.write(RNG_CR_NIST_DEFAULT | RNGEN | CONFIGLOCK);");
+    assert!(htcr_check.is_some() && nscr_check.is_some() && lock.is_some());
+    assert!(
+        htcr_check < lock && nscr_check < lock,
+        "CONFIGLOCK must be set AFTER both read-backs, or a bad config gets frozen"
+    );
+
     // Both config writes only take effect while CONDRST=1, so they must sit
     // between entering and leaving the conditioning-reset window.
     let enter = HW_RNG_SRC.find("REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);");
