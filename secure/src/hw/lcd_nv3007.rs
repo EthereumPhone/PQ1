@@ -283,10 +283,17 @@ fn init_dc_res_gpios() {
     REG.rcc_ahb2enr1.set_bits(clocks);
     cortex_m::asm::dsb();
 
-    // #705: read LCM_EN/HWEN while the pin is still HIGH-Z. The clock is on
-    // but MODER is untouched, and the AW99703 treats HWEN as an input, so IDR
-    // here is the BOARD'S PASSIVE NETWORK -- which is what decides HWEN's
-    // level whenever the MCU resets and releases the pin.
+    // #705: INVALID AS MEASURED -- kept only so the defect is not silently
+    // repeated. PB15's RESET MODER is 0b11 (GPIOB MODER resets to 0xFFFF_FEBF),
+    // i.e. ANALOG mode, and analog mode disables the Schmitt trigger so IDR
+    // reads 0 REGARDLESS of the pin's actual voltage (RM0456 GPIO chapter).
+    // This read therefore returns 0 whether HWEN is high or low, and the
+    // `HW=0` result it produced proves nothing about the board's passive bias.
+    //
+    // A valid version must configure PB15 as a digital INPUT with pulls
+    // disabled, record that configuration, and only then sample IDR -- and
+    // even that measures the steady state, not the reset-time trajectory,
+    // which needs a waveform.
     //
     //   0 -> pulled down: every reset drops HWEN, the chip loses its
     //        registers, and the FSBL's fingerprint window is ALWAYS dark
