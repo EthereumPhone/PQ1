@@ -14,7 +14,12 @@ use crate::fixed::{clamp01, exp_neg_q16, lerp, mul_q16, Q16, ONE_Q16};
 /// Press-down acknowledgment: the pressed-side chevron nudges.
 pub const PRESS_FEEDBACK_MS: u32 = 120;
 /// Released under this = a tap; held past it = a hold begins.
-pub const TAP_MAX_MS: u32 = 250;
+/// A release up to this long after the press is a tap; longer is an aborted
+/// hold. The PQ-UI reference says 250 ms; on the pq1's physical switches a
+/// deliberate press runs 250–400 ms (EVT #1, 2026-09-22: single "clicks"
+/// nudged the hero and did nothing, only a fast double-click advanced), so
+/// the device uses the 500 ms the legacy button driver already validated.
+pub const TAP_MAX_MS: u32 = 500;
 /// A second press within this of a tap converts it (entry contexts only).
 pub const DOUBLE_TAP_MS: u32 = 250;
 /// A press on the other side within this is the chord.
@@ -342,7 +347,7 @@ mod tests {
     fn hold_fill_timing() {
         assert_eq!(hold_fill(0), 0);
         assert_eq!(hold_fill(TAP_MAX_MS), 0);
-        assert!((f(hold_fill(1125)) - 0.5).abs() < 0.01);
+        assert!((f(hold_fill((TAP_MAX_MS + HOLD_COMMIT_MS) / 2)) - 0.5).abs() < 0.01);
         assert_eq!(hold_fill(HOLD_COMMIT_MS), ONE_Q16);
         assert_eq!(hold_snapback(ONE_Q16, 0), ONE_Q16);
         assert_eq!(hold_snapback(ONE_Q16, HOLD_SNAPBACK_MS), 0);

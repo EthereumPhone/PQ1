@@ -92,14 +92,30 @@ three marks 5,070 B. Engine code ≈ 17 KB, screen emitter/lift/driver ≈ 26 KB
 Strip buffer: 13,696 B BSS on `ui-lcd` builds; the transcript costs no BSS
 (overlay). QEMU e2e stack/BSS: unchanged vs baseline.
 
-Frame time (estimated, to be measured on the EVT): render ≈ 3–8 ms, blit
-48.6 ms @ 20 MHz SPI (≈ 17 fps), 24.3 ms @ 40 MHz (`ui-px-spi40`).
+Frame time, **measured on EVT #1 (2026-09-22, `ui-px-frametime` overlay,
+DWT cycles)** after the renderer / presenter fixes of that day: on the
+sweeping hero at 40 MHz SPI (`ui-px-spi40`, clean on the production panel)
+render ≈ 8–11 ms, blit 24 ms for all nine strips and ≈ 13 ms once unchanged
+strips are skipped (per-strip 64-bit digests), frame period ≈ 24 ms
+(≈ 40 fps; the 16 ms cap never binds). Before the fixes the same hero was
+> 100 ms per frame: the disc / ring / trail evaluated a 64-bit-divide Newton
+square root for every pixel of each circle's bounding box.
+
+**Input on hardware.** Taps are debounced in the SysTick ISR (25 ms lockout
+per side, first edge exact), replayed with their timestamps, and the frame
+clock is read after the replay. `TAP_MAX_MS` is **500 ms on the device**
+(the PQ-UI reference says 250): deliberate presses on the pq1 switches run
+250–400 ms and were being demoted to aborted holds ("only a double-click
+advances", EVT #1 2026-09-22). Hold-to-sign still commits at 2000 ms; the
+fill rises from 500 to 2000 ms.
 
 ## Known gaps / next steps
 
-1. **Run on the EVT** (`play-hw-px BOARD=pq1`): measure fps, verify the
-   strip orientation on glass, tune `ui-px-spi40`, check the SysTick edge
-   sampler against the physical buttons.
+1. ~~Run on the EVT~~ — done 2026-09-22 over the cable-free DFU loop
+   (`FEAT_S=... tools/evt-dev-flash.sh`, `tools/hid_sign_safe.py`): strip
+   orientation correct, `ui-px-spi40` clean, ≈ 40 fps on the sweep, taps and
+   hold-right verified after the fixes above. Next lever if more is wanted:
+   GPDMA for the SPI stream so render and blit overlap (≈ 13 ms frames).
 2. **Endings during the sign:** the design's qubit loading film is not
    implemented; signing shows the legacy progress text painted through the
    engine, then the branded resolve plays (`px::lcd::show_ending`).

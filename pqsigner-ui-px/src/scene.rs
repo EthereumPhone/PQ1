@@ -718,7 +718,15 @@ impl Anim {
                     frame.push(Item::Disc { cx: cx_q8, cy: cy_q8, r: visible_r, color: style.fill });
                     let mark = match icon {
                         Some(Icon::Safe) => marks.safe,
-                        Some(Icon::Chain) => marks.mainnet,
+                        // The chain mark follows the proven NETWORK text: Base
+                        // gets its own mark, everything else the Ethereum one.
+                        Some(Icon::Chain) => {
+                            if self.cur.line(self.cur_page, 0).is_some_and(|(_, t)| t == b"Base" || t.ends_with(b" Base")) {
+                                marks.base.or(marks.mainnet)
+                            } else {
+                                marks.mainnet
+                            }
+                        }
                         Some(Icon::Fingerprint) => marks.fingerprint,
                         _ => None,
                     };

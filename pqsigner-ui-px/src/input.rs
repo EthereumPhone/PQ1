@@ -323,11 +323,16 @@ mod tests {
     extern crate alloc;
 
     #[test]
-    fn tap_fires_on_release_under_250ms() {
+    fn tap_fires_on_release_within_tap_max() {
         let mut f = InputFsm::new(InputCtx::NAV);
         assert_eq!(collect(f.poll(1000, true, false)), [Gesture::Press(Btn::Left)]);
         assert!(f.poll(1100, true, false).is_empty());
         assert_eq!(collect(f.poll(1200, false, false)), [Gesture::Release(Btn::Left), Gesture::Tap(Btn::Left)]);
+        // A deliberate 400 ms press on a physical switch is still a tap.
+        let mut f = InputFsm::new(InputCtx::NAV);
+        f.poll(0, true, false);
+        assert!(f.poll(300, true, false).is_empty(), "no HoldStart at 300 ms");
+        assert_eq!(collect(f.poll(400, false, false)), [Gesture::Release(Btn::Left), Gesture::Tap(Btn::Left)]);
     }
 
     #[test]
@@ -335,7 +340,8 @@ mod tests {
         let mut f = InputFsm::new(InputCtx::NAV);
         f.poll(0, false, true);
         assert!(f.hold_progress(100).is_none());
-        assert_eq!(collect(f.poll(260, false, true)), [Gesture::HoldStart(Btn::Right)]);
+        assert!(f.poll(TAP_MAX_MS, false, true).is_empty());
+        assert_eq!(collect(f.poll(TAP_MAX_MS + 10, false, true)), [Gesture::HoldStart(Btn::Right)]);
         assert_eq!(f.hold_progress(600), Some((Btn::Right, 600)));
         assert!(f.poll(1999, false, true).is_empty());
         assert_eq!(collect(f.poll(2000, false, true)), [Gesture::HoldCommit(Btn::Right)]);
@@ -345,20 +351,20 @@ mod tests {
         // Early release → cancel, no tap, no commit.
         let mut f = InputFsm::new(InputCtx::NAV);
         f.poll(0, false, true);
-        f.poll(300, false, true);
+        f.poll(TAP_MAX_MS + 50, false, true);
         assert_eq!(collect(f.poll(1200, false, false)), [Gesture::Release(Btn::Right), Gesture::HoldCancel(Btn::Right)]);
         // A release just past TAP_MAX without a HoldStart poll is still a cancel, never a tap.
         let mut f = InputFsm::new(InputCtx::NAV);
         f.poll(0, false, true);
-        assert_eq!(collect(f.poll(400, false, false)), [Gesture::Release(Btn::Right), Gesture::HoldCancel(Btn::Right)]);
+        assert_eq!(collect(f.poll(TAP_MAX_MS + 1, false, false)), [Gesture::Release(Btn::Right), Gesture::HoldCancel(Btn::Right)]);
     }
 
     #[test]
     fn chord_consumes_both_and_stops_hold_clocks() {
         let mut f = InputFsm::new(InputCtx::NAV);
         f.poll(0, false, true);
-        f.poll(300, false, true); // right hold started
-        let ev = collect(f.poll(400, true, true));
+        f.poll(TAP_MAX_MS + 50, false, true); // right hold started
+        let ev = collect(f.poll(TAP_MAX_MS + 150, true, true));
         assert_eq!(ev, [Gesture::HoldCancel(Btn::Right), Gesture::Chord]);
         // Holding both for 3 s never commits.
         assert!(f.poll(3500, true, true).is_empty());
