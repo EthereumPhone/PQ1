@@ -22,10 +22,22 @@ WHAT THIS CHECKS. Declared-vs-executed, by name:
 
 The static alternative — grepping for `#[cfg(test)]` nested inside a
 file-level `#![cfg(...)]` — catches only the shape that happened to bite us.
-This oracle also catches `#[ignore]`, `cfg(target_arch)`, a module that was
-never `mod`-declared, a `#[test]` inside a `#[cfg(feature)]` block mid-file,
-and whatever the next variant turns out to be. It is the same check that
-found #708 by hand: extract the names, grep the run output for each.
+This oracle also catches `cfg(target_arch)`, a module that was never
+`mod`-declared, a `#[test]` inside a `#[cfg(feature)]` block mid-file, and
+whatever the next variant turns out to be. It is the same check that found
+#708 by hand: extract the names, grep the run output for each.
+
+`#[ignore]` needs its own handling and gets it. `cargo test -- --list` prints
+an ignored test exactly like any other — `name: test`, no marker — so the
+list oracle alone would let one through. Ignored tests are therefore detected
+from the source side and treated as violations unless allowlisted, because
+"annotate the failing test" is the cheapest way there is to stop a test
+running, and it should cost an explicit exemption with a reason.
+
+SCOPE: PR-blocking CI only (`ci.yml`). A suite that lives solely in
+`nightly.yml` will be reported as never-run, which is deliberate — nightly is
+not a gate on a change — but it means the right response to such a report is
+sometimes "move it into ci.yml", not "allowlist it".
 
 SUITES ARE DERIVED FROM `.github/workflows/ci.yml`, not restated here. A
 hardcoded list is a second source of truth that drifts the first time someone
@@ -64,6 +76,7 @@ MIN_DECLARED = 3000
 MIN_RUNNABLE = 3000
 
 TEST_ATTR = re.compile(r"^\s*#\[test\]\s*$")
+IGNORE_ATTR = re.compile(r"^\s*#\[ignore\b")
 FN_NAME = re.compile(r"\bfn\s+([A-Za-z0-9_]+)")
 # `#[cfg(...)]`/`#[should_panic]`/doc comments may sit between the attribute
 # and the fn, so scan a few lines forward rather than requiring adjacency.
@@ -117,12 +130,12 @@ def list_tests(cwd: str, argv: list[str]) -> tuple[set[str], str]:
     return names, ""
 
 
-def declared_tests() -> list[tuple[str, str]]:
-    """Every `#[test]` fn in tracked sources, as (path, fn name)."""
+def declared_tests() -> list[tuple[str, str, bool]]:
+    """Every `#[test]` fn in tracked sources, as (path, fn name, is_ignored)."""
     files = subprocess.run(
         ["git", "ls-files", "*.rs"], cwd=REPO, capture_output=True, text=True, check=True
     ).stdout.split()
-    found: list[tuple[str, str]] = []
+    found: list[tuple[str, str, bool]] = []
     for rel in files:
         try:
             lines = (REPO / rel).read_text().splitlines()
@@ -131,10 +144,13 @@ def declared_tests() -> list[tuple[str, str]]:
         for i, line in enumerate(lines):
             if not TEST_ATTR.match(line):
                 continue
+            # `#[ignore]` may sit on either side of `#[test]`.
+            window = lines[max(0, i - FN_LOOKAHEAD) : i + 1 + FN_LOOKAHEAD]
+            ignored = any(IGNORE_ATTR.match(w) for w in window)
             for j in range(i + 1, min(i + 1 + FN_LOOKAHEAD, len(lines))):
                 m = FN_NAME.search(lines[j])
                 if m:
-                    found.append((rel, m.group(1)))
+                    found.append((rel, m.group(1), ignored))
                     break
     return found
 
@@ -174,7 +190,8 @@ def main() -> int:
         runnable |= names
 
     declared = declared_tests()
-    print(f"\n== declared #[test] fns: {len(declared)}")
+    n_ignored = sum(1 for _, _, ig in declared if ig)
+    print(f"\n== declared #[test] fns: {len(declared)}  ({n_ignored} marked #[ignore])")
     print(f"== distinct runnable names: {len(runnable)}")
 
     if len(declared) < MIN_DECLARED or len(runnable) < MIN_RUNNABLE:
@@ -185,17 +202,19 @@ def main() -> int:
 
     allow = load_allowlist()
     violations, exempted_hits = [], set()
-    for rel, name in declared:
-        if name in runnable:
+    for rel, name, ignored in declared:
+        # `--list` cannot distinguish an ignored test from a running one, so
+        # the source-side `#[ignore]` is the only signal there is.
+        if name in runnable and not ignored:
             continue
         key = f"{rel}::{name}"
         if key in allow:
             exempted_hits.add(key)
             continue
-        violations.append((rel, name))
+        violations.append((rel, name, "marked #[ignore]" if ignored else "never executes"))
 
     # Direction two: exemptions that no longer describe reality.
-    declared_keys = {f"{rel}::{name}" for rel, name in declared}
+    declared_keys = {f"{rel}::{name}" for rel, name, _ in declared}
     stale = []
     for key, entry in allow.items():
         if key not in declared_keys:
@@ -207,14 +226,15 @@ def main() -> int:
         Path(args.json).write_text(json.dumps({
             "suites": len(commands), "declared": len(declared),
             "runnable": len(runnable),
-            "violations": [{"file": f, "test": t} for f, t in violations],
+            "violations": [{"file": f, "test": t, "kind": k} for f, t, k in violations],
             "stale_allowlist": [{"key": k, "why": w} for k, w in stale],
         }, indent=2) + "\n")
 
     if violations:
         by_file: dict[str, list[str]] = {}
-        for rel, name in violations:
-            by_file.setdefault(rel, []).append(name)
+        for rel, name, kind in violations:
+            suffix = "" if kind == "never executes" else f"   [{kind}]"
+            by_file.setdefault(rel, []).append(name + suffix)
         print(f"\n!! {len(violations)} declared test(s) in {len(by_file)} file(s) "
               "never execute in any CI suite:\n")
         for rel in sorted(by_file):

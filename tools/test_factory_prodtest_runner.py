@@ -624,5 +624,98 @@ class RngConfigTests(unittest.TestCase):
         self.assertIn("not U575/U585", r.detail)
 
 
+class ProtoConstantsAreMirroredFaithfully(unittest.TestCase):
+    """The Python decode tables must match `proto/src/lib.rs`.
+
+    #708 moved the prodtest wire contract into `pqsigner-proto` so its Rust
+    tests would actually run. That fixed one half: the firmware side. This
+    fixture still hardcodes the same numbers in Python, and no Rust test can
+    reach a dict in a .py file — so without this, "both sides are tested" is
+    only true of one side.
+
+    The failure this prevents is quiet and bad: renumber a step code, and the
+    device reports a fault the operator manual decodes as a DIFFERENT fault.
+    """
+
+    PROTO = Path(__file__).resolve().parents[1] / "proto" / "src" / "lib.rs"
+
+    def parse_consts(self, pattern: str) -> dict[str, int]:
+        src = self.PROTO.read_text()
+        found = {
+            m.group(1): int(m.group(2), 0)
+            for m in re.finditer(pattern, src, re.M)
+        }
+        return found
+
+    def test_button_step_decode_matches_proto(self) -> None:
+        consts = self.parse_consts(
+            r"^pub const PRODTEST_STEP_([A-Z_]+): u8 = (0x[0-9A-Fa-f]+);"
+        )
+        # Guard the oracle: a regex that matched nothing would make every
+        # assertion below vacuously true. Nine codes: OK + eight failures.
+        self.assertEqual(
+            len(consts), 9,
+            f"expected 9 PRODTEST_STEP_* constants in {self.PROTO}, parsed "
+            f"{len(consts)}: {sorted(consts)} — the regex or the constants moved",
+        )
+        self.assertIn("OK", consts)
+
+        rust_codes = set(consts.values())
+        py_codes = set(runner.BUTTON_STEP_DECODE)
+        self.assertEqual(
+            rust_codes, py_codes,
+            "BUTTON_STEP_DECODE and proto's PRODTEST_STEP_* disagree; "
+            f"only in Rust: {sorted(rust_codes - py_codes)}, "
+            f"only in Python: {sorted(py_codes - rust_codes)}",
+        )
+        # Success must decode as PASS and every failure as FAIL, or the
+        # operator reads a defective unit as good.
+        self.assertEqual(runner.BUTTON_STEP_DECODE[consts["OK"]][0], "PASS")
+        for name, code in consts.items():
+            if name == "OK":
+                continue
+            self.assertEqual(
+                runner.BUTTON_STEP_DECODE[code][0], "FAIL",
+                f"PRODTEST_STEP_{name} (0x{code:02x}) does not decode as FAIL",
+            )
+
+    def test_response_lengths_match_proto(self) -> None:
+        consts = self.parse_consts(
+            r"^pub const (PRODTEST_[A-Z0-9_]*(?:LEN|MAX[A-Z_]*)): usize = ([0-9]+);"
+        )
+        self.assertGreaterEqual(
+            len(consts), 6,
+            f"parsed only {sorted(consts)} from {self.PROTO} — regex drifted",
+        )
+        for py_name, proto_name in [
+            ("RGB_OUT_LEN", "PRODTEST_RGB_OUT_LEN"),
+            ("RGB_OSD_OUT_LEN", "PRODTEST_RGB_OSD_OUT_LEN"),
+            ("RNG_CONFIG_LEN", "PRODTEST_RNG_CONFIG_LEN"),
+        ]:
+            self.assertIn(proto_name, consts, f"{proto_name} missing from proto")
+            self.assertEqual(
+                getattr(runner, py_name), consts[proto_name],
+                f"{py_name} in the fixture != {proto_name} in proto",
+            )
+
+    def test_expected_fw_version_matches_proto(self) -> None:
+        m = re.search(
+            r"^pub const PRODTEST_FW_VERSION: u32 = ([0-9]+);",
+            self.PROTO.read_text(), re.M,
+        )
+        self.assertIsNotNone(m, "PRODTEST_FW_VERSION not found in proto")
+        # The manual is the third party to this contract; proto's own
+        # `prodtest_fw_version_is_documented` binds it on the Rust side.
+        manual = (
+            Path(__file__).resolve().parents[1]
+            / "docs" / "provisioning" / "factory-prodtest.md"
+        ).read_text()
+        self.assertIn(
+            f"firmware version is exactly {m.group(1)}.", manual,
+            "docs/provisioning/factory-prodtest.md names a different prodtest "
+            "firmware version than proto does",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

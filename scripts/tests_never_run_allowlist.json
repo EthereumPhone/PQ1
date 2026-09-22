@@ -6,9 +6,34 @@
     "NEW one appears, if a listed test disappears, or if a listed test starts",
     "running (at which point the exemption must go so it is gated for real).",
     "Every `why` below was verified by reading the actual cfg/declaration, not",
-    "inferred from the file name."
+    "inferred from the file name.",
+    "Two classes live here: DEBT (issue: #7xx) \u2014 a test that should run and does not; and DELIBERATE (issue: 'n/a \u2014 deliberate') \u2014 an `#[ignore]`d maintenance tool that was never meant to gate anything. Do not let the second grow to hide the first."
   ],
   "exempt": [
+    {
+      "file": "dbgen/src/erc7730.rs",
+      "test": "print_lido_queue_descriptor_hash_after_curation",
+      "issue": "n/a \u2014 deliberate",
+      "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
+    },
+    {
+      "file": "dbgen/src/erc7730.rs",
+      "test": "print_lombard_fee_approval_descriptor_hash_after_curation",
+      "issue": "n/a \u2014 deliberate",
+      "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
+    },
+    {
+      "file": "dbgen/src/erc7730.rs",
+      "test": "print_morpho_blue_descriptor_hash_after_curation",
+      "issue": "n/a \u2014 deliberate",
+      "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
+    },
+    {
+      "file": "dbgen/src/erc7730.rs",
+      "test": "print_router02_descriptor_hash_after_curation",
+      "issue": "n/a \u2014 deliberate",
+      "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
+    },
     {
       "file": "fsbl-tests/tests/geometry_consistency.rs",
       "test": "fsbl_linker_32k_flash_region_is_deliberate_legacy",
@@ -56,6 +81,18 @@
       "test": "qemu_malicious_slot_cannot_forge_fsbl_row",
       "issue": "#721",
       "why": "fsbl-tests enrols suites by explicit `--test <name>`; this suite is not in any workflow's enrolment list."
+    },
+    {
+      "file": "fuzz/tests/gen_render_seeds.rs",
+      "test": "gen_render_dispatch_seeds",
+      "issue": "n/a \u2014 deliberate",
+      "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
+    },
+    {
+      "file": "fw-manifest/tests/gen_v6_signature_fixture.rs",
+      "test": "gen_v6_signature_fixture",
+      "issue": "n/a \u2014 deliberate",
+      "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
     },
     {
       "file": "geometry/tests/registry.rs",
@@ -1078,6 +1115,12 @@
       "why": "declared `#[cfg(all(test, feature = \"erc7730-nested-calldata-test-fixture\"))]`; the secure-crate host suite does not enable that fixture feature."
     },
     {
+      "file": "secure/src/display_under_test/erc7730_render_pure_tests.rs",
+      "test": "diagnostic_dump_seed_corpus_path_offsets",
+      "issue": "n/a \u2014 deliberate",
+      "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
+    },
+    {
       "file": "secure/src/factory_provisioning.rs",
       "test": "negative_error_code_hints_fit_oled_row",
       "issue": "#723",
@@ -1412,6 +1455,12 @@
       "test": "regenerate",
       "issue": "#722",
       "why": "`#![cfg(feature = \"sim-internals\")]`; no CI suite enables it. This is the C10 primitive KAT its own header describes as a three-way cross-check anchor."
+    },
+    {
+      "file": "xtask/src/erc7730_curation.rs",
+      "test": "print_checked_in_manifest_v3_input_receipts",
+      "issue": "n/a \u2014 deliberate",
+      "why": "deliberate `#[ignore]`: a maintenance tool shaped as a test (owner utility / corpus seeder / fixture generator / diagnostic dump), run on demand with `--ignored`. It asserts nothing a reader would expect CI to enforce. The attribute carries its own reason string at the call site."
     }
   ]
 }
