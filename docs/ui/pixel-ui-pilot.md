@@ -3,7 +3,7 @@
 **Status (2026-09-22):** engine + Safe sign flow implemented on
 `feat/ui-px-safe-pilot` (off `feat/pq1-board-target`). QEMU e2e passes with
 `ui-px` (all 24 scenarios; the Safe scenarios print `[UI-PX]` screens); the
-EVT image builds; **not yet run on glass**; **does not fit the release A/B
+EVT image builds; **ran on glass 2026-09-22** (EVT #1, branch `ui-px-evt` = this branch + `pq1-evt-dfu`, flashed over ROM DFU with `FEAT_S=dual-se,dev-testkey,ui-lcd,ui-px,dev-dfu,stm32u585,usb,board-pq1 tools/evt-dev-flash.sh`; `tools/hid_sign_safe.py` sent the Scenario-5 Safe `approveHash` UserOp on Base and the device clear-signed it end to end — SW 0x9000, well-formed Type-2 wrapper, ownerIndex 1 — after the human walked the pixel flow and held right; fps / orientation notes pending); **does not fit the release A/B
 slot** (see Budgets). Owner decisions that shaped it are in
 `CLAUDE.md` Pre-Production Caveats and `docs/security/HARDENING.md` §2.4.
 

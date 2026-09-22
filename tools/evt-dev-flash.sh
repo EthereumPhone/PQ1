@@ -3,6 +3,8 @@
 #
 #   tools/evt-dev-flash.sh            # build dev image (real SEs + LCD + dev-dfu), then flash
 #   tools/evt-dev-flash.sh --no-build # flash the last built dev image
+#   tools/evt-dev-flash.sh --build-only # build, do not wait for DFU
+#   FEAT_S=... tools/evt-dev-flash.sh   # override the secure feature list (keep dev-dfu!)
 #
 # Getting the board into DFU without a cable: with a `dev-dfu` image on it,
 # HOLD BOTH BUTTONS while plugging the USB-C in; the firmware clears
@@ -19,12 +21,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-BUILD=1
-for a in "$@"; do case $a in --no-build) BUILD=0;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
+BUILD=1; FLASH=1
+for a in "$@"; do case $a in --no-build) BUILD=0;; --build-only) FLASH=0;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
 
 T=thumbv8m.main-none-eabi
 IMG=evt-images/dev
-FEAT_S="dual-se,dev-testkey,ui-lcd,dev-dfu,stm32u585,usb,board-pq1"
+FEAT_S="${FEAT_S:-dual-se,dev-testkey,ui-lcd,dev-dfu,stm32u585,usb,board-pq1}"
 P="STM32_Programmer_CLI -c port=USB1"
 strip() { sed -r 's/\x1b\[[0-9;]*[mK]//g'; }
 cur() { { lsusb -d 0483:df11 2>/dev/null || true; } | { grep -o 'Bus [0-9]* Device [0-9]*' || true; } | head -1; }
@@ -40,6 +42,7 @@ wait_dfu() {
 ob() { $P -ob displ 2>&1 | strip | grep -E '^\s*(RDP|TZEN|nSWBOOT0|nBOOT0|SECWM1_PSTRT|SECWM1_PEND|SECWM2_PSTRT|SECWM2_PEND|SECBOOTADD0)\s'; }
 
 if [ $BUILD = 1 ]; then
+  mkdir -p $IMG
   echo "==> building dev image: $FEAT_S"
   make -n build-hw-dual-se-lcd-standalone BOARD=pq1 \
     | grep -B1 -A3 'cargo build' | grep -v -E '^--$|probe-rs|^echo' \
@@ -56,6 +59,7 @@ if [ $BUILD = 1 ]; then
   echo "==> built: $(stat -c%s $IMG/secure.bin) B secure, $(stat -c%s $IMG/nonsecure.bin) B nonsecure; dev-dfu linked: $(arm-none-eabi-nm -C $IMG/secure.elf | grep -c dev_dfu)"
 fi
 [ -f $IMG/secure.bin ] && [ -f $IMG/nonsecure.bin ] || { echo "no image in $IMG" >&2; exit 1; }
+[ $FLASH = 1 ] || { echo "==> --build-only: image in $IMG"; exit 0; }
 
 cat <<'MSG'
 ==> Put the EVT into DFU now:
