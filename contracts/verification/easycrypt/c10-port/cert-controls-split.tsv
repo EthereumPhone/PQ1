@@ -173,3 +173,10 @@ scratch/C10BoundedGameResetFailure.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10BoundedMAPositive.ec	MUST-PASS	-
 scratch/C10BoundedMAEraseHistory.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10BoundedMAAppendFailure.ec	MUST-FAIL	[by]: cannot close goals
+
+# Bounded hypertree success/failure and actual member-aware leaf wrapper.
+scratch/C10BoundedHypertreePositive.ec	MUST-PASS	-
+scratch/C10BoundedHypertreeNoGuard.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10BoundedHypertreePartialRelease.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10BoundedLeafPositive.ec	MUST-PASS	-
+scratch/C10BoundedLeafNoPKSeparation.ec	MUST-FAIL	[by]: cannot close goals

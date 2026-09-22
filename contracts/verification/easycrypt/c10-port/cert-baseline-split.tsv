@@ -1,4 +1,4 @@
-# 2026-09-22: bounded member-aware WOTS reduction; existing assumptions unchanged.
+# 2026-09-22: bounded hypertree and leaf interfaces; existing assumptions unchanged.
 # No new project axiom or admit; full raw census includes resolved clone obligations.
 base-c10-split/BinaryTrees.ec	defined-op:7ad6319948b8	height	# line 16
 base-c10-split/BinaryTrees.ec	defined-op:ddd3b90ca64e	fully_balanced	# line 39
@@ -1162,6 +1162,8 @@ cdrafts-split/BoundedIID.ec	defined-op:311ace66835f	bounded	# line 7
 cdrafts-split/C10BoundedGrind.ec	defined-op:13312df50453	of_int	# line 9
 cdrafts-split/C10BoundedGrind.ec	defined-op:1d345d1e1b5a	hit	# line 10
 cdrafts-split/C10BoundedGrind.ec	module:5d49d49f44a0	Search	# line 13
+cdrafts-split/C10BoundedHypertree.ec	module:8c6c29c67f77	BoundedHypertree	# line 9
+cdrafts-split/C10BoundedHypertree.ec	module:e6a0b1c1e8e0	BoundedHypertreeGame	# line 128
 cdrafts-split/C10BoundedIID.ec	defined-op:81dc6814a202	acceptance	# line 8
 cdrafts-split/C10BoundedIID.ec	defined-op:60358641ebbd	fuel	# line 9
 cdrafts-split/C10BoundedIID.ec	defined-op:8a64c07d1b66	iid_search	# line 10

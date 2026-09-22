@@ -111,6 +111,27 @@ challenge reductions can still enumerate the full counter domain: no useful
 running-time bound, challenge-probability estimate, or hypertree composition
 is established by this theorem.
 
+`C10BoundedHypertree` now supplies an option-valued signer over the existing
+independently sampled key cube. It proves termination, exactly `d` layers on
+success, agreement with the total signer on successful outputs, and no output
+when the first layer exhausts. After any layer failure the model performs no
+further cryptographic calls and returns `None`. Its nonadaptive game withholds
+the forgery call after failure; its win probability is bounded by the existing
+total hypertree game for the same adversary. The source uses a separate loop
+index so failure cannot prevent termination. These are mathematical termination
+claims, not useful wall-clock bounds or a recoverable Rust error API.
+
+`C10BoundedLeaf.bounded_leaf_member_aware` separately instantiates the N2-free
+WOTS bound with the actual `R_MEUFGCMAWOTSC_EUFNAGCMA_C` reduction from
+`XmssmtCC_All`. Wrapper termination and member separation are proved from
+explicit adversary/collection premises. **The two inequalities are not yet
+joined:** the leaf reduction precomputes a full signature cube, whereas the
+bounded hypertree signs the requested paths. A common failure-aware experiment
+and corresponding collision-branch argument are still required before claiming
+an N2-free bound for the bounded hypertree. In particular, a failure at an unused
+precomputed cube entry must not silently erase a winning operational execution.
+No real shared-hash or numerical security claim follows from these interfaces.
+
 `BoundedIID` and `C10BoundedIID` separately formalize independent uniform draws.
 They preserve both exhaustion `(1-p)^B` and successful-event mass
 `(1-(1-p)^B) * Pr[conditioned event]`, with `p` supplied by the actual consumer
@@ -129,12 +150,15 @@ Rust extraction is implied. Both abstract digest members must be projections
 of the **same** SHA-256 result: dfC0 is the low half (bytes 16–31 in physical
 big-endian order), dfC1 the high half. The collection is still abstract.
 
-The current perimeter contains 69 proof files, 57 roots, 1,347 unique declaration
-pins, 1,216 statements and 70 controls. The new controls preserve the guarded
+The current perimeter contains 71 proof files, 59 roots, 1,359 unique declaration
+pins, 1,228 statements and 75 controls. The new controls preserve the guarded
 comparison and absorbing-failure contract, and reject dropping the guard or
 clearing the failure flag. The member-aware controls also reject erasing the
 good-history premise and appending a failed-query record; a positive control
-applies the exact new final theorem. The earlier encoder/abort replay and review remain
+applies the exact new final theorem. The hypertree/leaf controls also reject
+erasing successful-output conditioning, releasing an empty signature after
+exhaustion, and omitting the leaf wrapper's PK-compression member separation.
+The earlier encoder/abort replay and review remain
 recorded in the [September 21 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md).
 The bounded-game batch passes its full replay and bounded Astra/Opus source
 review; the [September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-game-2026-09-22/README.md)

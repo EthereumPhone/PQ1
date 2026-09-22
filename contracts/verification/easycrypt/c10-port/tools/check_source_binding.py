@@ -22,7 +22,8 @@ SOURCES = (
     *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
         'C10Counter', 'C10Bytes', 'C10BoundedGrind', 'C10DeployedInstance', 'WOTS_C_Real',
         'C10Encoding', 'C10DigitUniform', 'C10BoundedSigning', 'BoundedIID', 'C10BoundedIID',
-        'C10BoundedGame', 'C10BoundedReduction', 'C10BoundedMA')),
+        'C10BoundedGame', 'C10BoundedReduction', 'C10BoundedMA',
+        'C10BoundedHypertree', 'C10BoundedLeaf')),
 )
 
 

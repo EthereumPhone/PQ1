@@ -4727,3 +4727,46 @@ The bounded member-aware Phase D gates are complete: 69 files pass both drivers,
 all 70 controls pass, and Astra/Opus return GO. See the
 [member-aware receipt](../security/adversarial-review/findings/easycrypt-bounded-ma-2026-09-22/README.md)
 for the reviewed source and exact remaining boundary.
+
+
+## 2026-09-22 implementation: bounded hypertree and leaf interfaces
+
+Active surface: bounded hypertree signing/game and the actual member-aware leaf
+wrapper, based on master `044b3d20`, isolated on
+`feat/easycrypt-bounded-hypertree-20260922`. H1 adds an option-valued NPRF signer
+with losslessness, exactly-d successful signatures, successful-output agreement
+and first-layer exhaustion rejection. H2 adds the same nonadaptive forgery game
+with an absorbing failure flag and proves its probability no greater than the
+existing total hypertree game. No partial signatures reach the adversary after
+failure, and no later cryptographic calls execute. H3 proves choose/forge
+termination for the actual `XmssmtCC_All` leaf reduction and instantiates
+`bounded_interactive_D1_MA` using its existing member-separation proof. H4 enrolls
+both roots, source hashes, exact pins and five positive/negative controls.
+
+The leaf theorem removes N2 and the grind-failure summand for the WOTS challenge
+experiment instantiated with that reduction. Its target, address, encoder,
+member-separation and adversary-termination premises remain explicit. It is
+**not yet a bound on the operational hypertree forgery probability**. The other
+new inequality compares the bounded hypertree to the old total hypertree, whose
+existing end theorem still requires N2. Joining them requires a common
+failure-aware game across the precomputed full cube and both collision branches;
+failure at an unused cube entry cannot simply be identified with failure on an
+actually requested signing path. The existing large total-game proof erases the
+local signing history and cannot discharge this by direct theorem application.
+That join remains the next bounded research task under #100/#295.
+
+The focused direct/CLI checks and controls are followed by one full cold
+split replay and one frozen Astra/Opus review under the standing substitutions.
+The enrolled perimeter is 71 files / 59 roots / 1,359 pins / 1,228 statements /
+75 controls. Raw assumption/module census: 1,732 rows; the only additions are
+the two concrete modules. Existing assumptions are unchanged, with no new
+project axiom or admit. The new controls reject dropping the successful-result guard,
+returning an empty signature on exhaustion, and omitting PK-compression member
+separation. Positive clients apply the exact signer/game and leaf contracts.
+
+The Phase-D checklist remains frozen source, mandatory full gate and bounded
+review, blocker remediation/material re-review, authorized landing and a compact
+receipt/tracker handoff. #509 remains deferred. The following research remains
+shared-hash/adaptive-history coupling, FORS truncated-R and resource accounting.
+This is a manually linked sampled-key model: no Rust extraction, useful runtime
+bound, real SHA-256 independence, numerical claim or deployment authority.

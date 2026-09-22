@@ -61,3 +61,7 @@ C10BoundedReduction
 
 # Failure-rejecting, N2-free member-aware WOTS bound.
 C10BoundedMA
+
+# Bounded hypertree and actual leaf-reduction interfaces.
+C10BoundedHypertree
+C10BoundedLeaf

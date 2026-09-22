@@ -1,5 +1,5 @@
-# Certified dependency cone: 69 files, 57 roots.
-# 2026-09-22 bounded member-aware WOTS reduction.
+# Certified dependency cone: 71 files, 59 roots.
+# 2026-09-22 bounded hypertree and leaf interfaces.
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -18,7 +18,9 @@ cdrafts-split/BadEncToTColl.ec
 cdrafts-split/BoundedIID.ec
 cdrafts-split/C10BoundedGame.ec
 cdrafts-split/C10BoundedGrind.ec
+cdrafts-split/C10BoundedHypertree.ec
 cdrafts-split/C10BoundedIID.ec
+cdrafts-split/C10BoundedLeaf.ec
 cdrafts-split/C10BoundedMA.ec
 cdrafts-split/C10BoundedReduction.ec
 cdrafts-split/C10BoundedSigning.ec
