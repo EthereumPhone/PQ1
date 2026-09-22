@@ -36,20 +36,20 @@ use crate::tx::eip712::safe::multi_send::test_util::{
 use crate::tx::eip712::safe::{compute_safe_tx_hash, verify_and_bind_trailer};
 use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 
-const CHAIN_ID: u64 = 1;
-const SAFE_ADDR: [u8; 20] = [
+pub(super) const CHAIN_ID: u64 = 1;
+pub(super) const SAFE_ADDR: [u8; 20] = [
     0x5a, 0xfe, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01,
 ];
 // Synthetic inner ERC-20 token (matches metadata but is deliberately absent
 // from the ERC-7730 known-call filter), keeping the baseline render/golden
 // tests independent of catalogue membership. Dedicated tests below exercise
 // the narrow native-decoder exemption with catalogued wstETH.
-const TOKEN: [u8; 20] = [0x70; 20];
-const WETH: [u8; 20] = [
+pub(super) const TOKEN: [u8; 20] = [0x70; 20];
+pub(super) const WETH: [u8; 20] = [
     0xc0, 0x2a, 0xaa, 0x39, 0xb2, 0x23, 0xfe, 0x8d, 0x0a, 0x0e, 0x5c, 0x4f, 0x27, 0xea, 0xd9, 0x08,
     0x3c, 0x75, 0x6c, 0xc2,
 ];
-const WSTETH: [u8; 20] = [
+pub(super) const WSTETH: [u8; 20] = [
     0x7f, 0x39, 0xc5, 0x81, 0xf5, 0x95, 0xb5, 0x3c, 0x5c, 0xb1, 0x9b, 0xd0, 0xb3, 0xf8, 0xda, 0x6c,
     0x93, 0x5e, 0x2c, 0xa0,
 ];
@@ -58,7 +58,7 @@ const LIDO_WITHDRAWAL_QUEUE_ERC721: [u8; 20] = [
     0xe4, 0x12, 0xf9, 0xb1,
 ];
 
-fn row_str(row: &[u8; DISPLAY_COLS]) -> String {
+pub(super) fn row_str(row: &[u8; DISPLAY_COLS]) -> String {
     for &b in row.iter() {
         assert!(
             (0x20..=0x7e).contains(&b),
@@ -72,7 +72,7 @@ fn row_str(row: &[u8; DISPLAY_COLS]) -> String {
         .to_string()
 }
 
-fn all_text(pages: &Pages) -> String {
+pub(super) fn all_text(pages: &Pages) -> String {
     (0..pages.len)
         .flat_map(|p| (0..DISPLAY_ROWS).map(move |r| (p, r)))
         .map(|(p, r)| row_str(&pages.buf[p][r]))
@@ -82,7 +82,7 @@ fn all_text(pages: &Pages) -> String {
 
 /// All ASCII-hex digits across every row of every page, lowercased — so a
 /// full 40-hex address (split across rows, with "0x"/space framing) matches.
-fn all_hex(pages: &Pages) -> String {
+pub(super) fn all_hex(pages: &Pages) -> String {
     all_text(pages)
         .chars()
         .filter(char::is_ascii_hexdigit)
@@ -94,7 +94,7 @@ fn all_hex(pages: &Pages) -> String {
 /// `transfer(recipient, amount)` on `TOKEN`. Returns `(bundle, calldata)`;
 /// `verify_and_bind_trailer` borrows `raw_data` out of `bundle`, so the caller
 /// must keep `bundle` alive across the render.
-fn build_raw_trailer(
+pub(super) fn build_raw_trailer(
     to: [u8; 20],
     operation: u8,
     raw: &[u8],
@@ -124,11 +124,11 @@ fn build_raw_trailer(
     (b, cd)
 }
 
-fn build_trailer(recipient: [u8; 20], amount: u64) -> (Vec<u8>, [u8; APPROVE_HASH_CALLDATA_LEN]) {
+pub(super) fn build_trailer(recipient: [u8; 20], amount: u64) -> (Vec<u8>, [u8; APPROVE_HASH_CALLDATA_LEN]) {
     build_raw_trailer(TOKEN, 0, &erc20_transfer(recipient, amount))
 }
 
-fn erc20_transfer(recipient: [u8; 20], amount: u64) -> [u8; 68] {
+pub(super) fn erc20_transfer(recipient: [u8; 20], amount: u64) -> [u8; 68] {
     // ERC-20 transfer(recipient, amount) = selector ‖ arg1 ‖ arg2.
     let mut raw = [0u8; 68];
     raw[0..4].copy_from_slice(&[0xa9, 0x05, 0x9c, 0xbb]); // transfer(address,uint256)
@@ -137,11 +137,11 @@ fn erc20_transfer(recipient: [u8; 20], amount: u64) -> [u8; 68] {
     raw
 }
 
-fn render_raw(to: [u8; 20], operation: u8, raw: &[u8]) -> Result<Pages, ()> {
+pub(super) fn render_raw(to: [u8; 20], operation: u8, raw: &[u8]) -> Result<Pages, ()> {
     render_raw_with_context(to, operation, raw, None, None)
 }
 
-fn render_raw_with_context(
+pub(super) fn render_raw_with_context(
     to: [u8; 20],
     operation: u8,
     raw: &[u8],
@@ -154,7 +154,7 @@ fn render_raw_with_context(
     render_safe_v1_pages(&verified, cow, erc20, &NameResolver::new())
 }
 
-fn erc20_approve(spender: [u8; 20], amount_or_token_id: u64) -> [u8; 68] {
+pub(super) fn erc20_approve(spender: [u8; 20], amount_or_token_id: u64) -> [u8; 68] {
     let mut raw = [0u8; 68];
     raw[..4].copy_from_slice(&[0x09, 0x5e, 0xa7, 0xb3]);
     raw[16..36].copy_from_slice(&spender);
@@ -162,7 +162,7 @@ fn erc20_approve(spender: [u8; 20], amount_or_token_id: u64) -> [u8; 68] {
     raw
 }
 
-fn usdc_meta() -> Erc20Metadata<'static> {
+pub(super) fn usdc_meta() -> Erc20Metadata<'static> {
     Erc20Metadata {
         chain_id: CHAIN_ID,
         contract: TOKEN,
@@ -172,7 +172,7 @@ fn usdc_meta() -> Erc20Metadata<'static> {
     }
 }
 
-fn wsteth_meta() -> Erc20Metadata<'static> {
+pub(super) fn wsteth_meta() -> Erc20Metadata<'static> {
     Erc20Metadata {
         chain_id: CHAIN_ID,
         contract: WSTETH,
@@ -201,7 +201,7 @@ fn exact_preflight_refuses_safe_erc20_value_too_wide_for_exact_display() {
     );
 }
 
-fn bound_cow_stub() -> VerifiedCowswapV3 {
+pub(super) fn bound_cow_stub() -> VerifiedCowswapV3 {
     // The renderer accepts this type only after `verify_and_bind_trailer` has
     // bound it to the selected Safe presign bytes. This focused renderer test
     // materialises that capability directly; the CoW verifier's own tests pin

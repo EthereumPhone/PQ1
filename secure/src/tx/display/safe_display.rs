@@ -95,7 +95,7 @@ use crate::tx::eip712::cowswap_display::{
 };
 use crate::tx::eip712::keccak;
 use crate::tx::eip712::safe::multi_send::{
-    self, classify_record_kind, record_needs_value_page, MsRecordIter, MsRecordKind,
+    self, classify_record_kind, record_needs_value_page, MsRecord, MsRecordIter, MsRecordKind,
 };
 use crate::tx::eip712::safe::{
     decode_canonical, safe_inner_is_cow_presign, SafeTx, VerifiedSafeExec, VerifiedSafeV1,
@@ -419,14 +419,14 @@ fn safe_fixed_overhead_pages(refund_active: bool, safe_tx_gas_active: bool) -> u
 /// (hence the "up to" label); on chains with a higher block limit it is no
 /// longer a strict maximum but still scales with — and stays large for —
 /// any real drain. See the refund-page comment in `render_safe_pages_inner`.
-const GAS_USED_CEILING: u64 = 30_000_000;
+pub(super) const GAS_USED_CEILING: u64 = 30_000_000;
 
 /// Which Safe flow the render is being driven from. Used to pick the
 /// banner string on page 0 and decide what to show on the metadata page
 /// (approveHash carries a SafeTx nonce in the canonical; execTransaction
 /// only sees the SafeTx nonce on-chain at execution time).
 #[derive(Copy, Clone)]
-enum SafeRenderFlavour {
+pub(super) enum SafeRenderFlavour {
     /// `approveHash(bytes32)` — the firmware re-derived the SafeTx hash
     /// from the trailer's canonical and bound it to the calldata
     /// argument. The user is approving the hash now; the Safe will
@@ -445,24 +445,24 @@ enum SafeRenderFlavour {
 /// Normalised input to the shared Safe rendering body. Approve-hash and
 /// exec-transaction both reduce to the same display surface: chain, Safe
 /// address, op + inner-kind hint, inner-tx pages, confirm.
-struct SafeRenderInput<'a> {
-    flavour: SafeRenderFlavour,
-    chain_id: u64,
-    safe_address: [u8; 20],
-    to: [u8; 20],
+pub(super) struct SafeRenderInput<'a> {
+    pub(super) flavour: SafeRenderFlavour,
+    pub(super) chain_id: u64,
+    pub(super) safe_address: [u8; 20],
+    pub(super) to: [u8; 20],
     /// SafeTx operation byte. `0` = Call. `1` = DelegateCall — only
     /// reachable for an allowlisted MultiSendCallOnly batch (the
     /// verifiers' operation gates refuse everything else); rendered as
     /// `Op: MultiSend` with per-record pages. Anything else on this
     /// field is an impossible state rendered as a loud `! Op: DELEGATE`.
-    operation: u8,
-    value: [u8; 32],
-    raw_data: &'a [u8],
+    pub(super) operation: u8,
+    pub(super) value: [u8; 32],
+    pub(super) raw_data: &'a [u8],
     /// keccak256(raw_data). For approveHash this comes from the
     /// canonical (already byte-equal to keccak256(raw_data) by the
     /// verifier's bind step); for exec we compute it here so the
     /// blind-sign branches can still surface it.
-    data_hash: [u8; 32],
+    pub(super) data_hash: [u8; 32],
     /// SafeTx refund parameters. All three are folded into the signed
     /// `safeTxHash` (EIP-712 struct hash) but are NOT otherwise visible
     /// in the inner-tx semantics, so the renderer must surface them
@@ -473,16 +473,16 @@ struct SafeRenderInput<'a> {
     /// `gasPrice`, so an attacker who hides these fields can drain the
     /// Safe's entire balance of a chosen ERC-20 behind a benign-looking
     /// inner call. See `docs/companion/safe-multisig-clear-sign.md`.
-    gas_price: [u8; 32],
-    gas_token: [u8; 20],
-    refund_receiver: [u8; 20],
+    pub(super) gas_price: [u8; 32],
+    pub(super) gas_token: [u8; 20],
+    pub(super) refund_receiver: [u8; 20],
     /// SafeTx `baseGas` (signed, EIP-712 struct field). The refund debit is
     /// `(gasUsed + baseGas) * gasPrice`; `baseGas` is uncapped, so an
     /// attacker can drain via a huge `baseGas` with a tiny `gasPrice` (which
     /// would make the per-gas RATE page look benign). We therefore also
     /// render the `baseGas * gasPrice` base component so that drain vector
     /// is visible (audit 2026-06-19, hardened after adversarial review).
-    base_gas: [u8; 32],
+    pub(super) base_gas: [u8; 32],
     /// SafeTx `safeTxGas` (signed, EIP-712 struct field, canonical word 4).
     /// It bounds the gas forwarded to the inner call; crucially, Safe's
     /// `require(success || safeTxGas != 0 || gasPrice != 0)` means a NON-ZERO
@@ -492,7 +492,7 @@ struct SafeRenderInput<'a> {
     /// inner action ("transfer 100 USDC") silently no-op while the user
     /// believes it executed: a WYSIWYS integrity gap. Surfaced on its own
     /// page whenever non-zero (audit 2026-06-26).
-    safe_tx_gas: [u8; 32],
+    pub(super) safe_tx_gas: [u8; 32],
 }
 
 /// Render a verified `safe_v1` trailer.
@@ -625,195 +625,14 @@ fn render_safe_pages_inner(
         raw_data: input.raw_data,
     };
 
-    let legacy_amounts_exact = crate::fi::check_true_into_sentinel(|| {
-        core::hint::black_box(legacy_values_are_exactly_renderable(input, erc20))
-    });
-    crate::fi::scrub_sentinel_register();
-    if legacy_amounts_exact != crate::fi::OK_SENTINEL {
-        return Err(());
-    }
-
-    // Safe cannot consume an ERC-7730 proof for its inner call yet. Before
-    // classification, prove that the exact direct tuple OR every exact
-    // canonical-MultiSend record tuple is absent from the pinned catalogue,
-    // except for the two native paths whose semantics are independently
-    // pinned: exact Merkle ERC-20 metadata + strict ABI decode, or the exact
-    // CoW presign call/record already verified and bound by the v3 pipeline.
-    // Display classification itself is intentionally irrelevant: an ERC-721
-    // `approve` that merely looks like ERC-20 still requires its descriptor.
-    let mut unknown_verdict_slot = 0u32;
-    // SAFETY: unique caller-owned local. Volatile FAIL materialization must
-    // survive LTO; skipping the non-inlined proof call leaves this rejecting.
-    unsafe {
-        core::ptr::write_volatile(&mut unknown_verdict_slot, crate::fi::FAIL_SENTINEL);
-    }
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-    let mut unknown_cfi = crate::fi::CfiCounter::new();
-    prove_safe_inner_calls_unknown(
-        input,
-        cow,
-        erc20,
-        &mut unknown_verdict_slot,
-        &mut unknown_cfi,
-    );
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-
-    // Final reject gate A: independently materialize the volatile proof and
-    // caller-owned CFI transcript. No `?` propagation is load-bearing here.
-    // SAFETY: the proof's unique mutable borrow ended before this readback.
-    let unknown_verdict_a = unsafe { core::ptr::read_volatile(&unknown_verdict_slot) };
-    let unknown_cfi_verdict_a = unknown_cfi.check_into_sentinel(CFI_SAFE_ROUTE_EXPECTED);
-    let unknown_all_ok_a = unknown_verdict_a == crate::fi::OK_SENTINEL
-        && unknown_cfi_verdict_a == crate::fi::OK_SENTINEL;
-    crate::fi::scrub_sentinel_register();
-    let unknown_gate_a =
-        crate::fi::check_true_into_sentinel(|| core::hint::black_box(unknown_all_ok_a));
-    crate::fi::scrub_sentinel_register();
-    if unknown_gate_a != crate::fi::OK_SENTINEL {
-        return Err(());
-    }
-
-    crate::fi::wait_random();
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-    // Final reject gate B: re-read live evidence after an independent gap.
-    // SAFETY: same initialized caller-owned local, with no intervening write.
-    let unknown_verdict_b = unsafe { core::ptr::read_volatile(&unknown_verdict_slot) };
-    let unknown_cfi_verdict_b = unknown_cfi.check_into_sentinel(CFI_SAFE_ROUTE_EXPECTED);
-    let unknown_all_ok_b = unknown_verdict_b == crate::fi::OK_SENTINEL
-        && unknown_cfi_verdict_b == crate::fi::OK_SENTINEL;
-    crate::fi::scrub_sentinel_register();
-    let unknown_gate_b =
-        crate::fi::check_true_into_sentinel(|| core::hint::black_box(unknown_all_ok_b));
-    crate::fi::scrub_sentinel_register();
-    if unknown_gate_b != crate::fi::OK_SENTINEL {
-        return Err(());
-    }
-
-    // Refund-risk pages are added for BOTH approveHash and
-    // execTransaction whenever the SafeTx configures a gas refund.
-    // Safe pays `(gasUsed + baseGas) * gasPrice` of `gasToken` (ETH when
-    // `gasToken == 0`) to `refundReceiver` (`tx.origin` when zero). The
-    // on-chain trigger is `gasPrice > 0`; a *token* refund has no
-    // gasPrice cap, so a hidden refund is a full-ERC-20-balance drain
-    // channel dressed up behind a benign inner call. We surface it
-    // whenever any refund field is set — a non-zero gasToken /
-    // refundReceiver with gasPrice 0 is anomalous enough to show too.
-    // Two pages: banner + gasToken, then the full refundReceiver address.
-    // FI-robust: defaults to SHOW unless all three refund fields are
-    // provably zero (see `must_show_unless_robustly_skippable`). A hidden
-    // *token* refund is a full-ERC-20-balance drain channel, so a single
-    // fault must never be able to skip these pages.
-    let refund_active =
-        refund_is_active(&input.gas_price, &input.gas_token, &input.refund_receiver);
-
-    // Decide inner-tx flavor up-front so we can size the page count.
-    // ERC-20 calldata renders as `Erc20Known` only when metadata is
-    // *both* present and address-matches the inner `to`; otherwise we
-    // fall back to `Erc20Unknown` (still readable shape, just no
-    // symbol/decimals).
-    //
-    // Safe self-calls (`tx.to == tx.safe_address`) are routed to the
-    // Safe-mgmt decoder first: a positive classification yields a
-    // per-op intent banner; an unrecognised selector falls into the
-    // loud "Unknown Safe op" blind-sign branch so the user can tell
-    // it apart from a generic opaque inner call.
+    let SafeSemantics {
+        inner_kind,
+        refund_active,
+        show_inner_eth,
+        show_safe_tx_gas,
+        total_pages,
+    } = classify(input, cow, erc20)?;
     let inner_value = U256(tx.value);
-    // An allowlisted MultiSendCallOnly DELEGATECALL renders per-record
-    // pages (the verdict gate in the handlers already enforced the hard
-    // rules + the page budget). The claim predicate is the SAME
-    // `multi_send::is_multisend_claim` the verifiers' operation gates
-    // and the CoW-binding resolver use, so verify, gate and render
-    // cannot disagree about what counts as a multiSend. A claim that
-    // fails to decode here is an impossible state (the gate refused it)
-    // and falls to the loud blind branch under a `! Op: DELEGATE` row —
-    // fail-safe, never fail-rich.
-    //
-    // Otherwise, a handler-verified CoW v3 order takes the inner slot
-    // outright — the v3 pipeline already byte-bound the canonical to
-    // this SafeTx's raw_data (digest/validTo) and to the Safe address
-    // (uid owner). The predicate re-check is defensive only: if the
-    // dispatcher ever paired a `cow` with a non-presign inner call
-    // (logic bug, memory fault), we ignore it and fall through to the
-    // normal ladder, which lands on the loud blind-sign page.
-    let inner_kind = if multi_send::is_multisend_claim(input.operation, &tx.to, safe.raw_data) {
-        let cow_body = safe_cow_pages(cow);
-        let count = multi_send::summarize(safe.raw_data)
-            .map(|s| s.record_count)
-            .unwrap_or(0);
-        match multi_send::records_pages_total(safe.raw_data, &tx.safe_address, cow_body) {
-            Some(total) if count > 0 => InnerKind::MultiSend {
-                count,
-                inner_pages: total,
-            },
-            _ => InnerKind::Blind,
-        }
-    } else {
-        match cow {
-            Some(v3) if safe_inner_is_cow_presign(&tx.to, safe.raw_data) => {
-                InnerKind::CowswapPresign(v3)
-            }
-            _ => {
-                if tx.to == tx.safe_address && !safe.raw_data.is_empty() {
-                    match classify_safe_mgmt(safe.raw_data) {
-                        Some(op) => InnerKind::SafeMgmt(op),
-                        None => InnerKind::UnknownSafeSelf,
-                    }
-                } else {
-                    match classify_inner(safe.raw_data, &inner_value) {
-                        InnerKind::Erc20Known(call) if erc20.is_some() => {
-                            InnerKind::Erc20Known(call)
-                        }
-                        InnerKind::Erc20Known(call) => InnerKind::Erc20Unknown(call),
-                        other => other,
-                    }
-                }
-            }
-        }
-    };
-
-    let inner_pages = inner_kind_page_count(&inner_kind);
-    // The refund block is 3 pages when configured (token + worst-case refund
-    // MAGNITUDE + recipient, audit 2026-06-19); that count now lives in the
-    // shared `safe_fixed_overhead_pages` so the renderer and the budget gate
-    // cannot disagree about it.
-    //
-    // Inner SafeTx `value` (native currency the Safe forwards to `to`)
-    // is shown inline only by the PlainEth branch. For every other inner
-    // kind a non-zero value would otherwise be invisible even though it
-    // is bound into the signed safeTxHash, so splice a dedicated page.
-    // FI-robust: defaults to SHOW unless the inner value is provably zero or
-    // the value is already rendered inline (PlainEth / EmptyCall). The
-    // inner native value the Safe forwards to `to` is committed into the signed
-    // safeTxHash and is gated ONLY here — the dispatcher's
-    // `enforce_native_value_page` covers the *outer* UserOp value, not this
-    // one — so a single-fault skip would hide an ETH drain (audit 2026-06-27).
-    let inline_value_kind = matches!(inner_kind, InnerKind::PlainEth | InnerKind::EmptyCall);
-    let show_inner_eth =
-        must_show_unless_robustly_skippable(inner_value.is_zero() || inline_value_kind);
-    let inner_eth_pages = usize::from(show_inner_eth);
-    // safeTxGas page (audit 2026-06-26): shown whenever non-zero — it is
-    // signed into the safeTxHash but invisible in the inner-tx semantics,
-    // and a non-zero value lets the inner call silently fail while the outer
-    // tx still succeeds (see `SafeRenderInput::safe_tx_gas`). Kept in
-    // lockstep with the `multisend_sign_gate` `fixed` term so the budget gate
-    // REFUSES (rather than truncates) any multiSend whose total would
-    // overflow MAX_PAGES.
-    // FI-robust (same rationale): a hidden non-zero safeTxGas lets the inner
-    // call silently no-op while the nonce is burned and any refund paid.
-    let show_safe_tx_gas = must_show_unless_robustly_skippable(all_zero(&input.safe_tx_gas));
-    let total_pages =
-        safe_fixed_overhead_pages(refund_active, show_safe_tx_gas) + inner_eth_pages + inner_pages;
-    // Fail CLOSED, never truncate: a page that renders a signed value must be
-    // shown or the signature refused. The old `min(total_pages, MAX_PAGES)`
-    // silently dropped trailing pages (records) when the gate/renderer page
-    // counts diverged — exactly the signed-but-not-shown class this audit
-    // closes (2026-06-27). `multisend_sign_gate` already refuses over-budget
-    // multiSends up front; this is the renderer-local backstop for every
-    // Safe shape (single-call included), so the WYSIWYS guarantee no longer
-    // rests solely on the external gate.
-    if total_pages > super::MAX_PAGES {
-        return Err(());
-    }
     let mut pages = Pages::with_len(total_pages);
 
     // ── Page 0: banner + chain ──────────────────────────────────────
@@ -1096,6 +915,232 @@ fn render_safe_pages_inner(
     Ok(pages)
 }
 
+
+/// The Safe display decisions, computed ONCE and consumed by every painter.
+///
+/// "One classification, two painters": the legacy 16×4 page renderer
+/// ([`render_safe_pages_inner`]) and the pixel-UI screen emitter
+/// (`safe_screens`) must never disagree about what a SafeTx *is* — which
+/// inner kind it carries, whether the refund / inner-ETH / safeTxGas pages
+/// are due — so those decisions, together with every FI gate that guards
+/// them, live here and nowhere else. `total_pages` is the legacy page count
+/// (including the trailing confirm page) that the pixel path cross-checks
+/// against the legacy renderer's actual output.
+pub(super) struct SafeSemantics<'a> {
+    pub(super) inner_kind: InnerKind<'a>,
+    pub(super) refund_active: bool,
+    pub(super) show_inner_eth: bool,
+    pub(super) show_safe_tx_gas: bool,
+    pub(super) total_pages: usize,
+}
+
+/// Classify a normalised Safe render input. Runs the legacy exactness gate,
+/// the FI-hardened unknown-call proof with its two final reject gates, the
+/// FI-robust refund / inner-ETH / safeTxGas presence decisions, the inner
+/// kind ladder and the page budget. `Err(())` means refuse to sign.
+pub(super) fn classify<'a>(
+    input: &SafeRenderInput<'_>,
+    cow: Option<&'a VerifiedCowswapV3>,
+    erc20: Option<&Erc20Metadata<'_>>,
+) -> Result<SafeSemantics<'a>, ()> {
+    let legacy_amounts_exact = crate::fi::check_true_into_sentinel(|| {
+        core::hint::black_box(legacy_values_are_exactly_renderable(input, erc20))
+    });
+    crate::fi::scrub_sentinel_register();
+    if legacy_amounts_exact != crate::fi::OK_SENTINEL {
+        return Err(());
+    }
+
+    // Safe cannot consume an ERC-7730 proof for its inner call yet. Before
+    // classification, prove that the exact direct tuple OR every exact
+    // canonical-MultiSend record tuple is absent from the pinned catalogue,
+    // except for the two native paths whose semantics are independently
+    // pinned: exact Merkle ERC-20 metadata + strict ABI decode, or the exact
+    // CoW presign call/record already verified and bound by the v3 pipeline.
+    // Display classification itself is intentionally irrelevant: an ERC-721
+    // `approve` that merely looks like ERC-20 still requires its descriptor.
+    let mut unknown_verdict_slot = 0u32;
+    // SAFETY: unique caller-owned local. Volatile FAIL materialization must
+    // survive LTO; skipping the non-inlined proof call leaves this rejecting.
+    unsafe {
+        core::ptr::write_volatile(&mut unknown_verdict_slot, crate::fi::FAIL_SENTINEL);
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    let mut unknown_cfi = crate::fi::CfiCounter::new();
+    prove_safe_inner_calls_unknown(
+        input,
+        cow,
+        erc20,
+        &mut unknown_verdict_slot,
+        &mut unknown_cfi,
+    );
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+    // Final reject gate A: independently materialize the volatile proof and
+    // caller-owned CFI transcript. No `?` propagation is load-bearing here.
+    // SAFETY: the proof's unique mutable borrow ended before this readback.
+    let unknown_verdict_a = unsafe { core::ptr::read_volatile(&unknown_verdict_slot) };
+    let unknown_cfi_verdict_a = unknown_cfi.check_into_sentinel(CFI_SAFE_ROUTE_EXPECTED);
+    let unknown_all_ok_a = unknown_verdict_a == crate::fi::OK_SENTINEL
+        && unknown_cfi_verdict_a == crate::fi::OK_SENTINEL;
+    crate::fi::scrub_sentinel_register();
+    let unknown_gate_a =
+        crate::fi::check_true_into_sentinel(|| core::hint::black_box(unknown_all_ok_a));
+    crate::fi::scrub_sentinel_register();
+    if unknown_gate_a != crate::fi::OK_SENTINEL {
+        return Err(());
+    }
+
+    crate::fi::wait_random();
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    // Final reject gate B: re-read live evidence after an independent gap.
+    // SAFETY: same initialized caller-owned local, with no intervening write.
+    let unknown_verdict_b = unsafe { core::ptr::read_volatile(&unknown_verdict_slot) };
+    let unknown_cfi_verdict_b = unknown_cfi.check_into_sentinel(CFI_SAFE_ROUTE_EXPECTED);
+    let unknown_all_ok_b = unknown_verdict_b == crate::fi::OK_SENTINEL
+        && unknown_cfi_verdict_b == crate::fi::OK_SENTINEL;
+    crate::fi::scrub_sentinel_register();
+    let unknown_gate_b =
+        crate::fi::check_true_into_sentinel(|| core::hint::black_box(unknown_all_ok_b));
+    crate::fi::scrub_sentinel_register();
+    if unknown_gate_b != crate::fi::OK_SENTINEL {
+        return Err(());
+    }
+
+    // Refund-risk pages are added for BOTH approveHash and
+    // execTransaction whenever the SafeTx configures a gas refund.
+    // Safe pays `(gasUsed + baseGas) * gasPrice` of `gasToken` (ETH when
+    // `gasToken == 0`) to `refundReceiver` (`tx.origin` when zero). The
+    // on-chain trigger is `gasPrice > 0`; a *token* refund has no
+    // gasPrice cap, so a hidden refund is a full-ERC-20-balance drain
+    // channel dressed up behind a benign inner call. We surface it
+    // whenever any refund field is set — a non-zero gasToken /
+    // refundReceiver with gasPrice 0 is anomalous enough to show too.
+    // Two pages: banner + gasToken, then the full refundReceiver address.
+    // FI-robust: defaults to SHOW unless all three refund fields are
+    // provably zero (see `must_show_unless_robustly_skippable`). A hidden
+    // *token* refund is a full-ERC-20-balance drain channel, so a single
+    // fault must never be able to skip these pages.
+    let refund_active =
+        refund_is_active(&input.gas_price, &input.gas_token, &input.refund_receiver);
+
+    // Decide inner-tx flavor up-front so we can size the page count.
+    // ERC-20 calldata renders as `Erc20Known` only when metadata is
+    // *both* present and address-matches the inner `to`; otherwise we
+    // fall back to `Erc20Unknown` (still readable shape, just no
+    // symbol/decimals).
+    //
+    // Safe self-calls (`tx.to == tx.safe_address`) are routed to the
+    // Safe-mgmt decoder first: a positive classification yields a
+    // per-op intent banner; an unrecognised selector falls into the
+    // loud "Unknown Safe op" blind-sign branch so the user can tell
+    // it apart from a generic opaque inner call.
+    let inner_value = U256(input.value);
+    // An allowlisted MultiSendCallOnly DELEGATECALL renders per-record
+    // pages (the verdict gate in the handlers already enforced the hard
+    // rules + the page budget). The claim predicate is the SAME
+    // `multi_send::is_multisend_claim` the verifiers' operation gates
+    // and the CoW-binding resolver use, so verify, gate and render
+    // cannot disagree about what counts as a multiSend. A claim that
+    // fails to decode here is an impossible state (the gate refused it)
+    // and falls to the loud blind branch under a `! Op: DELEGATE` row —
+    // fail-safe, never fail-rich.
+    //
+    // Otherwise, a handler-verified CoW v3 order takes the inner slot
+    // outright — the v3 pipeline already byte-bound the canonical to
+    // this SafeTx's raw_data (digest/validTo) and to the Safe address
+    // (uid owner). The predicate re-check is defensive only: if the
+    // dispatcher ever paired a `cow` with a non-presign inner call
+    // (logic bug, memory fault), we ignore it and fall through to the
+    // normal ladder, which lands on the loud blind-sign page.
+    let inner_kind = if multi_send::is_multisend_claim(input.operation, &input.to, input.raw_data) {
+        let cow_body = safe_cow_pages(cow);
+        let count = multi_send::summarize(input.raw_data)
+            .map(|s| s.record_count)
+            .unwrap_or(0);
+        match multi_send::records_pages_total(input.raw_data, &input.safe_address, cow_body) {
+            Some(total) if count > 0 => InnerKind::MultiSend {
+                count,
+                inner_pages: total,
+            },
+            _ => InnerKind::Blind,
+        }
+    } else {
+        match cow {
+            Some(v3) if safe_inner_is_cow_presign(&input.to, input.raw_data) => {
+                InnerKind::CowswapPresign(v3)
+            }
+            _ => {
+                if input.to == input.safe_address && !input.raw_data.is_empty() {
+                    match classify_safe_mgmt(input.raw_data) {
+                        Some(op) => InnerKind::SafeMgmt(op),
+                        None => InnerKind::UnknownSafeSelf,
+                    }
+                } else {
+                    match classify_inner(input.raw_data, &inner_value) {
+                        InnerKind::Erc20Known(call) if erc20.is_some() => {
+                            InnerKind::Erc20Known(call)
+                        }
+                        InnerKind::Erc20Known(call) => InnerKind::Erc20Unknown(call),
+                        other => other,
+                    }
+                }
+            }
+        }
+    };
+
+    let inner_pages = inner_kind_page_count(&inner_kind);
+    // The refund block is 3 pages when configured (token + worst-case refund
+    // MAGNITUDE + recipient, audit 2026-06-19); that count now lives in the
+    // shared `safe_fixed_overhead_pages` so the renderer and the budget gate
+    // cannot disagree about it.
+    //
+    // Inner SafeTx `value` (native currency the Safe forwards to `to`)
+    // is shown inline only by the PlainEth branch. For every other inner
+    // kind a non-zero value would otherwise be invisible even though it
+    // is bound into the signed safeTxHash, so splice a dedicated page.
+    // FI-robust: defaults to SHOW unless the inner value is provably zero or
+    // the value is already rendered inline (PlainEth / EmptyCall). The
+    // inner native value the Safe forwards to `to` is committed into the signed
+    // safeTxHash and is gated ONLY here — the dispatcher's
+    // `enforce_native_value_page` covers the *outer* UserOp value, not this
+    // one — so a single-fault skip would hide an ETH drain (audit 2026-06-27).
+    let inline_value_kind = matches!(inner_kind, InnerKind::PlainEth | InnerKind::EmptyCall);
+    let show_inner_eth =
+        must_show_unless_robustly_skippable(inner_value.is_zero() || inline_value_kind);
+    let inner_eth_pages = usize::from(show_inner_eth);
+    // safeTxGas page (audit 2026-06-26): shown whenever non-zero — it is
+    // signed into the safeTxHash but invisible in the inner-tx semantics,
+    // and a non-zero value lets the inner call silently fail while the outer
+    // tx still succeeds (see `SafeRenderInput::safe_tx_gas`). Kept in
+    // lockstep with the `multisend_sign_gate` `fixed` term so the budget gate
+    // REFUSES (rather than truncates) any multiSend whose total would
+    // overflow MAX_PAGES.
+    // FI-robust (same rationale): a hidden non-zero safeTxGas lets the inner
+    // call silently no-op while the nonce is burned and any refund paid.
+    let show_safe_tx_gas = must_show_unless_robustly_skippable(all_zero(&input.safe_tx_gas));
+    let total_pages =
+        safe_fixed_overhead_pages(refund_active, show_safe_tx_gas) + inner_eth_pages + inner_pages;
+    // Fail CLOSED, never truncate: a page that renders a signed value must be
+    // shown or the signature refused. The old `min(total_pages, MAX_PAGES)`
+    // silently dropped trailing pages (records) when the gate/renderer page
+    // counts diverged — exactly the signed-but-not-shown class this audit
+    // closes (2026-06-27). `multisend_sign_gate` already refuses over-budget
+    // multiSends up front; this is the renderer-local backstop for every
+    // Safe shape (single-call included), so the WYSIWYS guarantee no longer
+    // rests solely on the external gate.
+    if total_pages > super::MAX_PAGES {
+        return Err(());
+    }
+    Ok(SafeSemantics {
+        inner_kind,
+        refund_active,
+        show_inner_eth,
+        show_safe_tx_gas,
+        total_pages,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Handler-facing multiSend gate
 // ---------------------------------------------------------------------------
@@ -1217,7 +1262,7 @@ struct SafeRawData<'a> {
     raw_data: &'a [u8],
 }
 
-enum InnerKind<'a> {
+pub(super) enum InnerKind<'a> {
     EmptyCall,
     PlainEth,
     Erc20Known(Erc20Call),
@@ -1590,7 +1635,7 @@ mod inner_kind_hint_tests {
 /// Each leg is 2 pages in both modes, so the body is a constant 8 and
 /// this returns 9 regardless of whether `cow` is present; the absent
 /// case still computes it via the AddrHex legs for symmetry.
-fn safe_cow_pages(cow: Option<&VerifiedCowswapV3>) -> usize {
+pub(super) fn safe_cow_pages(cow: Option<&VerifiedCowswapV3>) -> usize {
     use crate::tx::eip712::cowswap::CowLeg;
     1 + cow.map_or(
         order_body_page_count(&CowLeg::AddrHex, &CowLeg::AddrHex),
@@ -1598,7 +1643,7 @@ fn safe_cow_pages(cow: Option<&VerifiedCowswapV3>) -> usize {
     )
 }
 
-fn inner_kind_page_count(kind: &InnerKind<'_>) -> usize {
+pub(super) fn inner_kind_page_count(kind: &InnerKind<'_>) -> usize {
     match kind {
         InnerKind::EmptyCall => 1,
         InnerKind::PlainEth => 2,
@@ -1945,17 +1990,74 @@ fn append_erc20_tail_pages(
     next_page
 }
 
+/// One multiSend record with its display decisions, as both painters see it.
+pub(super) struct MsRecordSem<'a> {
+    pub(super) idx: usize,
+    pub(super) rec: MsRecord<'a>,
+    pub(super) kind: InnerKind<'a>,
+    pub(super) needs_value_page: bool,
+    pub(super) meta: Option<&'a Erc20Metadata<'a>>,
+}
+
+/// The record the verified CoW order is bound to (unique presign claim) —
+/// the same selection the resolver made, re-derived from the same bytes.
+pub(super) fn presign_unique_idx(raw_data: &[u8]) -> Option<usize> {
+    multi_send::summarize(raw_data)
+        .ok()
+        .filter(|s| s.presign_claims == 1)
+        .map(|s| s.presign_idx)
+}
+
+/// Classify one decoded multiSend record exactly as the legacy painter does:
+/// metadata applies per record by address match (the single-call rule), and
+/// the CoW order renders ONLY on the record the handler verified the v3
+/// trailer against (unique presign claim); any other pairing is an
+/// impossible state that falls to the loud blind pages, never fail-rich.
+pub(super) fn multisend_record_semantics<'a>(
+    input: &SafeRenderInput<'a>,
+    cow: Option<&'a VerifiedCowswapV3>,
+    erc20: Option<&'a Erc20Metadata<'a>>,
+    presign_unique_idx: Option<usize>,
+    idx: usize,
+    rec: MsRecord<'a>,
+) -> MsRecordSem<'a> {
+    let value = U256(rec.value);
+    let raw_kind = classify_record_kind(&rec.to, value.is_zero(), rec.data, &input.safe_address);
+    let needs_value_page = record_needs_value_page(&raw_kind, value.is_zero());
+    let meta = erc20.filter(|m| m.contract == rec.to);
+    let kind: InnerKind<'a> = match raw_kind {
+        MsRecordKind::EmptyCall => InnerKind::EmptyCall,
+        MsRecordKind::PlainEth => InnerKind::PlainEth,
+        MsRecordKind::Erc20(call) if meta.is_some() => InnerKind::Erc20Known(call),
+        MsRecordKind::Erc20(call) => InnerKind::Erc20Unknown(call),
+        MsRecordKind::SafeMgmt(op) => InnerKind::SafeMgmt(op),
+        MsRecordKind::UnknownSafeSelf => InnerKind::UnknownSafeSelf,
+        MsRecordKind::CowPresignClaim => match (cow, presign_unique_idx) {
+            (Some(v3), Some(pi)) if pi == idx => InnerKind::CowswapPresign(v3),
+            _ => InnerKind::Blind,
+        },
+        MsRecordKind::Blind => InnerKind::Blind,
+    };
+    MsRecordSem {
+        idx,
+        rec,
+        kind,
+        needs_value_page,
+        meta,
+    }
+}
+
 /// Render every record of an allowlisted multiSend batch: divider page
 /// ("MSend rec i/N" + target), an explicit value page for any record
 /// that forwards ETH without showing it inline, then the record's
 /// classified pages via [`append_inner_kind_pages`].
-fn append_multisend_pages(
+fn append_multisend_pages<'a>(
     pages: &mut Pages,
     start: usize,
-    input: &SafeRenderInput<'_>,
+    input: &SafeRenderInput<'a>,
     count: usize,
-    cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    cow: Option<&'a VerifiedCowswapV3>,
+    erc20: Option<&'a Erc20Metadata<'a>>,
     resolver: &NameResolver<'_>,
 ) -> usize {
     let mut p = start;
@@ -1964,59 +2066,32 @@ fn append_multisend_pages(
         // to Blind for undecodable claims.
         return p;
     };
-    // The record the verified CoW order is bound to (unique presign
-    // claim) — the same selection the resolver made, re-derived from
-    // the same bytes.
-    let presign_unique_idx = multi_send::summarize(input.raw_data)
-        .ok()
-        .filter(|s| s.presign_claims == 1)
-        .map(|s| s.presign_idx);
+    let presign_idx = presign_unique_idx(input.raw_data);
     let mut idx = 0usize;
     for rec in MsRecordIter::new(packed) {
         // Decode errors are unreachable post-gate (summarize already
         // walked every record); stop cleanly rather than render a
         // half-decoded batch.
         let Ok(rec) = rec else { break };
-        write_msend_divider_page(pages, p, idx, count, &rec.to);
+        let sem = multisend_record_semantics(input, cow, erc20, presign_idx, idx, rec);
+        write_msend_divider_page(pages, p, idx, count, &sem.rec.to);
         p += 1;
-        let value = U256(rec.value);
-        let raw_kind =
-            classify_record_kind(&rec.to, value.is_zero(), rec.data, &input.safe_address);
-        if record_needs_value_page(&raw_kind, value.is_zero()) {
+        let value = U256(sem.rec.value);
+        if sem.needs_value_page {
             write_record_value_page(pages, p, &value, input.chain_id);
             p += 1;
         }
-        // Metadata applies per record by address match — same rule the
-        // single-call picker uses for the inner `to`.
-        let rec_meta = erc20.filter(|m| m.contract == rec.to);
-        let kind: InnerKind<'_> = match raw_kind {
-            MsRecordKind::EmptyCall => InnerKind::EmptyCall,
-            MsRecordKind::PlainEth => InnerKind::PlainEth,
-            MsRecordKind::Erc20(call) if rec_meta.is_some() => InnerKind::Erc20Known(call),
-            MsRecordKind::Erc20(call) => InnerKind::Erc20Unknown(call),
-            MsRecordKind::SafeMgmt(op) => InnerKind::SafeMgmt(op),
-            MsRecordKind::UnknownSafeSelf => InnerKind::UnknownSafeSelf,
-            // The CoW order renders ONLY on the record the handler
-            // verified the v3 trailer against (unique presign claim).
-            // Any other pairing is an impossible state — fall to the
-            // loud blind pages, never fail-rich.
-            MsRecordKind::CowPresignClaim => match (cow, presign_unique_idx) {
-                (Some(v3), Some(pi)) if pi == idx => InnerKind::CowswapPresign(v3),
-                _ => InnerKind::Blind,
-            },
-            MsRecordKind::Blind => InnerKind::Blind,
-        };
         let ctx = InnerRenderCtx {
             chain_id: input.chain_id,
             safe_address: input.safe_address,
-            to: rec.to,
+            to: sem.rec.to,
             value,
-            data: rec.data,
-            data_hash: keccak(rec.data),
-            erc20: rec_meta,
+            data: sem.rec.data,
+            data_hash: keccak(sem.rec.data),
+            erc20: sem.meta,
             resolver,
         };
-        p = append_inner_kind_pages(pages, p, &kind, &ctx);
+        p = append_inner_kind_pages(pages, p, &sem.kind, &ctx);
         idx += 1;
     }
     p
@@ -2157,7 +2232,7 @@ fn write_safe_nonce_row(row: &mut [u8; DISPLAY_COLS], nonce_be: &[u8; 32]) {
 /// exceeds `u64::MAX`. Used for the `baseGas * gasPrice` base-cost page via
 /// [`U256::saturating_mul_u64`]; a `baseGas` beyond `u64` makes the cost
 /// astronomically large, which the caller renders as a loud `!HUGE`.
-fn u64_be_tail(be: &[u8; 32]) -> (u64, bool) {
+pub(super) fn u64_be_tail(be: &[u8; 32]) -> (u64, bool) {
     let high_nonzero = be[..24].iter().any(|&b| b != 0);
     let mut tail = [0u8; 8];
     tail.copy_from_slice(&be[24..32]);

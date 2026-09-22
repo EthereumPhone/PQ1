@@ -1407,6 +1407,32 @@ mod transcript_proof_tests {
 }
 
 /// Inner `to` decoded from a verified `safe_v1` canonical.
+/// The ERC-20 metadata the Safe painters receive from the dispatcher ladder:
+/// chain-bound to the outer transaction, then address-matched to the
+/// verified inner call / multiSend records. Shared with the pixel-UI screen
+/// emitter (`px_lift`) so both painters see the same capability; the
+/// renderer still re-matches per record before applying it.
+pub(crate) fn safe_route_meta<'m>(
+    tx_chain_id: u64,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    erc20: Option<&'m crate::erc20::bundle::Erc20Metadata<'m>>,
+) -> Option<&'m crate::erc20::bundle::Erc20Metadata<'m>> {
+    let erc20 = erc20.filter(|meta| meta.chain_id == tx_chain_id);
+    if let Some(safe) = safe_v1 {
+        return safe_inner_meta(
+            erc20,
+            safe.canonical[sphincs_tz_shared::SAFE_OFF_OPERATION],
+            &safe_v1_inner_to(safe),
+            safe.raw_data,
+        );
+    }
+    if let Some(exec) = safe_exec {
+        return safe_inner_meta(erc20, exec.decoded.operation, &exec.decoded.to, exec.decoded.data);
+    }
+    None
+}
+
 fn safe_v1_inner_to(safe: &crate::tx::eip712::safe::VerifiedSafeV1<'_>) -> [u8; 20] {
     let mut t = [0u8; 20];
     t.copy_from_slice(
