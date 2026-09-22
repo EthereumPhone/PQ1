@@ -65,3 +65,12 @@ C10BoundedMA
 # Bounded hypertree and actual leaf-reduction interfaces.
 C10BoundedHypertree
 C10BoundedLeaf
+
+# Remaining C10 research: history, domains, randomizer and charged composition.
+C10HypertreeCoverage
+SharedROBounded
+C10Randomizer
+C10HashDomains
+C10SharedSearch
+C10SearchBounds
+C10HypertreeCharged

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.joinpath('../../../../..').resolve()
 PORT = 'contracts/verification/easycrypt/c10-port/'
 SOURCES = (
     'sphincs-c10/src/wots.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/lib.rs',
-    'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs',
+    'sphincs-c10/src/fors.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs',
     'sphincs-c10/tests/easycrypt_transcript.rs',
     PORT + 'tools/check_source_binding.py',
     'contracts/verification/scripts/run_easycrypt_split.py',
@@ -23,7 +23,9 @@ SOURCES = (
         'C10Counter', 'C10Bytes', 'C10BoundedGrind', 'C10DeployedInstance', 'WOTS_C_Real',
         'C10Encoding', 'C10DigitUniform', 'C10BoundedSigning', 'BoundedIID', 'C10BoundedIID',
         'C10BoundedGame', 'C10BoundedReduction', 'C10BoundedMA',
-        'C10BoundedHypertree', 'C10BoundedLeaf')),
+        'C10BoundedHypertree', 'C10BoundedLeaf',
+        'FORS_C10', 'C10HypertreeCoverage', 'SharedROBounded', 'C10Randomizer',
+        'C10HashDomains', 'C10SharedSearch', 'C10SearchBounds', 'C10HypertreeCharged')),
 )
 
 

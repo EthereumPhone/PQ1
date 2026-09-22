@@ -1,12 +1,14 @@
 # Mechanizing C10 EUF-CMA in EasyCrypt — a sourced feasibility verdict (2026-07)
 
-> **Current assessment — 2026-09-21:** the July parameter-impossibility notice
+> **Current assessment — 2026-09-22:** the July parameter-impossibility notice
 > below is historical for the old unsplit development. The current split model
 > admits C10's numerical geometry, and the counter/serialization/bounded-search
 > batch has landed. The encoder/abort batch now defines the actual digit
 > encoder, proves target 205 and uniform-input acceptance, and adds explicit
-> bounded-failure semantics. Failure-aware end-to-end composition, shared-oracle
-> coupling and numerical bounds remain open. Read the
+> bounded-failure semantics. The latest batch adds a charged bounded-hypertree
+> bound, history-aware classical-RO search and repeated-R laws. Charge-free
+> end-to-end composition, actual shared-oracle refinement and numerical forgery
+> bounds remain open. Read the
 > [September literature reassessment](#update-2026-09-21--literature-reassessment-after-the-concrete-grind-batch)
 > and the [current artifact boundary](../../contracts/verification/easycrypt/c10-port/README.md)
 > before quoting the older verdicts.
@@ -4776,3 +4778,50 @@ drivers and all 75 controls pass. Opus returned GO; the sole Astra pending-repla
 gap is discharged on the unchanged reviewed source. See the
 [hypertree/leaf receipt](../security/adversarial-review/findings/easycrypt-bounded-hypertree-2026-09-22/README.md).
 The common cube/collision-branch join remains open.
+
+
+## 2026-09-22 remaining research: checked advances and exact unresolved statements
+
+The authorized four-slice batch uses isolated `feat/easycrypt-remaining-20260922`
+from master `bd9b8a88`, without changing firmware, parameters or APIs. Its current
+owner is the [artifact boundary](../../contracts/verification/easycrypt/c10-port/README.md).
+
+| Question | Checked result | Remaining obligation |
+|---|---|---|
+| Bounded hypertree/leaf composition | `C10HypertreeCharged` composes the actual bounded game into the existing five-term charged bound, with N2 absent and all other premises retained. `C10HypertreeCoverage` proves all-leaf paths cover the full cube. | Carry an accepted signing-history event through the old hypertree/collision game hops, relate it to the leaf oracle transcript, and prove the charged event impossible on that event. The separate bounded-leaf inequality does not establish this join. |
+| Shared hash and adaptive history | `SharedROBounded` memoizes answers; a unique search list chosen from arbitrary entry history has tail bounded by `(1-p)^fresh`. `C10SharedSearch` uses the actual C10 predicate and distinct counter-byte inputs. `C10HashDomains` proves relevant length/tag separation. | Give a common stateful raw-input oracle, map every abstract collection call to actual bytes/projections, preserve its history across calls, and simulate the actual signing/reduction programs. There are no external calls interleaved inside the present search operator. |
+| FORS truncated R | `C10Randomizer` proves high-128-bit uniform truncation and an adaptive birthday bound under an explicit whole-experiment sample budget. `FORSC10.bounded_r` uses the existing consumer and proves its finite IID-R/conditioned mixture, with repeats. | Simulate the secret-keyed R derivation and H_msg through that common oracle; account for prior queries, repeated derivation inputs and repeated R. The current theorem does not identify the SHA stream with IID R or discharge `good_pos`. |
+| Numerical/resource bounds | `C10SearchBounds` proves a classical search-exhaustion bound of `2^-305` for at least 9,994,240 fresh trials. Exact arithmetic separately illustrates the fully fresh tail (about `2^-469.97`) and 10-million-draw R birthday bound (about `2^-82.49`). | The current pure hash operators have no query-cost semantics, so neither the old ITSR game nor its reductions express a meaningful bounded-work forgery estimate. Introduce costed experiments and prove their reduction/query bounds before combining numerical security terms. The quoted numbers are not security levels. |
+
+**Correction to the preceding batch:** the actual nonadaptive hypertree game
+signs every leaf. Its 262,144 paths cover all 262,656 precomputed cells. Thus an
+“unused cube entry” is not the obstruction for this exact experiment. The
+remaining issue is the program/probability coupling. A source-only exploratory
+attempt to strengthen the old event-discarding hop was not completed and is not
+enrolled or counted as a theorem. No assumption was added to cover that gap.
+
+Repeated R values do not invalidate fixed-function rejection sampling: for a
+fixed `mco`, the exact law uses `p = mu dmkey (good m)` and permits repetitions.
+Replacing that law by fresh independent H_msg outputs is a different step and
+needs the missing history/collision argument. Similarly, a unique nonce does
+not imply a unique truncated R. The new negative controls reject cached-failure
+freshness, duplicate-input independence, the wrong H_msg width, single-path cube
+coverage, and erased FORS exhaustion. Positive controls consume the exact new
+contracts. Rust host tests check the real H_msg/pair layouts and digest fields;
+they remain finite correspondence evidence, not extraction.
+
+The literature supplies techniques, not a theorem that closes these statements:
+[Metere and Dong's direct lazy-sampling work](https://arxiv.org/abs/2311.16844)
+provides an EasyCrypt coupling approach;
+[Completing the Chain](https://eprint.iacr.org/2026/134) links Jasmin
+implementations/specifications and an XMSS security refinement, not this C10
+shared-hash model; and
+[Hash-based Signature Schemes for Bitcoin](https://eprint.iacr.org/2025/2203)
+discusses SPHINCS+C variants and concrete analysis without supplying this checked
+C10 composition. The existing classical results do not establish QROM security.
+
+The Phase-D checklist is frozen source, focused direct/CLI checks and semantic
+controls, exact pins/census/source binding, full cold two-driver replay, one
+bounded Astra/Opus wave under the user's substitutions, blocker reconciliation,
+authorized normal master push, and exact receipts/#100/#295 handoff. #509 stays
+deferred; this batch adds no hardware or deployment authority.

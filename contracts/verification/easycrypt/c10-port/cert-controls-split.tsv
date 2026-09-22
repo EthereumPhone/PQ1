@@ -180,3 +180,19 @@ scratch/C10BoundedHypertreeNoGuard.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10BoundedHypertreePartialRelease.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10BoundedLeafPositive.ec	MUST-PASS	-
 scratch/C10BoundedLeafNoPKSeparation.ec	MUST-FAIL	[by]: cannot close goals
+
+# Remaining research: actual consumers and invalid freshness/coverage claims.
+scratch/C10HypertreeCoveragePositive.ec	MUST-PASS	-
+scratch/SharedROBoundedPositive.ec	MUST-PASS	-
+scratch/C10RandomizerPositive.ec	MUST-PASS	-
+scratch/C10HashDomainsPositive.ec	MUST-PASS	-
+scratch/C10SharedSearchPositive.ec	MUST-PASS	-
+scratch/C10SearchBoundsPositive.ec	MUST-PASS	-
+scratch/C10HypertreeChargedPositive.ec	MUST-PASS	-
+scratch/SharedROKnownNotFresh.ec	MUST-FAIL	[by]: cannot close goals
+scratch/SharedRODuplicateNotFresh.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10HashWrongLength.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10CoverageSinglePath.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10FORSBoundedPositive.ec	MUST-PASS	-
+scratch/C10FORSNoExhaustion.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10RandomizerWrongHalf.ec	MUST-FAIL	[by]: cannot close goals

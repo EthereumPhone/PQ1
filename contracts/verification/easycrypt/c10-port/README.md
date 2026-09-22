@@ -121,43 +121,85 @@ total hypertree game for the same adversary. The source uses a separate loop
 index so failure cannot prevent termination. These are mathematical termination
 claims, not useful wall-clock bounds or a recoverable Rust error API.
 
-`C10BoundedLeaf.bounded_leaf_member_aware` separately instantiates the N2-free
-WOTS bound with the actual `R_MEUFGCMAWOTSC_EUFNAGCMA_C` reduction from
-`XmssmtCC_All`. Wrapper termination and member separation are proved from
-explicit adversary/collection premises. **The two inequalities are not yet
-joined:** the leaf reduction precomputes a full signature cube, whereas the
-bounded hypertree signs the requested paths. A common failure-aware experiment
-and corresponding collision-branch argument are still required before claiming
-an N2-free bound for the bounded hypertree. In particular, a failure at an unused
-precomputed cube entry must not silently erase a winning operational execution.
-No real shared-hash or numerical security claim follows from these interfaces.
+`C10BoundedLeaf.bounded_leaf_member_aware` instantiates the N2-free WOTS
+bound with the actual `R_MEUFGCMAWOTSC_EUFNAGCMA_C` reduction from
+`XmssmtCC_All`. `C10HypertreeCharged.bounded_hypertree_charged` now gives the
+bounded hypertree a five-term bound for the same adversary: WOTS-TW, member-aware
+S-TCR, PK-compression and tree-collision games, plus the existing charged
+`GAME1_INT` grind-failure event. It preserves the original address, encoder,
+member-separation and target-cap premises and adds explicit forge termination.
+**N2 is absent, but the charge remains.** It is neither the operational
+exhaustion probability nor a numerical estimate of it.
 
-`BoundedIID` and `C10BoundedIID` separately formalize independent uniform draws.
-They preserve both exhaustion `(1-p)^B` and successful-event mass
-`(1-(1-p)^B) * Pr[conditioned event]`, with `p` supplied by the actual consumer
-predicate and `B=10000000`. **They do not instantiate the deterministic SHA-256
-counter search.** The existing capstones and their total-grind premises remain
-unchanged. A failure-aware end-to-end reduction, real shared-oracle/adaptive-history
-coupling (including FORS truncated R), and numerical resource bounds remain open
-under #100/#295. #509 remains the deferred owner-triggered combined playbook pass.
+`C10HypertreeCoverage` corrects the earlier “unused cube entry” concern for this
+specific nonadaptive experiment: it signs **all 262,144 leaf indices**, whose
+paths cover all 262,656 cells of the two-layer cube. The proof links its indexing
+to the signer's repeated division. A single path does not cover the cube.
+Removing the charge still requires an accepted-history event to survive the
+actual game hops and reach the leaf-reduction transcript. Address coverage alone
+does not prove that probability coupling; the charge-free join remains open.
+
+`SharedROBounded` models a classical lazy random oracle with memoized answers.
+For a unique input list, exhaustion is at most `(1-p)^fresh`, counting inputs
+absent from the entry history. The history and chosen list may be arbitrary;
+cached successes only help, and cached failures are replayed. The exact IID
+law additionally requires every input to be fresh. `C10SharedSearch` instantiates
+these results with the actual C10 predicate and the distinct physical inputs
+for counters 0 through 9,999,999. `C10SearchBounds` proves exhaustion at most
+`2^-305` if at least 9,994,240 are fresh (at most 5,760 already known).
+This is a **search-failure bound in that classical model, not a scheme security
+level**. The search has no interleaved external oracle calls, and does not
+return an updated history for a multi-procedure simulation.
+
+`C10HashDomains` checks manual physical layouts: H_msg is 160 bytes, R derivation
+is 103 or 119, and WOTS digest/pair hashing are 128. Equal-width WOTS/tree inputs
+need their distinct address-type tags. For fixed seed/root/message, repeated R
+means repeated H_msg input. These lemmas do not identify all abstract collection
+members with the real shared SHA-256 oracle.
+
+`C10Randomizer` proves that truncating a uniform 256-bit draw to its high 128 bits
+is uniform, retains repeats, and instantiates the standard-library birthday
+bound for at most 10 million draws **in the whole experiment**, including adaptive
+stopping with explicit losslessness and call-budget premises. It does not prove
+that the actual secret-keyed nonce stream is IID. `FORSC10.bounded_r` is a finite
+IID-R companion of the existing conditioned-key consumer: it uses the same
+`dmkey`, `good` and fixed `mco`, and proves exhaustion and the exact success/failure
+mixture. Repeated R values are allowed; no birthday loss is needed merely to
+express that fixed-function rejection law. Its success law still uses the
+existing `good_pos` axiom, and does not set the good-key mass to `1/2048`.
+
+`BoundedIID` and `C10BoundedIID` retain the separate independent-digest laws.
+None of these results establishes real SHA-256 independence, a quantum-oracle
+bound, or a numerical forgery bound. The existing reductions use uncosted pure
+hash operators and may enumerate the full u32 domain. Closing resource accounting
+requires a costed oracle experiment and corresponding reductions, not replacing
+the structural target cap `c` with a hash-query budget. The remaining common
+experiment/coupling and quantitative ITSR obligations stay under #100/#295;
+#509 remains the deferred owner-triggered combined playbook pass.
 
 The source boundary is pinned in `cert-source-binding.json`. The full split
 wrapper checks it and runs `easycrypt_transcript` against the real Rust helpers:
-210 transcript cases and 259 digit inputs, including every individual bit and
-the target witness. These finite checks and the manual EasyCrypt model are
+210 WOTS transcript cases, 259 digit inputs, H_msg/pair layouts, and 258
+FORS/hypertree field inputs, including every individual bit and the WOTS target
+witness. These finite checks and the manual EasyCrypt model are
 separate from Aeneas/Lean's `extract_digits_spec`; no cross-assistant theorem or
 Rust extraction is implied. Both abstract digest members must be projections
 of the **same** SHA-256 result: dfC0 is the low half (bytes 16–31 in physical
 big-endian order), dfC1 the high half. The collection is still abstract.
 
-The current perimeter contains 71 proof files, 59 roots, 1,359 unique declaration
-pins, 1,228 statements and 75 controls. The new controls preserve the guarded
+The current perimeter contains 78 proof files, 66 roots, 1,422 unique declaration
+pins, 1,271 statements and 89 controls. The new controls preserve the guarded
 comparison and absorbing-failure contract, and reject dropping the guard or
 clearing the failure flag. The member-aware controls also reject erasing the
 good-history premise and appending a failed-query record; a positive control
 applies the exact new final theorem. The hypertree/leaf controls also reject
 erasing successful-output conditioning, releasing an empty signature after
 exhaustion, and omitting the leaf wrapper's PK-compression member separation.
+The new history/domain/randomizer controls also reject independent resampling
+of cached or duplicate inputs, single-path cube coverage, the wrong H_msg width,
+truncating the low half, and erased FORS exhaustion. The raw census adds only
+defined operators and the fully instantiated Birthday clone, with its explicit
+losslessness/call-budget premises; existing axioms/admits are unchanged.
 The earlier encoder/abort replay and review remain
 recorded in the [September 21 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md).
 The bounded-game batch passes its full replay and bounded Astra/Opus source

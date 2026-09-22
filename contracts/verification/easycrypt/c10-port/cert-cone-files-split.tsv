@@ -1,5 +1,5 @@
-# Certified dependency cone: 71 files, 59 roots.
-# 2026-09-22 bounded hypertree and leaf interfaces.
+# Certified dependency cone: 78 files, 66 roots.
+# 2026-09-22 remaining C10 research.
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -32,6 +32,12 @@ cdrafts-split/C10DeployedInstance.ec
 cdrafts-split/C10DeployedScope.ec
 cdrafts-split/C10DigitUniform.ec
 cdrafts-split/C10Encoding.ec
+cdrafts-split/C10HashDomains.ec
+cdrafts-split/C10HypertreeCharged.ec
+cdrafts-split/C10HypertreeCoverage.ec
+cdrafts-split/C10Randomizer.ec
+cdrafts-split/C10SearchBounds.ec
+cdrafts-split/C10SharedSearch.ec
 cdrafts-split/C10SpecControls.ec
 cdrafts-split/C10Surface.ec
 cdrafts-split/C10SurfaceKernel.ec
@@ -57,6 +63,7 @@ cdrafts-split/GprocWotsNamed.ec
 cdrafts-split/Grind.ec
 cdrafts-split/RtopCSoundness.ec
 cdrafts-split/STCR_C.ec
+cdrafts-split/SharedROBounded.ec
 cdrafts-split/SphincsC10CapstoneCharged.ec
 cdrafts-split/SphincsC10CapstoneWired.ec
 cdrafts-split/SphincsC10Content.ec

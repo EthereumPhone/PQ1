@@ -3,7 +3,10 @@
 #![cfg(feature = "sim-internals")]
 
 use sha2::{Digest, Sha256};
-use sphincs_c10::sim_internals::{extract_digits, make_adrs, pad16, wots_digest};
+use sphincs_c10::sim_internals::{
+    extract_digits, extract_fors_indices, extract_ht_index, h_msg, make_adrs, pad16, th_pair,
+    wots_digest,
+};
 
 // C10Bytes.bits_to_bytes: little-endian bits, chunks of eight, reversed bytes.
 fn model_bytes(bits: &[bool]) -> Vec<u8> {
@@ -86,4 +89,54 @@ fn concrete_digits_match_easycrypt_bit_order_and_target() {
     assert_eq!(&digits[..41], &[5; 41]);
     assert_eq!(&digits[41..], &[0; 2]);
     assert_eq!(digits.iter().map(|&d| usize::from(d)).sum::<usize>(), 205);
+}
+
+#[test]
+fn concrete_hash_domains_match_easycrypt_layouts() {
+    let seed = core::array::from_fn(|i| (3 * i + 1) as u8);
+    let root = core::array::from_fn(|i| (5 * i + 2) as u8);
+    let message = core::array::from_fn(|i| (7 * i + 3) as u8);
+    for r_value in [0, u128::MAX, 0x0102030405060708090a0b0c0d0e0f10] {
+        let r = pad16(&r_value.to_be_bytes());
+        let mut input = Vec::new();
+        for field in [&seed, &root, &r, &message, &[255; 32]] {
+            input.extend(field);
+        }
+        assert_eq!(input.len(), 160);
+        let expected: [u8; 32] = Sha256::digest(&input).into();
+        assert_eq!(h_msg(&seed, &root, &r, &message), expected);
+        for tag in [2, 3] {
+            let address = make_adrs(1, 0x0203040506070809, tag, 11, 12, 13, 14);
+            assert_eq!(&address[12..16], &tag.to_be_bytes());
+            let mut pair = Vec::new();
+            for field in [&seed, &address, &root, &r] {
+                pair.extend(field);
+            }
+            assert_eq!(pair.len(), 128);
+            let digest = Sha256::digest(&pair);
+            assert_eq!(th_pair(&seed, &address, &root, &r), digest[..16]);
+            let wots_address = make_adrs(1, 0x0203040506070809, 0, 11, 12, 13, 14);
+            assert_ne!(&pair[44..48], &wots_address[12..16]);
+        }
+    }
+}
+
+#[test]
+fn concrete_fors_and_hypertree_fields_match_lsb_model() {
+    let mut cases = vec![[false; 256], [true; 256]];
+    for bit in 0..256 {
+        let mut bits = [false; 256];
+        bits[bit] = true;
+        cases.push(bits);
+    }
+    for bits in cases {
+        let digest: [u8; 32] = model_bytes(&bits).try_into().unwrap();
+        let read =
+            |start, width| (0..width).fold(0u32, |v, j| v | (u32::from(bits[start + j]) << j));
+        assert_eq!(
+            extract_fors_indices(&digest),
+            core::array::from_fn(|i| read(11 * i, 11))
+        );
+        assert_eq!(extract_ht_index(&digest), read(143, 18));
+    }
 }
