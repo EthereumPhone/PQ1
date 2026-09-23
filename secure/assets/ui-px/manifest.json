@@ -4,28 +4,55 @@
   "inputs": {
     "tools/pq-ui/pq1/assets/Aileron-Regular.otf": "5d8c1ab7cf7c25787f96a05b076602897fe38b47e21fe8954a4e4cbd7ae83d0a",
     "tools/pq-ui/pq1/assets/Aileron-SemiBold.otf": "f71260882efb77bac6bd987eeafc4f8831e82827f81f35e447b62c37cb40f866",
-    "tools/pq-ui/pq1/assets/safe.png": "249f5b4d3b85c1910310827de29d898e04b9d337ebd9ceb3ac6f97f1fe1f9c34"
+    "tools/pq-ui/pq1/assets/dai.png": "cc0f8f3c07ab7e4a10dbfb8091930bc8c3c7d00c743ff6f5af33ac2ef769d38c",
+    "tools/pq-ui/pq1/assets/safe.png": "249f5b4d3b85c1910310827de29d898e04b9d337ebd9ceb3ac6f97f1fe1f9c34",
+    "tools/pq-ui/pq1/assets/tether.png": "07036c11c46460aaeadb4d070bd9d51a869ed264ee1d13598e6a33675edaccab",
+    "tools/pq-ui/pq1/assets/usdc.png": "b09b241f7f1252b86d0366a71b59df3ae9b8226d21ebb842d293c8e387d0b807"
   },
   "outputs": {
     "atlas.pq1a": {
-      "bytes": 74038,
-      "sha256": "e3be84584e574cb0c2ac05b07ba6d0ea8c631b943fcabb69c79ad7dab327da1f"
+      "bytes": 74204,
+      "sha256": "abbfc52924bd6f8f9ea72f8c93dbe90828d14b9750a39a80d88d8792dc70521c"
     },
     "base.a4": {
-      "bytes": 1690,
-      "sha256": "8246fc6f54e750f719b40bcb54b9383360f46ea7c15f96174ecbea7303506b20"
+      "bytes": 346,
+      "sha256": "d299e1dea2dfc5126841150ebfd257364392b4319eead4a1ba1d4b98674ac071"
+    },
+    "blind.a4": {
+      "bytes": 144,
+      "sha256": "248b402e423bb8a58952f1936a17827d83005424ff0703bf182f480dcc2de2d7"
+    },
+    "dai.a4": {
+      "bytes": 688,
+      "sha256": "676ab532e36156d15d45482cdc192589abe34b321541854ad6b405126cdf26f7"
+    },
+    "eth.a4": {
+      "bytes": 232,
+      "sha256": "468c9ff58df2483eeab72e0c13f17415a788fa8877fa1526da2b29d971d5885a"
     },
     "fonts.bin": {
       "bytes": 68867,
       "sha256": "ce8aa3bcb8f2682b7990c7c735eb658507de48ab9d63635b34c2f1a9a68999cc"
     },
     "mainnet.a4": {
-      "bytes": 1690,
-      "sha256": "0672ad610a2f28f94499bef67b769c2bd0703473b12f447a18ec53f627583ed2"
+      "bytes": 278,
+      "sha256": "f6ccde932d874634dfcab97c64aff5c97a0f26147ab525d058913f02ccda62d0"
+    },
+    "rotate.a4": {
+      "bytes": 296,
+      "sha256": "64bdfb21d0bef46b0810235e7bbcd89dae6aeecbb9c0b8b77e7d786ea2b8efc3"
     },
     "safe.a4": {
       "bytes": 1690,
       "sha256": "50d9d44e0195aee2134137f8dff4e0b543f558f8676df7ec54fe8dc93cb5af7c"
+    },
+    "usdc.a4": {
+      "bytes": 976,
+      "sha256": "0d13f5abea74146a607d8cf4b117e4e7ea398cc3036f43fa475c9bd0d102eac5"
+    },
+    "usdt.a4": {
+      "bytes": 488,
+      "sha256": "ae250a9920fae673c2e14e44a69c0e88cf55bd3372639231f6a029f6fb6510f0"
     }
   },
   "pillow": "10.2.0",

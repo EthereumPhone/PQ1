@@ -1257,6 +1257,89 @@ fn main() -> ! {
         hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
     }
 
+    // Scenario 4a: a zero-value call with empty calldata — the
+    // `value_transfer` painter's "Contract call?" flavour (pixel family
+    // `contract_call`).
+    hprintln!("[NS][e2e] Scenario 4a: zero-value contract call");
+    unsafe {
+        let contract: [u8; 20] = [
+            0x9e, 0x3b, 0x5c, 0x0f, 0x7a, 0x1d, 0x24, 0xe8, 0x6c, 0x3f, 0x0b, 0x7d, 0x5a, 0x2e, 0x4c,
+            0x6f, 0x8b, 0x1d, 0x3a, 0x7c,
+        ];
+        let len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            &wallet_sender,
+            11_155_111,
+            1,
+            false,
+            4,
+            &contract,
+            0u128,
+            &[],
+        );
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 4a must succeed");
+        let (t1_present, _) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 4a must NOT emit a Type 1");
+    }
+
+    // Scenario 4b: an ERC-20 transfer of a token with no verified metadata
+    // (the `erc20_unknown` painter; pixel family `transfer_unknown_token`).
+    hprintln!("[NS][e2e] Scenario 4b: unknown-token ERC-20 transfer");
+    unsafe {
+        let token: [u8; 20] = [
+            0x3c, 0xa9, 0xe5, 0xf1, 0xb7, 0x2d, 0x04, 0xe8, 0xa6, 0xc1, 0xd9, 0xb3, 0xf5, 0x7e, 0x28,
+            0xa0, 0xc4, 0xd6, 0xb1, 0xe9,
+        ];
+        let mut data = [0u8; 68];
+        data[..4].copy_from_slice(&[0xa9, 0x05, 0x9c, 0xbb]);
+        data[16..36].copy_from_slice(&to_alice);
+        data[52..68].copy_from_slice(&12_345_678_901_234_567_890u128.to_be_bytes());
+        let len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            &wallet_sender,
+            11_155_111,
+            1,
+            false,
+            5,
+            &token,
+            0u128,
+            &data,
+        );
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 4b must succeed");
+        let (t1_present, _) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 4b must NOT emit a Type 1");
+    }
+
+    // Scenario 4c: the first UserOp of a counterfactual wallet — slot 0 with
+    // `FLAG_INCLUDE_INIT_CODE`, so the response carries the 4280-B initCode
+    // and the confirmation carries the loud deployment page (pixel: the
+    // `! DEPLOY` trailer twin).
+    hprintln!("[NS][e2e] Scenario 4c: first deploy with initCode");
+    unsafe {
+        let len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            &wallet_sender,
+            8453, // Base
+            0,
+            false,
+            0,
+            &to_alice,
+            10_000_000_000_000_000u128, // 0.01 ETH
+            &[],
+        );
+        let flags: u32 = sphincs_tz_shared::FLAG_INCLUDE_INIT_CODE;
+        PAYLOAD_BUF[8..12].copy_from_slice(&flags.to_be_bytes());
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 4c must succeed");
+        let ic_len = u32::from_be_bytes([SIG_BUF[8], SIG_BUF[9], SIG_BUF[10], SIG_BUF[11]]);
+        assert_eq!(ic_len, 4280, "scenario 4c must emit the initCode");
+        let (t1_present, _) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 4c must NOT emit a Type 1");
+        hprintln!("[NS][e2e]   → init_code_len={}", ic_len);
+    }
+
     // Scenario 5: Safe-multisig `approveHash` clear-sign.
     //
     // Build a synthetic SafeTx that calls

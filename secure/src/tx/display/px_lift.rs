@@ -1,6 +1,15 @@
 //! The lift from the proven legacy page transcript to the pixel-UI screen
 //! transcript, and the proof that binds the two.
 //!
+//! Three bodies share it ([`Body`]): the Safe flow (the pilot), every
+//! single-UserOp route (`userop_screens`: value / contract call, ERC-20,
+//! typed call, blind sign) and the slot-rotation consent. What follows
+//! describes the Safe body; the others differ only in how the body is bound
+//! (see [`structure_ok`]): a single-UserOp body re-runs its page painter and
+//! must equal the proven body pages byte-for-byte (its `Nonce` footer page is
+//! a `DETAILS` screen, not dropped), the rotation body is the one rotation
+//! page.
+//!
 //! Under `ui-px` the Safe sign handler still builds and proves the legacy
 //! `Pages` exactly as before (dispatcher, native-value / fee splice, the
 //! paymaster / signer / target / nonce-lane / gas-lane / ERC-8213 / deployment
@@ -33,36 +42,53 @@
 //! ERC-7730 transcript proof) defends the emitters themselves against a
 //! single skipped or faulted write.
 
-use super::safe_screens::{emit_safe_exec, emit_safe_v1, SafeBodyReceipt};
+use super::safe_screens::{emit_safe_exec, emit_safe_v1};
+use super::screen_kit::BodyReceipt;
 use super::trailer_screens::{self, TrailerFacts, TrailerReceipt};
+use super::userop_screens::{self, Family, UserOpInputs};
 use super::Pages;
 use crate::erc20::bundle::Erc20Metadata;
 use crate::names::NameResolver;
 use crate::tx::eip712::cowswap::VerifiedCowswapV3;
 use crate::tx::eip712::safe::{VerifiedSafeExec, VerifiedSafeV1};
-use pqsigner_ui_px::{exact_screen_occurrences, screen_exact, Icon, Kind, Screens};
+use pqsigner_ui_px::{exact_screen_occurrences, screen_exact, Kind, Screens};
 use subtle::ConstantTimeEq;
 
 /// The legacy Safe body ends with this confirm-footer page; it is the page
 /// the lift drops in favour of the returning hero.
 const LEGACY_CONFIRM_FOOTER_ROW0: &[u8] = b"Long-press to";
 
-/// Everything the content emitters consume: the verified Safe inputs the
-/// page painters classified, and the trailer facts the handler proved.
+/// The route body a dialog opens with.
+pub(crate) enum Body<'a> {
+    /// The verified Safe inputs the page painters classified.
+    Safe {
+        safe_v1: Option<&'a VerifiedSafeV1<'a>>,
+        safe_exec: Option<&'a VerifiedSafeExec<'a>>,
+        cow: Option<&'a VerifiedCowswapV3>,
+        erc20: Option<&'a Erc20Metadata<'a>>,
+        resolver: &'a NameResolver<'a>,
+    },
+    /// A single-UserOp route below the Safe / CoW / ERC-7730 rungs.
+    UserOp(UserOpInputs<'a>),
+    /// The slot-rotation consent.
+    Rotation { chain_id: u64, slot_index: u32 },
+}
+
+/// Everything the content emitters consume: the route body's verified
+/// inputs and the trailer facts the handler proved.
 pub(crate) struct ContentInputs<'a> {
-    pub(crate) safe_v1: Option<&'a VerifiedSafeV1<'a>>,
-    pub(crate) safe_exec: Option<&'a VerifiedSafeExec<'a>>,
-    pub(crate) cow: Option<&'a VerifiedCowswapV3>,
-    pub(crate) erc20: Option<&'a Erc20Metadata<'a>>,
-    pub(crate) resolver: &'a NameResolver<'a>,
+    pub(crate) body: Body<'a>,
     pub(crate) trailers: &'a TrailerFacts<'a>,
 }
 
 /// What one content emit produced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ContentReceipt {
-    pub(crate) body: SafeBodyReceipt,
+    pub(crate) body: BodyReceipt,
     pub(crate) trailers: TrailerReceipt,
+    /// The disc and ending captions the body chose (trailers, `Confirm?` and
+    /// the endings wear it).
+    pub(crate) family: Family,
 }
 
 /// SHA-256 over the visible transcript (length-prefixed).
@@ -78,20 +104,30 @@ pub(crate) fn sha256_screens(screens: &Screens) -> [u8; 32] {
 }
 
 fn emit_once(screens: &mut Screens, inp: &ContentInputs<'_>) -> Result<ContentReceipt, ()> {
-    // Same precedence as `safe::cow_binding::resolve_cow_binding` and the
-    // dispatcher ladder: a verified approveHash context wins over exec.
-    let body = if let Some(s) = inp.safe_v1 {
-        emit_safe_v1(screens, s, inp.cow, inp.erc20, inp.resolver)?
-    } else if let Some(e) = inp.safe_exec {
-        emit_safe_exec(screens, e, inp.cow, inp.erc20, inp.resolver)?
-    } else {
-        return Err(());
+    let (body, family) = match &inp.body {
+        // Same precedence as `safe::cow_binding::resolve_cow_binding` and the
+        // dispatcher ladder: a verified approveHash context wins over exec.
+        Body::Safe { safe_v1, safe_exec, cow, erc20, resolver } => {
+            let body = if let Some(s) = safe_v1 {
+                emit_safe_v1(screens, s, *cow, *erc20, resolver)?
+            } else if let Some(e) = safe_exec {
+                emit_safe_exec(screens, e, *cow, *erc20, resolver)?
+            } else {
+                return Err(());
+            };
+            (body, Family::SAFE)
+        }
+        Body::UserOp(u) => userop_screens::emit(screens, u)?,
+        Body::Rotation { chain_id, slot_index } => (
+            super::slot_rotation_screens::emit(screens, *chain_id, *slot_index)?,
+            super::slot_rotation_screens::FAMILY,
+        ),
     };
     if screens.len() != body.screens {
         return Err(());
     }
     let mut cfi = crate::fi::CfiCounter::new();
-    let trailers = trailer_screens::emit_trailers(screens, inp.trailers, &mut cfi)?;
+    let trailers = trailer_screens::emit_trailers(screens, inp.trailers, family.look, &mut cfi)?;
     crate::fi::scrub_sentinel_register();
     if cfi.check_into_sentinel(trailer_screens::TRAILER_CFI_EXPECTED) != crate::fi::OK_SENTINEL {
         return Err(());
@@ -100,7 +136,7 @@ fn emit_once(screens: &mut Screens, inp: &ContentInputs<'_>) -> Result<ContentRe
     if trailers.start != body.screens {
         return Err(());
     }
-    Ok(ContentReceipt { body, trailers })
+    Ok(ContentReceipt { body, trailers, family })
 }
 
 /// Emit the Safe body and the trailers TWICE into the poisoned buffer and
@@ -139,15 +175,32 @@ pub(crate) fn append_returning_hero(screens: &mut Screens) -> Result<(), ()> {
     screens.push(&first).map(|_| ())
 }
 
-/// Insert the design's `Confirm?` (index 5 when ≥ 7 details) with the Safe
-/// disc. Returns the index, if inserted.
-pub(crate) fn insert_confirm(screens: &mut Screens) -> Result<Option<usize>, ()> {
-    screens.insert_confirm(Icon::Safe)
+/// Insert the design's `Confirm?` (index 5 when ≥ 7 details) with the
+/// family's disc. Returns the index, if inserted.
+pub(crate) fn insert_confirm(screens: &mut Screens, family: &Family) -> Result<Option<usize>, ()> {
+    screens.insert_confirm_look(family.look)
+}
+
+/// The route body the handler proved is the body this emitter drew.
+fn body_bound(body: &Body<'_>, pages: &Pages, body_len: usize) -> bool {
+    match body {
+        // The Safe body ends with the confirm footer the lift drops.
+        Body::Safe { .. } => pages.buf[body_len - 1][0].starts_with(LEGACY_CONFIRM_FOOTER_ROW0),
+        // The route's painter re-run equals the proven body byte-for-byte.
+        Body::UserOp(u) => userop_screens::body_pages_match(pages, body_len, u),
+        Body::Rotation { slot_index, .. } => {
+            let want = super::slot_rotation::build_slot_rotation_pages(*slot_index);
+            body_len == super::slot_rotation_screens::LEGACY_PAGES
+                && want.len == body_len
+                && pages.buf[0] == want.buf[0]
+        }
+    }
 }
 
 fn structure_ok(
     screens: &Screens,
     pages: &Pages,
+    body: &Body<'_>,
     body_len: usize,
     receipt: &ContentReceipt,
     facts: &TrailerFacts<'_>,
@@ -159,7 +212,7 @@ fn structure_ok(
     if receipt.body.legacy_pages != body_len || body_len == 0 || body_len > pages.len {
         return false;
     }
-    if !pages.buf[body_len - 1][0].starts_with(LEGACY_CONFIRM_FOOTER_ROW0) {
+    if !body_bound(body, pages, body_len) {
         return false;
     }
     // One trailer screen per trailer page the handler appended after the
@@ -207,7 +260,8 @@ fn structure_ok(
     }
     // Every trailer screen re-derives from the facts at its (shifted) index.
     crate::fi::scrub_sentinel_register();
-    trailer_screens::trailer_set_proof(screens, &receipt.trailers, facts, confirm_at) == crate::fi::OK_SENTINEL
+    trailer_screens::trailer_set_proof(screens, &receipt.trailers, facts, receipt.family.look, confirm_at)
+        == crate::fi::OK_SENTINEL
 }
 
 /// The lift proof as one FI sentinel: `OK_SENTINEL` iff every structural
@@ -217,6 +271,7 @@ fn structure_ok(
 pub(crate) fn transcript_proof(
     screens: &Screens,
     pages: &Pages,
+    body: &Body<'_>,
     body_len: usize,
     receipt: &ContentReceipt,
     facts: &TrailerFacts<'_>,
@@ -225,6 +280,7 @@ pub(crate) fn transcript_proof(
     let ok = structure_ok(
         core::hint::black_box(screens),
         core::hint::black_box(pages),
+        core::hint::black_box(body),
         core::hint::black_box(body_len),
         core::hint::black_box(receipt),
         core::hint::black_box(facts),

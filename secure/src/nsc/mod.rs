@@ -1069,47 +1069,34 @@ fn px_screens_view(scratch: &mut [u8]) -> Option<&mut pqsigner_ui_px::Screens> {
     Some(unsafe { &mut *p })
 }
 
-/// Confirm a Safe sign request through the pixel UI: build the screen
-/// transcript from the SAME verified inputs the legacy pages were built from,
-/// bind it to the already-proven `pages`, and run the design's confirm loop.
+/// Confirm a sign request through the pixel UI: build the screen transcript
+/// from the SAME verified inputs the legacy pages were built from, bind it
+/// to the already-proven `pages`, and run the design's confirm loop.
 ///
 /// The legacy `pages` stay the proof substrate: every dispatcher / trailer
 /// `*_proof` has already run over them. The lift (`tx::display::px_lift`)
-/// re-emits the Safe body AND the handler's trailers as design screens
-/// (twice, hash-compared; every trailer screen derived from the same page
-/// builder as its proven page), appends the returning hero and the design's
-/// `Confirm?`, and proves the assembly — no `Legacy` record anywhere —
-/// before anything is shown. Any failure is a refusal — never a fall-back
-/// to the page dialog.
+/// re-emits the route body (Safe, a single-UserOp family, or the rotation
+/// consent) AND the handler's trailers as design screens (twice,
+/// hash-compared; every trailer screen derived from the same page builder as
+/// its proven page), appends the returning hero and the design's `Confirm?`,
+/// and proves the assembly — no `Legacy` record anywhere — before anything
+/// is shown. Any failure is a refusal — never a fall-back to the page
+/// dialog.
 #[cfg(feature = "ui-px")]
-pub(super) fn px_confirm_safe(
+pub(super) fn px_confirm(
     scratch: &mut [u8],
     pages: &crate::tx::display::Pages,
-    tx_chain_id: u64,
-    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
-    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
-    cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
-    resolver: &crate::names::NameResolver<'_>,
-    facts: &crate::tx::display::TrailerFacts<'_>,
+    inputs: &crate::tx::display::px_lift::ContentInputs<'_>,
 ) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
     use crate::tx::display::px_lift;
     let screens = px_screens_view(scratch).ok_or("px scratch")?;
-    let meta = crate::tx::display::safe_route_meta(tx_chain_id, safe_v1, safe_exec, erc20);
-    let inputs = px_lift::ContentInputs {
-        safe_v1,
-        safe_exec,
-        cow,
-        erc20: meta,
-        resolver,
-        trailers: facts,
-    };
-    let receipt = px_lift::emit_content(screens, &inputs).map_err(|()| "px body")?;
+    let receipt = px_lift::emit_content(screens, inputs).map_err(|()| "px body")?;
     let body_len = receipt.body.legacy_pages;
     px_lift::append_returning_hero(screens).map_err(|()| "px hero")?;
-    let confirm_at = px_lift::insert_confirm(screens).map_err(|()| "px confirm")?;
+    let confirm_at = px_lift::insert_confirm(screens, &receipt.family).map_err(|()| "px confirm")?;
     crate::fi::scrub_sentinel_register();
-    let verdict = px_lift::transcript_proof(screens, pages, body_len, &receipt, facts, confirm_at);
+    let verdict =
+        px_lift::transcript_proof(screens, pages, &inputs.body, body_len, &receipt, inputs.trailers, confirm_at);
     crate::fi::scrub_sentinel_register();
     if verdict != crate::fi::OK_SENTINEL {
         return Err("px transcript");
@@ -1121,6 +1108,10 @@ pub(super) fn px_confirm_safe(
     let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| "px atlas")?;
     #[cfg(not(feature = "ui-lcd"))]
     let atlas = ();
+    // The endings (decline resolve, signing film) wear this family's disc
+    // and captions.
+    #[cfg(feature = "ui-lcd")]
+    crate::ui::px::lcd::set_film_look(receipt.family.look, receipt.family.signed, receipt.family.declined);
     let out = crate::ui::px::confirm_screens_checked(screens, &atlas);
     // The transcript holds no secret, but leave nothing stale behind.
     screens.volatile_poison_and_reset();
@@ -1134,6 +1125,64 @@ pub(super) fn px_confirm_safe(
         crate::fi::scrub_sentinel_register();
     }
     Ok(out)
+}
+
+/// The Safe route (`px_confirm` over the Safe body).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_safe(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    tx_chain_id: u64,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    resolver: &crate::names::NameResolver<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let meta = crate::tx::display::safe_route_meta(tx_chain_id, safe_v1, safe_exec, erc20);
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Safe {
+            safe_v1,
+            safe_exec,
+            cow,
+            erc20: meta,
+            resolver,
+        },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// A single-UserOp route (value / contract call, ERC-20, typed call, blind).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_userop(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    body: crate::tx::display::userop_screens::UserOpInputs<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::UserOp(body),
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// The slot-rotation consent.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_rotation(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    slot_index: u32,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Rotation { chain_id, slot_index },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
 }
 
 /// HIGH-7 guard: depth counter incremented on handler entry,

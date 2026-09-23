@@ -179,6 +179,33 @@ pub mod safe_screens;
 #[allow(dead_code)]
 pub mod px_lift;
 
+// The shared emitter kit and the single-UserOp / rotation emitters (port
+// step 2), host-mounted like the Safe emitter so their fact differentials
+// and screen goldens run on every `cargo test`.
+#[path = "../tx/display/screen_kit.rs"]
+#[allow(dead_code)]
+pub mod screen_kit;
+
+#[path = "../tx/display/userop_screens.rs"]
+#[allow(dead_code)]
+pub mod userop_screens;
+
+#[path = "../tx/display/value_transfer_screens.rs"]
+#[allow(dead_code)]
+pub mod value_transfer_screens;
+
+#[path = "../tx/display/erc20_screens.rs"]
+#[allow(dead_code)]
+pub mod erc20_screens;
+
+#[path = "../tx/display/blind_sign_screens.rs"]
+#[allow(dead_code)]
+pub mod blind_sign_screens;
+
+#[path = "../tx/display/slot_rotation_screens.rs"]
+#[allow(dead_code)]
+pub mod slot_rotation_screens;
+
 // The native trailer twins (`trailer_screens`) over the mounted page
 // painters, so the lift's trailer proofs run against real trailer pages.
 #[path = "../tx/display/trailer_screens.rs"]
@@ -220,6 +247,9 @@ mod safe_display_render_pure_tests;
 
 #[cfg(test)]
 mod safe_screens_render_pure_tests;
+
+#[cfg(test)]
+mod userop_screens_render_pure_tests;
 
 #[cfg(test)]
 mod wysiwys_dispatch_differential_tests;

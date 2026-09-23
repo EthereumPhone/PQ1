@@ -51,7 +51,7 @@ use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 use pqsigner_ui_px::fit::{fit_tier, layout_address, split_hash_full, AddrLines, Region};
 use pqsigner_ui_px::screen::LINES_PER_PAGE;
 use pqsigner_ui_px::{
-    exact_screen_occurrences, screen_at_matches, Icon, Screen, ScreenBuilder, Screens, Side, Weight,
+    exact_screen_occurrences, screen_at_matches, Icon, Look, Screen, ScreenBuilder, Screens, Side, Weight,
 };
 
 type Page = [[u8; DISPLAY_COLS]; DISPLAY_ROWS];
@@ -75,7 +75,21 @@ pub(crate) struct TrailerFacts<'a> {
     pub verification_gas: &'a [u8; 32],
     pub pre_verification_gas: &'a [u8; 32],
     pub fingerprint: erc8213::Kind,
-    pub deployment: &'a DeploymentConfirmContext,
+    /// The deployment context of the main confirmation; `None` on the slot
+    /// rotation consent (it precedes the deployment decision).
+    pub deployment: Option<&'a DeploymentConfirmContext>,
+    /// Which dialog these trailers close.
+    pub set: TrailerSet,
+}
+
+/// Which handler dialog the trailers belong to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TrailerSet {
+    /// The main sign confirmation: every slot, each on its own predicate.
+    Sign,
+    /// The slot-rotation consent: signer, nonce lane and gas lane only (the
+    /// three gates the handler appends to `build_slot_rotation_pages`).
+    Rotation,
 }
 
 /// The trailer slots, in page order.
@@ -141,13 +155,20 @@ pub(crate) struct TrailerReceipt {
 /// Whether a slot is present for these facts — the page painters' own skip
 /// predicates, recomputed.
 fn present(slot: Slot, f: &TrailerFacts<'_>) -> bool {
+    if f.set == TrailerSet::Rotation {
+        return match slot {
+            Slot::Signer | Slot::GasLane => true,
+            Slot::NonceLane => !nonce_lane::nonce_lane_is_zero(f.nonce),
+            _ => false,
+        };
+    }
     match slot {
         Slot::NativeValue => !f.tx.value.is_zero(),
         Slot::MaxFee | Slot::WorstCase => f.legacy_fee_required,
         Slot::Paymaster => value_page::paymaster_present(f.paymaster_and_data_hash),
         Slot::Signer | Slot::Target | Slot::GasLane | Slot::FpBanner | Slot::FpDigest => true,
         Slot::NonceLane => !nonce_lane::nonce_lane_is_zero(f.nonce),
-        Slot::Deploy => f.deployment.requested(),
+        Slot::Deploy => f.deployment.is_some_and(DeploymentConfirmContext::requested),
     }
 }
 
@@ -225,7 +246,7 @@ impl<'a> Lines<'a> {
 
 /// A docked detail over `lines` (1–6, paged by three) at the largest tier
 /// that fits every line. Never truncates: a line that fits no tier is `Err`.
-fn detail(id: &[u8], icon: Icon, side: Side, label: &[u8], lines: &Lines<'_>, pulse: bool) -> Result<Screen, ()> {
+fn detail(id: &[u8], look: Look, side: Side, label: &[u8], lines: &Lines<'_>, pulse: bool) -> Result<Screen, ()> {
     let all = lines.as_slice();
     if all.is_empty() {
         return Err(());
@@ -237,7 +258,7 @@ fn detail(id: &[u8], icon: Icon, side: Side, label: &[u8], lines: &Lines<'_>, pu
     if !p1.is_empty() {
         tier = tier.min(fit_tier(p1, Region::Docked).ok_or(())?);
     }
-    let mut b = ScreenBuilder::detail(id, icon, side, label).tier(tier);
+    let mut b = ScreenBuilder::detail(id, look.icon, side, label).look_tint(look).tier(tier);
     for (i, &(text, w)) in all.iter().enumerate() {
         if i == LINES_PER_PAGE {
             b = b.next_page();
@@ -264,7 +285,15 @@ fn addr_lines(addr: &[u8; 20]) -> AddrLines {
 
 /// A detail whose value is an EIP-55 address (2 or 3 design lines), with an
 /// optional SemiBold head line.
-fn addr_detail(id: &[u8], side: Side, label: &[u8], head: Option<&[u8]>, addr: &[u8; 20], pulse: bool) -> Result<Screen, ()> {
+fn addr_detail(
+    id: &[u8],
+    look: Look,
+    side: Side,
+    label: &[u8],
+    head: Option<&[u8]>,
+    addr: &[u8; 20],
+    pulse: bool,
+) -> Result<Screen, ()> {
     let a = addr_lines(addr);
     let mut lines = Lines::new();
     if let Some(h) = head {
@@ -273,14 +302,34 @@ fn addr_detail(id: &[u8], side: Side, label: &[u8], head: Option<&[u8]>, addr: &
     for l in a.as_slice() {
         lines.push(l.as_bytes(), Weight::Regular)?;
     }
-    detail(id, Icon::Safe, side, label, &lines, pulse)
+    detail(id, look, side, label, &lines, pulse)
+}
+
+/// The two fee screens of the compact legacy fee envelope (`Fees: max / tip`
+/// and `Worst-case:`), from the SAME page builder the proven fee pages came
+/// from — the trailer slots on the Safe route, the route body's own fee
+/// pages on every single-UserOp route. `Err` when the envelope is not exact
+/// (the dispatcher's preflight already refused that case).
+pub(crate) fn fee_screen(worst: bool, tx: &Eip1559Tx, look: Look, side: Side) -> Result<Screen, ()> {
+    let rendered = value_page::build_legacy_fee_pages(tx);
+    if !rendered.exact {
+        return Err(());
+    }
+    let (page, id, label): (&Page, &[u8], &[u8]) = if worst {
+        (&rendered.pages[1], b"WORST", b"WORST CASE")
+    } else {
+        (&rendered.pages[0], b"MAXFEE", b"MAX FEE")
+    };
+    let mut lines = Lines::new();
+    lines.push_rows(page, Weight::Regular)?;
+    detail(id, look, side, label, &lines, false)
 }
 
 /// The expected screen for `slot` at transcript index `idx` (unshifted),
 /// `Ok(None)` for a proven skip, `Err` when the facts cannot be rendered
 /// exactly (the caller refuses, exactly like the page painter would).
 #[allow(clippy::too_many_lines)]
-pub(crate) fn expected(slot: Slot, f: &TrailerFacts<'_>, idx: usize) -> Result<Option<Screen>, ()> {
+pub(crate) fn expected(slot: Slot, f: &TrailerFacts<'_>, look: Look, idx: usize) -> Result<Option<Screen>, ()> {
     if !present(slot, f) {
         return Ok(None);
     }
@@ -290,38 +339,25 @@ pub(crate) fn expected(slot: Slot, f: &TrailerFacts<'_>, idx: usize) -> Result<O
             let page: Page = value_page::build_native_value_page(&f.tx.value, f.tx.chain_id).ok_or(())?;
             let mut lines = Lines::new();
             lines.push_rows(&page, Weight::Regular)?;
-            detail(b"NATIVE", Icon::Safe, side, b"NATIVE VALUE", &lines, true)?
+            detail(b"NATIVE", look, side, b"NATIVE VALUE", &lines, true)?
         }
-        Slot::MaxFee | Slot::WorstCase => {
-            let rendered = value_page::build_legacy_fee_pages(f.tx);
-            if !rendered.exact {
-                return Err(());
-            }
-            let (page, id, label): (&Page, &[u8], &[u8]) = if slot == Slot::MaxFee {
-                (&rendered.pages[0], b"MAXFEE", b"MAX FEE")
-            } else {
-                (&rendered.pages[1], b"WORST", b"WORST CASE")
-            };
-            let mut lines = Lines::new();
-            lines.push_rows(page, Weight::Regular)?;
-            detail(id, Icon::Safe, side, label, &lines, false)?
-        }
+        Slot::MaxFee | Slot::WorstCase => fee_screen(slot == Slot::WorstCase, f.tx, look, side)?,
         Slot::Paymaster => {
             let page: Page = value_page::build_paymaster_page();
             let mut lines = Lines::new();
             lines.push_rows(&page, Weight::Regular)?;
-            detail(b"PAYMSTR", Icon::Safe, side, b"PAYMASTER", &lines, true)?
+            detail(b"PAYMSTR", look, side, b"PAYMASTER", &lines, true)?
         }
         Slot::Signer => {
             let page: Page = value_page::build_signer_identity_page(f.account_index, f.sender).ok_or(())?;
-            addr_detail(b"SIGNER", side, b"SIGNER", Some(trimmed(&page[0])), f.sender, false)?
+            addr_detail(b"SIGNER", look, side, b"SIGNER", Some(trimmed(&page[0])), f.sender, false)?
         }
-        Slot::Target => addr_detail(b"TARGET", side, b"TARGET", None, f.target, false)?,
+        Slot::Target => addr_detail(b"TARGET", look, side, b"TARGET", None, f.target, false)?,
         Slot::NonceLane => {
             let page: Page = nonce_lane::build_nonce_lane_page(f.nonce);
             let mut lines = Lines::new();
             lines.push_rows(&page[1..], Weight::Regular)?;
-            detail(b"LANE", Icon::Safe, side, b"NONCE LANE", &lines, false)?
+            detail(b"LANE", look, side, b"NONCE LANE", &lines, false)?
         }
         Slot::GasLane => {
             let page: Page =
@@ -329,13 +365,13 @@ pub(crate) fn expected(slot: Slot, f: &TrailerFacts<'_>, idx: usize) -> Result<O
                     .ok_or(())?;
             let mut lines = Lines::new();
             lines.push_rows(&page, Weight::Regular)?;
-            detail(b"GASLANE", Icon::Safe, side, b"GAS LANE", &lines, false)?
+            detail(b"GASLANE", look, side, b"GAS LANE", &lines, false)?
         }
         Slot::FpBanner => {
             let pair = erc8213::build_fingerprint_pair(f.fingerprint);
             let mut lines = Lines::new();
             lines.push_rows(&pair[0], Weight::Regular)?;
-            detail(b"FP8213", Icon::Fingerprint, side, b"ERC-8213", &lines, false)?
+            detail(b"FP8213", Look::plain(Icon::Fingerprint), side, b"ERC-8213", &lines, false)?
         }
         Slot::FpDigest => {
             let [a, b, c] = split_hash_full(f.fingerprint.hash());
@@ -352,8 +388,9 @@ pub(crate) fn expected(slot: Slot, f: &TrailerFacts<'_>, idx: usize) -> Result<O
             bld.finish().map_err(|_| ())?
         }
         Slot::Deploy => {
-            let page: Page = super::deployment::build_deployment_page(f.deployment.factory());
-            addr_detail(b"DEPLOY", side, b"! DEPLOY", Some(trimmed(&page[0])), f.deployment.factory(), true)?
+            let d = f.deployment.ok_or(())?;
+            let page: Page = super::deployment::build_deployment_page(d.factory());
+            addr_detail(b"DEPLOY", look, side, b"! DEPLOY", Some(trimmed(&page[0])), d.factory(), true)?
         }
     };
     Ok(Some(s))
@@ -365,13 +402,14 @@ pub(crate) fn expected(slot: Slot, f: &TrailerFacts<'_>, idx: usize) -> Result<O
 pub(crate) fn emit_trailers(
     out: &mut Screens,
     f: &TrailerFacts<'_>,
+    look: Look,
     cfi: &mut crate::fi::CfiCounter,
 ) -> Result<TrailerReceipt, ()> {
     let start = out.len();
     let mut at = [None; N_TRAILERS];
     for (i, slot) in SLOTS.iter().enumerate() {
         let idx = out.len();
-        if let Some(s) = expected(*slot, f, idx)? {
+        if let Some(s) = expected(*slot, f, look, idx)? {
             out.push(&s)?;
             at[i] = Some(idx);
         }
@@ -402,6 +440,7 @@ pub(crate) fn trailer_screen_proof(
     slot_i: usize,
     receipt: &TrailerReceipt,
     f: &TrailerFacts<'_>,
+    look: Look,
     confirm_at: Option<usize>,
 ) -> u32 {
     crate::fi::check_true_into_sentinel(|| {
@@ -411,7 +450,7 @@ pub(crate) fn trailer_screen_proof(
         let Some(at) = receipt.at.get(slot_i) else {
             return false;
         };
-        match (at, expected(*slot, f, at.unwrap_or(0))) {
+        match (at, expected(*slot, f, look, at.unwrap_or(0))) {
             (None, Ok(None)) => true,
             (Some(idx), Ok(Some(s))) => {
                 core::hint::black_box(screen_at_matches(screens, shifted(*idx, confirm_at), &s))
@@ -429,6 +468,7 @@ pub(crate) fn trailer_set_proof(
     screens: &Screens,
     receipt: &TrailerReceipt,
     f: &TrailerFacts<'_>,
+    look: Look,
     confirm_at: Option<usize>,
 ) -> u32 {
     crate::fi::check_true_into_sentinel(|| {
@@ -448,7 +488,7 @@ pub(crate) fn trailer_set_proof(
         }
         for i in 0..N_TRAILERS {
             crate::fi::scrub_sentinel_register();
-            if trailer_screen_proof(screens, i, receipt, f, confirm_at) != crate::fi::OK_SENTINEL {
+            if trailer_screen_proof(screens, i, receipt, f, look, confirm_at) != crate::fi::OK_SENTINEL {
                 return false;
             }
         }

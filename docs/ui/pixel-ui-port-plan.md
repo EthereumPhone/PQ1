@@ -49,25 +49,67 @@ tests 2596/0; `pq-ui-check`, `ui-px-assets-check`, `pq-ui-port-diff`
 (24 MATCH, 1 recorded DEVIATION) green. Only an EVT walk-through of the Safe
 flows is still pending (human).
 
-### 2. Single-UserOp families
+### 2. Single-UserOp families — DONE (2026-09-23)
 
-One emitter each, in this order:
+| firmware route | upstream flow | emitter |
+|---|---|---|
+| `value_transfer` | `send`, `contract_call` | `value_transfer_screens.rs` |
+| `erc20_known` | `send_token`, `send_token_named`, `transfer_token`, `approve_token` | `erc20_screens.rs` |
+| `erc20_unknown` | `transfer_unknown_token` (ramp from the token address) | `erc20_screens.rs` |
+| `blind_sign` | `blind/bare_call`, `call_with_value`, `unknown_call` | `blind_sign_screens.rs` |
+| `typed_call` | `blind/typed_call/sign_with_args` | `typed_call/screens.rs` |
+| `slot_rotation` | `rotate_slot` | `slot_rotation_screens.rs` |
+| `deployment` | deploy banner | the `! DEPLOY` trailer twin (`trailer_screens.rs`, step 1) |
 
-| firmware route | upstream flow |
-|---|---|
-| `value_transfer` | `send` |
-| `erc20_known` | `send_token`, `send_token_named`, `transfer_token`, `approve_token` |
-| `erc20_unknown` | `transfer_unknown_token` (gradient from the token address) |
-| `blind_sign`, `forced_blind` | `blind/bare_call`, `call_with_value`, `unknown_call` |
-| `typed_call` | `blind/typed_call/sign_with_args` |
-| `slot_rotation` | `rotate_slot` |
-| `deployment` | deploy banner + initCode |
-| `contract_call` | `contract_call` |
+How it is wired: `userop_screens.rs` re-walks the tail of the dispatcher
+ladder (below Safe / CoW / ERC-7730 / known-call) and hands the route to its
+emitter; the shared pieces (`Emit`, amount policies, wrap, caption fit, token
+looks) moved from `safe_screens.rs` to `screen_kit.rs` (Safe output
+byte-identical). `px_lift` takes a `Body` (Safe / UserOp / Rotation); a
+single-UserOp body is bound by re-running its page painter and comparing the
+proven body pages byte-for-byte, the rotation body by its one page. Trailers
+wear the family's disc (`Look`) and a `TrailerSet::Rotation` covers the
+rotation consent (signer, nonce lane, gas lane). `px_route_confirm` sends
+every non-Safe route that is not a direct CoW order or an authenticated
+ERC-7730 descriptor to the pixel dialog; the rotation consent has its own
+route. Where a page cut a value (the function signature at 32 characters,
+the calldata hash to 16 of 32 bytes) the screens show all of it; a typed-call
+integer the page could only show as `!OVERFLOW` refuses on the pixel path.
 
-Assets: ETH, USDC, DAI, USDT marks + blind / rotate icons.
+Engine: disc icons ETH, USDC, USDT, DAI, blind, rotate (baked marks; the
+atlas is 74,204 B of its 77,824 B NS window — every mark but `safe` is
+trimmed to fit), the placeholder-ramp tint (`colors.PLACEHOLDER_GRADIENTS`,
+hashed like `placeholder_index`), unbranded endings (black disc, green /
+red stroke) with per-family captions via `lcd::set_film_look`.
 
-Done when: `pick_sign_pages` routes every single-UserOp shape to px and
-each family has one e2e scenario and blessed frames.
+Evidence: `userop_screens_render_pure_tests` (12 scenarios through the real
+dispatcher + trailer painters: route, lift proof, fact differential over body
+AND trailers, design-rule checker, record goldens, fixtures under
+`pqsigner-ui-px/tests/fixtures/<family>/` with blessed frame goldens); secure
+host tests 2608/0; `pqsigner-ui-px` tests green with the Safe goldens
+unchanged; `make e2e-px` all assertions passed (24 pixel transcripts; a pixel hero per family — APPROVE, EXECUTE, SEND, CALL, TRANSFER, UNKNOWN, BLIND, ROTATE; the `DEPLOY` trailer twin; zero Legacy records); catalogue `docs/ui-screens/px/` regenerated (362 frames, 19 scenarios; the four Safe scenarios byte-identical). The suite gained Scenario 4a (zero-value
+contract call), 4b (unknown-token transfer) and 4c (first deploy with
+initCode).
+
+Not ported, on purpose:
+
+- `forced_blind` (default-off `erc7730-forced-blind`): its consent is
+  `confirm_forced_checked` (two phases, deadlines, request-bound receipts),
+  not the page dialog. Porting it needs a pixel twin of that ceremony, not
+  an emitter; it stays on the page dialog until then.
+- Token logos are drawn as the white part of the art on the token-colour disc
+  (the atlas carries 4-bit masks, not colour art), and the USDC / USDT / DAI
+  marks are third-party brand assets with no production sign-off gate like
+  `safe_logo_approved` yet.
+- The firmware trail darkens toward the disc; upstream `trail_chain` paints
+  the brightest follower next to it. Fixing it re-blesses every golden
+  (Safe included) — one line, left for a deliberate re-bless.
+
+Flash after step 2 (`make size-report-px BOARD=pq1`): the ship-shaped A/B
+image overflows the secure slot by 25,408 B (Safe alone: 9.2 KB). The
+monolithic EVT dev image (`FEAT_S=dual-se,dev-testkey,ui-lcd,ui-px,dev-dfu,stm32u585,usb,board-pq1
+tools/evt-dev-flash.sh --build-only`) links: 494,816 B secure, 97,808 B
+non-secure. The flash lever stays an owner decision (see § Flash).
 
 ### 3. Structured flows
 

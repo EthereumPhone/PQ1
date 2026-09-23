@@ -21,13 +21,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "ui-screens" / "px"
 
-SCENARIO_RE = re.compile(r"^\[NS\]\[e2e\] Scenario ([0-9A-Za-z]+): (.*?)\s*$")
+SCENARIO_RE = re.compile(r"^\[NS\]\[e2e\] Scenario ([0-9A-Za-z-]+): (.*?)\s*$")
 HUMAN_RE = re.compile(r"^\[UI-PX\] ([0-9a-f]{4})/([0-9a-f]{4}) p(\d) (.*)$")
 RECORD_RE = re.compile(r"^\[UI-PXR\] ([0-9a-f]{4}) p(\d) ([0-9a-f]{512})\s*$")
 
 
 def parse(log: Path) -> dict[str, dict]:
-    """scenario key -> {title, screens: [(idx, page, human, hex)]}"""
+    """scenario key -> {title, screens: [(dialog, idx, page, human, hex)]}
+
+    A scenario can open more than one dialog (the slot-rotation consent, then
+    the sign confirmation); a new dialog starts where screen 0 page 0 comes
+    round again after other screens."""
     scenarios: dict[str, dict] = {}
     cur = None
     pending_human: dict[tuple[int, int], str] = {}
@@ -48,7 +52,11 @@ def parse(log: Path) -> dict[str, dict]:
         if m:
             idx, page = int(m.group(1), 16), int(m.group(2))
             human = pending_human.pop((idx, page), "")
-            scenarios[cur]["screens"].append((idx, page, human, m.group(3)))
+            shown = scenarios[cur]["screens"]
+            dialog = shown[-1][0] if shown else 0
+            if shown and idx == 0 and page == 0 and (shown[-1][1], shown[-1][2]) != (0, 0):
+                dialog += 1
+            shown.append((dialog, idx, page, human, m.group(3)))
     return {k: v for k, v in scenarios.items() if v["screens"]}
 
 
@@ -81,16 +89,20 @@ def export(log: Path, out: Path = OUT) -> int:
         index.append("")
         index.append("| # | id | page | record text | frame |")
         index.append("|---|----|------|-------------|-------|")
-        for idx, page, human, hexrec in sc["screens"]:
+        multi = len({dlg for dlg, *_ in sc["screens"]}) > 1
+        for dlg, idx, page, human, hexrec in sc["screens"]:
             rid = record_id(hexrec)
-            name = f"{idx:02d}-{slug(rid)}-p{page}.png"
+            name = (f"d{dlg + 1}-" if multi else "") + f"{idx:02d}-{slug(rid)}-p{page}.png"
             batch_lines.append(f"{d / name} {page} {hexrec}")
             text = human.split(" ", 1)[1] if " " in human else human
             text = text.replace("|", "\\|")
-            index.append(f"| {idx} | `{rid}` | {page + 1} | {text} | ![{rid}]({d.name}/{name}) |")
+            pos = f"{dlg + 1}.{idx}" if multi else f"{idx}"
+            index.append(f"| {pos} | `{rid}` | {page + 1} | {text} | ![{rid}]({d.name}/{name}) |")
             total += 1
         index.append("")
-        (d / "records.txt").write_text("".join(f"{idx:04x} p{page} {hexrec}\n" for idx, page, _, hexrec in sc["screens"]))
+        (d / "records.txt").write_text("".join(
+            (f"d{dlg + 1} " if multi else "") + f"{idx:04x} p{page} {hexrec}\n"
+            for dlg, idx, page, _, hexrec in sc["screens"]))
     batch = out / "_batch.txt"
     batch.write_text("\n".join(batch_lines) + "\n")
     subprocess.run(

@@ -16,13 +16,27 @@ use sha2::{Digest, Sha256};
 const FONTS: &[u8] = include_bytes!("../../secure/assets/ui-px/fonts.bin");
 const SAFE: &[u8] = include_bytes!("../../secure/assets/ui-px/safe.a4");
 const MAINNET: &[u8] = include_bytes!("../../secure/assets/ui-px/mainnet.a4");
+const BASE: &[u8] = include_bytes!("../../secure/assets/ui-px/base.a4");
+const ETH: &[u8] = include_bytes!("../../secure/assets/ui-px/eth.a4");
+const BLIND: &[u8] = include_bytes!("../../secure/assets/ui-px/blind.a4");
+const ROTATE: &[u8] = include_bytes!("../../secure/assets/ui-px/rotate.a4");
+const USDC: &[u8] = include_bytes!("../../secure/assets/ui-px/usdc.a4");
+const USDT: &[u8] = include_bytes!("../../secure/assets/ui-px/usdt.a4");
+const DAI: &[u8] = include_bytes!("../../secure/assets/ui-px/dai.a4");
 
 fn marks() -> Marks<'static> {
     Marks {
         safe: parse_mark(SAFE),
         mainnet: parse_mark(MAINNET),
-        base: None,
+        // The device draws Base's own mark on a Base NETWORK screen.
+        base: parse_mark(BASE),
         fingerprint: None,
+        eth: parse_mark(ETH),
+        usdc: parse_mark(USDC),
+        usdt: parse_mark(USDT),
+        dai: parse_mark(DAI),
+        blind: parse_mark(BLIND),
+        rotate: parse_mark(ROTATE),
     }
 }
 
@@ -194,33 +208,41 @@ const GOLDEN_FILM_FLASH: &str = "e4574e263ed8452307cc7ac9871161e81d71ae5c42ed20d
 const GOLDEN_FILM_CHECK: &str = "1fc1479648e0fb9bd2fbb31423f6de392115c8c67af4e5bdfd2a0cc6894ab39c";
 const GOLDEN_FILM_HOLD_END: &str = "9dd674e78b15221c8a5effedd5a5121c0fba5183741bdacf90a58cabc647da33";
 
-/// Every Safe scenario transcript the secure host tests export
-/// (`UI_PX_EXPORT=1 cargo test -p sphincs-tz-secure ... safe_screens`):
-/// render the settled frame of every (screen, page) and compare the hash
-/// list with `tests/fixtures/safe/<name>.sha`. `UI_PX_BLESS=1` rewrites the
+/// The per-family transcript fixtures (`tests/fixtures/<family>/<name>.hex`,
+/// one 512-hex record per line, exported by the secure host tests with
+/// `UI_PX_EXPORT=1`): render the settled frame of every (screen, page) and
+/// compare the hash list with `<name>.sha`. `UI_PX_BLESS=1` rewrites the
 /// `.sha` files (`make ui-px-goldens-bless`); `UI_PX_PNG=1` writes the
-/// frames under `target/ui-px-golden/safe/<name>/`.
+/// frames under `target/ui-px-golden/<family>/<name>/`. (Named `safe_flows`
+/// for the bless target's filter; it walks every family directory.)
 #[test]
 fn safe_flows() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/safe");
-    let mut fixtures: Vec<_> = std::fs::read_dir(&dir)
-        .expect("tests/fixtures/safe exists")
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "hex"))
-        .collect();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let mut fixtures: Vec<(String, std::path::PathBuf)> = Vec::new();
+    for fam in std::fs::read_dir(&root).expect("tests/fixtures exists").filter_map(Result::ok) {
+        if !fam.path().is_dir() {
+            continue;
+        }
+        let family = fam.file_name().to_string_lossy().into_owned();
+        for e in std::fs::read_dir(fam.path()).unwrap().filter_map(Result::ok) {
+            let p = e.path();
+            if p.extension().is_some_and(|x| x == "hex") {
+                fixtures.push((family.clone(), p));
+            }
+        }
+    }
     fixtures.sort();
-    assert!(!fixtures.is_empty(), "no Safe transcript fixtures");
+    assert!(fixtures.iter().any(|(f, _)| f == "safe"), "no Safe transcript fixtures");
     let bless = std::env::var_os("UI_PX_BLESS").is_some();
     let font = Font::parse(FONTS).expect("atlas");
     let mut mismatches = Vec::new();
-    for path in fixtures {
+    for (family, path) in fixtures {
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
         let text = std::fs::read_to_string(&path).unwrap();
         let mut hashes = Vec::new();
         for (i, line) in text.lines().enumerate() {
-            let screen = pqsigner_ui_px::png::screen_from_hex(line).unwrap_or_else(|| panic!("{name}: record {i} malformed"));
-            assert_eq!(pqsigner_ui_px::check::check_screens(&[screen]), Ok(()), "{name}: record {i}");
+            let screen = pqsigner_ui_px::png::screen_from_hex(line).unwrap_or_else(|| panic!("{family}/{name}: record {i} malformed"));
+            assert_eq!(pqsigner_ui_px::check::check_screens(&[screen]), Ok(()), "{family}/{name}: record {i}");
             for page in 0..screen.npages().max(1) {
                 let mut a = Anim::new(&screen, page, 0);
                 let mut t = 16;
@@ -229,7 +251,7 @@ fn safe_flows() {
                 }
                 let px = pqsigner_ui_px::png::render_full(&a, &marks(), &font);
                 if std::env::var_os("UI_PX_PNG").is_some() {
-                    write_png(&format!("safe/{name}/{i:02}-p{page}.png"), &px);
+                    write_png(&format!("{family}/{name}/{i:02}-p{page}.png"), &px);
                 }
                 hashes.push(format!("{i:02} p{page} {}", sha(&px)));
             }
@@ -242,8 +264,63 @@ fn safe_flows() {
         }
         let want = std::fs::read_to_string(&sha_path).unwrap_or_default();
         if want != got {
-            mismatches.push(name);
+            mismatches.push(format!("{family}/{name}"));
         }
     }
-    assert!(mismatches.is_empty(), "frame goldens changed for {mismatches:?} — review target/ui-px-golden/safe/ (UI_PX_PNG=1) and `make ui-px-goldens-bless`");
+    assert!(mismatches.is_empty(), "frame goldens changed for {mismatches:?} — review target/ui-px-golden/<family>/ (UI_PX_PNG=1) and `make ui-px-goldens-bless`");
 }
+
+/// Every step-2 family disc at rest on its hero (the idle sweep settled at
+/// t 0), one tinted placeholder disc, and the unbranded endings: the film on
+/// a family status screen lands on a black disc with the state-colour ring
+/// and mark, captioned from the screen's lines.
+#[test]
+fn family_discs_and_unbranded_endings() {
+    let cases: [(&str, Icon, Option<u8>, &str); 7] = [
+        ("disc_eth", Icon::Eth, None, GOLDEN_DISC_ETH),
+        ("disc_usdc", Icon::Usdc, None, GOLDEN_DISC_USDC),
+        ("disc_usdt", Icon::Usdt, None, GOLDEN_DISC_USDT),
+        ("disc_dai", Icon::Dai, None, GOLDEN_DISC_DAI),
+        ("disc_blind", Icon::Blind, None, GOLDEN_DISC_BLIND),
+        ("disc_rotate", Icon::Rotate, None, GOLDEN_DISC_ROTATE),
+        ("disc_eth_tint1", Icon::Eth, Some(1), GOLDEN_DISC_ETH_TINT1),
+    ];
+    for (name, icon, tint, expected) in cases {
+        let mut b = ScreenBuilder::hero(b"ASK", icon, b"SEND 1 ETH?");
+        if let Some(t) = tint {
+            b = b.tint(t);
+        }
+        let s = checked(b.finish().unwrap());
+        let a = Anim::new(&s, 0, 0);
+        let px = render_full(&a);
+        assert!((50..95).any(|y| (190..238).any(|x| px[(y * W + x) as usize] != 0)), "{name}: nothing in the disc");
+        check(name, &px, expected);
+    }
+    for (name, ending, expected) in [
+        ("ending_eth_signed", Ending::Signed, GOLDEN_ENDING_ETH_SIGNED),
+        ("ending_eth_declined", Ending::Declined, GOLDEN_ENDING_ETH_DECLINED),
+    ] {
+        let film = ScreenBuilder::status(b"SIGN", Icon::Eth, b"", pqsigner_ui_px::State::Awaiting, pqsigner_ui_px::ResultMark::None)
+            .line(b"TRANSACTION CONFIRMED", Weight::Regular)
+            .line(b"TRANSACTION DECLINED", Weight::Regular)
+            .finish()
+            .unwrap();
+        let mut e = Anim::new(&film, 0, 0);
+        e.ending(ending, 0);
+        for t in (16..=1300).step_by(16) {
+            e.step(t);
+        }
+        let px = render_full(&e);
+        check(name, &px, expected);
+    }
+}
+
+const GOLDEN_DISC_ETH: &str = "cc80a3dc0b11d9c6f060876204baff547a335f1aa8ddce439ea106c4a806aaf6";
+const GOLDEN_DISC_USDC: &str = "c89b71775c022d5ee3b91b078230bfa953e4c1d47adc024cc7de515e52318394";
+const GOLDEN_DISC_USDT: &str = "2358fd40973c9f4a3680c9bd0dba506bbade5269ef5cc7035917b9f4cb2869b9";
+const GOLDEN_DISC_DAI: &str = "0fba635333447ec0fc17a2855b79c872b8d1710a7a5abb578369b2882b77c618";
+const GOLDEN_DISC_BLIND: &str = "36930052ebbd2027d35b3ac5b218b061f3cde9b1c9ee6b0db2d91aa4ecdab360";
+const GOLDEN_DISC_ROTATE: &str = "cf46606c59634c6303b2e9419fa2230f35b8a20e51042259715a5ffca1a32376";
+const GOLDEN_DISC_ETH_TINT1: &str = "ca430a1c37d82982f0a15894ac91d5b17a2c39df01b6113782b6488b51b3bfa7";
+const GOLDEN_ENDING_ETH_SIGNED: &str = "5ad70f3d3d27ed7838565a182f3920f90fb095ac01ef81f9e27e06c86b065ec2";
+const GOLDEN_ENDING_ETH_DECLINED: &str = "803a91483480bf4f9f19f2cf0193c1f7bf31bef9b951d2f8f537ba7489779b34";

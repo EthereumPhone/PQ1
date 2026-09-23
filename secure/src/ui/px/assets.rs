@@ -84,12 +84,7 @@ impl AtlasRef {
     /// The disc marks (the disc itself is drawn procedurally).
     #[must_use]
     pub fn marks(&self) -> Marks<'static> {
-        Marks {
-            safe: self.atlas.entry(pq1a::NAME_SAFE).and_then(parse_mark),
-            mainnet: self.atlas.entry(pq1a::NAME_MAINNET).and_then(parse_mark),
-            base: self.atlas.entry(pq1a::NAME_BASE).and_then(parse_mark),
-            fingerprint: None,
-        }
+        self.atlas.marks()
     }
 }
 
@@ -120,7 +115,7 @@ pub fn verify_atlas() -> Result<AtlasRef, ()> {
     let atlas = Atlas::parse(window()).ok_or(())?;
     let fonts = atlas.entry(pq1a::NAME_FONTS).ok_or(())?;
     Font::parse(fonts).ok_or(())?;
-    for name in [pq1a::NAME_SAFE, pq1a::NAME_MAINNET, pq1a::NAME_BASE] {
+    for name in pq1a::MARK_NAMES {
         parse_mark(atlas.entry(name).ok_or(())?).ok_or(())?;
     }
     Ok(AtlasRef { atlas })

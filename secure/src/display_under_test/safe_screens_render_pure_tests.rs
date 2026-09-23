@@ -45,7 +45,7 @@ use crate::tx::eip712::safe::multi_send::test_util::{
     encode_multisend, pack_record, presign_calldata_stub, ZERO_VALUE,
 };
 use crate::tx::eip712::safe::{compute_safe_tx_hash, verify_and_bind_trailer};
-use pqsigner_ui_px::{Kind, Screen, Screens, MAX_SCREENS};
+use pqsigner_ui_px::{Kind, Look, Screen, Screens, MAX_SCREENS};
 use super::deployment::DeploymentConfirmContext;
 use sphincs_tz_shared::{APPROVE_HASH_CALLDATA_LEN, APPROVE_HASH_SELECTOR, SAFE_OFF_DATA_HASH};
 
@@ -109,7 +109,7 @@ fn both(to: [u8; 20], operation: u8, raw: &[u8], cow: Option<&VerifiedCowswapV3>
     both_with(to, operation, raw, cow, erc20, |_| {}).expect("scenario must render on both painters")
 }
 
-fn screen_text(screens: &Screens) -> String {
+pub(super) fn screen_text(screens: &Screens) -> String {
     let mut s = String::new();
     for sc in screens.as_slice() {
         for b in sc.id() {
@@ -137,7 +137,7 @@ fn screen_text(screens: &Screens) -> String {
     s
 }
 
-fn hex_only(s: &str) -> String {
+pub(super) fn hex_only(s: &str) -> String {
     s.chars().filter(char::is_ascii_hexdigit).collect::<String>().to_lowercase()
 }
 
@@ -509,7 +509,8 @@ impl TrailerFixture {
             verification_gas: &self.verify,
             pre_verification_gas: &self.prever,
             fingerprint: self.fp,
-            deployment: &self.deployment,
+            deployment: Some(&self.deployment),
+            set: trailer_screens::TrailerSet::Sign,
         }
     }
 }
@@ -553,8 +554,9 @@ fn append_trailer_pages(pages: &mut Pages, f: &TrailerFacts<'_>) {
     assert_eq!(super::erc8213::fingerprint_page_proof(pages, before, f.fingerprint), ok);
     let mut cfi = crate::fi::CfiCounter::new();
     let before = pages.len;
-    super::deployment::enforce_deployment_page(pages, f.deployment, &mut cfi).unwrap();
-    assert_eq!(super::deployment::deployment_page_proof(pages, before, f.deployment), ok);
+    let d = f.deployment.unwrap();
+    super::deployment::enforce_deployment_page(pages, d, &mut cfi).unwrap();
+    assert_eq!(super::deployment::deployment_page_proof(pages, before, d), ok);
 }
 
 struct Lifted {
@@ -579,11 +581,13 @@ fn lifted(fx: &TrailerFixture) -> Lifted {
     append_trailer_pages(&mut pages, &facts);
     let mut screens = Screens::blank();
     let inputs = px_lift::ContentInputs {
-        safe_v1: Some(&verified),
-        safe_exec: None,
-        cow: None,
-        erc20: Some(&meta),
-        resolver: &resolver,
+        body: px_lift::Body::Safe {
+            safe_v1: Some(&verified),
+            safe_exec: None,
+            cow: None,
+            erc20: Some(&meta),
+            resolver: &resolver,
+        },
         trailers: &facts,
     };
     let receipt = px_lift::emit_content(&mut screens, &inputs).unwrap();
@@ -591,7 +595,7 @@ fn lifted(fx: &TrailerFixture) -> Lifted {
     assert_eq!(receipt.trailers.start, receipt.body.screens);
     assert_eq!(receipt.trailers.screens, pages.len - body_len, "one trailer screen per trailer page");
     px_lift::append_returning_hero(&mut screens).unwrap();
-    let confirm_at = px_lift::insert_confirm(&mut screens).unwrap();
+    let confirm_at = px_lift::insert_confirm(&mut screens, &receipt.family).unwrap();
     // The finished transcript passes the design-rule checker (flow shape
     // included) — the design-rule gate on the Safe route.
     assert_eq!(pqsigner_ui_px::check::check_flow(&screens), Ok(()));
@@ -602,8 +606,21 @@ fn ids(screens: &Screens) -> Vec<String> {
     screens.as_slice().iter().map(|s| String::from_utf8_lossy(s.id()).trim_end().to_owned()).collect()
 }
 
+/// The Safe body's binding reads only the proven pages (its confirm
+/// footer), so the proof can run on a Safe body without its inputs.
+fn safe_body() -> px_lift::Body<'static> {
+    static RESOLVER: std::sync::OnceLock<NameResolver<'static>> = std::sync::OnceLock::new();
+    px_lift::Body::Safe {
+        safe_v1: None,
+        safe_exec: None,
+        cow: None,
+        erc20: None,
+        resolver: RESOLVER.get_or_init(NameResolver::new),
+    }
+}
+
 fn proof(l: &Lifted, screens: &Screens, facts: &TrailerFacts<'_>, confirm_at: Option<usize>) -> u32 {
-    px_lift::transcript_proof(screens, &l.pages, l.body_len, &l.receipt, facts, confirm_at)
+    px_lift::transcript_proof(screens, &l.pages, &safe_body(), l.body_len, &l.receipt, facts, confirm_at)
 }
 
 fn copy_of(screens: &Screens) -> Screens {
@@ -736,7 +753,7 @@ fn lift_proof_rejects_tampering() {
     assert_ne!(proof(&l, &t, &facts, l.confirm_at), ok, "commit-armed detail");
 
     // A body length that does not land on the legacy confirm footer.
-    assert_ne!(px_lift::transcript_proof(&l.screens, &l.pages, l.body_len - 1, &l.receipt, &facts, l.confirm_at), ok);
+    assert_ne!(px_lift::transcript_proof(&l.screens, &l.pages, &safe_body(), l.body_len - 1, &l.receipt, &facts, l.confirm_at), ok);
 
     // Facts that disagree with the screens: a different target, a value
     // the screens do not show, a lane key they do not show.
@@ -762,11 +779,11 @@ fn trailer_slot_proofs_reject_a_present_screen_on_a_skip() {
     let zero = fixture(0, false, false, false);
     let mut receipt: TrailerReceipt = l.receipt.trailers;
     receipt.at[0] = None;
-    assert_ne!(trailer_screens::trailer_set_proof(&l.screens, &receipt, &zero.facts(), l.confirm_at), crate::fi::OK_SENTINEL);
-    assert_ne!(trailer_screens::trailer_screen_proof(&l.screens, 0, &l.receipt.trailers, &zero.facts(), l.confirm_at), crate::fi::OK_SENTINEL);
+    assert_ne!(trailer_screens::trailer_set_proof(&l.screens, &receipt, &zero.facts(), Look::SAFE, l.confirm_at), crate::fi::OK_SENTINEL);
+    assert_ne!(trailer_screens::trailer_screen_proof(&l.screens, 0, &l.receipt.trailers, &zero.facts(), Look::SAFE, l.confirm_at), crate::fi::OK_SENTINEL);
     // And the genuine receipt against the genuine facts passes per slot.
     for i in 0..trailer_screens::N_TRAILERS {
-        assert_eq!(trailer_screens::trailer_screen_proof(&l.screens, i, &l.receipt.trailers, &fx.facts(), l.confirm_at), crate::fi::OK_SENTINEL, "slot {i}");
+        assert_eq!(trailer_screens::trailer_screen_proof(&l.screens, i, &l.receipt.trailers, &fx.facts(), Look::SAFE, l.confirm_at), crate::fi::OK_SENTINEL, "slot {i}");
     }
 }
 
@@ -776,14 +793,7 @@ fn lift_helpers_fail_closed() {
     let facts = fx.facts();
     let mut screens = Screens::blank();
     assert!(px_lift::append_returning_hero(&mut screens).is_err(), "no hero");
-    let inputs = px_lift::ContentInputs {
-        safe_v1: None,
-        safe_exec: None,
-        cow: None,
-        erc20: None,
-        resolver: &NameResolver::new(),
-        trailers: &facts,
-    };
+    let inputs = px_lift::ContentInputs { body: safe_body(), trailers: &facts };
     assert!(px_lift::emit_content(&mut screens, &inputs).is_err());
     let _ = Screen::BLANK;
 }
@@ -808,7 +818,7 @@ fn every_trailer_slot_renders_for_both_fixtures() {
     for (name, fx) in [("minimal", fixture(0, false, false, false)), ("maximal", fixture(1_500_000_000_000_000_000, true, true, true))] {
         let facts = fx.facts();
         for (i, slot) in trailer_screens::SLOTS.iter().enumerate() {
-            let r = trailer_screens::expected(*slot, &facts, 9 + i);
+            let r = trailer_screens::expected(*slot, &facts, Look::SAFE, 9 + i);
             assert!(r.is_ok(), "{name}: slot {slot:?} refused to render");
         }
     }

@@ -49,13 +49,28 @@ mod safe_screens;
 /// The legacy-pages → screens lift and its transcript proof (`ui-px`).
 #[cfg(feature = "ui-px")]
 pub mod px_lift;
+/// Shared building blocks of the pixel-UI screen emitters (`ui-px`).
+#[cfg(feature = "ui-px")]
+mod screen_kit;
+/// Pixel-UI emitters for the single-UserOp routes and the rotation consent
+/// (`ui-px`, port step 2), each the second painter over its page painter.
+#[cfg(feature = "ui-px")]
+pub(crate) mod userop_screens;
+#[cfg(feature = "ui-px")]
+mod value_transfer_screens;
+#[cfg(feature = "ui-px")]
+mod erc20_screens;
+#[cfg(feature = "ui-px")]
+mod blind_sign_screens;
+#[cfg(feature = "ui-px")]
+mod slot_rotation_screens;
 // The native pixel-UI twins of the handler-owned trailer pages. Always
 // compiled (pure, host-testable; dead-stripped without a `ui-px` caller) so
 // the sign handler's `TrailerFacts` exists on every configuration.
 #[cfg(not(test))]
 mod trailer_screens;
 #[cfg(not(test))]
-pub(crate) use trailer_screens::TrailerFacts;
+pub(crate) use trailer_screens::{TrailerFacts, TrailerSet};
 #[cfg(feature = "ui-px")]
 pub(crate) use dispatch::safe_route_meta;
 #[cfg(not(test))]

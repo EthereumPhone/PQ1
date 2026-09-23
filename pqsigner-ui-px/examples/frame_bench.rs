@@ -15,7 +15,7 @@ const SAFE: &[u8] = include_bytes!("../../secure/assets/ui-px/safe.a4");
 const MAINNET: &[u8] = include_bytes!("../../secure/assets/ui-px/mainnet.a4");
 
 fn marks() -> Marks<'static> {
-    Marks { safe: parse_mark(SAFE), mainnet: parse_mark(MAINNET), base: None, fingerprint: None }
+    Marks { safe: parse_mark(SAFE), mainnet: parse_mark(MAINNET), ..Marks::default() }
 }
 
 fn render_full(anim: &Anim, font: &Font<'_>, strip_buf: &mut [u16]) -> u64 {

@@ -22,7 +22,7 @@ use crate::motion::{
     PRESS_FEEDBACK_MS, TEXT_IN_DELAY_MS,
 };
 use crate::raster::{Frame, Item, Mask, Rgb};
-use crate::screen::{Icon, Kind, ResultMark, Screen, State, Tier, Weight};
+use crate::screen::{Icon, Kind, ResultMark, Screen, State, Tier, Weight, N_RAMPS};
 
 // ---- grid (DESIGN.md § Layout grid & anchors) -----------------------------
 pub const CIRCLE_R: i32 = 30;
@@ -236,13 +236,121 @@ pub struct DiscStyle {
     pub fill: Rgb,
     pub ring: Rgb,
     pub mark: Rgb,
+    /// Follower colours in the engine's existing order (`Rgb::SAFE_TRAIL`'s
+    /// convention: ramp stop 1 at index 0 … stop 5 at index 4); the chain
+    /// and the film index it the same way for every family.
     pub trail: [Rgb; 5],
     /// Black film over a coloured body; white film inside a black body.
     pub film_white: bool,
+    /// The qubit film's body colour: the ramp's brightest stop, so a
+    /// black-bodied token never plays black-on-black qubits
+    /// (`components.token_style_from_spec` "film").
+    pub film: Rgb,
+    /// A brand family (Safe): its endings FILL the disc (DESIGN.md "The
+    /// ending disc splits on branding"); every other family strokes it.
+    pub branded: bool,
 }
 
+/// `colors.PLACEHOLDER_GRADIENTS`: fourteen six-stop ramps, far follower →
+/// the token (stop 6 = the disc; ramp 13 is the mono entry, whose disc the
+/// design overrides to black).
+pub const PLACEHOLDER_RAMPS: [[Rgb; 6]; N_RAMPS as usize] = [
+    [Rgb::new(0x41, 0x3D, 0x2E), Rgb::new(0x48, 0x42, 0x2C), Rgb::new(0x5C, 0x52, 0x23), Rgb::new(0x75, 0x64, 0x00), Rgb::new(0x7D, 0x65, 0x00), Rgb::new(0x8A, 0x75, 0x00)],
+    [Rgb::new(0x64, 0x12, 0x20), Rgb::new(0x85, 0x18, 0x2A), Rgb::new(0xA7, 0x1E, 0x34), Rgb::new(0xB2, 0x1E, 0x35), Rgb::new(0xC7, 0x1F, 0x37), Rgb::new(0xE0, 0x1E, 0x37)],
+    [Rgb::new(0x05, 0x19, 0x23), Rgb::new(0x00, 0x2E, 0x4A), Rgb::new(0x00, 0x4F, 0x75), Rgb::new(0x00, 0x60, 0x97), Rgb::new(0x00, 0x74, 0xB1), Rgb::new(0x00, 0x7E, 0xB2)],
+    [Rgb::new(0x38, 0x16, 0x0D), Rgb::new(0x4C, 0x26, 0x1B), Rgb::new(0x56, 0x2F, 0x21), Rgb::new(0x60, 0x37, 0x28), Rgb::new(0x6A, 0x3F, 0x2F), Rgb::new(0x7E, 0x50, 0x3C)],
+    [Rgb::new(0x31, 0x00, 0x55), Rgb::new(0x3C, 0x06, 0x63), Rgb::new(0x4A, 0x0A, 0x77), Rgb::new(0x5A, 0x10, 0x8F), Rgb::new(0x68, 0x18, 0xA5), Rgb::new(0x8B, 0x2F, 0xC9)],
+    [Rgb::new(0x5C, 0x2E, 0x0C), Rgb::new(0x70, 0x38, 0x10), Rgb::new(0x83, 0x43, 0x14), Rgb::new(0x95, 0x4D, 0x18), Rgb::new(0xA6, 0x57, 0x1B), Rgb::new(0xB6, 0x5F, 0x1F)],
+    [Rgb::new(0x03, 0x19, 0x11), Rgb::new(0x06, 0x2A, 0x1D), Rgb::new(0x08, 0x33, 0x24), Rgb::new(0x0E, 0x45, 0x30), Rgb::new(0x12, 0x56, 0x3D), Rgb::new(0x17, 0x68, 0x49)],
+    [Rgb::new(0x03, 0x31, 0x2E), Rgb::new(0x00, 0x52, 0x52), Rgb::new(0x00, 0x67, 0x5E), Rgb::new(0x00, 0x6E, 0x67), Rgb::new(0x00, 0x7A, 0x76), Rgb::new(0x00, 0x84, 0x82)],
+    [Rgb::new(0x64, 0x0E, 0x30), Rgb::new(0x75, 0x17, 0x3A), Rgb::new(0x86, 0x20, 0x45), Rgb::new(0x96, 0x2A, 0x50), Rgb::new(0xA7, 0x32, 0x55), Rgb::new(0xC5, 0x4C, 0x71)],
+    [Rgb::new(0x7C, 0x05, 0x0A), Rgb::new(0x8C, 0x19, 0x17), Rgb::new(0x9B, 0x27, 0x23), Rgb::new(0xAA, 0x35, 0x2F), Rgb::new(0xBA, 0x42, 0x39), Rgb::new(0xCA, 0x4D, 0x45)],
+    [Rgb::new(0x26, 0x26, 0x2C), Rgb::new(0x2F, 0x30, 0x37), Rgb::new(0x39, 0x3A, 0x41), Rgb::new(0x4B, 0x4C, 0x52), Rgb::new(0x5B, 0x5C, 0x62), Rgb::new(0x6A, 0x6B, 0x70)],
+    [Rgb::new(0x11, 0x00, 0x1C), Rgb::new(0x22, 0x07, 0x32), Rgb::new(0x37, 0x17, 0x4C), Rgb::new(0x5C, 0x31, 0x7E), Rgb::new(0x6F, 0x40, 0x97), Rgb::new(0x8C, 0x57, 0xBC)],
+    [Rgb::new(0x07, 0x23, 0x8B), Rgb::new(0x15, 0x37, 0x9A), Rgb::new(0x24, 0x48, 0xA9), Rgb::new(0x32, 0x58, 0xB8), Rgb::new(0x40, 0x67, 0xC4), Rgb::new(0x4C, 0x73, 0xCF)],
+    [Rgb::new(0x05, 0x05, 0x05), Rgb::new(0x2E, 0x2E, 0x2E), Rgb::new(0x5C, 0x5C, 0x5C), Rgb::new(0x8F, 0x8F, 0x8F), Rgb::new(0xC4, 0xC4, 0xC4), Rgb::new(0xF4, 0xF4, 0xF4)],
+];
+/// `TOKEN_GRADIENTS["USDC"]` (`ramp_from(#2775CA)`).
+pub const RAMP_USDC: [Rgb; 6] = [Rgb::new(0x06, 0x12, 0x1E), Rgb::new(0x0C, 0x23, 0x3D), Rgb::new(0x14, 0x3A, 0x65), Rgb::new(0x1B, 0x52, 0x8D), Rgb::new(0x22, 0x65, 0xAE), Rgb::new(0x27, 0x75, 0xCA)];
+/// `TOKEN_GRADIENTS["USDT"]` (`ramp_from(#50AF95)`).
+pub const RAMP_USDT: [Rgb; 6] = [Rgb::new(0x0C, 0x1A, 0x16), Rgb::new(0x18, 0x34, 0x2D), Rgb::new(0x28, 0x58, 0x4A), Rgb::new(0x38, 0x7A, 0x68), Rgb::new(0x45, 0x96, 0x80), Rgb::new(0x50, 0xAF, 0x95)];
+/// `TOKEN_GRADIENTS["DAI"]` (`ramp_from(#F5AC37)`).
+pub const RAMP_DAI: [Rgb; 6] = [Rgb::new(0x25, 0x1A, 0x08), Rgb::new(0x4A, 0x34, 0x10), Rgb::new(0x7A, 0x56, 0x1C), Rgb::new(0xAC, 0x78, 0x26), Rgb::new(0xD3, 0x94, 0x2F), Rgb::new(0xF5, 0xAC, 0x37)];
+/// `ROTATE_GRADIENT`: the gold trail under the black rotation disc (stop 6 = the film colour, never the disc).
+pub const RAMP_ROTATE: [Rgb; 6] = [Rgb::new(0x41, 0x3D, 0x2E), Rgb::new(0x51, 0x4B, 0x33), Rgb::new(0x7A, 0x6E, 0x3B), Rgb::new(0xAF, 0x99, 0x2E), Rgb::new(0xDD, 0xC0, 0x19), Rgb::new(0xDD, 0xC0, 0x19)];
+
+/// A six-stop ramp's five followers in the `DiscStyle::trail` order (stop 1
+/// … stop 5, like `Rgb::SAFE_TRAIL`).
 #[must_use]
-pub fn disc_style(icon: Option<Icon>) -> DiscStyle {
+pub const fn ramp_trail(r: &[Rgb; 6]) -> [Rgb; 5] {
+    [r[0], r[1], r[2], r[3], r[4]]
+}
+
+/// `colors.luma` × 1000 (Rec. 709 weights).
+#[must_use]
+pub const fn luma_milli(c: Rgb) -> u32 {
+    (2126 * c.r as u32 + 7152 * c.g as u32 + 722 * c.b as u32) / 2550
+}
+
+/// `components.HOLD_DARK_BODY`: a body below this luma is black — the hold
+/// film rises white inside it instead of black over it.
+const HOLD_DARK_BODY_MILLI: u32 = 150;
+/// `colors.CHAIN_DARK_MARK_LUMA`: above this a disc takes a black mark.
+const DARK_MARK_LUMA_MILLI: u32 = 620;
+
+/// The mono body (ETH, the blind mark): black disc, white ring and mark,
+/// the MONO ramp's grey trail, the film on its brightest stop.
+const fn mono_style() -> DiscStyle {
+    let r = &PLACEHOLDER_RAMPS[13];
+    DiscStyle {
+        fill: Rgb::BLACK,
+        ring: Rgb::WHITE,
+        mark: Rgb::WHITE,
+        trail: ramp_trail(r),
+        film_white: true,
+        film: r[5],
+        branded: false,
+    }
+}
+
+/// A popular token's own colour under its (white) logo mark, on its ramp.
+const fn token_style(r: &[Rgb; 6]) -> DiscStyle {
+    DiscStyle {
+        fill: r[5],
+        ring: Rgb::WHITE,
+        mark: Rgb::WHITE,
+        trail: ramp_trail(r),
+        // Logo art darkens (components.hold_style: art never hides a film).
+        film_white: false,
+        film: r[5],
+        branded: false,
+    }
+}
+
+/// A solid placeholder disc on ramp `i` (`colors.PLACEHOLDER_PALETTES`).
+fn tinted_style(i: u8) -> DiscStyle {
+    let r = &PLACEHOLDER_RAMPS[usize::from(i.min(N_RAMPS - 1))];
+    // The mono entry's disc is black (colors.PLACEHOLDER_PALETTES[MONO_RAMP]).
+    let fill = if i == N_RAMPS - 1 { Rgb::BLACK } else { r[5] };
+    DiscStyle {
+        fill,
+        ring: Rgb::WHITE,
+        mark: if luma_milli(fill) > DARK_MARK_LUMA_MILLI { Rgb::BLACK } else { Rgb::WHITE },
+        trail: ramp_trail(r),
+        film_white: luma_milli(fill) < HOLD_DARK_BODY_MILLI,
+        film: r[5],
+        branded: false,
+    }
+}
+
+/// The disc look for an icon and its optional placeholder tint.
+#[must_use]
+pub fn disc_style(icon: Option<Icon>, tint: Option<u8>) -> DiscStyle {
+    if let (Some(t), Some(i)) = (tint, icon) {
+        if t < N_RAMPS && !matches!(i, Icon::Safe | Icon::Fingerprint | Icon::Chain) {
+            return tinted_style(t);
+        }
+    }
     match icon {
         Some(Icon::Safe) => DiscStyle {
             fill: Rgb::SAFE_FILL,
@@ -250,6 +358,8 @@ pub fn disc_style(icon: Option<Icon>) -> DiscStyle {
             mark: Rgb::new(0x12, 0x12, 0x12),
             trail: Rgb::SAFE_TRAIL,
             film_white: false,
+            film: Rgb::SAFE_FILL,
+            branded: true,
         },
         Some(Icon::Fingerprint) => DiscStyle {
             fill: Rgb::WHITE,
@@ -257,6 +367,23 @@ pub fn disc_style(icon: Option<Icon>) -> DiscStyle {
             mark: Rgb::BLACK,
             trail: Rgb::MONO_TRAIL,
             film_white: false,
+            film: Rgb::WHITE,
+            branded: false,
+        },
+        Some(Icon::Eth | Icon::Blind) => mono_style(),
+        Some(Icon::Usdc) => token_style(&RAMP_USDC),
+        Some(Icon::Usdt) => token_style(&RAMP_USDT),
+        Some(Icon::Dai) => token_style(&RAMP_DAI),
+        // Slot rotation: the rotate mark white on a BLACK body over the gold
+        // trail; the film takes stop 6 (colors.ROTATE_GRADIENT).
+        Some(Icon::Rotate) => DiscStyle {
+            fill: Rgb::BLACK,
+            ring: Rgb::WHITE,
+            mark: Rgb::WHITE,
+            trail: ramp_trail(&RAMP_ROTATE),
+            film_white: true,
+            film: RAMP_ROTATE[5],
+            branded: false,
         },
         _ => DiscStyle {
             fill: Rgb::BLACK,
@@ -264,6 +391,8 @@ pub fn disc_style(icon: Option<Icon>) -> DiscStyle {
             mark: Rgb::WHITE,
             trail: Rgb::MONO_TRAIL,
             film_white: true,
+            film: Rgb::BLACK,
+            branded: false,
         },
     }
 }
@@ -275,6 +404,32 @@ pub struct Marks<'a> {
     pub mainnet: Option<Mask<'a>>,
     pub base: Option<Mask<'a>>,
     pub fingerprint: Option<Mask<'a>>,
+    pub eth: Option<Mask<'a>>,
+    pub usdc: Option<Mask<'a>>,
+    pub usdt: Option<Mask<'a>>,
+    pub dai: Option<Mask<'a>>,
+    pub blind: Option<Mask<'a>>,
+    pub rotate: Option<Mask<'a>>,
+}
+
+impl<'a> Marks<'a> {
+    /// The mark an icon wears (the chain disc picks Base vs the Ethereum
+    /// mark from its NETWORK text at the call site).
+    #[must_use]
+    pub fn for_icon(&self, icon: Option<Icon>) -> Option<Mask<'a>> {
+        match icon {
+            Some(Icon::Safe) => self.safe,
+            Some(Icon::Chain) => self.mainnet,
+            Some(Icon::Fingerprint) => self.fingerprint,
+            Some(Icon::Eth) => self.eth,
+            Some(Icon::Usdc) => self.usdc,
+            Some(Icon::Usdt) => self.usdt,
+            Some(Icon::Dai) => self.dai,
+            Some(Icon::Blind) => self.blind,
+            Some(Icon::Rotate) => self.rotate,
+            Some(Icon::Wallet | Icon::None) | None => None,
+        }
+    }
 }
 
 /// Parse a `*.a4` mark asset (`"PQ1M" | w u8 | h u8 | reserved u16 | rows`).
@@ -749,10 +904,11 @@ impl Anim {
                 }
                 Film::Resolve { film, outcome } => (0, film.pose(now).text_a, Some(outcome)),
             };
-            let caption_of = |e: Ending| -> &'static [u8] {
+            let (signed, declined) = ending_captions(&self.cur);
+            let caption_of = |e: Ending| -> &[u8] {
                 match e {
-                    Ending::Signed => b"SIGNED SAFE TX",
-                    Ending::Declined => b"SAFE TX DECLINED",
+                    Ending::Signed => signed,
+                    Ending::Declined => declined,
                 }
             };
             for (text, a_q16) in [(&b"SIGNING"[..], busy_a), (outcome.map_or(&b""[..], caption_of), text_a)] {
@@ -777,7 +933,7 @@ impl Anim {
 
         // ---- the disc, its trail, film and ring ---------------------------
         let icon = self.cur.icon();
-        let style = disc_style(icon);
+        let style = disc_style(icon, self.cur.tint());
         let head_x = self.sx.value + self.sweep;
         let cx_q8 = head_x >> 8;
         let cy_q8 = self.sy.value >> 8;
@@ -807,7 +963,6 @@ impl Anim {
                 {
                     frame.push(Item::Disc { cx: cx_q8, cy: cy_q8, r: visible_r, color: style.fill });
                     let mark = match icon {
-                        Some(Icon::Safe) => marks.safe,
                         // The chain mark follows the proven NETWORK text: Base
                         // gets its own mark, everything else the Ethereum one.
                         Some(Icon::Chain) => {
@@ -817,8 +972,7 @@ impl Anim {
                                 marks.mainnet
                             }
                         }
-                        Some(Icon::Fingerprint) => marks.fingerprint,
-                        _ => None,
+                        other => marks.for_icon(other),
                     };
                     if let Some(m) = mark {
                         frame.push(Item::Mask { cx: cx_q8, cy: cy_q8, mask: m, scale: ONE_Q8, color: style.mark, a: 255 });
@@ -845,10 +999,15 @@ impl Anim {
     }
 
     /// The resting look an ending lands on: (fill, ring, mark colour).
-    fn resting(e: Ending) -> (Rgb, Rgb, Rgb) {
-        match e {
-            Ending::Signed => (Rgb::SAFE_FILL, Rgb::BLACK, Rgb::BLACK),
-            Ending::Declined => (Rgb::RED, Rgb::BLACK, Rgb::BLACK),
+    /// A branded family fills the disc (Safe: `#13FF7F` / the shared red
+    /// cancel disc, black stroke, black mark); an unbranded one keeps the
+    /// black disc and strokes ring + result mark in the state colour.
+    fn resting(e: Ending, branded: bool) -> (Rgb, Rgb, Rgb) {
+        match (e, branded) {
+            (Ending::Signed, true) => (Rgb::SAFE_FILL, Rgb::BLACK, Rgb::BLACK),
+            (Ending::Declined, true) => (Rgb::RED, Rgb::BLACK, Rgb::BLACK),
+            (Ending::Signed, false) => (Rgb::BLACK, Rgb::GREEN, Rgb::GREEN),
+            (Ending::Declined, false) => (Rgb::BLACK, Rgb::RED, Rgb::RED),
         }
     }
 
@@ -864,12 +1023,7 @@ impl Anim {
     /// The status film over the disc (DESIGN.md § Status animations).
     fn build_film<'a>(&self, frame: &mut Frame<'a>, marks: &Marks<'a>, style: &DiscStyle, icon: Option<Icon>, film: Film, now: u32) {
         let visible_r = (CIRCLE_R << 8) - TOKEN_INSET_Q8;
-        let mark = match icon {
-            Some(Icon::Safe) => marks.safe,
-            Some(Icon::Chain) => marks.mainnet,
-            Some(Icon::Fingerprint) => marks.fingerprint,
-            _ => None,
-        };
+        let mark = marks.for_icon(icon);
         match film {
             Film::Resolve { film, outcome } => {
                 // The arrived disc crossfades to the result look over the
@@ -878,7 +1032,7 @@ impl Anim {
                 let p = film.pose(now);
                 let cx = self.sx.value >> 8;
                 let cy = self.sy.value >> 8;
-                let (fill, ring, mark_c) = Self::resting(outcome);
+                let (fill, ring, mark_c) = Self::resting(outcome, style.branded);
                 let state = match outcome {
                     Ending::Signed => Rgb::GREEN,
                     Ending::Declined => Rgb::RED,
@@ -928,19 +1082,19 @@ impl Anim {
                             }
                         }
                         for b in &p.bodies[..usize::from(p.n)] {
-                            frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: style.fill });
+                            frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: style.film });
                         }
                     }
                     Phase::Flash | Phase::Result => {
                         let e = outcome.unwrap_or(Ending::Declined);
-                        let (fill, ring, mark_c) = Self::resting(e);
+                        let (fill, ring, mark_c) = Self::resting(e, style.branded);
                         let state = match e {
                             Ending::Signed => Rgb::GREEN,
                             Ending::Declined => Rgb::RED,
                         };
                         let b = p.bodies[0];
                         let u = if p.phase == Phase::Flash { motion::ease_out(motion::phase(ft_of(&film, now), loading::T6, loading::QUBIT_T_FLASH)) } else { ONE_Q16 };
-                        frame.push(Item::Disc { cx, cy, r: b.r, color: blend_rgb(style.fill, fill, u) });
+                        frame.push(Item::Disc { cx, cy, r: b.r, color: blend_rgb(style.film, fill, u) });
                         frame.push(Item::Ring { cx, cy, r: b.r, w: TOKEN_RING_W_Q8, color: blend_rgb(style.ring, ring, u) });
                         if p.flash_a > 0 {
                             frame.push(Item::Ring { cx, cy, r: p.flash_r, w: (2 << 8) + 128, color: state.scale(p.flash_a) });
@@ -950,6 +1104,22 @@ impl Anim {
                 }
             }
         }
+    }
+}
+
+/// The endings' captions a film status screen carries: line 0 = the signed
+/// caption, line 1 = the declined caption. A screen without them (the Safe
+/// flow, a hero the cancel resolves on) gets the Safe family's captions.
+#[must_use]
+pub fn ending_captions(s: &Screen) -> (&[u8], &[u8]) {
+    const SIGNED: &[u8] = b"SIGNED SAFE TX";
+    const DECLINED: &[u8] = b"SAFE TX DECLINED";
+    if s.kind() != Some(Kind::Status) {
+        return (SIGNED, DECLINED);
+    }
+    match (s.line(0, 0), s.line(0, 1)) {
+        (Some((_, a)), Some((_, b))) if !a.is_empty() && !b.is_empty() => (a, b),
+        _ => (SIGNED, DECLINED),
     }
 }
 
@@ -1123,5 +1293,102 @@ mod tests {
         assert!(f.items().iter().any(|i| matches!(i, Item::Check { .. })));
         assert!(f.items().iter().any(|i| matches!(i, Item::Disc { color, .. } if *color == Rgb::SAFE_FILL)));
         assert!(!f.items().iter().any(|i| matches!(i, Item::Chevron { .. })), "no input on an ending");
+    }
+
+    #[test]
+    fn ramp_table_matches_the_reference_palette() {
+        // Spot values from tools/pq-ui/pq1/colors.py (PLACEHOLDER_GRADIENTS,
+        // TOKEN_GRADIENTS via ramp_from, ROTATE_GRADIENT).
+        assert_eq!(PLACEHOLDER_RAMPS[0][5], Rgb::new(0x8A, 0x75, 0x00));
+        assert_eq!(PLACEHOLDER_RAMPS[1][0], Rgb::new(0x64, 0x12, 0x20));
+        assert_eq!(PLACEHOLDER_RAMPS[10][5], Rgb::new(0x6A, 0x6B, 0x70));
+        assert_eq!(PLACEHOLDER_RAMPS[13][5], Rgb::new(0xF4, 0xF4, 0xF4));
+        assert_eq!(RAMP_USDC[5], Rgb::new(0x27, 0x75, 0xCA));
+        assert_eq!(RAMP_USDT[5], Rgb::new(0x50, 0xAF, 0x95));
+        assert_eq!(RAMP_DAI[5], Rgb::new(0xF5, 0xAC, 0x37));
+        assert_eq!(RAMP_DAI[0], Rgb::new(0x25, 0x1A, 0x08));
+        assert_eq!(RAMP_ROTATE[4], Rgb::new(0xDD, 0xC0, 0x19));
+        // luma: Rec. 709 on 0..255.
+        assert_eq!(luma_milli(Rgb::WHITE), 1000);
+        assert_eq!(luma_milli(Rgb::BLACK), 0);
+    }
+
+    #[test]
+    fn disc_styles_per_family() {
+        let safe = disc_style(Some(Icon::Safe), None);
+        assert!(safe.branded && safe.fill == Rgb::SAFE_FILL && safe.trail == Rgb::SAFE_TRAIL);
+        // A tint never re-dresses the Safe disc.
+        assert_eq!(disc_style(Some(Icon::Safe), Some(3)).fill, Rgb::SAFE_FILL);
+        for icon in [Icon::Eth, Icon::Blind] {
+            let m = disc_style(Some(icon), None);
+            assert!(!m.branded && m.fill == Rgb::BLACK && m.ring == Rgb::WHITE && m.mark == Rgb::WHITE);
+            assert!(m.film_white);
+            assert_eq!(m.film, PLACEHOLDER_RAMPS[13][5], "no black-on-black qubits");
+            assert_eq!(m.trail, ramp_trail(&PLACEHOLDER_RAMPS[13]));
+        }
+        for (icon, ramp) in [(Icon::Usdc, RAMP_USDC), (Icon::Usdt, RAMP_USDT), (Icon::Dai, RAMP_DAI)] {
+            let t = disc_style(Some(icon), None);
+            assert_eq!((t.fill, t.ring, t.mark), (ramp[5], Rgb::WHITE, Rgb::WHITE));
+            assert_eq!(t.trail, ramp_trail(&ramp));
+            assert!(!t.film_white && !t.branded);
+        }
+        let r = disc_style(Some(Icon::Rotate), None);
+        assert_eq!((r.fill, r.mark, r.film), (Rgb::BLACK, Rgb::WHITE, RAMP_ROTATE[5]));
+        assert_eq!(r.trail, ramp_trail(&RAMP_ROTATE));
+        for i in 0..N_RAMPS {
+            let t = disc_style(Some(Icon::Eth), Some(i));
+            let ramp = &PLACEHOLDER_RAMPS[usize::from(i)];
+            assert_eq!(t.trail, ramp_trail(ramp));
+            assert_eq!(t.film, ramp[5]);
+            if i == N_RAMPS - 1 {
+                assert_eq!(t.fill, Rgb::BLACK, "the mono entry fills black");
+                assert!(t.film_white);
+            } else {
+                assert_eq!(t.fill, ramp[5]);
+                assert!(!t.film_white, "ramp {i}: a coloured body darkens");
+                assert_eq!(t.mark, Rgb::WHITE);
+            }
+        }
+    }
+
+    #[test]
+    fn every_icon_maps_to_its_mark() {
+        let m = |b: u8| Some(Mask { w: 2, h: 2, rows: if b == 0 { &[0x10, 0] } else { &[0x20, 0] } });
+        let marks = Marks {
+            safe: m(1),
+            mainnet: m(1),
+            base: None,
+            fingerprint: None,
+            eth: m(1),
+            usdc: m(1),
+            usdt: m(1),
+            dai: m(1),
+            blind: m(1),
+            rotate: m(1),
+        };
+        for icon in [Icon::Safe, Icon::Chain, Icon::Eth, Icon::Usdc, Icon::Usdt, Icon::Dai, Icon::Blind, Icon::Rotate] {
+            assert!(marks.for_icon(Some(icon)).is_some(), "{icon:?}");
+        }
+        assert!(marks.for_icon(Some(Icon::None)).is_none());
+        assert!(marks.for_icon(Some(Icon::Wallet)).is_none());
+        assert!(marks.for_icon(Some(Icon::Fingerprint)).is_none());
+    }
+
+    #[test]
+    fn ending_captions_come_from_the_film_screen() {
+        assert_eq!(ending_captions(&hero()), (&b"SIGNED SAFE TX"[..], &b"SAFE TX DECLINED"[..]));
+        let film = ScreenBuilder::status(b"SIGN", Icon::Eth, b"", State::Awaiting, ResultMark::None)
+            .line(b"TRANSFER SUCCESSFUL", Weight::Regular)
+            .line(b"TRANSFER DECLINED", Weight::Regular)
+            .finish()
+            .unwrap();
+        assert_eq!(ending_captions(&film), (&b"TRANSFER SUCCESSFUL"[..], &b"TRANSFER DECLINED"[..]));
+        let bare = ScreenBuilder::status(b"SIGN", Icon::Safe, b"", State::Awaiting, ResultMark::None).finish().unwrap();
+        assert_eq!(ending_captions(&bare).0, b"SIGNED SAFE TX");
+        // Resting looks: brand fills, the rest strokes in the state colour.
+        assert_eq!(Anim::resting(Ending::Signed, true).0, Rgb::SAFE_FILL);
+        assert_eq!(Anim::resting(Ending::Declined, true).0, Rgb::RED);
+        assert_eq!(Anim::resting(Ending::Signed, false), (Rgb::BLACK, Rgb::GREEN, Rgb::GREEN));
+        assert_eq!(Anim::resting(Ending::Declined, false), (Rgb::BLACK, Rgb::RED, Rgb::RED));
     }
 }

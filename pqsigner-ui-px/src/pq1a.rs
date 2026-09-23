@@ -33,6 +33,16 @@ pub const NAME_FONTS: &[u8; 8] = b"fonts\0\0\0";
 pub const NAME_SAFE: &[u8; 8] = b"safe\0\0\0\0";
 pub const NAME_MAINNET: &[u8; 8] = b"mainnet\0";
 pub const NAME_BASE: &[u8; 8] = b"base\0\0\0\0";
+pub const NAME_ETH: &[u8; 8] = b"eth\0\0\0\0\0";
+pub const NAME_BLIND: &[u8; 8] = b"blind\0\0\0";
+pub const NAME_ROTATE: &[u8; 8] = b"rotate\0\0";
+pub const NAME_USDC: &[u8; 8] = b"usdc\0\0\0\0";
+pub const NAME_USDT: &[u8; 8] = b"usdt\0\0\0\0";
+pub const NAME_DAI: &[u8; 8] = b"dai\0\0\0\0\0";
+/// Every disc mark the shipped container must carry (the secure world
+/// refuses a dialog when one is missing or malformed).
+pub const MARK_NAMES: [&[u8; 8]; 9] =
+    [NAME_SAFE, NAME_MAINNET, NAME_BASE, NAME_ETH, NAME_BLIND, NAME_ROTATE, NAME_USDC, NAME_USDT, NAME_DAI];
 
 /// A parsed container: the whole blob plus a validated entry count.
 #[derive(Clone, Copy, Debug)]
@@ -108,6 +118,26 @@ impl<'a> Atlas<'a> {
         let off = le_u32(self.data, rec + 8)? as usize;
         let len = le_u32(self.data, rec + 12)? as usize;
         Some((off, len))
+    }
+
+    /// The disc marks the container carries (a missing / malformed entry is
+    /// `None` and draws no mark).
+    #[must_use]
+    pub fn marks(&self) -> crate::scene::Marks<'a> {
+        use crate::scene::parse_mark;
+        let m = |n: &[u8; 8]| self.entry(n).and_then(parse_mark);
+        crate::scene::Marks {
+            safe: m(NAME_SAFE),
+            mainnet: m(NAME_MAINNET),
+            base: m(NAME_BASE),
+            fingerprint: None,
+            eth: m(NAME_ETH),
+            usdc: m(NAME_USDC),
+            usdt: m(NAME_USDT),
+            dai: m(NAME_DAI),
+            blind: m(NAME_BLIND),
+            rotate: m(NAME_ROTATE),
+        }
     }
 
     /// The bytes of the entry called `name` (exact 8-byte match), if present.
@@ -210,10 +240,14 @@ mod tests {
     fn the_real_bake_parses() {
         let blob = include_bytes!("../../nonsecure/assets/ui-px/atlas.pq1a");
         let a = Atlas::parse(blob).unwrap();
-        assert_eq!(a.len(), 4);
+        assert_eq!(a.len(), 1 + MARK_NAMES.len());
         assert!(a.entry(NAME_FONTS).unwrap().starts_with(b"PQ1F"));
-        for n in [NAME_SAFE, NAME_MAINNET, NAME_BASE] {
+        for n in MARK_NAMES {
             assert!(a.entry(n).unwrap().starts_with(b"PQ1M"));
+            assert!(crate::scene::parse_mark(a.entry(n).unwrap()).is_some());
         }
+        let m = a.marks();
+        assert!(m.eth.is_some() && m.usdc.is_some() && m.usdt.is_some() && m.dai.is_some());
+        assert!(m.blind.is_some() && m.rotate.is_some() && m.safe.is_some());
     }
 }

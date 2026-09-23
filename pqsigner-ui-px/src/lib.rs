@@ -69,6 +69,6 @@ pub mod scene;
 pub mod screen;
 
 pub use screen::{
-    exact_screen_occurrences, screen_at_matches, screen_exact, BuildErr, Icon, Kind, ResultMark,
-    Screen, ScreenBuilder, Screens, Side, State, Tier, Weight, MAX_SCREENS, SCREENS_BYTES, SCREEN_BYTES,
+    exact_screen_occurrences, placeholder_ramp, screen_at_matches, screen_exact, BuildErr, Icon, Kind, Look, ResultMark,
+    Screen, ScreenBuilder, Screens, Side, State, Tier, Weight, MAX_SCREENS, N_RAMPS, SCREENS_BYTES, SCREEN_BYTES,
 };

@@ -15,7 +15,7 @@ use std::path::Path;
 use pqsigner_ui_px::font::Font;
 use pqsigner_ui_px::png::{render_full, screen_from_hex, write_png};
 use pqsigner_ui_px::pq1a::{self, Atlas};
-use pqsigner_ui_px::scene::{parse_mark, Anim, Marks};
+use pqsigner_ui_px::scene::Anim;
 
 const ATLAS: &[u8] = include_bytes!("../../nonsecure/assets/ui-px/atlas.pq1a");
 
@@ -26,12 +26,7 @@ fn main() {
     };
     let atlas = Atlas::parse(ATLAS).expect("atlas.pq1a parses");
     let font = Font::parse(atlas.entry(pq1a::NAME_FONTS).expect("fonts")).expect("font atlas");
-    let marks = Marks {
-        safe: atlas.entry(pq1a::NAME_SAFE).and_then(parse_mark),
-        mainnet: atlas.entry(pq1a::NAME_MAINNET).and_then(parse_mark),
-        base: atlas.entry(pq1a::NAME_BASE).and_then(parse_mark),
-        fingerprint: None,
-    };
+    let marks = atlas.marks();
     let file = std::fs::File::open(&batch).expect("batch file");
     let mut bad = 0usize;
     let mut n = 0usize;

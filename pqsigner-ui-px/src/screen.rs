@@ -17,7 +17,7 @@
 //! | off | len | field   | encoding |
 //! |-----|-----|---------|----------|
 //! |   0 |   1 | kind    | `H` hero, `D` detail, `V` value, `C` confirm, `S` status, `L` legacy |
-//! |   1 |   1 | icon    | `S` safe, `N` chain, `F` fingerprint, `W` wallet, `-` none |
+//! |   1 |   1 | icon    | `S` safe, `N` chain, `F` fingerprint, `W` wallet, `E` ether, `U` USDC, `T` USDT, `D` DAI, `B` blind, `R` rotate, `-` none |
 //! |   2 |   1 | side    | `L`, `R`, `-` (disc column on a detail screen) |
 //! |   3 |   2 | tier    | `36` `32` `28` `22`, or `--` |
 //! |   5 |   1 | commit  | `Y` / `N` — hold-right-to-sign armed; only on `H` / `C` |
@@ -30,7 +30,12 @@
 //! |  20 |  12 | label   | caps, 16 px `SemiBold` under the disc |
 //! |  32 |  32 | caption | caps, the hero ask / confirm prompt / status caption |
 //! |  64 | 192 | lines   | 6 × { weight `r`/`s`/`t`, 30 bytes text, 1 pad } |
+//! |  95 |   1 | tint    | the pad of line record 0: ` ` = the icon's own look, `a`..`n` = placeholder ramp 0..13 |
 //!
+//! The tint is the design's token colour (DESIGN.md § Color, placeholder
+//! ramps): a solid disc + trail on one of the fourteen ramps, hashed from the
+//! token's identity ([`placeholder_ramp`]). It lives in a pad byte so every
+//! record written before it existed (the Safe family) is byte-identical.
 //! Design kinds address page `p` line `i` as record `p * 3 + i`; a legacy
 //! screen stores its four 16-column rows in records `0..4` of page 0.
 //! Unused text is space-padded, so a record is always fully defined.
@@ -87,6 +92,10 @@ const OFF_ID: usize = 12;
 const OFF_LABEL: usize = 20;
 const OFF_CAPTION: usize = 32;
 const OFF_LINES: usize = 64;
+/// The tint rides in the pad byte of line record 0.
+const OFF_TINT: usize = OFF_LINES + LINE_REC - 1;
+/// Number of placeholder ramps (`colors.PLACEHOLDER_GRADIENTS`).
+pub const N_RAMPS: u8 = 14;
 
 const _: () = assert!(OFF_ID + ID_LEN == OFF_LABEL);
 const _: () = assert!(OFF_LABEL + LABEL_LEN == OFF_CAPTION);
@@ -163,6 +172,16 @@ pub enum Icon {
     Chain,
     Fingerprint,
     Wallet,
+    /// The ether mark on the mono body (ETH / WETH; a tinted disc for a
+    /// token without logo art).
+    Eth,
+    Usdc,
+    Usdt,
+    Dai,
+    /// The blind-signing mark.
+    Blind,
+    /// The slot-rotation mark.
+    Rotate,
     None,
 }
 
@@ -174,6 +193,12 @@ impl Icon {
             Self::Chain => b'N',
             Self::Fingerprint => b'F',
             Self::Wallet => b'W',
+            Self::Eth => b'E',
+            Self::Usdc => b'U',
+            Self::Usdt => b'T',
+            Self::Dai => b'D',
+            Self::Blind => b'B',
+            Self::Rotate => b'R',
             Self::None => b'-',
         }
     }
@@ -185,10 +210,51 @@ impl Icon {
             b'N' => Some(Self::Chain),
             b'F' => Some(Self::Fingerprint),
             b'W' => Some(Self::Wallet),
+            b'E' => Some(Self::Eth),
+            b'U' => Some(Self::Usdc),
+            b'T' => Some(Self::Usdt),
+            b'D' => Some(Self::Dai),
+            b'B' => Some(Self::Blind),
+            b'R' => Some(Self::Rotate),
             b'-' => Some(Self::None),
             _ => None,
         }
     }
+}
+
+/// A family's disc: the art and, optionally, the placeholder ramp it is
+/// tinted with (`None` = the icon's own look).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Look {
+    pub icon: Icon,
+    pub tint: Option<u8>,
+}
+
+impl Look {
+    /// The Safe family's disc (untinted — its records predate the tint).
+    pub const SAFE: Self = Self { icon: Icon::Safe, tint: None };
+
+    #[must_use]
+    pub const fn plain(icon: Icon) -> Self {
+        Self { icon, tint: None }
+    }
+}
+
+/// `colors.placeholder_index(key)` for a string key: CRC-32 (IEEE) of the
+/// ASCII-uppercased bytes, modulo the fourteen ramps — so the same token
+/// (contract address, or symbol) always wears the same ramp as on the
+/// design reference.
+#[must_use]
+pub fn placeholder_ramp(key: &[u8]) -> u8 {
+    let mut crc: u32 = 0xFFFF_FFFF;
+    for &b in key {
+        crc ^= u32::from(b.to_ascii_uppercase());
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+        }
+    }
+    ((!crc) % u32::from(N_RAMPS)) as u8
 }
 
 /// Which column the disc docks on (record byte 2).
@@ -458,6 +524,22 @@ impl Screen {
         Icon::from_byte(self.0[OFF_ICON])
     }
 
+    /// The placeholder ramp the disc is tinted with; `None` = the icon's
+    /// own look (also for a malformed byte — `is_well_formed` refuses those).
+    #[must_use]
+    pub fn tint(&self) -> Option<u8> {
+        match self.0[OFF_TINT] {
+            b @ b'a'..=b'z' if b - b'a' < N_RAMPS => Some(b - b'a'),
+            _ => None,
+        }
+    }
+
+    /// The disc look (icon + tint).
+    #[must_use]
+    pub fn look(&self) -> Option<Look> {
+        Some(Look { icon: self.icon()?, tint: self.tint() })
+    }
+
     #[must_use]
     pub fn side(&self) -> Option<Side> {
         Side::from_byte(self.0[OFF_SIDE])
@@ -581,6 +663,13 @@ impl Screen {
             || self.state().is_none()
             || self.result().is_none()
         {
+            return false;
+        }
+        let t = self.0[OFF_TINT];
+        if t != b' ' && !(b'a'..b'a' + N_RAMPS).contains(&t) {
+            return false;
+        }
+        if t != b' ' && self.kind() == Some(Kind::Legacy) {
             return false;
         }
         let tier_ok = self.tier().is_some() || &self.0[OFF_TIER..OFF_TIER + 2] == b"--";
@@ -758,6 +847,26 @@ impl ScreenBuilder {
         self
     }
 
+    /// Tint the disc with placeholder ramp `ramp` (`0..N_RAMPS`).
+    #[must_use]
+    pub fn tint(mut self, ramp: u8) -> Self {
+        if ramp >= N_RAMPS {
+            self.fail(BuildErr::NonAscii);
+        } else {
+            self.s.0[OFF_TINT] = b'a' + ramp;
+        }
+        self
+    }
+
+    /// Apply a [`Look`]'s tint (its icon is passed to the constructor).
+    #[must_use]
+    pub fn look_tint(self, look: Look) -> Self {
+        match look.tint {
+            Some(r) => self.tint(r),
+            None => self,
+        }
+    }
+
     /// Warning rings around the disc.
     #[must_use]
     pub fn pulse(mut self) -> Self {
@@ -919,8 +1028,14 @@ impl Screens {
     /// at, `None` when the rule does not apply, `Err` when the buffer is full
     /// or a confirm screen is already present.
     pub fn insert_confirm(&mut self, icon: Icon) -> Result<Option<usize>, ()> {
+        self.insert_confirm_look(Look::plain(icon))
+    }
+
+    /// [`Self::insert_confirm`] with a tinted disc.
+    pub fn insert_confirm_look(&mut self, look: Look) -> Result<Option<usize>, ()> {
         const CONFIRM_INDEX: usize = 5;
         const CONFIRM_MIN_DETAILS: usize = 7;
+        let icon = look.icon;
         let visible = self.as_slice();
         if visible.iter().any(|s| s.kind() == Some(Kind::Confirm)) {
             return Err(());
@@ -936,7 +1051,7 @@ impl Screens {
         if len >= MAX_SCREENS {
             return Err(());
         }
-        let c = ScreenBuilder::confirm(icon).finish().map_err(|_| ())?;
+        let c = ScreenBuilder::confirm(icon).look_tint(look).finish().map_err(|_| ())?;
         self.buf.copy_within(CONFIRM_INDEX..len, CONFIRM_INDEX + 1);
         self.buf[CONFIRM_INDEX] = c;
         self.set_len(len + 1);
@@ -1148,5 +1263,35 @@ mod tests {
         let mut ss = flow(MAX_SCREENS - 2);
         assert_eq!(ss.len(), MAX_SCREENS);
         assert!(ss.insert_confirm(Icon::Safe).is_err());
+    }
+
+    #[test]
+    fn placeholder_ramp_matches_the_reference_hash() {
+        // `zlib.crc32(key.upper().encode()) % 14` on the design reference.
+        assert_eq!(placeholder_ramp(b"0x3cA9e5F1b72D04E8a6c1D9B3f57E28a0C4d6B1e9"), 1);
+        assert_eq!(placeholder_ramp(b"TOSHI"), 5);
+        assert_eq!(placeholder_ramp(b"0x9E3b5c0f7A1d24e86C3F0b7d5a2E4c6F8b1D3a7c"), 6);
+    }
+
+    #[test]
+    fn tint_round_trips_and_keeps_untinted_records_unchanged() {
+        let plain = ScreenBuilder::hero(b"ASK", Icon::Eth, b"ASK?").finish().unwrap();
+        assert_eq!(plain.tint(), None);
+        let t = ScreenBuilder::hero(b"ASK", Icon::Eth, b"ASK?").tint(7).finish().unwrap();
+        assert_eq!(t.tint(), Some(7));
+        assert_eq!(t.look(), Some(Look { icon: Icon::Eth, tint: Some(7) }));
+        assert!(t.is_well_formed());
+        let mut diff = 0;
+        for i in 0..SCREEN_BYTES {
+            diff += usize::from(plain.0[i] != t.0[i]);
+        }
+        assert_eq!(diff, 1);
+        assert!(ScreenBuilder::hero(b"ASK", Icon::Eth, b"ASK?").tint(N_RAMPS).finish().is_err());
+        let mut bad = t;
+        bad.0[OFF_TINT] = b'z';
+        assert!(!bad.is_well_formed());
+        for icon in [Icon::Eth, Icon::Usdc, Icon::Usdt, Icon::Dai, Icon::Blind, Icon::Rotate] {
+            assert_eq!(Icon::from_byte(icon.as_byte()), Some(icon));
+        }
     }
 }

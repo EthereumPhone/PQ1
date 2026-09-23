@@ -21,9 +21,9 @@
 //! zero-collapse guard), so a value the legacy path renders exactly is
 //! rendered exactly here — and the same base-unit fallbacks apply.
 
-use super::primitives::{
-    amount_is_exact_at_fraction_digits, chain_name, eip55_hex, exact_fraction_digits, format_u64,
-    formatted_collapses_to_zero, known_native_ticker, native_ticker, NATIVE_DISPLAY_FRACTION_DIGITS,
+use super::primitives::native_ticker;
+use super::screen_kit::{
+    addr42, chain_line, native_amount, native_derived_amount, raw_units, token_amount, BodyReceipt, Emit, Text,
 };
 use super::safe_display::{
     classify, multisend_record_semantics, presign_unique_idx, u64_be_tail, InnerKind,
@@ -38,25 +38,15 @@ use crate::tx::eip712::cowswap::{CowLeg, VerifiedCowswapV3};
 use crate::tx::eip712::keccak;
 use crate::tx::eip712::safe::multi_send::{self, MsRecordIter};
 use crate::tx::eip712::safe::{decode_canonical, SafeTx, VerifiedSafeExec, VerifiedSafeV1};
-use pqsigner_ui_px::fit::{
-    fit_tier, layout_address, layout_amount, layout_name_over_address, split_hash_full,
-    split_word_docked, AddrLines, Line, Region,
-};
-use pqsigner_ui_px::{Icon, Screen, ScreenBuilder, Screens, Side, Weight};
+use pqsigner_ui_px::fit::{fit_tier, layout_address, layout_amount, split_word_docked, Region};
+use pqsigner_ui_px::{Icon, Look, ScreenBuilder, Screens, Side, Weight};
 use sphincs_tz_shared::GPV2_VAULT_RELAYER_ADDRESS;
 
-/// What the emitter produced, for the handler's cross-checks.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct SafeBodyReceipt {
-    /// Screens appended (the opening hero included; the returning hero and
-    /// the auto-inserted `Confirm?` are the lift's business).
-    pub(crate) screens: usize,
-    /// The legacy page count [`classify`] computed (header + refund +
-    /// safeTxGas + inner + confirm footer). The handler requires this to
-    /// equal the number of pages the legacy renderer actually produced for
-    /// the Safe body, so the two classifications provably agree.
-    pub(crate) legacy_pages: usize,
-}
+/// What the emitter produced, for the handler's cross-checks. `legacy_pages`
+/// is the page count [`classify`] computed (header + refund + safeTxGas +
+/// inner + confirm footer); the handler requires it to equal the number of
+/// pages the legacy renderer actually produced for the Safe body.
+pub(crate) type SafeBodyReceipt = BodyReceipt;
 
 /// Emit the screens for a verified `safe_v1` (approveHash) trailer.
 pub(crate) fn emit_safe_v1(
@@ -177,333 +167,6 @@ fn cow_body_screens(sell: &CowLeg, buy: &CowLeg) -> usize {
     leg_screens(sell) + leg_screens(buy) + 1 /* receiver */ + 1 /* expires */ + 1 /* fee */ + 1 /* sources */ + 1 /* appData */
 }
 
-// ---------------------------------------------------------------------------
-// Emitter state
-// ---------------------------------------------------------------------------
-
-struct Emit<'s> {
-    out: &'s mut Screens,
-    n: usize,
-    side: Side,
-    chain_id: u64,
-}
-
-impl Emit<'_> {
-    fn push(&mut self, s: Screen) -> Result<(), ()> {
-        self.out.push(&s)?;
-        self.n += 1;
-        Ok(())
-    }
-
-    /// Detail screens alternate the disc column (DESIGN.md `normalize_screens`).
-    fn next_side(&mut self) -> Side {
-        let s = self.side;
-        self.side = match s {
-            Side::Left => Side::Right,
-            _ => Side::Left,
-        };
-        s
-    }
-
-    fn detail(&mut self, id: &[u8], label: &[u8], lines: &[(&[u8], Weight)], pulse: bool) -> Result<(), ()> {
-        self.detail_icon(id, Icon::Safe, label, lines, pulse)
-    }
-
-    fn detail_icon(
-        &mut self,
-        id: &[u8],
-        icon: Icon,
-        label: &[u8],
-        lines: &[(&[u8], Weight)],
-        pulse: bool,
-    ) -> Result<(), ()> {
-        let tier = fit_tier(lines, Region::Docked).ok_or(())?;
-        let side = self.next_side();
-        let mut b = ScreenBuilder::detail(id, icon, side, label).tier(tier);
-        for &(text, w) in lines {
-            b = b.line(text, w);
-        }
-        if pulse {
-            b = b.pulse();
-        }
-        self.push(b.finish().map_err(|_| ())?)
-    }
-
-    /// A docked detail whose one value turns two pages (a 32-byte word).
-    fn detail_paged(&mut self, id: &[u8], label: &[u8], pages: &[[Line; 2]; 2]) -> Result<(), ()> {
-        let p0 = [(pages[0][0].as_bytes(), Weight::Regular), (pages[0][1].as_bytes(), Weight::Regular)];
-        let p1 = [(pages[1][0].as_bytes(), Weight::Regular), (pages[1][1].as_bytes(), Weight::Regular)];
-        let t0 = fit_tier(&p0, Region::Docked).ok_or(())?;
-        let t1 = fit_tier(&p1, Region::Docked).ok_or(())?;
-        let tier = t0.min(t1);
-        let side = self.next_side();
-        let s = ScreenBuilder::detail(id, Icon::Safe, side, label)
-            .tier(tier)
-            .line(p0[0].0, Weight::Regular)
-            .line(p0[1].0, Weight::Regular)
-            .next_page()
-            .line(p1[0].0, Weight::Regular)
-            .line(p1[1].0, Weight::Regular)
-            .finish()
-            .map_err(|_| ())?;
-        self.push(s)
-    }
-
-    /// Full-width value screen (disc parked off-panel).
-    fn value(&mut self, id: &[u8], label: &[u8], lines: &[(&[u8], Weight)]) -> Result<(), ()> {
-        let tier = fit_tier(lines, Region::Full).ok_or(())?;
-        let mut b = ScreenBuilder::value(id, Icon::Safe, label).tier(tier);
-        for &(text, w) in lines {
-            b = b.line(text, w);
-        }
-        self.push(b.finish().map_err(|_| ())?)
-    }
-
-    /// A 32-byte word as one full-width value screen (3 lines at 22).
-    fn word_value(&mut self, id: &[u8], label: &[u8], word: &[u8; 32]) -> Result<(), ()> {
-        let [a, b, c] = split_hash_full(word);
-        self.value(
-            id,
-            label,
-            &[
-                (a.as_bytes(), Weight::Regular),
-                (b.as_bytes(), Weight::Regular),
-                (c.as_bytes(), Weight::Regular),
-            ],
-        )
-    }
-
-    /// An address detail: resolved name (SemiBold, when it fits) over the
-    /// two EIP-55 address halves.
-    fn addr(&mut self, id: &[u8], label: &[u8], addr: &[u8; 20], resolver: &NameResolver<'_>) -> Result<(), ()> {
-        let addr42 = addr42(addr);
-        let na = layout_name_over_address(resolver.lookup(self.chain_id, addr), &addr42);
-        match na.name {
-            Some(name) => self.detail(
-                id,
-                label,
-                &[
-                    (name.as_bytes(), Weight::SemiBold),
-                    (na.addr.lines[0].as_bytes(), Weight::Regular),
-                    (na.addr.lines[1].as_bytes(), Weight::Regular),
-                ],
-                false,
-            ),
-            None => self.addr_lines(id, label, &na.addr, None),
-        }
-    }
-
-    /// A docked address (2 or 3 lines), optionally headed by a fixed
-    /// `SemiBold` label line (only when the address takes two lines).
-    fn addr_lines(&mut self, id: &[u8], label: &[u8], a: &AddrLines, head: Option<&[u8]>) -> Result<(), ()> {
-        let l = a.as_slice();
-        match (head, l.len()) {
-            (Some(h), 2) => self.detail(
-                id,
-                label,
-                &[(h, Weight::SemiBold), (l[0].as_bytes(), Weight::Regular), (l[1].as_bytes(), Weight::Regular)],
-                false,
-            ),
-            (_, 2) => self.detail(
-                id,
-                label,
-                &[(l[0].as_bytes(), Weight::Regular), (l[1].as_bytes(), Weight::Regular)],
-                false,
-            ),
-            _ => self.detail(
-                id,
-                label,
-                &[
-                    (l[0].as_bytes(), Weight::Regular),
-                    (l[1].as_bytes(), Weight::Regular),
-                    (l[2].as_bytes(), Weight::Regular),
-                ],
-                false,
-            ),
-        }
-    }
-
-    /// An amount detail: number + unit on one line when a one-line tier
-    /// fits, else number / unit.
-    fn amount(&mut self, id: &[u8], label: &[u8], amt: &Amount, pulse: bool) -> Result<(), ()> {
-        let lay = layout_amount(amt.digits(), amt.unit(), Region::Docked).map_err(|_| ())?;
-        if lay.n == 1 {
-            self.detail(id, label, &[(lay.lines[0].as_bytes(), Weight::Regular)], pulse)
-        } else {
-            self.detail(
-                id,
-                label,
-                &[(lay.lines[0].as_bytes(), Weight::Regular), (lay.lines[1].as_bytes(), Weight::Regular)],
-                pulse,
-            )
-        }
-    }
-}
-
-fn addr42(addr: &[u8; 20]) -> [u8; 42] {
-    let mut out = [0u8; 42];
-    out[0] = b'0';
-    out[1] = b'x';
-    out[2..].copy_from_slice(&eip55_hex(addr));
-    out
-}
-
-// ---------------------------------------------------------------------------
-// Amount formatting — the page painters' exactness policies as strings
-// ---------------------------------------------------------------------------
-
-/// A formatted amount: decimal digits (no unit) and the unit label.
-struct Amount {
-    digits: [u8; 96],
-    n: usize,
-    unit: [u8; 40],
-    unit_len: usize,
-}
-
-impl Amount {
-    fn digits(&self) -> &[u8] {
-        &self.digits[..self.n.min(96)]
-    }
-
-    fn unit(&self) -> &[u8] {
-        &self.unit[..self.unit_len.min(40)]
-    }
-
-    fn new(value: &U256, decimals: u32, frac: u32, unit: &[u8]) -> Option<Self> {
-        let mut a = Self {
-            digits: [0u8; 96],
-            n: 0,
-            unit: [0u8; 40],
-            unit_len: 0,
-        };
-        a.n = value.format_decimal(decimals, frac, false, &mut a.digits)?;
-        if unit.len() > a.unit.len() {
-            return None;
-        }
-        a.unit[..unit.len()].copy_from_slice(unit);
-        a.unit_len = unit.len();
-        Some(a)
-    }
-}
-
-/// `write_native_amount_two_rows`' policy: a known chain shows the stable
-/// six-decimal ticker form when exact, else the exact integer in `wei`; an
-/// unknown chain shows the exact integer as `raw`.
-fn native_amount(value: &U256, chain_id: u64) -> Option<Amount> {
-    match known_native_ticker(chain_id) {
-        None => Amount::new(value, 0, 0, b"raw"),
-        Some(unit) => {
-            if amount_is_exact_at_fraction_digits(value, 18, NATIVE_DISPLAY_FRACTION_DIGITS) {
-                if let Some(a) = Amount::new(value, 18, NATIVE_DISPLAY_FRACTION_DIGITS, unit) {
-                    if !formatted_collapses_to_zero(value, a.digits()) {
-                        return Some(a);
-                    }
-                }
-            }
-            Amount::new(value, 0, 0, b"wei")
-        }
-    }
-}
-
-/// `write_native_derived_amount_two_rows`' policy: a derived bound may widen
-/// the fraction (6..=18) before the exact-wei fallback.
-fn native_derived_amount(value: &U256, chain_id: u64) -> Option<Amount> {
-    let Some(unit) = known_native_ticker(chain_id) else {
-        return native_amount(value, chain_id);
-    };
-    if let Some(frac) = exact_fraction_digits(value, 18, NATIVE_DISPLAY_FRACTION_DIGITS, 18) {
-        if let Some(a) = Amount::new(value, 18, frac, unit) {
-            if !formatted_collapses_to_zero(value, a.digits()) {
-                return Some(a);
-            }
-        }
-    }
-    native_amount(value, chain_id)
-}
-
-/// `write_token_amount_two_rows`' policy: six fractional digits widened up
-/// to 18 to stay exact, else the signed integer in labelled base units.
-fn token_amount(value: &U256, decimals: u8, symbol: &[u8]) -> Option<Amount> {
-    if let Some(frac) = exact_fraction_digits(value, u32::from(decimals), 6, 18) {
-        if let Some(a) = Amount::new(value, u32::from(decimals), frac, symbol) {
-            if !formatted_collapses_to_zero(value, a.digits()) {
-                return Some(a);
-            }
-        }
-    }
-    let mut base = [0u8; 40];
-    const PREFIX: &[u8] = b"base ";
-    if PREFIX.len() + symbol.len() > base.len() {
-        return None;
-    }
-    base[..PREFIX.len()].copy_from_slice(PREFIX);
-    base[PREFIX.len()..PREFIX.len() + symbol.len()].copy_from_slice(symbol);
-    Amount::new(value, 0, 0, &base[..PREFIX.len() + symbol.len()])
-}
-
-/// Raw integer in `units` for a token with no verified metadata.
-fn raw_units(value: &U256) -> Option<Amount> {
-    Amount::new(value, 0, 0, b"units")
-}
-
-// ---------------------------------------------------------------------------
-// Small text builders
-// ---------------------------------------------------------------------------
-
-/// Fixed-capacity ASCII scratch line.
-struct Text {
-    buf: [u8; 32],
-    n: usize,
-}
-
-impl Text {
-    const fn new() -> Self {
-        Self { buf: [b' '; 32], n: 0 }
-    }
-
-    fn push(mut self, s: &[u8]) -> Self {
-        let room = self.buf.len().saturating_sub(self.n);
-        let k = s.len().min(room);
-        self.buf[self.n..self.n + k].copy_from_slice(&s[..k]);
-        self.n += k;
-        self
-    }
-
-    fn push_u64(self, v: u64) -> Self {
-        let mut tmp = [0u8; 20];
-        let n = format_u64(v, &mut tmp).unwrap_or(0);
-        self.push(&tmp[..n])
-    }
-
-    fn push_hex(mut self, bytes: &[u8]) -> Self {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        for &b in bytes {
-            if self.n + 2 > self.buf.len() {
-                break;
-            }
-            self.buf[self.n] = HEX[usize::from(b >> 4)];
-            self.buf[self.n + 1] = HEX[usize::from(b & 0x0F)];
-            self.n += 2;
-        }
-        self
-    }
-
-    fn as_bytes(&self) -> &[u8] {
-        &self.buf[..self.n]
-    }
-}
-
-/// `on Sepolia` for a named chain, `Chain 11155111` otherwise (the numeric
-/// id stays the ground truth when there is no advisory name).
-fn chain_line(chain_id: u64) -> Text {
-    let name = chain_name(chain_id).as_bytes();
-    if name == b"(unknown chain)" || name.len() < 3 {
-        Text::new().push(b"Chain ").push_u64(chain_id)
-    } else {
-        Text::new().push(b"on ").push(&name[1..name.len() - 1])
-    }
-}
-
 fn nonce_line(nonce_be: &[u8; 32]) -> Text {
     let (n, overflow) = u64_be_tail(nonce_be);
     if overflow {
@@ -539,12 +202,7 @@ fn emit_inner(
 ) -> Result<SafeBodyReceipt, ()> {
     let sem = classify(input, cow, erc20)?;
     let start = out.len();
-    let mut e = Emit {
-        out,
-        n: 0,
-        side: Side::Left,
-        chain_id: input.chain_id,
-    };
+    let mut e = Emit::new(out, input.chain_id, Look::SAFE);
 
     // ── Hero ────────────────────────────────────────────────────────
     let (hero_id, ask): (&[u8], &[u8]) = match input.flavour {

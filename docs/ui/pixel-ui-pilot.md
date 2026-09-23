@@ -64,7 +64,7 @@ make ui-px-assets            # re-bake fonts/marks + metrics_gen.rs (Pillow)
 make ui-px-assets-check      # reproducibility gate
 cargo test -p pqsigner-ui-px # 55 unit tests + 4 frame goldens
 cargo test -p sphincs-tz-secure --tests --release   # 2592 host tests (incl. 13 screen/lift tests)
-make e2e-px                  # QEMU e2e with ui-px (24/24)
+make e2e-px                  # QEMU e2e with ui-px (every scenario + the ui-px transcript assertions)
 make play-hw-px BOARD=pq1    # EVT: flash + physical buttons (probe-rs path)
 make play-hw-px BOARD=pq1 PX_EXTRA_FEATURES=,ui-px-spi40   # 40 MHz SPI variant
 ```
@@ -120,7 +120,12 @@ no-op, hold-left declines; the disc floods while the chord is held. See
 
 The port of every remaining screen (single-UserOp families, structured flows,
 PIN/verdicts/boot, switch-over) is `docs/ui/pixel-ui-port-plan.md`
-(rewritten 2026-09-23); this pilot is its step 1.
+(rewritten 2026-09-23); this pilot is its step 1. **UPDATE 2026-09-23:**
+step 2 is done — every single-UserOp route (value / contract call, ERC-20
+known and unknown, typed call, blind sign) and the slot-rotation consent go
+through the same lift (`px_lift::Body`), with the new disc icons, the
+placeholder-ramp tint and unbranded endings; see the plan's step 2 for the
+evidence and what stayed on the page dialog (`forced_blind`).
 
 1. ~~Run on the EVT~~ — done 2026-09-22 over the cable-free DFU loop
    (`FEAT_S=... tools/evt-dev-flash.sh`, `tools/hid_sign_safe.py`): strip
@@ -132,8 +137,10 @@ PIN/verdicts/boot, switch-over) is `docs/ui/pixel-ui-port-plan.md`
    progress hook, and lands with the design's `RESULT_HOLD_MS`.
 3. ~~**Native trailer screens**~~ — done 2026-09-23 (`tx/display/
    trailer_screens.rs`, eleven slots with per-slot + set proofs; the
-   `Legacy` kind is unused on the Safe route). Still open: batch and
-   off-chain routes; the remaining families (boot, PIN, wizard, verdicts).
+   `Legacy` kind is unused on every pixel route, which since step 2 includes
+   the single-UserOp routes and the rotation consent). Still open: direct
+   CoW, ERC-7730, batch and off-chain routes; the remaining families (boot,
+   PIN, wizard, verdicts).
 4. ~~`tools/ui_screens_export.py --px`~~ — done: `docs/ui-screens/px/`.
 5. ~~Kani~~ — installed (`kani-verifier 0.67.0`); `cargo kani -p
    pqsigner-ui-px` runs the `fit`, `driver` and `check` harnesses.

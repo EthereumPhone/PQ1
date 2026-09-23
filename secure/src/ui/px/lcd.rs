@@ -443,11 +443,56 @@ static FILM_LIVE: AtomicBool = AtomicBool::new(false);
 /// thread of execution, never from an ISR.
 static mut FILM: Option<(Anim, u32)> = None;
 
-/// The centred status screen the film plays over (the Safe disc).
+/// The family the next film / ending dresses in: its disc and its two ending
+/// captions. Single-threaded driver state (set by the sign handler's pixel
+/// route, read by the film, reset once a film lands).
+#[derive(Clone, Copy)]
+struct FilmLook {
+    look: pqsigner_ui_px::Look,
+    signed: &'static [u8],
+    declined: &'static [u8],
+}
+
+const FILM_LOOK_SAFE: FilmLook = FilmLook {
+    look: pqsigner_ui_px::Look::SAFE,
+    signed: b"SIGNED SAFE TX",
+    declined: b"SAFE TX DECLINED",
+};
+
+static mut FILM_LOOK: FilmLook = FILM_LOOK_SAFE;
+
+/// Dress the next film / ending in a family's disc and captions (e.g.
+/// `Look::plain(Icon::Eth)`, `b"TRANSACTION CONFIRMED"`, `b"TRANSACTION DECLINED"`).
+/// Reset to the Safe look when the film lands, so a stale look never leaks
+/// into the next dialog. A caption that is not printable ASCII or longer
+/// than a line falls back to the Safe captions (the builder refuses it).
+pub fn set_film_look(look: pqsigner_ui_px::Look, signed: &'static [u8], declined: &'static [u8]) {
+    // SAFETY: single-threaded driver state (no ISR touches it).
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM_LOOK) = FilmLook { look, signed, declined };
+    }
+}
+
+fn reset_film_look() {
+    // SAFETY: single-threaded driver state (no ISR touches it).
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM_LOOK) = FILM_LOOK_SAFE;
+    }
+}
+
+/// The centred status screen the film plays over: the family's disc, the
+/// two ending captions as lines 0 / 1 (`scene::ending_captions`).
 fn film_screen() -> Screen {
-    pqsigner_ui_px::ScreenBuilder::status(b"SIGN", pqsigner_ui_px::Icon::Safe, b"", pqsigner_ui_px::State::Awaiting, pqsigner_ui_px::ResultMark::None)
-        .finish()
-        .unwrap_or(Screen::BLANK)
+    // SAFETY: single-threaded driver state; copied out.
+    let fl = unsafe { *core::ptr::addr_of!(FILM_LOOK) };
+    let build = |fl: FilmLook| {
+        pqsigner_ui_px::ScreenBuilder::status(b"SIGN", fl.look.icon, b"", pqsigner_ui_px::State::Awaiting, pqsigner_ui_px::ResultMark::None)
+            .look_tint(fl.look)
+            .line(fl.signed, pqsigner_ui_px::Weight::Regular)
+            .line(fl.declined, pqsigner_ui_px::Weight::Regular)
+            .finish()
+    };
+    build(fl).or_else(|_| build(FILM_LOOK_SAFE)).unwrap_or(Screen::BLANK)
 }
 
 /// Start the loading film: the disc seeds into the qubits and the orbit
@@ -505,6 +550,7 @@ pub fn film_tick(_percent: u8) {
 pub fn film_resolve(e: Ending) {
     let Some(atlas) = assets::atlas() else {
         film_abort();
+        reset_film_look();
         return;
     };
     let now = timeout::now();
@@ -531,6 +577,7 @@ pub fn film_resolve(e: Ending) {
             break;
         }
     }
+    reset_film_look();
 }
 
 /// A film is running (started and not yet resolved).

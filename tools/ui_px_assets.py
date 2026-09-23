@@ -5,7 +5,8 @@ Reads the vendored PQ-UI design system (`tools/pq-ui/`, pinned in
 `tools/pq-ui/UPSTREAM.txt`) and writes, deterministically:
 
   secure/assets/ui-px/fonts.bin        glyph atlases, one tier per (size, weight)
-  secure/assets/ui-px/<name>.a4        4-bit alpha disc marks (safe, mainnet, base)
+  secure/assets/ui-px/<name>.a4        4-bit alpha disc marks (safe, mainnet, base,
+                                       eth, blind, rotate, usdc, usdt, dai)
   secure/assets/ui-px/manifest.json    sha256 of every output + inputs, versions
   nonsecure/assets/ui-px/atlas.pq1a    the SHIPPED form: fonts + marks in one
                                        container, linked into the NON-SECURE
@@ -44,7 +45,8 @@ Binary formats (little-endian):
                 reserved[20] (zero)                                           (32 B)
     Entry[n]    name[8] (ASCII, NUL-padded) | off u32 | len u32               (16 B)
     Payload     each entry's bytes at `off` from the container start, 4-aligned;
-                entries: "fonts" (fonts.bin), "safe", "mainnet", "base" (.a4)
+                entries: "fonts" (fonts.bin), "safe", "mainnet", "base",
+                "eth", "blind", "rotate", "usdc", "usdt", "dai" (.a4)
 
 Missing glyphs have w = h = advance = 0 (the fitter treats advance 0 as
 "not renderable at this tier"); code 0x7F stands in for U+2026 (ellipsis) in
@@ -73,7 +75,17 @@ ROOT_RS_DEFAULT = os.path.join(ROOT, "secure", "src", "ui", "px", "atlas_root.rs
 
 ATLAS_MAGIC = b"PQ1A"
 ATLAS_VERSION = 1
-ATLAS_ENTRY_ORDER = ("fonts", "safe", "mainnet", "base")
+ATLAS_ENTRY_ORDER = ("fonts", "safe", "mainnet", "base", "eth", "blind", "rotate", "usdc", "usdt", "dai")
+# Procedural pq1 glyphs baked as marks (pq1/components.GLYPHS names).
+PROCEDURAL_MARKS = ("mainnet", "base", "eth", "blind", "rotate")
+# Popular-token logo art (components.TOKEN_LOGOS) -> (asset, the token colour
+# the art is painted in, colors.TOKEN_COLORS). The disc is drawn in that
+# colour on-device; the mark is the WHITE part of the art.
+TOKEN_ART = {
+    "usdc": ("usdc.png", (0x27, 0x75, 0xCA)),
+    "usdt": ("tether.png", (0x50, 0xAF, 0x95)),
+    "dai": ("dai.png", (0xF5, 0xAC, 0x37)),
+}
 
 FORMAT_VERSION = 1
 SUP = 3  # supersample factor, same as pq1/layout.py SUP
@@ -216,8 +228,35 @@ def bake_fonts(levels4: bool):
     return bytes(out), metrics
 
 
-def mark_from_mask(mask: Image.Image, name: str) -> bytes:
-    """Masks are baked centred, so the optical centre is (w/2, h/2)."""
+def crop_centred(mask: Image.Image) -> Image.Image:
+    """Trim empty borders SYMMETRICALLY (the same amount off opposite sides),
+    so the centre stays at (w/2, h/2) and a 1:1 blit lands on the same pixels
+    as the uncropped mask. Only the bytes shrink — the NS atlas window
+    (0x13000) is the budget."""
+    w, h = mask.size
+    q = quantise(mask, True)
+    stride = (w + 1) // 2
+
+    def a(x, y):
+        b = q[y * stride + x // 2]
+        return (b >> 4) if x % 2 == 0 else (b & 15)
+
+    xs = [x for y in range(h) for x in range(w) if a(x, y)]
+    ys = [y for y in range(h) for x in range(w) if a(x, y)]
+    if not xs:
+        return mask
+    kx = min(min(xs), w - 1 - max(xs))
+    ky = min(min(ys), h - 1 - max(ys))
+    return mask.crop((kx, ky, w - kx, h - ky))
+
+
+def mark_from_mask(mask: Image.Image, name: str, crop: bool = True) -> bytes:
+    """Masks are baked centred, so the optical centre is (w/2, h/2). Every
+    mark but `safe` is cropped (`crop_centred`); the Safe mark keeps its full
+    square because the film blits it scaled, where a crop would move the
+    sampling grid and change the Safe goldens."""
+    if crop:
+        mask = crop_centred(mask)
     w, h = mask.size
     assert w < 256 and h < 256
     return struct.pack("<4sBBH", b"PQ1M", w, h, 0) + quantise(mask, True)
@@ -237,7 +276,27 @@ def bake_safe_mark() -> bytes:
             r, g, b, a = src[x, y]
             dark = max(0.0, 1.0 - g / 255.0) / (1.0 - 18 / 255.0)
             dst[x, y] = int(round(min(1.0, dark) * a))
-    return mark_from_mask(mask.reduce(SUP), "safe")
+    return mark_from_mask(mask.reduce(SUP), "safe", crop=False)
+
+
+def bake_token_mark(name: str) -> bytes:
+    """A popular token's full-bleed logo art (e.g. white USDC glyph on the
+    #2775CA disc): the device paints the disc in the token colour, so the
+    asset is the art's WHITE part as an alpha mask — per pixel, how far the
+    colour sits from the token colour toward white — at the visible disc
+    diameter."""
+    file, tok = TOKEN_ART[name]
+    im = Image.open(os.path.join(ASSETS, file)).convert("RGBA")
+    big = im.resize((MARK_DIAMETER * SUP, MARK_DIAMETER * SUP), Image.LANCZOS)
+    mask = Image.new("L", big.size, 0)
+    src = big.load()
+    dst = mask.load()
+    for y in range(big.size[1]):
+        for x in range(big.size[0]):
+            r, g, b, a = src[x, y]
+            t = min((r - tok[0]) / (255 - tok[0]), (g - tok[1]) / (255 - tok[1]), (b - tok[2]) / (255 - tok[2]))
+            dst[x, y] = int(round(max(0.0, min(1.0, t)) * a))
+    return mark_from_mask(mask.reduce(SUP), name)
 
 
 def bake_procedural_mark(name: str) -> bytes:
@@ -361,11 +420,13 @@ def main() -> int:
     marks = {}
     if not args.no_marks:
         marks["safe"] = bake_safe_mark()
-        for name in ("mainnet", "base"):
+        for name in PROCEDURAL_MARKS:
             try:
                 marks[name] = bake_procedural_mark(name)
             except Exception as e:  # noqa: BLE001 — report and continue; the manifest shows what shipped
                 print(f"warning: mark {name!r} not baked: {e}", file=sys.stderr)
+        for name in TOKEN_ART:
+            marks[name] = bake_token_mark(name)
         for name, blob in marks.items():
             with open(os.path.join(args.out, f"{name}.a4"), "wb") as f:
                 f.write(blob)
@@ -380,7 +441,8 @@ def main() -> int:
         "alpha_levels": 4 if args.alpha2 else 16,
         "pillow": PIL.__version__,
         "inputs": {os.path.relpath(p, ROOT): sha256_file(p) for p in FONTS.values()}
-        | {os.path.relpath(os.path.join(ASSETS, "safe.png"), ROOT): sha256_file(os.path.join(ASSETS, "safe.png"))},
+        | {os.path.relpath(os.path.join(ASSETS, f), ROOT): sha256_file(os.path.join(ASSETS, f))
+           for f in ["safe.png"] + [a for a, _ in TOKEN_ART.values()]},
         "outputs": {"fonts.bin": {"sha256": fonts_sha, "bytes": len(fonts_bin)}}
         | {f"{n}.a4": {"sha256": hashlib.sha256(b).hexdigest(), "bytes": len(b)} for n, b in marks.items()}
         | {"atlas.pq1a": {"sha256": hashlib.sha256(container).hexdigest(), "bytes": len(container)}},
