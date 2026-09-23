@@ -1127,6 +1127,49 @@ pub(super) fn px_confirm(
     Ok(out)
 }
 
+/// A pixel consent outside the sign path (port step 4: the firmware
+/// update's two consents). `build` writes the transcript into the shared
+/// snapshot buffer — free here: no sign handler is running under the
+/// non-reentrant dispatcher — the design's flow rules are checked
+/// (`check::check_flow`), and the dialog runs against a freshly verified
+/// atlas that is re-proven after the answer. `Err` = the pixel path cannot
+/// run (no verified atlas, a transcript error): the caller shows its page
+/// dialog instead, whose glyphs are secure-resident — a broken NS atlas
+/// must never make the firmware update, the way to repair it, unreachable.
+#[cfg(feature = "ui-px")]
+pub(crate) fn px_confirm_plain(
+    build: impl FnOnce(&mut pqsigner_ui_px::Screens) -> Result<(), ()>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    #[cfg(feature = "ui-lcd")]
+    let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| "px atlas")?;
+    #[cfg(not(feature = "ui-lcd"))]
+    let atlas = ();
+    // SAFETY: single-threaded dispatcher; only sign handlers borrow the
+    // shared snapshot buffer and none is in flight during this handler, so
+    // this is the unique reference for the duration of the dialog.
+    let buf = unsafe { &mut *core::ptr::addr_of_mut!(SIGN_SNAP_BUF) };
+    let screens = px_screens_view(buf).ok_or("px scratch")?;
+    if build(screens).is_err() || pqsigner_ui_px::check::check_flow(screens).is_err() {
+        screens.volatile_poison_and_reset();
+        return Err("px transcript");
+    }
+    // No film plays on these consents (nothing is signed); the handler's own
+    // status (CANCELED, …) follows the answer.
+    let out = crate::ui::px::confirm_screens_checked(screens, &atlas);
+    screens.volatile_poison_and_reset();
+    #[cfg(feature = "ui-lcd")]
+    {
+        drop(atlas);
+        crate::fi::scrub_sentinel_register();
+        if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+            // The answer was given against glyphs that changed: refuse.
+            return Ok((crate::ui::confirm::ConfirmResult::Cancelled, crate::fi::FAIL_SENTINEL));
+        }
+        crate::fi::scrub_sentinel_register();
+    }
+    Ok(out)
+}
+
 /// The Safe route (`px_confirm` over the Safe body).
 #[cfg(feature = "ui-px")]
 pub(super) fn px_confirm_safe(

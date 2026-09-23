@@ -16,8 +16,8 @@
 //!
 //! | off | len | field   | encoding |
 //! |-----|-----|---------|----------|
-//! |   0 |   1 | kind    | `H` hero, `D` detail, `V` value, `C` confirm, `S` status, `L` legacy |
-//! |   1 |   1 | icon    | `S` safe, `N` chain, `F` fingerprint, `W` wallet, `E` ether, `U` USDC, `T` USDT, `D` DAI, `B` blind, `R` rotate, `C` CoW Swap, `-` none |
+//! |   0 |   1 | kind    | `H` hero, `D` detail, `V` value, `C` confirm, `S` status, `L` legacy, `X` verdict, `P` entry row, `W` words grid |
+//! |   1 |   1 | icon    | `S` safe, `N` chain, `F` fingerprint, `W` wallet, `E` ether, `U` USDC, `T` USDT, `D` DAI, `B` blind, `R` rotate, `C` CoW Swap, `-` none; verdict signs `K` lock, `O` unlock, `!` alert, `Z` wipe, `H` shield, `P` PIN pill, `3` die, `G` gear, `M` result ring, `V` verified disc, `A` last-attempt heart |
 //! |   2 |   1 | side    | `L`, `R`, `-` (disc column on a detail screen) |
 //! |   3 |   2 | tier    | `36` `32` `28` `22`, or `--` |
 //! |   5 |   1 | commit  | `Y` / `N` — hold-right-to-sign armed; only on `H` / `C` |
@@ -31,6 +31,15 @@
 //! |  32 |  32 | caption | caps, the hero ask / confirm prompt / status caption |
 //! |  64 | 192 | lines   | 6 × { weight `r`/`s`/`t`, 30 bytes text, 1 pad } |
 //! |  95 |   1 | tint    | the pad of line record 0: ` ` = the icon's own look, `a`..`n` = placeholder ramp 0..13 |
+//!
+//! The three screens outside the sign dialog (port step 4) reuse the same
+//! fields: a **verdict** (`X`) draws its procedural sign (the icon byte)
+//! in the state colour with the caption on the band, or — docked on `side`
+//! with a label and 1–3 lines — the detail-grid notice; an **entry row**
+//! (`P`) carries the slot glyphs in line 0 and the slot states in line 1
+//! (`E` entered, `A` active, `D` dialed, `_` empty; a masked PIN digit is
+//! `*`); a **words grid** (`W`) carries up to eight words, three per line,
+//! space-separated, numbered 1–8 in reading order.
 //!
 //! The tint is the design's token colour (DESIGN.md § Color, placeholder
 //! ramps): a solid disc + trail on one of the fourteen ramps, hashed from the
@@ -70,6 +79,17 @@ pub const LINES_PER_PAGE: usize = 3;
 pub const LEGACY_LINES: usize = DISPLAY_ROWS;
 /// Pages a single screen may turn through.
 pub const PAGES_PER_SCREEN: usize = 2;
+/// Rings an entry row holds (the PIN's eight digits).
+pub const MAX_ENTRY_SLOTS: usize = 8;
+/// Words a words grid holds (two columns of four).
+pub const MAX_GRID_WORDS: usize = 8;
+/// Longest word a grid cell takes (BIP-39 words are ≤ 8 letters).
+pub const MAX_GRID_WORD: usize = 9;
+/// Words packed per line record of a words grid.
+pub const WORDS_PER_LINE: usize = 3;
+const _: () = assert!(MAX_GRID_WORDS <= WORDS_PER_LINE * LINES_PER_PAGE);
+const _: () = assert!(WORDS_PER_LINE * (MAX_GRID_WORD + 1) - 1 <= LINE_LEN);
+
 /// Hard cap on the number of screens in one confirmation transcript. Sized
 /// for the worst Safe-UI case (a multiSend batch of ERC-20 records, refund
 /// block, safeTxGas, the eleven native trailer slots, `Confirm?`, returning
@@ -124,6 +144,13 @@ pub enum Kind {
     Status,
     /// A legacy 16×4 text page shown through the pixel engine.
     Legacy,
+    /// A verdict: a procedural sign states a fact (LOCKED, WRONG PIN, …).
+    Verdict,
+    /// An entry row: rings of characters dialed with the two buttons (the
+    /// PIN, a seed-word prefix).
+    Entry,
+    /// The numbered two-column words grid (a fingerprint).
+    Words,
 }
 
 impl Kind {
@@ -136,6 +163,9 @@ impl Kind {
             Self::Confirm => b'C',
             Self::Status => b'S',
             Self::Legacy => b'L',
+            Self::Verdict => b'X',
+            Self::Entry => b'P',
+            Self::Words => b'W',
         }
     }
 
@@ -148,6 +178,9 @@ impl Kind {
             b'C' => Some(Self::Confirm),
             b'S' => Some(Self::Status),
             b'L' => Some(Self::Legacy),
+            b'X' => Some(Self::Verdict),
+            b'P' => Some(Self::Entry),
+            b'W' => Some(Self::Words),
             _ => None,
         }
     }
@@ -184,6 +217,23 @@ pub enum Icon {
     Rotate,
     /// The CoW Swap family: the navy cow head on the `#65D9FF` brand disc.
     Cowswap,
+    /// Verdict signs (procedural art, `verdict.rs`): the padlock locking /
+    /// unlocking, the warning triangle with its exclamation, the triangle
+    /// carrying the wipe brush, the backup shield, the PIN pill, the die,
+    /// the factory gear, the resting result ring (black disc, state ring and
+    /// mark) and the verified disc (white disc, black check).
+    Lock,
+    Unlock,
+    Alert,
+    Wipe,
+    Shield,
+    Pill,
+    Die,
+    Gear,
+    ResultRing,
+    Verified,
+    /// The last attempt: the counter's 1 beside the heart.
+    Heart,
     None,
 }
 
@@ -202,6 +252,17 @@ impl Icon {
             Self::Blind => b'B',
             Self::Rotate => b'R',
             Self::Cowswap => b'C',
+            Self::Lock => b'K',
+            Self::Unlock => b'O',
+            Self::Alert => b'!',
+            Self::Wipe => b'Z',
+            Self::Shield => b'H',
+            Self::Pill => b'P',
+            Self::Die => b'3',
+            Self::Gear => b'G',
+            Self::ResultRing => b'M',
+            Self::Verified => b'V',
+            Self::Heart => b'A',
             Self::None => b'-',
         }
     }
@@ -220,6 +281,17 @@ impl Icon {
             b'B' => Some(Self::Blind),
             b'R' => Some(Self::Rotate),
             b'C' => Some(Self::Cowswap),
+            b'K' => Some(Self::Lock),
+            b'O' => Some(Self::Unlock),
+            b'!' => Some(Self::Alert),
+            b'Z' => Some(Self::Wipe),
+            b'H' => Some(Self::Shield),
+            b'P' => Some(Self::Pill),
+            b'3' => Some(Self::Die),
+            b'G' => Some(Self::Gear),
+            b'M' => Some(Self::ResultRing),
+            b'V' => Some(Self::Verified),
+            b'A' => Some(Self::Heart),
             b'-' => Some(Self::None),
             _ => None,
         }
@@ -637,6 +709,46 @@ impl Screen {
         Some((w, trim_end(&self.0[o + 1..o + 1 + LINE_LEN])))
     }
 
+    /// An entry row's `(glyphs, states)` (line 0 and line 1, equal length);
+    /// `None` for another kind or a malformed row.
+    #[must_use]
+    pub fn entry_slots(&self) -> Option<(&[u8], &[u8])> {
+        if self.kind() != Some(Kind::Entry) {
+            return None;
+        }
+        let (_, g) = self.line(0, 0)?;
+        let (_, st) = self.line(0, 1)?;
+        // Trailing-space trimming never bites: glyphs and states carry no
+        // spaces except the empty slot's `_` state, whose glyph is `_` too.
+        if g.is_empty() || g.len() != st.len() || g.len() > MAX_ENTRY_SLOTS {
+            return None;
+        }
+        Some((g, st))
+    }
+
+    /// The number of a words grid's first cell (1 by default, 0 = none).
+    #[must_use]
+    pub fn grid_first(&self) -> Option<u8> {
+        if self.kind() != Some(Kind::Words) {
+            return None;
+        }
+        match [self.0[OFF_TIER], self.0[OFF_TIER + 1]] {
+            [b'-', b'-'] => Some(1),
+            [a @ b'0'..=b'2', b @ b'0'..=b'9'] => Some((a - b'0') * 10 + (b - b'0')).filter(|&n| n <= 24),
+            _ => None,
+        }
+    }
+
+    /// Word `k` (0-based, reading order) of a words grid.
+    #[must_use]
+    pub fn grid_word(&self, k: usize) -> Option<&[u8]> {
+        if self.kind() != Some(Kind::Words) || k >= MAX_GRID_WORDS {
+            return None;
+        }
+        let (_, line) = self.line(0, u8::try_from(k / WORDS_PER_LINE).ok()?)?;
+        line.split(|&c| c == b' ').nth(k % WORDS_PER_LINE).filter(|w| !w.is_empty())
+    }
+
     fn line_rec_index(&self, p: u8, i: u8) -> Option<usize> {
         let (p, i) = (usize::from(p), usize::from(i));
         let rec = if self.kind() == Some(Kind::Legacy) {
@@ -678,7 +790,11 @@ impl Screen {
         if t != b' ' && self.kind() == Some(Kind::Legacy) {
             return false;
         }
-        let tier_ok = self.tier().is_some() || &self.0[OFF_TIER..OFF_TIER + 2] == b"--";
+        let tier_ok = if kind == Kind::Words {
+            self.grid_first().is_some()
+        } else {
+            self.tier().is_some() || &self.0[OFF_TIER..OFF_TIER + 2] == b"--"
+        };
         if !tier_ok {
             return false;
         }
@@ -842,6 +958,103 @@ impl ScreenBuilder {
         b.s.0[OFF_RESULT] = result.as_byte();
         b.put(OFF_CAPTION, CAPTION_LEN, caption);
         b
+    }
+
+    /// A verdict: the sign `icon` (one of the verdict signs) in the `state`
+    /// colour, the caption on the band. [`Self::docked`] turns it into the
+    /// detail-grid notice.
+    #[must_use]
+    pub fn verdict(id: &[u8], icon: Icon, caption: &[u8], state: State, result: ResultMark) -> Self {
+        let mut b = Self::new(Kind::Verdict, id);
+        b.s.0[OFF_ICON] = icon.as_byte();
+        b.s.0[OFF_STATE] = state.as_byte();
+        b.s.0[OFF_RESULT] = result.as_byte();
+        b.put(OFF_CAPTION, CAPTION_LEN, caption);
+        b
+    }
+
+    /// Disarm a hero (a chooser: the wizard's own loop decides, no sign is
+    /// armed on it).
+    #[must_use]
+    pub fn uncommitted(mut self) -> Self {
+        self.s.0[OFF_COMMIT] = b'N';
+        self
+    }
+
+    /// Dock a verdict's sign in the `side` column with `label` under it; the
+    /// lines then take the other column (the SIG ERROR notice).
+    #[must_use]
+    pub fn docked(mut self, side: Side, label: &[u8]) -> Self {
+        self.s.0[OFF_SIDE] = side.as_byte();
+        self.put(OFF_LABEL, LABEL_LEN, label);
+        self
+    }
+
+    /// An entry row: `glyphs[i]` is what ring `i` shows, `states[i]` its
+    /// state (`E` entered, `A` active, `D` dialed, `_` empty). One to eight
+    /// rings, at most one active; `hint` is the chevron-line hint.
+    #[must_use]
+    pub fn entry(id: &[u8], caption: &[u8], glyphs: &[u8], states: &[u8]) -> Self {
+        let mut b = Self::new(Kind::Entry, id);
+        b.put(OFF_CAPTION, CAPTION_LEN, caption);
+        let active = states.iter().filter(|&&c| c == b'A').count();
+        if glyphs.is_empty()
+            || glyphs.len() > MAX_ENTRY_SLOTS
+            || glyphs.len() != states.len()
+            || active > 1
+            || !states.iter().all(|c| matches!(c, b'E' | b'A' | b'D' | b'_'))
+        {
+            b.fail(BuildErr::BadPages);
+            return b;
+        }
+        b.push_line(glyphs, Weight::Regular);
+        b.push_line(states, Weight::Regular);
+        b
+    }
+
+    /// The numbered words grid: one to eight words (≤ 9 characters each,
+    /// no spaces), three per line; `label` is an optional caps label on the
+    /// band.
+    #[must_use]
+    pub fn words(id: &[u8], label: &[u8], words: &[&[u8]]) -> Self {
+        let mut b = Self::new(Kind::Words, id);
+        // The band label rides in the caption slot (a fingerprint's name is
+        // longer than a detail label's twelve).
+        b.put(OFF_CAPTION, CAPTION_LEN, label);
+        if words.is_empty() || words.len() > MAX_GRID_WORDS {
+            b.fail(BuildErr::BadPages);
+            return b;
+        }
+        for chunk in words.chunks(WORDS_PER_LINE) {
+            let mut line = [b' '; LINE_LEN];
+            let mut n = 0usize;
+            for (j, w) in chunk.iter().enumerate() {
+                if w.is_empty() || w.len() > MAX_GRID_WORD || w.contains(&b' ') {
+                    b.fail(BuildErr::TooLong);
+                    return b;
+                }
+                if j > 0 {
+                    n += 1;
+                }
+                line[n..n + w.len()].copy_from_slice(w);
+                n += w.len();
+            }
+            b.push_line(&line[..n], Weight::Regular);
+        }
+        b
+    }
+
+    /// Number a words grid from `first` (1–24; 0 = no numbers — a list).
+    /// Rides in the tier bytes, which a grid has no other use for.
+    #[must_use]
+    pub fn first_number(mut self, first: u8) -> Self {
+        if self.kind != Kind::Words || first > 24 {
+            self.fail(BuildErr::BadPages);
+        } else {
+            self.s.0[OFF_TIER] = b'0' + first / 10;
+            self.s.0[OFF_TIER + 1] = b'0' + first % 10;
+        }
+        self
     }
 
     /// Set the value tier.

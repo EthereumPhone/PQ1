@@ -220,6 +220,98 @@ impl<'a> Font<'a> {
     }
 }
 
+/// The secret run's alphabet: BIP-39 words are lowercase ASCII.
+pub const SECRET_FIRST: u8 = b'a';
+pub const SECRET_LAST: u8 = b'z';
+/// Cells a secret run always draws (the longest BIP-39 word).
+pub const SECRET_CELLS: usize = 8;
+/// The fixed cell advance at the 22 px words tier (px).
+pub const SECRET_ADV: i32 = 14;
+
+/// `0xFF` iff `a == b`, `0x00` otherwise, without a branch
+/// (`secret_text::ct_eq_u8`'s twin).
+#[inline(always)]
+fn ct_eq_u8(a: u8, b: u8) -> u8 {
+    let x = u16::from(a ^ b);
+    let nz = (x | x.wrapping_neg()) >> 15;
+    (nz as u8).wrapping_sub(1)
+}
+
+impl Font<'_> {
+    /// Draw a SECRET run (a seed word) with a data-independent memory
+    /// access pattern (F-24 — the constant-time twin of the legacy
+    /// `secret_text` glyph scan, on the design's Aileron face):
+    ///
+    /// * exactly `SECRET_CELLS` cells are drawn whatever the word's length
+    ///   (`text` must be `SECRET_CELLS` bytes, zero-padded — a zero selects
+    ///   no glyph), each on a fixed `SECRET_ADV` pitch from `x`, so no
+    ///   position depends on the letters;
+    /// * every cell scans ALL 26 lowercase glyphs of the tier over one union
+    ///   box and keeps the matching one by mask (`ct_eq_u8` + `black_box`),
+    ///   so every bitmap byte read is addressed by public values only (the
+    ///   candidate and the pixel, never the secret);
+    /// * every pixel of every cell box is composited unconditionally
+    ///   (`blend_ct`: no early-out on zero / full coverage), so the strip
+    ///   writes do not depend on the letters either — only the pixel VALUES
+    ///   do, the accepted F-24 stage-E display-broadcast residual.
+    ///
+    /// Each glyph is centred in its cell (a monospaced setting of the
+    /// proportional face — `PORT_DEVIATIONS.toml`). `y` is the vertical
+    /// centre like a non-baseline [`TextRun`]. The `tools/sca` F-24 harness,
+    /// not this comment, is the gate before the path is trusted.
+    pub fn blit_secret_run(&self, tier: TierId, text: &[u8], x: i32, y: i32, color: Rgb, s: &mut Strip<'_>) {
+        use core::hint::black_box;
+        if text.len() != SECRET_CELLS {
+            return;
+        }
+        let Some(t) = self.tier(tier) else { return };
+        // The alphabet's glyphs and their union box, relative to the cell
+        // centre (public properties of the atlas).
+        const N: usize = (SECRET_LAST - SECRET_FIRST + 1) as usize;
+        let mut glyphs: [Option<Glyph<'_>>; N] = [None; N];
+        let (mut top, mut bottom, mut half_w) = (0i32, 0i32, 0i32);
+        for (k, c) in (SECRET_FIRST..=SECRET_LAST).enumerate() {
+            if let Some(g) = t.glyph(c) {
+                top = top.max(i32::from(g.bearing_top));
+                bottom = bottom.max(i32::from(g.h) - i32::from(g.bearing_top));
+                half_w = half_w.max((i32::from(g.w) + 1) / 2);
+                glyphs[k] = Some(g);
+            }
+        }
+        let baseline = y + ((i32::from(t.ascent_q6) - i32::from(t.descent_q6)) / 2 + 32) / 64;
+        let y_lo = (baseline - top).max(s.y0);
+        let y_hi = (baseline + bottom).min(s.y0 + s.h);
+        if y_hi <= y_lo {
+            return;
+        }
+        for (i, &secret) in text.iter().enumerate() {
+            let c = black_box(secret);
+            let cx = x + i as i32 * SECRET_ADV + SECRET_ADV / 2; // cell centre
+            for yy in y_lo..y_hi {
+                for xx in (cx - half_w)..(cx + half_w) {
+                    let mut acc = 0u8;
+                    for (g_code, slot) in (SECRET_FIRST..=SECRET_LAST).zip(glyphs.iter()) {
+                        let mask = black_box(ct_eq_u8(g_code, c));
+                        let Some(g) = slot else { continue };
+                        // Glyph-local coordinates of this pixel for this
+                        // candidate — public (candidate, pixel) only.
+                        let gx = xx - (cx - i32::from(g.w) / 2);
+                        let gy = yy - (baseline - i32::from(g.bearing_top));
+                        if gx < 0 || gy < 0 || gx >= i32::from(g.w) || gy >= i32::from(g.h) {
+                            continue;
+                        }
+                        let stride = (usize::from(g.w) + 1) / 2;
+                        let b = g.rows[gy as usize * stride + (gx / 2) as usize];
+                        let n = if gx % 2 == 0 { b >> 4 } else { b & 0x0F };
+                        acc = black_box(acc | (n & mask));
+                    }
+                    s.blend_ct(xx, yy, color, acc * 17);
+                }
+            }
+        }
+    }
+}
+
 fn blit_glyph(s: &mut Strip<'_>, g: &Glyph<'_>, x0: i32, y0: i32, color: Rgb, lut: &[u8; 16], over_black: &[u16; 16]) {
     if g.w == 0 || g.h == 0 {
         return;

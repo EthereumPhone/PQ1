@@ -162,6 +162,20 @@ impl<'a> Strip<'a> {
         }
     }
 
+    /// [`Strip::blend`] without the zero / full-coverage shortcuts: the
+    /// same arithmetic and the same store for every `a`, so the time and
+    /// the write pattern do not depend on a secret coverage (the seed-word
+    /// run). Clipping is on the public coordinates only.
+    #[inline(never)]
+    pub fn blend_ct(&mut self, x: i32, y: i32, color: Rgb, a: u8) {
+        if let Some(i) = self.idx(x, y) {
+            let d = Rgb::from565(self.buf[i]);
+            let a = i32::from(core::hint::black_box(a));
+            let ch = |d: u8, s: u8| -> u8 { (i32::from(d) + ((i32::from(s) - i32::from(d)) * a + 127) / 255) as u8 };
+            self.buf[i] = Rgb::new(ch(d.r, color.r), ch(d.g, color.g), ch(d.b, color.b)).to565();
+        }
+    }
+
     /// Composite `color` at coverage `a` over the run `x0 ..= x1` of row `y`
     /// (clipped). Same per-pixel result as [`Strip::blend`]; the bounds are
     /// checked once and an opaque run is a plain store.
@@ -243,7 +257,86 @@ pub enum Item<'a> {
     Mask { cx: Q8, cy: Q8, mask: Mask<'a>, scale: Q8, color: Rgb, a: u8 },
     /// Axis-aligned filled rectangle (integer px).
     Rect { x: i32, y: i32, w: i32, h: i32, color: Rgb, a: u8 },
+    /// A SECRET run (a seed word, zero-padded to `font::SECRET_CELLS`)
+    /// drawn by the constant-time cell path ([`Font::blit_secret_run`]),
+    /// left edge `x`, vertical centre `y`.
+    Secret { text: &'a [u8], tier: crate::font::TierId, x: i32, y: i32, color: Rgb },
+    /// A procedural shape (the verdict signs, the PIN row marks): a static
+    /// outline in Q4 design units placed by `xf`, filled / stroked / ringed
+    /// per `mode`, composited at `a`.
+    Shape { pts: &'static [(i16, i16)], xf: Xform, mode: ShapeMode, color: Rgb, a: u8 },
 }
+
+/// Where a [`Item::Shape`]'s Q4 outline lands: uniform scale `k` (Q8,
+/// 256 = design size), an extra horizontal factor `kx` (Q12, 4096 = 1 —
+/// the padlock shackle's foreshortening), a rotation `rot` (Q16 turns,
+/// wrapping; y points down, so a positive angle turns clockwise), then the
+/// translation `(ox, oy)` (Q8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Xform {
+    pub ox: Q8,
+    pub oy: Q8,
+    pub k: i16,
+    pub kx: i16,
+    pub rot: u16,
+}
+
+impl Xform {
+    /// Design size at `(ox, oy)`.
+    #[must_use]
+    pub const fn at(ox: Q8, oy: Q8) -> Self {
+        Self { ox, oy, k: 256, kx: 4096, rot: 0 }
+    }
+
+    /// Uniform scale `k` (Q8).
+    #[must_use]
+    pub const fn scaled(self, k: i16) -> Self {
+        Self { k, ..self }
+    }
+
+    /// Rotation (Q16 turns).
+    #[must_use]
+    pub const fn turned(self, rot: u16) -> Self {
+        Self { rot, ..self }
+    }
+
+    /// Horizontal factor (Q12).
+    #[must_use]
+    pub const fn squeezed(self, kx: i16) -> Self {
+        Self { kx, ..self }
+    }
+
+    fn apply(&self, (x, y): (i16, i16)) -> (Q8, Q8) {
+        // Q4 · Q8 · Q12 → Q8 is a shift of 4 + 8 + 12 − 8 = 16; Q4 · Q8 → Q8 is 4.
+        let px = ((i64::from(x) * i64::from(self.k) * i64::from(self.kx)) >> 16) as Q8;
+        let py = ((i64::from(y) * i64::from(self.k)) >> 4) as Q8;
+        let (px, py) = if self.rot == 0 { (px, py) } else { rot(px, py, Q16::from(self.rot)) };
+        (self.ox + px, self.oy + py)
+    }
+}
+
+/// How a shape's outline becomes coverage. All widths are Q8 px and never
+/// scale with the transform (a stroke keeps its weight as the sign grows).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShapeMode {
+    /// The closed polygon (non-zero winding), grown outward by `grow` —
+    /// a polygon inset by `grow` then grown back is the rounded-corner
+    /// polygon (the Minkowski sum with a disc).
+    Fill { grow: i16 },
+    /// The open polyline stroked with round caps and joins, half-width `hw`.
+    Stroke { hw: i16 },
+    /// The closed outline stroked (round joins), half-width `hw`.
+    Loop { hw: i16 },
+    /// The rim of the outline grown by `r`, stroked at half-width `hw`: for
+    /// a single segment the capsule's rim (the PIN pill); for a closed
+    /// polygon (≥ 3 points) the edge of the rounded polygon `Fill { grow: r }`
+    /// fills (the die faces' black edges).
+    Rim { r: i16, hw: i16 },
+}
+
+/// Points a shape may have (a larger outline is a build-time error the
+/// geometry tests catch; the rasteriser draws nothing rather than clip).
+pub const SHAPE_MAX_PTS: usize = 48;
 
 /// Display list capacity: chevrons (2) + texts (≤ 12 across two screens) +
 /// trail (5) + disc + mark + chord + ring + pager + band + spares.
@@ -307,6 +400,8 @@ fn draw_item(item: &Item<'_>, font: &Font<'_>, s: &mut Strip<'_>) {
         Item::Check { cx, cy, r, color, k } => check(s, cx, cy, r, color, k),
         Item::Cross { cx, cy, r, color, k } => cross(s, cx, cy, r, color, k),
         Item::Mask { cx, cy, mask, scale, color, a } => mask_blit(s, cx, cy, &mask, scale, color, a),
+        Item::Shape { pts, xf, mode, color, a } => shape(s, pts, xf, mode, color, a),
+        Item::Secret { text, tier, x, y, color } => font.blit_secret_run(tier, text, x, y, color, s),
         Item::Rect { x, y, w, h, color, a } => {
             for yy in y.max(s.y0)..(y + h).min(s.y0 + s.h) {
                 for xx in x.max(0)..(x + w).min(W) {
@@ -578,6 +673,122 @@ fn cross(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, k: Q16) {
     if kk > (1 << 15) {
         let e2 = ((i64::from(e) * i64::from(kk - (1 << 15))) >> 15) as Q8;
         capsules(s, &[(cx + e, cy - e), (cx + e - 2 * e2, cy - e + 2 * e2)], hw, color);
+    }
+}
+
+/// One edge of a transformed outline, with the reciprocal of its squared
+/// length precomputed so the per-pixel projection needs no division.
+#[derive(Clone, Copy, Default)]
+struct Edge {
+    ax: i32,
+    ay: i32,
+    bx: i32,
+    by: i32,
+    /// `2⁴⁰ / |ab|²` (0 for a degenerate edge).
+    inv: i64,
+}
+
+impl Edge {
+    fn new((ax, ay): (Q8, Q8), (bx, by): (Q8, Q8)) -> Self {
+        let dx = i64::from(bx - ax);
+        let dy = i64::from(by - ay);
+        let ab2 = dx * dx + dy * dy;
+        Self { ax, ay, bx, by, inv: if ab2 == 0 { 0 } else { (1i64 << 40) / ab2 } }
+    }
+
+    /// Squared distance (Q16) from `(px, py)` to the segment.
+    #[inline]
+    fn dist2(&self, px: Q8, py: Q8) -> i64 {
+        let abx = i64::from(self.bx - self.ax);
+        let aby = i64::from(self.by - self.ay);
+        let apx = i64::from(px - self.ax);
+        let apy = i64::from(py - self.ay);
+        let dot = apx * abx + apy * aby;
+        let t = ((dot * self.inv) >> 24).clamp(0, 1 << 16); // Q16 in [0, 1]
+        let qx = apx - ((abx * t) >> 16);
+        let qy = apy - ((aby * t) >> 16);
+        qx * qx + qy * qy
+    }
+
+    /// Winding contribution of the edge for a rightward ray from `(px, py)`.
+    #[inline]
+    fn winding(&self, px: Q8, py: Q8) -> i32 {
+        let cross = i64::from(self.bx - self.ax) * i64::from(py - self.ay) - i64::from(px - self.ax) * i64::from(self.by - self.ay);
+        if self.ay <= py {
+            i32::from(self.by > py && cross > 0)
+        } else {
+            -i32::from(self.by <= py && cross < 0)
+        }
+    }
+}
+
+/// Rasterise an [`Item::Shape`] into the strip. Kept out of line so the
+/// edge table only occupies stack while a shape is actually drawn (the
+/// signing film never draws one).
+#[inline(never)]
+fn shape(s: &mut Strip<'_>, pts: &[(i16, i16)], xf: Xform, mode: ShapeMode, color: Rgb, a: u8) {
+    let n = pts.len();
+    if !(2..=SHAPE_MAX_PTS).contains(&n) || a == 0 {
+        return;
+    }
+    let closed = matches!(mode, ShapeMode::Fill { .. } | ShapeMode::Loop { .. }) || (matches!(mode, ShapeMode::Rim { .. }) && n >= 3);
+    let signed = closed && !matches!(mode, ShapeMode::Loop { .. });
+    let mut edges = [Edge::default(); SHAPE_MAX_PTS];
+    let (mut x_lo, mut x_hi, mut y_lo, mut y_hi) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+    let mut prev = xf.apply(pts[0]);
+    let first = prev;
+    let mut ne = 0usize;
+    for (i, &p) in pts.iter().enumerate() {
+        let q = if i == 0 { first } else { xf.apply(p) };
+        x_lo = x_lo.min(q.0);
+        x_hi = x_hi.max(q.0);
+        y_lo = y_lo.min(q.1);
+        y_hi = y_hi.max(q.1);
+        if i > 0 {
+            edges[ne] = Edge::new(prev, q);
+            ne += 1;
+        }
+        prev = q;
+    }
+    if closed && prev != first {
+        edges[ne] = Edge::new(prev, first);
+        ne += 1;
+    }
+    let edges = &edges[..ne];
+    let reach = Q8::from(match mode {
+        ShapeMode::Fill { grow } => grow,
+        ShapeMode::Stroke { hw } | ShapeMode::Loop { hw } => hw,
+        ShapeMode::Rim { r, hw } => r.saturating_add(hw),
+    }) + ONE_Q8;
+    let ya = ((y_lo - reach) >> 8).max(s.y0);
+    let yb = ((y_hi + reach) >> 8).min(s.y0 + s.h - 1);
+    let xa = ((x_lo - reach) >> 8).max(0);
+    let xb = ((x_hi + reach) >> 8).min(W - 1);
+    for y in ya..=yb {
+        let py = (y << 8) + ONE_Q8 / 2;
+        for x in xa..=xb {
+            let px = (x << 8) + ONE_Q8 / 2;
+            let mut d2 = i64::MAX;
+            let mut wind = 0i32;
+            for e in edges {
+                d2 = d2.min(e.dist2(px, py));
+                if signed {
+                    wind += e.winding(px, py);
+                }
+            }
+            let d = isqrt_u64(d2 as u64) as Q8;
+            let d_signed = if wind != 0 { -d } else { d };
+            let sd = match mode {
+                ShapeMode::Fill { grow } => d_signed - Q8::from(grow),
+                ShapeMode::Stroke { hw } | ShapeMode::Loop { hw } => d - Q8::from(hw),
+                ShapeMode::Rim { r, hw } => (d_signed - Q8::from(r)).abs() - Q8::from(hw),
+            };
+            let cov = edge_cov(sd);
+            if cov != 0 {
+                let aa = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
+                s.blend(x, y, color, aa);
+            }
+        }
     }
 }
 

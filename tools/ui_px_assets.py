@@ -76,9 +76,11 @@ ROOT_RS_DEFAULT = os.path.join(ROOT, "secure", "src", "ui", "px", "atlas_root.rs
 
 ATLAS_MAGIC = b"PQ1A"
 ATLAS_VERSION = 1
-ATLAS_ENTRY_ORDER = ("fonts", "safe", "mainnet", "base", "eth", "blind", "rotate", "usdc", "usdt", "dai", "cowswap")
+ATLAS_ENTRY_ORDER = ("fonts", "safe", "mainnet", "base", "eth", "blind", "rotate", "usdc", "usdt", "dai", "cowswap", "fprint")
 # Procedural pq1 glyphs baked as marks (pq1/components.GLYPHS names).
-PROCEDURAL_MARKS = ("mainnet", "base", "eth", "blind", "rotate")
+PROCEDURAL_MARKS = ("mainnet", "base", "eth", "blind", "rotate", "fingerprint")
+# Glyph name -> container / file name where the glyph's name is too long.
+MARK_KEYS = {"fingerprint": "fprint"}
 # Popular-token logo art (components.TOKEN_LOGOS) -> (asset, the token colour
 # the art is painted in, colors.TOKEN_COLORS). The disc is drawn in that
 # colour on-device; the mark is the WHITE part of the art.
@@ -448,7 +450,8 @@ def main() -> int:
         marks["safe"] = bake_safe_mark()
         for name in PROCEDURAL_MARKS:
             try:
-                marks[name] = bake_procedural_mark(name)
+                # Container names are at most 8 bytes (pq1a NAME_*).
+                marks[MARK_KEYS.get(name, name)] = bake_procedural_mark(name)
             except Exception as e:  # noqa: BLE001 — report and continue; the manifest shows what shipped
                 print(f"warning: mark {name!r} not baked: {e}", file=sys.stderr)
         for name in TOKEN_ART:

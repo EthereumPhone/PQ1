@@ -11,6 +11,8 @@
 //! rasteriser lands, the NV3007 pixel presenter.
 
 pub mod confirm_px;
+pub mod screens;
+pub mod status_map;
 pub mod text;
 #[cfg(feature = "ui-lcd")]
 pub mod assets;

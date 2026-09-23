@@ -24,6 +24,7 @@ const USDC: &[u8] = include_bytes!("../../secure/assets/ui-px/usdc.a4");
 const USDT: &[u8] = include_bytes!("../../secure/assets/ui-px/usdt.a4");
 const DAI: &[u8] = include_bytes!("../../secure/assets/ui-px/dai.a4");
 const COWSWAP: &[u8] = include_bytes!("../../secure/assets/ui-px/cowswap.a4");
+const FPRINT: &[u8] = include_bytes!("../../secure/assets/ui-px/fprint.a4");
 
 fn marks() -> Marks<'static> {
     Marks {
@@ -31,7 +32,8 @@ fn marks() -> Marks<'static> {
         mainnet: parse_mark(MAINNET),
         // The device draws Base's own mark on a Base NETWORK screen.
         base: parse_mark(BASE),
-        fingerprint: None,
+        // The digest / fingerprint mark (baked in port step 4).
+        fingerprint: parse_mark(FPRINT),
         eth: parse_mark(ETH),
         usdc: parse_mark(USDC),
         usdt: parse_mark(USDT),

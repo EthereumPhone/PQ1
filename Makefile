@@ -596,6 +596,16 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		short=$$(grep -E '^\[UI-PXR\] ' $$log | awk '{ if (length($$4) != 512) n++ } END { print n+0 }'); \
 		if [ "$$short" -eq 0 ]; then echo "  PASS  ui-px: every [UI-PXR] record is 512 hex characters"; \
 		else echo "  FAIL  ui-px: $$short malformed [UI-PXR] records"; fail=1; fi; \
+		for want in 'id=SPLASH ' 'id=READY ' 'id=SIGNED ' 'id=NOTICE ' 'id=BUSY cap="GENERATING KEYS"'; do \
+			if grep -Eq "^\[UI-PXS\] .* $$want" $$log; then echo "  PASS  ui-px: status screen $$want (port step 4)"; \
+			else echo "  FAIL  ui-px: no $$want status screen (port step 4)"; fail=1; fi; \
+		done; \
+		pages=$$(grep -c -- '^    +----------------+' $$log || true); \
+		if [ "$$pages" -eq 0 ]; then echo "  PASS  ui-px: zero 16x4 text pages in the whole run (port step 4)"; \
+		else echo "  FAIL  ui-px: $$((pages / 2)) 16x4 text pages shown"; fail=1; fi; \
+		badpxs=$$(grep -E '^\[UI-PXSR\] ' $$log | awk '{ if (length($$2) != 512) n++ } END { print n+0 }'); \
+		if [ "$$badpxs" -eq 0 ]; then echo "  PASS  ui-px: every [UI-PXSR] record is 512 hex characters"; \
+		else echo "  FAIL  ui-px: $$badpxs malformed [UI-PXSR] records"; fail=1; fi; \
 		;; esac; \
 	[ -n "$(E2E_LOG_KEEP)" ] || rm -f $$log; \
 	if [ $$fail -eq 0 ]; then \
@@ -4714,7 +4724,7 @@ pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails
 
 ui-px-check: pq-ui-check ui-px-assets-check pq-ui-port-diff ## All pixel-UI design-rule gates (vendored tree, bake, port_diff, checker tests)
 	@cargo test --locked -p pqsigner-ui-px
-	@cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests
+	@cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests ui_px_status_map
 
 .PHONY: ui-px-assets ui-px-assets-check
 ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1a, atlas_root.rs + metrics_gen.rs
@@ -4723,7 +4733,7 @@ ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1
 ui-px-assets-check: ## Verify the committed ui-px assets (incl. the NS atlas container + pinned root) are reproducible
 	@tmp=$$(mktemp -d); \
 	python3 tools/ui_px_assets.py --out $$tmp --ns-out $$tmp/ns --metrics $$tmp/metrics_gen.rs --root-rs $$tmp/atlas_root.rs >/dev/null && \
-	for f in fonts.bin safe.a4 mainnet.a4 base.a4 eth.a4 blind.a4 rotate.a4 usdc.a4 usdt.a4 dai.a4 cowswap.a4 manifest.json; do \
+	for f in fonts.bin safe.a4 mainnet.a4 base.a4 eth.a4 blind.a4 rotate.a4 usdc.a4 usdt.a4 dai.a4 cowswap.a4 fprint.a4 manifest.json; do \
 	  cmp -s $$tmp/$$f secure/assets/ui-px/$$f || { echo "ui-px asset drift: $$f (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
 	done; \
 	cmp -s $$tmp/ns/atlas.pq1a nonsecure/assets/ui-px/atlas.pq1a || { echo "ui-px asset drift: atlas.pq1a (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \

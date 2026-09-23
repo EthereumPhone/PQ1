@@ -40,10 +40,12 @@ pub const NAME_USDC: &[u8; 8] = b"usdc\0\0\0\0";
 pub const NAME_USDT: &[u8; 8] = b"usdt\0\0\0\0";
 pub const NAME_DAI: &[u8; 8] = b"dai\0\0\0\0\0";
 pub const NAME_COWSWAP: &[u8; 8] = b"cowswap\0";
+/// The digest / fingerprint mark (`components.GLYPHS["fingerprint"]`).
+pub const NAME_FPRINT: &[u8; 8] = b"fprint\0\0";
 /// Every disc mark the shipped container must carry (the secure world
 /// refuses a dialog when one is missing or malformed).
-pub const MARK_NAMES: [&[u8; 8]; 10] = [
-    NAME_SAFE, NAME_MAINNET, NAME_BASE, NAME_ETH, NAME_BLIND, NAME_ROTATE, NAME_USDC, NAME_USDT, NAME_DAI, NAME_COWSWAP,
+pub const MARK_NAMES: [&[u8; 8]; 11] = [
+    NAME_SAFE, NAME_MAINNET, NAME_BASE, NAME_ETH, NAME_BLIND, NAME_ROTATE, NAME_USDC, NAME_USDT, NAME_DAI, NAME_COWSWAP, NAME_FPRINT,
 ];
 
 /// A parsed container: the whole blob plus a validated entry count.
@@ -132,7 +134,7 @@ impl<'a> Atlas<'a> {
             safe: m(NAME_SAFE),
             mainnet: m(NAME_MAINNET),
             base: m(NAME_BASE),
-            fingerprint: None,
+            fingerprint: m(NAME_FPRINT),
             eth: m(NAME_ETH),
             usdc: m(NAME_USDC),
             usdt: m(NAME_USDT),

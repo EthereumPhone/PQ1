@@ -20,6 +20,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "ui-screens" / "px"
+# Port step 4: the screens outside the sign dialog (boot, PIN, wizard,
+# verdicts, the firmware-update / address / sync consents) are not reachable
+# from the QEMU e2e (it auto-provisions and pre-unlocks); their records come
+# from the secure host test that emits them (`ui_px_status_map`).
+LIFECYCLE = ROOT / "pqsigner-ui-px" / "tests" / "fixtures" / "lifecycle"
 
 SCENARIO_RE = re.compile(r"^\[NS\]\[e2e\] Scenario ([0-9A-Za-z-]+): (.*?)\s*$")
 HUMAN_RE = re.compile(r"^\[UI-PX\] ([0-9a-f]{4})/([0-9a-f]{4}) p(\d) (.*)$")
@@ -103,6 +108,23 @@ def export(log: Path, out: Path = OUT) -> int:
         (d / "records.txt").write_text("".join(
             (f"d{dlg + 1} " if multi else "") + f"{idx:04x} p{page} {hexrec}\n"
             for dlg, idx, page, _, hexrec in sc["screens"]))
+    for fx in sorted(LIFECYCLE.glob("*.hex")):
+        d = out / f"lifecycle-{slug(fx.stem)}"
+        d.mkdir(parents=True, exist_ok=True)
+        for old in d.glob("*.png"):
+            old.unlink()
+        index.append(f"## Lifecycle: {fx.stem} (host fixture `{fx.relative_to(ROOT)}`)")
+        index.append("")
+        index.append("| # | id | caption | frame |")
+        index.append("|---|----|---------|-------|")
+        for idx, hexrec in enumerate(l.strip() for l in fx.read_text().splitlines() if l.strip()):
+            rid = record_id(hexrec)
+            cap = bytes.fromhex(hexrec)[32:64].decode("ascii", "replace").rstrip().replace("|", "\\|")
+            name = f"{idx:02d}-{slug(rid)}-p0.png"
+            batch_lines.append(f"{d / name} 0 {hexrec}")
+            index.append(f"| {idx} | `{rid}` | {cap} | ![{rid}]({d.name}/{name}) |")
+            total += 1
+        index.append("")
     batch = out / "_batch.txt"
     batch.write_text("\n".join(batch_lines) + "\n")
     subprocess.run(

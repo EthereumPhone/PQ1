@@ -295,6 +295,13 @@ struct FrameCost {
 /// Render `frame` strip by strip and stream each strip that changed since
 /// the panel last received it.
 fn present_frame(frame: &Frame<'_>, font: &Font<'_>) -> FrameCost {
+    present_frame_ex(frame, font, false)
+}
+
+/// [`present_frame`]; `force` streams every strip and records none (a frame
+/// carrying secret cells: no strip is skipped on a digest of secret pixels,
+/// and no such digest outlives the frame).
+fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCost {
     let mut cost = FrameCost::default();
     // SAFETY: single-threaded frame loop; the SysTick sampler never touches
     // the strip buffer or the digest table (same discipline as
@@ -309,10 +316,15 @@ fn present_frame(frame: &Frame<'_>, font: &Font<'_>) -> FrameCost {
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
         render_strip(frame, font, &mut strip);
-        let d = strip_digest(&buf[..(W * h) as usize]);
+        let d = if force { 0 } else { strip_digest(&buf[..(W * h) as usize]) };
         #[cfg(feature = "ui-px-frametime")]
         let t1 = frametime::cycles();
-        if shown.get(i).copied().flatten() != Some(d) {
+        if force {
+            blit_strip(y0, h, &buf[..(W * h) as usize]);
+            if let Some(slot) = shown.get_mut(i) {
+                *slot = None;
+            }
+        } else if shown.get(i).copied().flatten() != Some(d) {
             blit_strip(y0, h, &buf[..(W * h) as usize]);
             if let Some(slot) = shown.get_mut(i) {
                 *slot = Some(d);
@@ -499,12 +511,18 @@ fn film_screen() -> Screen {
 /// loops until [`film_resolve`]. Without a verified atlas nothing plays
 /// (and the ticks stay no-ops).
 pub fn film_start() {
+    film_start_with(&film_screen());
+}
+
+/// Start the loading film on `s` — the busy look of port step 4: `s` is a
+/// status record whose disc seeds the qubits and whose caption breathes
+/// over the orbit (GENERATING KEYS, WIPING, …).
+pub fn film_start_with(s: &Screen) {
     let Some(atlas) = assets::atlas() else {
         return;
     };
     let now = timeout::now();
-    let s = film_screen();
-    let mut anim = Anim::new(&s, 0, now);
+    let mut anim = Anim::new(s, 0, now);
     anim.film_start(now);
     invalidate_shown();
     let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
@@ -609,6 +627,83 @@ pub fn show_busy(caption: &[u8]) {
     let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
 }
 
+// ---- port step 4: screens outside the dialog -------------------------------------
+
+/// Longest a non-dialog screen plays before it is left at rest (the longest
+/// verdict timeline is 2.4 s).
+const PLAY_CAP_MS: u32 = 3_000;
+
+/// Whether the S-only clock is ticking (SysTick starts after some early
+/// boot screens on QEMU-shaped boots; never wait on a stopped clock).
+fn clock_running() -> bool {
+    let a = timeout::now();
+    for _ in 0..400_000u32 {
+        if timeout::now() != a {
+            return true;
+        }
+        core::hint::spin_loop();
+    }
+    false
+}
+
+/// Play a non-dialog record from its arrival until it rests, leaving the
+/// resting frame on the glass; `secret` grid cells are painted over every
+/// frame by the constant-time run, and such a frame streams every strip.
+/// With a stopped clock only the resting frame is shown.
+pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8])]) {
+    film_abort();
+    invalidate_shown();
+    let marks = atlas.marks();
+    let font = atlas.font();
+    let force = !secret.is_empty();
+    let paint = |anim: &Anim| {
+        let mut frame = Frame::new();
+        anim.build(&marks, &font, &mut frame);
+        for &(k, w) in secret {
+            pqsigner_ui_px::rows::push_secret_word(&mut frame, k, w, 255);
+        }
+        let _ = present_frame_ex(&frame, &font, force);
+    };
+    if !clock_running() {
+        // Settle on synthetic time, show the rest.
+        let mut anim = Anim::new(s, 0, 0);
+        let mut t = 16;
+        while anim.step(t) && t < PLAY_CAP_MS {
+            t += 16;
+        }
+        paint(&anim);
+    } else {
+        let t0 = timeout::now();
+        let mut anim = Anim::new(s, 0, t0);
+        loop {
+            let now = timeout::now();
+            let moving = anim.step(now);
+            paint(&anim);
+            if !moving || now.wrapping_sub(t0) >= PLAY_CAP_MS {
+                break;
+            }
+            while now.wrapping_add(FRAME_PERIOD_MS).wrapping_sub(timeout::now()) < (1 << 31) {
+                cortex_m::asm::wfi();
+            }
+        }
+    }
+    if force {
+        invalidate_shown();
+    }
+}
+
+/// Paint a non-dialog record's resting frame at once (work in progress).
+pub fn paint_rest(s: &Screen, atlas: &assets::AtlasRef) {
+    film_abort();
+    invalidate_shown();
+    let mut anim = Anim::new(s, 0, 0);
+    let mut t = 16;
+    while anim.step(t) && t < PLAY_CAP_MS {
+        t += 16;
+    }
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
+}
+
 // ---- the flow ------------------------------------------------------------------
 
 /// Run the design's confirm loop over a proven transcript on the panel.
@@ -621,6 +716,9 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     if deadline_expired() {
         return (PxOutcome::DeadlineExpired, crate::fi::FAIL_SENTINEL);
     }
+    // A busy film (key generation before the dialog) ends here; the sign
+    // starts its own film after the consent.
+    film_abort();
     // Parsed once per flow from the view `assets::verify_atlas` proved for
     // this dialog: the atlas header walk is cheap but it is per frame
     // otherwise, and the marks likewise.

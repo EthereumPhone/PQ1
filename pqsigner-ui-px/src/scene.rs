@@ -215,6 +215,48 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
                 push(spec(s, Src::Line(page, i), tier_id(s, w), CENTER_X, y, Align::Center, false, 0));
             }
         }
+        Some(Kind::Verdict) => {
+            // Token-less: the sign owns the canvas (verdict.rs draws it).
+            l.circle = None;
+            l.chev = Chev::None;
+            match s.side() {
+                Some(side @ (crate::screen::Side::Left | crate::screen::Side::Right)) => {
+                    // The detail-grid notice (sig_error): the sign docks in
+                    // `side`, the label under it, the lines opposite.
+                    let (cx, tx) = if side == crate::screen::Side::Right {
+                        (COL_RIGHT_CX, TEXT_CX_CIRCLE_RIGHT)
+                    } else {
+                        (COL_LEFT_CX, TEXT_CX_CIRCLE_LEFT)
+                    };
+                    push(spec(s, Src::Label, TierId::semibold(16), cx, BASELINE_Y, Align::Center, true, LS_LABEL_Q6));
+                    let tier = s.tier().unwrap_or(Tier::T22);
+                    let n = s.nlines(0);
+                    for i in 0..n {
+                        let w = s.line(0, i).map_or(Weight::Regular, |(w, _)| w);
+                        let y = stacked_y_q8(tier, n, i) >> 8;
+                        push(spec(s, Src::Line(0, i), tier_id(s, w), tx, y, Align::Center, false, 0));
+                    }
+                }
+                _ => {
+                    push(spec(s, Src::Caption, TierId::regular(18), CENTER_X, BASELINE_Y, Align::Center, true, LS_QUESTION_Q6));
+                }
+            }
+        }
+        Some(Kind::Entry) => {
+            // The row replaces the token; the corner chevrons carry the taps.
+            l.circle = None;
+            push(spec(s, Src::Caption, TierId::regular(18), CENTER_X, BASELINE_Y, Align::Center, true, LS_QUESTION_Q6));
+        }
+        Some(Kind::Words) => {
+            // A value screen's grid: the token parked, chevrons for tap-nav,
+            // the optional label (the caption slot) on the band.
+            l.circle = None;
+            // Never a label under a grid of four or more words: the fourth
+            // row's ink and the band's text overlap (words-grid Don't).
+            if s.grid_word(3).is_none() {
+                push(spec(s, Src::Caption, TierId::semibold(16), CENTER_X, BASELINE_Y, Align::Center, true, LS_LABEL_Q6));
+            }
+        }
         Some(Kind::Legacy) | None => {
             // Four 16-column rows as full-width 22 px text stacked about y 66.
             l.circle = None;
@@ -440,7 +482,22 @@ impl<'a> Marks<'a> {
             Some(Icon::Blind) => self.blind,
             Some(Icon::Rotate) => self.rotate,
             Some(Icon::Cowswap) => self.cowswap,
-            Some(Icon::Wallet | Icon::None) | None => None,
+            Some(
+                Icon::Wallet
+                | Icon::None
+                | Icon::Lock
+                | Icon::Unlock
+                | Icon::Alert
+                | Icon::Wipe
+                | Icon::Shield
+                | Icon::Pill
+                | Icon::Die
+                | Icon::Gear
+                | Icon::ResultRing
+                | Icon::Verified
+                | Icon::Heart,
+            )
+            | None => None,
         }
     }
 }
@@ -529,6 +586,15 @@ pub struct Anim {
     film: Option<Film>,
     /// Idle-since (last settle or last input), for the ambient cycles.
     idle_since: u32,
+    /// When the current screen arrived (a verdict's clock).
+    arrived_at: u32,
+}
+
+/// Screens that own the canvas: no token disc rests on them, and none
+/// rides the transit into them (DESIGN.md § Verdict screens, token-less).
+#[must_use]
+pub fn token_less(s: &Screen) -> bool {
+    matches!(s.kind(), Some(Kind::Verdict | Kind::Entry | Kind::Words))
 }
 
 impl Anim {
@@ -557,6 +623,7 @@ impl Anim {
             press: None,
             film: None,
             idle_since: now,
+            arrived_at: now,
         };
         a.alpha_out.snap(0);
         a
@@ -588,7 +655,16 @@ impl Anim {
         self.settled_at = None;
         self.flip_at = None;
         self.idle_since = now;
+        self.arrived_at = now;
         self.sweep = 0;
+        if token_less(screen) {
+            // No token rides into a token-less screen: park it now so a
+            // later screen that rests on one brings it back in.
+            self.sx.snap(q16(cx));
+            self.sy.snap(q16(cy));
+            let park = (self.sx.value, self.sy.value);
+            self.chain = [park; 5];
+        }
     }
 
     /// Turn a page within the current screen: sequential fade (out, then in).
@@ -777,7 +853,8 @@ impl Anim {
         if !flip_live {
             self.flip_at = None;
         }
-        let ambient = (l.sweep || l.hint || l.band) && self.film.is_none();
+        let ambient = (l.sweep || l.hint || l.band || crate::verdict::live(&self.cur, now.wrapping_sub(self.arrived_at)))
+            && self.film.is_none();
         let ending_live = self.film.is_some() && !self.film_done(now);
         // The trail is still catching up with the head.
         let chain_live = self
@@ -795,7 +872,7 @@ impl Anim {
         if self.film.is_some() || self.hold.is_some() || self.settled_at.is_none() || self.flip_at.is_some() {
             return Some(now.wrapping_add(16));
         }
-        if l.sweep || l.hint {
+        if l.sweep || l.hint || crate::verdict::live(&self.cur, now.wrapping_sub(self.arrived_at)) {
             return Some(now.wrapping_add(33));
         }
         if l.band {
@@ -844,6 +921,28 @@ impl Anim {
         let a_in = (i64::from(self.alpha_in.value.clamp(0, ONE_Q16)) * 255 >> 16) as u8;
         if a_out > 0 && !(self.prev.0 == self.cur.0 && self.prev_page == self.cur_page) {
             push_texts(frame, &self.prev, self.prev_page, a_out);
+        }
+        if self.film.is_none() && token_less(&self.cur) {
+            let t = now.wrapping_sub(self.arrived_at);
+            match self.cur.kind() {
+                Some(Kind::Verdict) => {
+                    crate::verdict::build_sign(&self.cur, t, frame);
+                    let ta = crate::verdict::caption_alpha(&self.cur, t);
+                    let a = (i64::from(ta) * 255 >> 16) as u8;
+                    push_texts(frame, &self.cur, 0, a);
+                }
+                Some(Kind::Entry) => {
+                    crate::rows::build_entry(&self.cur, frame);
+                    push_texts(frame, &self.cur, 0, a_in.max(1));
+                }
+                Some(Kind::Words) => {
+                    crate::rows::build_words(&self.cur, a_in, frame);
+                    push_texts(frame, &self.cur, 0, a_in);
+                }
+                _ => {}
+            }
+            let _ = (font, marks);
+            return;
         }
         if self.film.is_none() {
             if let Some(t) = self.flip_at {
@@ -924,7 +1023,14 @@ impl Anim {
                     Ending::Declined => declined,
                 }
             };
-            for (text, a_q16) in [(&b"SIGNING"[..], busy_a), (outcome.map_or(&b""[..], caption_of), text_a)] {
+            // The busy line: the film screen's own caption (GENERATING KEYS,
+            // WIPING …), SIGNING when it has none.
+            let busy: &[u8] = if self.cur.kind() == Some(Kind::Status) && !self.cur.caption().is_empty() {
+                self.cur.caption()
+            } else {
+                b"SIGNING"
+            };
+            for (text, a_q16) in [(busy, busy_a), (outcome.map_or(&b""[..], caption_of), text_a)] {
                 let a = (i64::from(a_q16.clamp(0, ONE_Q16)) * 255 >> 16) as u8;
                 if a > 0 && !text.is_empty() {
                     frame.push(Item::Text {
@@ -1152,7 +1258,7 @@ fn blend_rgb(a: Rgb, b: Rgb, t: Q16) -> Rgb {
     )
 }
 
-fn push_texts<'a>(frame: &mut Frame<'a>, s: &'a Screen, page: u8, alpha: u8) {
+pub(crate) fn push_texts<'a>(frame: &mut Frame<'a>, s: &'a Screen, page: u8, alpha: u8) {
     if alpha == 0 {
         return;
     }

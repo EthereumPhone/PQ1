@@ -179,25 +179,118 @@ stays an owner decision (see § Flash).
 
 Done: every upstream sign-flow family in `flows/MANIFEST.md` has a firmware
 twin with frames. `firmware/update`, `pin/unlock` and `unlock_batch` (PIN →
-batch idle → padlock) are screens outside the sign dialog — step 4.
+batch idle → padlock) are screens outside the sign dialog — step 4 (done).
 
-### 4. Everything outside the sign dialog
+### 4. Everything outside the sign dialog — DONE (2026-09-23)
 
-- **PIN entry** (`pin/unlock`, `pin_entering`, `pin_differ`): pin-row +
-  entry-dial on the two buttons. Only the painting changes; `pin_entry.rs`
-  logic stays.
-- **Verdicts** (`screens/verdict/*`): one registry in
-  `pqsigner-ui-px::scene` with the procedural icons; `wipe` gets the
-  explosion film.
-- **Boot**: 8-word fingerprint on `words-grid` + `firmware_verified`. The
-  FSBL window is NOT ported (it stays text).
-- **Seed wizard**: words-grid display + entry-dial confirm.
-- **Firmware update**: progress status screen → `firmware_verified` /
-  verdict.
-- **Idle** screens + the 120 s lock → `padlock`.
+| firmware surface | upstream | how |
+|---|---|---|
+| ~300 `ui::show_status` / `show_progress` sites | `screens/verdict/*`, status / film | `ui/px/status_map.rs` maps each to its screen; `ui/px/screens.rs` presents it |
+| PIN entry (`pin_entry.rs`) | `pin/pin_entering` (PIN row) | `status_map::pin_row` — painting only, the entry loop unchanged |
+| wrong PIN / PINs differ / checking / last attempt / locked / unlocked | `pin_mismatch`, `last_attempt`, `padlock` | verdicts |
+| boot splash + OS fingerprint | words grid | `splash`, `fingerprint_grid` (the FSBL's own 4×16 prefixes, so both rows still compare) |
+| seed wizard: chooser, 24 words, word entry, candidate pick, backup check | words grid, entry row, `shield` | `choice`, `seed_page` + the constant-time run, `letter_row`, `candidate_list` |
+| 120 s idle lock, re-unlock | `padlock` | PendSV plays LOCKED, then the PIN row; UNLOCKED before READY |
+| wipe / tamper / RNG / factory | `wipe`, `tamper`, `rng_failed`, `factory_signing` | verdicts |
+| firmware update consents (`fw_update::confirm_verify_request` / `confirm_install`) | `firmware/update` | `firmware_*_screens` through `nsc::px_confirm_plain` |
+| wallet-address and off-chain-sync consents | — | page lift (`wallet_address_screens`, `offchain_sync_screens`) through `px_confirm_plain` |
 
-Done when: cold boot → wizard → unlock → sign → lock → wipe on EVT shows no
-text frame.
+How it is wired:
+
+- **Records.** Three new kinds in the `Screen` record: `X` verdict (the sign
+  in the icon byte, eleven procedural signs; docked on a side = the
+  `sig_error` detail notice), `P` entry row (glyphs + slot states), `W`
+  words grid (up to eight words, numbered from a first number). New icons
+  `K O ! Z H P 3 G M V A`. Existing records are byte-identical.
+- **Engine.** `raster::Item::Shape` (a static Q4 outline placed by a
+  transform: fill with rounded corners, stroke, closed loop, rim) draws every
+  sign; the outlines are baked from the vendored `pq1/procedural/` modules by
+  `tools/ui_px_verdict_geometry.py` into `verdict_geom.rs`. `verdict.rs` owns
+  the timelines (the entrance law, then the mechanism: the padlock turning in
+  / snapping open, the attention pulses, the shield's nod and wiggle, the pill
+  filling, turning and shaking, the ring's head shake, the gear's coast, the
+  heart's pump). `rows.rs` draws the entry row and the words grid.
+- **Classifier.** `status_map::classify(title, sub)` is the one registry:
+  a verdict where the design has one, the busy look for work in progress
+  (painted at rest at once — it never delays the work, e.g. WIPING before
+  the SE wipe), READY at rest, and every other status — every refusal —
+  the detail-grid notice with the title as its label and the full reason as
+  the lines (wrapped, never cut). `show_progress` runs start the qubit film
+  on the busy record (its caption breathes over the orbit); a running film
+  is never replaced.
+- **Fallback.** Every painter verifies the NS atlas first and returns
+  `false` when it cannot; the caller then paints its 16×4 page (the device
+  stays readable). The seed walk decides its paging once (three pages of
+  eight on the grid, eight of three on the pages) and cancels rather than
+  mix them if the atlas fails mid-walk. The firmware-update and the two
+  lifted consents fall back to their page dialogs (secure-resident glyphs):
+  a broken NS atlas must never make the update — the repair — unreachable.
+- **Secrets.** No secret enters a record. The PIN row carries the page's
+  masking (entered digits `*`, only the active digit shown); its logged /
+  hashed copy redacts even that. Seed words (and restore candidates) are
+  painted by `Font::blit_secret_run`: fixed eight 14 px cells, all 26
+  lowercase glyphs scanned per cell and kept by mask, every cell pixel
+  composited unconditionally (`Strip::blend_ct`), fetched with the
+  constant-time `word_bytes` / `word_bytes_at`; such frames stream every
+  strip (no digest of secret pixels decides a skip). The `tools/sca` F-24
+  harness has NOT been re-run against this path — hardening pass.
+- **Logs.** Non-dialog screens log as `[UI-PXS]` / `[UI-PXSR]` so the sign
+  transcript counts are untouched.
+- **Fingerprint mark** baked (`fprint`, +312 B; atlas 75,128 of 77,824 B):
+  the ERC-8213 / DIGEST trailer discs and the firmware family now wear it
+  (every re-blessed frame outside `lifecycle/` is one of those discs).
+
+Deviations (recorded in `tools/pq-ui/PORT_DEVIATIONS.toml`): the entry
+grammar is the legacy loop's (the chord or hold-right ENTERs, hold-left
+goes BACK / cancels; no double-press BACK/NEXT, static hint row, no ring
+bounce); entered PIN digits stay masked; seed words in monospaced cells;
+the die rests, the wipe brush pulses, no lead films; LAST ATTEMPT without
+the reel; **no `firmware_verified` at boot** — the secure world measures, it
+does not verify, so the boot intro is the fingerprint disc; the firmware
+update uses the fingerprint disc (no download mark baked) and shows both
+fingerprints (image and signing key) whole on the grid.
+
+Not ported, on purpose: the FSBL window (stays text, per the plan); the
+panic handler's fatal screen (a second panic in the pixel path would be
+UB — it stays on the glyph blitter); bench-only diagnostics
+(`saes-self-test`, `button-test`, `se-lcd-diag`, prodtest, the SE stress /
+e2e harness statuses go through the classifier anyway); `forced_blind`
+(unchanged from step 2); the SSD1306 bench backend.
+
+Design-rule checker: new `GlyphMissing` rule — every caption / label byte
+must exist in its face (the 18 px / 16 px faces carry caps, digits and
+`?.,:/-'&%+!()`; a `#` silently vanished on the first wallet-address
+draft). Every existing fixture passes it.
+
+Evidence: `ui_px_status_map` host tests (9: the lifecycle verdict map, the
+notice keeping every word, caption charset, PIN masking, the FSBL-prefix
+grid, both fw-update transcripts passing `check_flow`, the lifted consents
+carrying every page fact, secret records holding no words, and the fixture
+drift check); `pqsigner-ui-px` 93 unit + 7 golden (new: shape / verdict /
+rows / constant-time run tests); frame goldens for the new `lifecycle`
+family (8 fixtures, 52 frames) blessed after review, 21 existing fixtures
+re-blessed for the fingerprint disc only (verified: every changed frame is a
+fingerprint-icon record); secure host tests 2628/0; `make e2e-px` ALL
+ASSERTIONS PASSED (47 pixel transcripts unchanged, plus the step-4 checks:
+SPLASH / READY / SIGNED / NOTICE / GENERATING KEYS status screens and **zero
+16×4 text pages in the whole run**); plain `make e2e` ALL ASSERTIONS
+PASSED; `make ui-px-check` green (vendored tree, reproducible bake incl.
+`fprint.a4`, port_diff 24 MATCH / 1 recorded DEVIATION);
+`tools/ui_px_verdict_geometry.py --check` up to date; catalogue
+`docs/ui-screens/px/` regenerated (773 frames: the 30 e2e scenarios with only
+their fingerprint discs changed, plus 8 `lifecycle-*` sections from the host
+fixtures — PIN, wizard, boot, verdicts and the consents are not reachable
+from the QEMU e2e, which auto-provisions and pre-unlocks).
+
+Flash after step 4: the ship-shaped A/B image (`make size-report-px
+BOARD=pq1`) overflows the secure slot by 68,352 B (39,520 B after step 3).
+The monolithic EVT dev image links: 537,632 B secure (+28,704 B), 97,808 B
+non-secure (atlas 75,128 B of its 77,824 B window). The flash lever stays an
+owner decision (§ Flash).
+
+Done when (from the plan): cold boot → wizard → unlock → sign → lock → wipe
+on EVT shows no text frame — the code paths are ported and QEMU shows zero
+16×4 pages; the EVT walk-through itself is pending (human).
 
 ### 5. Switch over
 

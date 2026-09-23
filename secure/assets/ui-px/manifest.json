@@ -12,8 +12,8 @@
   },
   "outputs": {
     "atlas.pq1a": {
-      "bytes": 74816,
-      "sha256": "7d12665a9991dfe0b83c7903338a36bdad9745efa4c6e7623192be6350603cc2"
+      "bytes": 75128,
+      "sha256": "4c5e99d5a388f88058715af58bf6f8d6894576b409e89137c802661e7995ac71"
     },
     "base.a4": {
       "bytes": 346,
@@ -38,6 +38,10 @@
     "fonts.bin": {
       "bytes": 68867,
       "sha256": "ce8aa3bcb8f2682b7990c7c735eb658507de48ab9d63635b34c2f1a9a68999cc"
+    },
+    "fprint.a4": {
+      "bytes": 296,
+      "sha256": "40aef1b6dabf26bd626fe368572c47d36a9678978fb5cd97ae1946cfad287459"
     },
     "mainnet.a4": {
       "bytes": 278,

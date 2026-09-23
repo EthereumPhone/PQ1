@@ -18,3 +18,31 @@ why = "EVT #1: deliberate presses on the pq1 switches run 250-400 ms and were de
 #     down together, fires on release) - the reference signs on hold-right;
 #   * hold-right is a no-op on the device; hold-left declines everywhere
 #     (reference: same).
+
+# Port step 4 (2026-09-23) — screens outside the sign dialog. Visual /
+# mechanism deviations with no motion.json token (port_diff cannot see them);
+# docs/ui/pixel-ui-port-plan.md § 4 has the reasons in full:
+#   * PIN row: entered digits are masked (a filled dot in the white ring), the
+#     reference shows the digit — the device keeps the 16x4 page's masking
+#     (the page showed `*`; screens never show more than the page did);
+#   * PIN row / letter row: the input grammar is the legacy entry loop's
+#     (pin_entry.rs / seed_wizard.rs unchanged: tap -/+ dials, the chord or
+#     hold-right ENTERs, hold-left goes BACK and cancels on the first slot) -
+#     the reference binds BACK/NEXT to double presses; the hint row shows the
+#     static `- ENTER (BOTH) +` (no 3 s pulse cycle, no ring bounce: the
+#     entry loop paints once per button event);
+#   * seed words: drawn by the constant-time cell run (fixed 14 px cells,
+#     each glyph centred in its cell) - a monospaced setting of the
+#     proportional Aileron face, F-24; three pages of eight words (the
+#     reference grid), the 16x4 pages keep eight pages of three;
+#   * verdicts: the die rests at the REST corner view (no tumble), the wipe
+#     brush takes the pulse treatment (no swiffle), no lead films (no
+#     explosion before WALLET WIPED / the firmware endings), LAST ATTEMPT
+#     shows the 1 at the 36 px face (no 40 px SemiBold baked, no reel);
+#   * boot: the fingerprint intro is a status screen on the fingerprint disc
+#     and there is NO `firmware_verified` at boot (the secure world measures,
+#     it does not verify); FIRMWARE VERIFIED is not claimed anywhere yet;
+#   * firmware update: the fingerprint disc stands in for the download mark
+#     (not baked); both fingerprints (image + signing key) get the words grid,
+#     each announced by a detail screen; the returning ask repeats the
+#     opening ask byte-for-byte (the firmware flow rule), not `CONFIRM UPDATE`.

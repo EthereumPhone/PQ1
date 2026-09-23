@@ -54,6 +54,13 @@ pub fn confirm_verify_request() -> (ConfirmResult, u32) {
     use crate::ui::confirm::{confirm_checked, Page};
     use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 
+    // Port step 4: the design's ask (same static facts); the page dialog
+    // below only when the pixel path cannot run.
+    #[cfg(feature = "ui-px")]
+    if let Ok(out) = crate::nsc::px_confirm_plain(crate::ui::px::status_map::firmware_verify_screens) {
+        return out;
+    }
+
     let mut page: Page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     for (row, text) in [
         b"FW UPDATE MODE" as &[u8],
@@ -138,6 +145,20 @@ pub fn confirm_install(manifest: &ManifestRef) -> (ConfirmResult, u32) {
         let (vendor_pk_seed, vendor_pk_root) = vendor_pubkey::key_parts();
         let key_fpr = fw_manifest::vendor_pubkey_fingerprint(vendor_pk_seed, vendor_pk_root);
         let key_words = hash_to_word_indices(&key_fpr);
+
+        // Port step 4: the same facts on the design's screens — the version
+        // and its direction, both fingerprints whole on the words grid —
+        // through the pixel consent; the pages below only when it cannot run.
+        #[cfg(feature = "ui-px")]
+        {
+            let fw_cells: [[u8; 8]; 8] = core::array::from_fn(|i| sphincs_tz_bip39::word_bytes_at(fw_words[i]).0);
+            let key_cells: [[u8; 8]; 8] = core::array::from_fn(|i| sphincs_tz_bip39::word_bytes_at(key_words[i]).0);
+            if let Ok(out) = crate::nsc::px_confirm_plain(|t| {
+                crate::ui::px::status_map::firmware_update_screens(new_version, floor, &fw_cells, &key_cells, t)
+            }) {
+                return out;
+            }
+        }
 
         let pages: [Page; 4] = [
             build_version_page(new_version, floor),

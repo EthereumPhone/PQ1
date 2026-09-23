@@ -65,8 +65,12 @@ pub mod motion;
 pub mod png;
 pub mod pq1a;
 pub mod raster;
+pub mod rows;
 pub mod scene;
 pub mod screen;
+pub mod verdict;
+#[allow(clippy::unreadable_literal, missing_docs)]
+pub mod verdict_geom;
 
 pub use screen::{
     exact_screen_occurrences, placeholder_ramp, screen_at_matches, screen_exact, BuildErr, Icon, Kind, Look, ResultMark,

@@ -875,3 +875,95 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 27 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x01760b8c573c5a9b15a4bd \| r:64d44cb09516189a01ba1b \| r:b28f7229e0264e03682c | ![DIGEST](scenario-5s/27-digest-p0.png) |
 | 28 | `APPROVE` | 1 | id=APPROVE lab="" cap="APPROVE SAFE TX?" | ![APPROVE](scenario-5s/28-approve-p0.png) |
 
+## Lifecycle: boot (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/boot.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `SPLASH` | PQ1 | ![SPLASH](lifecycle-boot/00-splash-p0.png) |
+| 1 | `OSFPRINT` | OS FINGERPRINT | ![OSFPRINT](lifecycle-boot/01-osfprint-p0.png) |
+| 2 | `FPRINT` |  | ![FPRINT](lifecycle-boot/02-fprint-p0.png) |
+| 3 | `READY` | READY | ![READY](lifecycle-boot/03-ready-p0.png) |
+
+## Lifecycle: fw_update (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/fw_update.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `UPDATE` | UPDATE TO V0.1.0.3? | ![UPDATE](lifecycle-fw-update/00-update-p0.png) |
+| 1 | `VERSION` |  | ![VERSION](lifecycle-fw-update/01-version-p0.png) |
+| 2 | `FWPRINT` |  | ![FWPRINT](lifecycle-fw-update/02-fwprint-p0.png) |
+| 3 | `FWWORDS` |  | ![FWWORDS](lifecycle-fw-update/03-fwwords-p0.png) |
+| 4 | `KEYPRINT` |  | ![KEYPRINT](lifecycle-fw-update/04-keyprint-p0.png) |
+| 5 | `KEYWORDS` |  | ![KEYWORDS](lifecycle-fw-update/05-keywords-p0.png) |
+| 6 | `UPDATE` | UPDATE TO V0.1.0.3? | ![UPDATE](lifecycle-fw-update/06-update-p0.png) |
+
+## Lifecycle: fw_verify (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/fw_verify.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `FWVERIFY` | VERIFY FIRMWARE PACKAGE? | ![FWVERIFY](lifecycle-fw-verify/00-fwverify-p0.png) |
+| 1 | `FWMODE` |  | ![FWMODE](lifecycle-fw-verify/01-fwmode-p0.png) |
+| 2 | `FWVERIFY` | VERIFY FIRMWARE PACKAGE? | ![FWVERIFY](lifecycle-fw-verify/02-fwverify-p0.png) |
+
+## Lifecycle: offchain_sync (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/offchain_sync.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `SYNC` | SYNC OFF-CHAIN FLOOR? | ![SYNC](lifecycle-offchain-sync/00-sync-p0.png) |
+| 1 | `SYNCNET` |  | ![SYNCNET](lifecycle-offchain-sync/01-syncnet-p0.png) |
+| 2 | `SLOT` |  | ![SLOT](lifecycle-offchain-sync/02-slot-p0.png) |
+| 3 | `COUNT` |  | ![COUNT](lifecycle-offchain-sync/03-count-p0.png) |
+| 4 | `SYNC` | SYNC OFF-CHAIN FLOOR? | ![SYNC](lifecycle-offchain-sync/04-sync-p0.png) |
+
+## Lifecycle: outcomes (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/outcomes.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `CANCELED` | CANCELED | ![CANCELED](lifecycle-outcomes/00-canceled-p0.png) |
+| 1 | `SIGNED` | SIGNED | ![SIGNED](lifecycle-outcomes/01-signed-p0.png) |
+| 2 | `WIPING` | WIPING - DO NOT POWER OFF | ![WIPING](lifecycle-outcomes/02-wiping-p0.png) |
+| 3 | `WIPED` | WALLET WIPED | ![WIPED](lifecycle-outcomes/03-wiped-p0.png) |
+| 4 | `TAMPER` | TAMPER DETECTED | ![TAMPER](lifecycle-outcomes/04-tamper-p0.png) |
+| 5 | `RNG` | RNG FAILED | ![RNG](lifecycle-outcomes/05-rng-p0.png) |
+| 6 | `FACTORY` | FACTORY SIGNING | ![FACTORY](lifecycle-outcomes/06-factory-p0.png) |
+| 7 | `NOTICE` |  | ![NOTICE](lifecycle-outcomes/07-notice-p0.png) |
+| 8 | `NOTICE` |  | ![NOTICE](lifecycle-outcomes/08-notice-p0.png) |
+| 9 | `BUSY` | PROVISIONING ... | ![BUSY](lifecycle-outcomes/09-busy-p0.png) |
+| 10 | `BUSY` | GENERATING KEYS | ![BUSY](lifecycle-outcomes/10-busy-p0.png) |
+
+## Lifecycle: unlock (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/unlock.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `PIN` | ENTER PIN | ![PIN](lifecycle-unlock/00-pin-p0.png) |
+| 1 | `PIN` | ENTER PIN | ![PIN](lifecycle-unlock/01-pin-p0.png) |
+| 2 | `CHECKPIN` | CHECKING PIN | ![CHECKPIN](lifecycle-unlock/02-checkpin-p0.png) |
+| 3 | `WRONGPIN` | WRONG PIN | ![WRONGPIN](lifecycle-unlock/03-wrongpin-p0.png) |
+| 4 | `LASTTRY` | LAST ATTEMPT - WIPES ON FAIL | ![LASTTRY](lifecycle-unlock/04-lasttry-p0.png) |
+| 5 | `UNLOCKED` | UNLOCKED | ![UNLOCKED](lifecycle-unlock/05-unlocked-p0.png) |
+| 6 | `LOCKED` | LOCKED | ![LOCKED](lifecycle-unlock/06-locked-p0.png) |
+| 7 | `PINLOCK` | PIN LOCKED - POWER CYCLE | ![PINLOCK](lifecycle-unlock/07-pinlock-p0.png) |
+
+## Lifecycle: wallet_address (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/wallet_address.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `WALLET` | CONFIRM ACCOUNT 0 ADDRESS? | ![WALLET](lifecycle-wallet-address/00-wallet-p0.png) |
+| 1 | `ADDRESS` |  | ![ADDRESS](lifecycle-wallet-address/01-address-p0.png) |
+| 2 | `WALLET` | CONFIRM ACCOUNT 0 ADDRESS? | ![WALLET](lifecycle-wallet-address/02-wallet-p0.png) |
+
+## Lifecycle: wizard (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/wizard.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `CHOICE` | CREATE NEW WALLET? | ![CHOICE](lifecycle-wizard/00-choice-p0.png) |
+| 1 | `CHOICE` | RESTORE WALLET? | ![CHOICE](lifecycle-wizard/01-choice-p0.png) |
+| 2 | `PIN` | SET NEW PIN | ![PIN](lifecycle-wizard/02-pin-p0.png) |
+| 3 | `WRITE24` | WRITE DOWN 24 WORDS | ![WRITE24](lifecycle-wizard/03-write24-p0.png) |
+| 4 | `SEED` |  | ![SEED](lifecycle-wizard/04-seed-p0.png) |
+| 5 | `WORD` | CHECK WORD 5 | ![WORD](lifecycle-wizard/05-word-p0.png) |
+| 6 | `PICK` | WORD 3 OF 24 | ![PICK](lifecycle-wizard/06-pick-p0.png) |
+| 7 | `BACKUPOK` | BACKUP OK | ![BACKUPOK](lifecycle-wizard/07-backupok-p0.png) |
+| 8 | `NOMATCH` | NO MATCH | ![NOMATCH](lifecycle-wizard/08-nomatch-p0.png) |
+| 9 | `BADSEED` | WRONG SEED PHRASE | ![BADSEED](lifecycle-wizard/09-badseed-p0.png) |
+| 10 | `PINDIFF` | PINS DIFFER | ![PINDIFF](lifecycle-wizard/10-pindiff-p0.png) |
+

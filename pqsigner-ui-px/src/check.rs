@@ -49,6 +49,10 @@ pub enum Violation {
     CommitOnDetail(usize),
     AddressBroken(usize),
     ChainPlacement(usize),
+    /// A caption / label byte its face does not carry (it would silently
+    /// vanish on the glass: the 18 px caption and 16 px label faces are caps,
+    /// digits and `?.,:/-'&%+!()`).
+    GlyphMissing(usize),
 }
 
 /// `Confirm?` sits here when the rule inserts it.
@@ -96,6 +100,15 @@ pub fn check_screens(screens: &[Screen]) -> Result<(), Violation> {
                 return Err(Violation::ValueNotSingle(i));
             }
             check_words_unbroken(s, i)?;
+        }
+        // The caption (18 px regular; a words grid's band label is 16 px
+        // SemiBold) and the detail label (16 px SemiBold) must be drawable.
+        let caption_face = if kind == Kind::Words { (16, true) } else { (18, false) };
+        let drawable = |text: &[u8], (px, sb): (u8, bool)| text.iter().all(|&b| b == b' ' || crate::fit::advance_q6(px, sb, b).is_some());
+        if !matches!(kind, Kind::Legacy | Kind::Confirm)
+            && (!drawable(s.caption(), caption_face) || !drawable(s.label(), (16, true)))
+        {
+            return Err(Violation::GlyphMissing(i));
         }
         if s.id() == b"CHAIN" {
             let prev = i.checked_sub(1).map(|j| screens[j].id());

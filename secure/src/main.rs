@@ -507,6 +507,12 @@ mod se050_under_test;
 #[cfg(test)]
 mod ui_under_test;
 
+// Port step 4: the pure status → pixel-screen map (`ui::px::status_map`),
+// host-tested on its own (the production `ui` tree is `cfg(not(test))`).
+#[cfg(test)]
+#[path = "ui/px/status_map.rs"]
+mod ui_px_status_map;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
@@ -4097,6 +4103,8 @@ fn main() -> ! {
                     Ok(master) => {
                         let unlocked = nsc::unlock_after_verified_pin(master);
                         if unlocked == crate::fi::OK_SENTINEL {
+                            #[cfg(feature = "ui-px")]
+                            ui::show_status("Unlocked", "");
                             ui::show_status("PQSigner OS", "Ready");
                             secure_log!("[S] PIN verified — unlocked");
                             break;
@@ -4415,6 +4423,11 @@ fn PendSV() {
         // Consecutive failures that never reached a chip-side PIN compare.
         let mut no_verdict: u32 = 0;
 
+        // Port step 4: the idle lock is the padlock shutting (the page
+        // path goes straight to the PIN prompt).
+        #[cfg(feature = "ui-px")]
+        ui::show_status("Locked", "");
+
         loop {
             attempts += 1;
             if attempts > PENDSV_MAX_REUNLOCK_ATTEMPTS {
@@ -4459,6 +4472,8 @@ fn PendSV() {
                     let unlocked = nsc::unlock_after_verified_pin(master);
                     if unlocked == crate::fi::OK_SENTINEL {
                         timeout::reset_activity();
+                        #[cfg(feature = "ui-px")]
+                        ui::show_status("Unlocked", "");
                         ui::show_status("PQSigner OS", "Ready");
                         secure_log!("[S] Re-unlocked after idle wipe");
                         break;

@@ -151,14 +151,21 @@ const WORDS_MS: u32 = 4_000;
 /// 4 deputy 8 simple
 /// ```
 fn render_all_words(hash: &[u8; 32]) {
-    let d = display();
-    d.clear();
-
     // Consume the exact same pure 4x16 byte grid as the legacy bench FSBL.
     // Keeping layout and prefix truncation in one shared helper makes an
     // honest FSBL/secure-world mismatch a meaningful tamper signal instead
     // of a renderer-width artifact.
     let rows = firmware_fingerprint_lines(hash);
+
+    // Port step 4: the same eight prefixes on the design's words grid. The
+    // FSBL's own window is NOT ported — it stays text (plan § 4).
+    #[cfg(feature = "ui-px")]
+    if crate::ui::px::screens::show(&crate::ui::px::status_map::fingerprint_grid(&rows)) {
+        return;
+    }
+
+    let d = display();
+    d.clear();
     for (row_idx, row) in rows.iter().enumerate() {
         d.draw_line(row_idx, ascii_str(row));
     }

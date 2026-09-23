@@ -46,5 +46,9 @@ pqsigner-ui-px = { path = ".", features = ["std"] }
 name = "render_record"
 required-features = ["std"]
 
+[[example]]
+name = "lifecycle_sheet"
+required-features = ["std"]
+
 [lints]
 workspace = true
