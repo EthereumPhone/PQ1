@@ -519,25 +519,11 @@ ui-lcd = ["spi1-arduino", "gpio-buttons", "dep:embedded-graphics"]
 # (green→red→blue fill loop) to validate the NV3007 wiring + init sequence on
 # real silicon. Pulls in `ui-lcd` (→ `spi1-arduino`). Build via `make lcd-test-hw`.
 lcd-test = ["ui-lcd"]
-# DEV EXPERIMENT ONLY (#705) — program the AW99703's LOWEST over-voltage
-# threshold, `OVPSEL=000` (16 / 17.5 / 19 V), instead of the shipping `001`
-# (22.5 / 24 / 25.5 V). `001`'s worst-case trip exceeds C140's 25 V rating;
-# `000` is under it, but only works if the panel's LED string needs less than
-# the 16 V MINIMUM trip — the number we have asked the ODM for. This feature
-# exists to answer that on silicon before the answer arrives: if the backlight
-# lights normally under it, the string is below 16 V on this unit at room
-# temperature. Lowering the threshold is the protective direction and the
-# setting does not survive a power cycle, so the experiment is reversible.
-# One unit at one temperature is NOT the worst-case envelope — it cannot
-# authorise the shipping value. Fenced out of `mode-production`.
-aw99703-ovp-low = ["ui-lcd"]
-# DEV EXPERIMENT ONLY (#705) — drive the backlight at full scale (brightness
-# code 0x7FF instead of 0x5FF, so ~20 mA instead of ~15 mA) to raise the boost
-# output voltage. Used with `aw99703-ovp-low` to show the string still clears
-# the lowered OVP threshold at this board's highest DESIGN operating point.
-# Deliberately does not touch `LEDCUR`, whose 29.6 mA maximum may exceed the
-# panel's rating. Fenced out of `mode-production`.
-aw99703-full-brightness = ["ui-lcd"]
+# `aw99703-ovp-low` and `aw99703-full-brightness` were #705 bench experiments,
+# REMOVED 2026-09-23 once they had answered their question. Owner decision: keep
+# the shipping OVP at `OVPSEL=001` and the shipping brightness at 0x5FF. Both
+# are recoverable from git (`27f38683`, `0a7ceef4`) if the ODM envelope ever
+# reopens the question; the measurements they produced are recorded on #705.
 # Animated splash-screen preview. Short-circuits `main()` into
 # `ui::splash_test::run`, which ports the three `assets/splash-1{6,7,8}-*.html`
 # revisions (hyperspace / horizon / nebula) to no_std and cycles them on the

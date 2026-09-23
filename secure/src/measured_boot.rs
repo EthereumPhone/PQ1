@@ -255,10 +255,11 @@ pub fn run() {
     //                      HWEN high before `configure()`, which then waits
     //                      ~5 ms, far beyond the 250 us t_reset.
     //
-    // MODE is the discriminator and MSB alone is not: under
-    // `aw99703-full-brightness` we write MSB=FF, which IS the reset default,
-    // so that build cannot tell "survived" from "reset" on MSB. MODE's default
-    // is 0x00 (Standby) against the 0x15 we write, in every build.
+    // MODE is the discriminator and MSB alone is not. That mattered acutely
+    // while the retired `aw99703-full-brightness` experiment wrote MSB=FF,
+    // which IS the reset default, leaving that build unable to tell "survived"
+    // from "reset" on MSB at all. MODE's default is 0x00 (Standby) against the
+    // 0x15 we write, in every build, so prefer it regardless.
     //
     // `HW=` was dropped from this row: `hwen_float_level` is documented
     // INVALID AS MEASURED (PB15 resets to analog mode, so IDR reads 0 whatever

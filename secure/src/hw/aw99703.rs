@@ -82,23 +82,25 @@ const LEDCUR_CH1_20MA: u8 = (0b10011 << 3) | 0b001;
 /// as 22.5 V min / 24 V typ / **25.5 V max**, so its upper bound already
 /// exceeds the 25 V part. Re-verified 2026-09-23 against **V1.6 p.7**, which
 /// is cell-for-cell identical to V1.2 p.7 — the concern is real and is not an
-/// artefact of reading a stale revision. See `aw99703-ovp-low` for the
-/// experiment that tests whether the one setting below it is usable here.
+/// artefact of reading a stale revision.
+///
+/// DECIDED 2026-09-23: keep `001`. The setting below it (`000`, 16/17.5/19 V)
+/// was measured working on one unit at full design current — no OVP flag set,
+/// read off FLAGS2 rather than judged by eye — but a no-trip only proves Vout
+/// is under THAT die's threshold, somewhere at or above 16 V, not under the
+/// 16 V population minimum. And LED forward voltage RISES as temperature
+/// falls, so the cold corner was never tested. Against that, `001`'s exposure
+/// needs an open LED string — a fault that has already killed the backlight —
+/// and is then ~2% over C140's 25 V rating, transiently, after which the boost
+/// clamps. Trading a possible no-backlight failure on healthy units for a
+/// marginal excursion on a dead one is the wrong direction. See #705.
 ///
 /// The reset value of this register is **0x2E**, i.e. `OVPSEL=011` = 38 V. So
 /// a part that is powered but unconfigured sits at the highest threshold, far
 /// above C140's rating — which is exactly why [`enable`] is gated on the
 /// [`Configured`] token rather than on a return value a caller could ignore.
-#[cfg(not(feature = "aw99703-ovp-low"))]
 const BSTCTR1_OVP: u8 = (0b00 << 6) | (1 << 5) | (0b001 << 2) | 0b10;
 
-/// DEV EXPERIMENT (#705): OVP = **19 V max** (`OVPSEL=000`, 16 / 17.5 / 19 V),
-/// comfortably under C140's 25 V rating. Viable only if the LED string stays
-/// below the 16 V MINIMUM trip; if it does not, the boost protection fires and
-/// the backlight fails or flickers — which is the readable outcome this
-/// experiment wants. Everything else in the byte is unchanged.
-#[cfg(feature = "aw99703-ovp-low")]
-const BSTCTR1_OVP: u8 = (0b00 << 6) | (1 << 5) | (0b000 << 2) | 0b10;
 /// PWM-pin dimming disabled, linear map, backlight mode.
 ///
 /// `PDIS=1` is required, not defensive — the PWM pin has an internal 400 kΩ
@@ -110,19 +112,7 @@ const MODE_I2C_LINEAR_BACKLIGHT: u8 = (1 << 4) | (1 << 2) | 0b01;
 /// `LEDMSB` holds bits [10:3] and `LEDLSB[2:0]` bits [2:0], so 0x5FF is
 /// (0xBF, 0x07).
 const BRIGHTNESS_LSB: u8 = 0x07;
-#[cfg(not(feature = "aw99703-full-brightness"))]
 const BRIGHTNESS_MSB: u8 = 0xBF;
-
-/// DEV EXPERIMENT (#705): 11-bit code **0x7FF**, full scale — (0xFF, 0x07).
-///
-/// Margin probe for `aw99703-ovp-low`. Brightness sets the LED current as a
-/// fraction of `LEDCUR`'s full scale, so 0x5FF -> 0x7FF takes the string from
-/// ~15 mA to the full ~20 mA, raising Vf and therefore the boost output. It
-/// stays at the part's default full-scale current: this deliberately does NOT
-/// raise `LEDCUR` to its 29.6 mA maximum, which could exceed the panel's
-/// rated LED current, and there is exactly one sealed screen unit.
-#[cfg(feature = "aw99703-full-brightness")]
-const BRIGHTNESS_MSB: u8 = 0xFF;
 
 // --- bit-banged I2C (private copy: `soft_i2c_aux` drives the same physical
 // bus for the RGB driver, but this one has its own pins and cfg gate, and the
