@@ -41,6 +41,7 @@
 //! both before and after the `Confirm?` insertion.
 
 use super::deployment::DeploymentConfirmContext;
+use super::eip1271::OffchainConfirmContext;
 use super::erc8213;
 use super::nonce_lane;
 use super::primitives::eip55_hex;
@@ -80,6 +81,12 @@ pub(crate) struct TrailerFacts<'a> {
     pub deployment: Option<&'a DeploymentConfirmContext>,
     /// Which dialog these trailers close.
     pub set: TrailerSet,
+    /// The off-chain dialog's second fingerprint (RAW32: the exact
+    /// replay-safe value passed to C10); `None` everywhere else.
+    pub fingerprint2: Option<erc8213::Kind>,
+    /// The off-chain dialog's signer / wallet / mode context
+    /// (`eip1271::build_context_pages`); `None` everywhere else.
+    pub offchain: Option<&'a OffchainConfirmContext>,
 }
 
 /// Which handler dialog the trailers belong to.
@@ -90,6 +97,18 @@ pub(crate) enum TrailerSet {
     /// The slot-rotation consent: signer, nonce lane and gas lane only (the
     /// three gates the handler appends to `build_slot_rotation_pages`).
     Rotation,
+    /// The off-chain (EIP-1271) confirmation: the ERC-8213 fingerprint, the
+    /// RAW32 replay-safe fingerprint and the signing-context suffix, each on
+    /// its own predicate (`cmd_sign_offchain`).
+    Offchain,
+    /// One batch member's dialog (`cmd_sign_userop_batch`): the dispatcher's
+    /// native-value / fee splice, then signer, target, nonce lane, gas lane
+    /// and the member's calldata fingerprint (paymaster and deployment are
+    /// batch-wide and live on the final ask).
+    BatchMember,
+    /// The batch's final ask: paymaster, signer, nonce lane, gas lane, the
+    /// batch-final fingerprint and the deployment page.
+    BatchFinal,
 }
 
 /// The trailer slots, in page order.
@@ -106,9 +125,14 @@ pub(crate) enum Slot {
     FpBanner,
     FpDigest,
     Deploy,
+    Fp2Banner,
+    Fp2Digest,
+    CtxSigner,
+    CtxWallet,
+    CtxMode,
 }
 
-pub(crate) const N_TRAILERS: usize = 11;
+pub(crate) const N_TRAILERS: usize = 16;
 pub(crate) const SLOTS: [Slot; N_TRAILERS] = [
     Slot::NativeValue,
     Slot::MaxFee,
@@ -121,12 +145,22 @@ pub(crate) const SLOTS: [Slot; N_TRAILERS] = [
     Slot::FpBanner,
     Slot::FpDigest,
     Slot::Deploy,
+    Slot::Fp2Banner,
+    Slot::Fp2Digest,
+    Slot::CtxSigner,
+    Slot::CtxWallet,
+    Slot::CtxMode,
 ];
 
 const TRAILER_CFI_STEP: u32 = 0x7A11_5C3E;
 /// One bump per slot, skipped or emitted — a whole skipped emitter leaves the
 /// caller-owned counter short.
 pub(crate) const TRAILER_CFI_EXPECTED: u32 = crate::cfi_expected!(
+    TRAILER_CFI_STEP,
+    TRAILER_CFI_STEP,
+    TRAILER_CFI_STEP,
+    TRAILER_CFI_STEP,
+    TRAILER_CFI_STEP,
     TRAILER_CFI_STEP,
     TRAILER_CFI_STEP,
     TRAILER_CFI_STEP,
@@ -155,6 +189,32 @@ pub(crate) struct TrailerReceipt {
 /// Whether a slot is present for these facts — the page painters' own skip
 /// predicates, recomputed.
 fn present(slot: Slot, f: &TrailerFacts<'_>) -> bool {
+    if f.set == TrailerSet::Offchain {
+        return match slot {
+            Slot::FpBanner | Slot::FpDigest => true,
+            Slot::Fp2Banner | Slot::Fp2Digest => f.fingerprint2.is_some(),
+            Slot::CtxSigner | Slot::CtxWallet | Slot::CtxMode => f.offchain.is_some(),
+            _ => false,
+        };
+    }
+    if f.set == TrailerSet::BatchMember {
+        return match slot {
+            Slot::NativeValue => !f.tx.value.is_zero(),
+            Slot::MaxFee | Slot::WorstCase => f.legacy_fee_required,
+            Slot::Signer | Slot::Target | Slot::GasLane | Slot::FpBanner | Slot::FpDigest => true,
+            Slot::NonceLane => !nonce_lane::nonce_lane_is_zero(f.nonce),
+            _ => false,
+        };
+    }
+    if f.set == TrailerSet::BatchFinal {
+        return match slot {
+            Slot::Paymaster => value_page::paymaster_present(f.paymaster_and_data_hash),
+            Slot::Signer | Slot::GasLane | Slot::FpBanner | Slot::FpDigest => true,
+            Slot::NonceLane => !nonce_lane::nonce_lane_is_zero(f.nonce),
+            Slot::Deploy => f.deployment.is_some_and(DeploymentConfirmContext::requested),
+            _ => false,
+        };
+    }
     if f.set == TrailerSet::Rotation {
         return match slot {
             Slot::Signer | Slot::GasLane => true,
@@ -169,6 +229,7 @@ fn present(slot: Slot, f: &TrailerFacts<'_>) -> bool {
         Slot::Signer | Slot::Target | Slot::GasLane | Slot::FpBanner | Slot::FpDigest => true,
         Slot::NonceLane => !nonce_lane::nonce_lane_is_zero(f.nonce),
         Slot::Deploy => f.deployment.is_some_and(DeploymentConfirmContext::requested),
+        Slot::Fp2Banner | Slot::Fp2Digest | Slot::CtxSigner | Slot::CtxWallet | Slot::CtxMode => false,
     }
 }
 
@@ -367,33 +428,59 @@ pub(crate) fn expected(slot: Slot, f: &TrailerFacts<'_>, look: Look, idx: usize)
             lines.push_rows(&page, Weight::Regular)?;
             detail(b"GASLANE", look, side, b"GAS LANE", &lines, false)?
         }
-        Slot::FpBanner => {
-            let pair = erc8213::build_fingerprint_pair(f.fingerprint);
-            let mut lines = Lines::new();
-            lines.push_rows(&pair[0], Weight::Regular)?;
-            detail(b"FP8213", Look::plain(Icon::Fingerprint), side, b"ERC-8213", &lines, false)?
-        }
-        Slot::FpDigest => {
-            let [a, b, c] = split_hash_full(f.fingerprint.hash());
-            let lines = [
-                (a.as_bytes(), Weight::Regular),
-                (b.as_bytes(), Weight::Regular),
-                (c.as_bytes(), Weight::Regular),
-            ];
-            let tier = fit_tier(&lines, Region::Full).ok_or(())?;
-            let mut bld = ScreenBuilder::value(b"DIGEST", Icon::Fingerprint, b"DIGEST").tier(tier);
-            for &(text, w) in &lines {
-                bld = bld.line(text, w);
-            }
-            bld.finish().map_err(|_| ())?
-        }
+        Slot::FpBanner => fp_banner(f.fingerprint, b"FP8213", side)?,
+        Slot::FpDigest => fp_digest(f.fingerprint, b"DIGEST")?,
         Slot::Deploy => {
             let d = f.deployment.ok_or(())?;
             let page: Page = super::deployment::build_deployment_page(d.factory());
             addr_detail(b"DEPLOY", look, side, b"! DEPLOY", Some(trimmed(&page[0])), d.factory(), true)?
         }
+        Slot::Fp2Banner => fp_banner(f.fingerprint2.ok_or(())?, b"FP8213B", side)?,
+        Slot::Fp2Digest => fp_digest(f.fingerprint2.ok_or(())?, b"DIGEST2")?,
+        Slot::CtxSigner | Slot::CtxWallet | Slot::CtxMode => {
+            let c = f.offchain.ok_or(())?;
+            let pages = super::eip1271::build_context_pages(c);
+            match slot {
+                Slot::CtxSigner => {
+                    let mut lines = Lines::new();
+                    lines.push_rows(&pages[0][1..], Weight::Regular)?;
+                    detail(b"OFFSIGNR", look, side, b"ACCOUNT", &lines, false)?
+                }
+                Slot::CtxWallet => addr_detail(b"WALLET", look, side, b"WALLET", None, c.wallet_addr(), false)?,
+                _ => {
+                    // `L cancel/R sign` is instruction vocabulary.
+                    let mut lines = Lines::new();
+                    lines.push_rows(&pages[2][..3], Weight::Regular)?;
+                    detail(b"MODE", look, side, b"MODE", &lines, !c.account_deployed())?
+                }
+            }
+        }
     };
     Ok(Some(s))
+}
+
+/// The ERC-8213 banner page's rows as a fingerprint-disc detail.
+fn fp_banner(kind: erc8213::Kind, id: &[u8], side: Side) -> Result<Screen, ()> {
+    let pair = erc8213::build_fingerprint_pair(kind);
+    let mut lines = Lines::new();
+    lines.push_rows(&pair[0], Weight::Regular)?;
+    detail(id, Look::plain(Icon::Fingerprint), side, b"ERC-8213", &lines, false)
+}
+
+/// The fingerprinted 32-byte hash, full width.
+fn fp_digest(kind: erc8213::Kind, id: &[u8]) -> Result<Screen, ()> {
+    let [a, b, c] = split_hash_full(kind.hash());
+    let lines = [
+        (a.as_bytes(), Weight::Regular),
+        (b.as_bytes(), Weight::Regular),
+        (c.as_bytes(), Weight::Regular),
+    ];
+    let tier = fit_tier(&lines, Region::Full).ok_or(())?;
+    let mut bld = ScreenBuilder::value(id, Icon::Fingerprint, b"DIGEST").tier(tier);
+    for &(text, w) in &lines {
+        bld = bld.line(text, w);
+    }
+    bld.finish().map_err(|_| ())
 }
 
 /// Append every present trailer screen in slot order, bumping the

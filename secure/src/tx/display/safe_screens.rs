@@ -34,11 +34,11 @@ use crate::erc20::bundle::Erc20Metadata;
 use crate::erc20::calldata::{is_unlimited_amount, Erc20Call};
 use crate::names::NameResolver;
 use crate::tx::eip1559::U256;
-use crate::tx::eip712::cowswap::{CowLeg, VerifiedCowswapV3};
+use crate::tx::eip712::cowswap::VerifiedCowswapV3;
 use crate::tx::eip712::keccak;
 use crate::tx::eip712::safe::multi_send::{self, MsRecordIter};
 use crate::tx::eip712::safe::{decode_canonical, SafeTx, VerifiedSafeExec, VerifiedSafeV1};
-use pqsigner_ui_px::fit::{fit_tier, layout_address, layout_amount, split_word_docked, Region};
+use pqsigner_ui_px::fit::{fit_tier, layout_address, layout_amount, Region};
 use pqsigner_ui_px::{Icon, Look, ScreenBuilder, Screens, Side, Weight};
 use sphincs_tz_shared::GPV2_VAULT_RELAYER_ADDRESS;
 
@@ -134,7 +134,7 @@ fn inner_kind_screens(kind: &InnerKind<'_>) -> usize {
         InnerKind::Erc20Known(call) => 4 + usize::from(matches!(call, Erc20Call::TransferFrom { .. })),
         InnerKind::Erc20Unknown(call) => 4 + usize::from(matches!(call, Erc20Call::TransferFrom { .. })),
         InnerKind::SafeMgmt(op) => mgmt_screens(op),
-        InnerKind::CowswapPresign(v3) => 1 + cow_body_screens(&v3.sell, &v3.buy),
+        InnerKind::CowswapPresign(v3) => 1 + super::cowswap_screens::order_body_screens(&v3.sell, &v3.buy),
         InnerKind::UnknownSafeSelf | InnerKind::Blind => 4,
         // Per-record totals are counted while emitting (the record walk is
         // the only place the per-record kinds exist); the emitter's counter
@@ -156,16 +156,6 @@ fn mgmt_screens(op: &SafeMgmtOp) -> usize {
     }
 }
 
-fn leg_screens(leg: &CowLeg) -> usize {
-    match leg {
-        CowLeg::Decoded { .. } => 1,
-        CowLeg::AddrHex => 2,
-    }
-}
-
-fn cow_body_screens(sell: &CowLeg, buy: &CowLeg) -> usize {
-    leg_screens(sell) + leg_screens(buy) + 1 /* receiver */ + 1 /* expires */ + 1 /* fee */ + 1 /* sources */ + 1 /* appData */
-}
 
 fn nonce_line(nonce_be: &[u8; 32]) -> Text {
     let (n, overflow) = u64_be_tail(nonce_be);
@@ -465,7 +455,7 @@ fn emit_inner_kind(
                 &[(kind_line, Weight::Regular), (b"owner: this Safe", Weight::Regular)],
                 false,
             )?;
-            emit_cow_body(e, v3)
+            super::cowswap_screens::emit_order_body(e, v3, Some(b"= the Safe"))
         }
         InnerKind::MultiSend { .. } => Err(()),
     }
@@ -645,98 +635,3 @@ fn emit_mgmt(e: &mut Emit<'_>, op: &SafeMgmtOp, resolver: &NameResolver<'_>) -> 
     }
 }
 
-// CoW canonical offsets (mirror `cowswap_display.rs`).
-const OFF_SELL_TOKEN: usize = 8;
-const OFF_BUY_TOKEN: usize = 28;
-const OFF_RECEIVER: usize = 48;
-const OFF_SELL_AMOUNT: usize = 68;
-const OFF_BUY_AMOUNT: usize = 100;
-const OFF_FEE_AMOUNT: usize = 132;
-const OFF_VALID_TO: usize = 164;
-const OFF_KIND: usize = 168;
-const OFF_PARTIAL: usize = 169;
-const OFF_SELL_TOKEN_BAL: usize = 170;
-const OFF_BUY_TOKEN_BAL: usize = 171;
-const OFF_APP_DATA: usize = 172;
-
-fn word_at(c: &[u8; 204], off: usize) -> [u8; 32] {
-    let mut w = [0u8; 32];
-    w.copy_from_slice(&c[off..off + 32]);
-    w
-}
-
-fn addr_at(c: &[u8; 204], off: usize) -> [u8; 20] {
-    let mut a = [0u8; 20];
-    a.copy_from_slice(&c[off..off + 20]);
-    a
-}
-
-fn emit_cow_leg(e: &mut Emit<'_>, c: &[u8; 204], leg: &CowLeg, sell: bool) -> Result<(), ()> {
-    let kind = c[OFF_KIND];
-    let (tok_off, amt_off) = if sell { (OFF_SELL_TOKEN, OFF_SELL_AMOUNT) } else { (OFF_BUY_TOKEN, OFF_BUY_AMOUNT) };
-    let amount = U256(word_at(c, amt_off));
-    // Sell-order: sell exactly / buy at least; buy-order: sell at most / buy exactly.
-    let label: &[u8] = match (kind, sell) {
-        (0, true) => b"SELL",
-        (0, false) => b"BUY MIN",
-        (_, true) => b"SELL MAX",
-        (_, false) => b"BUY",
-    };
-    match leg {
-        CowLeg::Decoded { decimals, symbol, symbol_len, .. } => {
-            let amt = token_amount(&amount, *decimals, &symbol[..usize::from(*symbol_len)]).ok_or(())?;
-            let id: &[u8] = if sell { b"SELL" } else { b"BUY" };
-            e.amount(id, label, &amt, false)
-        }
-        CowLeg::AddrHex => {
-            let a = layout_address(&addr42(&addr_at(c, tok_off)));
-            let (id_tok, id_amt, lbl_tok): (&[u8], &[u8], &[u8]) = if sell {
-                (b"SELLTOK", b"SELLAMT", b"SELL TOKEN")
-            } else {
-                (b"BUYTOK", b"BUYAMT", b"BUY TOKEN")
-            };
-            e.addr_lines(id_tok, lbl_tok, &a, None)?;
-            e.word_value(id_amt, label, &amount.0)
-        }
-    }
-}
-
-fn emit_cow_body(e: &mut Emit<'_>, v3: &VerifiedCowswapV3) -> Result<(), ()> {
-    let c = &v3.canonical;
-    emit_cow_leg(e, c, &v3.sell, true)?;
-    emit_cow_leg(e, c, &v3.buy, false)?;
-    // Receiver: zero routes proceeds to the uid owner (= this Safe).
-    let receiver = addr_at(c, OFF_RECEIVER);
-    if receiver == [0u8; 20] {
-        e.detail(b"RECEIVER", b"RECEIVER", &[(b"= the Safe", Weight::Regular)], false)?;
-    } else {
-        let a = layout_address(&addr42(&receiver));
-        e.addr_lines(b"RECEIVER", b"RECEIVER", &a, None)?;
-    }
-    let valid_to = u32::from_be_bytes([c[OFF_VALID_TO], c[OFF_VALID_TO + 1], c[OFF_VALID_TO + 2], c[OFF_VALID_TO + 3]]);
-    let exp = Text::new().push(b"unix ").push_u64(u64::from(valid_to));
-    let partial: &[u8] = if c[OFF_PARTIAL] == 0 { b"Partial: no" } else { b"Partial: yes" };
-    e.detail(b"EXPIRES", b"EXPIRES", &[(exp.as_bytes(), Weight::Regular), (partial, Weight::Regular)], false)?;
-    // Fee in the sell token, full magnitude (a huge fee is a drain).
-    let fee = U256(word_at(c, OFF_FEE_AMOUNT));
-    let fee_amt = match &v3.sell {
-        CowLeg::Decoded { decimals, symbol, symbol_len, .. } => token_amount(&fee, *decimals, &symbol[..usize::from(*symbol_len)]),
-        CowLeg::AddrHex => raw_units(&fee),
-    }
-    .ok_or(())?;
-    e.amount(b"FEE", b"FEE (SELL)", &fee_amt, false)?;
-    let src: &[u8] = match c[OFF_SELL_TOKEN_BAL] {
-        0 => b"sell: erc20",
-        1 => b"sell: external",
-        2 => b"sell: internal",
-        _ => b"sell: ?",
-    };
-    let dst: &[u8] = match c[OFF_BUY_TOKEN_BAL] {
-        0 => b"buy: erc20",
-        1 => b"buy: internal",
-        _ => b"buy: ?",
-    };
-    e.detail(b"SOURCES", b"SOURCES", &[(src, Weight::Regular), (dst, Weight::Regular)], false)?;
-    let app = word_at(c, OFF_APP_DATA);
-    e.detail_paged(b"APPDATA", b"APP DATA", &split_word_docked(&app))
-}

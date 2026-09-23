@@ -50,7 +50,14 @@ Two consent policies coexist, by path, since 2026-09-22:
 | Path | The sign gesture is armed… | Since |
 |---|---|---|
 | Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right / chord is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
-| Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`, pilot = Safe flow) | on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) and the returning ask; **never on a detail** | owner decision 2026-09-22, following PQ-UI `DESIGN.md` § Input "Commit arming" |
+| Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`; every sign dialog since port step 3, 2026-09-23 — `forced_blind` excepted) | on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) and the returning ask; **never on a detail** | owner decision 2026-09-22, following PQ-UI `DESIGN.md` § Input "Commit arming" |
+
+**UPDATE 2026-09-23 (port plan step 3):** the pixel path now carries every
+sign dialog — Safe, every single-UserOp route, the slot-rotation consent,
+direct CoW, ERC-7730, the off-chain kinds (typed, `personal_sign`, RAW32) and
+each batch member plus the batch's final ask — so the row above applies to
+all of them under `ui-px`. `forced_blind` keeps its own ceremony; the legacy
+row still governs every build without `ui-px`.
 
 **UPDATE 2026-09-22 (later the same day, owner decision on the EVT):** on the
 pixel path the sign gesture is the **two-button chord click** — both buttons

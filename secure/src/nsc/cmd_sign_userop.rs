@@ -1467,6 +1467,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             ),
             deployment: None,
             set: crate::tx::display::TrailerSet::Rotation,
+            fingerprint2: None,
+            offchain: None,
         };
         let px_rotation = px_route_rotation(px_scratch, &rotate_pages, chain_id, slot_index, &px_rotation_facts);
         #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
@@ -1901,6 +1903,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         fingerprint: fingerprint_kind,
         deployment: Some(&deployment_context),
         set: crate::tx::display::TrailerSet::Sign,
+        fingerprint2: None,
+        offchain: None,
     };
     let px_decision = px_route_confirm(
         px_scratch,
@@ -2820,13 +2824,13 @@ fn u128_saturating_from_u256(bytes: &[u8; 32]) -> u128 {
 }
 
 /// Route a sign confirmation through the pixel UI when `ui-px` is on.
-/// `None` means "use the page dialog" (a structured route not yet ported —
-/// direct CoW, ERC-7730 — or the feature is off); `Some(Err(reason))` is a
-/// refusal, never a fall-back.
+/// `None` means "use the page dialog" (the feature is off);
+/// `Some(Err(reason))` is a refusal, never a fall-back.
 ///
 /// The precedence is `dispatch::pick_sign_pages_inner`'s: a verified Safe
 /// context wins (the Safe surface, CoW-wrapped or not), then a direct CoW
-/// order and an authenticated ERC-7730 descriptor keep the page dialog, and
+/// order (its page painter re-run binds the body), then an authenticated
+/// ERC-7730 render (laid out from the proven page range itself), and
 /// everything below them is a single-UserOp route whose body the lift binds
 /// by re-running its page painter.
 #[cfg(feature = "ui-px")]
@@ -2849,8 +2853,16 @@ fn px_route_confirm(
     if safe_v1.is_some() || safe_exec.is_some() {
         return Some(super::px_confirm_safe(scratch, pages, chain_id, safe_v1, safe_exec, cow, erc20, resolver, facts));
     }
-    if cow.is_some() || erc7730_present {
-        return None;
+    if let Some(v3) = cow {
+        return Some(super::px_confirm_cow(scratch, pages, v3, facts));
+    }
+    if erc7730_present {
+        let target = tx.to.unwrap_or([0u8; 20]);
+        let family = crate::tx::display::erc7730_screens::family(
+            crate::tx::display::erc7730_screens::Surface::Contract,
+            &target,
+        );
+        return Some(super::px_confirm_erc7730(scratch, pages, chain_id, family, facts));
     }
     let body = crate::tx::display::userop_screens::UserOpInputs {
         tx,

@@ -1169,6 +1169,46 @@ pub(super) fn px_confirm_userop(
     px_confirm(scratch, pages, &inputs)
 }
 
+/// A direct CoW Swap order (no Safe context).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_cow(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    v3: &crate::tx::eip712::cowswap::VerifiedCowswapV3,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Cow { v3 },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// An authenticated ERC-7730 render: the body is the proven page range
+/// before the handler's trailers.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_erc7730(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    family: crate::tx::display::userop_screens::Family,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let tail = crate::tx::display::expected_trailer_count(facts);
+    let body_len = pages.len.checked_sub(tail).ok_or("px body")?;
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Erc7730 {
+            pages,
+            start: 0,
+            body_len,
+            chain_id,
+            family,
+        },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
 /// The slot-rotation consent.
 #[cfg(feature = "ui-px")]
 pub(super) fn px_confirm_rotation(

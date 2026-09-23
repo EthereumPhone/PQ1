@@ -46,6 +46,18 @@ impl Rgb {
         Self::new(0x1C, 0xB8, 0x69),
         Self::new(0x18, 0xDD, 0x75),
     ];
+    /// CoW Swap brand disc (`#65D9FF`), the navy cow head (`#012F7A`,
+    /// `colors.COWSWAP_DARK`) and the brand trail (`COWSWAP_GRADIENT`
+    /// stops 1–5), far → near.
+    pub const COWSWAP_FILL: Self = Self::new(0x65, 0xD9, 0xFF);
+    pub const COWSWAP_NAVY: Self = Self::new(0x01, 0x2F, 0x7A);
+    pub const COWSWAP_TRAIL: [Self; 5] = [
+        Self::new(0x02, 0x1E, 0x34),
+        Self::new(0x01, 0x2F, 0x7A),
+        Self::new(0x00, 0x5E, 0xB7),
+        Self::new(0x00, 0xA1, 0xFF),
+        Self::new(0x3F, 0xC4, 0xFF),
+    ];
     /// Black-body mono token: white ring, grey trail.
     pub const MONO_TRAIL: [Self; 5] = [
         Self::new(0x28, 0x28, 0x28),

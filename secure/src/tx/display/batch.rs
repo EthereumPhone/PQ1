@@ -151,7 +151,7 @@ pub fn wrap_pages_with_batch_banner(
     Ok(())
 }
 
-fn build_batch_banner_page(tx_index: usize, batch_total: usize) -> BannerPage {
+pub(crate) fn build_batch_banner_page(tx_index: usize, batch_total: usize) -> BannerPage {
     let mut page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     write_centered(&mut page[1], b"BATCH SIGN");
     write_tx_position(&mut page[2], tx_index, batch_total);

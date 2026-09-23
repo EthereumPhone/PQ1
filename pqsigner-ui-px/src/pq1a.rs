@@ -39,10 +39,12 @@ pub const NAME_ROTATE: &[u8; 8] = b"rotate\0\0";
 pub const NAME_USDC: &[u8; 8] = b"usdc\0\0\0\0";
 pub const NAME_USDT: &[u8; 8] = b"usdt\0\0\0\0";
 pub const NAME_DAI: &[u8; 8] = b"dai\0\0\0\0\0";
+pub const NAME_COWSWAP: &[u8; 8] = b"cowswap\0";
 /// Every disc mark the shipped container must carry (the secure world
 /// refuses a dialog when one is missing or malformed).
-pub const MARK_NAMES: [&[u8; 8]; 9] =
-    [NAME_SAFE, NAME_MAINNET, NAME_BASE, NAME_ETH, NAME_BLIND, NAME_ROTATE, NAME_USDC, NAME_USDT, NAME_DAI];
+pub const MARK_NAMES: [&[u8; 8]; 10] = [
+    NAME_SAFE, NAME_MAINNET, NAME_BASE, NAME_ETH, NAME_BLIND, NAME_ROTATE, NAME_USDC, NAME_USDT, NAME_DAI, NAME_COWSWAP,
+];
 
 /// A parsed container: the whole blob plus a validated entry count.
 #[derive(Clone, Copy, Debug)]
@@ -137,6 +139,7 @@ impl<'a> Atlas<'a> {
             dai: m(NAME_DAI),
             blind: m(NAME_BLIND),
             rotate: m(NAME_ROTATE),
+            cowswap: m(NAME_COWSWAP),
         }
     }
 

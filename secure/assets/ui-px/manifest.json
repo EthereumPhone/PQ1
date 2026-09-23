@@ -4,6 +4,7 @@
   "inputs": {
     "tools/pq-ui/pq1/assets/Aileron-Regular.otf": "5d8c1ab7cf7c25787f96a05b076602897fe38b47e21fe8954a4e4cbd7ae83d0a",
     "tools/pq-ui/pq1/assets/Aileron-SemiBold.otf": "f71260882efb77bac6bd987eeafc4f8831e82827f81f35e447b62c37cb40f866",
+    "tools/pq-ui/pq1/assets/cowswap.png": "a457db73b7103397a63eb547069db70d11fde188db6fa6617c1f7f1a36f8531e",
     "tools/pq-ui/pq1/assets/dai.png": "cc0f8f3c07ab7e4a10dbfb8091930bc8c3c7d00c743ff6f5af33ac2ef769d38c",
     "tools/pq-ui/pq1/assets/safe.png": "249f5b4d3b85c1910310827de29d898e04b9d337ebd9ceb3ac6f97f1fe1f9c34",
     "tools/pq-ui/pq1/assets/tether.png": "07036c11c46460aaeadb4d070bd9d51a869ed264ee1d13598e6a33675edaccab",
@@ -11,8 +12,8 @@
   },
   "outputs": {
     "atlas.pq1a": {
-      "bytes": 74204,
-      "sha256": "abbfc52924bd6f8f9ea72f8c93dbe90828d14b9750a39a80d88d8792dc70521c"
+      "bytes": 74816,
+      "sha256": "7d12665a9991dfe0b83c7903338a36bdad9745efa4c6e7623192be6350603cc2"
     },
     "base.a4": {
       "bytes": 346,
@@ -21,6 +22,10 @@
     "blind.a4": {
       "bytes": 144,
       "sha256": "248b402e423bb8a58952f1936a17827d83005424ff0703bf182f480dcc2de2d7"
+    },
+    "cowswap.a4": {
+      "bytes": 596,
+      "sha256": "c95e77442afc9f0af8eabda46bac95e6a7248d5ee8ac5b22245d4d0657e4e0f5"
     },
     "dai.a4": {
       "bytes": 688,

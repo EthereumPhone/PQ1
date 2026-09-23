@@ -17,7 +17,7 @@
 //! | off | len | field   | encoding |
 //! |-----|-----|---------|----------|
 //! |   0 |   1 | kind    | `H` hero, `D` detail, `V` value, `C` confirm, `S` status, `L` legacy |
-//! |   1 |   1 | icon    | `S` safe, `N` chain, `F` fingerprint, `W` wallet, `E` ether, `U` USDC, `T` USDT, `D` DAI, `B` blind, `R` rotate, `-` none |
+//! |   1 |   1 | icon    | `S` safe, `N` chain, `F` fingerprint, `W` wallet, `E` ether, `U` USDC, `T` USDT, `D` DAI, `B` blind, `R` rotate, `C` CoW Swap, `-` none |
 //! |   2 |   1 | side    | `L`, `R`, `-` (disc column on a detail screen) |
 //! |   3 |   2 | tier    | `36` `32` `28` `22`, or `--` |
 //! |   5 |   1 | commit  | `Y` / `N` — hold-right-to-sign armed; only on `H` / `C` |
@@ -182,6 +182,8 @@ pub enum Icon {
     Blind,
     /// The slot-rotation mark.
     Rotate,
+    /// The CoW Swap family: the navy cow head on the `#65D9FF` brand disc.
+    Cowswap,
     None,
 }
 
@@ -199,6 +201,7 @@ impl Icon {
             Self::Dai => b'D',
             Self::Blind => b'B',
             Self::Rotate => b'R',
+            Self::Cowswap => b'C',
             Self::None => b'-',
         }
     }
@@ -216,6 +219,7 @@ impl Icon {
             b'D' => Some(Self::Dai),
             b'B' => Some(Self::Blind),
             b'R' => Some(Self::Rotate),
+            b'C' => Some(Self::Cowswap),
             b'-' => Some(Self::None),
             _ => None,
         }
@@ -233,6 +237,8 @@ pub struct Look {
 impl Look {
     /// The Safe family's disc (untinted — its records predate the tint).
     pub const SAFE: Self = Self { icon: Icon::Safe, tint: None };
+    /// The CoW Swap family's branded disc.
+    pub const COWSWAP: Self = Self { icon: Icon::Cowswap, tint: None };
 
     #[must_use]
     pub const fn plain(icon: Icon) -> Self {
@@ -1058,6 +1064,30 @@ impl Screens {
         Ok(Some(CONFIRM_INDEX))
     }
 
+    /// Insert `s` right after the opening hero (index 1) — the batch
+    /// position screen a batch member's own flow opens with. Every detail
+    /// that moves down one index swaps its disc column, so the transcript
+    /// keeps alternating (DESIGN.md `normalize_screens`). `Err` when there is
+    /// no hero at index 0 or the buffer is full.
+    pub fn insert_after_hero(&mut self, s: &Screen) -> Result<(), ()> {
+        let len = self.len();
+        if len == 0 || len >= MAX_SCREENS || self.buf[0].kind() != Some(Kind::Hero) {
+            return Err(());
+        }
+        self.buf.copy_within(1..len, 2);
+        self.buf[1] = *s;
+        for moved in &mut self.buf[2..=len] {
+            let flipped = match moved.side() {
+                Some(Side::Left) => Side::Right,
+                Some(Side::Right) => Side::Left,
+                _ => continue,
+            };
+            moved.0[OFF_SIDE] = flipped.as_byte();
+        }
+        self.set_len(len + 1);
+        Ok(())
+    }
+
     /// Volatile-poison every byte of the fixed buffer, then reset `len`
     /// (written last, so a skipped re-emit exposes a zero count).
     #[inline(never)]
@@ -1256,6 +1286,23 @@ mod tests {
             legacy.push_legacy(&page).unwrap();
         }
         assert_eq!(legacy.insert_confirm(Icon::Safe), Ok(Some(5)));
+    }
+
+    #[test]
+    fn insert_after_hero_keeps_the_disc_alternating() {
+        let mut ss = Screens::blank();
+        ss.push(&ScreenBuilder::hero(b"ASK", Icon::Eth, b"ASK?").finish().unwrap()).unwrap();
+        for (i, side) in [Side::Right, Side::Left, Side::Right].into_iter().enumerate() {
+            let id = [b'D', b'0' + i as u8];
+            ss.push(&ScreenBuilder::detail(&id, Icon::Eth, side, b"L").line(b"x", Weight::Regular).finish().unwrap()).unwrap();
+        }
+        let batch = ScreenBuilder::detail(b"BATCH", Icon::Eth, Side::Right, b"BATCH").line(b"Tx 1 of 3", Weight::Regular).finish().unwrap();
+        ss.insert_after_hero(&batch).unwrap();
+        let sides: [Option<Side>; 5] = core::array::from_fn(|i| ss.as_slice()[i].side());
+        assert_eq!(sides, [Some(Side::None), Some(Side::Right), Some(Side::Left), Some(Side::Right), Some(Side::Left)]);
+        assert_eq!(ss.as_slice()[1].id(), b"BATCH");
+        let mut empty = Screens::blank();
+        assert!(empty.insert_after_hero(&batch).is_err());
     }
 
     #[test]

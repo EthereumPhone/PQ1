@@ -39,15 +39,15 @@ use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::tx::eip712::keccak;
 use pqsigner_ui_px::{Icon, Kind, Screens};
 
-const BASE: u64 = 8453;
-const SEPOLIA: u64 = 11_155_111;
+pub(super) const BASE: u64 = 8453;
+pub(super) const SEPOLIA: u64 = 11_155_111;
 
-const SHA256_OF_EMPTY: [u8; 32] = [
+pub(super) const SHA256_OF_EMPTY: [u8; 32] = [
     0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
     0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
 ];
 
-const USDC_BASE: [u8; 20] = [
+pub(super) const USDC_BASE: [u8; 20] = [
     0x83, 0x35, 0x89, 0xfc, 0xd6, 0xed, 0xb6, 0xe0, 0x8f, 0x4c, 0x7c, 0x32, 0xd4, 0xf7, 0x1b, 0x54,
     0xbd, 0xa0, 0x29, 0x13,
 ];
@@ -56,26 +56,26 @@ const UNKNOWN_TOKEN: [u8; 20] = [
     0x3c, 0xa9, 0xe5, 0xf1, 0xb7, 0x2d, 0x04, 0xe8, 0xa6, 0xc1, 0xd9, 0xb3, 0xf5, 0x7e, 0x28, 0xa0,
     0xc4, 0xd6, 0xb1, 0xe9,
 ];
-const RECIPIENT: [u8; 20] = [
+pub(super) const RECIPIENT: [u8; 20] = [
     0x78, 0xd8, 0x52, 0x62, 0x82, 0xac, 0x09, 0xf1, 0x88, 0x5d, 0x0f, 0x39, 0xb8, 0x87, 0x5a, 0x01,
     0x80, 0xfc, 0x08, 0x1e,
 ];
-const CONTRACT: [u8; 20] = [
+pub(super) const CONTRACT: [u8; 20] = [
     0x9e, 0x3b, 0x5c, 0x0f, 0x7a, 0x1d, 0x24, 0xe8, 0x6c, 0x3f, 0x0b, 0x7d, 0x5a, 0x2e, 0x4c, 0x6f,
     0x8b, 0x1d, 0x3a, 0x7c,
 ];
 
-fn u256(n: u128) -> U256 {
+pub(super) fn u256(n: u128) -> U256 {
     let mut out = [0u8; 32];
     out[16..].copy_from_slice(&n.to_be_bytes());
     U256(out)
 }
 
-fn word(n: u64) -> [u8; 32] {
+pub(super) fn word(n: u64) -> [u8; 32] {
     u256(u128::from(n)).0
 }
 
-fn tx(chain_id: u64, to: [u8; 20], value: u128, data_len: usize) -> Eip1559Tx {
+pub(super) fn tx(chain_id: u64, to: [u8; 20], value: u128, data_len: usize) -> Eip1559Tx {
     let mut tx = Eip1559Tx::default();
     tx.chain_id = chain_id;
     tx.nonce = 42;
@@ -88,7 +88,7 @@ fn tx(chain_id: u64, to: [u8; 20], value: u128, data_len: usize) -> Eip1559Tx {
     tx
 }
 
-fn usdc() -> Erc20Metadata<'static> {
+pub(super) fn usdc() -> Erc20Metadata<'static> {
     Erc20Metadata {
         chain_id: BASE,
         contract: USDC_BASE,
@@ -118,20 +118,20 @@ fn erc20_transfer_from(from: [u8; 20], to: [u8; 20], amount: u64) -> [u8; 100] {
 }
 
 /// Every handler-owned trailer fact for one scenario.
-struct Facts {
-    paymaster: [u8; 32],
-    sender: [u8; 20],
-    target: [u8; 20],
-    nonce: [u8; 32],
-    call: [u8; 32],
-    verify: [u8; 32],
-    prever: [u8; 32],
-    fp: FpKind,
-    deployment: DeploymentConfirmContext,
+pub(super) struct Facts {
+    pub(super) paymaster: [u8; 32],
+    pub(super) sender: [u8; 20],
+    pub(super) target: [u8; 20],
+    pub(super) nonce: [u8; 32],
+    pub(super) call: [u8; 32],
+    pub(super) verify: [u8; 32],
+    pub(super) prever: [u8; 32],
+    pub(super) fp: FpKind,
+    pub(super) deployment: DeploymentConfirmContext,
 }
 
 impl Facts {
-    fn new(chain_id: u64, target: [u8; 20], data: &[u8], lane: bool, deploy: bool, paymaster: bool) -> Self {
+    pub(super) fn new(chain_id: u64, target: [u8; 20], data: &[u8], lane: bool, deploy: bool, paymaster: bool) -> Self {
         let sender: [u8; 20] = core::array::from_fn(|i| 0x30u8.wrapping_add(i as u8));
         let mut nonce = [0u8; 32];
         if lane {
@@ -151,7 +151,7 @@ impl Facts {
         }
     }
 
-    fn trailer<'a>(&'a self, tx: &'a Eip1559Tx, set: TrailerSet) -> TrailerFacts<'a> {
+    pub(super) fn trailer<'a>(&'a self, tx: &'a Eip1559Tx, set: TrailerSet) -> TrailerFacts<'a> {
         TrailerFacts {
             tx,
             legacy_fee_required: false,
@@ -166,13 +166,15 @@ impl Facts {
             fingerprint: self.fp,
             deployment: if set == TrailerSet::Sign { Some(&self.deployment) } else { None },
             set,
+            fingerprint2: None,
+            offchain: None,
         }
     }
 }
 
 /// The handler's own trailer pages after the dispatcher (paymaster, signer,
 /// target, nonce lane, gas lane, ERC-8213, deployment), with their proofs.
-fn append_handler_trailers(pages: &mut Pages, f: &TrailerFacts<'_>) {
+pub(super) fn append_handler_trailers(pages: &mut Pages, f: &TrailerFacts<'_>) {
     let ok = crate::fi::OK_SENTINEL;
     if f.set == TrailerSet::Sign {
         let mut cfi = crate::fi::CfiCounter::new();
@@ -214,10 +216,10 @@ fn append_handler_trailers(pages: &mut Pages, f: &TrailerFacts<'_>) {
     }
 }
 
-struct Lifted {
-    pages: Pages,
-    screens: Screens,
-    route: &'static str,
+pub(super) struct Lifted {
+    pub(super) pages: Pages,
+    pub(super) screens: Screens,
+    pub(super) route: &'static str,
 }
 
 fn route_name(r: &Route<'_>) -> &'static str {
@@ -260,7 +262,20 @@ fn lift_userop(
     finish(pages, &inputs, route)
 }
 
-fn finish(pages: Pages, inputs: &ContentInputs<'_>, route: &'static str) -> Lifted {
+pub(super) fn finish(pages: Pages, inputs: &ContentInputs<'_>, route: &'static str) -> Lifted {
+    let screens = lift_screens(&pages, inputs);
+    Lifted { pages, screens, route }
+}
+
+/// `finish` over a buffer the body itself borrows (`Body::Erc7730`).
+pub(super) fn finish_ref(pages: &Pages, inputs: &ContentInputs<'_>, route: &'static str) -> Lifted {
+    let screens = lift_screens(pages, inputs);
+    let mut copy = Pages::with_len(pages.len);
+    copy.buf = pages.buf;
+    Lifted { pages: copy, screens, route }
+}
+
+fn lift_screens(pages: &Pages, inputs: &ContentInputs<'_>) -> Screens {
     let mut screens = Screens::blank();
     let receipt = px_lift::emit_content(&mut screens, inputs).expect("emit");
     let body_len = receipt.body.legacy_pages;
@@ -269,7 +284,7 @@ fn finish(pages: Pages, inputs: &ContentInputs<'_>, route: &'static str) -> Lift
     let confirm_at = px_lift::insert_confirm(&mut screens, &receipt.family).unwrap();
     assert_eq!(pqsigner_ui_px::check::check_flow(&screens), Ok(()), "{}", screen_text(&screens));
     assert_eq!(
-        px_lift::transcript_proof(&screens, &pages, &inputs.body, body_len, &receipt, inputs.trailers, confirm_at),
+        px_lift::transcript_proof(&screens, pages, &inputs.body, body_len, &receipt, inputs.trailers, confirm_at),
         crate::fi::OK_SENTINEL,
         "lift proof:\n{}",
         screen_text(&screens)
@@ -278,12 +293,12 @@ fn finish(pages: Pages, inputs: &ContentInputs<'_>, route: &'static str) -> Lift
         assert!(s.is_well_formed(), "screen {i}");
         assert_ne!(s.kind(), Some(Kind::Legacy));
     }
-    Lifted { pages, screens, route }
+    screens
 }
 
 /// Every hex run ≥ 8 and decimal run ≥ 2 of the legacy page text is in the
 /// screen text (the named chain id is carried by the `NETWORK` name).
-fn assert_facts(l: &Lifted, chain_id: u64) {
+pub(super) fn assert_facts(l: &Lifted, chain_id: u64) {
     let mut legacy = all_text(&l.pages).replace("ERC-20", "ERC");
     let name = super::primitives::chain_name(chain_id);
     if name != "(unknown chain)" && legacy.contains("Chain: ") {
@@ -318,7 +333,7 @@ fn assert_facts(l: &Lifted, chain_id: u64) {
     }
 }
 
-fn golden(screens: &Screens) -> String {
+pub(super) fn golden(screens: &Screens) -> String {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
     h.update((screens.len() as u32).to_be_bytes());
@@ -330,7 +345,7 @@ fn golden(screens: &Screens) -> String {
 
 /// With `UI_PX_EXPORT=1`, write the records to
 /// `pqsigner-ui-px/tests/fixtures/<family>/<name>.hex`.
-fn export(family: &str, name: &str, screens: &Screens) {
+pub(super) fn export(family: &str, name: &str, screens: &Screens) {
     if std::env::var_os("UI_PX_EXPORT").is_none() {
         return;
     }
@@ -344,7 +359,7 @@ fn export(family: &str, name: &str, screens: &Screens) {
     std::fs::write(dir.join(format!("{name}.hex")), out).expect("fixture write");
 }
 
-fn check(family: &str, name: &str, l: &Lifted, chain_id: u64, route: &str, expected: &str) {
+pub(super) fn check(family: &str, name: &str, l: &Lifted, chain_id: u64, route: &str, expected: &str) {
     assert_eq!(l.route, route, "{name}: route");
     assert_facts(l, chain_id);
     export(family, name, &l.screens);
@@ -352,11 +367,11 @@ fn check(family: &str, name: &str, l: &Lifted, chain_id: u64, route: &str, expec
     assert_eq!(got, expected, "{name}: screen golden changed — re-bless after reviewing the PNGs:\n{}", screen_text(&l.screens));
 }
 
-fn ids(screens: &Screens) -> Vec<String> {
+pub(super) fn ids(screens: &Screens) -> Vec<String> {
     screens.as_slice().iter().map(|s| String::from_utf8_lossy(s.id()).trim_end().to_owned()).collect()
 }
 
-fn hero_caption(l: &Lifted) -> String {
+pub(super) fn hero_caption(l: &Lifted) -> String {
     String::from_utf8_lossy(l.screens.as_slice()[0].caption()).into_owned()
 }
 

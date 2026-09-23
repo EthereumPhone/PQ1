@@ -445,11 +445,12 @@ E2E_LOG_KEEP ?=
 
 .PHONY: e2e-px
 e2e-px: E2E_EXTRA_FEATURES = ,ui-px
-# Dialogs the suite confirms through the pixel UI: the Safe routes, every
-# single-UserOp route and each slot-rotation consent (port steps 1-2). The
-# direct CoW / ERC-7730 / batch / off-chain routes still use the page dialog.
+# Dialogs the suite confirms through the pixel UI: every sign dialog — the
+# Safe routes, every single-UserOp route, each slot-rotation consent, direct
+# CoW, ERC-7730, the off-chain kinds and every batch member + final ask
+# (port steps 1-3).
 E2E_PX_TRANSCRIPTS ?= 0
-e2e-px: E2E_PX_TRANSCRIPTS = 24
+e2e-px: E2E_PX_TRANSCRIPTS = 47
 e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — pixel routes print [UI-PX]
 
 e2e: ## Automated unified-sign E2E (QEMU)
@@ -519,8 +520,11 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 5m-nested: ERC-7730 nested proof set matches + signs" \
 		"\\[NS\\]\\[e2e\\] Scenario 5m-multi-tail: ERC-7730 two-string tails match + signs" \
 		"\\[NS\\]\\[e2e\\] Scenario 5p: EIP-712 typed sign + binding differential" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-personal: personal_sign off-chain signature" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-raw32: RAW32 off-chain signature" \
 		"\\[NS\\]\\[e2e\\] Scenario 5n: known-call mis-bound descriptor is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5q: Safe-wrapped CoW presign clear-sign" \
+		"\\[NS\\]\\[e2e\\] Scenario 5q-direct: direct CoW order clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5r: safe-wrapped presign without cow_order is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5s: multiSend (approve+presign) safe-wrapped CoW clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5t: multiSend with a delegatecall record is refused" \
@@ -552,22 +556,20 @@ e2e: ## Automated unified-sign E2E (QEMU)
 	fi; \
 	rt_region=$$(mktemp); \
 	awk '/Scenario 5e-rt-erc20:/{capture=1} capture{print} /RT-ERC20 trusted pages complete/{exit}' $$log > $$rt_region; \
-	for text in \
-		"0x1CDD2EaB611126" \
-		"97626F7b4bB0e23D" \
-		"a4FeBF7B7C" \
-		"0xdAC17F958D2ee5" \
-		"23a2206206994597" \
-		"C13D831ec7"; do \
+	case "$(E2E_EXTRA_FEATURES)" in \
+		*ui-px*) rt_texts="0x1CDD2EaB61112697626|F7b4bB0e23Da4FeBF7B7C|0xdAC17F958D2ee523a22|06206994597C13D831ec7" ;; \
+		*) rt_texts="0x1CDD2EaB611126|97626F7b4bB0e23D|a4FeBF7B7C|0xdAC17F958D2ee5|23a2206206994597|C13D831ec7" ;; \
+	esac; \
+	IFS='|'; for text in $$rt_texts; do \
 		if ! grep -Fq "$$text" $$rt_region; then \
 			echo "  MISS  RT-ERC20 trusted row: $$text"; \
 			fail=1; \
 		fi; \
-	done; \
+	done; unset IFS; \
 	if [ $$(grep -Fc "Token contract" $$rt_region) -lt 2 ]; then \
 		echo "  MISS  RT-ERC20 two exact token-identity pages"; fail=1; \
 	fi; \
-	if [ $$(grep -Fc "Amount" $$rt_region) -lt 2 ] || [ $$(grep -Fc "USDT" $$rt_region) -lt 2 ]; then \
+	if [ $$(grep -Fic "Amount" $$rt_region) -lt 2 ] || [ $$(grep -Fc "USDT" $$rt_region) -lt 2 ]; then \
 		echo "  MISS  RT-ERC20 two decoded amount+ticker displays"; fail=1; \
 	fi; \
 	if grep -Fq "Token (UNVERI" $$rt_region || grep -Fq "Approve Safe TX" $$rt_region; then \
@@ -576,7 +578,7 @@ e2e: ## Automated unified-sign E2E (QEMU)
 	rm -f $$rt_region; \
 	case "$(E2E_EXTRA_FEATURES)" in *ui-px*) \
 		px_flows=$$(grep -c '^\[UI-PX\] 0000/[0-9a-f]* p0' $$log || true); \
-		if [ "$$px_flows" -eq $(E2E_PX_TRANSCRIPTS) ]; then echo "  PASS  ui-px: $(E2E_PX_TRANSCRIPTS) pixel transcripts (Safe + single-UserOp + rotation routes)"; \
+		if [ "$$px_flows" -eq $(E2E_PX_TRANSCRIPTS) ]; then echo "  PASS  ui-px: $(E2E_PX_TRANSCRIPTS) pixel transcripts (every sign dialog)"; \
 		else echo "  FAIL  ui-px: expected $(E2E_PX_TRANSCRIPTS) pixel transcripts, saw $$px_flows"; fail=1; fi; \
 		for hero in APPROVE EXECUTE SEND CALL TRANSFER UNKNOWN BLIND ROTATE; do \
 			if grep -Eq "^\[UI-PX\] 0000/[0-9a-f]{4} p0 H.* id=$$hero " $$log; then echo "  PASS  ui-px: family hero $$hero"; \
@@ -584,6 +586,10 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		done; \
 		if grep -q '^\[UI-PX\] .* id=DEPLOY ' $$log; then echo "  PASS  ui-px: deployment trailer twin (Scenario 4c)"; \
 		else echo "  FAIL  ui-px: no DEPLOY trailer screen"; fail=1; fi; \
+		for want in 'cap="SIGN COWSWAP[?]"' 'cap="SIGN EIP-1271[?]"' 'cap="SIGN BLIND HASH[?]"' 'id=INTENT ' 'id=BATCH ' 'cap="SIGN [0-9] TXS[?]"' 'id=OFFSIGNR '; do \
+			if grep -Eq "^\[UI-PX\] .* $$want" $$log; then echo "  PASS  ui-px: structured route screen $$want"; \
+			else echo "  FAIL  ui-px: no $$want screen (port step 3)"; fail=1; fi; \
+		done; \
 		legacy=$$(grep -cE '^\[UI-PXR\] [0-9a-f]{4} p[0-9] 4c' $$log || true); \
 		if [ "$$legacy" -eq 0 ]; then echo "  PASS  ui-px: zero Legacy (page-wrapped) records on the pixel routes"; \
 		else echo "  FAIL  ui-px: $$legacy Legacy records on the pixel routes"; fail=1; fi; \
@@ -4698,7 +4704,7 @@ pq-ui-check: ## Verify tools/pq-ui/ against MANIFEST.sha256 (bytes + file set)
 # host tests that run the checker over every Safe scenario transcript.
 .PHONY: ui-px-goldens-bless
 ui-px-goldens-bless: ## Re-export every family's scenario transcripts and re-bless their per-frame goldens (review the PNGs first)
-	@UI_PX_EXPORT=1 cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests >/dev/null
+	@UI_PX_EXPORT=1 cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests >/dev/null
 	@UI_PX_BLESS=1 UI_PX_PNG=1 cargo test --locked -p pqsigner-ui-px --test golden safe_flows >/dev/null
 	@ls pqsigner-ui-px/tests/fixtures/*/*.sha | wc -l | xargs -I{} echo "blessed {} transcript goldens (frames under target/ui-px-golden/<family>/)"
 
@@ -4708,7 +4714,7 @@ pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails
 
 ui-px-check: pq-ui-check ui-px-assets-check pq-ui-port-diff ## All pixel-UI design-rule gates (vendored tree, bake, port_diff, checker tests)
 	@cargo test --locked -p pqsigner-ui-px
-	@cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests
+	@cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests
 
 .PHONY: ui-px-assets ui-px-assets-check
 ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1a, atlas_root.rs + metrics_gen.rs
@@ -4717,7 +4723,7 @@ ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1
 ui-px-assets-check: ## Verify the committed ui-px assets (incl. the NS atlas container + pinned root) are reproducible
 	@tmp=$$(mktemp -d); \
 	python3 tools/ui_px_assets.py --out $$tmp --ns-out $$tmp/ns --metrics $$tmp/metrics_gen.rs --root-rs $$tmp/atlas_root.rs >/dev/null && \
-	for f in fonts.bin safe.a4 mainnet.a4 base.a4 eth.a4 blind.a4 rotate.a4 usdc.a4 usdt.a4 dai.a4 manifest.json; do \
+	for f in fonts.bin safe.a4 mainnet.a4 base.a4 eth.a4 blind.a4 rotate.a4 usdc.a4 usdt.a4 dai.a4 cowswap.a4 manifest.json; do \
 	  cmp -s $$tmp/$$f secure/assets/ui-px/$$f || { echo "ui-px asset drift: $$f (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
 	done; \
 	cmp -s $$tmp/ns/atlas.pq1a nonsecure/assets/ui-px/atlas.pq1a || { echo "ui-px asset drift: atlas.pq1a (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \

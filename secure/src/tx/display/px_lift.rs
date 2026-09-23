@@ -1,9 +1,12 @@
 //! The lift from the proven legacy page transcript to the pixel-UI screen
 //! transcript, and the proof that binds the two.
 //!
-//! Three bodies share it ([`Body`]): the Safe flow (the pilot), every
+//! Several bodies share it ([`Body`]): the Safe flow (the pilot), every
 //! single-UserOp route (`userop_screens`: value / contract call, ERC-20,
-//! typed call, blind sign) and the slot-rotation consent. What follows
+//! typed call, blind sign), the slot-rotation consent, the direct CoW
+//! order (`cowswap_screens`, bound like a single-UserOp body) and an
+//! authenticated ERC-7730 render (`erc7730_screens`, laid out from the proven
+//! page range itself). What follows
 //! describes the Safe body; the others differ only in how the body is bound
 //! (see [`structure_ok`]): a single-UserOp body re-runs its page painter and
 //! must equal the proven body pages byte-for-byte (its `Nonce` footer page is
@@ -72,6 +75,30 @@ pub(crate) enum Body<'a> {
     UserOp(UserOpInputs<'a>),
     /// The slot-rotation consent.
     Rotation { chain_id: u64, slot_index: u32 },
+    /// A direct CoW Swap order (no Safe context).
+    Cow { v3: &'a VerifiedCowswapV3 },
+    /// An authenticated ERC-7730 render: the proven page range
+    /// `pages[start..start + body_len]` itself (`erc7730_screens` re-lays it
+    /// out; `start` is 1 inside a batch member, after the banner page).
+    Erc7730 {
+        pages: &'a Pages,
+        start: usize,
+        body_len: usize,
+        chain_id: u64,
+        family: Family,
+    },
+    /// An off-chain `personal_sign` / RAW32 body (`offchain_screens`), bound
+    /// like a single-UserOp body.
+    Offchain(super::offchain_screens::OffchainBody<'a>),
+    /// One member of an atomic batch: the `BATCH SIGN / Tx i of N` banner
+    /// page, then the member's own route body (`batch_screens`).
+    BatchMember {
+        index: usize,
+        total: usize,
+        inner: &'a Body<'a>,
+    },
+    /// The batch's final whole-batch ask (`build_final_summary_pages`).
+    BatchSummary { total: usize },
 }
 
 /// Everything the content emitters consume: the route body's verified
@@ -103,8 +130,10 @@ pub(crate) fn sha256_screens(screens: &Screens) -> [u8; 32] {
     h.finalize().into()
 }
 
-fn emit_once(screens: &mut Screens, inp: &ContentInputs<'_>) -> Result<ContentReceipt, ()> {
-    let (body, family) = match &inp.body {
+/// Emit a route body (hero first) and name the family its trailers,
+/// `Confirm?` and endings wear.
+fn emit_body(screens: &mut Screens, body: &Body<'_>) -> Result<(BodyReceipt, Family), ()> {
+    Ok(match body {
         // Same precedence as `safe::cow_binding::resolve_cow_binding` and the
         // dispatcher ladder: a verified approveHash context wins over exec.
         Body::Safe { safe_v1, safe_exec, cow, erc20, resolver } => {
@@ -122,7 +151,35 @@ fn emit_once(screens: &mut Screens, inp: &ContentInputs<'_>) -> Result<ContentRe
             super::slot_rotation_screens::emit(screens, *chain_id, *slot_index)?,
             super::slot_rotation_screens::FAMILY,
         ),
-    };
+        Body::Cow { v3 } => (super::cowswap_screens::emit_direct(screens, v3)?, super::cowswap_screens::FAMILY),
+        Body::Erc7730 { pages, start, body_len, chain_id, family } => (
+            super::erc7730_screens::emit(screens, pages, *start, *body_len, *chain_id, *family)?,
+            *family,
+        ),
+        Body::Offchain(b) => {
+            let family = super::offchain_screens::family(b);
+            (super::offchain_screens::emit(screens, b, family)?, family)
+        }
+        Body::BatchMember { index, total, inner } => {
+            if matches!(inner, Body::BatchMember { .. } | Body::BatchSummary { .. }) {
+                return Err(());
+            }
+            let (receipt, family) = emit_body(screens, inner)?;
+            super::batch_screens::insert_position(screens, *index, *total, family.look)?;
+            (
+                BodyReceipt {
+                    screens: receipt.screens + 1,
+                    legacy_pages: receipt.legacy_pages + 1,
+                },
+                super::batch_screens::member_family(family),
+            )
+        }
+        Body::BatchSummary { total } => (super::batch_screens::emit_summary(screens, *total)?, super::batch_screens::SUMMARY_FAMILY),
+    })
+}
+
+fn emit_once(screens: &mut Screens, inp: &ContentInputs<'_>) -> Result<ContentReceipt, ()> {
+    let (body, family) = emit_body(screens, &inp.body)?;
     if screens.len() != body.screens {
         return Err(());
     }
@@ -181,20 +238,60 @@ pub(crate) fn insert_confirm(screens: &mut Screens, family: &Family) -> Result<O
     screens.insert_confirm_look(family.look)
 }
 
-/// The route body the handler proved is the body this emitter drew.
-fn body_bound(body: &Body<'_>, pages: &Pages, body_len: usize) -> bool {
+/// The route body the handler proved (`pages[start..start + len]`) is the
+/// body this emitter drew.
+fn body_bound(body: &Body<'_>, pages: &Pages, start: usize, len: usize) -> bool {
+    let Some(end) = start.checked_add(len) else {
+        return false;
+    };
+    if len == 0 || end > pages.len {
+        return false;
+    }
     match body {
         // The Safe body ends with the confirm footer the lift drops.
-        Body::Safe { .. } => pages.buf[body_len - 1][0].starts_with(LEGACY_CONFIRM_FOOTER_ROW0),
+        Body::Safe { .. } => pages.buf[end - 1][0].starts_with(LEGACY_CONFIRM_FOOTER_ROW0),
         // The route's painter re-run equals the proven body byte-for-byte.
-        Body::UserOp(u) => userop_screens::body_pages_match(pages, body_len, u),
+        Body::UserOp(u) => userop_screens::body_pages_match(pages, start, len, u),
         Body::Rotation { slot_index, .. } => {
             let want = super::slot_rotation::build_slot_rotation_pages(*slot_index);
-            body_len == super::slot_rotation_screens::LEGACY_PAGES
-                && want.len == body_len
-                && pages.buf[0] == want.buf[0]
+            len == super::slot_rotation_screens::LEGACY_PAGES && want.len == len && pages.buf[start] == want.buf[0]
+        }
+        Body::Cow { v3 } => prefix_matches(&super::cowswap_screens::render_direct_pages(v3), pages, start, len),
+        // The screens were laid out from these very pages: the same buffer,
+        // the same range, ending on the renderer's confirm page.
+        Body::Erc7730 { pages: lifted, start: lifted_start, body_len: lifted_len, .. } => {
+            core::ptr::eq(*lifted, pages)
+                && *lifted_start == start
+                && *lifted_len == len
+                && super::erc7730_screens::is_confirm_page(&pages.buf[end - 1])
+        }
+        Body::Offchain(b) => prefix_matches(&super::offchain_screens::render_pages(b), pages, start, len),
+        // The banner page, then the member's own body right after it.
+        Body::BatchMember { index, total, inner } => {
+            pages.buf[start] == super::batch::build_batch_banner_page(*index, *total)
+                && body_bound(inner, pages, start + 1, len - 1)
+        }
+        Body::BatchSummary { total } => len == 1 && pages.buf[start] == super::batch::build_final_summary_pages(*total).buf[0],
+    }
+}
+
+/// `rendered` (a page painter re-run) is exactly `pages[start..start + len]`.
+pub(crate) fn prefix_matches(rendered: &Pages, pages: &Pages, start: usize, len: usize) -> bool {
+    let Some(end) = start.checked_add(len) else {
+        return false;
+    };
+    if rendered.len != len || len == 0 || end > pages.len {
+        return false;
+    }
+    let mut acc = 0u8;
+    for (a, b) in rendered.as_slice().iter().zip(pages.as_slice()[start..end].iter()) {
+        for (ra, rb) in a.iter().zip(b.iter()) {
+            for (x, y) in ra.iter().zip(rb.iter()) {
+                acc |= x ^ y;
+            }
         }
     }
+    acc == 0
 }
 
 fn structure_ok(
@@ -212,7 +309,7 @@ fn structure_ok(
     if receipt.body.legacy_pages != body_len || body_len == 0 || body_len > pages.len {
         return false;
     }
-    if !body_bound(body, pages, body_len) {
+    if !body_bound(body, pages, 0, body_len) {
         return false;
     }
     // One trailer screen per trailer page the handler appended after the

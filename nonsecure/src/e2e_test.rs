@@ -2465,6 +2465,44 @@ fn main() -> ! {
         hprintln!("[NS][e2e]   → typed render signed; one-bit domain mismatch refused");
     }
 
+    // Scenario 5p-personal: `personal_sign` through CMD_SIGN_OFFCHAIN (the
+    // message text on the trusted display; port step 3 pixel twin).
+    hprintln!("[NS][e2e] Scenario 5p-personal: personal_sign off-chain signature");
+    {
+        const OFFCHAIN_KIND_PERSONAL_SIGN: u8 = 1;
+        let msg = b"Login to app.example.com? Nonce: 8f3a9c2e1b";
+        let mut offchain_input = [0u8; 17 + 64];
+        offchain_input[0] = 0;
+        offchain_input[1..9].copy_from_slice(&11_155_111u64.to_be_bytes());
+        offchain_input[9..13].copy_from_slice(&1u32.to_be_bytes());
+        offchain_input[13] = OFFCHAIN_KIND_PERSONAL_SIGN;
+        offchain_input[14..16].copy_from_slice(&(msg.len() as u16).to_be_bytes());
+        offchain_input[16] = 1; // ACCOUNT_DEPLOYED
+        offchain_input[17..17 + msg.len()].copy_from_slice(msg);
+        let mut offchain_out = [0u8; 4016];
+        let status = nsc_api::sign_offchain(&offchain_input[..17 + msg.len()], &mut offchain_out);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 5p-personal must sign (got {})", status);
+        hprintln!("[NS][e2e]   → personal_sign signed");
+    }
+
+    // Scenario 5p-raw32: the loudly-labelled blind RAW32 tier.
+    hprintln!("[NS][e2e] Scenario 5p-raw32: RAW32 off-chain signature");
+    {
+        const OFFCHAIN_KIND_RAW32: u8 = 0;
+        let mut offchain_input = [0u8; 17 + 32];
+        offchain_input[0] = 0;
+        offchain_input[1..9].copy_from_slice(&11_155_111u64.to_be_bytes());
+        offchain_input[9..13].copy_from_slice(&1u32.to_be_bytes());
+        offchain_input[13] = OFFCHAIN_KIND_RAW32;
+        offchain_input[14..16].copy_from_slice(&32u16.to_be_bytes());
+        offchain_input[16] = 1; // ACCOUNT_DEPLOYED
+        offchain_input[17..].copy_from_slice(&[0x7d; 32]);
+        let mut offchain_out = [0u8; 4016];
+        let status = nsc_api::sign_offchain(&offchain_input, &mut offchain_out);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 5p-raw32 must sign (got {})", status);
+        hprintln!("[NS][e2e]   → RAW32 signed");
+    }
+
     // Scenario 5n: a cryptographically-valid trailer for the wrong deployment
     // must not restore blind signing for a firmware-known call. The UserOp is
     // WETH Sepolia deposit(), while the attached proof is WETH mainnet. Bundle
@@ -2588,6 +2626,52 @@ fn main() -> ! {
             "[NS][e2e]   → safe-wrapped CoW presign verified, t2_len={}",
             t2_len
         );
+    }
+
+    // Scenario 5q-direct: a direct CoW order (no Safe): the wallet itself
+    // pre-signs `setPreSignature(uid, true)` on the settlement contract with
+    // uid.owner = the wallet; the native kind-3 trailer carries the order.
+    hprintln!("[NS][e2e] Scenario 5q-direct: direct CoW order clear-sign");
+    unsafe {
+        let chain_id: u64 = 11_155_111;
+        let mut order = [0u8; 204];
+        order[0..8].copy_from_slice(&chain_id.to_be_bytes());
+        order[8..28].copy_from_slice(&[
+            0xc0, 0x2a, 0xaa, 0x39, 0xb2, 0x23, 0xfe, 0x8d, 0x0a, 0x0e, 0x5c, 0x4f, 0x27, 0xea,
+            0xd9, 0x08, 0x3c, 0x75, 0x6c, 0xc2,
+        ]); // sellToken = WETH
+        order[28..48].copy_from_slice(&[
+            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a, 0x2e, 0x9e,
+            0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
+        ]); // buyToken = USDC
+        order[92..100].copy_from_slice(&0x06F0_5B59_D3B2_0000u64.to_be_bytes()); // sellAmount 0.5e18
+        order[128..132].copy_from_slice(&1_842_310_000u32.to_be_bytes()); // buyAmount
+        order[164..168].copy_from_slice(&0x6800_0000u32.to_be_bytes()); // validTo
+        let order_digest = compute_cow_order_digest(&order);
+        let presign_cd = build_presign_calldata(&order_digest, &wallet_sender, &order[164..168]);
+        let mut len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            &wallet_sender,
+            chain_id,
+            1,
+            false,
+            6,
+            &GPV2_SETTLEMENT_ADDRESS,
+            0u128,
+            &presign_cd,
+        );
+        // erc20 = 0, reserved = 0, kind-3 = the bare 204-byte order, safe_v1 = 0.
+        PAYLOAD_BUF[len..len + 2].copy_from_slice(&0u16.to_be_bytes());
+        PAYLOAD_BUF[len + 2..len + 4].copy_from_slice(&0u16.to_be_bytes());
+        PAYLOAD_BUF[len + 4..len + 6].copy_from_slice(&204u16.to_be_bytes());
+        PAYLOAD_BUF[len + 6..len + 210].copy_from_slice(&order);
+        PAYLOAD_BUF[len + 210..len + 212].copy_from_slice(&0u16.to_be_bytes());
+        len += 212;
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 5q-direct must succeed (got {})", status);
+        let (t1_present, _t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 5q-direct must NOT emit Type 1");
+        hprintln!("[NS][e2e]   → direct CoW order verified and signed");
     }
 
     // Scenario 5r: Safe-wrapped CoW presign WITHOUT the cow_order trailer

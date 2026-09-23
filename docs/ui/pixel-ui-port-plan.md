@@ -111,24 +111,75 @@ monolithic EVT dev image (`FEAT_S=dual-se,dev-testkey,ui-lcd,ui-px,dev-dfu,stm32
 tools/evt-dev-flash.sh --build-only`) links: 494,816 B secure, 97,808 B
 non-secure. The flash lever stays an owner decision (see § Flash).
 
-### 3. Structured flows
+### 3. Structured flows — DONE (2026-09-23)
 
-- **CoW direct** (`cowswap/swap`, `address_mode`): the Safe-wrapped path
-  already emits screens from `append_order_body_pages`; make the direct
-  route call the same emitter.
-- **ERC-7730** (`erc7730/swap`): add a `Screens` sink to the existing
-  FormatOp render in `pqsigner-erc7730::display::render`, so one walk
-  produces both pages and screens. Biggest item; start it early.
-- **EIP-1271 / off-chain**: PERSONAL_SIGN text, EIP712_TYPED via the
-  ERC-7730 sink, counterfactual banner, `! BLIND RAW32` + full hash.
-  `cmd_sign_offchain` gets the same px route as `cmd_sign_userop`.
-- **Batch** (`batch/transfers`, `transfers_declined`, `unlock_batch`):
-  hero-pager band, `SIGNED i OF N` between segments. Re-derive screens per
-  segment (the batch signs in place over `SIGN_SNAP_BUF`). One owner
-  decision: N asks or one ask.
+| firmware route | upstream flow | emitter |
+|---|---|---|
+| direct CoW order | `cowswap/swap`, `cowswap/address_mode` | `cowswap_screens.rs` (the order body is shared with the Safe-wrapped presign) |
+| ERC-7730 contract call | `erc7730/swap` | `erc7730_screens.rs` (`Surface::Contract`) |
+| off-chain `personal_sign` | `eip1271/personal_counterfactual` | `offchain_screens.rs` |
+| off-chain RAW32 | `eip1271/personal_counterfactual_hash` | `offchain_screens.rs` (`! BLIND RAW32`, full hash) |
+| off-chain EIP-712 typed | — (ERC-7730 typed) | `erc7730_screens.rs` (`Surface::Typed`) |
+| batch member / final ask | `batch/transfers`, `transfers_declined` | `batch_screens.rs` + the member's own route |
+| erc8213 fingerprints | `fingerprint/*` | the `FP8213` / `DIGEST` trailer twins (step 1) |
 
-Done when: every upstream flow family in `flows/MANIFEST.md` has a
-firmware twin with frames.
+How it is wired: `px_lift::Body` gained `Cow`, `Erc7730 { pages, start,
+body_len }`, `Offchain`, `BatchMember { index, total, inner }` and
+`BatchSummary`; the body is bound to the proven pages at an offset
+(`body_bound(body, pages, start, len)`), so a batch member binds its banner
+page and then its inner route one page in. `px_route_confirm` now sends every
+sign route to the pixel dialog; `cmd_sign_offchain` (typed, personal, RAW32)
+and `cmd_sign_userop_batch` (rotation consent, each member, the final ask)
+route the same way and play the signing film. `TrailerFacts` gained the sets
+`Offchain` (fingerprint, RAW32's replay-safe fingerprint, the three
+signer / wallet / mode context pages), `BatchMember` and `BatchFinal`.
+
+Decisions and deviations from the plan text above:
+
+- **ERC-7730 is a page lift, not a renderer sink.** The screens are laid out
+  from the proven, two-pass-checked 7730 page range itself (row 0 = field
+  label, rows 1-3 = value; split addresses re-joined, `1/2`/`2/2` word pages
+  and the hex nonce merged into two-page screens, navigation rows dropped).
+  A sink inside the 13k-line audited renderer would have touched every
+  `FormatOp` painter, which "the one rule" forbids; the lift carries every
+  fact by construction and the fact test checks it.
+- **Batch (owner decision 2026-09-23): N asks + the final ask**, i.e. today's
+  gating unchanged. Each member dialog is its own route body with a `BATCH`
+  screen (`BATCH SIGN` / `Tx i of N`) after the hero; between members the
+  device shows `TX i OF N CONFIRMED`, never `SIGNED` (nothing is signed
+  before the final `SIGN N TXS?`). The batch snapshot can fill the whole
+  shared buffer, so the pixel transcript uses the tail past the request: a
+  batch request over 29,291 B is refused on the pixel route (`px scratch`).
+- **CoW decoded legs now show the token** (verified name over the full
+  contract address) on the Safe-wrapped route too — step 1 dropped the page's
+  anti-spoof token page for decoded legs; no Safe golden covered it.
+- `forced_blind` stays on its own ceremony (unchanged from step 2).
+
+Engine: `Icon::Cowswap` (the navy cow head baked from `cowswap.png`, branded
+`#65D9FF` disc and brand trail; signed ending fills the disc with a navy
+check), `Screens::insert_after_hero` (the batch position screen, disc
+alternation kept). Atlas 74,816 B of the 77,824 B NS window.
+
+Evidence: `structured_screens_render_pure_tests` (11 scenarios: direct CoW
+decoded + address mode, ERC-7730 Uniswap with and without UserOp fields,
+personal_sign counterfactual, RAW32, EIP-712 typed, batch member and final
+ask, plus binding refusals for a different order and the wrong batch
+position — route, lift proof, fact differential, design-rule checker, record
++ frame goldens under `pqsigner-ui-px/tests/fixtures/{cowswap,erc7730,
+eip1271,batch}/`); step-1/2 goldens unchanged; secure host tests
+2619/0; e2e Scenarios 5q-direct, 5p-personal, 5p-raw32 added;
+`make e2e` and `make e2e-px` ALL ASSERTIONS PASSED (47 pixel transcripts, the
+5e-rt-erc20 row check has a pixel twin); catalogue `docs/ui-screens/px/`
+regenerated (721 frames, 30 scenarios; every step-1/2 frame byte-identical, 5m-nested gained its ERC-7730 dialog).
+
+Flash after step 3: the ship-shaped A/B image (`make size-report-px BOARD=pq1`)
+overflows the secure slot by 39,520 B (25,408 B after step 2). The monolithic
+EVT dev image links: 508,928 B secure, 97,808 B non-secure. The flash lever
+stays an owner decision (see § Flash).
+
+Done: every upstream sign-flow family in `flows/MANIFEST.md` has a firmware
+twin with frames. `firmware/update`, `pin/unlock` and `unlock_batch` (PIN →
+batch idle → padlock) are screens outside the sign dialog — step 4.
 
 ### 4. Everything outside the sign dialog
 
@@ -174,5 +225,6 @@ streaming, upstream PR to PQ-UI. Do not start any of these while porting.
 
 ## Owner decisions
 
-1. Batch: N asks or one ask (step 3).
+1. ~~Batch: N asks or one ask (step 3).~~ Decided 2026-09-23: N asks + the
+   final ask (today's gating), `CONFIRMED` between members.
 2. Flash lever (after step 2 numbers).

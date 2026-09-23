@@ -393,10 +393,11 @@ jobs:
       # 5p/5n, to reach the explicit ALL ASSERTIONS PASSED sentinel.
       - name: make e2e
         run: make e2e
-      # The same suite through the pixel trusted UI (`ui-px`): the Safe,
-      # single-UserOp and slot-rotation dialogs must produce pixel transcripts
-      # (one per family hero, the deploy trailer twin) with zero page-wrapped
-      # Legacy records (port plan steps 1-2).
+      # The same suite through the pixel trusted UI (`ui-px`): every sign
+      # dialog (Safe, single-UserOp, rotation, direct CoW, ERC-7730, off-chain,
+      # batch) must produce a pixel transcript (a hero per family, the deploy
+      # twin, the structured-route screens) with zero page-wrapped Legacy
+      # records (port plan steps 1-3).
       - name: make e2e-px
         run: make e2e-px
       # TZP-12 (#483): publish the QEMU ELF pair + the interactive runner so
@@ -466,8 +467,8 @@ jobs:
       # secure slot with 40 KB headroom. INFORMATIONAL until the owner's flash
       # decision: measured 2026-09-23 the image is 9.2 KB OVER the v6 slot
       # with the atlas already relocated to the NS slot (Safe family only),
-      # and 25,408 B over after port step 2, so this step fails by design and
-      # must not block the pipeline yet. Flip continue-on-error
+      # 25,408 B over after port step 2 and 39,520 B over after step 3, so this
+      # step fails by design and must not block the pipeline yet. Flip continue-on-error
       # off once the budget lever lands.
       - name: Pixel-UI flash budget (make size-report-px, informational)
         continue-on-error: true

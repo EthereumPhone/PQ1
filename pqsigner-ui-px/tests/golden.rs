@@ -23,6 +23,7 @@ const ROTATE: &[u8] = include_bytes!("../../secure/assets/ui-px/rotate.a4");
 const USDC: &[u8] = include_bytes!("../../secure/assets/ui-px/usdc.a4");
 const USDT: &[u8] = include_bytes!("../../secure/assets/ui-px/usdt.a4");
 const DAI: &[u8] = include_bytes!("../../secure/assets/ui-px/dai.a4");
+const COWSWAP: &[u8] = include_bytes!("../../secure/assets/ui-px/cowswap.a4");
 
 fn marks() -> Marks<'static> {
     Marks {
@@ -37,6 +38,7 @@ fn marks() -> Marks<'static> {
         dai: parse_mark(DAI),
         blind: parse_mark(BLIND),
         rotate: parse_mark(ROTATE),
+        cowswap: parse_mark(COWSWAP),
     }
 }
 
@@ -276,13 +278,14 @@ fn safe_flows() {
 /// and mark, captioned from the screen's lines.
 #[test]
 fn family_discs_and_unbranded_endings() {
-    let cases: [(&str, Icon, Option<u8>, &str); 7] = [
+    let cases: [(&str, Icon, Option<u8>, &str); 8] = [
         ("disc_eth", Icon::Eth, None, GOLDEN_DISC_ETH),
         ("disc_usdc", Icon::Usdc, None, GOLDEN_DISC_USDC),
         ("disc_usdt", Icon::Usdt, None, GOLDEN_DISC_USDT),
         ("disc_dai", Icon::Dai, None, GOLDEN_DISC_DAI),
         ("disc_blind", Icon::Blind, None, GOLDEN_DISC_BLIND),
         ("disc_rotate", Icon::Rotate, None, GOLDEN_DISC_ROTATE),
+        ("disc_cowswap", Icon::Cowswap, None, GOLDEN_DISC_COWSWAP),
         ("disc_eth_tint1", Icon::Eth, Some(1), GOLDEN_DISC_ETH_TINT1),
     ];
     for (name, icon, tint, expected) in cases {
@@ -321,6 +324,7 @@ const GOLDEN_DISC_USDT: &str = "2358fd40973c9f4a3680c9bd0dba506bbade5269ef5cc703
 const GOLDEN_DISC_DAI: &str = "0fba635333447ec0fc17a2855b79c872b8d1710a7a5abb578369b2882b77c618";
 const GOLDEN_DISC_BLIND: &str = "36930052ebbd2027d35b3ac5b218b061f3cde9b1c9ee6b0db2d91aa4ecdab360";
 const GOLDEN_DISC_ROTATE: &str = "cf46606c59634c6303b2e9419fa2230f35b8a20e51042259715a5ffca1a32376";
+const GOLDEN_DISC_COWSWAP: &str = "eb145205606daddc8e5b2137571903e7a6f124a7cb459e326eab8f9e2954752f";
 const GOLDEN_DISC_ETH_TINT1: &str = "ca430a1c37d82982f0a15894ac91d5b17a2c39df01b6113782b6488b51b3bfa7";
 const GOLDEN_ENDING_ETH_SIGNED: &str = "5ad70f3d3d27ed7838565a182f3920f90fb095ac01ef81f9e27e06c86b065ec2";
 const GOLDEN_ENDING_ETH_DECLINED: &str = "803a91483480bf4f9f19f2cf0193c1f7bf31bef9b951d2f8f537ba7489779b34";

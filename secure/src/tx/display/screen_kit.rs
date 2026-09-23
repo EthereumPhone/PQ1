@@ -159,6 +159,35 @@ impl<'s> Emit<'s> {
         self.push(b.finish().map_err(|_| ())?)
     }
 
+    /// A docked detail over two explicit pages (1–3 lines each); both
+    /// pages share the smaller of their fitted tiers.
+    pub(crate) fn detail_two_pages(
+        &mut self,
+        id: &[u8],
+        label: &[u8],
+        p0: &[(&[u8], Weight)],
+        p1: &[(&[u8], Weight)],
+        pulse: bool,
+    ) -> Result<(), ()> {
+        if p0.is_empty() || p1.is_empty() || p0.len() > LINES_PER_PAGE || p1.len() > LINES_PER_PAGE {
+            return Err(());
+        }
+        let tier = fit_tier(p0, Region::Docked).ok_or(())?.min(fit_tier(p1, Region::Docked).ok_or(())?);
+        let side = self.next_side();
+        let mut b = ScreenBuilder::detail(id, self.look.icon, side, label).look_tint(self.look).tier(tier);
+        for &(text, w) in p0 {
+            b = b.line(text, w);
+        }
+        b = b.next_page();
+        for &(text, w) in p1 {
+            b = b.line(text, w);
+        }
+        if pulse {
+            b = b.pulse();
+        }
+        self.push(b.finish().map_err(|_| ())?)
+    }
+
     /// A docked detail whose one value turns two pages (a 32-byte word).
     pub(crate) fn detail_paged(&mut self, id: &[u8], label: &[u8], pages: &[[Line; 2]; 2]) -> Result<(), ()> {
         let p0 = [(pages[0][0].as_bytes(), Weight::Regular), (pages[0][1].as_bytes(), Weight::Regular)];
@@ -495,7 +524,7 @@ impl Wrapped {
     }
 }
 
-fn fits_at_22(text: &[u8], region: Region) -> bool {
+pub(crate) fn fits_at_22(text: &[u8], region: Region) -> bool {
     text.len() <= region.chars(Tier::T22)
         && measure_q6(text, 22, false, 0).is_some_and(|w| w <= region.width_px() * 64)
 }

@@ -206,6 +206,22 @@ pub mod blind_sign_screens;
 #[allow(dead_code)]
 pub mod slot_rotation_screens;
 
+#[path = "../tx/display/cowswap_screens.rs"]
+#[allow(dead_code)]
+pub mod cowswap_screens;
+
+#[path = "../tx/display/erc7730_screens.rs"]
+#[allow(dead_code)]
+pub mod erc7730_screens;
+
+#[path = "../tx/display/offchain_screens.rs"]
+#[allow(dead_code)]
+pub mod offchain_screens;
+
+#[path = "../tx/display/batch_screens.rs"]
+#[allow(dead_code)]
+pub mod batch_screens;
+
 // The native trailer twins (`trailer_screens`) over the mounted page
 // painters, so the lift's trailer proofs run against real trailer pages.
 #[path = "../tx/display/trailer_screens.rs"]
@@ -250,6 +266,9 @@ mod safe_screens_render_pure_tests;
 
 #[cfg(test)]
 mod userop_screens_render_pure_tests;
+
+#[cfg(test)]
+mod structured_screens_render_pure_tests;
 
 #[cfg(test)]
 mod wysiwys_dispatch_differential_tests;

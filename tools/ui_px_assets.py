@@ -6,7 +6,8 @@ Reads the vendored PQ-UI design system (`tools/pq-ui/`, pinned in
 
   secure/assets/ui-px/fonts.bin        glyph atlases, one tier per (size, weight)
   secure/assets/ui-px/<name>.a4        4-bit alpha disc marks (safe, mainnet, base,
-                                       eth, blind, rotate, usdc, usdt, dai)
+                                       eth, blind, rotate, usdc, usdt, dai,
+                                       cowswap)
   secure/assets/ui-px/manifest.json    sha256 of every output + inputs, versions
   nonsecure/assets/ui-px/atlas.pq1a    the SHIPPED form: fonts + marks in one
                                        container, linked into the NON-SECURE
@@ -46,7 +47,7 @@ Binary formats (little-endian):
     Entry[n]    name[8] (ASCII, NUL-padded) | off u32 | len u32               (16 B)
     Payload     each entry's bytes at `off` from the container start, 4-aligned;
                 entries: "fonts" (fonts.bin), "safe", "mainnet", "base",
-                "eth", "blind", "rotate", "usdc", "usdt", "dai" (.a4)
+                "eth", "blind", "rotate", "usdc", "usdt", "dai", "cowswap" (.a4)
 
 Missing glyphs have w = h = advance = 0 (the fitter treats advance 0 as
 "not renderable at this tier"); code 0x7F stands in for U+2026 (ellipsis) in
@@ -75,7 +76,7 @@ ROOT_RS_DEFAULT = os.path.join(ROOT, "secure", "src", "ui", "px", "atlas_root.rs
 
 ATLAS_MAGIC = b"PQ1A"
 ATLAS_VERSION = 1
-ATLAS_ENTRY_ORDER = ("fonts", "safe", "mainnet", "base", "eth", "blind", "rotate", "usdc", "usdt", "dai")
+ATLAS_ENTRY_ORDER = ("fonts", "safe", "mainnet", "base", "eth", "blind", "rotate", "usdc", "usdt", "dai", "cowswap")
 # Procedural pq1 glyphs baked as marks (pq1/components.GLYPHS names).
 PROCEDURAL_MARKS = ("mainnet", "base", "eth", "blind", "rotate")
 # Popular-token logo art (components.TOKEN_LOGOS) -> (asset, the token colour
@@ -279,6 +280,31 @@ def bake_safe_mark() -> bytes:
     return mark_from_mask(mask.reduce(SUP), "safe", crop=False)
 
 
+# CoW Swap brand art (cowswap.png): the navy cow head (colors.COWSWAP_DARK)
+# on the #65D9FF disc. Like the Safe mark, the device draws the disc and the
+# asset is the dark part of the art as an alpha mask.
+COWSWAP_DISC = (0x65, 0xD9, 0xFF)
+COWSWAP_NAVY = (0x01, 0x2F, 0x7A)
+
+
+def bake_cowswap_mark() -> bytes:
+    """Per pixel, how far the colour sits from the disc toward the navy head
+    (projection onto the disc -> navy segment), times alpha."""
+    im = Image.open(os.path.join(ASSETS, "cowswap.png")).convert("RGBA")
+    big = im.resize((MARK_DIAMETER * SUP, MARK_DIAMETER * SUP), Image.LANCZOS)
+    mask = Image.new("L", big.size, 0)
+    src = big.load()
+    dst = mask.load()
+    d = [n - c for n, c in zip(COWSWAP_NAVY, COWSWAP_DISC)]
+    dd = sum(v * v for v in d)
+    for y in range(big.size[1]):
+        for x in range(big.size[0]):
+            r, g, b, a = src[x, y]
+            t = sum((p - c) * v for p, c, v in zip((r, g, b), COWSWAP_DISC, d)) / dd
+            dst[x, y] = int(round(max(0.0, min(1.0, t)) * a))
+    return mark_from_mask(mask.reduce(SUP), "cowswap")
+
+
 def bake_token_mark(name: str) -> bytes:
     """A popular token's full-bleed logo art (e.g. white USDC glyph on the
     #2775CA disc): the device paints the disc in the token colour, so the
@@ -427,6 +453,7 @@ def main() -> int:
                 print(f"warning: mark {name!r} not baked: {e}", file=sys.stderr)
         for name in TOKEN_ART:
             marks[name] = bake_token_mark(name)
+        marks["cowswap"] = bake_cowswap_mark()
         for name, blob in marks.items():
             with open(os.path.join(args.out, f"{name}.a4"), "wb") as f:
                 f.write(blob)
@@ -442,7 +469,7 @@ def main() -> int:
         "pillow": PIL.__version__,
         "inputs": {os.path.relpath(p, ROOT): sha256_file(p) for p in FONTS.values()}
         | {os.path.relpath(os.path.join(ASSETS, f), ROOT): sha256_file(os.path.join(ASSETS, f))
-           for f in ["safe.png"] + [a for a, _ in TOKEN_ART.values()]},
+           for f in ["safe.png", "cowswap.png"] + [a for a, _ in TOKEN_ART.values()]},
         "outputs": {"fonts.bin": {"sha256": fonts_sha, "bytes": len(fonts_bin)}}
         | {f"{n}.a4": {"sha256": hashlib.sha256(b).hexdigest(), "bytes": len(b)} for n, b in marks.items()}
         | {"atlas.pq1a": {"sha256": hashlib.sha256(container).hexdigest(), "bytes": len(container)}},

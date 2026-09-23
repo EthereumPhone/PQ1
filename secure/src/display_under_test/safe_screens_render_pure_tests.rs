@@ -511,6 +511,8 @@ impl TrailerFixture {
             fingerprint: self.fp,
             deployment: Some(&self.deployment),
             set: trailer_screens::TrailerSet::Sign,
+            fingerprint2: None,
+            offchain: None,
         }
     }
 }

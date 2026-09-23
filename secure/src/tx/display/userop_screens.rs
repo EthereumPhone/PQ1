@@ -107,28 +107,17 @@ fn render_route_pages(route: &Route<'_>, inp: &UserOpInputs<'_>) -> Option<Pages
     })
 }
 
-/// The route body the dispatcher produced (`pages[..body_len]`) is exactly
-/// what the route's painter renders for these inputs.
+/// The route body the dispatcher produced (`pages[start..start + body_len]`)
+/// is exactly what the route's painter renders for these inputs.
 #[inline(never)]
-pub(crate) fn body_pages_match(pages: &Pages, body_len: usize, inp: &UserOpInputs<'_>) -> bool {
+pub(crate) fn body_pages_match(pages: &Pages, start: usize, body_len: usize, inp: &UserOpInputs<'_>) -> bool {
     let Ok(route) = classify(inp) else {
         return false;
     };
     let Some(rendered) = render_route_pages(&route, inp) else {
         return false;
     };
-    if rendered.len != body_len || body_len == 0 || body_len > pages.len {
-        return false;
-    }
-    let mut acc = 0u8;
-    for (a, b) in rendered.as_slice().iter().zip(pages.as_slice()[..body_len].iter()) {
-        for (ra, rb) in a.iter().zip(b.iter()) {
-            for (x, y) in ra.iter().zip(rb.iter()) {
-                acc |= x ^ y;
-            }
-        }
-    }
-    acc == 0
+    super::px_lift::prefix_matches(&rendered, pages, start, body_len)
 }
 
 /// The family (disc + ending captions) of the route these inputs take.

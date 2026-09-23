@@ -125,7 +125,10 @@ step 2 is done — every single-UserOp route (value / contract call, ERC-20
 known and unknown, typed call, blind sign) and the slot-rotation consent go
 through the same lift (`px_lift::Body`), with the new disc icons, the
 placeholder-ramp tint and unbranded endings; see the plan's step 2 for the
-evidence and what stayed on the page dialog (`forced_blind`).
+evidence and what stayed on the page dialog (`forced_blind`). **UPDATE 2026-09-23
+(later):** step 3 is done — direct CoW, ERC-7730 (a lift of the proven 7730
+pages), the off-chain kinds and the batch (N member asks + the final ask)
+confirm through the pixel UI too; see the plan's step 3.
 
 1. ~~Run on the EVT~~ — done 2026-09-22 over the cable-free DFU loop
    (`FEAT_S=... tools/evt-dev-flash.sh`, `tools/hid_sign_safe.py`): strip
@@ -138,9 +141,9 @@ evidence and what stayed on the page dialog (`forced_blind`).
 3. ~~**Native trailer screens**~~ — done 2026-09-23 (`tx/display/
    trailer_screens.rs`, eleven slots with per-slot + set proofs; the
    `Legacy` kind is unused on every pixel route, which since step 2 includes
-   the single-UserOp routes and the rotation consent). Still open: direct
-   CoW, ERC-7730, batch and off-chain routes; the remaining families (boot,
-   PIN, wizard, verdicts).
+   the single-UserOp routes and the rotation consent, and since step 3
+   every sign route). Still open: the families outside the sign dialog
+   (boot, PIN, wizard, verdicts — step 4).
 4. ~~`tools/ui_screens_export.py --px`~~ — done: `docs/ui-screens/px/`.
 5. ~~Kani~~ — installed (`kani-verifier 0.67.0`); `cargo kani -p
    pqsigner-ui-px` runs the `fit`, `driver` and `check` harnesses.

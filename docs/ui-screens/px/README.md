@@ -268,13 +268,59 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 
 | # | id | page | record text | frame |
 |---|----|------|-------------|-------|
-| 0 | `ROTATE` | 1 | id=ROTATE lab="" cap="ROTATE SLOT?" | ![ROTATE](scenario-5m-nested/00-rotate-p0.png) |
-| 1 | `ROTATE` | 1 | id=ROTATE lab="ROTATE" cap="" \| r:New signing slot \| r:Slot 1 | ![ROTATE](scenario-5m-nested/01-rotate-p0.png) |
-| 2 | `COST` | 1 | id=COST lab="COST" cap="" \| r:+1 bootstrap use \| r:(on-chain cap) | ![COST](scenario-5m-nested/02-cost-p0.png) |
-| 3 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5m-nested/03-signer-p0.png) |
-| 4 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:50000 \| r:Verify:300000 \| r:PreVer:100000 | ![GASLANE](scenario-5m-nested/04-gaslane-p0.png) |
-| 4 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:450000 | ![GASLANE](scenario-5m-nested/04-gaslane-p1.png) |
-| 5 | `ROTATE` | 1 | id=ROTATE lab="" cap="ROTATE SLOT?" | ![ROTATE](scenario-5m-nested/05-rotate-p0.png) |
+| 1.0 | `ROTATE` | 1 | id=ROTATE lab="" cap="ROTATE SLOT?" | ![ROTATE](scenario-5m-nested/d1-00-rotate-p0.png) |
+| 1.1 | `ROTATE` | 1 | id=ROTATE lab="ROTATE" cap="" \| r:New signing slot \| r:Slot 1 | ![ROTATE](scenario-5m-nested/d1-01-rotate-p0.png) |
+| 1.2 | `COST` | 1 | id=COST lab="COST" cap="" \| r:+1 bootstrap use \| r:(on-chain cap) | ![COST](scenario-5m-nested/d1-02-cost-p0.png) |
+| 1.3 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5m-nested/d1-03-signer-p0.png) |
+| 1.4 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:50000 \| r:Verify:300000 \| r:PreVer:100000 | ![GASLANE](scenario-5m-nested/d1-04-gaslane-p0.png) |
+| 1.4 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:450000 | ![GASLANE](scenario-5m-nested/d1-04-gaslane-p1.png) |
+| 1.5 | `ROTATE` | 1 | id=ROTATE lab="" cap="ROTATE SLOT?" | ![ROTATE](scenario-5m-nested/d1-05-rotate-p0.png) |
+| 2.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN FORWARD CALL?" | ![SIGN](scenario-5m-nested/d2-00-sign-p0.png) |
+| 2.1 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5m-nested/d2-01-dev-p0.png) |
+| 2.2 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Forward call \| r:PQSigner \| r:NestedForwarder | ![INTENT](scenario-5m-nested/d2-02-intent-p0.png) |
+| 2.3 | `F2` | 1 | id=F2 lab="TARGET" cap="" \| r:0x5656565656565656565 \| r:656565656565656565656 | ![F2](scenario-5m-nested/d2-03-f2-p0.png) |
+| 2.4 | `F3` | 1 | id=F3 lab="CALL CALL" cap="" \| r:0x5656565656565656565 \| r:656565656565656565656 | ![F3](scenario-5m-nested/d2-04-f3-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5m-nested/d2-05-confirm-p0.png) |
+| 2.6 | `F4` | 1 | id=F4 lab="" cap="" \| s:** DEV BUILD ** \| r:Unattested \| r:descriptor | ![F4](scenario-5m-nested/d2-06-f4-p0.png) |
+| 2.7 | `F5` | 1 | id=F5 lab="TRANSFER" cap="" \| r:PQSigner \| r:NestedToken | ![F5](scenario-5m-nested/d2-07-f5-p0.png) |
+| 2.8 | `F6` | 1 | id=F6 lab="RECIPIENT" cap="" \| r:0x7878787878787878787 \| r:878787878787878787878 | ![F6](scenario-5m-nested/d2-08-f6-p0.png) |
+| 2.9 | `F7` | 1 | id=F7 lab="AMOUNT" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![F7](scenario-5m-nested/d2-09-f7-p0.png) |
+| 2.9 | `F7` | 2 | id=F7 lab="AMOUNT" cap="" \| r:0000000000000000 \| r:000000000001e240 | ![F7](scenario-5m-nested/d2-09-f7-p1.png) |
+| 2.10 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:Chain 31337 | ![NETWORK](scenario-5m-nested/d2-10-network-p0.png) |
+| 2.11 | `F10` | 1 | id=F10 lab="MAX FEE/BASE" cap="" \| r:10000000000 \| r:Tip/base: \| r:2000000000 | ![F10](scenario-5m-nested/d2-11-f10-p0.png) |
+| 2.12 | `F11` | 1 | id=F11 lab="GAS:450000" cap="" \| r:Max total/base: \| r:4500000000000000 | ![F11](scenario-5m-nested/d2-12-f11-p0.png) |
+| 2.13 | `NONCE` | 1 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000000 \| r:0000000000000000 \| r:0000000000000000 | ![NONCE](scenario-5m-nested/d2-13-nonce-p0.png) |
+| 2.13 | `NONCE` | 2 | id=NONCE lab="NONCE (HEX)" cap="" \| r:000000000000002d | ![NONCE](scenario-5m-nested/d2-13-nonce-p1.png) |
+| 2.14 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5m-nested/d2-14-signer-p0.png) |
+| 2.15 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0x3434343434343434343 \| r:434343434343434343434 | ![TARGET](scenario-5m-nested/d2-15-target-p0.png) |
+| 2.16 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:50000 \| r:Verify:300000 \| r:PreVer:100000 | ![GASLANE](scenario-5m-nested/d2-16-gaslane-p0.png) |
+| 2.16 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:450000 | ![GASLANE](scenario-5m-nested/d2-16-gaslane-p1.png) |
+| 2.17 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5m-nested/d2-17-fp8213-p0.png) |
+| 2.18 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x656ac999bd3392b7aa674b \| r:1ae24ca0e5ef17b0f00544 \| r:6ea86edb49ad633e6f12 | ![DIGEST](scenario-5m-nested/d2-18-digest-p0.png) |
+| 2.19 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN FORWARD CALL?" | ![SIGN](scenario-5m-nested/d2-19-sign-p0.png) |
+
+## Scenario 5m-multi-tail: ERC-7730 two-string tails match + signs
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN ANNOTATE?" | ![SIGN](scenario-5m-multi-tail/00-sign-p0.png) |
+| 1 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5m-multi-tail/01-dev-p0.png) |
+| 2 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Annotate \| r:PQSigner \| r:MultiTailNotes | ![INTENT](scenario-5m-multi-tail/02-intent-p0.png) |
+| 3 | `F2` | 1 | id=F2 lab="SUBJECT" cap="" \| r:alpha subject \| r:13 bytes | ![F2](scenario-5m-multi-tail/03-f2-p0.png) |
+| 4 | `F3` | 1 | id=F3 lab="MEMO" cap="" \| r:exact memo \| r:10 bytes | ![F3](scenario-5m-multi-tail/04-f3-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5m-multi-tail/05-confirm-p0.png) |
+| 6 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:Chain 31337 | ![NETWORK](scenario-5m-multi-tail/06-network-p0.png) |
+| 7 | `F5` | 1 | id=F5 lab="MAX FEE/BASE" cap="" \| r:10000000000 \| r:Tip/base: \| r:2000000000 | ![F5](scenario-5m-multi-tail/07-f5-p0.png) |
+| 8 | `F6` | 1 | id=F6 lab="GAS:450000" cap="" \| r:Max total/base: \| r:4500000000000000 | ![F6](scenario-5m-multi-tail/08-f6-p0.png) |
+| 9 | `NONCE` | 1 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000000 \| r:0000000000000000 \| r:0000000000000000 | ![NONCE](scenario-5m-multi-tail/09-nonce-p0.png) |
+| 9 | `NONCE` | 2 | id=NONCE lab="NONCE (HEX)" cap="" \| r:000000000000002d | ![NONCE](scenario-5m-multi-tail/09-nonce-p1.png) |
+| 10 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5m-multi-tail/10-signer-p0.png) |
+| 11 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0x7878787878787878787 \| r:878787878787878787878 | ![TARGET](scenario-5m-multi-tail/11-target-p0.png) |
+| 12 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:50000 \| r:Verify:300000 \| r:PreVer:100000 | ![GASLANE](scenario-5m-multi-tail/12-gaslane-p0.png) |
+| 12 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:450000 | ![GASLANE](scenario-5m-multi-tail/12-gaslane-p1.png) |
+| 13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5m-multi-tail/13-fp8213-p0.png) |
+| 14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xd9baf3cf86728a714a6db2 \| r:05d884da6658c1c5657384 \| r:1f2f62d2967823331588 | ![DIGEST](scenario-5m-multi-tail/14-digest-p0.png) |
+| 15 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN ANNOTATE?" | ![SIGN](scenario-5m-multi-tail/15-sign-p0.png) |
 
 ## Scenario 5w: companion-supplied address-name trailer
 
@@ -395,6 +441,346 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 15 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x0a67b1709a8404c63d8213 \| r:c205a30d97c06321160671 \| r:00c7357acfeb24dd6c36 | ![DIGEST](scenario-5k/15-digest-p0.png) |
 | 16 | `UNKNOWN` | 1 | id=UNKNOWN lab="" cap="CONFIRM UNKNOWN CALL?" | ![UNKNOWN](scenario-5k/16-unknown-p0.png) |
 
+## Scenario 5e: atomic batch sign (3 inner txs)
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 1.0 | `SEND` | 1 | id=SEND lab="" cap="SEND 0.100000 ETH?" | ![SEND](scenario-5e/d1-00-send-p0.png) |
+| 1.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 1 of 3 | ![BATCH](scenario-5e/d1-01-batch-p0.png) |
+| 1.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5e/d1-02-network-p0.png) |
+| 1.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xA0a0a0A0A0A0a0a0A0A \| r:0a0A0a0A0a0A0A0A0a0a0 | ![TO](scenario-5e/d1-03-to-p0.png) |
+| 1.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.100000 ETH | ![VALUE](scenario-5e/d1-04-value-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e/d1-05-confirm-p0.png) |
+| 1.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5e/d1-06-maxfee-p0.png) |
+| 1.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5e/d1-07-worst-p0.png) |
+| 1.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 8 \| r:Data: 0 B | ![DETAILS](scenario-5e/d1-08-details-p0.png) |
+| 1.9 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.100000 ETH | ![NATIVE](scenario-5e/d1-09-native-p0.png) |
+| 1.10 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e/d1-10-signer-p0.png) |
+| 1.11 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xA0a0a0A0A0A0a0a0A0A \| r:0a0A0a0A0a0A0A0A0a0a0 | ![TARGET](scenario-5e/d1-11-target-p0.png) |
+| 1.12 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e/d1-12-gaslane-p0.png) |
+| 1.12 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e/d1-12-gaslane-p1.png) |
+| 1.13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5e/d1-13-fp8213-p0.png) |
+| 1.14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x290decd9548b62a8d60345 \| r:a988386fc84ba6bc954840 \| r:08f6362f93160ef3e563 | ![DIGEST](scenario-5e/d1-14-digest-p0.png) |
+| 1.15 | `SEND` | 1 | id=SEND lab="" cap="SEND 0.100000 ETH?" | ![SEND](scenario-5e/d1-15-send-p0.png) |
+| 2.0 | `TRANSFER` | 1 | id=TRANSFER lab="" cap="TRANSFER UNKNOWN TOKEN?" | ![TRANSFER](scenario-5e/d2-00-transfer-p0.png) |
+| 2.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 2 of 3 | ![BATCH](scenario-5e/d2-01-batch-p0.png) |
+| 2.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5e/d2-02-network-p0.png) |
+| 2.3 | `CONTRACT` | 1 | id=CONTRACT lab="CONTRACT" cap="" \| s:! Unknown token \| r:0xA1A1a1a1A1A1A1A1A1a \| r:1a1a1a1a1A1A1a1A1a1a1 | ![CONTRACT](scenario-5e/d2-03-contract-p0.png) |
+| 2.4 | `AMOUNT` | 1 | id=AMOUNT lab="AMOUNT" cap="" \| r:(RAW) transfer \| r:250000000 | ![AMOUNT](scenario-5e/d2-04-amount-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e/d2-05-confirm-p0.png) |
+| 2.6 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xABaBaBaBABab \| r:ABabAbAbABAbAB \| r:abababaBaBABaB | ![TO](scenario-5e/d2-06-to-p0.png) |
+| 2.7 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5e/d2-07-maxfee-p0.png) |
+| 2.8 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5e/d2-08-worst-p0.png) |
+| 2.9 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 8 \| r:Data: 68 B | ![DETAILS](scenario-5e/d2-09-details-p0.png) |
+| 2.10 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e/d2-10-signer-p0.png) |
+| 2.11 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xA1A1a1a1A1A1A1A1A1a \| r:1a1a1a1a1A1A1a1A1a1a1 | ![TARGET](scenario-5e/d2-11-target-p0.png) |
+| 2.12 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e/d2-12-gaslane-p0.png) |
+| 2.12 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e/d2-12-gaslane-p1.png) |
+| 2.13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5e/d2-13-fp8213-p0.png) |
+| 2.14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x80abe80e197e36fff456e8 \| r:985f29f9f4f0fa3432afb0 \| r:8f38a8a92f410446a003 | ![DIGEST](scenario-5e/d2-14-digest-p0.png) |
+| 2.15 | `TRANSFER` | 1 | id=TRANSFER lab="" cap="TRANSFER UNKNOWN TOKEN?" | ![TRANSFER](scenario-5e/d2-15-transfer-p0.png) |
+| 3.0 | `UNKNOWN` | 1 | id=UNKNOWN lab="" cap="CONFIRM UNKNOWN CALL?" | ![UNKNOWN](scenario-5e/d3-00-unknown-p0.png) |
+| 3.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 3 of 3 | ![BATCH](scenario-5e/d3-01-batch-p0.png) |
+| 3.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5e/d3-02-network-p0.png) |
+| 3.3 | `BLINDSGN` | 1 | id=BLINDSGN lab="BLIND SIGN" cap="" \| r:Unknown call \| r:Verify on dapp | ![BLINDSGN](scenario-5e/d3-03-blindsgn-p0.png) |
+| 3.4 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xa2A2a2A2A2A2A2a2a2a \| r:2a2A2A2A2A2a2A2A2a2a2 | ![TO](scenario-5e/d3-04-to-p0.png) |
+| 3.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e/d3-05-confirm-p0.png) |
+| 3.6 | `AMOUNT` | 1 | id=AMOUNT lab="AMOUNT" cap="" \| r:0 ETH | ![AMOUNT](scenario-5e/d3-06-amount-p0.png) |
+| 3.7 | `CALLDATA` | 1 | id=CALLDATA lab="CALL DATA" cap="" \| r:Selector: 0x12345678 \| r:Data: 9 B | ![CALLDATA](scenario-5e/d3-07-calldata-p0.png) |
+| 3.8 | `DATAHASH` | 1 | id=DATAHASH lab="DATA HASH" cap="" \| r:0x69f98b03597fd56be5fc3b \| r:54a5fd0e67efc7b9c93cc0 \| r:3cd5130ea7019af14fe9 | ![DATAHASH](scenario-5e/d3-08-datahash-p0.png) |
+| 3.9 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5e/d3-09-maxfee-p0.png) |
+| 3.10 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5e/d3-10-worst-p0.png) |
+| 3.11 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 8 \| r:Data: 9 B | ![DETAILS](scenario-5e/d3-11-details-p0.png) |
+| 3.12 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e/d3-12-signer-p0.png) |
+| 3.13 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xa2A2a2A2A2A2A2a2a2a \| r:2a2A2A2A2A2a2A2A2a2a2 | ![TARGET](scenario-5e/d3-13-target-p0.png) |
+| 3.14 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e/d3-14-gaslane-p0.png) |
+| 3.14 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e/d3-14-gaslane-p1.png) |
+| 3.15 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5e/d3-15-fp8213-p0.png) |
+| 3.16 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x50d527cb697bd53269541b \| r:f85d48da0823f09d8bcab1 \| r:f1af2369d29c34ab9949 | ![DIGEST](scenario-5e/d3-16-digest-p0.png) |
+| 3.17 | `UNKNOWN` | 1 | id=UNKNOWN lab="" cap="CONFIRM UNKNOWN CALL?" | ![UNKNOWN](scenario-5e/d3-17-unknown-p0.png) |
+| 4.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 3 TXS?" | ![SIGN](scenario-5e/d4-00-sign-p0.png) |
+| 4.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| r:Txs in batch: 3 \| r:each confirmed \| r:one signature | ![BATCH](scenario-5e/d4-01-batch-p0.png) |
+| 4.2 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e/d4-02-signer-p0.png) |
+| 4.3 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e/d4-03-gaslane-p0.png) |
+| 4.3 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e/d4-03-gaslane-p1.png) |
+| 4.4 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:Raw32 Hash | ![FP8213](scenario-5e/d4-04-fp8213-p0.png) |
+| 4.5 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xf5ba42bd33eb7ea1e60b54 \| r:73d8bdc5be937ed200995c \| r:41855bbfffcf4b53b68f | ![DIGEST](scenario-5e/d4-05-digest-p0.png) |
+| 4.6 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 3 TXS?" | ![SIGN](scenario-5e/d4-06-sign-p0.png) |
+
+## Scenario 5e-7730: batch ERC-7730 trailer matches + signs
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 1.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN WRAP?" | ![SIGN](scenario-5e-7730/d1-00-sign-p0.png) |
+| 1.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 1 of 1 | ![BATCH](scenario-5e-7730/d1-01-batch-p0.png) |
+| 1.2 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5e-7730/d1-02-dev-p0.png) |
+| 1.3 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Wrap \| r:WETH \| r:WETH | ![INTENT](scenario-5e-7730/d1-03-intent-p0.png) |
+| 1.4 | `F2` | 1 | id=F2 lab="AMOUNT" cap="" \| r:0.01 ETH | ![F2](scenario-5e-7730/d1-04-f2-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e-7730/d1-05-confirm-p0.png) |
+| 1.6 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5e-7730/d1-06-network-p0.png) |
+| 1.7 | `F4` | 1 | id=F4 lab="MAX FEE/GWEI" cap="" \| r:10 \| r:Tip/gwei: \| r:2 | ![F4](scenario-5e-7730/d1-07-f4-p0.png) |
+| 1.8 | `F5` | 1 | id=F5 lab="" cap="" \| s:Max total/ETH: \| r:0.0058 \| r:Gas:580000 | ![F5](scenario-5e-7730/d1-08-f5-p0.png) |
+| 1.9 | `NONCE` | 1 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000000 \| r:0000000000000000 \| r:0000000000000000 | ![NONCE](scenario-5e-7730/d1-09-nonce-p0.png) |
+| 1.9 | `NONCE` | 2 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000051 | ![NONCE](scenario-5e-7730/d1-09-nonce-p1.png) |
+| 1.10 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.010000 ETH | ![NATIVE](scenario-5e-7730/d1-10-native-p0.png) |
+| 1.11 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e-7730/d1-11-signer-p0.png) |
+| 1.12 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xfFf9976782d46CC0563 \| r:0D1f6eBAb18b2324d6B14 | ![TARGET](scenario-5e-7730/d1-12-target-p0.png) |
+| 1.13 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e-7730/d1-13-gaslane-p0.png) |
+| 1.13 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e-7730/d1-13-gaslane-p1.png) |
+| 1.14 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5e-7730/d1-14-fp8213-p0.png) |
+| 1.15 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x9e0e1b38823d3ef404d2bf \| r:8305dbf9a8d25df6806279 \| r:99452c844afce8db8319 | ![DIGEST](scenario-5e-7730/d1-15-digest-p0.png) |
+| 1.16 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN WRAP?" | ![SIGN](scenario-5e-7730/d1-16-sign-p0.png) |
+| 2.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 1 TXS?" | ![SIGN](scenario-5e-7730/d2-00-sign-p0.png) |
+| 2.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| r:Txs in batch: 1 \| r:each confirmed \| r:one signature | ![BATCH](scenario-5e-7730/d2-01-batch-p0.png) |
+| 2.2 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e-7730/d2-02-signer-p0.png) |
+| 2.3 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e-7730/d2-03-gaslane-p0.png) |
+| 2.3 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e-7730/d2-03-gaslane-p1.png) |
+| 2.4 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:Raw32 Hash | ![FP8213](scenario-5e-7730/d2-04-fp8213-p0.png) |
+| 2.5 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xf15966fd0b079a995e7eba \| r:c8e84108ec6066be280bb2 \| r:7d911b813154d3007931 | ![DIGEST](scenario-5e-7730/d2-05-digest-p0.png) |
+| 2.6 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 1 TXS?" | ![SIGN](scenario-5e-7730/d2-06-sign-p0.png) |
+
+## Scenario 5e-rt-erc20: invalid Safe cannot gate ERC-7730 token metadata
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 1.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN DEPOSIT COLLATERAL?" | ![SIGN](scenario-5e-rt-erc20/d1-00-sign-p0.png) |
+| 1.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 1 of 2 | ![BATCH](scenario-5e-rt-erc20/d1-01-batch-p0.png) |
+| 1.2 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5e-rt-erc20/d1-02-dev-p0.png) |
+| 1.3 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Deposit collateral \| r:PositionsManage | ![INTENT](scenario-5e-rt-erc20/d1-03-intent-p0.png) |
+| 1.4 | `F2` | 1 | id=F2 lab="AMOUNT" cap="" \| r:100 USDT | ![F2](scenario-5e-rt-erc20/d1-04-f2-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e-rt-erc20/d1-05-confirm-p0.png) |
+| 1.6 | `F3` | 1 | id=F3 lab="" cap="" \| s:Token contract \| r:0x1CDD2EaB61112697626 \| r:F7b4bB0e23Da4FeBF7B7C | ![F3](scenario-5e-rt-erc20/d1-06-f3-p0.png) |
+| 1.7 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Mainnet | ![NETWORK](scenario-5e-rt-erc20/d1-07-network-p0.png) |
+| 1.8 | `F5` | 1 | id=F5 lab="MAX FEE/GWEI" cap="" \| r:10 \| r:Tip/gwei: \| r:2 | ![F5](scenario-5e-rt-erc20/d1-08-f5-p0.png) |
+| 1.9 | `F6` | 1 | id=F6 lab="" cap="" \| s:Max total/ETH: \| r:0.0058 \| r:Gas:580000 | ![F6](scenario-5e-rt-erc20/d1-09-f6-p0.png) |
+| 1.10 | `NONCE` | 1 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000000 \| r:0000000000000000 \| r:0000000000000000 | ![NONCE](scenario-5e-rt-erc20/d1-10-nonce-p0.png) |
+| 1.10 | `NONCE` | 2 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000053 | ![NONCE](scenario-5e-rt-erc20/d1-10-nonce-p1.png) |
+| 1.11 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e-rt-erc20/d1-11-signer-p0.png) |
+| 1.12 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xbe4050a73a7Fb384c65 \| r:E885a15C33461A4B20055 | ![TARGET](scenario-5e-rt-erc20/d1-12-target-p0.png) |
+| 1.13 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e-rt-erc20/d1-13-gaslane-p0.png) |
+| 1.13 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e-rt-erc20/d1-13-gaslane-p1.png) |
+| 1.14 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5e-rt-erc20/d1-14-fp8213-p0.png) |
+| 1.15 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x55fea8fa20d61df0015cfb \| r:2209e72846a391a1fbce11 \| r:20398e4f71abe9efc133 | ![DIGEST](scenario-5e-rt-erc20/d1-15-digest-p0.png) |
+| 1.16 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN DEPOSIT COLLATERAL?" | ![SIGN](scenario-5e-rt-erc20/d1-16-sign-p0.png) |
+| 2.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN DEPOSIT COLLATERAL?" | ![SIGN](scenario-5e-rt-erc20/d2-00-sign-p0.png) |
+| 2.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 2 of 2 | ![BATCH](scenario-5e-rt-erc20/d2-01-batch-p0.png) |
+| 2.2 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5e-rt-erc20/d2-02-dev-p0.png) |
+| 2.3 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Deposit collateral \| r:PositionsManage | ![INTENT](scenario-5e-rt-erc20/d2-03-intent-p0.png) |
+| 2.4 | `F2` | 1 | id=F2 lab="AMOUNT" cap="" \| r:100 USDT | ![F2](scenario-5e-rt-erc20/d2-04-f2-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e-rt-erc20/d2-05-confirm-p0.png) |
+| 2.6 | `F3` | 1 | id=F3 lab="" cap="" \| s:Token contract \| r:0xdAC17F958D2ee523a22 \| r:06206994597C13D831ec7 | ![F3](scenario-5e-rt-erc20/d2-06-f3-p0.png) |
+| 2.7 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Mainnet | ![NETWORK](scenario-5e-rt-erc20/d2-07-network-p0.png) |
+| 2.8 | `F5` | 1 | id=F5 lab="MAX FEE/GWEI" cap="" \| r:10 \| r:Tip/gwei: \| r:2 | ![F5](scenario-5e-rt-erc20/d2-08-f5-p0.png) |
+| 2.9 | `F6` | 1 | id=F6 lab="" cap="" \| s:Max total/ETH: \| r:0.0058 \| r:Gas:580000 | ![F6](scenario-5e-rt-erc20/d2-09-f6-p0.png) |
+| 2.10 | `NONCE` | 1 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000000 \| r:0000000000000000 \| r:0000000000000000 | ![NONCE](scenario-5e-rt-erc20/d2-10-nonce-p0.png) |
+| 2.10 | `NONCE` | 2 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000053 | ![NONCE](scenario-5e-rt-erc20/d2-10-nonce-p1.png) |
+| 2.11 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e-rt-erc20/d2-11-signer-p0.png) |
+| 2.12 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xbe4050a73a7Fb384c65 \| r:E885a15C33461A4B20055 | ![TARGET](scenario-5e-rt-erc20/d2-12-target-p0.png) |
+| 2.13 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e-rt-erc20/d2-13-gaslane-p0.png) |
+| 2.13 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e-rt-erc20/d2-13-gaslane-p1.png) |
+| 2.14 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5e-rt-erc20/d2-14-fp8213-p0.png) |
+| 2.15 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x7c6995addaedc5a6fe877e \| r:e8d04bc4ccb87091fe736a \| r:fa33cd7face5becf55a7 | ![DIGEST](scenario-5e-rt-erc20/d2-15-digest-p0.png) |
+| 2.16 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN DEPOSIT COLLATERAL?" | ![SIGN](scenario-5e-rt-erc20/d2-16-sign-p0.png) |
+| 3.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 2 TXS?" | ![SIGN](scenario-5e-rt-erc20/d3-00-sign-p0.png) |
+| 3.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| r:Txs in batch: 2 \| r:each confirmed \| r:one signature | ![BATCH](scenario-5e-rt-erc20/d3-01-batch-p0.png) |
+| 3.2 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5e-rt-erc20/d3-02-signer-p0.png) |
+| 3.3 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5e-rt-erc20/d3-03-gaslane-p0.png) |
+| 3.3 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5e-rt-erc20/d3-03-gaslane-p1.png) |
+| 3.4 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:Raw32 Hash | ![FP8213](scenario-5e-rt-erc20/d3-04-fp8213-p0.png) |
+| 3.5 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x6578f34faa792757c2783f \| r:9738f2b3778bd1f417e414 \| r:3375f8b5e5c8fcef99a6 | ![DIGEST](scenario-5e-rt-erc20/d3-05-digest-p0.png) |
+| 3.6 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 2 TXS?" | ![SIGN](scenario-5e-rt-erc20/d3-06-sign-p0.png) |
+
+## Scenario 5f: degenerate 1-tx batch
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 1.0 | `SEND` | 1 | id=SEND lab="" cap="SEND ETH?" | ![SEND](scenario-5f/d1-00-send-p0.png) |
+| 1.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 1 of 1 | ![BATCH](scenario-5f/d1-01-batch-p0.png) |
+| 1.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5f/d1-02-network-p0.png) |
+| 1.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xB0B0b0B0B0B0 \| r:B0b0B0B0B0b0b0 \| r:b0b0B0b0b0B0B0 | ![TO](scenario-5f/d1-03-to-p0.png) |
+| 1.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:1 wei | ![VALUE](scenario-5f/d1-04-value-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5f/d1-05-confirm-p0.png) |
+| 1.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5f/d1-06-maxfee-p0.png) |
+| 1.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5f/d1-07-worst-p0.png) |
+| 1.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 9 \| r:Data: 0 B | ![DETAILS](scenario-5f/d1-08-details-p0.png) |
+| 1.9 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:1 \| r:wei | ![NATIVE](scenario-5f/d1-09-native-p0.png) |
+| 1.10 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5f/d1-10-signer-p0.png) |
+| 1.11 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xB0B0b0B0B0B0 \| r:B0b0B0B0B0b0b0 \| r:b0b0B0b0b0B0B0 | ![TARGET](scenario-5f/d1-11-target-p0.png) |
+| 1.12 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5f/d1-12-gaslane-p0.png) |
+| 1.12 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5f/d1-12-gaslane-p1.png) |
+| 1.13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5f/d1-13-fp8213-p0.png) |
+| 1.14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x290decd9548b62a8d60345 \| r:a988386fc84ba6bc954840 \| r:08f6362f93160ef3e563 | ![DIGEST](scenario-5f/d1-14-digest-p0.png) |
+| 1.15 | `SEND` | 1 | id=SEND lab="" cap="SEND ETH?" | ![SEND](scenario-5f/d1-15-send-p0.png) |
+| 2.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 1 TXS?" | ![SIGN](scenario-5f/d2-00-sign-p0.png) |
+| 2.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| r:Txs in batch: 1 \| r:each confirmed \| r:one signature | ![BATCH](scenario-5f/d2-01-batch-p0.png) |
+| 2.2 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5f/d2-02-signer-p0.png) |
+| 2.3 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5f/d2-03-gaslane-p0.png) |
+| 2.3 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5f/d2-03-gaslane-p1.png) |
+| 2.4 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:Raw32 Hash | ![FP8213](scenario-5f/d2-04-fp8213-p0.png) |
+| 2.5 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x13bb430379e55c3c8ec8e0 \| r:948c462d9991432ce38607 \| r:c053d4300a418e9cf1b5 | ![DIGEST](scenario-5f/d2-05-digest-p0.png) |
+| 2.6 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 1 TXS?" | ![SIGN](scenario-5f/d2-06-sign-p0.png) |
+
+## Scenario 5g: max-size batch (N=MAX_BATCH_TXS)
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 1.0 | `CALL` | 1 | id=CALL lab="" cap="CONFIRM CONTRACT CALL?" | ![CALL](scenario-5g/d1-00-call-p0.png) |
+| 1.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 1 of 4 | ![BATCH](scenario-5g/d1-01-batch-p0.png) |
+| 1.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5g/d1-02-network-p0.png) |
+| 1.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xC0C0c0c0C0C0 \| r:c0c0c0C0c0C0C0 \| r:C0C0C0C0C0c0c0 | ![TO](scenario-5g/d1-03-to-p0.png) |
+| 1.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000000 ETH | ![VALUE](scenario-5g/d1-04-value-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5g/d1-05-confirm-p0.png) |
+| 1.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5g/d1-06-maxfee-p0.png) |
+| 1.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5g/d1-07-worst-p0.png) |
+| 1.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 10 \| r:Data: 0 B | ![DETAILS](scenario-5g/d1-08-details-p0.png) |
+| 1.9 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5g/d1-09-signer-p0.png) |
+| 1.10 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xC0C0c0c0C0C0 \| r:c0c0c0C0c0C0C0 \| r:C0C0C0C0C0c0c0 | ![TARGET](scenario-5g/d1-10-target-p0.png) |
+| 1.11 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5g/d1-11-gaslane-p0.png) |
+| 1.11 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5g/d1-11-gaslane-p1.png) |
+| 1.12 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5g/d1-12-fp8213-p0.png) |
+| 1.13 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x290decd9548b62a8d60345 \| r:a988386fc84ba6bc954840 \| r:08f6362f93160ef3e563 | ![DIGEST](scenario-5g/d1-13-digest-p0.png) |
+| 1.14 | `CALL` | 1 | id=CALL lab="" cap="CONFIRM CONTRACT CALL?" | ![CALL](scenario-5g/d1-14-call-p0.png) |
+| 2.0 | `SEND` | 1 | id=SEND lab="" cap="SEND 0.000001 ETH?" | ![SEND](scenario-5g/d2-00-send-p0.png) |
+| 2.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 2 of 4 | ![BATCH](scenario-5g/d2-01-batch-p0.png) |
+| 2.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5g/d2-02-network-p0.png) |
+| 2.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xC1C1c1c1C1C1 \| r:C1c1c1C1C1C1c1 \| r:C1C1C1c1C1c1c1 | ![TO](scenario-5g/d2-03-to-p0.png) |
+| 2.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000001 ETH | ![VALUE](scenario-5g/d2-04-value-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5g/d2-05-confirm-p0.png) |
+| 2.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5g/d2-06-maxfee-p0.png) |
+| 2.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5g/d2-07-worst-p0.png) |
+| 2.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 10 \| r:Data: 0 B | ![DETAILS](scenario-5g/d2-08-details-p0.png) |
+| 2.9 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.000001 ETH | ![NATIVE](scenario-5g/d2-09-native-p0.png) |
+| 2.10 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5g/d2-10-signer-p0.png) |
+| 2.11 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xC1C1c1c1C1C1 \| r:C1c1c1C1C1C1c1 \| r:C1C1C1c1C1c1c1 | ![TARGET](scenario-5g/d2-11-target-p0.png) |
+| 2.12 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5g/d2-12-gaslane-p0.png) |
+| 2.12 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5g/d2-12-gaslane-p1.png) |
+| 2.13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5g/d2-13-fp8213-p0.png) |
+| 2.14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x290decd9548b62a8d60345 \| r:a988386fc84ba6bc954840 \| r:08f6362f93160ef3e563 | ![DIGEST](scenario-5g/d2-14-digest-p0.png) |
+| 2.15 | `SEND` | 1 | id=SEND lab="" cap="SEND 0.000001 ETH?" | ![SEND](scenario-5g/d2-15-send-p0.png) |
+| 3.0 | `SEND` | 1 | id=SEND lab="" cap="SEND 0.000002 ETH?" | ![SEND](scenario-5g/d3-00-send-p0.png) |
+| 3.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 3 of 4 | ![BATCH](scenario-5g/d3-01-batch-p0.png) |
+| 3.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5g/d3-02-network-p0.png) |
+| 3.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xc2C2C2C2C2C2 \| r:c2c2c2c2C2C2c2 \| r:C2C2C2C2C2c2C2 | ![TO](scenario-5g/d3-03-to-p0.png) |
+| 3.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000002 ETH | ![VALUE](scenario-5g/d3-04-value-p0.png) |
+| 3.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5g/d3-05-confirm-p0.png) |
+| 3.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5g/d3-06-maxfee-p0.png) |
+| 3.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5g/d3-07-worst-p0.png) |
+| 3.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 10 \| r:Data: 0 B | ![DETAILS](scenario-5g/d3-08-details-p0.png) |
+| 3.9 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.000002 ETH | ![NATIVE](scenario-5g/d3-09-native-p0.png) |
+| 3.10 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5g/d3-10-signer-p0.png) |
+| 3.11 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xc2C2C2C2C2C2 \| r:c2c2c2c2C2C2c2 \| r:C2C2C2C2C2c2C2 | ![TARGET](scenario-5g/d3-11-target-p0.png) |
+| 3.12 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5g/d3-12-gaslane-p0.png) |
+| 3.12 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5g/d3-12-gaslane-p1.png) |
+| 3.13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5g/d3-13-fp8213-p0.png) |
+| 3.14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x290decd9548b62a8d60345 \| r:a988386fc84ba6bc954840 \| r:08f6362f93160ef3e563 | ![DIGEST](scenario-5g/d3-14-digest-p0.png) |
+| 3.15 | `SEND` | 1 | id=SEND lab="" cap="SEND 0.000002 ETH?" | ![SEND](scenario-5g/d3-15-send-p0.png) |
+| 4.0 | `SEND` | 1 | id=SEND lab="" cap="SEND 0.000003 ETH?" | ![SEND](scenario-5g/d4-00-send-p0.png) |
+| 4.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| s:BATCH SIGN \| r:Tx 4 of 4 | ![BATCH](scenario-5g/d4-01-batch-p0.png) |
+| 4.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5g/d4-02-network-p0.png) |
+| 4.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xc3c3c3c3c3c3 \| r:c3c3c3C3C3c3C3 \| r:C3C3c3C3C3c3c3 | ![TO](scenario-5g/d4-03-to-p0.png) |
+| 4.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000003 ETH | ![VALUE](scenario-5g/d4-04-value-p0.png) |
+| 4.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5g/d4-05-confirm-p0.png) |
+| 4.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5g/d4-06-maxfee-p0.png) |
+| 4.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5g/d4-07-worst-p0.png) |
+| 4.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 10 \| r:Data: 0 B | ![DETAILS](scenario-5g/d4-08-details-p0.png) |
+| 4.9 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.000003 ETH | ![NATIVE](scenario-5g/d4-09-native-p0.png) |
+| 4.10 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5g/d4-10-signer-p0.png) |
+| 4.11 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xc3c3c3c3c3c3 \| r:c3c3c3C3C3c3C3 \| r:C3C3c3C3C3c3c3 | ![TARGET](scenario-5g/d4-11-target-p0.png) |
+| 4.12 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5g/d4-12-gaslane-p0.png) |
+| 4.12 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5g/d4-12-gaslane-p1.png) |
+| 4.13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5g/d4-13-fp8213-p0.png) |
+| 4.14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x290decd9548b62a8d60345 \| r:a988386fc84ba6bc954840 \| r:08f6362f93160ef3e563 | ![DIGEST](scenario-5g/d4-14-digest-p0.png) |
+| 4.15 | `SEND` | 1 | id=SEND lab="" cap="SEND 0.000003 ETH?" | ![SEND](scenario-5g/d4-15-send-p0.png) |
+| 5.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 4 TXS?" | ![SIGN](scenario-5g/d5-00-sign-p0.png) |
+| 5.1 | `BATCH` | 1 | id=BATCH lab="BATCH" cap="" \| r:Txs in batch: 4 \| r:each confirmed \| r:one signature | ![BATCH](scenario-5g/d5-01-batch-p0.png) |
+| 5.2 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5g/d5-02-signer-p0.png) |
+| 5.3 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:60000 \| r:Verify:400000 \| r:PreVer:120000 | ![GASLANE](scenario-5g/d5-03-gaslane-p0.png) |
+| 5.3 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:580000 | ![GASLANE](scenario-5g/d5-03-gaslane-p1.png) |
+| 5.4 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:Raw32 Hash | ![FP8213](scenario-5g/d5-04-fp8213-p0.png) |
+| 5.5 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x1a0bcace677e43cf3f5684 \| r:60c2e9a80e152441c15fa1 \| r:8892c1a98b1501676c2f | ![DIGEST](scenario-5g/d5-05-digest-p0.png) |
+| 5.6 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN 4 TXS?" | ![SIGN](scenario-5g/d5-06-sign-p0.png) |
+
+## Scenario 5m: ERC-7730 trailer matches + signs
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN WRAP?" | ![SIGN](scenario-5m/00-sign-p0.png) |
+| 1 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5m/01-dev-p0.png) |
+| 2 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Wrap \| r:WETH \| r:WETH | ![INTENT](scenario-5m/02-intent-p0.png) |
+| 3 | `F2` | 1 | id=F2 lab="AMOUNT" cap="" \| r:0.01 ETH | ![F2](scenario-5m/03-f2-p0.png) |
+| 4 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5m/04-network-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5m/05-confirm-p0.png) |
+| 6 | `F4` | 1 | id=F4 lab="MAX FEE/GWEI" cap="" \| r:10 \| r:Tip/gwei: \| r:2 | ![F4](scenario-5m/06-f4-p0.png) |
+| 7 | `F5` | 1 | id=F5 lab="" cap="" \| s:Max total/ETH: \| r:0.0045 \| r:Gas:450000 | ![F5](scenario-5m/07-f5-p0.png) |
+| 8 | `NONCE` | 1 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000000 \| r:0000000000000000 \| r:0000000000000000 | ![NONCE](scenario-5m/08-nonce-p0.png) |
+| 8 | `NONCE` | 2 | id=NONCE lab="NONCE (HEX)" cap="" \| r:000000000000002a | ![NONCE](scenario-5m/08-nonce-p1.png) |
+| 9 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.010000 ETH | ![NATIVE](scenario-5m/09-native-p0.png) |
+| 10 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5m/10-signer-p0.png) |
+| 11 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0xfFf9976782d46CC0563 \| r:0D1f6eBAb18b2324d6B14 | ![TARGET](scenario-5m/11-target-p0.png) |
+| 12 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:50000 \| r:Verify:300000 \| r:PreVer:100000 | ![GASLANE](scenario-5m/12-gaslane-p0.png) |
+| 12 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:450000 | ![GASLANE](scenario-5m/12-gaslane-p1.png) |
+| 13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5m/13-fp8213-p0.png) |
+| 14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x9e0e1b38823d3ef404d2bf \| r:8305dbf9a8d25df6806279 \| r:99452c844afce8db8319 | ![DIGEST](scenario-5m/14-digest-p0.png) |
+| 15 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN WRAP?" | ![SIGN](scenario-5m/15-sign-p0.png) |
+
+## Scenario 5p: EIP-712 typed sign + binding differential
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN DELEGATE?" | ![SIGN](scenario-5p/00-sign-p0.png) |
+| 1 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5p/01-dev-p0.png) |
+| 2 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Delegate \| r:PQSigner \| r:E2E Delegate | ![INTENT](scenario-5p/02-intent-p0.png) |
+| 3 | `F2` | 1 | id=F2 lab="DELEGATEE" cap="" \| r:0x4242424242424242424 \| r:242424242424242424242 | ![F2](scenario-5p/03-f2-p0.png) |
+| 4 | `F3` | 1 | id=F3 lab="NONCE" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![F3](scenario-5p/04-f3-p0.png) |
+| 4 | `F3` | 2 | id=F3 lab="NONCE" cap="" \| r:0000000000000000 \| r:0000000000000007 | ![F3](scenario-5p/04-f3-p1.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5p/05-confirm-p0.png) |
+| 6 | `F5` | 1 | id=F5 lab="EXPIRY" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![F5](scenario-5p/06-f5-p0.png) |
+| 6 | `F5` | 2 | id=F5 lab="EXPIRY" cap="" \| r:0000000000000000 \| r:0000000077359400 | ![F5](scenario-5p/06-f5-p1.png) |
+| 7 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p/07-network-p0.png) |
+| 8 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:EIP-712 Final | ![FP8213](scenario-5p/08-fp8213-p0.png) |
+| 9 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xea57cad152799a4828cc58 \| r:866ebd967a28c63b836c79 \| r:88c373a904ded022e9ed | ![DIGEST](scenario-5p/09-digest-p0.png) |
+| 10 | `OFFSIGNR` | 1 | id=OFFSIGNR lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![OFFSIGNR](scenario-5p/10-offsignr-p0.png) |
+| 11 | `WALLET` | 1 | id=WALLET lab="WALLET" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![WALLET](scenario-5p/11-wallet-p0.png) |
+| 12 | `MODE` | 1 | id=MODE lab="MODE" cap="" \| r:DEPLOYED EIP1271 \| r:Use 1/65536 \| r:Gap: 1 | ![MODE](scenario-5p/12-mode-p0.png) |
+| 13 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN DELEGATE?" | ![SIGN](scenario-5p/13-sign-p0.png) |
+
+## Scenario 5p-personal: personal_sign off-chain signature
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal/00-sign-p0.png) |
+| 1 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-personal/01-network-p0.png) |
+| 2 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-personal/02-mode-p0.png) |
+| 3 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-personal/03-account-p0.png) |
+| 4 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5p-personal/04-signer-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5p-personal/05-confirm-p0.png) |
+| 6 | `MSG` | 1 | id=MSG lab="MESSAGE" cap="" \| r:Login to app.example. \| r:com? Nonce: \| r:8f3a9c2e1b | ![MSG](scenario-5p-personal/06-msg-p0.png) |
+| 7 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:2/65536 keys used \| r:Gap: 2 | ![KEYS](scenario-5p-personal/07-keys-p0.png) |
+| 8 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5p-personal/08-fp8213-p0.png) |
+| 9 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xa72199a4ddd6ba427bb621 \| r:6846cb41412c6c5fcdaffe \| r:53454d121bacefb42a98 | ![DIGEST](scenario-5p-personal/09-digest-p0.png) |
+| 10 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal/10-sign-p0.png) |
+
+## Scenario 5p-raw32: RAW32 off-chain signature
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN BLIND HASH?" | ![SIGN](scenario-5p-raw32/00-sign-p0.png) |
+| 1 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-raw32/01-network-p0.png) |
+| 2 | `BLIND` | 1 | id=BLIND lab="BLIND" cap="" \| s:! BLIND RAW32 \| r:Hash only, no text \| r:Check it on the dapp | ![BLIND](scenario-5p-raw32/02-blind-p0.png) |
+| 3 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-raw32/03-mode-p0.png) |
+| 4 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-raw32/04-account-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5p-raw32/05-confirm-p0.png) |
+| 6 | `HASH` | 1 | id=HASH lab="HASH" cap="" \| r:0x7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d | ![HASH](scenario-5p-raw32/06-hash-p0.png) |
+| 7 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:3/65536 keys used \| r:Gap: 3 | ![KEYS](scenario-5p-raw32/07-keys-p0.png) |
+| 8 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:Raw32 Hash | ![FP8213](scenario-5p-raw32/08-fp8213-p0.png) |
+| 9 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d | ![DIGEST](scenario-5p-raw32/09-digest-p0.png) |
+| 10 | `FP8213B` | 1 | id=FP8213B lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:ReplaySafe Hash | ![FP8213B](scenario-5p-raw32/10-fp8213b-p0.png) |
+| 11 | `DIGEST2` | 1 | id=DIGEST2 lab="DIGEST" cap="" \| r:0xe73b69fffa2632cdf49b8f \| r:e320b4dc2c4ff98b0132c2 \| r:8395360b7d8f9d63ee65 | ![DIGEST2](scenario-5p-raw32/11-digest2-p0.png) |
+| 12 | `OFFSIGNR` | 1 | id=OFFSIGNR lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![OFFSIGNR](scenario-5p-raw32/12-offsignr-p0.png) |
+| 13 | `WALLET` | 1 | id=WALLET lab="WALLET" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![WALLET](scenario-5p-raw32/13-wallet-p0.png) |
+| 14 | `MODE` | 1 | id=MODE lab="MODE" cap="" \| r:DEPLOYED EIP1271 \| r:Use 3/65536 \| r:Gap: 3 | ![MODE](scenario-5p-raw32/14-mode-p0.png) |
+| 15 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN BLIND HASH?" | ![SIGN](scenario-5p-raw32/15-sign-p0.png) |
+
 ## Scenario 5q: Safe-wrapped CoW presign clear-sign
 
 | # | id | page | record text | frame |
@@ -424,6 +810,34 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 20 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5q/20-fp8213-p0.png) |
 | 21 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x3dee5d6d0369427ec99609 \| r:55135f1f30f980b42d9067 \| r:469b908aed5a14b959fd | ![DIGEST](scenario-5q/21-digest-p0.png) |
 | 22 | `APPROVE` | 1 | id=APPROVE lab="" cap="APPROVE SAFE TX?" | ![APPROVE](scenario-5q/22-approve-p0.png) |
+
+## Scenario 5q-direct: direct CoW order clear-sign
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN COWSWAP?" | ![SIGN](scenario-5q-direct/00-sign-p0.png) |
+| 1 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5q-direct/01-network-p0.png) |
+| 2 | `ORDER` | 1 | id=ORDER lab="ORDER" cap="" \| r:SELL order | ![ORDER](scenario-5q-direct/02-order-p0.png) |
+| 3 | `SELLTOK` | 1 | id=SELLTOK lab="SELL TOKEN" cap="" \| r:0xC02aaA39b223 \| r:FE8D0A0e5C4F27 \| r:eAD9083C756Cc2 | ![SELLTOK](scenario-5q-direct/03-selltok-p0.png) |
+| 4 | `SELLAMT` | 1 | id=SELLAMT lab="SELL" cap="" \| r:0x0000000000000000000000 \| r:0000000000000000000000 \| r:000006f05b59d3b20000 | ![SELLAMT](scenario-5q-direct/04-sellamt-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5q-direct/05-confirm-p0.png) |
+| 6 | `BUYTOK` | 1 | id=BUYTOK lab="BUY TOKEN" cap="" \| r:0xA0b86991c6218b36c1d \| r:19D4a2e9Eb0cE3606eB48 | ![BUYTOK](scenario-5q-direct/06-buytok-p0.png) |
+| 7 | `BUYAMT` | 1 | id=BUYAMT lab="BUY MIN" cap="" \| r:0x0000000000000000000000 \| r:0000000000000000000000 \| r:0000000000006dcf6b70 | ![BUYAMT](scenario-5q-direct/07-buyamt-p0.png) |
+| 8 | `RECEIVER` | 1 | id=RECEIVER lab="RECEIVER" cap="" \| r:0x0000000000000000000 \| r:000000000000000000000 | ![RECEIVER](scenario-5q-direct/08-receiver-p0.png) |
+| 9 | `EXPIRES` | 1 | id=EXPIRES lab="EXPIRES" cap="" \| r:unix 1744830464 \| r:Partial: no | ![EXPIRES](scenario-5q-direct/09-expires-p0.png) |
+| 10 | `FEE` | 1 | id=FEE lab="FEE (SELL)" cap="" \| r:0 units | ![FEE](scenario-5q-direct/10-fee-p0.png) |
+| 11 | `SOURCES` | 1 | id=SOURCES lab="SOURCES" cap="" \| r:sell: erc20 \| r:buy: erc20 | ![SOURCES](scenario-5q-direct/11-sources-p0.png) |
+| 12 | `APPDATA` | 1 | id=APPDATA lab="APP DATA" cap="" \| r:0x0000000000000000 \| r:0000000000000000 | ![APPDATA](scenario-5q-direct/12-appdata-p0.png) |
+| 12 | `APPDATA` | 2 | id=APPDATA lab="APP DATA" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![APPDATA](scenario-5q-direct/12-appdata-p1.png) |
+| 13 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5q-direct/13-maxfee-p0.png) |
+| 14 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-5q-direct/14-worst-p0.png) |
+| 15 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5q-direct/15-signer-p0.png) |
+| 16 | `TARGET` | 1 | id=TARGET lab="TARGET" cap="" \| r:0x9008D19f58AAbD9eD0D \| r:60971565AA8510560ab41 | ![TARGET](scenario-5q-direct/16-target-p0.png) |
+| 17 | `GASLANE` | 1 | id=GASLANE lab="GAS LANE" cap="" \| r:Call:50000 \| r:Verify:300000 \| r:PreVer:100000 | ![GASLANE](scenario-5q-direct/17-gaslane-p0.png) |
+| 17 | `GASLANE` | 2 | id=GASLANE lab="GAS LANE" cap="" \| r:Total:450000 | ![GASLANE](scenario-5q-direct/17-gaslane-p1.png) |
+| 18 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5q-direct/18-fp8213-p0.png) |
+| 19 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x7e2f6fe5267d92010dfdd5 \| r:753ca605616cab88a3c166 \| r:856be86dfb87320f4fd6 | ![DIGEST](scenario-5q-direct/19-digest-p0.png) |
+| 20 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN COWSWAP?" | ![SIGN](scenario-5q-direct/20-sign-p0.png) |
 
 ## Scenario 5s: multiSend (approve+presign) safe-wrapped CoW clear-sign
 

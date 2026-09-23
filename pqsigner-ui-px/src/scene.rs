@@ -347,7 +347,7 @@ fn tinted_style(i: u8) -> DiscStyle {
 #[must_use]
 pub fn disc_style(icon: Option<Icon>, tint: Option<u8>) -> DiscStyle {
     if let (Some(t), Some(i)) = (tint, icon) {
-        if t < N_RAMPS && !matches!(i, Icon::Safe | Icon::Fingerprint | Icon::Chain) {
+        if t < N_RAMPS && !matches!(i, Icon::Safe | Icon::Cowswap | Icon::Fingerprint | Icon::Chain) {
             return tinted_style(t);
         }
     }
@@ -359,6 +359,17 @@ pub fn disc_style(icon: Option<Icon>, tint: Option<u8>) -> DiscStyle {
             trail: Rgb::SAFE_TRAIL,
             film_white: false,
             film: Rgb::SAFE_FILL,
+            branded: true,
+        },
+        // CoW Swap: the navy cow head on the brand disc, the brand trail;
+        // like Safe its endings fill the disc (status.branded_resting).
+        Some(Icon::Cowswap) => DiscStyle {
+            fill: Rgb::COWSWAP_FILL,
+            ring: Rgb::BLACK,
+            mark: Rgb::COWSWAP_NAVY,
+            trail: Rgb::COWSWAP_TRAIL,
+            film_white: false,
+            film: Rgb::COWSWAP_FILL,
             branded: true,
         },
         Some(Icon::Fingerprint) => DiscStyle {
@@ -410,6 +421,7 @@ pub struct Marks<'a> {
     pub dai: Option<Mask<'a>>,
     pub blind: Option<Mask<'a>>,
     pub rotate: Option<Mask<'a>>,
+    pub cowswap: Option<Mask<'a>>,
 }
 
 impl<'a> Marks<'a> {
@@ -427,6 +439,7 @@ impl<'a> Marks<'a> {
             Some(Icon::Dai) => self.dai,
             Some(Icon::Blind) => self.blind,
             Some(Icon::Rotate) => self.rotate,
+            Some(Icon::Cowswap) => self.cowswap,
             Some(Icon::Wallet | Icon::None) | None => None,
         }
     }
@@ -999,11 +1012,15 @@ impl Anim {
     }
 
     /// The resting look an ending lands on: (fill, ring, mark colour).
-    /// A branded family fills the disc (Safe: `#13FF7F` / the shared red
-    /// cancel disc, black stroke, black mark); an unbranded one keeps the
-    /// black disc and strokes ring + result mark in the state colour.
-    fn resting(e: Ending, branded: bool) -> (Rgb, Rgb, Rgb) {
-        match (e, branded) {
+    /// A branded family fills the disc (Safe: `#13FF7F`, black mark; CoW
+    /// Swap: `#65D9FF`, navy mark; both share the red cancel disc and the
+    /// black stroke); an unbranded one keeps the black disc and strokes
+    /// ring + result mark in the state colour.
+    fn resting(e: Ending, style: &DiscStyle) -> (Rgb, Rgb, Rgb) {
+        match (e, style.branded) {
+            (Ending::Signed, true) if style.fill == Rgb::COWSWAP_FILL => {
+                (Rgb::COWSWAP_FILL, Rgb::BLACK, Rgb::COWSWAP_NAVY)
+            }
             (Ending::Signed, true) => (Rgb::SAFE_FILL, Rgb::BLACK, Rgb::BLACK),
             (Ending::Declined, true) => (Rgb::RED, Rgb::BLACK, Rgb::BLACK),
             (Ending::Signed, false) => (Rgb::BLACK, Rgb::GREEN, Rgb::GREEN),
@@ -1032,7 +1049,7 @@ impl Anim {
                 let p = film.pose(now);
                 let cx = self.sx.value >> 8;
                 let cy = self.sy.value >> 8;
-                let (fill, ring, mark_c) = Self::resting(outcome, style.branded);
+                let (fill, ring, mark_c) = Self::resting(outcome, style);
                 let state = match outcome {
                     Ending::Signed => Rgb::GREEN,
                     Ending::Declined => Rgb::RED,
@@ -1087,7 +1104,7 @@ impl Anim {
                     }
                     Phase::Flash | Phase::Result => {
                         let e = outcome.unwrap_or(Ending::Declined);
-                        let (fill, ring, mark_c) = Self::resting(e, style.branded);
+                        let (fill, ring, mark_c) = Self::resting(e, style);
                         let state = match e {
                             Ending::Signed => Rgb::GREEN,
                             Ending::Declined => Rgb::RED,
@@ -1365,8 +1382,9 @@ mod tests {
             dai: m(1),
             blind: m(1),
             rotate: m(1),
+            cowswap: m(1),
         };
-        for icon in [Icon::Safe, Icon::Chain, Icon::Eth, Icon::Usdc, Icon::Usdt, Icon::Dai, Icon::Blind, Icon::Rotate] {
+        for icon in [Icon::Safe, Icon::Chain, Icon::Eth, Icon::Usdc, Icon::Usdt, Icon::Dai, Icon::Blind, Icon::Rotate, Icon::Cowswap] {
             assert!(marks.for_icon(Some(icon)).is_some(), "{icon:?}");
         }
         assert!(marks.for_icon(Some(Icon::None)).is_none());
@@ -1386,9 +1404,14 @@ mod tests {
         let bare = ScreenBuilder::status(b"SIGN", Icon::Safe, b"", State::Awaiting, ResultMark::None).finish().unwrap();
         assert_eq!(ending_captions(&bare).0, b"SIGNED SAFE TX");
         // Resting looks: brand fills, the rest strokes in the state colour.
-        assert_eq!(Anim::resting(Ending::Signed, true).0, Rgb::SAFE_FILL);
-        assert_eq!(Anim::resting(Ending::Declined, true).0, Rgb::RED);
-        assert_eq!(Anim::resting(Ending::Signed, false), (Rgb::BLACK, Rgb::GREEN, Rgb::GREEN));
-        assert_eq!(Anim::resting(Ending::Declined, false), (Rgb::BLACK, Rgb::RED, Rgb::RED));
+        let safe = disc_style(Some(Icon::Safe), None);
+        let cow = disc_style(Some(Icon::Cowswap), None);
+        let eth = disc_style(Some(Icon::Eth), None);
+        assert_eq!(Anim::resting(Ending::Signed, &safe).0, Rgb::SAFE_FILL);
+        assert_eq!(Anim::resting(Ending::Declined, &safe).0, Rgb::RED);
+        assert_eq!(Anim::resting(Ending::Signed, &cow), (Rgb::COWSWAP_FILL, Rgb::BLACK, Rgb::COWSWAP_NAVY));
+        assert_eq!(Anim::resting(Ending::Declined, &cow), (Rgb::RED, Rgb::BLACK, Rgb::BLACK));
+        assert_eq!(Anim::resting(Ending::Signed, &eth), (Rgb::BLACK, Rgb::GREEN, Rgb::GREEN));
+        assert_eq!(Anim::resting(Ending::Declined, &eth), (Rgb::BLACK, Rgb::RED, Rgb::RED));
     }
 }

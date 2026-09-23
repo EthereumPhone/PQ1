@@ -87,6 +87,16 @@ impl OffchainConfirmContext {
         }
     }
 
+    /// The derived wallet (proxy) address the context names.
+    pub(crate) fn wallet_addr(&self) -> &[u8; 20] {
+        &self.wallet_addr
+    }
+
+    /// Whether the wallet is deployed (`false` = ERC-6492 wrapped).
+    pub(crate) fn account_deployed(&self) -> bool {
+        self.account_deployed
+    }
+
     fn receipt_digest(&self) -> [u8; 32] {
         let mut h = Sha256::new();
         h.update(OFFCHAIN_CONFIRM_DOMAIN);
@@ -237,7 +247,7 @@ pub(crate) fn eip1271_context_final_set_proof(
     })
 }
 
-fn build_context_pages(
+pub(crate) fn build_context_pages(
     context: &OffchainConfirmContext,
 ) -> [ContextPage; OFFCHAIN_CONTEXT_PAGES] {
     let mut out = [[[b' '; DISPLAY_COLS]; DISPLAY_ROWS]; OFFCHAIN_CONTEXT_PAGES];
