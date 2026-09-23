@@ -1,0 +1,6 @@
+OK   coverage: all 1890 top-level statements across 213 CONE files are pinned (roots 95 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 30 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   scope-probe linkage: 26 headline files <-> 26 registered scope probes (exact bijection)
+OK unique statement pins: 2166
+OK split static contract: 213 files; proof execution not performed

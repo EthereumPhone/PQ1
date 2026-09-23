@@ -1,0 +1,657 @@
+./home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/stmt_digest.py:50: ResourceWarning: unclosed file <_io.TextIOWrapper name='A.ec' mode='r' encoding='utf-8'>
+  body = strip_comments(io.open(path, encoding='utf-8', errors='replace').read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......../home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/stmt_coverage.py:51: ResourceWarning: unclosed file <_io.TextIOWrapper name='closure-c10-split.txt' mode='r' encoding='UTF-8'>
+  rs = [os.path.join(D, n.strip() + '.ec') for n in open('closure-c10-split.txt')
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/SPHINCS_PLUS.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/FL_SL_XMSS_MT_ES.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/WOTS_TW_ES.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/RadixEncoding.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/TweakableHashFunctions.eca' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/KeyedHashFunctions.eca' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/HashAddresses.eca' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/MerkleTrees.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/BinaryTrees.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/FORS_ES.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawForsPathReplay.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindReturned.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawHistoryPreservation.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PrefixGuess.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SecretPrefix.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10RawOracle.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10Randomizer.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10Counter.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10Bytes.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawSigner.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawLayer.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawMerkle.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawFors.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawKeygen.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/KeygenPrefixes.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RTailFresh.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RoleGrind.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PrefixHybrid.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10RawGrind.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10HashDomains.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10DeployedInstance.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SphincsC10Content.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SphincsC10CapstoneWired.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FORS_C10_Multi.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FORS_C10.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/BoundedIID.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocFORSC10.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FxChain.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RtopCSoundness.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/XmssmtCC_All.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/WOTS_C_Interactive.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/WOTS_C_Reduction.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/WOTS_C_Scheme.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/WOTS_C_Real.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/STCR_C.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/Grind.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/XMSSMT_C_Scheme.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawTrial.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawRHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RoleGrindCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawKeygenCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawWots.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawShuffle.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PhysicalKeygenCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PreparedRaw.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindExhaustion.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/StreamExpectation.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/TrialExpectation.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindTail.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FORSC10Digest.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/StreamBound.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PreparedExhaustion.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ExhaustionCharges.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PreparedGrind.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PreparedHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PrefixIdeal.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PrefixBound.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PrefixGames.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/KeygenExhaustion.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawForest.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PathOracle.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PathReplay.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/AcceptedContexts.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ContextExhaustion.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/IdealWitness.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RTailContexts.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RTailMessages.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PersistentGrind.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindWitness.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindReplay.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawPathReplay.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawForsComparison.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ForsLeafInputs.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RecoveryHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PathInputs.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PathCollision.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawPathComparison.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SignerTrace.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindTraceReplay.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindTraceRecorded.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/MonotoneHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindTrace.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SignerReturned.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/AcceptedSampling.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SignerAccepted.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/StreamAccepted.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/TrialAccepted.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ByteHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ByteSession.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FullSession.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawSignature.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawDecode.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawSlices.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawCodec.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FullHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/MessageHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/VerifierHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SignerRecorded.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RSessionHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RSession.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RHistoryOps.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PreparedFinish.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FullMessageHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SignerMessages.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ClassifiedSession.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ClassifiedSigner.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ClassifiedGrind.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ClassifiedHistory.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ClassifiedBound.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SessionDigest.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindHypertree.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/AcceptedHypertree.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/DigestWindow.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GrindJointCoverage.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/AcceptedCoverage.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FreshCoverage.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/DigestPrefix.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/DigestPair.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ByteReplay.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/DigestCoordinates.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/AuditComplete.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/AuditPrefix.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PrefixAudit.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ByteAudit.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/ByteBound.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FullPrefix.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FullSessionCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawSignerCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawLayerCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawMerkleCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawWotsCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawForestCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawForsCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/PrefixState.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FullFailure.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawSignerWidths.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawCompositeWidths.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawTreeWidths.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawWidths.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawSessionCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawSession.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SessionKeygen.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RSessionBound.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RSessionCost.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SessionClosedForm.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/RawSessionBound.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SessionPhysical.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10StatefulSearch.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SharedROBounded.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10HypertreeAccepted.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GFailCharged.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10BoundedMA.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10BoundedGame.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10BoundedSigning.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10BoundedGrind.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10BoundedHypertree.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10AcceptedReduction.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10ReductionForge.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10HypertreeCoverage.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10CubeCorrect.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10HypertreeCorrect.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10WOTSCorrect.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10ReductionChoose.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10CubeConstruction.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10HypertreeCharged.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/XmssmtCCCharged.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10SearchBounds.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10Surface.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10SurfaceKernel.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/CountDS.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/VecDP.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10Encoding.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10DigitUniform.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10BoundedIID.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10SharedSearch.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10BoundedLeaf.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10BoundedReduction.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocTCollNamed.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/BadEncStep4.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/BadEncToTColl.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/BadEncSplit.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/TCollResEnum.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocWotsNamed.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/WotsLegCharged.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10DeployedCapstone.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocQBound.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocT3Trco.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocVI.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocT2Trh.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocT1Opre.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocChargedQWired.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/GprocQWired.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/SphincsC10CapstoneCharged.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/BadEncCountermodel.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/DarkSideC10.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/DarkSide.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10SpecControls.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10DeployedScope.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/C10DeployedGeometry.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FORS_C_TreePort.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/FORS_C.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='cdrafts-split/WOTS_C_Multi.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/A.ec' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-path-correspondence/contracts/verification/easycrypt/c10-port/tools/cert_cone.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='base-c10-split/B.eca' mode='r' encoding='UTF-8'>
+  text = strip_comments(open(p).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.
+----------------------------------------------------------------------
+Ran 11 tests in 2.414s
+
+OK
+OK EasyCrypt manual source binding: 177 inputs (not extraction)
