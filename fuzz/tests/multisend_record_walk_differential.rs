@@ -96,6 +96,26 @@ const MS_ADDR: Address = Address::new([
     0x40, 0xA2, 0xaC, 0xCb, 0xd9, 0x2b, 0xCa, 0x93, 0x8b, 0x02, 0x01, 0x0E, 0x17, 0xA5, 0xb8, 0x92,
     0x9b, 0x49, 0x13, 0x0D,
 ]);
+
+/// Real deployed MultiSendCallOnly v1.5.0 runtime bytecode
+/// (`0xA83c336B20401Af773B6219BA5027174338D1836` — entry `[3]` of
+/// `MULTISEND_CALL_ONLY_ADDRESSES`; fetched via `cast code` on Base
+/// 2026-09-23, keccak = safe-deployments codeHash `0xcdbdcec3…6663`).
+/// Its record loop differs from v1.3.0: `to := or(to, mul(iszero(to),
+/// address()))` and revert-data bubbling. See the provenance note at
+/// the bottom of this file.
+const MS150_RUNTIME_HEX: &str = "60806040526004361061001e5760003560e01c80638d80ff0a14610023575b600080fd5b6100dc6004803603602081101561003957600080fd5b810190808035906020019064010000000081111561005657600080fd5b82018360208201111561006857600080fd5b8035906020019184600183028401116401000000008311171561008a57600080fd5b91908080601f016020809104026020016040519081016040528093929190818152602001838380828437600081840152601f19601f8201169050808301925050505050505091929192905050506100de565b005b805160205b8181101561016a578083015160f81c6001820184015160601c3081150281179050601583018501516035840186015160558501870160008560008114610130576001811461014057610145565b6000808585888a5af19150610145565b600080fd5b5080610157576040513d6000823e3d81fd5b82605501870196505050505050506100e3565b50505056fea26469706673582212201ad552da02f0e66afd7f2ad29a305f1d4c737610d3b9e7ce8c994444949e57d664736f6c63430007060033";
+
+const MS150_ADDR: Address = Address::new([
+    0xA8, 0x3c, 0x33, 0x6B, 0x20, 0x40, 0x1A, 0xf7, 0x73, 0xB6, 0x21, 0x9B, 0xA5, 0x02, 0x71, 0x74,
+    0x33, 0x8D, 0x18, 0x36,
+]);
+
+/// Every bytecode oracle the corpus is diffed against: `(label, runtime hex, address)`.
+const ORACLES: [(&str, &str, Address); 2] = [
+    ("v1.3.0", MS_RUNTIME_HEX, MS_ADDR),
+    ("v1.5.0", MS150_RUNTIME_HEX, MS150_ADDR),
+];
 const CALLER: Address = Address::new([0x11; 20]);
 
 /// A single CALL the EVM dispatched from inside `multiSend` — the
@@ -157,11 +177,16 @@ fn encode_multisend(packed: &[u8]) -> Vec<u8> {
 /// Run the real MultiSendCallOnly bytecode over `packed` and recover the
 /// dispatched record sequence. Returns `(tx_succeeded, calls)`.
 fn run_evm(packed: &[u8]) -> (bool, Vec<EvmCall>) {
-    let code = Bytecode::new_raw(Bytes::from(hex::decode(MS_RUNTIME_HEX).unwrap()));
+    run_evm_with(MS_RUNTIME_HEX, MS_ADDR, packed)
+}
+
+/// [`run_evm`] against an explicit oracle bytecode deployed at `ms_addr`.
+fn run_evm_with(runtime_hex: &str, ms_addr: Address, packed: &[u8]) -> (bool, Vec<EvmCall>) {
+    let code = Bytecode::new_raw(Bytes::from(hex::decode(runtime_hex).unwrap()));
     let big = U256::from(10u64).pow(U256::from(30u64)); // ≈ 2^99 ≫ any fundable record value
     let mut db = InMemoryDB::default();
     db.insert_account_info(
-        MS_ADDR,
+        ms_addr,
         AccountInfo {
             balance: big,
             nonce: 1,
@@ -192,7 +217,7 @@ fn run_evm(packed: &[u8]) -> (bool, Vec<EvmCall>) {
         caller: CALLER,
         gas_limit: 30_000_000,
         gas_price: 0,
-        kind: TxKind::Call(MS_ADDR),
+        kind: TxKind::Call(ms_addr),
         value: U256::ZERO,
         data: Bytes::from(calldata),
         nonce: 0,
@@ -218,7 +243,7 @@ struct RecordView {
     data: Vec<u8>,
 }
 
-/// `MsRecordIter` + the `summarize` hard rules (op==0, 1..=MAX records),
+/// `MsRecordIter` + the `summarize` hard rules (op==0, to!=0, 1..=MAX records),
 /// MINUS the `cow_binding` presign counting (kept pure). This is exactly
 /// the firmware's record-walk acceptance predicate.
 fn rust_decode_records(packed: &[u8]) -> Result<Vec<RecordView>, MsError> {
@@ -227,6 +252,9 @@ fn rust_decode_records(packed: &[u8]) -> Result<Vec<RecordView>, MsError> {
         let rec = rec?;
         if rec.operation != 0 {
             return Err(MsError::RecordOpNotCall);
+        }
+        if rec.to == [0u8; 20] {
+            return Err(MsError::RecordToZero);
         }
         if out.len() == MULTISEND_MAX_RECORDS {
             return Err(MsError::BadRecordCount);
@@ -337,6 +365,13 @@ fn handcrafted_corpus() -> Vec<(&'static str, Vec<u8>)> {
     }
 
     // op = 1 (nested DELEGATECALL) — MultiSendCallOnly reverts.
+    // to == 0: v1.5.0 rewrites it to address(this); firmware refuses it everywhere.
+    c.push(("record_to_zero", pack_record(0, &[0u8; 20], &v0, &[])));
+    {
+        let mut p = pack_record(0, &safe_to(14), &v0, &[0x22; 4]);
+        p.extend_from_slice(&pack_record(0, &[0u8; 20], &v0, &[]));
+        c.push(("second_record_to_zero", p));
+    }
     c.push(("record_op1", pack_record(1, &safe_to(4), &v0, &[0xaa; 4])));
     // op = 2 (undefined) and op = 255 — also revert.
     c.push(("record_op2", pack_record(2, &safe_to(5), &v0, &[])));
@@ -504,9 +539,15 @@ struct Tally {
 }
 
 fn classify(label: &str, packed: &[u8], t: &mut Tally) {
+    for (oracle, runtime_hex, ms_addr) in ORACLES {
+        classify_with(oracle, runtime_hex, ms_addr, label, packed, t);
+    }
+}
+
+fn classify_with(oracle: &str, runtime_hex: &str, ms_addr: Address, label: &str, packed: &[u8], t: &mut Tally) {
     t.total += 1;
     let rust = rust_decode_records(packed);
-    let (evm_ok, evm_calls) = run_evm(packed);
+    let (evm_ok, evm_calls) = run_evm_with(runtime_hex, ms_addr, packed);
 
     match &rust {
         Ok(records) => {
@@ -516,7 +557,7 @@ fn classify(label: &str, packed: &[u8], t: &mut Tally) {
                 t.accept_match += 1;
                 if t.accept_examples.len() < 4 {
                     t.accept_examples.push(format!(
-                        "{label}: ACCEPT {} record(s) → EVM dispatched identical sequence (e.g. rec0 to=0x{:02x}.., data_len={})",
+                        "[{oracle}] {label}: ACCEPT {} record(s) → EVM dispatched identical sequence (e.g. rec0 to=0x{:02x}.., data_len={})",
                         records.len(),
                         records[0].to[0],
                         records[0].data.len(),
@@ -526,6 +567,7 @@ fn classify(label: &str, packed: &[u8], t: &mut Tally) {
                 t.dangerous += 1;
                 panic!(
                     "DANGEROUS Rust-accept / EVM-disagree (POTENTIAL DECODER BUG)\n  \
+                     oracle  = {oracle}\n  \
                      label   = {label}\n  \
                      packed  = 0x{}\n  \
                      rust    = Ok({} records)\n  \
@@ -552,7 +594,7 @@ fn classify(label: &str, packed: &[u8], t: &mut Tally) {
                 t.both_reject += 1;
                 if t.both_reject_examples.len() < 4 {
                     t.both_reject_examples
-                        .push(format!("{label}: BOTH REJECT (Rust {e:?}, EVM revert)"));
+                        .push(format!("[{oracle}] {label}: BOTH REJECT (Rust {e:?}, EVM revert)"));
                 }
             } else {
                 // Rust stricter than the lenient EVM assembly — fail-closed,
@@ -560,7 +602,7 @@ fn classify(label: &str, packed: &[u8], t: &mut Tally) {
                 t.fail_closed += 1;
                 if t.fail_closed_examples.len() < 8 {
                     t.fail_closed_examples.push(format!(
-                        "{label}: FAIL-CLOSED (Rust {e:?} ⟂ EVM accepts {} call(s))",
+                        "[{oracle}] {label}: FAIL-CLOSED (Rust {e:?} ⟂ EVM accepts {} call(s))",
                         evm_calls.len()
                     ));
                 }
@@ -584,7 +626,7 @@ fn multisend_record_walk_differential() {
     }
 
     // ---- Report -------------------------------------------------------
-    println!("\n=== multiSend record-walk differential (revm v1.3.0 bytecode oracle) ===");
+    println!("\n=== multiSend record-walk differential (revm v1.3.0 + v1.5.0 bytecode oracles) ===");
     println!("cases total          : {}", t.total);
     println!("ACCEPT + same sequence: {}", t.accept_match);
     println!("BOTH reject          : {}", t.both_reject);
@@ -680,6 +722,24 @@ fn negative_control_soundness_check_has_teeth() {
     );
 }
 
+/// Pins the reason for the firmware's `to == 0` refusal: v1.5.0 dispatches a
+/// zero-`to` record to `address(this)` (under the SafeTx DELEGATECALL: the
+/// Safe itself), v1.3.0 dispatches it to `0x0`. Same bytes, different
+/// callee — so the firmware must refuse rather than render either.
+#[test]
+fn v150_rewrites_zero_to_self_and_firmware_refuses() {
+    let packed = pack_record(0, &[0u8; 20], &[0u8; 32], &[]);
+    let (_, calls130) = run_evm_with(MS_RUNTIME_HEX, MS_ADDR, &packed);
+    let (_, calls150) = run_evm_with(MS150_RUNTIME_HEX, MS150_ADDR, &packed);
+    assert_eq!(calls130.first().map(|c| c.to), Some([0u8; 20]));
+    assert_eq!(calls150.first().map(|c| c.to), Some(MS150_ADDR.into_array()));
+    assert_eq!(rust_decode_records(&packed), Err(MsError::RecordToZero));
+    assert_eq!(
+        pqsigner_tx::multisend::summarize_packed(&packed).map(|_| ()),
+        Err(MsError::RecordToZero)
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Oracle provenance / cross-variant fidelity (verified 2026-06-30)
 // ---------------------------------------------------------------------------
@@ -699,3 +759,14 @@ fn negative_control_soundness_check_has_teeth() {
 // solc metadata trailer differ). So this single embedded blob is a
 // faithful oracle for every allowlisted target — the differential's
 // conclusion carries to all three.
+//
+// UPDATE 2026-09-23 — v1.5.0 (0xA83c…1836) added to the allowlist. Its
+// loop body is NOT byte-identical: after `to := shr(0x60, …)` it inserts
+// `30 81 15 02 81 17` = `to := or(to, mul(iszero(to), address()))`, and a
+// failed sub-call bubbles its revert data (`returndatacopy`/`revert`)
+// instead of `revert(0, 0)`. The op-0-only switch is unchanged. v1.5.0 is
+// therefore embedded as its own oracle (`MS150_RUNTIME_HEX`) and every
+// case runs against both; the zero-`to` rewrite is neutralised by
+// `summarize_packed`'s `RecordToZero` refusal (pinned by
+// `v150_rewrites_zero_to_self_and_firmware_refuses`). Revert bubbling
+// changes only the failure payload, not which calls are dispatched.

@@ -8,11 +8,14 @@
 //! storage context, so the packed payload is only worth decoding when
 //! the target is a known-good MultiSend implementation:
 //!
-//!   * **Address allowlist** — only the three canonical
+//!   * **Address allowlist** — only the four canonical
 //!     `MultiSendCallOnly` deployments (v1.3.0 canonical / v1.3.0
-//!     eip155 / v1.4.1) are accepted as a DELEGATECALL target. Any
-//!     other target keeps today's hard refusal at the Safe verifiers'
-//!     operation gates.
+//!     eip155 / v1.4.1 / v1.5.0) are accepted as a DELEGATECALL target.
+//!     Any other target keeps today's hard refusal at the Safe
+//!     verifiers' operation gates.
+//!   * **No `to == 0` record** — v1.5.0 rewrites a zero `to` to the
+//!     Safe itself; refusing it for every target keeps the rendered
+//!     record target equal to the address the chain calls.
 //!   * **Per-record `operation == 0`** — mirrors MultiSendCallOnly's
 //!     on-chain revert, so no nested DELEGATECALL can ride a record
 //!     even if the allowlist were somehow wrong.
@@ -502,6 +505,30 @@ mod tests {
         );
     }
 
+    /// MultiSendCallOnly v1.5.0 rewrites `to == 0` to `address(this)` —
+    /// the Safe itself under DELEGATECALL — so a zero-`to` record would
+    /// render as a call to `0x0000…` while executing a Safe self-call
+    /// (e.g. `addOwnerWithThreshold`). Refused for every allowlisted
+    /// target, and the verdict surfaces the banner.
+    #[test]
+    fn summarize_rejects_record_to_zero() {
+        let mut packed = pack_record(
+            0,
+            &[0x70u8; 20],
+            &ZERO_VALUE,
+            &approve_calldata(&GPV2_VAULT_RELAYER_ADDRESS, 1),
+        );
+        packed.extend_from_slice(&pack_record(0, &[0u8; 20], &ZERO_VALUE, &[0x0d, 0x58, 0x2f, 0x13]));
+        let cd = encode_multisend(&packed);
+        assert_eq!(summarize(&cd).unwrap_err(), MsError::RecordToZero);
+        for a in &MULTISEND_CALL_ONLY_ADDRESSES {
+            assert!(matches!(
+                multisend_verdict(1, a, &cd),
+                MsVerdict::Reject("msend rec to=0")
+            ));
+        }
+    }
+
     #[test]
     fn summarize_rejects_zero_records() {
         assert_eq!(
@@ -514,7 +541,7 @@ mod tests {
     fn summarize_rejects_too_many_records() {
         let mut packed = Vec::new();
         for i in 0..=MULTISEND_MAX_RECORDS {
-            packed.extend_from_slice(&pack_record(0, &[i as u8; 20], &ZERO_VALUE, &[]));
+            packed.extend_from_slice(&pack_record(0, &[i as u8 + 1; 20], &ZERO_VALUE, &[]));
         }
         assert_eq!(
             summarize(&encode_multisend(&packed)).unwrap_err(),
