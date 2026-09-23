@@ -481,7 +481,26 @@ pub fn configure() -> Option<Configured> {
     cortex_m::asm::dsb();
     config_open_drain(SCL);
     config_open_drain(SDA);
-    // HWEN-high → I2C-ready settle (datasheet t_reset; generous at any SYSCLK).
+    // HWEN-high -> I2C-ready settle. The datasheet's `treset` is **250 us**
+    // (V1.6 "Hardware Enable & Standby Mode": once VIN > 2 V, PORN goes high
+    // and the part answers I2C after treset). 800,000 cycles is ~5 ms at
+    // 160 MHz, i.e. 20x that, and longer still at any lower SYSCLK.
+    //
+    // NOTE FOR THE FSBL PORT (#705), searched 2026-09-23 so it is not searched
+    // again: there is **no minimum HWEN LOW pulse width anywhere**. Not in
+    // V1.2, not in V1.6 — and V1.6 is the latest, confirmed on Awinic's own
+    // product page (DS_AW99703_EN_V1.6, 2024-03-12). Web search turns up
+    // nothing for this part; the closest hit is the AW20108, a different chip.
+    // Everything the document says near HWEN is the other direction: treset
+    // above, a 100 us VIN->HWEN delay in the Figure 2 power-up sequence, the
+    // 300/400/500 kOhm internal pull-down `RPDEN`, and "if pulling HWEN low,
+    // the LED current will be turned off immediately without any ramp".
+    //
+    // So any HWEN low-pulse constant is engineering margin, not a citation,
+    // and must say so. Erring long is the safe direction: too long costs boot
+    // time, too short fails to reset the part and silently leaves a "real
+    // re-init" retry doing nothing — which is the exact failure such a retry
+    // exists to prevent.
     cortex_m::asm::delay(800_000);
 
     // #705: latch what the chip held BEFORE we reconfigure it. Must happen
