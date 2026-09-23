@@ -114,16 +114,35 @@ fn exact_preflight_accepts_decoded_dust_via_base_units() {
 }
 
 #[test]
-fn exact_preflight_refuses_value_too_wide_for_scaled_or_base_units() {
-    // 10^21 + 1 has a 22-digit raw representation. With 18 decimals and a
-    // four-byte symbol, its exact fractional form cannot fit row 2 and its
-    // raw base-unit form cannot fit row 1.
+fn exact_preflight_wraps_full_precision_value_exactly() {
+    // 10^21 + 1 = 1000.000000000000000001 at 18 decimals — the shape of a
+    // CoW quote-derived limit. Neither the two-row decimal form nor the
+    // base-unit form fits; the exact wrapped form does.
     let c = sell_canonical([0x33; 20], 1_000_000_000_000_000_000_001);
     let sell = leg(b"DUST", 18);
 
     assert!(
+        amounts_are_exactly_renderable(&c, &sell, &CowLeg::AddrHex),
+        "a full-precision amount must wrap exactly instead of refusing"
+    );
+    let pages = render_cowswap_pages(&c, &sell, &CowLeg::AddrHex);
+    let text = page_concat(&pages, 1);
+    assert!(
+        text.contains("1000.0000000000>") && text.contains(">00000001 DUST"),
+        "every digit shown across the two rows: {text}"
+    );
+}
+
+#[test]
+fn exact_preflight_refuses_value_too_wide_for_scaled_or_base_units() {
+    // 10^25 + 1 = 10000000.000000000000000001: its wrapped row 2 needs 18
+    // columns with a four-byte symbol, its raw base-unit form 26 digits.
+    let c = sell_canonical([0x33; 20], 10_000_000_000_000_000_000_000_001);
+    let sell = leg(b"DUST", 18);
+
+    assert!(
         !amounts_are_exactly_renderable(&c, &sell, &CowLeg::AddrHex),
-        "the preflight must refuse when neither exact representation fits"
+        "the preflight must refuse when no exact representation fits"
     );
 }
 

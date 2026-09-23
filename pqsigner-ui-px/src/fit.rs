@@ -295,6 +295,101 @@ pub fn layout_amount(number: &[u8], unit: &[u8], region: Region) -> Result<Amoun
     }
 }
 
+/// Continuation mark ending line 1 and opening line 2 of a wrapped amount
+/// (the baked face is ASCII-only, so three periods stand in for `…`).
+pub const AMOUNT_WRAP_MARK: &[u8] = b"...";
+
+/// Does every line fit `tier` in `region` (character budget, measured
+/// width and the tier's stacking limit)?
+fn fits_at(lines: &[LineIn<'_>], region: Region, tier: Tier) -> bool {
+    if lines.is_empty() || lines.len() > tier.max_lines() {
+        return false;
+    }
+    let Some(budget_q6) = region.width_px().checked_mul(64) else {
+        return false;
+    };
+    lines.iter().all(|&(text, w)| {
+        text.len() <= region.chars(tier)
+            && measure_q6(text, tier.px(), weight_is_semibold(w), 0).is_some_and(|px| px <= budget_q6)
+    })
+}
+
+/// The owner-approved exception (2026-09-23) to [`layout_amount`]'s
+/// "the number never breaks": an exact decimal too wide for any tier —
+/// a full-precision 18-decimal amount such as a CoW quote-derived limit —
+/// wraps once, with explicit continuation marks, never rounded:
+///
+/// ```text
+///   1234.98765432109876...
+///   ...5432 DAI
+/// ```
+///
+/// Line 1 carries the complete whole part and the decimal point (the
+/// magnitude is read there); line 2 is fraction digits plus the full unit
+/// and opens with the mark, so it cannot pass for a standalone amount.
+/// The largest tier that fits wins; within it, line 1 takes as many digits
+/// as fit. Callers use it only after [`layout_amount`] returned
+/// [`FitErr::TooWide`] ([`layout_amount_or_wrap`]).
+pub fn layout_amount_wrapped(number: &[u8], unit: &[u8], region: Region) -> Result<AmountLayout, FitErr> {
+    if number.is_empty() {
+        return Err(FitErr::Empty);
+    }
+    if number.iter().any(|&b| measure_q6(&[b], 22, false, 0).is_none())
+        || unit.iter().any(|&b| measure_q6(&[b], 22, false, 0).is_none())
+    {
+        return Err(FitErr::Unrenderable);
+    }
+    let Some(dot) = number.iter().position(|&b| b == b'.') else {
+        return Err(FitErr::TooWide);
+    };
+    for &tier in &TIERS_DESC {
+        if tier.max_lines() < 2 {
+            continue;
+        }
+        // Line 1 = number[..k] + mark, the largest k that fits; k keeps the
+        // whole part and the point on line 1 and leaves ≥ 1 digit to wrap.
+        let mut k = number.len() - 1;
+        while k > dot {
+            let mut l1 = Line::EMPTY;
+            if push_str(&mut l1, &number[..k])
+                && push_str(&mut l1, AMOUNT_WRAP_MARK)
+                && fits_at(&[(l1.as_bytes(), Weight::Regular)], region, tier)
+            {
+                let mut l2 = Line::EMPTY;
+                let l2_ok = push_str(&mut l2, AMOUNT_WRAP_MARK)
+                    && push_str(&mut l2, &number[k..])
+                    && (unit.is_empty() || (push_str(&mut l2, b" ") && push_str(&mut l2, unit)));
+                if l2_ok
+                    && fits_at(
+                        &[(l1.as_bytes(), Weight::Regular), (l2.as_bytes(), Weight::Regular)],
+                        region,
+                        tier,
+                    )
+                {
+                    return Ok(AmountLayout {
+                        lines: [l1, l2],
+                        n: 2,
+                        tier,
+                    });
+                }
+                // A shorter line 1 only lengthens line 2: next tier.
+                break;
+            }
+            k -= 1;
+        }
+    }
+    Err(FitErr::TooWide)
+}
+
+/// [`layout_amount`], falling back to [`layout_amount_wrapped`] only when
+/// the number is too wide to stand whole.
+pub fn layout_amount_or_wrap(number: &[u8], unit: &[u8], region: Region) -> Result<AmountLayout, FitErr> {
+    match layout_amount(number, unit, region) {
+        Err(FitErr::TooWide) => layout_amount_wrapped(number, unit, region),
+        r => r,
+    }
+}
+
 /// An address laid out for a docked 22-tier detail: two ≤ 21-character
 /// lines when both fit the measured width, else three 14-character lines
 /// (an uppercase-heavy EIP-55 string can exceed 276 px at 21 characters —
@@ -399,6 +494,30 @@ mod kani_harnesses {
             // Line 1 always starts with the whole number.
             assert!(a.lines[0].as_bytes().starts_with(&num[..n]));
             assert!(a.n == 1 || a.lines[1].as_bytes() == &unit[..u]);
+        }
+    }
+
+    /// The wrapped layout is lossless: line 1 minus its mark ++ line 2 minus
+    /// its mark and unit is the number, and line 1 holds the decimal point.
+    #[kani::proof]
+    #[kani::unwind(70)]
+    fn layout_amount_wrapped_is_lossless() {
+        let n: usize = kani::any();
+        kani::assume(n <= 24);
+        let num: [u8; 24] = kani::any();
+        let unit = b"DAI";
+        if let Ok(a) = layout_amount_wrapped(&num[..n], unit, Region::Docked) {
+            let l1 = a.lines[0].as_bytes();
+            let l2 = a.lines[1].as_bytes();
+            let m = AMOUNT_WRAP_MARK.len();
+            assert!(a.n == 2 && l1.len() > m && l2.len() >= m + 1 + unit.len());
+            let head = &l1[..l1.len() - m];
+            let tail = &l2[m..l2.len() - 1 - unit.len()];
+            assert!(&l1[l1.len() - m..] == AMOUNT_WRAP_MARK && &l2[..m] == AMOUNT_WRAP_MARK);
+            assert!(&l2[l2.len() - unit.len()..] == unit);
+            assert!(head.len() + tail.len() == n);
+            assert!(head == &num[..head.len()] && tail == &num[head.len()..n]);
+            assert!(head.contains(&b'.'));
         }
     }
 
@@ -565,6 +684,42 @@ mod tests {
         // Bare numbers.
         let a = layout_amount(b"250000000", b"", Region::Full).unwrap();
         assert_eq!((a.n, a.tier), (1, Tier::T36));
+    }
+
+    #[test]
+    fn wrapped_amount_rules() {
+        // Fits whole: unchanged, never wrapped.
+        let a = layout_amount_or_wrap(b"9.987654321098765432", b"DAI", Region::Docked).unwrap();
+        assert_eq!(a.lines[0].as_bytes(), b"9.987654321098765432");
+        // Too wide whole: wraps once, lossless, whole part on line 1.
+        let num = b"1234.987654321098765432";
+        assert_eq!(layout_amount(num, b"DAI", Region::Docked), Err(FitErr::TooWide));
+        let a = layout_amount_or_wrap(num, b"DAI", Region::Docked).unwrap();
+        assert_eq!(a.n, 2);
+        let l1 = a.lines[0].as_bytes();
+        let l2 = a.lines[1].as_bytes();
+        assert!(l1.ends_with(AMOUNT_WRAP_MARK) && l2.starts_with(AMOUNT_WRAP_MARK));
+        assert!(l2.ends_with(b" DAI"));
+        let head = &l1[..l1.len() - 3];
+        let tail = &l2[3..l2.len() - 4];
+        assert!(head.contains(&b'.'));
+        let mut joined = [0u8; 64];
+        joined[..head.len()].copy_from_slice(head);
+        joined[head.len()..head.len() + tail.len()].copy_from_slice(tail);
+        assert_eq!(&joined[..head.len() + tail.len()], &num[..]);
+        for l in [l1, l2] {
+            assert!(measure_q6(l, a.tier.px(), false, 0).unwrap() <= 276 * 64);
+        }
+        // A million DAI at full precision still fits.
+        assert!(layout_amount_or_wrap(b"1000000.987654321098765432", b"DAI", Region::Docked).is_ok());
+        // No decimal point: nothing to wrap at.
+        assert_eq!(
+            layout_amount_or_wrap(b"1234567890123456789012", b"USDC", Region::Docked),
+            Err(FitErr::TooWide)
+        );
+        // Non-TooWide errors pass through unchanged.
+        assert_eq!(layout_amount_or_wrap(b"", b"DAI", Region::Docked), Err(FitErr::Empty));
+        assert_eq!(layout_amount_or_wrap(b"1\xff", b"DAI", Region::Docked), Err(FitErr::Unrenderable));
     }
 
     #[test]
