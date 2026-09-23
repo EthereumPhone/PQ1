@@ -44,7 +44,17 @@ Confirm against the PDF before relying on any of it:
 
 ## Provenance
 
-- `sha256 5ba0309d30882b1e04f4fef0eeca4cf7603ab921d85994a4290873481f4ff029`
+- `sha256 d58e878ca167473208dccc0857d960cd7bad151ffd735bf255bea5a47fc6a1f1`
+  (the superseded 2026-07-14 sheet was
+  `sha256 5ba0309d30882b1e04f4fef0eeca4cf7603ab921d85994a4290873481f4ff029`)
+
+- **The parts list is machine-readable, and is the right way to diff revisions.**
+  Both sheets carry one PDF link annotation per component whose JavaScript action
+  is `app.popUpMenu('Ref-Des=…','Part Type=…','Value=…',…)` — 121 parts. Extract
+  and compare those instead of diffing text or pixels: the text layer is absent
+  from this revision, and the two render in different fonts so a pixel diff is
+  almost entirely font noise. The 2026-07-14 → 2026-08-26 comparison reduced to
+  exactly five field differences this way.
 - Byte-identical to the file received from the ODM. The delivered copy arrived
   through a browser as `…_1500-2.pdf`; the `-2` is a download-dedup suffix, not
   part of the vendor build code, and was dropped so the name matches the
