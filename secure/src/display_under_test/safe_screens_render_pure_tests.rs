@@ -374,6 +374,62 @@ fn multisend_approve_presign_screens() {
     assert_golden("multisend", &b, GOLDEN_MULTISEND);
 }
 
+/// The 2026-09-23 EVT refusal: a Safe v1.5.0 MultiSendCallOnly batch
+/// `[USDC.approve(VaultRelayer), setPreSignature]` selling 10 USDC for at
+/// least a full-precision, quote-derived `1234.987654321098765432 DAI`.
+/// The buy minimum fits no whole-number layout on either painter; both now
+/// wrap it exactly (continuation marks, every digit, no rounding).
+#[test]
+fn multisend_v150_cow_full_precision_dai_wraps_on_both_painters() {
+    use crate::tx::eip712::cowswap::CowLeg;
+    fn leg(symbol: &[u8], name: &[u8], decimals: u8) -> CowLeg {
+        let mut s = [0u8; 64];
+        s[..symbol.len()].copy_from_slice(symbol);
+        let mut n = [0u8; 64];
+        n[..name.len()].copy_from_slice(name);
+        CowLeg::Decoded {
+            decimals,
+            symbol: s,
+            symbol_len: symbol.len() as u8,
+            name: n,
+            name_len: name.len() as u8,
+        }
+    }
+    fn put(c: &mut [u8], off: usize, v: u128) {
+        c[off..off + 32].fill(0);
+        c[off + 16..off + 32].copy_from_slice(&v.to_be_bytes());
+    }
+    let mut cow = bound_cow_stub();
+    let c = &mut cow.canonical;
+    c[8..28].copy_from_slice(&TOKEN);
+    c[28..48].copy_from_slice(&[0x50; 20]);
+    put(c, 68, 10_000_000); // 10.000000 USDC
+    put(c, 100, 1_234_987_654_321_098_765_432); // 1234.987654321098765432 DAI
+    c[164..168].copy_from_slice(&1_790_000_000u32.to_be_bytes());
+    cow.sell = leg(b"USDC", b"USD Coin", 6);
+    cow.buy = leg(b"DAI", b"Dai Stablecoin", 18);
+
+    let approve = erc20_approve(GPV2_VAULT_RELAYER_ADDRESS, 10);
+    let mut packed = pack_record(0, &TOKEN, &ZERO_VALUE, &approve);
+    packed.extend_from_slice(&pack_record(0, &GPV2_SETTLEMENT_ADDRESS, &ZERO_VALUE, &presign_calldata_stub()));
+    let raw = encode_multisend(&packed);
+    let meta = usdc_meta();
+    let b = both(MULTISEND_CALL_ONLY_ADDRESSES[3], 1, &raw, Some(&cow), Some(&meta));
+    assert_shape(&b);
+    assert_facts_carry_over(&b);
+
+    let pages = all_text(&b.pages);
+    assert!(pages.contains("1234.9876543210>"), "legacy row 1:\n{pages}");
+    assert!(pages.contains(">98765432 DAI"), "legacy row 2:\n{pages}");
+    let text = screen_text(&b.screens);
+    assert!(text.contains("COW ORDER"));
+    let l1 = text.lines().find(|l| l.starts_with("1234.") && l.ends_with("...")).expect("wrapped line 1");
+    let l2 = text.lines().find(|l| l.starts_with("...") && l.ends_with(" DAI")).expect("wrapped line 2");
+    let joined = alloc::format!("{}{}", &l1[..l1.len() - 3], &l2[3..l2.len() - 4]);
+    assert_eq!(joined, "1234.987654321098765432", "every digit, in order:\n{text}");
+    assert_golden("multisend_v150_dai_wrap", &b, GOLDEN_MULTISEND_V150_DAI_WRAP);
+}
+
 #[test]
 fn safe_mgmt_add_owner_screens() {
     // addOwnerWithThreshold(address,uint256) to the Safe itself.
@@ -427,6 +483,7 @@ const GOLDEN_PLAIN_ETH_GAS: &str = "8a2ff55e37c064e9e054a938ebe05338e819da5f1a9a
 const GOLDEN_REFUND: &str = "567d6e8b775ad4e5bcc229f788ba4086adf14c4f2321f9d9cdc1441e2f2032f9";
 const GOLDEN_COW_DIRECT: &str = "960ff3db77fbf0b9f01f6797ce2d18629e543187fa16f9341bef02ad4e1af4f3";
 const GOLDEN_MULTISEND: &str = "5063f14da0ce37eece26ef54b7c9618256fc38414d44805f7a14a5684805b7d7";
+const GOLDEN_MULTISEND_V150_DAI_WRAP: &str = "7de1b1df98a30d1a92c9658d1978394b308d338f9358700278fdc2d8aa400bb7";
 const GOLDEN_MGMT_ADD_OWNER: &str = "c410e962f07b2cc5bfc8be5046ecaebd69ddb9c14a3405134d7d3d27771c8556";
 
 
@@ -658,6 +715,9 @@ fn lift_proof_accepts_the_assembled_transcript() {
     assert_eq!(l.screens.as_slice()[5].kind(), Some(Kind::Confirm));
     assert_eq!(l.screens.as_slice()[l.screens.len() - 1].kind(), Some(Kind::Hero));
     let id = ids(&l.screens);
+    // The user sees where it goes and what moves before the first sign
+    // prompt (#770, PQ-UI `safe/erc20_transfer`: TO | SEND | Confirm?).
+    assert_eq!(&id[..5], &["APPROVE", "NETWORK", "SAFEACCT", "TO", "AMOUNT"]);
     let start = l.receipt.trailers.start + 1; // shifted by the Confirm? at 5
     assert_eq!(&id[start..start + 7], &["MAXFEE", "WORST", "SIGNER", "TARGET", "GASLANE", "FP8213", "DIGEST"]);
     for s in l.screens.as_slice() {

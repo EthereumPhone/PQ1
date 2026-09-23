@@ -518,6 +518,65 @@ fn legacy_token_adjacent_low_digits_render_exactly_without_collision() {
     }
 }
 
+/// A full-precision 18-decimal amount (a CoW quote-derived `buyAmount`)
+/// fits neither the two-row decimal form nor labelled base units; it wraps
+/// exactly across both rows with continuation marks instead of refusing.
+#[test]
+fn legacy_token_full_precision_18_decimals_wraps_exactly() {
+    fn u256_dec(s: &str) -> U256 {
+        let mut v = [0u8; 32];
+        for c in s.bytes() {
+            let mut carry = u32::from(c - b'0');
+            for b in v.iter_mut().rev() {
+                let x = u32::from(*b) * 10 + carry;
+                *b = (x & 0xff) as u8;
+                carry = x >> 8;
+            }
+        }
+        U256(v)
+    }
+    let meta = Erc20Metadata {
+        chain_id: 8453,
+        contract: [0x50; 20],
+        decimals: 18,
+        name: b"Dai Stablecoin",
+        symbol: b"DAI",
+    };
+    for (raw, e1, e2) in [
+        ("9987654321098765432", "9.9876543210987>", ">65432 DAI"),
+        ("1234987654321098765432", "1234.9876543210>", ">98765432 DAI"),
+        ("1000000987654321098765432", "1000000.9876543>", ">21098765432 DAI"),
+    ] {
+        let amount = u256_dec(raw);
+        let mut r1 = [b' '; DISPLAY_COLS];
+        let mut r2 = [b' '; DISPLAY_COLS];
+        assert!(token_amount_is_exactly_renderable(&amount, &meta), "{raw}");
+        assert_eq!(
+            write_token_amount_two_rows(&mut r1, &mut r2, &amount, &meta),
+            AmountFit::Full
+        );
+        assert_eq!(row_str(&r1), e1);
+        assert_eq!(row_str(&r2), e2);
+    }
+    // Ten million DAI at full precision needs 17 columns on row 2: refused,
+    // never rounded.
+    let amount = u256_dec("10000000987654321098765432");
+    let mut r1 = [b' '; DISPLAY_COLS];
+    let mut r2 = [b' '; DISPLAY_COLS];
+    assert!(!token_amount_is_exactly_renderable(&amount, &meta));
+    assert_eq!(
+        write_token_amount_two_rows(&mut r1, &mut r2, &amount, &meta),
+        AmountFit::Overflow
+    );
+    // Amounts that already fit keep their established form.
+    let amount = u256_dec("9987654321000000000");
+    assert_eq!(
+        write_token_amount_two_rows(&mut r1, &mut r2, &amount, &meta),
+        AmountFit::Full
+    );
+    assert_eq!(row_str(&r1), "9.987654321 DAI");
+}
+
 #[test]
 fn legacy_token_base_unit_fallback_never_truncates_symbol() {
     let meta = Erc20Metadata {

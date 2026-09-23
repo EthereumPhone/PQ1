@@ -1296,26 +1296,89 @@ pub fn write_token_amount_two_rows(
 
     // Tiny high-decimal amounts and other awkward exact decimals may not fit
     // the two-row grid. Preserve availability without rounding by rendering
-    // the signed integer in explicitly labelled token base units. Refuse when
-    // the complete label or integer still cannot fit.
+    // the signed integer in explicitly labelled token base units.
     const BASE_PREFIX: &[u8] = b"base ";
-    if unit_bytes.len() > DISPLAY_COLS.saturating_sub(BASE_PREFIX.len() + 1) {
-        *row1 = [b' '; DISPLAY_COLS];
-        *row2 = [b' '; DISPLAY_COLS];
+    if unit_bytes.len() <= DISPLAY_COLS.saturating_sub(BASE_PREFIX.len() + 1) {
+        let mut base_unit = [0u8; DISPLAY_COLS];
+        base_unit[..BASE_PREFIX.len()].copy_from_slice(BASE_PREFIX);
+        base_unit[BASE_PREFIX.len()..BASE_PREFIX.len() + unit_bytes.len()].copy_from_slice(unit_bytes);
+        if write_amount_two_rows_bytes(
+            row1,
+            row2,
+            amount,
+            0,
+            0,
+            false,
+            &base_unit[..BASE_PREFIX.len() + unit_bytes.len()],
+        ) == AmountFit::Full
+        {
+            return AmountFit::Full;
+        }
+    }
+
+    // A full-precision amount of an 18-decimal token (a CoW quote-derived
+    // limit, say `1234.987654321098765432 DAI`) fits neither form. Wrap the
+    // exact decimal across both rows with explicit continuation marks.
+    // Refuse when even the wrapped form cannot hold every digit and the
+    // complete symbol.
+    write_amount_wrapped(row1, row2, amount, decimals, unit_bytes)
+}
+
+/// Continuation mark ending row 1 and opening row 2 of a wrapped amount.
+pub const AMOUNT_WRAP_MARK: u8 = b'>';
+
+/// Exact decimal wrapped across two rows:
+///
+/// ```text
+///   1234.9876543210>      whole part + '.' + leading fraction digits
+///   >98765432 DAI         remaining fraction digits + full symbol
+/// ```
+///
+/// Row 1 always carries the complete whole part and the decimal point, so
+/// the magnitude is read on row 1 and row 2 can only be fraction digits —
+/// it cannot pass for a standalone amount (it opens with the mark, never a
+/// digit). Every digit of the widened exact fraction is shown; nothing is
+/// rounded, and the symbol is never truncated. `Overflow` (both rows
+/// blanked) when the digits or symbol do not fit.
+fn write_amount_wrapped(
+    row1: &mut [u8; DISPLAY_COLS],
+    row2: &mut [u8; DISPLAY_COLS],
+    value: &U256,
+    decimals: u32,
+    unit_bytes: &[u8],
+) -> AmountFit {
+    *row1 = [b' '; DISPLAY_COLS];
+    *row2 = [b' '; DISPLAY_COLS];
+    let Some(frac) = exact_fraction_digits(value, decimals, 6, 18) else {
+        return AmountFit::Overflow;
+    };
+    let mut tmp = [0u8; 96];
+    let Some(n) = value.format_decimal(decimals, frac, false, &mut tmp) else {
+        return AmountFit::Overflow;
+    };
+    let digits = &tmp[..n];
+    if formatted_collapses_to_zero(value, digits) {
         return AmountFit::Overflow;
     }
-    let mut base_unit = [0u8; DISPLAY_COLS];
-    base_unit[..BASE_PREFIX.len()].copy_from_slice(BASE_PREFIX);
-    base_unit[BASE_PREFIX.len()..BASE_PREFIX.len() + unit_bytes.len()].copy_from_slice(unit_bytes);
-    write_amount_two_rows_bytes(
-        row1,
-        row2,
-        amount,
-        0,
-        0,
-        false,
-        &base_unit[..BASE_PREFIX.len() + unit_bytes.len()],
-    )
+    let Some(dot) = digits.iter().position(|&b| b == b'.') else {
+        return AmountFit::Overflow;
+    };
+    // Row 1: as many digits as fit before the mark.
+    let head = DISPLAY_COLS - 1;
+    if dot >= head || n <= head {
+        return AmountFit::Overflow;
+    }
+    let tail = &digits[head..];
+    if 1 + tail.len() + 1 + unit_bytes.len() > DISPLAY_COLS {
+        return AmountFit::Overflow;
+    }
+    row1[..head].copy_from_slice(&digits[..head]);
+    row1[head] = AMOUNT_WRAP_MARK;
+    row2[0] = AMOUNT_WRAP_MARK;
+    row2[1..1 + tail.len()].copy_from_slice(tail);
+    row2[1 + tail.len()] = b' ';
+    row2[2 + tail.len()..2 + tail.len() + unit_bytes.len()].copy_from_slice(unit_bytes);
+    AmountFit::Full
 }
 
 /// Pure pre-publication check for legacy token amount sinks. It intentionally

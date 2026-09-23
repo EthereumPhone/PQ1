@@ -38,7 +38,7 @@ use crate::tx::eip712::cowswap::VerifiedCowswapV3;
 use crate::tx::eip712::keccak;
 use crate::tx::eip712::safe::multi_send::{self, MsRecordIter};
 use crate::tx::eip712::safe::{decode_canonical, SafeTx, VerifiedSafeExec, VerifiedSafeV1};
-use pqsigner_ui_px::fit::{fit_tier, layout_address, layout_amount, Region};
+use pqsigner_ui_px::fit::{fit_tier, layout_address, layout_amount, layout_amount_or_wrap, Region};
 use pqsigner_ui_px::{Icon, Look, ScreenBuilder, Screens, Side, Weight};
 use sphincs_tz_shared::GPV2_VAULT_RELAYER_ADDRESS;
 
@@ -282,7 +282,7 @@ fn emit_inner(
                 raw_units(&worst)
             }
             .ok_or(())?;
-            let lay = layout_amount(amt.digits(), amt.unit(), Region::Docked).map_err(|_| ())?;
+            let lay = layout_amount_or_wrap(amt.digits(), amt.unit(), Region::Docked).map_err(|_| ())?;
             let disclosure: &[u8] = b"at 30M gas est";
             if lay.n == 1 {
                 e.detail(

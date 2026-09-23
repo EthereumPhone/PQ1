@@ -19,7 +19,7 @@ use super::primitives::{
 use crate::names::NameResolver;
 use crate::tx::eip1559::U256;
 use pqsigner_ui_px::fit::{
-    fit_tier, layout_amount, layout_name_over_address, measure_q6, split_hash_full, AddrLines, Line,
+    fit_tier, layout_amount_or_wrap, layout_name_over_address, measure_q6, split_hash_full, AddrLines, Line,
     Region,
 };
 use pqsigner_ui_px::screen::LINES_PER_PAGE;
@@ -284,9 +284,10 @@ impl<'s> Emit<'s> {
     }
 
     /// An amount detail: number + unit on one line when a one-line tier
-    /// fits, else number / unit.
+    /// fits, else number / unit; an exact number too wide to stand whole
+    /// wraps once with continuation marks (`layout_amount_wrapped`).
     pub(crate) fn amount(&mut self, id: &[u8], label: &[u8], amt: &Amount, pulse: bool) -> Result<(), ()> {
-        let lay = layout_amount(amt.digits(), amt.unit(), Region::Docked).map_err(|_| ())?;
+        let lay = layout_amount_or_wrap(amt.digits(), amt.unit(), Region::Docked).map_err(|_| ())?;
         if lay.n == 1 {
             self.detail(id, label, &[(lay.lines[0].as_bytes(), Weight::Regular)], pulse)
         } else {
