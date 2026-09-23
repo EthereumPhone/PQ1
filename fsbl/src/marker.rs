@@ -209,6 +209,13 @@ pub enum Stage {
     LcdInited = 16,
     /// Fingerprint rows drawn and flushed; only the hold delay remains.
     RenderFlushed = 17,
+    /// AW99703 read-back receipt (#705), pq1 + `stage-marker` only. Payload is
+    /// `0x00_CC_BB_MM` = CHIP_ID, BSTCTR1, MODE, with the top byte set if any
+    /// read NACKed. Exists to obtain on an FSBL the read-back evidence the
+    /// fail-closed I2C refusal needs: the secure world confirmed these values
+    /// (#705 `ID03 B1=26 MO=15`), but the FSBL's bit-bang timing is a
+    /// different code path, so that licenses the values and not the timing.
+    BacklightProbe = 18,
 }
 
 /// Record `stage` with a 32-bit `payload` for context (e.g. the floor value).
@@ -242,7 +249,7 @@ pub fn record(stage: Stage, payload: u32) {
         wr(SECCR, PG);
         let dst = MARKER_PAGE + 16 * (stage as usize);
         for (i, word) in qw.iter().enumerate() {
-            // `stage <= 17` bounds the target to the first 288 bytes of the
+            // `stage <= 18` bounds the target to the first 304 bytes of the
             // erased 8 KB page, 16-byte aligned as the controller requires.
             wr(dst + i * 4, *word);
         }

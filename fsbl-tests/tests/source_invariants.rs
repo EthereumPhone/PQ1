@@ -610,14 +610,7 @@ fn negative_main_gates_branch_on_display_verdict() {
     // default-off and bench-only, and the refusal path records through it on
     // purpose so a bench run can tell a display refusal from any other halt.
     let render = read_workspace_file("fsbl/src/render.rs");
-    let render_code: String = render
-        .lines()
-        .map(|l| match l.find("//") {
-            Some(i) => &l[..i],
-            None => l,
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    let render_code = code_only(&render);
     for forbidden in ["write_volatile", "boot_state", "crate::otp"] {
         assert!(
             !render_code.contains(forbidden),
@@ -639,6 +632,72 @@ fn negative_main_gates_branch_on_display_verdict() {
         fail_idx < hold_idx,
         "the failure return must come BEFORE the fingerprint hold: found the \
          return at byte {fail_idx} and the hold at byte {hold_idx}"
+    );
+}
+
+/// The FSBL's I2C leg must NOT gate the boot until its read-backs have been
+/// observed on an FSBL.
+///
+/// This pins a STAGED ROLLOUT so it cannot be mistaken for an oversight and
+/// "fixed" by someone arming it. The fail-closed refusal compares three
+/// read-backs; the secure world has confirmed all three on silicon (#705,
+/// `ID03 B1=26 MO=15`), but the FSBL's transport is a different code path —
+/// a fixed 40-cycle bit-bang quarter-period at HSI16 against the secure
+/// world's 400 sized for 160 MHz — so that receipt licenses the VALUES, not
+/// the TIMING.
+///
+/// Why this specific asymmetry is worth a test: a constant that mismatches on
+/// HEALTHY silicon means every unit refuses handoff forever, unfixable once
+/// the RDP-2 self-lock freezes it, and strictly worse than the plain halt the
+/// owner rejected. Arming it is a deliberate act that should require deleting
+/// this test and saying why.
+#[test]
+fn negative_fsbl_i2c_leg_is_not_armed_without_a_receipt() {
+    let render = read_workspace_file("fsbl/src/render.rs");
+    assert!(
+        render.contains("let backlight_on = lcd.backlight_on();"),
+        "render must still CALL backlight_on — the illuminate-last step (#730) \
+         is not optional even while its verdict is unenforced"
+    );
+    assert!(
+        render.contains("let _ = backlight_on;"),
+        "the backlight verdict must stay UNENFORCED until an on-FSBL read-back \
+         receipt exists. If you are arming it deliberately, delete this test in \
+         the same commit and cite the receipt."
+    );
+    let code = code_only(&render);
+    assert!(
+        !code.contains("ok &= backlight_on") && !code.contains("ok && backlight_on"),
+        "the backlight verdict must not be folded into the display verdict yet"
+    );
+
+    // The FSBL must never touch the fault registers: reading one is a
+    // documented IC-restart path once a flag is set, and its effect on a clean
+    // part is unspecified. Fine as a patchable secure-world diagnostic (#733),
+    // not something to freeze into the FSBL.
+    let drv = read_workspace_file("fsbl/src/aw99703.rs");
+    let drv_code = code_only(&drv);
+    for forbidden in ["0x0E", "0x0F", "FLAGS"] {
+        assert!(
+            !drv_code.contains(forbidden),
+            "fsbl/src/aw99703.rs must not reference the fault registers \
+             (found `{forbidden}`): reading one can restart the IC"
+        );
+    }
+
+    // The bit-bang period must NOT be derived from the achieved clock. This
+    // inverts the repo's usual rule on purpose — see the constant's comment.
+    assert!(
+        drv.contains("const QUARTER: u32 = 40;"),
+        "the FSBL bit-bang quarter-period must be a fixed 40 cycles (~100 kHz \
+         at HSI16). The secure world's 400 is sized for 160 MHz and would give \
+         ~10 kHz here."
+    );
+    assert!(
+        !drv_code.contains("achieved_hz"),
+        "fsbl/src/aw99703.rs must not multiply an achieved_hz() value: \
+         overflow-checks reaches the release profile and the panic handler is \
+         panic_halt, so it would spin on every boot of every unit"
     );
 }
 

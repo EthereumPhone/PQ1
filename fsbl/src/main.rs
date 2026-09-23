@@ -77,6 +77,10 @@ use panic_halt as _;
 use cortex_m_rt::entry;
 use fw_manifest::{ManifestRef, TRY_ONCE_COMMITTED, TRY_ONCE_TRIED};
 
+/// AW99703 backlight driver (#705). pq1 only — iota2's backlight is
+/// hard-wired, so the module compiles to nothing there.
+#[cfg(feature = "board-pq1")]
+mod aw99703;
 mod board;
 mod boot_state;
 mod branch;

@@ -102,8 +102,46 @@ pub fn render_fingerprint(digest: &[u8; 32]) -> u32 {
         // Fail closed, and do it WITHOUT the hold: ten seconds of blank screen
         // before a refusal teaches the operator nothing and delays the only
         // recovery action there is (power-cycle).
+        //
+        // Drop HWEN on the way out so a refusal is never accompanied by a lit
+        // panel showing a half-painted screen. Belt-and-braces: the enable
+        // below has not run yet on this path.
+        #[cfg(feature = "board-pq1")]
+        crate::aw99703::off();
         return 0;
     }
+
+    // #730 stage 2: illuminate LAST, now that the words are on the panel.
+    // Everything before this point ran with the AW99703 in Standby, so the
+    // panel was dark — `DISPON` is the final command of the init sequence, and
+    // enabling earlier would have lit undefined GRAM.
+    let backlight_on = lcd.backlight_on();
+
+    // DELIBERATELY NOT FOLDED INTO `ok` — this is a staged rollout, not an
+    // oversight, and `negative_fsbl_i2c_leg_is_not_armed_without_a_receipt`
+    // pins it so nobody "fixes" it by arming it early.
+    //
+    // The fail-closed refusal compares three read-backs. The secure world has
+    // confirmed all three on silicon (#705: `ID03 B1=26 MO=15`), but the
+    // FSBL's transport is a DIFFERENT code path — a fixed 40-cycle bit-bang
+    // quarter-period at HSI16, against the secure world's 400 sized for
+    // 160 MHz — so that receipt licenses the VALUES, not the TIMING.
+    //
+    // Arming a comparison nobody has run on THIS path is the one mistake this
+    // design cannot recover from: a constant that mismatches on HEALTHY
+    // silicon means every unit refuses handoff forever, unfixable once the
+    // RDP-2 self-lock freezes it, and strictly worse than the plain halt the
+    // owner rejected. So the verdict is RECORDED here and gated later.
+    let _ = backlight_on;
+
+    // The receipt itself: CHIP_ID, BSTCTR1 and MODE as read back by THIS
+    // transport, packed `0x00_CC_BB_MM` with the top byte set if any NACKed.
+    // Expected `0x00_03_26_15`.
+    #[cfg(all(feature = "stage-marker", feature = "board-pq1"))]
+    crate::marker::record(
+        crate::marker::Stage::BacklightProbe,
+        crate::aw99703::read_receipt(),
+    );
 
     // Hold so the user can read the words — MEASURED 10.002 s against the
     // 10,000 ms nominal now that the clock switch and the delay calibration

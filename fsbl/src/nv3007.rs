@@ -56,14 +56,16 @@
 //! ## Backlight — a dark pq1 panel is NOT a failure of this driver
 //!
 //! `LCM_EN` (PB15) only enables an AW99703 LED-driver IC whose brightness is
-//! programmed over I2C2 at `0x36`. The FSBL has no I2C stage YET — #705 is
-//! adding one, and the owner has chosen recoverable fail-closed for it — so
-//! until that lands the success criterion for this display port is the
-//! `stage-marker` page reaching `LcdInited` and `RenderFlushed` with a zero
-//! timeout count, not visible pixels.
+//! programmed over I2C2 at `0x36`. [`crate::aw99703`] now drives it (#705):
+//! [`Lcd::init`] programs its limits while the chip stays in Standby, and
+//! [`Lcd::backlight_on`] is the single write that emits light, called only
+//! after the content is painted (#730).
 //!
-//! (The secure world HAS had a driver for that chip since 2026-09; the claim
-//! that none exists in the tree was true when written and is not now.)
+//! Until that path has an on-FSBL read-back receipt its verdict is recorded
+//! rather than enforced, so a dark pq1 panel is still not by itself evidence
+//! that this display port failed — the `stage-marker` page reaching
+//! `LcdInited` / `RenderFlushed` with a zero timeout count remains the
+//! machine-checkable criterion.
 //!
 //! ## Clocking — 4 MHz MSIS, NOT the 16 MHz this file used to claim
 //!
@@ -860,6 +862,13 @@ pub struct Lcd {
     rows: [[u8; DISPLAY_COLS]; DISPLAY_ROWS],
     /// Per-glyph RGB565 scratch (lives in the singleton, not the stack).
     cell: [u16; CELL_N],
+    /// pq1 backlight, configured but still in Standby. Held here rather than
+    /// in a static because the FSBL links with exactly one `PT_LOAD` segment
+    /// and `static RAM: 0 B`; a `static mut` would add a second and fail the
+    /// geometry gate. `None` means `configure` did not succeed, and
+    /// `backlight_on` is then unreachable — the token cannot be forged.
+    #[cfg(feature = "board-pq1")]
+    backlight: Option<crate::aw99703::Configured>,
 }
 
 impl Lcd {
@@ -867,6 +876,8 @@ impl Lcd {
         Self {
             rows: [[b' '; DISPLAY_COLS]; DISPLAY_ROWS],
             cell: [BG; CELL_N],
+            #[cfg(feature = "board-pq1")]
+            backlight: None,
         }
     }
 
@@ -879,6 +890,16 @@ impl Lcd {
     pub fn init(&mut self) -> bool {
         spi1_init();
         init_dc_res_gpios();
+
+        // #730 stage 1: program the backlight's limits and brightness while
+        // the chip stays in Standby, so the panel is still dark. The chip
+        // needs its HWEN settle anyway, so doing it here costs nothing; the
+        // write that emits light is `backlight_on`, after the content is
+        // painted. `init_dc_res_gpios` has already driven HWEN high.
+        #[cfg(feature = "board-pq1")]
+        {
+            self.backlight = crate::aw99703::configure();
+        }
 
         // Reset the panel the way this board can. `LCD_RST_IS_DRIVABLE` is a
         // const, so the unused arm is dead-code-eliminated — neither board
@@ -898,6 +919,30 @@ impl Lcd {
         }
         delay_ms(150);
         ok && run_init_sequence() && fill_screen(BG)
+    }
+
+    /// #730 stage 2: the single write that emits light. Call only AFTER the
+    /// panel shows content — `DISPON` is the last command of the init
+    /// sequence, so illuminating earlier lights undefined GRAM.
+    ///
+    /// `false` means the backlight is not on: either `configure` failed (no
+    /// token) or the enable write did not read back.
+    ///
+    /// On iota2 this is a no-op returning `true`: that board's backlight is
+    /// hard-wired on and there is no AW99703 to talk to.
+    #[must_use]
+    pub fn backlight_on(&mut self) -> bool {
+        #[cfg(feature = "board-pq1")]
+        {
+            match self.backlight.take() {
+                Some(token) => crate::aw99703::enable(token),
+                None => false,
+            }
+        }
+        #[cfg(not(feature = "board-pq1"))]
+        {
+            true
+        }
     }
 
     /// Reset the char grid to spaces.
