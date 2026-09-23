@@ -430,9 +430,18 @@ pub fn read_fault_snapshot() -> FaultSnapshot {
 ///
 /// Latched at the top of `configure()`, before any write, so reading it later cannot
 /// disturb the answer. `(acked, ledmsb, mode)`.
+///
+/// GATED to `dev-testkey` 2026-09-23. Its only consumer is the dev-gated
+/// `measured_boot` row, but the latch itself was ungated — and it is the only
+/// ungated caller of [`read_reg`], so it single-handedly pulled the bit-banged
+/// register-READ path into a shipping image, and cost two I2C reads on every
+/// production boot, to populate a static nothing in that build reads.
+/// `configure()` performs no production read-back of its own.
+#[cfg(feature = "dev-testkey")]
 static mut PRE_INIT: (bool, u8, u8) = (false, 0, 0);
 
 /// Snapshot of the chip state seen at the start of this boot. See [`PRE_INIT`].
+#[cfg(feature = "dev-testkey")]
 pub fn pre_init_snapshot() -> (bool, u8, u8) {
     // SAFETY: single-threaded boot; written once at the top of `configure()` before
     // any reader can run.
@@ -483,16 +492,20 @@ pub fn configure() -> Option<Configured> {
     cortex_m::asm::delay(800_000);
 
     // #705: latch what the chip held BEFORE we reconfigure it. Must happen
-    // after the pins are configured but before the first write.
-    let pre_msb = read_reg(REG_LEDMSB);
-    let pre_mode = read_reg(REG_MODE);
-    // SAFETY: single-threaded boot, written once before any reader.
-    unsafe {
-        PRE_INIT = (
-            pre_msb.is_some(),
-            pre_msb.unwrap_or(0),
-            pre_mode.unwrap_or(0),
-        );
+    // after the pins are configured but before the first write. Dev images
+    // only — see [`PRE_INIT`]; a shipping build does no register read here.
+    #[cfg(feature = "dev-testkey")]
+    {
+        let pre_msb = read_reg(REG_LEDMSB);
+        let pre_mode = read_reg(REG_MODE);
+        // SAFETY: single-threaded boot, written once before any reader.
+        unsafe {
+            PRE_INIT = (
+                pre_msb.is_some(),
+                pre_msb.unwrap_or(0),
+                pre_mode.unwrap_or(0),
+            );
+        }
     }
 
     // Order: current/OVP limits first, brightness (LSB then MSB, per datasheet).

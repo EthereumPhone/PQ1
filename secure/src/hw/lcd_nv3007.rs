@@ -264,24 +264,6 @@ fn res_high() {
 /// reset: on iota2 the pin is PE14, whose only other role is spi_hw's AF5
 /// (SPI1_MISO) on a write-only panel. Keeping the write preserves that board's
 /// register sequence exactly.
-/// LCM_EN/HWEN's level while still high-Z at boot — the board's passive bias.
-/// See the read site in `init_dc_res_gpios` (#705).
-static mut HWEN_FLOAT: bool = false;
-
-/// Level of LCM_EN/HWEN before anything drove it this boot. See [`HWEN_FLOAT`].
-///
-/// **No consumer, by design.** `measured_boot` used to print this next to
-/// valid readings; it was removed 2026-09-23 because the measurement is
-/// INVALID (see `init_dc_res_gpios` — PB15 resets to analog mode, so IDR reads
-/// 0 regardless of the pin's voltage) and displaying it is how it came to be
-/// believed. Retained, with its explanation, so the defect is not re-invented;
-/// a valid replacement must configure PB15 as a digital input first.
-#[allow(dead_code)]
-pub fn hwen_float_level() -> bool {
-    // SAFETY: written once during boot before any reader runs.
-    unsafe { HWEN_FLOAT }
-}
-
 fn init_dc_res_gpios() {
     // Clock every port this module touches.
     let mut clocks = board::gpio_rcc_bit(DC_PORT) | board::gpio_rcc_bit(RES_PORT);
@@ -291,31 +273,25 @@ fn init_dc_res_gpios() {
     REG.rcc_ahb2enr1.set_bits(clocks);
     cortex_m::asm::dsb();
 
-    // #705: INVALID AS MEASURED -- kept only so the defect is not silently
-    // repeated. PB15's RESET MODER is 0b11 (GPIOB MODER resets to 0xFFFF_FEBF),
-    // i.e. ANALOG mode, and analog mode disables the Schmitt trigger so IDR
-    // reads 0 REGARDLESS of the pin's actual voltage (RM0456 GPIO chapter).
-    // This read therefore returns 0 whether HWEN is high or low, and the
-    // `HW=0` result it produced proves nothing about the board's passive bias.
+    // #705 HWEN BIAS PROBE — REMOVED 2026-09-23, recorded so it is not
+    // re-invented. It sampled `LCD_BACKLIGHT_EN`'s IDR here to decide whether
+    // the board's passive bias holds HWEN up (config survives a warm reset,
+    // so the FSBL's fingerprint window could be visible) or pulls it down
+    // (the window is always dark).
     //
-    // A valid version must configure PB15 as a digital INPUT with pulls
-    // disabled, record that configuration, and only then sample IDR -- and
-    // even that measures the steady state, not the reset-time trajectory,
-    // which needs a waveform.
+    // It could never work. PB15's RESET MODER is 0b11 (GPIOB MODER resets to
+    // 0xFFFF_FEBF), i.e. ANALOG mode, and analog mode disables the Schmitt
+    // trigger, so IDR reads 0 REGARDLESS of the pin's actual voltage (RM0456
+    // GPIO chapter). The `HW=0` it produced proved nothing, and was retracted
+    // in `fbf8fdd8`. It was deleted rather than kept because it ran on EVERY
+    // boot of every build — `ui-lcd` is in RELEASE_FEATURES — to populate a
+    // static nothing read.
     //
-    //   0 -> pulled down: every reset drops HWEN, the chip loses its
-    //        registers, and the FSBL's fingerprint window is ALWAYS dark
-    //   1 -> held up: configuration can survive a warm reset, so the window's
-    //        visibility depends on boot history
-    //
-    // Settles the schematic ambiguity (R112 10k at HWEN vs R124 100K at PWM)
-    // electrically, without a scope and without needing a warm reset.
-    if let Some((port, pin)) = board::LCD_BACKLIGHT_EN {
-        // SAFETY: IDR of a board-map GPIO port; read-only, no side effects.
-        let idr = unsafe { RoReg32::new(port + 0x10) };
-        // SAFETY: single-threaded boot, written once before any reader.
-        unsafe { HWEN_FLOAT = idr.read() & (1 << pin) != 0 };
-    }
+    // A valid replacement must configure PB15 as a digital INPUT with pulls
+    // disabled, record that configuration, and only then sample IDR — and even
+    // that measures the steady state, not the reset-time trajectory, which
+    // needs a waveform. The question it was aimed at (the R112 10k-at-HWEN vs
+    // R124 100K-at-PWM schematic ambiguity) is still open.
 
     // DC: output, push-pull, very-high speed, no pull.
     let dc2 = DC_PIN * 2;
