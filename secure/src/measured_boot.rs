@@ -289,24 +289,37 @@ pub fn run() {
         // enough for a protection to have tripped, and never on a timer (the
         // read is itself a documented restart path once a flag is set).
         //
-        //   ID03 F2=00 F1=00 -> bus verified, no fault latched. F2 bit 7 is
-        //                       the OVP answer the #705 experiments otherwise
-        //                       grade by eye.
+        //   ID03 B1=26 MO=15 -> bus verified; BSTCTR1 and MODE read back as
+        //                       written.
         //   ID=xx BUS FAULT  -> CHIP_ID is not 0x03, so nothing else could be
-        //                       believed and the flags were NOT read. A
-        //                       stuck-low bus reads 0x00 everywhere, which is
-        //                       byte-identical to "no fault".
+        //                       believed and no register was read. A stuck-low
+        //                       bus reads 0x00 everywhere, which is
+        //                       byte-identical to a good value of 0x00.
         //
-        // Full detail (including the BSTCTR1/MODE readback) goes to
-        // `secure_log!`, because the bench board has no panel at all.
+        // WHY THESE TWO, and not the fault flags they replaced (2026-09-23):
+        // the OVP question the flags answered is CLOSED — OVPSEL stays 001. The
+        // open question is now the FSBL's, and it is sharper. A fail-closed
+        // FSBL that refuses handoff when a read-back mismatches is unpatchable
+        // after the RDP-2 self-lock, so a constant that does not match on
+        // HEALTHY silicon does not mean a false alarm: it means every unit
+        // refuses forever. `CHIP_ID == 0x03` has a receipt (#733). These two
+        // have none — nothing has ever read them back on hardware. This is that
+        // receipt. Expected: B1=26 (reset is 0x2E, so 26/2E/00/-- are four
+        // distinguishable states) and MO=15 (reset is 0x00, Standby).
+        //
+        // FLAGS1/FLAGS2 are still read and still logged; only the LCD row
+        // changed, because the panel has 16 columns and this is what is open.
+        // Full detail goes to `secure_log!`, since the bench board has no panel.
         let f = crate::hw::aw99703::read_fault_snapshot();
         let frow: [u8; 16] = if f.bus_trustworthy() {
-            let f2 = hex(f.flags2.unwrap_or(0xFF));
-            let f1 = hex(f.flags1.unwrap_or(0xFF));
+            // `--` distinguishes "did not ACK" from any real byte value.
+            let dash = [b'-', b'-'];
+            let b1 = f.bstctr1.map_or(dash, hex);
+            let mo = f.mode.map_or(dash, hex);
             [
                 b'I', b'D', b'0', b'3',
-                b' ', b'F', b'2', b'=', f2[0], f2[1],
-                b' ', b'F', b'1', b'=', f1[0], f1[1],
+                b' ', b'B', b'1', b'=', b1[0], b1[1],
+                b' ', b'M', b'O', b'=', mo[0], mo[1],
             ]
         } else {
             let id = f.chip_id.map_or([b'-', b'-'], hex);
