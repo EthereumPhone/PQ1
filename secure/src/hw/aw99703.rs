@@ -34,7 +34,9 @@
 //!
 //! Transport is a bit-banged I2C master (~100 kHz) on the two GPIOs — this
 //! bus carries pixels' worth of brightness, never secure-element traffic, so
-//! the reasoning in `soft_i2c` applies unchanged.
+//! the display-only / never-secure-element-traffic rule recorded in
+//! `hw/mod.rs` applies unchanged. (That rule used to live in `hw/soft_i2c.rs`,
+//! deleted 2026-09-23 with the bench OLED backend.)
 //!
 //! **Not write-only.** `read_reg` and [`pre_init_snapshot`] already read the
 //! part, and both revisions document two latching fault registers we have
@@ -122,8 +124,9 @@ const BRIGHTNESS_MSB: u8 = 0xBF;
 #[cfg(feature = "aw99703-full-brightness")]
 const BRIGHTNESS_MSB: u8 = 0xFF;
 
-// --- bit-banged I2C (same idiom as `soft_i2c`, private copy: different pins,
-// different cfg gate, and the two must never be silently unified onto one bus) ---
+// --- bit-banged I2C (private copy: `soft_i2c_aux` drives the same physical
+// bus for the RGB driver, but this one has its own pins and cfg gate, and the
+// two must never be silently unified) ---
 const QUARTER: u32 = 400; // cycles; ≈100 kHz at 160 MHz, slower is fine
 const MODER_OFF: u32 = 0x00;
 const OTYPER_OFF: u32 = 0x04;

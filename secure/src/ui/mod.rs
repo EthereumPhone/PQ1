@@ -7,7 +7,9 @@
 //!   development today.
 //! * `ui-lcd` — real backend that drives an NV3007 142×428 SPI LCD
 //!   (`hw::lcd_nv3007`) and reads two GPIO buttons. The only shipping display
-//!   backend (the SSD1306 `ui-oled` backend was removed 2026-06-30).
+//!   backend. The SSD1306 `ui-oled` backend was removed 2026-06-30 and the
+//!   bench-only `ui-oled-bench` one on 2026-09-23, so the NV3007 LCD is the
+//!   only pixel backend left.
 //!
 //! Both backends export the same `Display` and `Input` types so the rest of
 //! the secure world is backend-agnostic.
@@ -29,14 +31,6 @@ mod lcd;
 #[cfg(feature = "ui-lcd")]
 pub use lcd::{Display, Input};
 
-/// Bench-only SSD1306 over bit-banged I2C. Exists because the pq1 board
-/// exposes almost no pins and the NV3007 panel may not be physically present;
-/// it validates nothing about the shipping display path. `PROD_FORBIDDEN`.
-#[cfg(feature = "ui-oled-bench")]
-mod oled;
-#[cfg(feature = "ui-oled-bench")]
-pub use oled::{Display, Input};
-
 /// Screenshot-hash capture — emits a SHA-256 fingerprint per displayed
 /// frame over the secure log, parsed by `tools/ui_fixture.py` for UI
 /// regression testing. See `docs/architecture/trezor-comparison.md §2.3`.
@@ -54,7 +48,7 @@ pub mod seed_wizard;
 /// Bypasses address-keyed font lookups for the seed wizard's word rows. Used by
 /// the `ui-lcd` (RGB565 via `secret_glyph_cols`) backend; the
 /// `ui-semihosting`/`ui-noop` backends don't render pixels.
-#[cfg(any(feature = "ui-lcd", feature = "ui-oled-bench"))]
+#[cfg(feature = "ui-lcd")]
 pub mod secret_text;
 
 /// Bench-only animated splash-screen preview for the NV3007 LCD. Ports the
@@ -146,14 +140,6 @@ impl Ui for noop::Display {
 
 #[cfg(feature = "ui-lcd")]
 impl Ui for lcd::Display {
-    #[inline] fn clear(&mut self) { self.clear() }
-    #[inline] fn draw_line(&mut self, row: usize, text: &str) { self.draw_line(row, text) }
-    #[inline] fn flush(&mut self) { self.flush() }
-    #[inline] fn splash(&mut self) { self.splash() }
-}
-
-#[cfg(feature = "ui-oled-bench")]
-impl Ui for oled::Display {
     #[inline] fn clear(&mut self) { self.clear() }
     #[inline] fn draw_line(&mut self, row: usize, text: &str) { self.draw_line(row, text) }
     #[inline] fn flush(&mut self) { self.flush() }

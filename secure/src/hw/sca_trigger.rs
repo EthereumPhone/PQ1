@@ -55,6 +55,11 @@
 /// looking at different pins, which is the exact shape of the `pin_diag` bug
 /// (see `optiga/reset_pin.rs`). Found by GPT-5.6 in the 2026-08-31 review.
 ///
+/// (`hw/soft_i2c.rs` was deleted 2026-09-23 with the bench OLED backend, so
+/// that particular guard is gone. The finding is left as written because it is
+/// why `SCA_TRIGGER` is derived from the board map rather than hardcoded —
+/// which is still true, and still load-bearing.)
+///
 /// A board with no bonded trigger pin leaves every entry point a no-op rather
 /// than writing to a pad that does not exist.
 const HAS_TRIG: bool = crate::board::SCA_TRIGGER.is_some();

@@ -262,46 +262,15 @@ pub const RGB_I2C_ADDR: u8 = 0x34;
 /// was dark with PB12 low and lit with it high.
 pub const RGB_EN: Option<(u32, u32)> = Some((GPIOB_S, 12));
 
-/// Height in pixels of the SSD1306 wired to this board's bench setup.
-///
-/// Strictly a property of the **module you plugged in**, not of the board —
-/// it lives here because that is where the rest of the bench-OLED wiring is
-/// described, and because it must be a compile-time constant (it sizes the
-/// framebuffer). The module actually on the bench (128x64). Four text rows at
-/// 16 px pitch.
-///
-/// Only 32 and 64 are valid: those are the SSD1306 geometries, and both
-/// divide evenly by 8 (the page height) and by `DISPLAY_ROWS`. Enforced by a
-/// `const assert!` in `ui::oled`.
-pub const OLED_HEIGHT_PX: usize = 64;
-
-/// Bench-only SSD1306 OLED, bit-banged I2C. **`ui-oled-bench` only.**
-///
-/// - `SCL` = **PA2**, the `TX` pad.
-/// - `SDA` = **PA3**, the `RX` pad.
-///
-/// Both are **bare pads**, which is the whole point: they can be reached with
-/// a crocodile clip or a test hook, where the 2x5 debug header is 1.27 mm and
-/// needs solder. On a board that exposes almost nothing, "can you attach a
-/// wire without an iron" is a real selection criterion.
-///
-/// These are the debug console's pins, so **`ui-oled-bench` and
-/// `uart-console` are mutually exclusive** — enforced in `hw::soft_i2c`. That
-/// costs nothing in practice: the console and the OLED are two ways of seeing
-/// the same 16x4 text, and you would not run both. Semihosting remains
-/// available alongside either.
-///
-/// An earlier revision used PB3 (the `SWO` header pin) for `SCL`. PB3 is
-/// electrically fine and still free, but it is a 1.27 mm header pin sitting
-/// directly beside `SWCLK` — a clip that bridges the two puts the debugger's
-/// clock in contention with firmware. PA2 avoids that entirely, and leaves
-/// PB3 to [`SCA_TRIGGER`], removing that collision as well.
-///
-/// Hardware I2C is still impossible on this pair: PA2/PA3 offer only
-/// `USART2` (AF7) and `LPUART1` (AF8), no I2C at all (DS13086 Rev 10,
-/// Tables 28/29). Hence software I2C.
-pub const OLED_SCL: Option<(u32, u32)> = Some((GPIOA_S, 2));
-pub const OLED_SDA: Option<(u32, u32)> = Some((GPIOA_S, 3));
+// The bench-OLED pin map (OLED_HEIGHT_PX / OLED_SCL = PA2 / OLED_SDA = PA3)
+// lived here until 2026-09-23, when the `ui-oled-bench` backend was removed —
+// real NV3007 panels exist now, so the stand-in is not needed.
+//
+// One fact from that block is worth keeping because it explains a LIVE choice:
+// an earlier revision put the bench SCL on PB3, the `SWO` header pin, which
+// sits directly beside `SWCLK` — a clip bridging the two puts the debugger's
+// clock in contention with firmware. Moving it to the PA2/PA3 bare pads freed
+// PB3 for [`SCA_TRIGGER`], which is where it is today.
 
 /// GPIOA / GPIOB pins this board's USB front end hands to the NON-SECURE
 /// world via `GPIOx_SECCFGR`. Consumed by `hw::usb_hw::init`; checked against

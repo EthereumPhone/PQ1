@@ -341,9 +341,21 @@ impl Input {
 
         #[cfg(feature = "debug-log")]
         {
-            // DHCSR.C_DEBUGEN gate: the semihosting OPEN is a BKPT; without a
-            // debugger it HardFaults, so only open when a debugger is attached
-            // (see oled.rs for the full rationale).
+            // DHCSR.C_DEBUGEN gate. The semihosting OPEN below is a
+            // `BKPT 0xAB` instruction. With a debugger attached the probe
+            // intercepts it and returns a file descriptor (or an error under
+            // probe-rs, which lacks `--semihosting-file` support). **Without a
+            // debugger** the BKPT escalates to a DebugMonitor fault and then
+            // HardFault — the device hangs before finishing UI init, which is
+            // what broke the standalone-testkey build. Skipping the OPEN when
+            // `C_DEBUGEN == 0` keeps the GPIO-button path working on
+            // USB-C-only power.
+            //
+            // Full text moved here 2026-09-23 from `ui/oled.rs`, which this
+            // used to point at and which has been deleted with the bench OLED
+            // backend. It was the only complete copy; losing it would invite a
+            // future "simplification" that reintroduces a boot hang on a
+            // device powered from USB-C alone.
             let c_debugen = unsafe { core::ptr::read_volatile(0xE000_EDF0 as *const u32) & 1 };
             if c_debugen != 0 {
                 use cortex_m_semihosting::syscall;

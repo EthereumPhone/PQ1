@@ -18,7 +18,6 @@
 #     SECSR/SECCR offsets, and wrote command bits to registers that do not
 #     implement them. `make bootproof-hw` programs option bytes correctly via
 #     STM32_Programmer_CLI; recoverable from git history if ever needed.)
-#   * tools/oled-mirror — host-side RTT framebuffer viewer.
 #   * tools/*.py / *.js / *.sh — host scripts; not Rust.
 [workspace]
 members = [

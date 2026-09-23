@@ -166,16 +166,15 @@ pub mod se_power;
 ))]
 pub mod se_i2c_probe;
 
-/// Bit-banged I2C for the bench OLED (`ui-oled-bench`). **Display only** —
-/// it has none of the hardware peripheral's timing, error reporting or GTZC
-/// coverage, so it must never carry secure-element traffic.
-#[cfg(all(feature = "ui-oled-bench", feature = "stm32u585"))]
-pub mod soft_i2c;
-
 /// Bit-banged I2C master for the `pq1` auxiliary bus (I2C2, PB13/PB14) shared
 /// by the two LED-driver ICs. Pin-generic, so the AW21036 and (once merged)
 /// the AW99703 backlight share one transport instead of a copy each.
 /// **LED brightness only** — never secure-element traffic.
+///
+/// This is the only bit-banged I2C left: `soft_i2c`, which served the bench
+/// OLED, was deleted 2026-09-23 with that backend. Modules whose comments cite
+/// "the reasoning in `soft_i2c`" mean the display-only / never-SE-traffic rule
+/// recorded here, which is unchanged.
 #[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
 pub mod soft_i2c_aux;
 

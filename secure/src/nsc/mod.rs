@@ -132,7 +132,6 @@ compile_error!(
         feature = "se050-rotate-scp03",
         feature = "se050-scp03-allow-factory-fallback",
         feature = "sca-trigger",
-        feature = "ui-oled-bench",
     )
 ))]
 compile_error!(
@@ -874,40 +873,11 @@ compile_error!(
      Phase A/B `ui-lcd`+`ui-noop` pairing is no longer valid.)"
 );
 
-// `ui-capture` hashes whatever buffer a backend hands `capture::emit`, and the
-// backends hand it different things: `ui-semihosting` passes the 64-byte
-// character grid, this OLED backend passes its 512-byte SSD1306 page buffer,
-// and `ui-lcd` does not call emit at all. Combining them would produce a
-// [UI-FP] fingerprint stream matching neither `tests/ui_fixtures.json` nor the
-// LCD's silence — a green-looking capture run that compares nothing.
-#[cfg(all(feature = "ui-oled-bench", feature = "ui-capture"))]
-compile_error!(
-    "`ui-oled-bench` and `ui-capture` are incompatible: capture fingerprints the \
-     backend's own framebuffer, and this backend's is the 512-byte SSD1306 page \
-     buffer rather than the character grid the fixtures were recorded against. \
-     Capture runs belong on `ui-semihosting`."
-);
-
-#[cfg(all(feature = "ui-oled-bench", feature = "ui-lcd"))]
-compile_error!(
-    "UI backends `ui-oled-bench` and `ui-lcd` are mutually exclusive. Pick exactly \
-     one. (`ui-oled-bench` became a standalone Display backend in Phase C; the old \
-     Phase A/B `ui-oled-bench`+`ui-lcd` pairing is no longer valid.)"
-);
-
-#[cfg(all(feature = "ui-oled-bench", feature = "ui-semihosting"))]
-compile_error!(
-    "UI backends `ui-oled-bench` and `ui-semihosting` are mutually exclusive. Pick exactly \
-     one. (`ui-oled-bench` became a standalone Display backend in Phase C; the old \
-     Phase A/B `ui-oled-bench`+`ui-semihosting` pairing is no longer valid.)"
-);
-
-#[cfg(all(feature = "ui-oled-bench", feature = "ui-noop"))]
-compile_error!(
-    "UI backends `ui-oled-bench` and `ui-noop` are mutually exclusive. Pick exactly \
-     one. (`ui-oled-bench` became a standalone Display backend in Phase C; the old \
-     Phase A/B `ui-oled-bench`+`ui-noop` pairing is no longer valid.)"
-);
+// Four `ui-oled-bench` mutual-exclusion fences stood here (vs `ui-capture`,
+// `ui-lcd`, `ui-semihosting`, `ui-noop`) until 2026-09-23. They died with the
+// backend, not with the rule: the "exactly one UI backend" requirement is
+// still enforced below, and `ui-lcd`/`ui-semihosting`/`ui-noop` remain
+// mutually exclusive through their own fences.
 
 // At least one UI backend must be selected when targeting actual hardware
 // or QEMU. (Pure `cargo test -p sphincs-tz-secure --tests` builds run on
@@ -920,13 +890,12 @@ compile_error!(
         feature = "ui-semihosting",
         feature = "ui-noop",
         feature = "ui-lcd",
-        feature = "ui-oled-bench",
     ))
 ))]
 compile_error!(
-    "Exactly one UI backend must be selected: `ui-semihosting`, `ui-noop`, \
-     `ui-lcd`, or `ui-oled-bench` (bench-only SSD1306, PROD_FORBIDDEN). \
-     (`ui-capture` composes with any backend.)"
+    "Exactly one UI backend must be selected: `ui-semihosting`, `ui-noop` or \
+     `ui-lcd`. (`ui-capture` composes with any backend.) The bench-only \
+     `ui-oled-bench` SSD1306 backend was removed 2026-09-23."
 );
 
 // ---------------------------------------------------------------------------

@@ -226,26 +226,9 @@ board-pq1 = []
 # listed in the Makefile's PROD_FORBIDDEN.
 se-i2c-probe = []
 
-# Bench-only SSD1306 OLED backend over BIT-BANGED I2C (`secure/src/ui/oled.rs`
-# + `hw/soft_i2c.rs`). Renders the same 16x4 character grid as every other UI
-# backend.
-#
-# Exists because the pq1 production board exposes only a 2x5 debug header and
-# four pads, so until the NV3007 panel is fitted there is no way to see the
-# trusted UI on the device itself. It validates NOTHING about the shipping
-# display path (different bus, driver and geometry), and while a debugger is
-# attached `ui-semihosting` shows the identical text for free. It wins only
-# untethered, or at RDP >= 1 where SWD and semihosting are both gone.
-#
-# Mutually exclusive with `sca-trigger` (both want PB3 on pq1) and, on iota2,
-# with a real SE backend (the pins there ARE the SE bus) — both enforced by
-# const asserts in `hw::soft_i2c`. NEVER SHIP: it is in PROD_FORBIDDEN.
-# Implies `gpio-buttons` for the same reason `ui-lcd` does: this backend exists
-# for untethered / RDP>=1 use, and in exactly that configuration there is no
-# semihosting input, so without physical buttons `wait_button` falls to a WFE
-# stub and the UI has no input source at all. pq1's buttons are on-board
-# PA0/PA1, so this is satisfiable there.
-ui-oled-bench = ["dep:embedded-graphics", "gpio-buttons", "stm32u585"]
+# `ui-oled-bench` (bench-only SSD1306 over bit-banged I2C) was REMOVED
+# 2026-09-23: real NV3007 panels exist now, so the stand-in is not needed.
+# It was the last consumer of `embedded-graphics` outside `ui-lcd`.
 # Route every SHA-256 call in the signing crates through the STM32U585 HASH
 # peripheral (the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`).
 # Without this feature the signing crates use software `sha2::Sha256` — what

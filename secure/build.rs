@@ -72,34 +72,25 @@ fn main() {
 
     // Mutually-exclusive UI backend check.
     //
-    // Four Display backends, exactly one must be active:
+    // Three Display backends, exactly one must be active:
     //   * `ui-semihosting`  QEMU / debugger console
     //   * `ui-noop`         headless
     //   * `ui-lcd`          NV3007 142×428 SPI LCD — the ONLY shipping backend
-    //   * `ui-oled-bench`   SSD1306 over bit-banged I2C, BENCH ONLY
     //
-    // The SSD1306 backend was removed 2026-06-30 in favour of NV3007-only, and
-    // its return is not a reversal of that: `ui-oled-bench` exists because the
-    // pq1 production board exposes only a debug header and four pads, so until
-    // the NV3007 panel is fitted there is no way to see the trusted UI on the
-    // device. It is in the Makefile's PROD_FORBIDDEN list and validates nothing
-    // about the shipping display path.
+    // There were four. The shipping SSD1306 backend went 2026-06-30 in favour
+    // of NV3007-only; the bench-only `ui-oled-bench` that briefly outlived it
+    // went 2026-09-23, once real panels existed. It had been the only way to
+    // see the trusted UI on a pq1 board with no panel fitted, and it validated
+    // nothing about the shipping display path.
     let ui_semihosting = env::var_os("CARGO_FEATURE_UI_SEMIHOSTING").is_some();
     let ui_noop = env::var_os("CARGO_FEATURE_UI_NOOP").is_some();
     let ui_lcd = env::var_os("CARGO_FEATURE_UI_LCD").is_some();
-    let ui_oled_bench = env::var_os("CARGO_FEATURE_UI_OLED_BENCH").is_some();
-    let ui_count = ui_semihosting as u32 + ui_noop as u32 + ui_lcd as u32 + ui_oled_bench as u32;
+    let ui_count = ui_semihosting as u32 + ui_noop as u32 + ui_lcd as u32;
     if ui_count > 1 {
-        panic!(
-            "UI backends (`ui-semihosting`, `ui-noop`, `ui-lcd`, `ui-oled-bench`) \
-             are mutually exclusive"
-        );
+        panic!("UI backends (`ui-semihosting`, `ui-noop`, `ui-lcd`) are mutually exclusive");
     }
     if ui_count == 0 {
-        panic!(
-            "must enable exactly one UI backend (`ui-semihosting`, `ui-noop`, \
-             `ui-lcd`, or `ui-oled-bench`)"
-        );
+        panic!("must enable exactly one UI backend (`ui-semihosting`, `ui-noop`, `ui-lcd`)");
     }
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());

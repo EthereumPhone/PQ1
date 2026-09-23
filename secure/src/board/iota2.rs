@@ -102,32 +102,11 @@ pub const SE050_I2C_SCL_PIN: u32 = 8;
 pub const SE050_I2C_SDA_PIN: u32 = 9;
 pub const SE050_I2C_AF: u32 = 4;
 
-/// Bench-only SSD1306 OLED, bit-banged I2C. **`ui-oled-bench` only.**
-///
-/// The historical pins from before the backend was removed — PB8/PB9, the
-/// Arduino-header I2C1 lines. **These are also this board's secure-element
-/// bus**, so the bench OLED and a real SE backend cannot coexist here: both
-/// would configure the same two pads, one as AF4 open-drain for the I2C1
-/// peripheral and one as a GPIO for bit-banging. `hw::soft_i2c` rejects that
-/// combination at compile time; use `mock-se` for OLED builds on this board.
-///
-/// (pq1 bit-bangs on PB3/PA3 instead, which no *secure element* claims — but
-/// PB3 there is the SCA scope trigger, so that board has its own exclusivity
-/// rule. Both are enforced in `hw::soft_i2c`.)
-/// Height in pixels of the SSD1306 wired to this board's bench setup.
-///
-/// Strictly a property of the **module you plugged in**, not of the board —
-/// it lives here because that is where the rest of the bench-OLED wiring is
-/// described, and because it must be a compile-time constant (it sizes the
-/// framebuffer). The historical bench module (128x32). Four text rows at 8 px pitch.
-///
-/// Only 32 and 64 are valid: those are the SSD1306 geometries, and both
-/// divide evenly by 8 (the page height) and by `DISPLAY_ROWS`. Enforced by a
-/// `const assert!` in `ui::oled`.
-pub const OLED_HEIGHT_PX: usize = 32;
-
-pub const OLED_SCL: Option<(u32, u32)> = Some((GPIOB_S, 8));
-pub const OLED_SDA: Option<(u32, u32)> = Some((GPIOB_S, 9));
+// The bench-OLED pin map lived here until 2026-09-23, when the
+// `ui-oled-bench` backend was removed. On this board it bit-banged PB8/PB9 —
+// which are also the secure-element bus — so an OLED build and a real SE
+// backend could never coexist here, and `hw::soft_i2c` rejected the pair at
+// compile time. That constraint goes with the backend.
 
 /// The SE I2C buses to bring up: exactly one, shared by both chips.
 pub const SE_I2C_BUSES: &[SeI2cBus] = &[SeI2cBus {
