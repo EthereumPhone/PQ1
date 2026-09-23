@@ -516,6 +516,35 @@ fn negative_fsbl_board_map_matches_the_secure_board_map() {
                  wrong — do not relax this test."
             );
         }
+
+        // The AW99703 transport constants (#705), pq1 only. Asserted BY EXACT
+        // NAME rather than added to the `pub const LCD_` sweep above, for two
+        // reasons: they do not share that prefix, and the sweep is guarded by a
+        // `>= 10` floor, which cannot notice a constant being deleted. A named
+        // list can. If one of these is renamed, fix the name here — do not drop
+        // the entry.
+        if board == "pq1" {
+            for name in [
+                "AUX_I2C_PORT",
+                "AUX_I2C_SCL_PIN",
+                "AUX_I2C_SDA_PIN",
+                "BACKLIGHT_I2C_ADDR",
+            ] {
+                let line = fsbl_src
+                    .lines()
+                    .map(str::trim)
+                    .find(|l| l.starts_with(&format!("pub const {name}")))
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "fsbl/src/board/pq1.rs must declare `{name}` — the FSBL's I2C                              stage (#705) drives the backlight through it, and a pin map                              that exists in only one of the two copies is how the wrong                              pins reach silicon."
+                        )
+                    });
+                assert!(
+                    secure_src.lines().map(str::trim).any(|s| s == line),
+                    "fsbl/src/board/pq1.rs and secure/src/board/pq1.rs have DRIFTED on                      `{name}`.\nThis line is in the FSBL's copy but not in the secure                      map:\n    {line}\nBoth drive the SAME physical AW99703 on the SAME                      bus. Update whichever copy is wrong — do not relax this test."
+                );
+            }
+        }
     }
 }
 

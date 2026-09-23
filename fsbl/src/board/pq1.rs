@@ -44,16 +44,40 @@ pub const LCD_RST_PORT: u32 = GPIOB_S;
 pub const LCD_RST_PIN: u32 = 1;
 pub const LCD_RST_IS_DRIVABLE: bool = true;
 
-/// `LCM_EN` — PB15, the enable for the AW99703 backlight boost driver.
+/// `LCM_EN` — PB15, the AW99703 backlight driver's `HWEN`.
 ///
-/// **This alone may not light the panel.** The AW99703 is an I2C-controlled
-/// LED driver at `0x36` on I2C2 (PB13/PB14); brightness almost certainly
-/// has to be programmed over that bus after the enable is asserted. There
-/// is no driver for it in the tree yet.
+/// **This alone does not light the panel** — settled by experiment, not
+/// inference (#705, commit `a3226eca`): a dev build that stalled 5 s before the
+/// chip's first register write showed a blank screen for exactly that window.
+/// `HWEN` high only reaches *Standby*; the part emits no LED current until
+/// `MODE[1:0]` is written to `01` over I2C2, so asserting this pin is
+/// necessary and not sufficient.
 ///
-/// Consequence for bring-up, worth stating where it will be read: a DARK
-/// PANEL IS NOT EVIDENCE THIS PORT FAILED. The FSBL cannot drive I2C2 (no
-/// I2C driver at this stage, by design), so the success criterion for the
-/// display port is the `stage-marker` page showing `LcdInited` and
-/// `RenderFlushed` reached — not visible pixels.
+/// The consequence is what #705 exists for: any stage that runs before that
+/// I2C write renders onto a dark panel, including this one. A dark panel is
+/// therefore NOT evidence that the display port failed, and until the I2C
+/// stage lands the success criterion stays the `stage-marker` page reaching
+/// `LcdInited` and `RenderFlushed`, not visible pixels.
 pub const LCD_BACKLIGHT_EN: Option<(u32, u32)> = Some((GPIOB_S, 15));
+
+// ---------------------------------------------------------------------------
+// AW99703 backlight driver — I2C2 transport (#705)
+// ---------------------------------------------------------------------------
+//
+// Copied VERBATIM from `secure/src/board/pq1.rs`; `source_invariants.rs`
+// asserts each line appears there unchanged, because two copies of a pin map
+// that disagree is how the wrong pins reached silicon once already (PA8 is a
+// button on iota2 and the secure-element rail enable here).
+//
+// The bus is shared with the AW21036 RGB driver at 0x34, which the FSBL never
+// talks to — but which can hold SDA after a warm reset mid-transaction, so an
+// I2C stage here needs a bus-idle check and clock recovery rather than an
+// unconditional START.
+
+/// I2C2 SCL/SDA port — shared bus carrying both LED-driver ICs.
+pub const AUX_I2C_PORT: u32 = GPIOB_S;
+pub const AUX_I2C_SCL_PIN: u32 = 13;
+pub const AUX_I2C_SDA_PIN: u32 = 14;
+
+/// AW99703 backlight boost driver, 7-bit address.
+pub const BACKLIGHT_I2C_ADDR: u8 = 0x36;
