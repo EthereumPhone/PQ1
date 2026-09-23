@@ -59,8 +59,22 @@ const BSTCTR1_OVP: u8 = (0b00 << 6) | (1 << 5) | (0b000 << 2) | 0b10;
 /// PWM-pin dimming disabled (pin floats), linear map, backlight mode.
 const MODE_I2C_LINEAR_BACKLIGHT: u8 = (1 << 4) | (1 << 2) | 0b01;
 /// Demo brightness: 11-bit code 0x5FF of 0x7FF ≈ 75 % of full scale (linear map).
+/// `LEDMSB` holds bits [10:3] and `LEDLSB[2:0]` bits [2:0], so 0x5FF is
+/// (0xBF, 0x07).
 const BRIGHTNESS_LSB: u8 = 0x07;
+#[cfg(not(feature = "aw99703-full-brightness"))]
 const BRIGHTNESS_MSB: u8 = 0xBF;
+
+/// DEV EXPERIMENT (#705): 11-bit code **0x7FF**, full scale — (0xFF, 0x07).
+///
+/// Margin probe for `aw99703-ovp-low`. Brightness sets the LED current as a
+/// fraction of `LEDCUR`'s full scale, so 0x5FF -> 0x7FF takes the string from
+/// ~15 mA to the full ~20 mA, raising Vf and therefore the boost output. It
+/// stays at the part's default full-scale current: this deliberately does NOT
+/// raise `LEDCUR` to its 29.6 mA maximum, which could exceed the panel's
+/// rated LED current, and there is exactly one sealed screen unit.
+#[cfg(feature = "aw99703-full-brightness")]
+const BRIGHTNESS_MSB: u8 = 0xFF;
 
 // --- bit-banged I2C (same idiom as `soft_i2c`, private copy: different pins,
 // different cfg gate, and the two must never be silently unified onto one bus) ---

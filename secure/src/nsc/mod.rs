@@ -183,6 +183,14 @@ compile_error!(
      Bench it via a single-boot hardware test image (e2e-test / dev-testkey)."
 );
 // Belt-and-braces: the canonical ship profile must never carry it.
+#[cfg(all(feature = "mode-production", feature = "aw99703-full-brightness"))]
+compile_error!(
+    "mode-production and aw99703-full-brightness are mutually exclusive. That \
+     feature is a #705 bench probe that raises the backlight to full scale to \
+     push the boost output voltage up; shipping brightness is an owner/UX \
+     decision, not a side effect of a margin experiment."
+);
+
 #[cfg(all(feature = "mode-production", feature = "aw99703-ovp-low"))]
 compile_error!(
     "mode-production and aw99703-ovp-low are mutually exclusive. That feature \

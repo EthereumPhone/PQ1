@@ -548,6 +548,13 @@ lcd-test = ["ui-lcd"]
 # One unit at one temperature is NOT the worst-case envelope — it cannot
 # authorise the shipping value. Fenced out of `mode-production`.
 aw99703-ovp-low = ["ui-lcd"]
+# DEV EXPERIMENT ONLY (#705) — drive the backlight at full scale (brightness
+# code 0x7FF instead of 0x5FF, so ~20 mA instead of ~15 mA) to raise the boost
+# output voltage. Used with `aw99703-ovp-low` to show the string still clears
+# the lowered OVP threshold at this board's highest DESIGN operating point.
+# Deliberately does not touch `LEDCUR`, whose 29.6 mA maximum may exceed the
+# panel's rating. Fenced out of `mode-production`.
+aw99703-full-brightness = ["ui-lcd"]
 # Animated splash-screen preview. Short-circuits `main()` into
 # `ui::splash_test::run`, which ports the three `assets/splash-1{6,7,8}-*.html`
 # revisions (hyperspace / horizon / nebula) to no_std and cycles them on the
