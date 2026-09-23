@@ -269,6 +269,14 @@ fn res_high() {
 static mut HWEN_FLOAT: bool = false;
 
 /// Level of LCM_EN/HWEN before anything drove it this boot. See [`HWEN_FLOAT`].
+///
+/// **No consumer, by design.** `measured_boot` used to print this next to
+/// valid readings; it was removed 2026-09-23 because the measurement is
+/// INVALID (see `init_dc_res_gpios` — PB15 resets to analog mode, so IDR reads
+/// 0 regardless of the pin's voltage) and displaying it is how it came to be
+/// believed. Retained, with its explanation, so the defect is not re-invented;
+/// a valid replacement must configure PB15 as a digital input first.
+#[allow(dead_code)]
 pub fn hwen_float_level() -> bool {
     // SAFETY: written once during boot before any reader runs.
     unsafe { HWEN_FLOAT }

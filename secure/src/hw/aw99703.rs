@@ -4,19 +4,47 @@
 //! `HWEN`, which only brings the chip out of shutdown into *Standby*. It emits
 //! no LED current until `MODE[1:0]` is written to `01` (backlight) over I2C2
 //! (PB13/PB14, 4.7 kΩ pull-ups to 3V3 on the RGB-driver side of the bus,
-//! 7-bit address `0x36`). Datasheet: AW99703 V1.2 (Dec 2019), register table
-//! p.26–28; copy at `evt-images/AW99703-datasheet-v1.2.pdf`.
+//! 7-bit address `0x36`). Datasheet: AW99703 — the register values below were
+//! derived from **V1.2 (Dec 2019)**; Awinic's current revision is **V1.6
+//! (Mar 2024)**, so treat any V1.2-sourced number as pending re-check.
+//!
+//! The PDFs are vendor-copyrighted and deliberately NOT in this repo
+//! (`.gitignore`: purged from history before open-sourcing). Local copies:
+//! `~/Documents/PQ1/vendor-docs/AW99703-datasheet-v1.{2,6}-*.pdf`, from
+//! <https://doc.awinic.com/doc/202403/4635fa96-003b-4dd8-ad18-b47173a9429f.pdf>
+//! (V1.6) and the AW99703 product page. A previous version of this comment
+//! claimed a copy at `evt-images/AW99703-datasheet-v1.2.pdf`, which has never
+//! existed.
 //!
 //! Board facts that fix the register values (schematic sheet 1, "Backlight
-//! Driver"): only `LED1` is wired (`LCM_LEDK`), `LED2`/`LED3` float, the `PWM`
-//! pin floats, VIN = 3V6, and the boost output capacitor C140 is rated 25 V.
-//! Hence: enable channel 1 only, disable PWM-pin dimming, and lower OVP from
-//! the 38 V default to 24 V so an open string cannot exceed C140's rating.
+//! Driver"): only `LED1` is wired (`LCM_LEDK`), `LED2`/`LED3` are unconnected,
+//! VIN = 3V6, and the boost output capacitor C140 is rated 25 V. Hence: enable
+//! channel 1 only, disable PWM-pin dimming, and lower OVP from the 38 V
+//! default so an open string cannot exceed C140's rating.
+//!
+//! The `PWM` pin does **not** float — corrected 2026-09-23. Datasheet p.3 row
+//! A1, identical in V1.2 and V1.6: *"Input for PWM signal. With an internal
+//! 400 kΩ pull-down resistor to GND."* That makes `PDIS=1` REQUIRED rather
+//! than defensive: with `PDIS=0` the duty read from a pin held low is zero, so
+//! the panel would be dark rather than dim, and the PWM timeout separately
+//! kills the boost output in ~0.68 ms at the default sample rate. (Whether the
+//! pin is additionally loaded externally is the open R112/R124 schematic
+//! ambiguity noted in `lcd_nv3007.rs`; the timeout route to a dark panel holds
+//! either way, since no pulses arrive.)
 //!
 //! Transport is a bit-banged I2C master (~100 kHz) on the two GPIOs — this
 //! bus carries pixels' worth of brightness, never secure-element traffic, so
-//! the reasoning in `soft_i2c` applies unchanged. Write-only: the chip needs
-//! no readback to light up.
+//! the reasoning in `soft_i2c` applies unchanged.
+//!
+//! **Not write-only.** `read_reg` and [`pre_init_snapshot`] already read the
+//! part, and both revisions document two latching fault registers we have
+//! never used: `FLAGS1` 0x0E (LED open/short per channel, OCP, OT) and
+//! `FLAGS2` 0x0F (bit 7 OVP, bit 6 UVLO, bit 5 flash timeout). Reading one is
+//! NOT passive: pp.23–24 name "reading back fault register" as one of three
+//! ways to *restart the IC* once a flag is set, so any use must be a one-shot
+//! diagnostic, never a poll — a poll would turn a latched protection into a
+//! host-driven retry loop from display code. See the tracking issue before
+//! adding a reader.
 #![cfg(all(feature = "stm32u585", feature = "ui-lcd", feature = "board-pq1"))]
 
 use crate::board;
@@ -31,21 +59,34 @@ const _: () = assert!(
     "AW99703 SCL and SDA are the same pin"
 );
 
-// Register map (datasheet p.26).
+// Register map (V1.6 p.28; V1.2 p.27 — the old `p.26` cite matched neither).
 const REG_MODE: u8 = 0x02; // [4] PDIS, [2] MAP (1 = linear), [1:0] WORKMODE (01 = backlight)
 const REG_LEDCUR: u8 = 0x03; // [7:3] BL_FS = 4.8 mA + code*0.8 mA, [2:0] CH3EN/CH2EN/CH1EN
 const REG_BSTCTR1: u8 = 0x04; // [7:6] SF_SFT, [5] SF (1 = 1 MHz), [4:2] OVPSEL, [1:0] OCPSEL
 const REG_LEDLSB: u8 = 0x06; // [2:0] brightness LSBs — program BEFORE the MSB
 const REG_LEDMSB: u8 = 0x07; // [7:0] brightness MSBs
 
-/// 20 mA full-scale (code 0b10011, the chip default) on channel 1 only.
+/// Channel 1 only, at the chip's default 20 mA full scale (BL_FS 0b10011).
+///
+/// The current half is a no-op: the reset value is **0x9F**, whose BL_FS field
+/// is already 0b10011. What this write actually does is clear CH2EN/CH3EN,
+/// and that is load-bearing — V1.6 p.24 scopes LED open/short detection to
+/// *enabled* sinks, so leaving the default would put pq1's two unconnected
+/// sinks permanently inside the fault-detection set.
 const LEDCUR_CH1_20MA: u8 = (0b10011 << 3) | 0b001;
 /// No frequency shift, 1 MHz switching, **OVP = 24 V** (001), OCP 2.7 A (default).
 ///
-/// NOT a claim that 001 is safe for C140: Awinic V1.2 gives that setting as
-/// 22.5 V min / 24 V typ / **25.5 V max**, so its upper bound already exceeds
-/// the 25 V part. See `aw99703-ovp-low` for the experiment that tests whether
-/// the one setting below it is usable on this panel.
+/// NOT a claim that 001 is safe for C140: the OVPSEL table gives that setting
+/// as 22.5 V min / 24 V typ / **25.5 V max**, so its upper bound already
+/// exceeds the 25 V part. Re-verified 2026-09-23 against **V1.6 p.7**, which
+/// is cell-for-cell identical to V1.2 p.7 — the concern is real and is not an
+/// artefact of reading a stale revision. See `aw99703-ovp-low` for the
+/// experiment that tests whether the one setting below it is usable here.
+///
+/// The reset value of this register is **0x2E**, i.e. `OVPSEL=011` = 38 V. So
+/// a part that is powered but unconfigured sits at the highest threshold, far
+/// above C140's rating — which is exactly why [`enable`] is gated on the
+/// [`Configured`] token rather than on a return value a caller could ignore.
 #[cfg(not(feature = "aw99703-ovp-low"))]
 const BSTCTR1_OVP: u8 = (0b00 << 6) | (1 << 5) | (0b001 << 2) | 0b10;
 
@@ -56,7 +97,12 @@ const BSTCTR1_OVP: u8 = (0b00 << 6) | (1 << 5) | (0b001 << 2) | 0b10;
 /// experiment wants. Everything else in the byte is unchanged.
 #[cfg(feature = "aw99703-ovp-low")]
 const BSTCTR1_OVP: u8 = (0b00 << 6) | (1 << 5) | (0b000 << 2) | 0b10;
-/// PWM-pin dimming disabled (pin floats), linear map, backlight mode.
+/// PWM-pin dimming disabled, linear map, backlight mode.
+///
+/// `PDIS=1` is required, not defensive — the PWM pin has an internal 400 kΩ
+/// pull-down (module header). V1.6's *only* change over V1.5 was to
+/// disambiguate this bit's description, and it resolved in favour of this
+/// reading: `0: PWM dimming enable (default) / 1: PWM dimming disable`.
 const MODE_I2C_LINEAR_BACKLIGHT: u8 = (1 << 4) | (1 << 2) | 0b01;
 /// Demo brightness: 11-bit code 0x5FF of 0x7FF ≈ 75 % of full scale (linear map).
 /// `LEDMSB` holds bits [10:3] and `LEDLSB[2:0]` bits [2:0], so 0x5FF is

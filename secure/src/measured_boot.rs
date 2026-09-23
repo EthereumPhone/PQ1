@@ -217,23 +217,42 @@ pub fn run() {
     // of a screen that already holds for TITLE_MS. Put here because the
     // earlier BOOT-step screens are overwritten faster than a human can read.
     //
-    //   AW=1 MSB=BF -> config survived this reset: the FSBL's fingerprint
-    //                  window would be VISIBLE
-    //   AW=0        -> HWEN went low, registers reset and I2C disabled: the
-    //                  window is DARK and the FSBL must program the part
+    // Legend CORRECTED 2026-09-23 (the previous one misread AW=0, and MSB is
+    // degenerate in one build):
+    //
+    //   AW=1 M=BF MD=15 -> config survived this reset: the FSBL's fingerprint
+    //                      window would be VISIBLE
+    //   AW=1 M=FF MD=00 -> the part was reset (HWEN low / POR / soft reset):
+    //                      these are the documented defaults, so the window is
+    //                      DARK and the FSBL must program the part
+    //   AW=0            -> the chip is not answering NOW: bus fault, chip
+    //                      absent, or still in power-on reset. It does NOT
+    //                      mean "HWEN went low" — `init_dc_res_gpios` drives
+    //                      HWEN high before `configure()`, which then waits
+    //                      ~5 ms, far beyond the 250 us t_reset.
+    //
+    // MODE is the discriminator and MSB alone is not: under
+    // `aw99703-full-brightness` we write MSB=FF, which IS the reset default,
+    // so that build cannot tell "survived" from "reset" on MSB. MODE's default
+    // is 0x00 (Standby) against the 0x15 we write, in every build.
+    //
+    // `HW=` was dropped from this row: `hwen_float_level` is documented
+    // INVALID AS MEASURED (PB15 resets to analog mode, so IDR reads 0 whatever
+    // the pin voltage), and printing an invalid number next to valid ones is
+    // how it got believed the first time.
     #[cfg(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd"))]
     {
-        let (acked, msb, _mode) = crate::hw::aw99703::pre_init_snapshot();
+        let (acked, msb, mode) = crate::hw::aw99703::pre_init_snapshot();
         let hex = |n: u8| -> [u8; 2] {
             let d = |x: u8| if x < 10 { b'0' + x } else { b'A' + (x - 10) };
             [d(n >> 4), d(n & 0xF)]
         };
         let m = hex(msb);
-        let hw = crate::hw::lcd_nv3007::hwen_float_level();
+        let md = hex(mode);
         let row = [
             b'A', b'W', b'=', if acked { b'1' } else { b'0' },
-            b' ', b'M', b'S', b'B', b'=', m[0], m[1],
-            b' ', b'H', b'W', b'=', if hw { b'1' } else { b'0' },
+            b' ', b'M', b'=', m[0], m[1],
+            b' ', b'M', b'D', b'=', md[0], md[1],
         ];
         show_status("OS Fingerprint", crate::ui::ascii_str(&row));
     }
