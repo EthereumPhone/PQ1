@@ -205,6 +205,30 @@ fn positive_progress_callback_invoked_monotonically_to_100() {
     let _ = observed;
 }
 
+// The subtree builds are ~85% of a sign; they report inside their leaf loop
+// so a UI paced by the hook (the pixel signing film) never stalls for a
+// whole hypertree layer. Pins: many reports inside each layer's 32..65 /
+// 65..98 band, and the hook changes nothing about the signature.
+#[cfg(not(lean_extract))]
+#[test]
+fn positive_progress_reports_inside_each_hypertree_layer() {
+    use std::cell::RefCell;
+    thread_local!(static PROG: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) });
+    fn cb(pct: u8) {
+        PROG.with(|v| v.borrow_mut().push(pct));
+    }
+    PROG.with(|v| v.borrow_mut().clear());
+    let s = ShuffleSeed([0x5Au8; 32]);
+    let reported = sk().sign_with_shuffle(&MSG, None, &s, cb);
+    let prog: Vec<u8> = PROG.with(|v| v.borrow().clone());
+
+    assert_eq!(reported.as_slice(), sk().sign(&MSG, None).as_slice());
+    let layer0 = prog.iter().filter(|&&p| (33..65).contains(&p)).count();
+    let layer1 = prog.iter().filter(|&&p| (66..98).contains(&p)).count();
+    assert!(layer0 >= 24, "layer 0 reported {layer0} times: {prog:?}");
+    assert!(layer1 >= 24, "layer 1 reported {layer1} times: {prog:?}");
+}
+
 // ===========================================================================
 // NEGATIVE: assumption-challenging tests
 // ===========================================================================

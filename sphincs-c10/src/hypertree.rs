@@ -96,7 +96,7 @@ pub(crate) struct ProgressSink;
 
 /// `ProgressSink` with no callback installed. Arrow-free signature in
 /// both cfg shapes, so it extracts transparently.
-fn progress_none() -> ProgressSink {
+pub(crate) fn progress_none() -> ProgressSink {
     #[cfg(not(lean_extract))]
     {
         ProgressSink(None)
@@ -111,7 +111,7 @@ fn progress_none() -> ProgressSink {
 /// closure) so the sign path stays inside the closure-free Rust
 /// fragment the Aeneas Lean extraction supports (work-todo §33 P0).
 #[inline]
-fn report(progress: &ProgressSink, pct: u8) {
+pub(crate) fn report(progress: &ProgressSink, pct: u8) {
     #[cfg(not(lean_extract))]
     if let Some(f) = progress.0 {
         f(pct);
@@ -269,12 +269,18 @@ fn sign_inner(
         let idx_leaf = idx_tree & ((1u32 << SUBTREE_H) - 1);
         idx_tree >>= SUBTREE_H;
 
-        // Build the subtree and get the auth path
-        let (auth_path, _subtree_root) =
-            merkle::build_subtree_with_auth(&seed, sk_seed, layer, idx_tree as u64, idx_leaf);
-
-        // HT layers: layer 0 = 32%-65%, layer 1 = 65%-98%
-        report(progress, (32 + (layer + 1) * 33) as u8);
+        // Build the subtree and get the auth path. HT layers: layer 0 =
+        // 32%-65%, layer 1 = 65%-98%. The build is ~85% of a sign, so it
+        // reports inside its leaf loop too (every `merkle::REPORT_EVERY`
+        // leaves), keeping a UI paced by the hook from stalling for a whole
+        // layer. The report points are fixed leaf counts: public, and the
+        // same for every signature.
+        let pct_lo = (32 + layer * 33) as u8;
+        let pct_hi = (32 + (layer + 1) * 33) as u8;
+        let (auth_path, _subtree_root) = merkle::build_subtree_with_auth(
+            &seed, sk_seed, layer, idx_tree as u64, idx_leaf, progress, pct_lo, pct_hi,
+        );
+        report(progress, pct_hi);
 
         // **F-16 (DPA-defence) shuffle.** Per-layer WOTS chain
         // permutation. Each layer gets its own sub-derivation so a
@@ -289,7 +295,7 @@ fn sign_inner(
         // WOTS+C sign the current node
         let (wots_sigma, count) = wots::sign_with_shuffle(
             &seed, sk_seed, layer, idx_tree as u64, idx_leaf, &current_node,
-            &wots_shuffle_seed,
+            &wots_shuffle_seed, progress, pct_hi,
         );
 
         // Write WOTS chain values (L * N bytes)

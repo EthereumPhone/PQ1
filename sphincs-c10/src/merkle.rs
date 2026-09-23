@@ -48,6 +48,11 @@ pub fn compute_subtree_root(
     stack[0]
 }
 
+/// Leaves between two progress reports inside
+/// [`build_subtree_with_auth`]: 32 reports per 512-leaf subtree,
+/// ~6 ms apart on the STM32U585 with the HASH peripheral.
+pub(crate) const REPORT_EVERY: usize = 16;
+
 /// Build an XMSS subtree and extract the authentication path for a
 /// specific leaf, plus the WOTS secret keys for that leaf.
 ///
@@ -59,12 +64,21 @@ pub fn compute_subtree_root(
 /// This uses Treehash with auth-path extraction: during the left-to-right
 /// leaf processing, we identify which completed subtree nodes are siblings
 /// of our target path and capture them.
-pub fn build_subtree_with_auth(
+///
+/// Progress: after every [`REPORT_EVERY`] leaves it calls `progress` with a
+/// percentage interpolated from `pct_lo` to `pct_hi`. The report points
+/// depend only on the leaf counter (public, the same for every call); the
+/// callback sees nothing but the percentage and cannot change the result.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_subtree_with_auth(
     seed: &[u8; 32],
     sk_seed: &[u8; 32],
     layer: u32,
     tree: u64,
     target_leaf: u32,
+    progress: &crate::hypertree::ProgressSink,
+    pct_lo: u8,
+    pct_hi: u8,
 ) -> ([[u8; N]; SUBTREE_H], [u8; N]) {
     let n_leaves = SUBTREE_LEAVES;
     let mut auth_path = [[0u8; N]; SUBTREE_H];
@@ -118,6 +132,12 @@ pub fn build_subtree_with_auth(
         stack[sp] = node;
         stack_heights[sp] = node_h;
         sp += 1;
+
+        if (kp + 1) % REPORT_EVERY == 0 {
+            let span = u32::from(pct_hi.saturating_sub(pct_lo));
+            let pct = u32::from(pct_lo) + (kp as u32 + 1) * span / n_leaves as u32;
+            crate::hypertree::report(progress, pct as u8);
+        }
     }
 
     debug_assert_eq!(sp, 1);

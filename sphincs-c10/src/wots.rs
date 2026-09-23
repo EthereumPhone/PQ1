@@ -46,17 +46,28 @@ pub fn extract_digits(digest: &[u8; 32]) -> [u8; L] {
     digits
 }
 
+/// Trials between two progress reports inside [`find_count`] (a few ms of
+/// digests on the STM32U585).
+pub(crate) const GRIND_REPORT_EVERY: u32 = 4096;
+
 /// Find a count value such that the digit sum equals TARGET_SUM.
 ///
 /// Returns `(count, digest_bytes, digits)`.
 ///
 /// Matches Python: `wots_find_count(seed, layer, tree, kp, msg_hash, cfg)`.
-pub fn find_count(
+///
+/// Reports `pct` to `progress` every [`GRIND_REPORT_EVERY`] trials. The
+/// grind is message-dependent (tens of thousands of digests on average,
+/// several times that in the tail), so without these a UI paced by the hook
+/// stalls. The trial count is public: the found `count` is in the signature.
+pub(crate) fn find_count(
     seed: &[u8; 32],
     layer: u32,
     tree: u64,
     kp: u32,
     msg_hash: &[u8; 32],
+    progress: &crate::hypertree::ProgressSink,
+    pct: u8,
 ) -> (u32, [u8; 32], [u8; L]) {
     let wots_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
     for count in 0..10_000_000u32 {
@@ -65,6 +76,9 @@ pub fn find_count(
         let sum: usize = digits.iter().map(|&d| d as usize).sum();
         if sum == TARGET_SUM {
             return (count, d, digits);
+        }
+        if count % GRIND_REPORT_EVERY == GRIND_REPORT_EVERY - 1 {
+            crate::hypertree::report(progress, pct);
         }
     }
     // For C10 (L=43, w=8, TARGET_SUM=205) the grinder is expected to
@@ -105,8 +119,10 @@ pub fn keygen_pk(
 /// is the 16-byte Merkle node being authenticated, padded to 32 bytes
 /// by the caller.
 ///
-/// Returns `(chain_values[L], count)`.
-pub fn sign_with_shuffle(
+/// Returns `(chain_values[L], count)`. The count grind reports `pct` to
+/// `progress` (see [`find_count`]).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sign_with_shuffle(
     seed: &[u8; 32],
     sk_seed: &[u8; 32],
     layer: u32,
@@ -114,9 +130,11 @@ pub fn sign_with_shuffle(
     kp: u32,
     msg_hash: &[u8; N],
     shuffle_seed: &[u8; 32],
+    progress: &crate::hypertree::ProgressSink,
+    pct: u8,
 ) -> ([[u8; N]; L], u32) {
     let padded = pad16(msg_hash);
-    let (count, _digest, digits) = find_count(seed, layer, tree, kp, &padded);
+    let (count, _digest, digits) = find_count(seed, layer, tree, kp, &padded, progress, pct);
 
     let base_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
     let mut sigma = [[0u8; N]; L];
