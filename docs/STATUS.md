@@ -14,6 +14,9 @@ add exact-coordinate replay accounting and accepted-output bounds for the
 memoized grinder and complete signer. The
 [complete-session history results](../contracts/verification/easycrypt/c10-port/COMPLETE-SESSION-HISTORY.md)
 establish new-message freshness and account for repeated signing contexts.
+The [raw authentication-path results](../contracts/verification/easycrypt/c10-port/RAW-PATH-CORRESPONDENCE.md)
+connect actual Merkle/FORS recovery to recorded reference paths and explicit
+node-collision events. Honest-tree reference witnesses remain to be supplied.
 Adaptive accumulated opening coverage, the component reduction and numerical
 end-to-end forgery bounds remain open.
 See the

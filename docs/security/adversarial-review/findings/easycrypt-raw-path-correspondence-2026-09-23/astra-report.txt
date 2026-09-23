@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 6e8994150edf2e45e7915d4056888e7e0e6fad2f / 4f46dd1801fbf19473179ddd8c84b7c1e93336d7
+FINDINGS: none
+GAPS: Landing remains conditional on the coordinator confirming the unchanged-source receipt for the full cold 213-target, two-driver replay and 144 controls.

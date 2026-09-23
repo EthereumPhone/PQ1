@@ -1,0 +1,36 @@
+{
+  "target": "6e8994150edf2e45e7915d4056888e7e0e6fad2f",
+  "tree": "4f46dd1801fbf19473179ddd8c84b7c1e93336d7",
+  "reviewers": {
+    "codex": {
+      "verdict": "GO",
+      "duration_seconds": 172.084,
+      "report_words": 29,
+      "findings": []
+    },
+    "claude": {
+      "verdict": "GO",
+      "duration_seconds": 265.412,
+      "report_words": 10,
+      "findings": []
+    }
+  },
+  "drift": false,
+  "remaining_gate": "Resolved by complete green unchanged-source cold replay",
+  "coordinator_notes": [
+    "Opus reports no gaps; its report does not replace the separate still-running mandatory cold gate."
+  ],
+  "substitutions": "Astra ultra replaces SOL; Kimi omitted under standing owner instructions.",
+  "opus_runtime_model": [
+    "claude-opus-5-5"
+  ],
+  "astra_model_evidence": "gpt-6-astra ultra requested; CLI JSON stream does not independently expose remote model identity.",
+  "resolved_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-23T19:45:34.190712+00:00",
+    "finished_utc": "2026-09-23T21:46:24.183808+00:00",
+    "elapsed_seconds": 7249.99,
+    "commit": "6e8994150edf2e45e7915d4056888e7e0e6fad2f",
+    "tree": "4f46dd1801fbf19473179ddd8c84b7c1e93336d7"
+  }
+}

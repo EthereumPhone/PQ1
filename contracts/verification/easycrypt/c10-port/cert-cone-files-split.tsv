@@ -80,6 +80,7 @@ cdrafts-split/FORS_C.ec
 cdrafts-split/FORS_C10.ec
 cdrafts-split/FORS_C10_Multi.ec
 cdrafts-split/FORS_C_TreePort.ec
+cdrafts-split/ForsLeafInputs.ec
 cdrafts-split/FreshCoverage.ec
 cdrafts-split/FullFailure.ec
 cdrafts-split/FullHistory.ec
@@ -115,6 +116,10 @@ cdrafts-split/KeygenExhaustion.ec
 cdrafts-split/KeygenPrefixes.ec
 cdrafts-split/MessageHistory.ec
 cdrafts-split/MonotoneHistory.ec
+cdrafts-split/PathCollision.ec
+cdrafts-split/PathInputs.ec
+cdrafts-split/PathOracle.ec
+cdrafts-split/PathReplay.ec
 cdrafts-split/PersistentGrind.ec
 cdrafts-split/PhysicalKeygenCost.ec
 cdrafts-split/PrefixAudit.ec
@@ -143,7 +148,9 @@ cdrafts-split/RawDecode.ec
 cdrafts-split/RawForest.ec
 cdrafts-split/RawForestCost.ec
 cdrafts-split/RawFors.ec
+cdrafts-split/RawForsComparison.ec
 cdrafts-split/RawForsCost.ec
+cdrafts-split/RawForsPathReplay.ec
 cdrafts-split/RawHistoryPreservation.ec
 cdrafts-split/RawKeygen.ec
 cdrafts-split/RawKeygenCost.ec
@@ -151,6 +158,8 @@ cdrafts-split/RawLayer.ec
 cdrafts-split/RawLayerCost.ec
 cdrafts-split/RawMerkle.ec
 cdrafts-split/RawMerkleCost.ec
+cdrafts-split/RawPathComparison.ec
+cdrafts-split/RawPathReplay.ec
 cdrafts-split/RawRHistory.ec
 cdrafts-split/RawSession.ec
 cdrafts-split/RawSessionBound.ec
@@ -166,6 +175,7 @@ cdrafts-split/RawTrial.ec
 cdrafts-split/RawWidths.ec
 cdrafts-split/RawWots.ec
 cdrafts-split/RawWotsCost.ec
+cdrafts-split/RecoveryHistory.ec
 cdrafts-split/RoleGrind.ec
 cdrafts-split/RoleGrindCost.ec
 cdrafts-split/RtopCSoundness.ec

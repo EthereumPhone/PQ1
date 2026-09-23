@@ -107,3 +107,9 @@ ClassifiedBound
 ClassifiedSession
 ByteHistory
 SignerTrace
+
+# Actual Merkle/FORS recovery traces and reference-path comparison.
+RawPathComparison
+RawForsComparison
+RawPathReplay
+RawForsPathReplay

@@ -1,0 +1,25 @@
+Review PQSigner OS for merge of its EasyCrypt raw authentication-path correspondence.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-path-correspondence
+Commit: 6e8994150edf2e45e7915d4056888e7e0e6fad2f
+Tree: 4f46dd1801fbf19473179ddd8c84b7c1e93336d7
+Compare: b89a1b66647bd7498af9b4b9362984a328a2186c..6e8994150edf2e45e7915d4056888e7e0e6fad2f
+
+Focus only on formal-verification correctness:
+1. Actual RawMerkle/RawFors recovery records the path in the memoized Independent raw table, including the FORS initial leaf hash; returned roots equal bottom-up evaluation.
+2. Recorded reference paths and roots persist through public recovery calls. No stateless-oracle replacement or cached-input independence is assumed.
+3. Matching a recorded reference root yields the reference leaf/secret or distinct same-position raw inputs with equal 16-byte node projections. Width, path-length and reference-entry premises must be sufficient and explicit.
+4. All actual recovery code/interface restrictions and private oracle-state boundaries are preserved. Zero-valued nodes remain allowed, including the unresolved WOTS sentinel case.
+5. Statement/source/census/control enrollment preserves previous contracts and adds no project axiom, admit or clone assumption; negative controls fail for declared reasons.
+6. These theorems do not supply honest-tree reference witnesses or collision probability bounds. WOTS/FORS composition, adaptive opening coverage, and a numeric end-to-end forgery bound remain open.
+
+Evidence already green: all 10 new enrolled modules pass source-matched direct compilation and default CLI using repository-only imports; 11 new semantic/scope controls, 11 checker regressions, static contract and 177-input source binding pass. Candidate: 213 files, 95 roots, 2166 pins, 1890 statements, 1976 census rows, 144 controls. Full cold 213-target two-driver replay plus 144 controls is running separately and remains required for landing; the coordinator will confirm its unchanged-source receipt without another model turn.
+Non-goals: firmware/API/parameter changes, Rust extraction, concrete SHA-256 or QROM, hardware/shipment, deferred playbook sweep, optional hardening, and the separate unfinished honest-tree construction research.
+
+Inspect the diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 6e8994150edf2e45e7915d4056888e7e0e6fad2f / 4f46dd1801fbf19473179ddd8c84b7c1e93336d7
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.
