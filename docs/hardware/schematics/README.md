@@ -1,13 +1,19 @@
 # PQ1 mainboard — schematics
 
-Schematic sheets for the PQ1 mainboard, revision **V10**, dated 2026-07-14 15:00
-(vendor build code `AL_A66_MB_V10_20260714_1500`; `A66` is the ODM's internal
+Schematic sheets for the PQ1 mainboard, revision **V10**, dated 2026-08-26 15:00
+(vendor build code `AL_A66_MB_V10_20260826_1500`; `A66` is the ODM's internal
 project code for the PQ1 mainboard). Two sheets, A1.
 
 | File | Sheets | Contents |
 |------|--------|----------|
-| `AL_A66_MB_V10_20260714_1500.pdf` | 1 | MCU, both secure elements, display + backlight, buttons, SWD (`U1xx` / `R1xx` / `C1xx`) |
+| `AL_A66_MB_V10_20260826_1500.pdf` | 1 | MCU, both secure elements, display + backlight, buttons, SWD (`U1xx` / `R1xx` / `C1xx`) |
 | | 2 | USB-C, charging + power path, button and debug connectors, EMI (`U2xx` / `C2xx` / `D2xx`) |
+
+> **This file has no text layer.** It is a ClibPDF image-only export, so
+> `pdftotext` returns nothing and every fact must be read from a rendered crop
+> (`pdftoppm -r 400 -x .. -y .. -W .. -H ..`). The superseded 2026-07-14 sheet
+> *did* carry text, so any analysis that relied on text extraction was done
+> against that revision and does not automatically carry over.
 
 Unlike the copper plots in [`../pcb/`](../pcb/), these sheets **do** carry full
 reference-designator-to-net mapping, so this is the authority for *which MCU pin
@@ -43,9 +49,24 @@ Confirm against the PDF before relying on any of it:
   through a browser as `…_1500-2.pdf`; the `-2` is a download-dedup suffix, not
   part of the vendor build code, and was dropped so the name matches the
   convention the layer plots in [`../pcb/`](../pcb/) use. Contents unaltered.
-- This is the only schematic revision tracked here. Earlier ODM drops are
-  superseded and are deliberately not kept, so there is nothing to confuse this
-  file with.
+- One revision is tracked at a time. **Superseded 2026-09-23:** this file
+  replaced `AL_A66_MB_V10_20260714_1500.pdf` (2026-07-14), which had been the
+  tracked sheet and is recoverable from git history before that date.
+
+  Worth recording how the swap came about, because the failure mode will recur.
+  The 2026-08-26 drop had been sitting in `~/Downloads` and `~/Documents/pq1`
+  since mid-September while this README asserted that the tracked file was the
+  only revision and that anything else was *earlier* and superseded. It was
+  neither — it was six weeks newer. A day of hardware analysis ran against the
+  stale sheet before a search for an unrelated artefact (a BOM) turned it up.
+  **When an ODM drop arrives, replace the tracked file in the same change**;
+  a newer revision outside the repo is worse than no revision in it, because
+  this README makes the stale one look authoritative.
+
+- **There is no BOM in this repo**, in any format or anywhere in git history
+  (see [`../pcb/README.md`](../pcb/README.md)). Component values and ratings can
+  be read *only* from these sheets, so a claim like "C140 is rated 25 V" has
+  exactly one source and cannot be cross-checked here. Verified 2026-09-23.
 
 ## Scope
 
