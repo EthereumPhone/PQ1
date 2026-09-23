@@ -176,6 +176,30 @@ fn render_all_words(hash: &[u8; 32]) {
 /// 1. Shows "OS Fingerprint" title for 1.5 s so the user knows these
 ///    are firmware identification words, not their seed phrase.
 /// 2. Shows all 8 words on a single screen for 4 s (any button skips).
+/// Hold the current screen for `ms`, tolerating a tick source that has not
+/// started yet.
+///
+/// Driven by SysTick via `timeout::now()`. On real STM32U585 hardware SysTick
+/// is already running (`main::setup_systick` runs before `measured_boot`), so
+/// `now()` advances and this returns after `ms`. On QEMU SysTick starts
+/// *after* `measured_boot`, so `now()` is frozen at 0: `t0 == 0` and
+/// `0.wrapping_sub(0) < ms` is permanently true, and a bare deadline loop
+/// would spin FOREVER, wedging boot at this screen. The spin-count fallback
+/// detects the stopped tick source and skips the cosmetic delay instead of
+/// hanging.
+fn hold_ms(ms: u32) {
+    let t0 = timeout::now();
+    let mut spins: u32 = 0;
+    while timeout::now().wrapping_sub(t0) < ms {
+        cortex_m::asm::nop();
+        spins = spins.saturating_add(1);
+        if spins >= TITLE_STALLED_TICK_SPINS && timeout::now() == t0 {
+            // Tick source hasn't moved — not running yet. Don't hang.
+            break;
+        }
+    }
+}
+
 pub fn run() {
     let hash = firmware_hash();
     #[cfg(feature = "debug-log")]
@@ -255,24 +279,48 @@ pub fn run() {
             b' ', b'M', b'D', b'=', md[0], md[1],
         ];
         show_status("OS Fingerprint", crate::ui::ascii_str(&row));
+        // Dev images hold 8 s because one 16-column subtitle is unreadable in
+        // the production 1.5 s. Two diagnostics now SPLIT that budget rather
+        // than extending it, so boot time is unchanged.
+        hold_ms(4_000);
+
+        // #733: the fault registers, read ONCE, seconds after `enable()` — late
+        // enough for a protection to have tripped, and never on a timer (the
+        // read is itself a documented restart path once a flag is set).
+        //
+        //   ID03 F2=00 F1=00 -> bus verified, no fault latched. F2 bit 7 is
+        //                       the OVP answer the #705 experiments otherwise
+        //                       grade by eye.
+        //   ID=xx BUS FAULT  -> CHIP_ID is not 0x03, so nothing else could be
+        //                       believed and the flags were NOT read. A
+        //                       stuck-low bus reads 0x00 everywhere, which is
+        //                       byte-identical to "no fault".
+        //
+        // Full detail (including the BSTCTR1/MODE readback) goes to
+        // `secure_log!`, because the bench board has no panel at all.
+        let f = crate::hw::aw99703::read_fault_snapshot();
+        let frow: [u8; 16] = if f.bus_trustworthy() {
+            let f2 = hex(f.flags2.unwrap_or(0xFF));
+            let f1 = hex(f.flags1.unwrap_or(0xFF));
+            [
+                b'I', b'D', b'0', b'3',
+                b' ', b'F', b'2', b'=', f2[0], f2[1],
+                b' ', b'F', b'1', b'=', f1[0], f1[1],
+            ]
+        } else {
+            let id = f.chip_id.map_or([b'-', b'-'], hex);
+            [
+                b'I', b'D', b'=', id[0], id[1],
+                b' ', b'B', b'U', b'S', b' ', b'F', b'A', b'U', b'L', b'T', b' ',
+            ]
+        };
+        show_status("OS Fingerprint", crate::ui::ascii_str(&frow));
+        hold_ms(4_000);
     }
     #[cfg(not(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd")))]
-    show_status("OS Fingerprint", "");
-    let t0 = timeout::now();
-    let mut spins: u32 = 0;
-    // The #705 subtitle is unreadable in 1.5 s; dev images hold longer.
-    let title_ms = if cfg!(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd")) {
-        8_000
-    } else {
-        TITLE_MS
-    };
-    while timeout::now().wrapping_sub(t0) < title_ms {
-        cortex_m::asm::nop();
-        spins = spins.saturating_add(1);
-        if spins >= TITLE_STALLED_TICK_SPINS && timeout::now() == t0 {
-            // Tick source hasn't moved — not running yet. Don't hang.
-            break;
-        }
+    {
+        show_status("OS Fingerprint", "");
+        hold_ms(TITLE_MS);
     }
 
     // Phase 2: show all 8 words, auto-dismiss after 4 s or any button.

@@ -270,6 +270,156 @@ fn read_reg(reg: u8) -> Option<u8> {
     Some(v)
 }
 
+// ---------------------------------------------------------------------------
+// One-shot fault readout (#733) — dev images only
+// ---------------------------------------------------------------------------
+
+/// `CHIP_ID`. Read FIRST, always: it is the bus control, not a curiosity.
+#[cfg(feature = "dev-testkey")]
+const REG_CHIP_ID: u8 = 0x00;
+/// LED open/short per channel, OCP, OT.
+#[cfg(feature = "dev-testkey")]
+const REG_FLAGS1: u8 = 0x0E;
+/// `[7]` OVP, `[6]` UVLO, `[5]` flash timeout, `[4:0]` reserved.
+#[cfg(feature = "dev-testkey")]
+const REG_FLAGS2: u8 = 0x0F;
+/// The value `CHIP_ID` must return for the other reads to mean anything.
+#[cfg(feature = "dev-testkey")]
+const CHIP_ID_AW99703: u8 = 0x03;
+/// `FLAGS2` bit 7 — the over-voltage flag, i.e. the #705 question.
+#[cfg(feature = "dev-testkey")]
+pub const FLAGS2_OVP: u8 = 1 << 7;
+
+/// A single snapshot of the chip's fault state. `None` in any field means the
+/// chip did not ACK that read.
+#[cfg(feature = "dev-testkey")]
+pub struct FaultSnapshot {
+    pub chip_id: Option<u8>,
+    pub flags1: Option<u8>,
+    pub flags2: Option<u8>,
+    /// Read back, not assumed: should equal [`BSTCTR1_OVP`].
+    pub bstctr1: Option<u8>,
+    /// Read back: should equal [`MODE_I2C_LINEAR_BACKLIGHT`].
+    pub mode: Option<u8>,
+}
+
+#[cfg(feature = "dev-testkey")]
+impl FaultSnapshot {
+    /// Whether anything else in this snapshot can be believed.
+    ///
+    /// This is the whole reason `CHIP_ID` is read first. `write_byte` treats
+    /// any low SDA as an ACK and `read_bit` returns 0 on a stuck-low bus, so a
+    /// dead bus yields `FLAGS = 0x00` — byte-identical to "no fault". Without
+    /// this check the diagnostic is a false-negative generator.
+    pub fn bus_trustworthy(&self) -> bool {
+        self.chip_id == Some(CHIP_ID_AW99703)
+    }
+
+    /// `Some(true)` if the over-voltage protection has fired, `Some(false)` if
+    /// it demonstrably has not, `None` if the bus reading cannot be believed.
+    ///
+    /// The tri-state is the point: "no OVP" and "we could not tell" must never
+    /// collapse into the same answer, which is exactly what an eyeball test
+    /// does.
+    pub fn ovp_fired(&self) -> Option<bool> {
+        if !self.bus_trustworthy() {
+            return None;
+        }
+        self.flags2.map(|f| f & FLAGS2_OVP != 0)
+    }
+}
+
+/// One-shot read of the fault registers. **Never call this on a timer.**
+///
+/// Replaces an operator's judgement of whether the backlight "looks right"
+/// with a bit. That matters twice: the #705 OVP experiments are currently
+/// graded by eye, and the bench board has no panel at all, so there is no eye
+/// to grade them with.
+///
+/// # This read is not passive
+///
+/// Datasheet pp.23–24 name "reading back fault register" as one of three
+/// equivalent ways to **restart the IC**, each conditioned on "After ⟨X⟩ Flag
+/// is set". So on a part that has actually tripped, this call may restart it —
+/// plausibly taking the backlight out. That is acceptable for a one-shot
+/// diagnostic and is itself informative; it would be indefensible in a loop,
+/// where it would silently convert a latched protection into a host-driven
+/// retry loop issued from display code. The effect on a *clean* part is
+/// unspecified rather than documented-safe.
+///
+/// # What is deliberately not claimed
+///
+/// No clear-on-read or write-1-to-clear semantics: neither datasheet revision
+/// states any, and the two tables disagree on whether the bits are even
+/// writable (V1.6 p.28 says `R`, p.33 says `R/W`). Nothing here writes them.
+///
+/// `LED1OPEN` is not an always-live indicator — p.24 samples LED-open only at
+/// the rising edge of the OVP flag — so treat it as secondary to `FLAGS2`.
+///
+/// Reading `BSTCTR1`/`MODE` back is free and settles an open question: if they
+/// return their reset defaults, or NACK (the p.24 software reset leaves ~2 ms
+/// of I2C silence), then a readback restart *is* a full reset, which neither
+/// revision states.
+#[cfg(feature = "dev-testkey")]
+pub fn read_fault_snapshot() -> FaultSnapshot {
+    let chip_id = read_reg(REG_CHIP_ID);
+    if chip_id != Some(CHIP_ID_AW99703) {
+        // Stop here. Reading on a bus we cannot trust would produce zeros that
+        // read as "no fault", and would still carry the restart side effect.
+        secure_log!(
+            "[S] aw99703 #733: CHIP_ID {:?} != {:#04x} — bus untrustworthy, \
+             fault registers NOT read",
+            chip_id,
+            CHIP_ID_AW99703
+        );
+        return FaultSnapshot {
+            chip_id,
+            flags1: None,
+            flags2: None,
+            bstctr1: None,
+            mode: None,
+        };
+    }
+
+    let flags2 = read_reg(REG_FLAGS2);
+    let flags1 = read_reg(REG_FLAGS1);
+    let bstctr1 = read_reg(REG_BSTCTR1);
+    let mode = read_reg(REG_MODE);
+
+    secure_log!(
+        "[S] aw99703 #733: ID={:#04x} FLAGS2={:?} FLAGS1={:?} BSTCTR1={:?} (want {:#04x}) \
+         MODE={:?} (want {:#04x})",
+        CHIP_ID_AW99703,
+        flags2,
+        flags1,
+        bstctr1,
+        BSTCTR1_OVP,
+        mode,
+        MODE_I2C_LINEAR_BACKLIGHT
+    );
+    // Braced arms: `secure_log!` expands to nothing without `debug-log`, so a
+    // bare-expression arm is an incomplete expression in every other build.
+    match flags2.map(|f| f & FLAGS2_OVP != 0) {
+        Some(true) => {
+            secure_log!("[S] aw99703 #733: OVP HAS FIRED (FLAGS2 bit 7 set)");
+        }
+        Some(false) => {
+            secure_log!("[S] aw99703 #733: OVP has not fired");
+        }
+        None => {
+            secure_log!("[S] aw99703 #733: FLAGS2 did not ACK");
+        }
+    }
+
+    FaultSnapshot {
+        chip_id,
+        flags1,
+        flags2,
+        bstctr1,
+        mode,
+    }
+}
+
 /// What the backlight chip held BEFORE this boot reconfigured it (#705).
 ///
 /// The question invariant #10 turns on is whether the AW99703 keeps its
