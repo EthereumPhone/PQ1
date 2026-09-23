@@ -208,3 +208,22 @@ scratch/C10RawCachedAcceptance.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10RawReplayDraw.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10StatefulLostSuccess.ec	MUST-FAIL	[by]: cannot close goals
 scratch/_scope_neg_op_C10HypertreeAccepted.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Adaptive shared-oracle/byte-session controls and headline isolation.
+scratch/C10ByteSessionPositive.ec	MUST-PASS	-
+scratch/C10SessionAvailabilityPositive.ec	MUST-PASS	-
+scratch/C10ByteNoLengthGuard.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10ByteNoValueGuard.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10FullPublicIsPhysical.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10ByteSecretPrivacy.ec	MUST-FAIL	the module A is not allowed
+scratch/_scope_neg_op_SessionClosedForm.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawSessionCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawSignerWidths.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_FullPrefix.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawDecode.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Whole-session fail-stop boundary.
+scratch/C10FullFailurePositive.ec	MUST-PASS	-
+scratch/C10FullFailureResume.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_FullFailure.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

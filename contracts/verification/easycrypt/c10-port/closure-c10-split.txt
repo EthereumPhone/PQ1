@@ -88,3 +88,10 @@ C10StatefulSearch
 C10RawOracle
 C10RawGrind
 FORSC10Digest
+
+# Costed adaptive shared-oracle and byte-session research milestone.
+SessionClosedForm
+RawSessionCost
+ByteBound
+RawSignerWidths
+FullFailure

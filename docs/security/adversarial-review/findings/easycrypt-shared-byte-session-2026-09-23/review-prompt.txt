@@ -1,0 +1,26 @@
+Review PQSigner OS for merge of its EasyCrypt shared-oracle/byte-session research milestone.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-session-fix
+Commit: 1fc27470fc083e84eb844bf06e4aaf4551a7a079
+Tree: dab22c3bfae2e7535c662c9553f148ab167a9f53
+Compare: 1be79a0a653b90bf93071b0b83129b8654fff618..1fc27470fc083e84eb844bf06e4aaf4551a7a079
+
+Focus only on formal-verification correctness and manual C10 model correspondence:
+1. One fresh uniform 256-bit secret and persistent raw oracle, repeated inputs, adversary privacy and explicit losslessness/cap premises.
+2. Raw keygen, R/H_msg grinding, FORS/WOTS/Merkle/shuffle, failure rejection and exact signature parsing compared with sphincs-c10/src.
+3. Actual physical/public query accounting and same-client byte/structured and real/independent game hops.
+4. Adaptive R-grinding availability, including cached H_msg and repeated contexts; no unjustified IID premise.
+5. The independent-game forgery term stays unbounded. No claim of a numeric end-to-end EUF bound, Rust extraction, KDF entropy, real-SHA independence or QROM proof.
+6. Proof/source/assumption manifests, semantic controls and full-signature comparison execute the stated evidence; all transcribed Rust signer/Merkle sources stay hash-bound.
+7. The policy-magnitude tripwire permits only the exact reviewed shuffle arithmetic source; changed source, duplicate constants and other files still fail.
+
+Evidence already green: all 73 new enrolled modules have source-matched direct and default-CLI focused receipts; 15 new semantic/scope controls match polarity/reason; 11 checker regressions, 1902 pins, 127 source bindings and headline isolation pass. The manual Rust fixture comparison matches 20 full 4008-byte signatures and 160 negative verification cases/counters over five public test keys. Existing assumptions are unchanged. Full cold 163-target two-driver mandatory replay is running separately and remains required for landing; the coordinator will resolve that replay receipt without another model turn if this snapshot stays unchanged.
+Non-goals: firmware/API/parameter changes, hardware/shipment authority, deferred playbook sweep, optional hardening, or completing the remaining independent-game cryptographic bound in this review.
+
+Inspect the diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 1fc27470fc083e84eb844bf06e4aaf4551a7a079 / dab22c3bfae2e7535c662c9553f148ab167a9f53
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most 3 findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

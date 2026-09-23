@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
 root = Path(__file__).resolve().parents[1] / 'easycrypt/c10-port'
 lock = json.loads((root / 'cert-toolchain-split.json').read_text())
@@ -18,6 +19,11 @@ if not sys.argv[1:]:
     subprocess.run(['cargo', 'test', '--locked', '-p', 'sphincs-c10',
                     '--target', 'x86_64-unknown-linux-gnu', '--features', 'sim-internals',
                     '--test', 'easycrypt_transcript'], cwd=root.parents[3], check=True)
+    with tempfile.TemporaryDirectory(prefix='pq-easycrypt-fullsign-') as temporary:
+        output = Path(temporary) / 'evidence'
+        subprocess.run([sys.executable, '-I', str(root / 'tools/fullsign_model/check.py'),
+                        '--out', str(output)], check=True)
+        print('FULLSIGN_MODEL_RECEIPT=' + (output / 'result.json').read_text(), flush=True)
 command = ('python3 tools/split_contract.py --toolchain && python3 tools/split_proof_controls.py'
            if sys.argv[1:] else 'bash cert_gate_split.sh')
 # EasyCrypt uses no host compiler, mutable tag, network, shared cache, or

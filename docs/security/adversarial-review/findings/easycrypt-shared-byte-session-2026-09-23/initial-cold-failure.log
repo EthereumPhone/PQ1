@@ -1,0 +1,1414 @@
+make: Entering directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-session/contracts/verification'
+/usr/bin/python3 -E -S -B scripts/run_easycrypt_split.py
+OK EasyCrypt manual source binding: 125 inputs (not extraction)
+   Compiling sphincs-c10 v0.1.0 (/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-session/sphincs-c10)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.94s
+     Running tests/easycrypt_transcript.rs (/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/host-target/x86_64-unknown-linux-gnu/debug/deps/easycrypt_transcript-dcf76e94d34527c4)
+
+running 4 tests
+test concrete_digits_match_easycrypt_bit_order_and_target ... ok
+test concrete_hash_domains_match_easycrypt_layouts ... ok
+test concrete_fors_and_hypertree_fields_match_lsb_model ... ok
+test concrete_digest_matches_easycrypt_byte_adapter ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+{"exit_code": 0, "seconds": 17.33, "keygen_cases": 5, "signature_cases": 20, "negative_cases": 160, "receipt": "/tmp/pq-easycrypt-fullsign-cp_bqeew/evidence/result.json"}
+FULLSIGN_MODEL_RECEIPT={
+  "exit_code": 0,
+  "seconds": 17.33,
+  "rust_commit": "cb3a7b16e759bffb449587995e2534501d9ba347",
+  "rust_sources": {
+    "address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+    "fors.rs": "3b64e07bc9c3a6c0e1db1d63da90c32ad34b26857dfe5767997df360b7713ed2",
+    "hash.rs": "049a689c96ef9e14ce34030e71269292f3f6951b522cad88d56daa4466ade2c4",
+    "hypertree.rs": "0541fe8f4b6f284d060c620e9aa38f02a9384e551f47577e85cd7f648ab14b7b",
+    "lib.rs": "235b5db237d6133860fb7a9d36c2a89195700d8602806688aceb45b52fa0719f",
+    "merkle.rs": "f787428b15cea6fb353eb3e1830f9f737067ce70a74e4d6b79113b83a1f3aed0",
+    "near_miss.rs": "6fed92e4bbf9d13a43f0040335f3e7a4f3b3fd84fb49eba3db410f46a42512a3",
+    "params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+    "shuffle.rs": "2f3e0b12351084599294c9ccdfa01d18d7e2130a2fa84bae177ef26cfdb470ad",
+    "wots.rs": "e7ebe1d71591e68f6045383b041905ff17ad5822def35e77e11244ffdf49c56b"
+  },
+  "model_sources": {
+    "RawKeygen.ec": "9f983fbb237129b0600ee1462429a722c53f86a5a74e25a0e508f16c1238174e",
+    "RawFors.ec": "cea927f567b23443a0c0846493089f3651f1eb57a86daae508527b612741833e",
+    "RawShuffle.ec": "2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639",
+    "RawWots.ec": "b0510301eba5d387e3199d216bae2772f5e27480bdb3a23f037881c59138a558",
+    "RawForest.ec": "76b40a69989b36c88ecc4d9e9fae197da65fee865ea2572be94f50f297fb2f10",
+    "RawMerkle.ec": "c39af26b991ef2929dea669be1152fcb84dbcbf0f25dfb60c2d1290c183d1f6e",
+    "RawLayer.ec": "3ebf8be154f55b07d3d8f10a3dd5e541b7d47714fa2997703c93201dce30dc96",
+    "RawSigner.ec": "8b40da75596beb4a824890c8d5e3d58383f7f049c682815b476850a26c7b1650",
+    "RawSignerCost.ec": "f6afec786f09e10a694fad65e8e0c36bdc8fa0e2f87a8d299617bf056dffeedd",
+    "RawSignature.ec": "de0e9b611ea88e6aaa39e5b9d3931ff2cf611c20159eb69b42f53ae9b5bae03d",
+    "RawDecode.ec": "bc0102dd6f42c3d6b2187439e961507bda5372a4a7c5c9a4887ee518a1fe09b4",
+    "ByteSession.ec": "dc8e67b78f27c4412b34e636649de5cc162822ca9adc54f0a214a1229fa8e49b"
+  },
+  "harness_sources": {
+    "src/main.rs": "5a9ba5d9985c68dd60751f2543f3ced31df6afe94096b539373a95e2d6d4faa9",
+    "check.py": "fbc7bac09f2d7dd0026dde7741b8be70bd2966f59a875f1d51bec7507298b2b6",
+    "Cargo.toml": "4a7ab9c9e96b752b88a40c77507fce791818733ac059dc0cb6a2af1051826617",
+    "Cargo.lock": "841066878fb7673836172817b5b7d756fc98505adf976fdde7465eea4e8b2ea8"
+  },
+  "keygen_cases": 5,
+  "signatures": [
+    {
+      "case": 0,
+      "run": 0,
+      "signature_sha256": "2602ecec7c5a549e503aea9f79f255bbfc482a8c064d22d90e9604796332833d",
+      "hook_calls": 504865,
+      "software_shuffle_calls": 0,
+      "total_calls": 504865,
+      "r_calls": 37,
+      "hmsg_calls": 37,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "signature_sha256": "4910ada38e9c69241e083156e239fbc4c9b460f51fb2fe66a312b9def1d6ccda",
+      "hook_calls": 494414,
+      "software_shuffle_calls": 0,
+      "total_calls": 494414,
+      "r_calls": 3761,
+      "hmsg_calls": 3761,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "signature_sha256": "2602ecec7c5a549e503aea9f79f255bbfc482a8c064d22d90e9604796332833d",
+      "hook_calls": 504865,
+      "software_shuffle_calls": 15,
+      "total_calls": 504880,
+      "r_calls": 37,
+      "hmsg_calls": 37,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "signature_sha256": "4910ada38e9c69241e083156e239fbc4c9b460f51fb2fe66a312b9def1d6ccda",
+      "hook_calls": 494414,
+      "software_shuffle_calls": 15,
+      "total_calls": 494429,
+      "r_calls": 3761,
+      "hmsg_calls": 3761,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "signature_sha256": "b73dafc935bfb9cf6eacf605eec0f9b34e9765732b3186933df29a4eec7c3b4a",
+      "hook_calls": 502175,
+      "software_shuffle_calls": 0,
+      "total_calls": 502175,
+      "r_calls": 4324,
+      "hmsg_calls": 4324,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "signature_sha256": "2795a6500d01285cef1925df26ce61a78c7f91648d995a83b4df01fbae958d77",
+      "hook_calls": 491482,
+      "software_shuffle_calls": 0,
+      "total_calls": 491482,
+      "r_calls": 3821,
+      "hmsg_calls": 3821,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "signature_sha256": "b73dafc935bfb9cf6eacf605eec0f9b34e9765732b3186933df29a4eec7c3b4a",
+      "hook_calls": 502175,
+      "software_shuffle_calls": 15,
+      "total_calls": 502190,
+      "r_calls": 4324,
+      "hmsg_calls": 4324,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "signature_sha256": "2795a6500d01285cef1925df26ce61a78c7f91648d995a83b4df01fbae958d77",
+      "hook_calls": 491482,
+      "software_shuffle_calls": 15,
+      "total_calls": 491497,
+      "r_calls": 3821,
+      "hmsg_calls": 3821,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "signature_sha256": "3c05ae14f1f3f0607dca264cbc86c61cdfccaaf08657a25afa7d7baa22126424",
+      "hook_calls": 453988,
+      "software_shuffle_calls": 0,
+      "total_calls": 453988,
+      "r_calls": 605,
+      "hmsg_calls": 605,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "signature_sha256": "464933309528ac24e6bfa623d9e6d8836e09684c2d071276f6d4e99b56a00c67",
+      "hook_calls": 498094,
+      "software_shuffle_calls": 0,
+      "total_calls": 498094,
+      "r_calls": 649,
+      "hmsg_calls": 649,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "signature_sha256": "3c05ae14f1f3f0607dca264cbc86c61cdfccaaf08657a25afa7d7baa22126424",
+      "hook_calls": 453988,
+      "software_shuffle_calls": 15,
+      "total_calls": 454003,
+      "r_calls": 605,
+      "hmsg_calls": 605,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "signature_sha256": "464933309528ac24e6bfa623d9e6d8836e09684c2d071276f6d4e99b56a00c67",
+      "hook_calls": 498094,
+      "software_shuffle_calls": 15,
+      "total_calls": 498109,
+      "r_calls": 649,
+      "hmsg_calls": 649,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "signature_sha256": "2daa2fbb3fe840a1d468ee7f3c770e537a51a4adf59047114c71bdfe77aa89c3",
+      "hook_calls": 538014,
+      "software_shuffle_calls": 0,
+      "total_calls": 538014,
+      "r_calls": 3492,
+      "hmsg_calls": 3492,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "signature_sha256": "6b85806aff4468fa97be33d7fb6834695f9841b4e6ba2c405e6bce088c89063f",
+      "hook_calls": 476853,
+      "software_shuffle_calls": 0,
+      "total_calls": 476853,
+      "r_calls": 3564,
+      "hmsg_calls": 3564,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "signature_sha256": "2daa2fbb3fe840a1d468ee7f3c770e537a51a4adf59047114c71bdfe77aa89c3",
+      "hook_calls": 538014,
+      "software_shuffle_calls": 15,
+      "total_calls": 538029,
+      "r_calls": 3492,
+      "hmsg_calls": 3492,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "signature_sha256": "6b85806aff4468fa97be33d7fb6834695f9841b4e6ba2c405e6bce088c89063f",
+      "hook_calls": 476853,
+      "software_shuffle_calls": 15,
+      "total_calls": 476868,
+      "r_calls": 3564,
+      "hmsg_calls": 3564,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "signature_sha256": "cffc4e2b9ff7be0014c0a8d7b1ae1cd74d49e3de03cd46571dc8f2864cb113ea",
+      "hook_calls": 479192,
+      "software_shuffle_calls": 0,
+      "total_calls": 479192,
+      "r_calls": 2162,
+      "hmsg_calls": 2162,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "signature_sha256": "2f424f2ba20b7b5b2bbeaa0d0fa719ec5a2f0416348c42818035c5f545c61a10",
+      "hook_calls": 480852,
+      "software_shuffle_calls": 0,
+      "total_calls": 480852,
+      "r_calls": 359,
+      "hmsg_calls": 359,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "signature_sha256": "cffc4e2b9ff7be0014c0a8d7b1ae1cd74d49e3de03cd46571dc8f2864cb113ea",
+      "hook_calls": 479192,
+      "software_shuffle_calls": 15,
+      "total_calls": 479207,
+      "r_calls": 2162,
+      "hmsg_calls": 2162,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "signature_sha256": "2f424f2ba20b7b5b2bbeaa0d0fa719ec5a2f0416348c42818035c5f545c61a10",
+      "hook_calls": 480852,
+      "software_shuffle_calls": 15,
+      "total_calls": 480867,
+      "r_calls": 359,
+      "hmsg_calls": 359,
+      "verify_calls": 361
+    }
+  ],
+  "negative_verifications": [
+    {
+      "case": 0,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    }
+  ],
+  "scope": "Manual byte/call correspondence for public fixtures; software shuffle SHA calls counted separately from Rust hooks. No extraction or probability/security theorem."
+}
+
+### INPUTS_SHA256 9db16c6ef0cad6ff05eb0a5130dca375
+OK   INPUTS_SHA256 matches the committed identity
+OK   coverage: all 1664 top-level statements across 163 CONE files are pinned (roots 83 + transitively required)
+FENCE Q5 deployment magnitude \b65536\b in code of cdrafts-split/RawShuffle.ec
+OK unique statement pins: 1902
+FAIL split contract: Command '['/usr/bin/python3', 'tools/policy_cap_fence.py']' returned non-zero exit status 1.
+Traceback (most recent call last):
+  File "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-session/contracts/verification/scripts/run_easycrypt_split.py", line 33, in <module>
+    subprocess.run(['docker', 'run', '--rm', '--init', '--network', 'none',
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['docker', 'run', '--rm', '--init', '--network', 'none', '--env', 'PQ_EASYCRYPT_IMAGE=ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3', '--volume', '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-session/contracts/verification/easycrypt/c10-port:/source:ro', 'ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3', 'bash', '-lc', 'set -e; eval "$(opam env)"; cp -R /source /tmp/proofs; cd /tmp/proofs; bash cert_gate_split.sh']' returned non-zero exit status 1.
+make: *** [Makefile:2226: verify-easycrypt-split] Error 1
+make: Leaving directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-session/contracts/verification'

@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	d1d88a7319995db0b21c47869c79fa8d
+split	820fb7e3a8d386a01b58981604b327e0
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1401,3 +1401,13 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 2026-09-21 combined integration: preserve master e6ac316e surface-count promotion
 # and concrete counter/byte/search work from 27307116. Cone60, roots51, pins1276,
 # statements1154, controls58. A fresh full replay is required on this union.
+
+# 2026-09-23 shared byte-session milestone: d1d88a7319995db0b21c47869c79fa8d -> 9db16c6ef0cad6ff05eb0a5130dca375.
+# Adds73 checked research modules, explicit fail-stop/codec/cost/prefix contracts,
+# 15 semantic/scope controls and full-signature Rust/model fixture correspondence.
+# Project axioms, admits and clone assumptions unchanged; no numeric forgery bound.
+
+# 2026-09-23 shared byte-session gate correction: 9db16c6ef0cad6ff05eb0a5130dca375 -> 820fb7e3a8d386a01b58981604b327e0.
+# Bind hypertree.rs and merkle.rs. Permit only the exact RawShuffle source
+# for its 16-bit scaling constant; regression cases reject changed sources
+# and deployment-policy constants. Proof statements and assumptions unchanged.

@@ -30,6 +30,31 @@ SOURCES = (
         'C10CubeConstruction', 'C10ReductionChoose', 'C10ReductionForge',
         'C10AcceptedReduction', 'C10HypertreeAccepted', 'C10StatefulSearch',
         'C10RawOracle', 'C10RawGrind', 'FORSC10Digest')),
+    'sphincs-c10/src/shuffle.rs',
+    'sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/merkle.rs',
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'AcceptedContexts', 'ByteBound', 'ByteSession', 'ContextExhaustion',
+        'ExhaustionCharges', 'FullFailure', 'FullPrefix', 'FullSession', 'FullSessionCost',
+        'GrindExhaustion', 'GrindReplay', 'GrindTail', 'GrindWitness',
+        'IdealWitness', 'KeygenExhaustion', 'KeygenPrefixes', 'PersistentGrind',
+        'PhysicalKeygenCost', 'PrefixBound', 'PrefixGames', 'PrefixGuess',
+        'PrefixHybrid', 'PrefixIdeal', 'PrefixState', 'PreparedExhaustion',
+        'PreparedGrind', 'PreparedHistory', 'PreparedRaw', 'RHistoryOps',
+        'RSession', 'RSessionBound', 'RSessionCost', 'RSessionHistory',
+        'RTailContexts', 'RTailFresh', 'RTailMessages', 'RawCodec',
+        'RawCompositeWidths', 'RawDecode', 'RawForest', 'RawForestCost',
+        'RawFors', 'RawForsCost', 'RawKeygen', 'RawKeygenCost',
+        'RawLayer', 'RawLayerCost', 'RawMerkle', 'RawMerkleCost',
+        'RawRHistory', 'RawSession', 'RawSessionBound', 'RawSessionCost',
+        'RawShuffle', 'RawSignature', 'RawSigner', 'RawSignerCost',
+        'RawSignerWidths', 'RawSlices', 'RawTreeWidths', 'RawTrial',
+        'RawWidths', 'RawWots', 'RawWotsCost', 'RoleGrind',
+        'RoleGrindCost', 'SecretPrefix', 'SessionClosedForm', 'SessionKeygen',
+        'SessionPhysical', 'StreamBound', 'StreamExpectation', 'TrialExpectation',
+    )),
+    *(PORT + 'tools/fullsign_model/' + f for f in (
+        'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
+
 )
 
 

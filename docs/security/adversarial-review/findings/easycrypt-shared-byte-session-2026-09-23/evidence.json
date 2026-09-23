@@ -1,0 +1,26 @@
+{
+  "source_commit": "1fc27470fc083e84eb844bf06e4aaf4551a7a079",
+  "source_tree": "dab22c3bfae2e7535c662c9553f148ab167a9f53",
+  "base": "1be79a0a653b90bf93071b0b83129b8654fff618",
+  "input_identity": "820fb7e3a8d386a01b58981604b327e0",
+  "inventory": {
+    "files": 163,
+    "roots": 83,
+    "unique_pins": 1902,
+    "statements": 1664,
+    "controls": 113,
+    "raw_census_rows": 1918,
+    "manual_source_bindings": 127
+  },
+  "full_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-23T12:20:26.310014+00:00",
+    "finished_utc": "2026-09-23T14:09:50.082735+00:00",
+    "elapsed_seconds": 6563.77,
+    "commit": "1fc27470fc083e84eb844bf06e4aaf4551a7a079",
+    "tree": "dab22c3bfae2e7535c662c9553f148ab167a9f53"
+  },
+  "focused_receipts": 146,
+  "scope": "Adaptive complete signer/byte-session computation, costs and same-client prefix hop in a classical ideal-oracle model; independent-game forgery probability remains unbounded.",
+  "metadata_delta": "Receipt only; no proof, runtime or gate inputs change. Later external Q experiments are excluded."
+}

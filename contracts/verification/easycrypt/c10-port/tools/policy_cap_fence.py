@@ -39,7 +39,8 @@ inventory.  Closing that class needs exhaustive statement-pin coverage over all
 34 closure members (~623 statements), which is a separate project.  This fence
 closes the quarantine file itself and the isolation property around it.
 """
-import re, sys, os
+import hashlib, re, sys, os
+from pathlib import Path
 
 FENCED = 'cdrafts-split/C10DeployedScope.ec'
 MANIFEST = 'cert-quarantine-split.tsv'
@@ -66,10 +67,18 @@ DECL_RE = re.compile(
 # Every spelling of the deployment magnitude a value-grep can reasonably cover.
 # NOT a closure of the class -- see the module docstring; `l %/ 4` defeats this.
 # Q5 IS A TRIPWIRE, NOT A RULE: `2 ^ 16` will match legitimate arithmetic in some
-# future certified file, and there is deliberately no allowlist yet.  Expect to add
-# one the first time it fires on an unrelated proof; do not treat a Q5 hit as proof
-# of a policy import.
+# future certified file; do not treat a Q5 hit as proof of a policy import.
+# The sole exception below binds an exact source, not a whole file or directory.
 MAGNITUDES = [r'\b65536\b', r'\b0x10000\b', r'2\s*\^\s*16', r'\b4\s*\^\s*8\b']
+# RawShuffle's sole 65536 occurrence divides a 16-bit multiply-shift index. It is
+# unrelated to wallet usage. Any source edit, duplicate occurrence, different
+# spelling or different path falls back to the ordinary tripwire. Reviewing a
+# changed shuffle source requires deliberately updating this digest as well.
+NONPOLICY_MAGNITUDES = {
+    ('cdrafts-split/RawShuffle.ec', r'\b65536\b'):
+        '2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639',
+}
+
 
 
 def strip_comments(s):
@@ -172,9 +181,14 @@ def main():
     for f in certified_files():
         if f == FENCED:
             continue
-        c = strip_comments(open(f, encoding='utf-8').read())
+        source = Path(f).read_bytes()
+        c = strip_comments(source.decode('utf-8'))
         for pat in MAGNITUDES:
-            if re.search(pat, c):
+            matches = list(re.finditer(pat, c))
+            if matches:
+                expected = NONPOLICY_MAGNITUDES.get((f, pat))
+                if len(matches) == 1 and hashlib.sha256(source).hexdigest() == expected:
+                    continue
                 problems.append(f'Q5 deployment magnitude {pat} in code of {f}')
 
     if problems:
