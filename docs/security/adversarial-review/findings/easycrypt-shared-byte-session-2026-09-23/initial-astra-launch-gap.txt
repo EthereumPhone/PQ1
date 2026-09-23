@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: cb3a7b16e759bffb449587995e2534501d9ba347 / 91469e87dc20b6931f3c302095d9545f355f24dc
+FINDINGS: none
+GAPS: Source review could not begin: read-only commands fail before execution with “bwrap: No permissions to create new namespace.” Commit/tree identity, diff, proofs, C10 correspondence, and evidence checks remain uninspected; the separately running mandatory replay also remains required for landing.

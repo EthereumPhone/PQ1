@@ -1,0 +1,1462 @@
+[
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/AcceptedContexts.ec",
+    "source_sha256": "3a3cba55b26455b51f8515dcdd6a10189b7aad373a4f54ef436a481a627cf9ee",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/AcceptedContexts-compile-1790156725593039018.log",
+    "diagnostics": [],
+    "log_sha256": "f9290c64eaa99956b788ee99890227727d4103c82826a8f32d73a928e08b9412"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/AcceptedContexts.ec",
+    "source_sha256": "3a3cba55b26455b51f8515dcdd6a10189b7aad373a4f54ef436a481a627cf9ee",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.47,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/AcceptedContexts-cli-1790156852594860585.log",
+    "diagnostics": [],
+    "log_sha256": "1cf2cfee77a9293bbf0e2a64a7b4090e76e284f3d8b886dd980c5650c53c5a04"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ByteBound.ec",
+    "source_sha256": "4ef971ff1851f015d64a3992ee326441a0a93fd0d2b7e480eb132d1b13412c53",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ByteBound-compile-1790164498821678855.log",
+    "diagnostics": [],
+    "log_sha256": "c7e35a441c4949093be239fdc3bd8f0766242d46de559993d0b43d4a74aa5964"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ByteBound.ec",
+    "source_sha256": "4ef971ff1851f015d64a3992ee326441a0a93fd0d2b7e480eb132d1b13412c53",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.48,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ByteBound-cli-1790164567721926952.log",
+    "diagnostics": [],
+    "log_sha256": "2a04101641c852c773ae891ef535091aece0f238245169db5b33f1388d97489b"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ByteSession.ec",
+    "source_sha256": "dc8e67b78f27c4412b34e636649de5cc162822ca9adc54f0a214a1229fa8e49b",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ByteSession-compile-1790164471775469180.log",
+    "diagnostics": [],
+    "log_sha256": "92e12f04eb181a64f699cd8fa79787b0f09935b755050cdb77abb47b869a9d69"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ByteSession.ec",
+    "source_sha256": "dc8e67b78f27c4412b34e636649de5cc162822ca9adc54f0a214a1229fa8e49b",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.82,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ByteSession-cli-1790164534771290991.log",
+    "diagnostics": [],
+    "log_sha256": "b99c62e314a83807175ca46b9da1f15df4b4d0e3e4b0f031ff69b1b12c3c6644"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ContextExhaustion.ec",
+    "source_sha256": "da2834371767b99e3d9d912407aab48e50cde32b4d4394815a59ab59d627f10e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.63,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ContextExhaustion-compile-1790156673033113086.log",
+    "diagnostics": [],
+    "log_sha256": "60365b3b0c568437d4dc703215b572af44de098b1e208b157b18c6ee81c072dd"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ContextExhaustion.ec",
+    "source_sha256": "da2834371767b99e3d9d912407aab48e50cde32b4d4394815a59ab59d627f10e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ContextExhaustion-cli-1790156741310092603.log",
+    "diagnostics": [],
+    "log_sha256": "69885fd1991a60ec63552ea2a65dfb9faa24a86ad0449bcfb6864cf4ae1b7fb2"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExhaustionCharges.ec",
+    "source_sha256": "f538edb8acc286e523adcf0c5151b97e7c9e20f325628e0ef8b8091bf0dbac2c",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.83,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExhaustionCharges-compile-1790152454874224810.log",
+    "diagnostics": [],
+    "log_sha256": "6d89f70be0d81c7f622b90c0a44d30bb3a72d500a4321f794fbbfa61df4a9a7b"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExhaustionCharges.ec",
+    "source_sha256": "f538edb8acc286e523adcf0c5151b97e7c9e20f325628e0ef8b8091bf0dbac2c",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExhaustionCharges-cli-1790152769168372888.log",
+    "diagnostics": [],
+    "log_sha256": "d7366445ec76f2057c79e02d33af2d23890aac35e924644a1b5aac436192acfc"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/FullFailure.ec",
+    "source_sha256": "6a7ebb40564953acea43868aecd62a0a0d104eca29c2a47ada2168fedd859d7a",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/FullFailure-compile-1790164533596898196.log",
+    "diagnostics": [],
+    "log_sha256": "27f9e0e83a61085f6ce1ba0e5826ebcfa0b423681237f91915b30b3955b66008"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/FullFailure.ec",
+    "source_sha256": "6a7ebb40564953acea43868aecd62a0a0d104eca29c2a47ada2168fedd859d7a",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.73,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/FullFailure-cli-1790164600624359527.log",
+    "diagnostics": [],
+    "log_sha256": "05119084e4f24bccac30270a762371530117c4da0a77c6b32ca423add6594fea"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/FullPrefix.ec",
+    "source_sha256": "f509535b985d412a5ba6faae7dfd0f43df6873447c74267b3b8235d9a522b4b3",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.28,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/FullPrefix-compile-1790164498830677937.log",
+    "diagnostics": [],
+    "log_sha256": "20696dd4fd263284f136faa73fef4b12cef42adb95ec1b78366a8a647fa524bd"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/FullPrefix.ec",
+    "source_sha256": "f509535b985d412a5ba6faae7dfd0f43df6873447c74267b3b8235d9a522b4b3",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.33,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/FullPrefix-cli-1790164567712466584.log",
+    "diagnostics": [],
+    "log_sha256": "191e7d2f8e99a4f106c22ca1d290e1eb9bb6ab9884f4d59cc594ead632b64cb4"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/FullSession.ec",
+    "source_sha256": "16b4341168482fdef14c499729fe62e31dc110bbac3ee8b221ef9dc608371c50",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.32,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/FullSession-compile-1790164470631153618.log",
+    "diagnostics": [],
+    "log_sha256": "c4c109954ebcd62e3c44d2ed7652ea7e6186bfade6a4eeef9cee5daae5ada6cd"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/FullSession.ec",
+    "source_sha256": "16b4341168482fdef14c499729fe62e31dc110bbac3ee8b221ef9dc608371c50",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/FullSession-cli-1790164534760648540.log",
+    "diagnostics": [],
+    "log_sha256": "9bb405b11141a41336d7e148406b2ee8d2e521d0f4ce570b7d4e707a2b1f6780"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/FullSessionCost.ec",
+    "source_sha256": "24b4e0c2bafe54467a713fabd59619eaed6b73cf343a90ebdfc87e22d0426bb4",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.73,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/FullSessionCost-compile-1790164498821774926.log",
+    "diagnostics": [],
+    "log_sha256": "43ba6e1a2da37049a6800813896b2a778371d6431f00b8f048c0480e625d69f6"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/FullSessionCost.ec",
+    "source_sha256": "24b4e0c2bafe54467a713fabd59619eaed6b73cf343a90ebdfc87e22d0426bb4",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.88,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/FullSessionCost-cli-1790164567705081048.log",
+    "diagnostics": [],
+    "log_sha256": "bc64019bddd61869873ef93abbab0eb7f500b66dfc4d2f1c79b2893d61eb0fe5"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/GrindExhaustion.ec",
+    "source_sha256": "adf0ef36f2d7d4e6a7112f01863da7238604a368632042262952014cb224c553",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.03,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/GrindExhaustion-compile-1790151851400127401.log",
+    "diagnostics": [],
+    "log_sha256": "149913c334946dcb64180df030ad01f0685cb033b98407ee8ca5c3949309cc25"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/GrindExhaustion.ec",
+    "source_sha256": "adf0ef36f2d7d4e6a7112f01863da7238604a368632042262952014cb224c553",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.37,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/GrindExhaustion-cli-1790151932992750206.log",
+    "diagnostics": [],
+    "log_sha256": "7f9b226397ad1b76cafa2278dfe7b26c06774987df54bfd54f9ec8b53943e8ae"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/GrindReplay.ec",
+    "source_sha256": "be74461680e2b05aaa282cb9400b6a97e4e85013a7a7d63c2443d824f6a5764e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.22,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/GrindReplay-compile-1790153961652848184.log",
+    "diagnostics": [],
+    "log_sha256": "9435cef770634728f3d8ce5b5cea836183f8c3d87c138d20faac825d3d3b28da"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/GrindReplay.ec",
+    "source_sha256": "be74461680e2b05aaa282cb9400b6a97e4e85013a7a7d63c2443d824f6a5764e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.88,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/GrindReplay-cli-1790154029101620494.log",
+    "diagnostics": [],
+    "log_sha256": "f821ca6a69f9a4c1dd3872779747ab862f8a416bfc0a6ccdc1ad79d58cd145e2"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/GrindTail.ec",
+    "source_sha256": "698594f4806ec6d2712eef8719c605e987b2b884e53d76401a7d7fc784123fd1",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/GrindTail-compile-1790150666694583065.log",
+    "diagnostics": [],
+    "log_sha256": "0d1d280fdc5e91c4b04f22b62212c3b471c7a763989dd8cd9966532cfb3ac6bd"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/GrindTail.ec",
+    "source_sha256": "698594f4806ec6d2712eef8719c605e987b2b884e53d76401a7d7fc784123fd1",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.02,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/GrindTail-cli-1790151199120343032.log",
+    "diagnostics": [],
+    "log_sha256": "4b363d7bd3d0cbaf21a149f24ae8d563e2bbe2dbce336c463b3fc48f87f4c077"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/GrindWitness.ec",
+    "source_sha256": "0f47d638dd25fb2e6643c6f83a71220f9118ed5f400b05745f1684af611a7042",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/GrindWitness-compile-1790154066376660865.log",
+    "diagnostics": [],
+    "log_sha256": "ca637ce91d3b66edb75314cf240b1679a3fdbb8d726d337ca8302e3210eee17d"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/GrindWitness.ec",
+    "source_sha256": "0f47d638dd25fb2e6643c6f83a71220f9118ed5f400b05745f1684af611a7042",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.02,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/GrindWitness-cli-1790154126390751959.log",
+    "diagnostics": [],
+    "log_sha256": "8253fa2531f370a0cf7fcf33e882c9a9e78acaa067006fc6f2964e861c972448"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/IdealWitness.ec",
+    "source_sha256": "c213011448627d8866f796bd14a0bdf4a271b579ad48b63b9c4cce00a84a93bf",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 5.13,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/IdealWitness-compile-1790154562128784408.log",
+    "diagnostics": [],
+    "log_sha256": "146f1d024434a949280beb0b9152a3465b3e771167334103b2a3e135d125e0d4"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/IdealWitness.ec",
+    "source_sha256": "c213011448627d8866f796bd14a0bdf4a271b579ad48b63b9c4cce00a84a93bf",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.88,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/IdealWitness-cli-1790154610740802031.log",
+    "diagnostics": [],
+    "log_sha256": "250ba9df877fc6539ce634ff3d363277abd6d4dee53d54abf001c825372ac433"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenExhaustion.ec",
+    "source_sha256": "822cfe363dc338e4ca273a5424194b6af401b9043503c71994d8a83379178632",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.02,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/KeygenExhaustion-compile-1790153351207736729.log",
+    "diagnostics": [],
+    "log_sha256": "31d66b799167c568804ad148b76a063866134af84484bbcb15af5d09b6b2c83c"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenExhaustion.ec",
+    "source_sha256": "822cfe363dc338e4ca273a5424194b6af401b9043503c71994d8a83379178632",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.43,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/KeygenExhaustion-cli-1790153392387349035.log",
+    "diagnostics": [],
+    "log_sha256": "fee042f19c52ff0148e49d21691882c72ed52431e1b6e64c0ed0fbe0c90b489a"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenPrefixes.ec",
+    "source_sha256": "19b7377f3c34ab07d8a2e0884efd4554e612667df34bc5c3d1db16f1045ea66e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/KeygenPrefixes-compile-1790152396745593508.log",
+    "diagnostics": [],
+    "log_sha256": "cae37f280bc5e2f54224f9b4b6f30e0fef54df45f40e9eef97fa9316079492bd"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenPrefixes.ec",
+    "source_sha256": "19b7377f3c34ab07d8a2e0884efd4554e612667df34bc5c3d1db16f1045ea66e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/KeygenPrefixes-cli-1790152456046761396.log",
+    "diagnostics": [],
+    "log_sha256": "b2b0602fbc66e57824108387804b163f0b51da7d4909df394386e4b8e1bf10c2"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PersistentGrind.ec",
+    "source_sha256": "3a5f86bda6b3956f064298eb3f56c74968e360d3fd1c7e2377c0d8b9f5f64403",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.52,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PersistentGrind-compile-1790154226856666541.log",
+    "diagnostics": [],
+    "log_sha256": "81c9df5dd80d010a5e0daa76c01103ad37abc432e76dd73fb179db49cad20d60"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PersistentGrind.ec",
+    "source_sha256": "3a5f86bda6b3956f064298eb3f56c74968e360d3fd1c7e2377c0d8b9f5f64403",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.47,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PersistentGrind-cli-1790154280703743604.log",
+    "diagnostics": [],
+    "log_sha256": "025b2b6c76087c5dbe771b5fd3f0a95b4f678587c2c20568759602ef699f9561"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PhysicalKeygenCost.ec",
+    "source_sha256": "c84ed9f6121ce0bf5b0844922fee636f777fb080727df2bcff3d677d19ca2139",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PhysicalKeygenCost-compile-1790153462129028871.log",
+    "diagnostics": [],
+    "log_sha256": "e395fb71f8379e3a9c7b5a095a3d1f6617752c556b14958c761680fa912bd697"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PhysicalKeygenCost.ec",
+    "source_sha256": "c84ed9f6121ce0bf5b0844922fee636f777fb080727df2bcff3d677d19ca2139",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 6.23,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PhysicalKeygenCost-cli-1790153508624420313.log",
+    "diagnostics": [],
+    "log_sha256": "0bd500c6d62cf6bb354eb081dc3f393890d00009bba9ee23dec9fea99b62a5b6"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixBound.ec",
+    "source_sha256": "51e7a9a440bf4c63b95f88a74d8ccf5550c648d241ee8c0536121a8826c2d9c6",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 1.37,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixBound-compile-1790146702030548208.log",
+    "diagnostics": [],
+    "log_sha256": "ee3bb3cce081f5c7f06a7bdbd824eed2f5bb824b943b38005b990ab645fe3b04"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixBound.ec",
+    "source_sha256": "51e7a9a440bf4c63b95f88a74d8ccf5550c648d241ee8c0536121a8826c2d9c6",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 1.47,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixBound-cli-1790151155508654039.log",
+    "diagnostics": [],
+    "log_sha256": "fe760be16ffad4710d9871782acbd66b78e7918f2b14a01c8642379762fb6996"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixGames.ec",
+    "source_sha256": "0a7542d9a7d30c9fd22916ff14a4f7930ff5e960d14dc46130a6b7ecae2fc33c",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 2.07,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixGames-compile-1790146653146125330.log",
+    "diagnostics": [],
+    "log_sha256": "620ece95650fc4239a32bdd080397318e92e106138e7d52c81de323a82dd7ef3"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixGames.ec",
+    "source_sha256": "0a7542d9a7d30c9fd22916ff14a4f7930ff5e960d14dc46130a6b7ecae2fc33c",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 2.17,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixGames-cli-1790151153308121406.log",
+    "diagnostics": [],
+    "log_sha256": "2fbe8ded5d720a878ffa7421d70a71aaa93c33ab5dc624b5de38b3fdfad815e2"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixGuess.ec",
+    "source_sha256": "844ac92f59b501d634be15b648876abeb36d5b45cefa7ec8bbacba755901bbf2",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 1.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixGuess-compile-1790145439366944309.log",
+    "diagnostics": [],
+    "log_sha256": "258500c01659417527aa24d8c8f88abd81054d34b84bd8450d10a6698ea684ee"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixGuess.ec",
+    "source_sha256": "844ac92f59b501d634be15b648876abeb36d5b45cefa7ec8bbacba755901bbf2",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 1.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixGuess-cli-1790151149055872229.log",
+    "diagnostics": [],
+    "log_sha256": "32e9328dc44e1e202e10c7f9c432044026adfae40cd9616f6ffa060647265778"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixHybrid.ec",
+    "source_sha256": "58b5e562d002fc9847cb6fb68988732bed715dc3077f23479c2dbe03107143d9",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 2.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixHybrid-compile-1790145913175554200.log",
+    "diagnostics": [],
+    "log_sha256": "e27e318c0b46d795eab71914870aa74161f20a12e35b3263e88d6860708dc800"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixHybrid.ec",
+    "source_sha256": "58b5e562d002fc9847cb6fb68988732bed715dc3077f23479c2dbe03107143d9",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 2.62,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixHybrid-cli-1790151150655873489.log",
+    "diagnostics": [],
+    "log_sha256": "b34370ab47cf3189ebfe86b6e970500649a7fca462496a08c6d7f5bde3d66224"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixIdeal.ec",
+    "source_sha256": "7acc6ad0187247d00fe1076ef64090e1f8a3825dbfba728654b3990b2ea058aa",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 1.32,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixIdeal-compile-1790146849567421967.log",
+    "diagnostics": [],
+    "log_sha256": "ccf2861c3ac27f0a3161260ce12031e8bddc4ed6db66710843f922399d1876f0"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixIdeal.ec",
+    "source_sha256": "7acc6ad0187247d00fe1076ef64090e1f8a3825dbfba728654b3990b2ea058aa",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 1.17,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixIdeal-cli-1790151157012687544.log",
+    "diagnostics": [],
+    "log_sha256": "b4af0bc1ae292be423bea5d1d9b007a221928cc006d4ef35ec07b126bcefa61a"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixState.ec",
+    "source_sha256": "7a2f84fe20ca4989f3a65772de4d12334d00d7e42699b6da2bdd6db77930ab51",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 1.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixState-compile-1790157580832891989.log",
+    "diagnostics": [],
+    "log_sha256": "4afdf202c09b501f914d7b1bb1b8bf981a8a88d804d0857f648475a1cb9a6a88"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixState.ec",
+    "source_sha256": "7a2f84fe20ca4989f3a65772de4d12334d00d7e42699b6da2bdd6db77930ab51",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 1.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PrefixState-cli-1790157715572710241.log",
+    "diagnostics": [],
+    "log_sha256": "70b30add72e54448ead9b3ddeffb5445b6dcf17eb312baeb5ec6eea6527fdb37"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PreparedExhaustion.ec",
+    "source_sha256": "7dd142d0a464e580682805fc31a299e8f712dd95ca124f288fd484045053779f",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PreparedExhaustion-compile-1790152879053512662.log",
+    "diagnostics": [],
+    "log_sha256": "29897705540ac9f1c4a01683a41ec9a04a1757b37bc5e68263fca2d2e75d48d1"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PreparedExhaustion.ec",
+    "source_sha256": "7dd142d0a464e580682805fc31a299e8f712dd95ca124f288fd484045053779f",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PreparedExhaustion-cli-1790152905259129718.log",
+    "diagnostics": [],
+    "log_sha256": "15cfbf11e42cf25ee47ee33e45e6520c0e747953f0eb6c2326239849df13ea04"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PreparedGrind.ec",
+    "source_sha256": "6dc16a84c86b3293aac2576c186d5da73e208f6e9d2e95987495723be8e9b3a4",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PreparedGrind-compile-1790152890610507877.log",
+    "diagnostics": [],
+    "log_sha256": "05c1a38a1bdef7bf73dac166931903e58e145a8ae7d8fa21f17089cd1234d7e4"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PreparedGrind.ec",
+    "source_sha256": "6dc16a84c86b3293aac2576c186d5da73e208f6e9d2e95987495723be8e9b3a4",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PreparedGrind-cli-1790152920102309573.log",
+    "diagnostics": [],
+    "log_sha256": "64b6794b80d3746283761f3c37a309b45d145b641fea434ed523b47639c780f5"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PreparedHistory.ec",
+    "source_sha256": "fd5e1885408362a400e655848d888f21fdf0e06509eff6987b7d9819df077caa",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.27,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PreparedHistory-compile-1790152812053387873.log",
+    "diagnostics": [],
+    "log_sha256": "19c209f91735f633575bf5b2b13ad89c250c5976fb026a84d8183813f5f0dcc7"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PreparedHistory.ec",
+    "source_sha256": "fd5e1885408362a400e655848d888f21fdf0e06509eff6987b7d9819df077caa",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PreparedHistory-cli-1790152877868969041.log",
+    "diagnostics": [],
+    "log_sha256": "8bfb6f3dc7703db1286908c544140011aa5c5d7a05442ee0e0e228e79dc46f29"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PreparedRaw.ec",
+    "source_sha256": "c0faef209729a0c31da3ad90154d5121a72fd79d3351c2eda016bb3912c032a0",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.88,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PreparedRaw-compile-1790153075201981715.log",
+    "diagnostics": [],
+    "log_sha256": "db369268b20a265301941ba6aac1182c78e419479b71c2302be295fe3407db81"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/PreparedRaw.ec",
+    "source_sha256": "c0faef209729a0c31da3ad90154d5121a72fd79d3351c2eda016bb3912c032a0",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.02,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/PreparedRaw-cli-1790153114198870595.log",
+    "diagnostics": [],
+    "log_sha256": "7a0966f128d708789b0f586424a56b648ed779d210aaca40a392f99b0503ea99"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RHistoryOps.ec",
+    "source_sha256": "3c3fa9c98221e9274c775dcb491796d63f943584c5b5125d1edff871aadb036b",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.08,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RHistoryOps-compile-1790154435236982804.log",
+    "diagnostics": [],
+    "log_sha256": "37c511ba2923b87e416826d69b2bd74fdccbd08bffc3d015efdcac27cbc67e55"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RHistoryOps.ec",
+    "source_sha256": "3c3fa9c98221e9274c775dcb491796d63f943584c5b5125d1edff871aadb036b",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RHistoryOps-cli-1790154560949955198.log",
+    "diagnostics": [],
+    "log_sha256": "fd348eb7fa6a346ae708ee2685e6516f933e80f040f26ff9c4f50ea5758c63d1"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RSession.ec",
+    "source_sha256": "065b2bda9bca47ac9201141c15f064a63c2da4bb323f9a03004bfd493ba38262",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RSession-compile-1790157048003930517.log",
+    "diagnostics": [],
+    "log_sha256": "150d6acc1534fc786f103ce5a3aef1a17b08a040aeef9c8c3adbf587272a9682"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RSession.ec",
+    "source_sha256": "065b2bda9bca47ac9201141c15f064a63c2da4bb323f9a03004bfd493ba38262",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RSession-cli-1790157082422977173.log",
+    "diagnostics": [],
+    "log_sha256": "7bed85a7353c54f77a97e42f004542d99ecfbae49cfdaf468f17b1aea4eed490"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RSessionBound.ec",
+    "source_sha256": "216656b8ce163384a350c394489b6f0b457ad4bd48378ffed2a6337ab0190b8e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 5.27,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RSessionBound-compile-1790157489299843199.log",
+    "diagnostics": [],
+    "log_sha256": "b5d502a1ea44f34d36765375eaad5f7b15f53d88893271b02b5a8b6e43227aad"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RSessionBound.ec",
+    "source_sha256": "216656b8ce163384a350c394489b6f0b457ad4bd48378ffed2a6337ab0190b8e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 6.08,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RSessionBound-cli-1790157580852726645.log",
+    "diagnostics": [],
+    "log_sha256": "921ed49beb6adc1550e572cfa5d93e891b6d55169a11e57cbe607bfa12fcaaf3"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RSessionCost.ec",
+    "source_sha256": "cc9478edd0de222b7699f63496b7265f1b1c3a0b3dbdcf54d84ca72446f1dbe4",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.47,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RSessionCost-compile-1790157081252237465.log",
+    "diagnostics": [],
+    "log_sha256": "76cac6ae4b0200acb23eadcde9d7b2b9fd058ad7121e79513db786aec884208e"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RSessionCost.ec",
+    "source_sha256": "cc9478edd0de222b7699f63496b7265f1b1c3a0b3dbdcf54d84ca72446f1dbe4",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RSessionCost-cli-1790157189482426360.log",
+    "diagnostics": [],
+    "log_sha256": "68bfce75d2205454de206e9ea59e833b09b0ca1cf1ed5aa62fe24a5db453eba6"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RSessionHistory.ec",
+    "source_sha256": "9c387a51974f355bea84bf321363e195a447257eebe952235b454f5f786c9d9f",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 5.02,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RSessionHistory-compile-1790157176005685918.log",
+    "diagnostics": [],
+    "log_sha256": "b59772f4182b07cc084eb1290e69080545aa70fcb4edbce5b22ee718ee5ff005"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RSessionHistory.ec",
+    "source_sha256": "9c387a51974f355bea84bf321363e195a447257eebe952235b454f5f786c9d9f",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RSessionHistory-cli-1790157198251258270.log",
+    "diagnostics": [],
+    "log_sha256": "2f144ed9393bfbe7651c70e014d4ed343d7644a031d109bc23f339b7d9ed78ac"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RTailContexts.ec",
+    "source_sha256": "014255b820e35b9155e44154247be49230a66ddeea69f10f30766cb3d11d1261",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.07,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RTailContexts-compile-1790154181220133588.log",
+    "diagnostics": [],
+    "log_sha256": "af711194479ac6d36392220f950deb91796651dede0dfed8e9596825e2409b15"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RTailContexts.ec",
+    "source_sha256": "014255b820e35b9155e44154247be49230a66ddeea69f10f30766cb3d11d1261",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.12,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RTailContexts-cli-1790154215382766944.log",
+    "diagnostics": [],
+    "log_sha256": "7ec9abfc335e9b6bcdebbbf90cb249272648923a0f91944a33382b911b2ec621"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RTailFresh.ec",
+    "source_sha256": "fcca22c662ab86ec7694b86cd8a9e00edbadd918062d9edc97ee4b405a4a775d",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.02,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RTailFresh-compile-1790148587284523264.log",
+    "diagnostics": [],
+    "log_sha256": "232637630946418d153270ebee30752af7b84f464dce4da86b57f62a5097ca20"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RTailFresh.ec",
+    "source_sha256": "fcca22c662ab86ec7694b86cd8a9e00edbadd918062d9edc97ee4b405a4a775d",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.53,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RTailFresh-cli-1790151182032804414.log",
+    "diagnostics": [],
+    "log_sha256": "6b1bb506eed6dca1ee5b3f02ca5dd08e20468b489377bb8f23b5358d907c2168"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RTailMessages.ec",
+    "source_sha256": "a529312ef0e74c97d3856a6891f3188b2c14ffa5f6d327e0c95360c697e10caa",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.07,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RTailMessages-compile-1790153961633396602.log",
+    "diagnostics": [],
+    "log_sha256": "d4b866934fbdd2ed6af5f912f737081a343737ec74686123e84daa4754105ca1"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RTailMessages.ec",
+    "source_sha256": "a529312ef0e74c97d3856a6891f3188b2c14ffa5f6d327e0c95360c697e10caa",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.58,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RTailMessages-cli-1790154029120676948.log",
+    "diagnostics": [],
+    "log_sha256": "5ac86e0d7297b7a8baadd78005dd53feadca33b353c7d72eeb00bae093f006d5"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawCodec.ec",
+    "source_sha256": "5aaca2e8be870ef5d37f650cba934ea16534976fa6aef221fe375308a9202589",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.58,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawCodec-compile-1790163426104354061.log",
+    "diagnostics": [],
+    "log_sha256": "41bf035aa4d1c6988615e11e58528b806ef1b4a4e74e1a98b15162f5aa093550"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawCodec.ec",
+    "source_sha256": "5aaca2e8be870ef5d37f650cba934ea16534976fa6aef221fe375308a9202589",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.94,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawCodec-cli-1790163454479187512.log",
+    "diagnostics": [],
+    "log_sha256": "a1e07630f135b24dbf73d418df451e2a83917b9ce7b8a31a4dd6b30332a6ac0e"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawCompositeWidths.ec",
+    "source_sha256": "3aecc19f77024636d73c59be6f14251767119eefcf3df7cc3a8d71c6cbdc5748",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawCompositeWidths-compile-1790162739133641828.log",
+    "diagnostics": [],
+    "log_sha256": "c4d35c0530ece3001ad184f8d5d6fed7dc8ad8abe3a9634adf84f970375bb243"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawCompositeWidths.ec",
+    "source_sha256": "3aecc19f77024636d73c59be6f14251767119eefcf3df7cc3a8d71c6cbdc5748",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawCompositeWidths-cli-1790162802320921950.log",
+    "diagnostics": [],
+    "log_sha256": "d72a95e354a55f810c4b3d24572e766f32a48ee96f9a27598c72474037f8bdc3"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawDecode.ec",
+    "source_sha256": "bc0102dd6f42c3d6b2187439e961507bda5372a4a7c5c9a4887ee518a1fe09b4",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.82,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawDecode-compile-1790163524051416467.log",
+    "diagnostics": [],
+    "log_sha256": "287067cb3a2644bbe3f4f98f0ec735fd69c1795e19faec47bb767c9a35e7f83a"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawDecode.ec",
+    "source_sha256": "bc0102dd6f42c3d6b2187439e961507bda5372a4a7c5c9a4887ee518a1fe09b4",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.97,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawDecode-cli-1790163579370641599.log",
+    "diagnostics": [],
+    "log_sha256": "0ec704c699c80a543ffe9925dd1757df28ec56664bdc15a80214264046832339"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForest.ec",
+    "source_sha256": "76b40a69989b36c88ecc4d9e9fae197da65fee865ea2572be94f50f297fb2f10",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawForest-compile-1790161180341021501.log",
+    "diagnostics": [],
+    "log_sha256": "b4090cf4b34a2cb6513d14cbd5d34e833934b2c2b9731d6dd2137a044f7c5026"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForest.ec",
+    "source_sha256": "76b40a69989b36c88ecc4d9e9fae197da65fee865ea2572be94f50f297fb2f10",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawForest-cli-1790161292010757449.log",
+    "diagnostics": [],
+    "log_sha256": "5737bddda0034ad7ca54342090121698f168a4fd0523c65e3d02c86bb4a3faa3"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForestCost.ec",
+    "source_sha256": "2e44ea3f172ae407ba2f811d709a72db93ac849c9725b4a0b64de6e22e8a0387",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.92,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawForestCost-compile-1790161382416377156.log",
+    "diagnostics": [],
+    "log_sha256": "d2913c3b97729edb11c2bd9637ec7f95062938cb3f23472a5c3b130980c3b001"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForestCost.ec",
+    "source_sha256": "2e44ea3f172ae407ba2f811d709a72db93ac849c9725b4a0b64de6e22e8a0387",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawForestCost-cli-1790161479931981530.log",
+    "diagnostics": [],
+    "log_sha256": "b4c538ac9b3fe0af9ae092e2e6bbf34329889327a6640368b69e7ddbe1ee478f"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawFors.ec",
+    "source_sha256": "cea927f567b23443a0c0846493089f3651f1eb57a86daae508527b612741833e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.27,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawFors-compile-1790158961308960444.log",
+    "diagnostics": [],
+    "log_sha256": "3b27f00cbc7cbf1157f2597eb5881f8087679aafe11171f809943efb95ba5549"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawFors.ec",
+    "source_sha256": "cea927f567b23443a0c0846493089f3651f1eb57a86daae508527b612741833e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawFors-cli-1790158985550968608.log",
+    "diagnostics": [],
+    "log_sha256": "591ce56e342ab932220ca524220f522f37cdd6276d49a26fb1e10f72c9804e2d"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForsCost.ec",
+    "source_sha256": "48309753b7893210336d246e4d96f065bed6ca359e06cdeeec1d497f867b1d13",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.33,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawForsCost-compile-1790159058550006009.log",
+    "diagnostics": [],
+    "log_sha256": "51b99ac3434fe279fbfa7fd0da410b2f11a8fcc969e8172b28508006218f42fb"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForsCost.ec",
+    "source_sha256": "48309753b7893210336d246e4d96f065bed6ca359e06cdeeec1d497f867b1d13",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawForsCost-cli-1790159099880728597.log",
+    "diagnostics": [],
+    "log_sha256": "593acbb5aa0ecb9225e93be4c8ed91e0ae84456db35aa6010746ac61b3570070"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawKeygen.ec",
+    "source_sha256": "9f983fbb237129b0600ee1462429a722c53f86a5a74e25a0e508f16c1238174e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawKeygen-compile-1790153113029590814.log",
+    "diagnostics": [],
+    "log_sha256": "b4ad5e216120d334a79d3798a2d57c28544e99e400d4e241d5ceb78cd44ab60d"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawKeygen.ec",
+    "source_sha256": "9f983fbb237129b0600ee1462429a722c53f86a5a74e25a0e508f16c1238174e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.12,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawKeygen-cli-1790153172996727168.log",
+    "diagnostics": [],
+    "log_sha256": "eb1d830b6aa2915cb336e8520b227af00bb374b9e0e4e714b3476e602c45cc71"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawKeygenCost.ec",
+    "source_sha256": "99dbc9baaf990309bdc7523fc17fd721f1e0f72f2ddcdae229a99aa7217784bf",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.43,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawKeygenCost-compile-1790153226848346321.log",
+    "diagnostics": [],
+    "log_sha256": "2125e832909ea056b4e902a57fc8f60e822e9308502a71195af6fccf70313ef4"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawKeygenCost.ec",
+    "source_sha256": "99dbc9baaf990309bdc7523fc17fd721f1e0f72f2ddcdae229a99aa7217784bf",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.47,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawKeygenCost-cli-1790153293448004166.log",
+    "diagnostics": [],
+    "log_sha256": "b8d5f5ec4550e09b783374f9b426498f93e1c88224e17d5845d45dbcd3f8f963"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawLayer.ec",
+    "source_sha256": "3ebf8be154f55b07d3d8f10a3dd5e541b7d47714fa2997703c93201dce30dc96",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.22,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawLayer-compile-1790161605717977185.log",
+    "diagnostics": [],
+    "log_sha256": "0cc429575cb3515a6c474af1762b151029e4bbc2c22c76e81bf1ec39408dfe40"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawLayer.ec",
+    "source_sha256": "3ebf8be154f55b07d3d8f10a3dd5e541b7d47714fa2997703c93201dce30dc96",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.27,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawLayer-cli-1790161701811718392.log",
+    "diagnostics": [],
+    "log_sha256": "8d0baac179eb9da65854de50deaa04649e741e04822f8f2e4f8b30a3594081cb"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawLayerCost.ec",
+    "source_sha256": "9718dd0d01fa5241eb845cb3baf945fe502f1f0cf0fd2fb7c8482ac75578e99d",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.68,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawLayerCost-compile-1790161651668073191.log",
+    "diagnostics": [],
+    "log_sha256": "c2427cb7886a43b82ef400202017e6e8fe81e9a0a18b547a5d16ff015c6988e7"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawLayerCost.ec",
+    "source_sha256": "9718dd0d01fa5241eb845cb3baf945fe502f1f0cf0fd2fb7c8482ac75578e99d",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.82,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawLayerCost-cli-1790161781841836139.log",
+    "diagnostics": [],
+    "log_sha256": "f29e9bc6752a795152d8cb6f5075098c9881999b025b474bc2181101ca71d030"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawMerkle.ec",
+    "source_sha256": "c39af26b991ef2929dea669be1152fcb84dbcbf0f25dfb60c2d1290c183d1f6e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawMerkle-compile-1790161445209113788.log",
+    "diagnostics": [],
+    "log_sha256": "c2236451432593d7227afd6b538d0a61a7356350ce64dfea21d9ea7d3daf2b33"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawMerkle.ec",
+    "source_sha256": "c39af26b991ef2929dea669be1152fcb84dbcbf0f25dfb60c2d1290c183d1f6e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.17,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawMerkle-cli-1790161544476354267.log",
+    "diagnostics": [],
+    "log_sha256": "cf12c4464808405505af1687422395d42c6f38d2cfd3c50c85cf0d0f3867b68d"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawMerkleCost.ec",
+    "source_sha256": "7054bc7ee39e67ba1982477512bed6db3a2dc46f5575fea119a7e8a056f9554a",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.78,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawMerkleCost-compile-1790161517503763260.log",
+    "diagnostics": [],
+    "log_sha256": "e73af879d1a264550f7efb6c9d72da03e0d12e6de8460e8451ce6efecd10eb81"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawMerkleCost.ec",
+    "source_sha256": "7054bc7ee39e67ba1982477512bed6db3a2dc46f5575fea119a7e8a056f9554a",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.12,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawMerkleCost-cli-1790161606882540319.log",
+    "diagnostics": [],
+    "log_sha256": "c62e693097b84ed43bdc5e85adb92c8a06a2ed995c9336d9a44b2aef8021f632"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawRHistory.ec",
+    "source_sha256": "c7351e2b78e44908ad3758c23ca9ad0818a3bbd5234dd859e5a262af881fd280",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.03,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawRHistory-compile-1790147140875777940.log",
+    "diagnostics": [],
+    "log_sha256": "f9332f42e2962f4eb82b19d7527899b878c74d045e62d9b3a4f90ea8c4de6489"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawRHistory.ec",
+    "source_sha256": "c7351e2b78e44908ad3758c23ca9ad0818a3bbd5234dd859e5a262af881fd280",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.92,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawRHistory-cli-1790151170116722294.log",
+    "diagnostics": [],
+    "log_sha256": "e8af8235cb81981045e1838951f7fbbe0639d1cf0fc1611a7b22de2f7cab7fbf"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSession.ec",
+    "source_sha256": "d0ae12047489fcbf3ca4697b16ed495ccdf4e26c91c55b9bc097d3d04ffb236d",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.82,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSession-compile-1790158109594317795.log",
+    "diagnostics": [],
+    "log_sha256": "02fe89fa3eb3d9f9fd2ca4dec7afd20e92ad45b9de6a6f6fc2a5cb50973383d5"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSession.ec",
+    "source_sha256": "d0ae12047489fcbf3ca4697b16ed495ccdf4e26c91c55b9bc097d3d04ffb236d",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.37,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSession-cli-1790158159210039320.log",
+    "diagnostics": [],
+    "log_sha256": "35b7208e1c4b2daa862341cfd4e28641e5b853747b2a864cca027af8cc902c57"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSessionBound.ec",
+    "source_sha256": "604d3481b44ab5e133743264d50b28a69a61de9fb8a2decfeb9eb7c694506a75",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.52,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSessionBound-compile-1790158069804836248.log",
+    "diagnostics": [],
+    "log_sha256": "6ffab4d82381661c6ad5f062e524297feef7e02d1f21ea368f9aadfd08131da7"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSessionBound.ec",
+    "source_sha256": "604d3481b44ab5e133743264d50b28a69a61de9fb8a2decfeb9eb7c694506a75",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSessionBound-cli-1790158111945061492.log",
+    "diagnostics": [],
+    "log_sha256": "8e178f352da2521bbed0924671e6db3e7251fdbefdc022e7557c1e625e4be66b"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSessionCost.ec",
+    "source_sha256": "ca3b7eace77f611e901a11bad08ad2640f3e00177331e619efc3d67943d5ef07",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.98,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSessionCost-compile-1790158069823443315.log",
+    "diagnostics": [],
+    "log_sha256": "21b9e72f5d81a21af0c4c95887db3aa5a2bd01ded2de6e215cd28d97cb5557e4"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSessionCost.ec",
+    "source_sha256": "ca3b7eace77f611e901a11bad08ad2640f3e00177331e619efc3d67943d5ef07",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSessionCost-cli-1790158110771817342.log",
+    "diagnostics": [],
+    "log_sha256": "7a672d71ef47b2c589f6bc81ea62903a37ef6a2c373b13f59ee746be6d99a843"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawShuffle.ec",
+    "source_sha256": "2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawShuffle-compile-1790159332847191897.log",
+    "diagnostics": [],
+    "log_sha256": "30b8bde22881c82f32c86d7c333fdb1524405efb939353f54fcd67b445f91e59"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawShuffle.ec",
+    "source_sha256": "2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawShuffle-cli-1790159404430437937.log",
+    "diagnostics": [],
+    "log_sha256": "27ea8d15a7663d6ab04e9ae5ea57fdfe1ca535b0d64a4ef2176c00cac77735ab"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignature.ec",
+    "source_sha256": "de0e9b611ea88e6aaa39e5b9d3931ff2cf611c20159eb69b42f53ae9b5bae03d",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSignature-compile-1790162152115013215.log",
+    "diagnostics": [],
+    "log_sha256": "91e42f0ad87ce439a45d354b7c884d411939edf27e34179021f2f2d5adbc691a"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignature.ec",
+    "source_sha256": "de0e9b611ea88e6aaa39e5b9d3931ff2cf611c20159eb69b42f53ae9b5bae03d",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.42,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSignature-cli-1790162248143594629.log",
+    "diagnostics": [],
+    "log_sha256": "e576d8038e39e71c8bf00d75ded7c63c5d43d0776de6b1dc49af26e7f178d19f"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSigner.ec",
+    "source_sha256": "8b40da75596beb4a824890c8d5e3d58383f7f049c682815b476850a26c7b1650",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.62,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSigner-compile-1790161700645938425.log",
+    "diagnostics": [],
+    "log_sha256": "1023fe567443c346a203b8df9047ec9b6d25b3ad0911e4b852117617234a4b75"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSigner.ec",
+    "source_sha256": "8b40da75596beb4a824890c8d5e3d58383f7f049c682815b476850a26c7b1650",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.32,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSigner-cli-1790161813450229822.log",
+    "diagnostics": [],
+    "log_sha256": "50d070df1cfb61456b1d0b262e9a75b2720ba7b68f5c4703d3ea5b8a1f48bbcd"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignerCost.ec",
+    "source_sha256": "f6afec786f09e10a694fad65e8e0c36bdc8fa0e2f87a8d299617bf056dffeedd",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.12,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSignerCost-compile-1790161853593433709.log",
+    "diagnostics": [],
+    "log_sha256": "bac8cbf387c49e5e97314f4542f426d900ebfe1bd900e7807e9399974980c543"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignerCost.ec",
+    "source_sha256": "f6afec786f09e10a694fad65e8e0c36bdc8fa0e2f87a8d299617bf056dffeedd",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.48,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSignerCost-cli-1790162037496634324.log",
+    "diagnostics": [],
+    "log_sha256": "f3fc591b1eb1804d78eb32c50eb4b4981800acbde07e3e55a7d662deebb218da"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignerWidths.ec",
+    "source_sha256": "c11b577584bc4b93383249f8775d8dfde713412ef2626bd6b3d4ddef56dc5dcc",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSignerWidths-compile-1790162801154286903.log",
+    "diagnostics": [],
+    "log_sha256": "02144911350a5adcff78a1d6c67276f8d9ead1a2f64f62c8ad3fad0cf53e987f"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignerWidths.ec",
+    "source_sha256": "c11b577584bc4b93383249f8775d8dfde713412ef2626bd6b3d4ddef56dc5dcc",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.62,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSignerWidths-cli-1790162869987061794.log",
+    "diagnostics": [],
+    "log_sha256": "24c6034adb5ba4e7c42308a3b260379bc6c4bfa65cee51f69d5c92e3075e53df"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSlices.ec",
+    "source_sha256": "9c38e57c3c4a95101a2ee46e3cead17f52baef1fb3778738faa87bcd7ce1434a",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.29,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSlices-compile-1790163337194153494.log",
+    "diagnostics": [],
+    "log_sha256": "600da865b09364adcbaa5943fa4f0ce8c328bc4e97d84d47d4a6eea33a28a1ea"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSlices.ec",
+    "source_sha256": "9c38e57c3c4a95101a2ee46e3cead17f52baef1fb3778738faa87bcd7ce1434a",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.07,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawSlices-cli-1790163454472788806.log",
+    "diagnostics": [],
+    "log_sha256": "21d75f817bd17ae9dd317f68db0c4f03705cde7c777b05737696014202ceb072"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawTreeWidths.ec",
+    "source_sha256": "4b812859ff39a9d68bbaaa71474d93e7af05394ef33fc0eafd2240337017e929",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.22,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawTreeWidths-compile-1790162674107847700.log",
+    "diagnostics": [],
+    "log_sha256": "75631f84eea4ac51c6ecb11ac95f7ce652ac8b909f6d938a4d9b7785341cc2e1"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawTreeWidths.ec",
+    "source_sha256": "4b812859ff39a9d68bbaaa71474d93e7af05394ef33fc0eafd2240337017e929",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.37,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawTreeWidths-cli-1790162740303323132.log",
+    "diagnostics": [],
+    "log_sha256": "b0292036b2106f515092654f879df9151f850c228d78123035f79585228c2689"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawTrial.ec",
+    "source_sha256": "406554b86f265f7eb64f6b57559cd00e7c4caa20280182d5ef5c6d536787692b",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.82,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawTrial-compile-1790148040426654035.log",
+    "diagnostics": [],
+    "log_sha256": "ca48079de9405716d03368a972c3edefd829c1fbc3aa1ef95f666e15b3503119"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawTrial.ec",
+    "source_sha256": "406554b86f265f7eb64f6b57559cd00e7c4caa20280182d5ef5c6d536787692b",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawTrial-cli-1790151174071014522.log",
+    "diagnostics": [],
+    "log_sha256": "3bf9e9e1328f1f1edc2a9a417b882a0c984f372e9c3bc420ae7e0d1ff9e38837"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWidths.ec",
+    "source_sha256": "977ae67a18ca97c2524664902a15177efe57d9249f4e1ae7788f4cd6a4e28d54",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawWidths-compile-1790162573251507600.log",
+    "diagnostics": [],
+    "log_sha256": "77ad9c78f65ce43bb4f52a75b1f226239f7d36a6b0a89ebee681321385f8b7f6"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWidths.ec",
+    "source_sha256": "977ae67a18ca97c2524664902a15177efe57d9249f4e1ae7788f4cd6a4e28d54",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.92,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawWidths-cli-1790162676439428997.log",
+    "diagnostics": [],
+    "log_sha256": "9175b7a091af96c554b38f170294049d2dbed253fe90a6f80e037c3eacffd414"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWots.ec",
+    "source_sha256": "b0510301eba5d387e3199d216bae2772f5e27480bdb3a23f037881c59138a558",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.03,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawWots-compile-1790161179374339643.log",
+    "diagnostics": [],
+    "log_sha256": "4bed13f12d14ddc2251aa604435ded84556e4c70d7acb2081e22e766dbc8b085"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWots.ec",
+    "source_sha256": "b0510301eba5d387e3199d216bae2772f5e27480bdb3a23f037881c59138a558",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.03,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawWots-cli-1790161292002574435.log",
+    "diagnostics": [],
+    "log_sha256": "26648b6600e31602280b6da593e9c5e8005339bb1d1e732220f748f2108734c4"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWotsCost.ec",
+    "source_sha256": "d7d60a9efd1d42c6a4c81cf5b11f4ad8abda039ec058ae2408ad1febf668e868",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 5.02,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawWotsCost-compile-1790161478758917121.log",
+    "diagnostics": [],
+    "log_sha256": "5ee9031fe12ba5990ed5255b650b61f37441b2433cf7f6c5d39893eb13ead9ba"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWotsCost.ec",
+    "source_sha256": "d7d60a9efd1d42c6a4c81cf5b11f4ad8abda039ec058ae2408ad1febf668e868",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.73,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RawWotsCost-cli-1790161544468583258.log",
+    "diagnostics": [],
+    "log_sha256": "295319fd2df341ff66ac66230cfa4bd73c17410d67aef65dd7e1a1bdb88f8286"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec",
+    "source_sha256": "66e1d6d21ed7043421fff9bbd77575340c3013651b7bc3295b83328cca8125dd",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.37,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RoleGrind-compile-1790146703201082084.log",
+    "diagnostics": [],
+    "log_sha256": "840b829220cddfdab2d1b8eee12740f1fae4a122871ea100292129481c7ca363"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec",
+    "source_sha256": "66e1d6d21ed7043421fff9bbd77575340c3013651b7bc3295b83328cca8125dd",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RoleGrind-cli-1790151158208479849.log",
+    "diagnostics": [],
+    "log_sha256": "0e81936b51e5e75ee73ab8eb41d77e85062f8a806051b9e97cf914ded521c271"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrindCost.ec",
+    "source_sha256": "b717afc1c8f110b3fe6c782f55ba1bfc313781dda9c83007ea6a5cfddbea4421",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.97,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RoleGrindCost-compile-1790146849553517279.log",
+    "diagnostics": [],
+    "log_sha256": "6b4dbbe5de9b74658aac5f8b86edb1fd0d301cb3a22a1d233d5dcbd2e9ef1aea"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrindCost.ec",
+    "source_sha256": "b717afc1c8f110b3fe6c782f55ba1bfc313781dda9c83007ea6a5cfddbea4421",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.37,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/RoleGrindCost-cli-1790151161961038324.log",
+    "diagnostics": [],
+    "log_sha256": "707bad6b917eafe7ea2d07574f35ff2bae0d01823824c722ff6ccd47731c0aea"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/SecretPrefix.ec",
+    "source_sha256": "7d78a6e128a0bb2e268e7f84bf0546042958abf50cc4438ba435745bb4c06284",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 1.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/SecretPrefix-compile-1790145256876116217.log",
+    "diagnostics": [],
+    "log_sha256": "94198341b16ba32feac8b9e1d43911bd5e3bd94a3c007e968a5f3eec0a3c16e6"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/SecretPrefix.ec",
+    "source_sha256": "7d78a6e128a0bb2e268e7f84bf0546042958abf50cc4438ba435745bb4c06284",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 1.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/SecretPrefix-cli-1790151147302765603.log",
+    "diagnostics": [],
+    "log_sha256": "7e479459d428f9f255748bf3d74f958b0cdc7586c910109ec6db0d3cc8af1f04"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/SessionClosedForm.ec",
+    "source_sha256": "a3d372143f95958442641fb4e251fa347f3e37d568953b3d0426a0c26238f116",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.92,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/SessionClosedForm-compile-1790158392124578675.log",
+    "diagnostics": [],
+    "log_sha256": "4e5340c5ba023bff2ebaadd523908a8fa2d317710aaa82c2638883611ba11a77"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/SessionClosedForm.ec",
+    "source_sha256": "a3d372143f95958442641fb4e251fa347f3e37d568953b3d0426a0c26238f116",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.92,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/SessionClosedForm-cli-1790158536399147634.log",
+    "diagnostics": [],
+    "log_sha256": "25c886f1b8dade98b90d8bbe35fde11b9fadb549b7385b13ded42f39b76b490d"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/SessionKeygen.ec",
+    "source_sha256": "a66feb8f5b82815af8ab27c7c30fefd790c524f5b8982f0a7cc4c260ff34c044",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.47,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/SessionKeygen-compile-1790157822511259341.log",
+    "diagnostics": [],
+    "log_sha256": "1da9e2fae3d04b01b08082ba5ea842006848caee189b47886861e9e7fb9a22f5"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/SessionKeygen.ec",
+    "source_sha256": "a66feb8f5b82815af8ab27c7c30fefd790c524f5b8982f0a7cc4c260ff34c044",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.68,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/SessionKeygen-cli-1790157866392980622.log",
+    "diagnostics": [],
+    "log_sha256": "b899ea11f6924d1e233e57c33ac62eb7e9609b96ad7c5cef09dda3f61b19e19f"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/SessionPhysical.ec",
+    "source_sha256": "da8cbc5a81e147d3febdc5ec43ef91a43484402377e25f9a9449f3a02d1be965",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.47,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/SessionPhysical-compile-1790157921732834246.log",
+    "diagnostics": [],
+    "log_sha256": "5f3d5497e6a2369acac5687d5fb64c12d9a746bd42248480a10567dac777906b"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/SessionPhysical.ec",
+    "source_sha256": "da8cbc5a81e147d3febdc5ec43ef91a43484402377e25f9a9449f3a02d1be965",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.07,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/SessionPhysical-cli-1790157982677608520.log",
+    "diagnostics": [],
+    "log_sha256": "0df931f0d87f7ae9045745c0e85512b8943f57ebb09fb58053605ac42e7e57e4"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/StreamBound.ec",
+    "source_sha256": "2296949d6c52622f8f7555ae061cc443da2a27027a3a82143e737493ba47d3df",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.98,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/StreamBound-compile-1790149890108517721.log",
+    "diagnostics": [],
+    "log_sha256": "cf504f4bd0a9d381a1014d2691ae2946c60cee3f1af52b660c0c467f85a85b9e"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/StreamBound.ec",
+    "source_sha256": "2296949d6c52622f8f7555ae061cc443da2a27027a3a82143e737493ba47d3df",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.93,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/StreamBound-cli-1790151194163113354.log",
+    "diagnostics": [],
+    "log_sha256": "4d7ea84844c69b5932b42ba9cd070912d1056cd7c561e40c59722934b9cef6e9"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/StreamExpectation.ec",
+    "source_sha256": "ce2b6ecb1f16367073210f94116a29662ceb66d93fafbf9ca8a648dae9367504",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/StreamExpectation-compile-1790151804382574374.log",
+    "diagnostics": [],
+    "log_sha256": "856e3febba0d909a44021a0fca5304a57f8dfd7fb8a63f75c4e6d749866e9eac"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/StreamExpectation.ec",
+    "source_sha256": "ce2b6ecb1f16367073210f94116a29662ceb66d93fafbf9ca8a648dae9367504",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 3.92,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/StreamExpectation-cli-1790151883477665935.log",
+    "diagnostics": [],
+    "log_sha256": "1bffec1b777557ac39f2de78943d7d25ac1169bc65a8b0a9f63acb7776901b18"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/TrialExpectation.ec",
+    "source_sha256": "aacca79b964852ca185530fb355f6c025047660fca915028bb56fd4ffa470f13",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.32,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/TrialExpectation-compile-1790151162528694618.log",
+    "diagnostics": [],
+    "log_sha256": "d60a9e3f0bb851d4e0c53ba5a1e9151508f43e2300f672756a496675422fffca"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/cdrafts-split/TrialExpectation.ec",
+    "source_sha256": "aacca79b964852ca185530fb355f6c025047660fca915028bb56fd4ffa470f13",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.12,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/TrialExpectation-cli-1790151224685663963.log",
+    "diagnostics": [],
+    "log_sha256": "84a0d3d38fc07dc57335924a3be2ead97793a537ce632d6c1e7baec5d03ab221"
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "candidate": "1fc27470fc083e84eb844bf06e4aaf4551a7a079",
+  "pull_request": 734,
+  "overall_ci": "red",
+  "known_failures": {
+    "660": "Invariant job TRNG ledger anchor missing, exact baseline message in raw job log.",
+    "711": "Host/coverage/provenance jobs share exact existing proto receipt drift; fuzz build fails existing locked lockfile mismatch.",
+    "717": "Contracts and Slither setup fail on foundryup cannot execute binary file."
+  },
+  "logs": [
+    "session-ci-failures.log",
+    "session-fuzz-ci-failures.log",
+    "session-invariant-ci-raw.log"
+  ],
+  "source_scope": "No touched baseline failure input in EasyCrypt candidate."
+}
