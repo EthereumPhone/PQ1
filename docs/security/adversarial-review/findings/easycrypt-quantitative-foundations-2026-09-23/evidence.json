@@ -1,0 +1,26 @@
+{
+  "source_commit": "589c650000f9d443723201ce5333aba5f6a6d4b4",
+  "source_tree": "dd9581383dcd0d587d01c1663c84eadf7109af8e",
+  "base": "1abfc31158e232f1a7f09b972a03176e53a5785f",
+  "input_identity": "a7a6c66a5d9630e834ef2de251877aa4",
+  "inventory": {
+    "files": 184,
+    "roots": 87,
+    "unique_pins": 2003,
+    "statements": 1750,
+    "controls": 122,
+    "raw_census_rows": 1945,
+    "manual_source_bindings": 148
+  },
+  "full_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-23T14:39:53.725794+00:00",
+    "finished_utc": "2026-09-23T16:30:59.386431+00:00",
+    "elapsed_seconds": 6665.66,
+    "commit": "589c650000f9d443723201ce5333aba5f6a6d4b4",
+    "tree": "dd9581383dcd0d587d01c1663c84eadf7109af8e"
+  },
+  "focused_receipts": 42,
+  "scope": "Memoized complete-signing probability laws with entry-state freshness/history premises, prior opening sets and an exact-coordinate replay bound; residual adaptive forgery probability remains unbounded.",
+  "metadata_delta": "Receipt only. No proof, runtime or gate inputs change. External Q2 continuation is excluded."
+}
