@@ -227,3 +227,14 @@ scratch/_scope_neg_op_RawDecode.ec	MUST-FAIL	unknown variable or constant: `FORS
 scratch/C10FullFailurePositive.ec	MUST-PASS	-
 scratch/C10FullFailureResume.ec	MUST-FAIL	the given proof-term proves:
 scratch/_scope_neg_op_FullFailure.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Quantitative foundation controls and headline isolation.
+scratch/C10QProbabilityPositive.ec	MUST-PASS	-
+scratch/C10QWithoutFreshness.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10QWithoutRevisits.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10QAdaptiveOpeningsPositive.ec	MUST-PASS	-
+scratch/C10QAdaptiveOpeningsFalse.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ByteReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GrindJointCoverage.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerReturned.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GrindHypertree.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

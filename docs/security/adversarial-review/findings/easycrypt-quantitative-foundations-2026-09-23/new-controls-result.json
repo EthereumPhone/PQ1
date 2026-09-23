@@ -1,0 +1,83 @@
+[
+  {
+    "file": "scratch/C10QProbabilityPositive.ec",
+    "source_sha256": "75b7161dab8866c874f721c20994b67d5e49a522576ad13b62bfcfd8c8fce0f9",
+    "expected": "MUST-PASS",
+    "reason": "-",
+    "observed": 0,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10QProbabilityPositive-compile-1790174136163325075.log"
+  },
+  {
+    "file": "scratch/C10QWithoutFreshness.ec",
+    "source_sha256": "73507315d3eb8a0e8df52c3b8d35983cd0ec9f4a74b5a77ad00b984e4c03eaa2",
+    "expected": "MUST-FAIL",
+    "reason": "[by]: cannot close goals",
+    "observed": 1,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10QWithoutFreshness-compile-1790174139464291659.log"
+  },
+  {
+    "file": "scratch/C10QWithoutRevisits.ec",
+    "source_sha256": "0d0128e484e4c5d4c4b9144ab74e4a1d5754dc3f93fc9e5dc3e957fe7d3f1abb",
+    "expected": "MUST-FAIL",
+    "reason": "the given proof-term proves:",
+    "observed": 1,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10QWithoutRevisits-compile-1790174142726383568.log"
+  },
+  {
+    "file": "scratch/C10QAdaptiveOpeningsPositive.ec",
+    "source_sha256": "6dbd7f3ed6d99f8b8cb9d7bef0485efc31ce1bc5cbbb69ba6ac793a661c49ed8",
+    "expected": "MUST-PASS",
+    "reason": "-",
+    "observed": 0,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10QAdaptiveOpeningsPositive-compile-1790174146029868421.log"
+  },
+  {
+    "file": "scratch/C10QAdaptiveOpeningsFalse.ec",
+    "source_sha256": "621c466fbf812252d701be126af9c5e7e1b87f2a22f31422af23678449cc27dd",
+    "expected": "MUST-FAIL",
+    "reason": "the given proof-term proves:",
+    "observed": 1,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10QAdaptiveOpeningsFalse-compile-1790174148988270091.log"
+  },
+  {
+    "file": "scratch/_scope_neg_op_ByteReplay.ec",
+    "source_sha256": "37eb7b95baff403470bdb31d1d71daa9fba4d5379cbeb7332e51bf2d55d4356b",
+    "expected": "MUST-FAIL",
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "observed": 1,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ByteReplay-compile-1790174151837895913.log"
+  },
+  {
+    "file": "scratch/_scope_neg_op_GrindJointCoverage.ec",
+    "source_sha256": "ce7764d8e892532f7e074e0a337350854a39fbe0aa561318ec18517b36eb5f42",
+    "expected": "MUST-FAIL",
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "observed": 1,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_GrindJointCoverage-compile-1790174155345701611.log"
+  },
+  {
+    "file": "scratch/_scope_neg_op_SignerReturned.ec",
+    "source_sha256": "fa1124cb44c35fc938123cd97f575371f1ecc1d57e1fd8177e078b4c5709b84a",
+    "expected": "MUST-FAIL",
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "observed": 1,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_SignerReturned-compile-1790174158196497730.log"
+  },
+  {
+    "file": "scratch/_scope_neg_op_GrindHypertree.ec",
+    "source_sha256": "81b20e75deca2f3affe174bbfd4bf66b3150716652e7e1277a7e99f1e326a4ad",
+    "expected": "MUST-FAIL",
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "observed": 1,
+    "matched": true,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_GrindHypertree-compile-1790174161354329953.log"
+  }
+]

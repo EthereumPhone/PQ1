@@ -1,0 +1,29 @@
+{
+  "target": "589c650000f9d443723201ce5333aba5f6a6d4b4",
+  "tree": "dd9581383dcd0d587d01c1663c84eadf7109af8e",
+  "reviewers": {
+    "Astra": "GO, no findings",
+    "Opus": "GO, no findings"
+  },
+  "drift": false,
+  "remaining_gate": "Resolved by unchanged-source complete green cold gate.",
+  "coordinator_notes": [
+    "Stream.bad zeros the acceptance potential but does not stop the loop.",
+    "PrefixAudit.calls is min(Q,size queries); complete-cost coverage supplies the range premise.",
+    "Legacy scope-control rejection checks name visibility, not general absence of every verifier import.",
+    "Reports are retained verbatim; source statements and gate evidence govern claims."
+  ],
+  "resolved_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-23T14:39:53.725794+00:00",
+    "finished_utc": "2026-09-23T16:30:59.386431+00:00",
+    "elapsed_seconds": 6665.66,
+    "commit": "589c650000f9d443723201ce5333aba5f6a6d4b4",
+    "tree": "dd9581383dcd0d587d01c1663c84eadf7109af8e"
+  },
+  "substitutions": "Astra ultra replaces SOL; Kimi omitted under standing owner instructions.",
+  "opus_runtime_model": [
+    "claude-opus-5-5"
+  ],
+  "astra_model_evidence": "gpt-6-astra ultra requested by captured command; CLI JSON stream does not independently expose remote model identity."
+}

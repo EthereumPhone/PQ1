@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	820fb7e3a8d386a01b58981604b327e0
+split	a7a6c66a5d9630e834ef2de251877aa4
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1411,3 +1411,9 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Bind hypertree.rs and merkle.rs. Permit only the exact RawShuffle source
 # for its 16-bit scaling constant; regression cases reject changed sources
 # and deployment-policy constants. Proof statements and assumptions unchanged.
+
+# 2026-09-23 quantitative foundations: 820fb7e3a8d386a01b58981604b327e0 -> a7a6c66a5d9630e834ef2de251877aa4.
+# Adds21 proof modules for exact-coordinate replay and actual memoized signing
+# probabilities, with fixed-prior-opening boundaries and nine semantic/scope
+# controls. Cone184, roots87, pins2003, statements1750, controls122; project
+# axioms, admits and clone assumptions unchanged. Full forgery remains open.

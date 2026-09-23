@@ -1,0 +1,155 @@
+{
+  "headRefOid": "589c650000f9d443723201ce5333aba5f6a6d4b4",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:44:34Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232684758",
+      "name": "Invariant gates (#5 /",
+      "startedAt": "2026-09-23T14:43:01Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:45:13Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216150/job/107232685793",
+      "name": "PR",
+      "startedAt": "2026-09-23T14:43:01Z",
+      "status": "COMPLETED",
+      "workflowName": "ClusterFuzzLite (PR)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:43:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216084/job/107232684121",
+      "name": "Claude security review",
+      "startedAt": "2026-09-23T14:43:00Z",
+      "status": "COMPLETED",
+      "workflowName": "Claude Security Review (advisory)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:45:39Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216055/job/107232684960",
+      "name": "lake build + FV-lints + axiom audit",
+      "startedAt": "2026-09-23T14:43:00Z",
+      "status": "COMPLETED",
+      "workflowName": "Lean FV (SphincsCVerify)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:43:27Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685156",
+      "name": "cargo-vet (dependency audit attestation)",
+      "startedAt": "2026-09-23T14:43:01Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:45:21Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685197",
+      "name": "Production quarantine gates (rollback + ERC-7730 provenance OPEN)",
+      "startedAt": "2026-09-23T14:43:00Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:45:19Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685107",
+      "name": "Host unit tests (pure-logic crates)",
+      "startedAt": "2026-09-23T14:43:01Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:44:08Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685045",
+      "name": "Secure-world unit tests (host)",
+      "startedAt": "2026-09-23T14:43:00Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:46:21Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685135",
+      "name": "Line coverage (cargo llvm-cov \u2014 report-only baseline)",
+      "startedAt": "2026-09-23T14:43:06Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:45:51Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685090",
+      "name": "QEMU unified-sign E2E",
+      "startedAt": "2026-09-23T14:43:01Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:44:00Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685145",
+      "name": "Firmware-target gates (FSBL footprint + thumbv8m pair link)",
+      "startedAt": "2026-09-23T14:43:02Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:48:25Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685181",
+      "name": "Miri (UB in host-reachable unsafe)",
+      "startedAt": "2026-09-23T14:43:01Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:43:09Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685517",
+      "name": "Slither (contracts static analysis)",
+      "startedAt": "2026-09-23T14:43:00Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:43:11Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685067",
+      "name": "Contracts (forge test)",
+      "startedAt": "2026-09-23T14:43:01Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-09-23T14:45:54Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/EthereumPhone/PQ1/actions/runs/35876216029/job/107232685189",
+      "name": "G1 \u2014 gate-enforcement lint (every soundness gate fires on its surface)",
+      "startedAt": "2026-09-23T14:43:00Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    }
+  ]
+}

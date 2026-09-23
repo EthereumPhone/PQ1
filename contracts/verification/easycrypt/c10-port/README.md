@@ -29,6 +29,12 @@ whole-signer query budgets, exact byte parsing/re-encoding, fail-stop behavior
 and a same-client secret-prefix game hop. Its independent-game forgery term
 remains unbounded; it is separate from the conditional reduction family below.
 
+The [quantitative foundations](QUANTITATIVE-FOUNDATIONS.md) add an
+exact-coordinate replay hop and accepted-output bounds for the actual
+memoized grinder and complete signer. Fixed prior-opening sets and cached
+query charges remain explicit; adaptive accumulated coverage and the final
+component reduction are still open.
+
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a

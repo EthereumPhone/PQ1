@@ -1,0 +1,26 @@
+Review PQSigner OS for merge of its EasyCrypt quantitative-foundations milestone.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-quantitative
+Commit: 589c650000f9d443723201ce5333aba5f6a6d4b4
+Tree: dd9581383dcd0d587d01c1663c84eadf7109af8e
+Compare: 1abfc31158e232f1a7f09b972a03176e53a5785f..589c650000f9d443723201ce5333aba5f6a6d4b4
+
+Focus only on formal-verification correctness:
+1. Fresh prefix/window/chunk laws and acceptance conditioning use the actual uniform digest; no unjustified independence for cached inputs or future enlarged opening sets.
+2. The accepted-output potential bounds the actual memoized RoleGrind, including early exit, explicit private-tail freshness/history/width premises and the revisit charge.
+3. Private signing observations preserve returned signatures and oracle state, and tie the emitted randomizer to the retained H_msg entry through complete signature construction.
+4. The private collision monitor preserves uncapped public observations; its coverage is proved from actual byte-game public-call budgets, with required adversary privacy and termination.
+5. Equal valid accepted FORS/hypertree coordinates imply the 161-bit prefix relation; this isolates exact-coordinate replay and does not bound combinations of openings.
+6. Statement/source/census/control enrollment preserves all previous contracts and adds no project axiom, admit or clone assumption; new negative controls fail for declared reasons.
+7. The residual adaptive forgery/component-reduction term stays unbounded. No end-to-end numeric EUF, extraction, concrete SHA-256, QROM or shipment claim.
+
+Evidence already green: all 21 new enrolled files pass source-matched direct compilation and default CLI with repository-only includes; nine new semantic/scope controls and 11 checker regressions pass. Static contract: 184 files, 87 roots, 2003 pins, 1750 statements, 148 source bindings, 22 headlines with 18 scope probes. Existing assumptions are unchanged. Full cold 184-target two-driver replay plus 122 controls is running separately and remains required for landing; the coordinator will confirm that unchanged-source receipt without another model turn.
+Non-goals: firmware/API/parameter changes, hardware or shipment, deferred playbook sweep, optional hardening, or completion of the residual full adaptive forgery proof in this review.
+
+Inspect the diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 589c650000f9d443723201ce5333aba5f6a6d4b4 / dd9581383dcd0d587d01c1663c84eadf7109af8e
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.
