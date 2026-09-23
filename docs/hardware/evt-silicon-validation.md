@@ -614,6 +614,67 @@ driver for it in the tree — the FSBL has no I2C stage by design. The AW99703
 datasheet is not in the repo; that driver is the open follow-up, and it is only
 testable on a board that has a panel.
 
+> ### UPDATE 2026-09-23 — CLOSED. The FSBL fingerprint is visible and legible on a real panel.
+>
+> Run on the **enclosed screen unit** (UID `003B0022 30465002 2033314C`), which
+> is the board that has a panel. The operator read the four rows off the glass
+> and they matched the prediction exactly:
+>
+> ```
+> 1 fresh  5 febru
+> 2 narro  6 patie
+> 3 place  7 stumb
+> 4 box    8 local
+> ```
+>
+> **Why this is a binding and not just "a screen lit up".** The words were
+> computed HOST-SIDE BEFORE the run, by calling the same pure function the
+> firmware calls (`sphincs_tz_bip39::firmware_fingerprint_lines`) on digest
+> `5cd262970d45454235ec1a942b7de6ec15ba8e132c73f6f429a51f30552d3152` — the
+> `secure_hash` the signed manifest binds. The bank-1 blob's secure region was
+> independently re-hashed to the same value before flashing. So the glass is
+> tied to the exact image in the slot, and a stale or wrong frame could not
+> have produced these words.
+>
+> **What it closes**, against the three gaps stated immediately above:
+>
+> * *"nothing was visible"* — resolved. The render is visible AND legible at the
+>   4x16 grid's font size, which matters because invariant #10 asks a human to
+>   read 8 words inside a ~10 s window.
+> * *the FSBL's OWN driver copy* — `fsbl/src/nv3007.rs` is separate code from
+>   `secure/src/hw/{spi_hw,lcd_nv3007}.rs` and runs at **HSI16**, not 160 MHz.
+>   Prodtest's five LCD patterns (2026-09-21) validated the secure-world driver;
+>   this validates the FSBL's.
+> * *the AW99703 follow-up* — no longer open and no longer driverless.
+>   `fsbl/src/aw99703.rs` exists, and the words being LIT means `backlight_on`
+>   returned true: the verdict is folded into the display verdict (`94f02777`,
+>   corrected by `548d3d51`), and the refusal path returns BEFORE the hold, so a
+>   10 s hold with visible words is itself the receipt. This is also the first
+>   time that path ran against a **real LED load** — the bench board's AW99703
+>   drives an open circuit.
+>
+> **What it does NOT prove.** Nothing here makes the FSBL immutable: this unit is
+> RDP-0 with no WRP, which is the whole point of invariant #10's remaining open
+> gates. It does not exercise the FSBL-row vs secure-world-row divergence check
+> either, because slot A was built `ui-noop` and never drew a second row.
+>
+> **Route.** No SWD — the enclosed unit's 10-pin connector is removed and the
+> pads are inside the case. The operator put it into DFU with the USB-C sideband
+> adapter (`A8`/SBU shorted to VCC); the mechanism by which that reaches BOOT0 is
+> the schematic reading in `evt-debug-pins.md`, NOT something measured here — what
+> is measured is that the unit enumerated as `0483:df11`. Flashed with
+> `tools/flash-evt-dfu.sh --erase`, which regressed TrustZone, wrote at
+> TZEN=0 and re-enabled TZEN last. The boot proof needs four flash regions but
+> that tool writes two, so FSBL + manifest + secure were composed into ONE
+> bank-1 blob (offsets `0x0000` / `0x8000` / `0xE000`) and handed over as
+> `secure.bin`; each region was re-extracted and re-hashed from the blob before
+> flashing. `stage-marker` was deliberately OFF: with TZEN=1 the ROM bootloader
+> is non-secure and reads the secure bank back as zeros, so the marker page is
+> unreadable on this unit and the panel is the whole of the evidence.
+>
+> Final option bytes, re-read after the run: `RDP 0xAA`, `TZEN 0x1`,
+> `SECBOOTADD0 0x180000`, `SECWM1` all-secure, `SECWM2` off. No WRP, no RDP-2.
+
 ---
 
 ## §2 — Clock, bus, and timing re-verification (NON-DEST, do first)

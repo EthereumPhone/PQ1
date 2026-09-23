@@ -183,6 +183,15 @@ by hand does work, and is the bench route when flash is not blank:
 Result: `0483:df11`, `Product: DFU in FS Mode`; CubeProgrammer then reports
 `Device ID 0x482`, `STM32U575/STM32U585`, `NVM 2 MBytes`, `DFU protocol 1.1`.
 
+> **UPDATE 2026-09-23 — no longer true on this machine.** A udev rule now
+> exists at `/etc/udev/rules.d/99-stm32-dfu.rules`
+> (`SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11",
+> MODE="0666"`), so CubeProgrammer claims the interface as an ordinary user. A
+> full DFU flash of the enclosed screen unit ran without `sudo` on that date.
+> The paragraph below still describes what happens on a machine WITHOUT the
+> rule, which is the state a new bench will be in — keep it, but add the rule
+> rather than reaching for `sudo`.
+
 **`sudo` is required and its absence is misleading.** `/dev/bus/usb/BBB/DDD` is
 `crw-rw-r--` and no udev rule exists for `0483:df11`, so CubeProgrammer cannot
 claim the interface and fails with `Error: Target device not found` even while
