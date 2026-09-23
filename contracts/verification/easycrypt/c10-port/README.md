@@ -24,6 +24,11 @@ earlier stage of the same work and is retained only as history.
 
 Read this section before quoting anything from this directory.
 
+The [shared byte-session milestone](SHARED-BYTE-SESSION.md) adds adaptive
+whole-signer query budgets, exact byte parsing/re-encoding, fail-stop behavior
+and a same-client secret-prefix game hop. Its independent-game forgery term
+remains unbounded; it is separate from the conditional reduction family below.
+
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a

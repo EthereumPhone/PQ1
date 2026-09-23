@@ -1,0 +1,10 @@
+[package]
+name = "easycrypt-fullsign-correspondence"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+sphincs-c10 = { path = "../../../../../../sphincs-c10", features = ["hw-sha256"] }
+sha2 = "0.10"
+
+[workspace]
