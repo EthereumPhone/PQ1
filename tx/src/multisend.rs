@@ -91,6 +91,12 @@ pub enum MsError {
     /// reverts on-chain for these; we refuse on-device for the same
     /// reason — a nested DELEGATECALL is not honestly clear-signable.
     RecordOpNotCall,
+    /// A record's `to` is the zero address. MultiSendCallOnly v1.5.0
+    /// rewrites `to == 0` to `address(this)` — under the SafeTx
+    /// DELEGATECALL that is the Safe itself — while v1.3.0/v1.4.1 call
+    /// `0x0` literally. Refused for every target so the rendered `to`
+    /// is always the address the chain actually calls.
+    RecordToZero,
     /// Zero records, or more than `MULTISEND_MAX_RECORDS`.
     BadRecordCount,
 }
@@ -108,6 +114,7 @@ impl MsError {
             | MsError::TruncatedRecord
             | MsError::BadRecordDataLen => "msend malformed",
             MsError::RecordOpNotCall => "msend rec op!=0",
+            MsError::RecordToZero => "msend rec to=0",
             MsError::BadRecordCount => "msend rec count",
         }
     }
@@ -437,12 +444,13 @@ pub struct MsSummary {
 
 /// Validate the packed-records slice's hard rules and summarise it: strict
 /// record framing (via [`MsRecordIter`]), **every record `operation == 0`**
-/// (no nested DELEGATECALL), `1..=MULTISEND_MAX_RECORDS` records, and a count
-/// of CoW `setPreSignature` claims.
+/// (no nested DELEGATECALL), no `to == 0` record (MultiSendCallOnly v1.5.0
+/// rewrites it to the Safe itself), `1..=MULTISEND_MAX_RECORDS` records, and a
+/// count of CoW `setPreSignature` claims.
 ///
 /// This is the per-record DELEGATECALL-refusal gate. [`summarize`] composes it
 /// with [`decode_multisend`]. The in-loop check order — `operation != 0`
-/// **before** the record-count cap before the presign count — is behaviour (a
+/// before `to == 0` **before** the record-count cap before the presign count — is behaviour (a
 /// `> MULTISEND_MAX_RECORDS` batch whose first record is a DELEGATECALL still
 /// refuses with `RecordOpNotCall`, not `BadRecordCount`); do not reorder.
 ///
@@ -456,6 +464,9 @@ pub fn summarize_packed(packed: &[u8]) -> Result<MsSummary, MsError> {
         let rec = rec?;
         if rec.operation != 0 {
             return Err(MsError::RecordOpNotCall);
+        }
+        if rec.to == [0u8; 20] {
+            return Err(MsError::RecordToZero);
         }
         if record_count == MULTISEND_MAX_RECORDS {
             return Err(MsError::BadRecordCount);
@@ -989,11 +1000,16 @@ mod verification {
         let p = &packed[..len];
 
         if summarize_packed(p).is_ok() {
-            // Independent re-walk: every accepted record is a CALL (op == 0).
+            // Independent re-walk: every accepted record is a CALL (op == 0)
+            // to a non-zero `to` (MultiSendCallOnly v1.5.0 rewrites `to == 0`
+            // to the Safe itself, so it must never reach the renderer).
             let mut iter = MsRecordIter::new(p);
             for _ in 0..4 {
                 match iter.next() {
-                    Some(Ok(rec)) => assert_eq!(rec.operation, 0),
+                    Some(Ok(rec)) => {
+                        assert_eq!(rec.operation, 0);
+                        assert!(rec.to != [0u8; 20]);
+                    }
                     _ => break,
                 }
             }

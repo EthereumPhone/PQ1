@@ -53,10 +53,18 @@ same order-body renderer is used for direct, Safe, and batch paths.
 
 ## MultiSendCallOnly batches
 
-Only `operation=1` against one of the three firmware-pinned canonical
-`MultiSendCallOnly` deployments is accepted as the Safe UI batch shape. The
-packed records must be canonical, each record must use `op=0`, and there may be
-at most six records.
+Only `operation=1` against one of the four firmware-pinned canonical
+`MultiSendCallOnly` deployments (v1.3.0 canonical `0x40A2…130D`, v1.3.0 eip155
+`0xA1da…102B`, v1.4.1 `0x9641…02e2`, v1.5.0 `0xA83c…1836`) is accepted as the
+Safe UI batch shape. The packed records must be canonical, each record must use
+`op=0`, no record may target `0x0` (`msend rec to=0`), and there may be at most
+six records.
+
+UPDATE 2026-09-23: v1.5.0 added (Safe 1.5.0 wallets route batches through it).
+Its record loop rewrites `to == 0x0` to `address(this)` — the Safe itself under
+the outer DELEGATECALL — so the firmware refuses zero-`to` records for every
+target; the revm differential runs against both the v1.3.0 and v1.5.0
+bytecode.
 
 For a CoW presign record, attach kind 3 (and kind 4 only when the outer Safe
 route is `approveHash`) to the same batch `tx_idx`. The usual Safe UI flow is an
