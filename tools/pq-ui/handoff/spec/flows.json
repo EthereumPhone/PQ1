@@ -1,0 +1,4467 @@
+{
+ "flows": {
+  "approve_token": {
+   "confirm_index": 5,
+   "default_end": "approved",
+   "ends": {
+    "approved": {
+     "anim": "qubit",
+     "bottom": "USDC APPROVED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "rejected": {
+     "anim": "resolve",
+     "bottom": "USDC REJECTED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "APPROVE USDC?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "usdc",
+     "id": "APPROVE",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "SPENDER",
+     "kind": "detail",
+     "label": "SPENDER",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "CONTRACT",
+     "kind": "detail",
+     "label": "CONTRACT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "usdc",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "APPROVE USDC?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "usdc",
+     "id": "APPROVE",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "USDC APPROVED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "usdc",
+     "id": "APPROVED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/approve_token.py"
+  },
+  "batch/transfers": {
+   "confirm_index": null,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "BATCH DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "BATCH SIGNED 3 OF 3",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 30,
+    "screens": 31,
+    "sign_index": 9
+   },
+   "screens": [
+    {
+     "band_chev": true,
+     "bottom": "BATCH SIGN TX 1 OF 3",
+     "icon": "eth",
+     "id": "BATCH 1",
+     "kind": "hero",
+     "pager": [
+      1,
+      3
+     ]
+    },
+    {
+     "bottom": "SEND 1,250 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "CHAIN",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "BATCH SIGN TX 1 OF 3 TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "BATCH 1 ASK",
+     "kind": "hero",
+     "pager": [
+      1,
+      3
+     ]
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SIGNED 1 OF 3",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SIGNED 1",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    {
+     "band_chev": true,
+     "bottom": "BATCH SIGN TX 2 OF 3",
+     "icon": "eth",
+     "id": "BATCH 2",
+     "kind": "hero",
+     "pager": [
+      2,
+      3
+     ]
+    },
+    {
+     "bottom": "SEND 840.5 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "CHAIN",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "BATCH SIGN TX 2 OF 3 TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "BATCH 2 ASK",
+     "kind": "hero",
+     "pager": [
+      2,
+      3
+     ]
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SIGNED 2 OF 3",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SIGNED 2",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    {
+     "bottom": "BATCH SIGN TX 3 OF 3 TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "BATCH 3 ASK",
+     "kind": "hero",
+     "pager": [
+      3,
+      3
+     ]
+    },
+    {
+     "bottom": "SEND 12,000 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "CHAIN",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "BATCH SIGN TX 3 OF 3 TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "BATCH 3 ASK",
+     "kind": "hero",
+     "pager": [
+      3,
+      3
+     ]
+    },
+    {
+     "anim": "qubit",
+     "bottom": "BATCH SIGNED 3 OF 3",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "BATCH SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     9
+    ],
+    [
+     10,
+     19
+    ],
+    [
+     20,
+     29
+    ]
+   ],
+   "source": "flows/batch/transfers.py"
+  },
+  "batch/transfers_declined": {
+   "confirm_index": null,
+   "default_end": "declined",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "BATCH DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 20,
+    "screens": 21,
+    "sign_index": 9
+   },
+   "screens": [
+    {
+     "band_chev": true,
+     "bottom": "BATCH SIGN TX 1 OF 3",
+     "icon": "eth",
+     "id": "BATCH 1",
+     "kind": "hero",
+     "pager": [
+      1,
+      3
+     ]
+    },
+    {
+     "bottom": "SEND 1,250 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "CHAIN",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "BATCH SIGN TX 1 OF 3 TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "BATCH 1 ASK",
+     "kind": "hero",
+     "pager": [
+      1,
+      3
+     ]
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SIGNED 1 OF 3",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SIGNED 1",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    {
+     "band_chev": true,
+     "bottom": "BATCH SIGN TX 2 OF 3",
+     "icon": "eth",
+     "id": "BATCH 2",
+     "kind": "hero",
+     "pager": [
+      2,
+      3
+     ]
+    },
+    {
+     "bottom": "SEND 840.5 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "CHAIN",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "BATCH SIGN TX 2 OF 3 TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "BATCH 2 ASK",
+     "kind": "hero",
+     "pager": [
+      2,
+      3
+     ]
+    },
+    {
+     "anim": "resolve",
+     "bottom": "BATCH DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "icon": "eth",
+     "id": "BATCH DECLINED",
+     "interactive": false,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   ],
+   "segments": [
+    [
+     0,
+     9
+    ],
+    [
+     10,
+     19
+    ]
+   ],
+   "source": "flows/batch/transfers_declined.py"
+  },
+  "blind/bare_call": {
+   "confirm_index": 5,
+   "default_end": "confirmed",
+   "ends": {
+    "confirmed": {
+     "anim": "qubit",
+     "bottom": "UNKNOWN CALL CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "declined": {
+     "anim": "resolve",
+     "bottom": "UNKNOWN CALL DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 12,
+    "screens": 13,
+    "sign_index": 11
+   },
+   "screens": [
+    {
+     "bottom": "CONFIRM UNKNOWN CALL?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "blind",
+     "id": "UNKNOWN CALL",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "DATA HASH",
+     "kind": "detail",
+     "label": "DATA HASH",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "blind",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "CALL DATA",
+     "kind": "detail",
+     "label": "CALL DATA",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "bottom": "CONFIRM UNKNOWN CALL?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "blind",
+     "id": "UNKNOWN CALL",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "UNKNOWN CALL CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "blind",
+     "id": "CONFIRMED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     11
+    ]
+   ],
+   "source": "flows/blind/bare_call.py"
+  },
+  "blind/call_with_value": {
+   "confirm_index": 5,
+   "default_end": "confirmed",
+   "ends": {
+    "confirmed": {
+     "anim": "qubit",
+     "bottom": "UNKNOWN CALL CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "declined": {
+     "anim": "resolve",
+     "bottom": "UNKNOWN CALL DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 12,
+    "screens": 13,
+    "sign_index": 11
+   },
+   "screens": [
+    {
+     "bottom": "CONFIRM UNKNOWN CALL?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "blind",
+     "id": "UNKNOWN CALL",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "DATA HASH",
+     "kind": "detail",
+     "label": "DATA HASH",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "blind",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "CALL DATA",
+     "kind": "detail",
+     "label": "CALL DATA",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "bottom": "CONFIRM UNKNOWN CALL?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "blind",
+     "id": "UNKNOWN CALL",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "UNKNOWN CALL CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "blind",
+     "id": "CONFIRMED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     11
+    ]
+   ],
+   "source": "flows/blind/call_with_value.py"
+  },
+  "blind/typed_call/sign_with_args": {
+   "confirm_index": 5,
+   "default_end": "confirmed",
+   "ends": {
+    "confirmed": {
+     "anim": "qubit",
+     "bottom": "BLIND SIGN CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "declined": {
+     "anim": "resolve",
+     "bottom": "BLIND SIGN DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 15,
+    "screens": 16,
+    "sign_index": 14
+   },
+   "screens": [
+    {
+     "bottom": "CONFIRM BLIND SIGN?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "blind",
+     "id": "BLIND SIGN",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "blind",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "ARG 0",
+     "kind": "detail",
+     "label": "ARG 0",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "ARG 1",
+     "kind": "detail",
+     "label": "ARG 1",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "ARG 2",
+     "kind": "detail",
+     "label": "ARG 2",
+     "side": "left",
+     "size": 32
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "ARG 3",
+     "kind": "detail",
+     "label": "ARG 3",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "ARG 4",
+     "kind": "detail",
+     "label": "ARG 4",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "ARG 5",
+     "kind": "detail",
+     "label": "ARG 5",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "bottom": "CONFIRM BLIND SIGN?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "blind",
+     "id": "BLIND SIGN",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "BLIND SIGN CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "blind",
+     "id": "CONFIRMED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     14
+    ]
+   ],
+   "source": "flows/blind/typed_call/sign_with_args.py"
+  },
+  "blind/unknown_call": {
+   "confirm_index": 5,
+   "default_end": "confirmed",
+   "ends": {
+    "confirmed": {
+     "anim": "qubit",
+     "bottom": "UNKNOWN CALL CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "declined": {
+     "anim": "resolve",
+     "bottom": "UNKNOWN CALL DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 13,
+    "screens": 14,
+    "sign_index": 12
+   },
+   "screens": [
+    {
+     "bottom": "CONFIRM UNKNOWN CALL?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "blind",
+     "id": "UNKNOWN CALL",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "FUNCTION",
+     "kind": "detail",
+     "label": "FUNCTION",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "blind",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "DATA HASH",
+     "kind": "detail",
+     "label": "DATA HASH",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "CALL DATA",
+     "kind": "detail",
+     "label": "CALL DATA",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "blind",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "bottom": "CONFIRM UNKNOWN CALL?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "blind",
+     "id": "UNKNOWN CALL",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "UNKNOWN CALL CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "blind",
+     "id": "CONFIRMED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     12
+    ]
+   ],
+   "source": "flows/blind/unknown_call.py"
+  },
+  "contract_call": {
+   "confirm_index": null,
+   "default_end": "confirmed",
+   "ends": {
+    "confirmed": {
+     "anim": "qubit",
+     "bottom": "CONTRACT CALL CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "declined": {
+     "anim": "resolve",
+     "bottom": "CONTRACT CALL DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 9,
+    "screens": 10,
+    "sign_index": 8
+   },
+   "screens": [
+    {
+     "bottom": "CONFIRM CONTRACT CALL?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "CONTRACT CALL",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "VALUE",
+     "kind": "detail",
+     "label": "VALUE",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAIL",
+     "kind": "detail",
+     "label": "DETAIL",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "bottom": "CONFIRM CONTRACT CALL?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "CONTRACT CALL",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "CONTRACT CALL CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "CONFIRMED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     8
+    ]
+   ],
+   "source": "flows/contract_call.py"
+  },
+  "cowswap/address_mode": {
+   "confirm_index": 5,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "COWSWAP DECLINED",
+     "branded": true,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "COWSWAP SIGNED",
+     "branded": true,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "SIGN COWSWAP?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "cowswap",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "chain": 1,
+     "chev": "lr",
+     "icon": "mainnet",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "SELL",
+     "kind": "detail",
+     "label": "SELL",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "BUY",
+     "kind": "detail",
+     "label": "BUY",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "cowswap",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "EXPIRES",
+     "kind": "detail",
+     "label": "EXPIRES",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "FEE",
+     "kind": "detail",
+     "label": "FEE",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "bottom": "SIGN COWSWAP?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "cowswap",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "COWSWAP SIGNED",
+     "branded": true,
+     "duration": 8650,
+     "icon": "cowswap",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/cowswap/address_mode.py"
+  },
+  "cowswap/swap": {
+   "confirm_index": 5,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "COWSWAP DECLINED",
+     "branded": true,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "COWSWAP SIGNED",
+     "branded": true,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "SIGN COWSWAP?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "cowswap",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "chain": 1,
+     "chev": "lr",
+     "icon": "mainnet",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "SELL",
+     "kind": "detail",
+     "label": "SELL",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "BUY",
+     "kind": "detail",
+     "label": "BUY",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "cowswap",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "EXPIRES",
+     "kind": "detail",
+     "label": "EXPIRES",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "FEE",
+     "kind": "detail",
+     "label": "FEE",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "cowswap",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "bottom": "SIGN COWSWAP?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "cowswap",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "COWSWAP SIGNED",
+     "branded": true,
+     "duration": 8650,
+     "icon": "cowswap",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/cowswap/swap.py"
+  },
+  "eip1271/personal_counterfactual": {
+   "confirm_index": 5,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "EIP1271 DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "EIP1271 SIGNED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "SIGN EIP–1271?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "ACCOUNT",
+     "kind": "detail",
+     "label": "ACCOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "SLOT",
+     "kind": "detail",
+     "label": "SLOT",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "SIGNER",
+     "kind": "detail",
+     "label": "SIGNER",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "eth",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MSG",
+     "kind": "detail",
+     "label": "MSG",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "KEYS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "SIGN EIP–1271?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "EIP1271 SIGNED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/eip1271/personal_counterfactual.py"
+  },
+  "eip1271/personal_counterfactual_hash": {
+   "confirm_index": 5,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "EIP1271 DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "EIP1271 SIGNED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "SIGN EIP–1271?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "ACCOUNT",
+     "kind": "detail",
+     "label": "ACCOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "SLOT",
+     "kind": "detail",
+     "label": "SLOT",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "SIGNER",
+     "kind": "detail",
+     "label": "SIGNER",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "eth",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "HASH",
+     "kind": "detail",
+     "label": "HASH",
+     "pages": 2,
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "KEYS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "SIGN EIP–1271?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "EIP1271 SIGNED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/eip1271/personal_counterfactual_hash.py"
+  },
+  "erc7730/swap": {
+   "confirm_index": null,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "SWAP DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "SWAP SIGNED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 10,
+    "screens": 11,
+    "sign_index": 9
+   },
+   "screens": [
+    {
+     "band_chev": true,
+     "bottom": "ERC-7730 CLEAR SIGNING",
+     "icon": "dev",
+     "id": "ERC7730",
+     "kind": "hero"
+    },
+    {
+     "bottom": "SIGN SWAP COINBASE UNISWAP V3?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "FUNCTION",
+     "kind": "detail",
+     "label": "FUNCTION",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAIL",
+     "kind": "detail",
+     "label": "DETAIL",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "bottom": "SIGN SWAP COINBASE UNISWAP V3?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SIGN",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SWAP SIGNED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     9
+    ]
+   ],
+   "source": "flows/erc7730/swap.py"
+  },
+  "fingerprint/erc8213_call_data_digest": {
+   "confirm_index": null,
+   "default_end": "confirmed",
+   "ends": {
+    "confirmed": {
+     "anim": "qubit",
+     "bottom": "DIGEST CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "declined": {
+     "anim": "resolve",
+     "bottom": "DIGEST DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 4,
+    "screens": 5,
+    "sign_index": 3
+   },
+   "screens": [
+    {
+     "bottom": "CALL DATA DIGEST?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "fingerprint",
+     "id": "CALL DATA DIGEST",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "fingerprint",
+     "id": "DIGEST",
+     "kind": "value",
+     "size": 22
+    },
+    {
+     "bottom": "CALL DATA DIGEST?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "fingerprint",
+     "id": "CALL DATA DIGEST",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "DIGEST CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "fingerprint",
+     "id": "CONFIRMED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     3
+    ]
+   ],
+   "source": "flows/fingerprint/erc8213_call_data_digest.py"
+  },
+  "fingerprint/safe_tx_hash_fingerprint": {
+   "confirm_index": null,
+   "default_end": "confirmed",
+   "ends": {
+    "confirmed": {
+     "anim": "qubit",
+     "bottom": "SAFE TX HASH CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "declined": {
+     "anim": "resolve",
+     "bottom": "SAFE TX HASH DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 4,
+    "screens": 5,
+    "sign_index": 3
+   },
+   "screens": [
+    {
+     "bottom": "SAFE TX HASH FINGERPRINT?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "fingerprint",
+     "id": "SAFE TX HASH FINGERPRINT",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "fingerprint",
+     "id": "HASH",
+     "kind": "value",
+     "size": 22
+    },
+    {
+     "bottom": "SAFE TX HASH FINGERPRINT?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "fingerprint",
+     "id": "SAFE TX HASH FINGERPRINT",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SAFE TX HASH CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "fingerprint",
+     "id": "CONFIRMED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     3
+    ]
+   ],
+   "source": "flows/fingerprint/safe_tx_hash_fingerprint.py"
+  },
+  "firmware/update": {
+   "confirm_index": null,
+   "default_end": "updated",
+   "ends": {
+    "declined": {
+     "anim": "arrive",
+     "bottom": "UPDATE DECLINED",
+     "branded": true,
+     "duration": 11250,
+     "interactive": false,
+     "lead": "explosion",
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 8800
+    },
+    "updated": {
+     "anim": "arrive",
+     "bottom": "FIRMWARE UPDATED TO 1.0.3",
+     "branded": true,
+     "duration": 13400,
+     "interactive": false,
+     "lead": "explosion",
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 10950
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 5,
+    "screens": 6,
+    "sign_index": 4
+   },
+   "screens": [
+    {
+     "bottom": "UPDATE TO 1.0.3?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "download",
+     "id": "UPDATE",
+     "kind": "hero"
+    },
+    {
+     "band_chev": true,
+     "bottom": "FIRMWARE KEY FINGERPRINT",
+     "icon": "fingerprint",
+     "id": "KEY FINGERPRINT",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "download",
+     "id": "WORDS",
+     "kind": "value",
+     "size": 22,
+     "words": 8
+    },
+    {
+     "bottom": "CONFIRM UPDATE TO 1.0.3?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "download",
+     "id": "CONFIRM UPDATE",
+     "kind": "hero"
+    },
+    {
+     "anim": "arrive",
+     "bottom": "FIRMWARE UPDATED TO 1.0.3",
+     "branded": true,
+     "duration": 13400,
+     "icon": "download",
+     "id": "UPDATED",
+     "interactive": false,
+     "kind": "status",
+     "lead": "explosion",
+     "lead_gap": null,
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 10950
+    }
+   ],
+   "segments": [
+    [
+     0,
+     4
+    ]
+   ],
+   "source": "flows/firmware/update.py"
+  },
+  "palettes": {
+   "confirm_index": null,
+   "default_end": null,
+   "ends": {},
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": null,
+    "screens": 14,
+    "sign_index": null
+   },
+   "screens": [
+    {
+     "bottom": "RAMP 0 #8A7500 NEW",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP0",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 1 #E01E37",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP1",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 2 #007EB2 NEW",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP2",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 3 #7E503C",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP3",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 4 #8B2FC9",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP4",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 5 #B65F1F NEW",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP5",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 6 #176849",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP6",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 7 #008482 NEW",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP7",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 8 #C54C71 NEW",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP8",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 9 #CA4D45 NEW",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP9",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 10 #6A6B70",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP10",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 11 #8C57BC",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP11",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 12 #4C73CF NEW",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP12",
+     "kind": "hero"
+    },
+    {
+     "bottom": "RAMP 13 #000000",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "RAMP13",
+     "kind": "hero"
+    }
+   ],
+   "segments": [
+    [
+     0,
+     14
+    ]
+   ],
+   "source": "flows/palettes.py"
+  },
+  "pin/unlock": {
+   "confirm_index": null,
+   "default_end": "unlocked",
+   "ends": {
+    "locked": {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "duration": 11720,
+     "interactive": true,
+     "lead": null,
+     "loops": false,
+     "result": null,
+     "state": "failed",
+     "t_resolve": 9270
+    },
+    "unlocked": {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "duration": 11990,
+     "interactive": true,
+     "lead": null,
+     "loops": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 9540
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": null,
+    "screens": 3,
+    "sign_index": null
+   },
+   "screens": [
+    {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "busy": "ENTER PIN",
+     "duration": 11920,
+     "icon": "eth",
+     "id": "TRY 1",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "failed",
+     "t_resolve": 9470
+    },
+    {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "busy": "ENTER PIN",
+     "duration": 14650,
+     "icon": "eth",
+     "id": "TRY 2",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "failed",
+     "t_resolve": 12200
+    },
+    {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "busy": "ENTER PIN",
+     "duration": 11990,
+     "icon": "eth",
+     "id": "TRY 3",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 9540
+    }
+   ],
+   "segments": [],
+   "source": "flows/pin/unlock.py"
+  },
+  "rotate_slot": {
+   "confirm_index": null,
+   "default_end": "rotated",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "SLOT ROTATION DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "rotated": {
+     "anim": "qubit",
+     "bottom": "SLOT ROTATED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 5,
+    "screens": 6,
+    "sign_index": 4
+   },
+   "screens": [
+    {
+     "bottom": "ROTATE SLOT?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "rotate",
+     "id": "ROTATE SLOT",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "rotate",
+     "id": "ROTATE",
+     "kind": "detail",
+     "label": "ROTATE",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "rotate",
+     "id": "DETAIL",
+     "kind": "detail",
+     "label": "DETAIL",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "ROTATE SLOT?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "rotate",
+     "id": "ROTATE SLOT",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SLOT ROTATED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "rotate",
+     "id": "ROTATED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     4
+    ]
+   ],
+   "source": "flows/rotate_slot.py"
+  },
+  "safe/add_owner": {
+   "confirm_index": null,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "SAFE TX DECLINED",
+     "branded": true,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "SIGNED SAFE TX",
+     "branded": true,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 8,
+    "screens": 9,
+    "sign_index": 7
+   },
+   "screens": [
+    {
+     "bottom": "SAFE ADD OWNER?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "ADD OWNER",
+     "kind": "hero"
+    },
+    {
+     "chain": 1,
+     "chev": "lr",
+     "icon": "mainnet",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SAFE ACCT",
+     "kind": "detail",
+     "label": "SAFE ACCT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "NEW",
+     "kind": "detail",
+     "label": "NEW",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SIGNERS",
+     "kind": "detail",
+     "label": "SIGNERS",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TX INFO",
+     "kind": "detail",
+     "label": "TX INFO",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "bottom": "SAFE ADD OWNER?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "ADD OWNER",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SIGNED SAFE TX",
+     "branded": true,
+     "duration": 8650,
+     "icon": "safe",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     7
+    ]
+   ],
+   "source": "flows/safe/add_owner.py"
+  },
+  "safe/can_not_decode": {
+   "confirm_index": 5,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "SAFE TX DECLINED",
+     "branded": true,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "SIGNED SAFE TX",
+     "branded": true,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "APPROVE SAFE TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "APPROVE",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SAFE ACCT",
+     "kind": "detail",
+     "label": "SAFE ACCT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "BLIND SIGN",
+     "kind": "detail",
+     "label": "BLIND SIGN",
+     "pulse": true,
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "CHAIN",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "safe",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TX INFO",
+     "kind": "detail",
+     "label": "TX INFO",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "CALL DATA",
+     "kind": "detail",
+     "label": "CALL DATA",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TX HASH",
+     "kind": "detail",
+     "label": "TX HASH",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "APPROVE SAFE TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "APPROVE",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SIGNED SAFE TX",
+     "branded": true,
+     "duration": 8650,
+     "icon": "safe",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/safe/can_not_decode.py"
+  },
+  "safe/clear_sign": {
+   "confirm_index": 5,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "SAFE TX DECLINED",
+     "branded": true,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "SIGNED SAFE TRANSACTION",
+     "branded": true,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "SEND 25,000 USDC?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "SEND",
+     "side": "left",
+     "size": 36
+    },
+    {
+     "chain": 1,
+     "chev": "lr",
+     "icon": "mainnet",
+     "id": "CHAIN",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SAFE ACCT",
+     "kind": "detail",
+     "label": "SAFE ACCT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "safe",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TX INFO",
+     "kind": "detail",
+     "label": "TX INFO",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "CALL DATA",
+     "kind": "detail",
+     "label": "CALL DATA",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TX HASH",
+     "kind": "detail",
+     "label": "TX HASH",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "SEND 25,000 USDC?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SIGNED SAFE TRANSACTION",
+     "branded": true,
+     "duration": 8650,
+     "icon": "safe",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/safe/clear_sign.py"
+  },
+  "safe/enable_module": {
+   "confirm_index": null,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "ENABLE MODULE DECLINED",
+     "branded": true,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "ENABLE MODULE APPROVED",
+     "branded": true,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 8,
+    "screens": 9,
+    "sign_index": 7
+   },
+   "screens": [
+    {
+     "bottom": "APPROVE ENABLE MODULE?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "ENABLE MODULE",
+     "kind": "hero"
+    },
+    {
+     "chain": 1,
+     "chev": "lr",
+     "icon": "mainnet",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SAFE ACCT",
+     "kind": "detail",
+     "label": "SAFE ACCT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "ENABLE",
+     "kind": "detail",
+     "label": "ENABLE",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "MODULE",
+     "kind": "detail",
+     "label": "MODULE",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TX INFO",
+     "kind": "detail",
+     "label": "TX INFO",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "bottom": "APPROVE ENABLE MODULE?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "ENABLE MODULE",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "ENABLE MODULE APPROVED",
+     "branded": true,
+     "duration": 8650,
+     "icon": "safe",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     7
+    ]
+   ],
+   "source": "flows/safe/enable_module.py"
+  },
+  "safe/erc20_transfer": {
+   "confirm_index": 5,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "SAFE TX DECLINED",
+     "branded": true,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "SIGNED SAFE TX",
+     "branded": true,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "SEND 250 USDC?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "TRANSFER",
+     "kind": "hero"
+    },
+    {
+     "chain": 1,
+     "chev": "lr",
+     "icon": "mainnet",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SAFE ACCT",
+     "kind": "detail",
+     "label": "SAFE ACCT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SEND",
+     "kind": "detail",
+     "label": "SEND",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "safe",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TOKEN",
+     "kind": "detail",
+     "label": "TOKEN",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "CONTRACT",
+     "kind": "detail",
+     "label": "CONTRACT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TX INFO",
+     "kind": "detail",
+     "label": "TX INFO",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "bottom": "SEND 250 USDC?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "TRANSFER",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SIGNED SAFE TX",
+     "branded": true,
+     "duration": 8650,
+     "icon": "safe",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/safe/erc20_transfer.py"
+  },
+  "safe/execute_refund": {
+   "confirm_index": null,
+   "default_end": "signed",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "SAFE TX EXECUTION DECLINED",
+     "branded": true,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "signed": {
+     "anim": "qubit",
+     "bottom": "SAFE TX EXECUTED",
+     "branded": true,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 9,
+    "screens": 10,
+    "sign_index": 8
+   },
+   "screens": [
+    {
+     "bottom": "EXECUTE SAFE TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "EXECUTE",
+     "kind": "hero"
+    },
+    {
+     "chain": 1,
+     "chev": "lr",
+     "icon": "mainnet",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SAFE ACCT",
+     "kind": "detail",
+     "label": "SAFE ACCT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "SEND",
+     "kind": "detail",
+     "label": "SEND",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "GAS",
+     "kind": "detail",
+     "label": "GAS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "CONTRACT",
+     "kind": "detail",
+     "label": "CONTRACT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "EXECUTE SAFE TX?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "safe",
+     "id": "EXECUTE",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "SAFE TX EXECUTED",
+     "branded": true,
+     "duration": 8650,
+     "icon": "safe",
+     "id": "SIGNED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     8
+    ]
+   ],
+   "source": "flows/safe/execute_refund.py"
+  },
+  "send": {
+   "confirm_index": null,
+   "default_end": "confirmed",
+   "ends": {
+    "confirmed": {
+     "anim": "qubit",
+     "bottom": "TRANSACTION CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    },
+    "declined": {
+     "anim": "resolve",
+     "bottom": "DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "TRANSACTION FAILED",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 8,
+    "screens": 10,
+    "sign_index": 7
+   },
+   "screens": [
+    {
+     "bottom": "SEND 5.25 ETH?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "CHAIN",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "bottom": "SEND 5.25 ETH?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "TRANSACTION CONFIRMED",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "CONFIRMED",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     7
+    ]
+   ],
+   "source": "flows/send.py"
+  },
+  "send_token": {
+   "confirm_index": null,
+   "default_end": "successful",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "TRANSACTION DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "successful": {
+     "anim": "qubit",
+     "bottom": "TRANSACTION SUCCESSFUL",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 9,
+    "screens": 10,
+    "sign_index": 8
+   },
+   "screens": [
+    {
+     "bottom": "SEND 12,500 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "VALUE",
+     "kind": "detail",
+     "label": "VALUE",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAIL",
+     "kind": "detail",
+     "label": "DETAIL",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "bottom": "SEND 12,500 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "TRANSACTION SUCCESSFUL",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SUCCESSFUL",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     8
+    ]
+   ],
+   "source": "flows/send_token.py"
+  },
+  "send_token_named": {
+   "confirm_index": null,
+   "default_end": "successful",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "TRANSACTION DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "successful": {
+     "anim": "qubit",
+     "bottom": "TRANSACTION SUCCESSFUL",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 9,
+    "screens": 10,
+    "sign_index": 8
+   },
+   "screens": [
+    {
+     "bottom": "SEND 12,500 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "VALUE",
+     "kind": "detail",
+     "label": "VALUE",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAIL",
+     "kind": "detail",
+     "label": "DETAIL",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "bottom": "SEND 12,500 TOSHI?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "TRANSACTION SUCCESSFUL",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SUCCESSFUL",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     8
+    ]
+   ],
+   "source": "flows/send_token_named.py"
+  },
+  "transfer_token": {
+   "confirm_index": null,
+   "default_end": "successful",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "TRANSACTION DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "successful": {
+     "anim": "qubit",
+     "bottom": "TRANSACTION SUCCESSFUL",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 9,
+    "screens": 10,
+    "sign_index": 8
+   },
+   "screens": [
+    {
+     "bottom": "SEND 1,250.00 USDC?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "usdc",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "CONTRACT",
+     "kind": "detail",
+     "label": "CONTRACT",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "usdc",
+     "id": "DETAIL",
+     "kind": "detail",
+     "label": "DETAIL",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "bottom": "SEND 1,250.00 USDC?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "usdc",
+     "id": "SEND",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "TRANSACTION SUCCESSFUL",
+     "branded": false,
+     "duration": 8650,
+     "icon": "usdc",
+     "id": "SUCCESSFUL",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     8
+    ]
+   ],
+   "source": "flows/transfer_token.py"
+  },
+  "transfer_unknown_token": {
+   "confirm_index": 5,
+   "default_end": "successful",
+   "ends": {
+    "declined": {
+     "anim": "resolve",
+     "bottom": "TRANSFER DECLINED",
+     "branded": false,
+     "duration": 2850,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 400
+    },
+    "successful": {
+     "anim": "qubit",
+     "bottom": "TRANSFER SUCCESSFUL",
+     "branded": false,
+     "duration": 8650,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   },
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": 11,
+    "screens": 12,
+    "sign_index": 10
+   },
+   "screens": [
+    {
+     "bottom": "TRANSFER UNKNOWN TOKEN?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "TRANSFER",
+     "kind": "hero"
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "CONTRACT",
+     "kind": "detail",
+     "label": "CONTRACT",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "AMOUNT",
+     "side": "right",
+     "size": 22
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "TO",
+     "kind": "detail",
+     "label": "TO",
+     "side": "left",
+     "size": 22
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "eth",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "MAX FEE",
+     "kind": "detail",
+     "label": "MAX FEE",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "WORST CASE",
+     "kind": "detail",
+     "label": "WORST CASE",
+     "side": "left",
+     "size": 28
+    },
+    {
+     "chev": "lr",
+     "icon": "eth",
+     "id": "DETAILS",
+     "kind": "detail",
+     "label": "DETAILS",
+     "side": "right",
+     "size": 28
+    },
+    {
+     "bottom": "TRANSFER UNKNOWN TOKEN?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "eth",
+     "id": "TRANSFER",
+     "kind": "hero"
+    },
+    {
+     "anim": "qubit",
+     "bottom": "TRANSFER SUCCESSFUL",
+     "branded": false,
+     "duration": 8650,
+     "icon": "eth",
+     "id": "SUCCESSFUL",
+     "interactive": false,
+     "kind": "status",
+     "loops": true,
+     "rests_on_token": true,
+     "result": "check",
+     "state": "done",
+     "t_resolve": 6200
+    }
+   ],
+   "segments": [
+    [
+     0,
+     10
+    ]
+   ],
+   "source": "flows/transfer_unknown_token.py"
+  },
+  "unlock_batch": {
+   "confirm_index": null,
+   "default_end": null,
+   "ends": {
+    "locked": {
+     "anim": "padlock",
+     "bottom": "LOCKED",
+     "branded": false,
+     "duration": 4320,
+     "interactive": false,
+     "lead": null,
+     "loops": false,
+     "result": null,
+     "state": "failed",
+     "t_resolve": 1870
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": 3,
+    "screens": 4,
+    "sign_index": 1
+   },
+   "screens": [
+    {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "busy": "ENTER PIN",
+     "duration": 17600,
+     "icon": "eth",
+     "id": "screen0",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 14760
+    },
+    {
+     "anim": "batch_sign",
+     "bottom": "",
+     "branded": false,
+     "duration": 5000,
+     "icon": "eth",
+     "id": "screen1",
+     "interactive": false,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": true,
+     "result": null,
+     "state": "done",
+     "t_resolve": 0
+    },
+    {
+     "anim": "padlock",
+     "bottom": "UNLOCKED",
+     "branded": false,
+     "duration": 4850,
+     "icon": "eth",
+     "id": "screen2",
+     "interactive": false,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 2400
+    }
+   ],
+   "segments": [],
+   "source": "flows/unlock_batch.py"
+  }
+ },
+ "schema_version": 1
+}

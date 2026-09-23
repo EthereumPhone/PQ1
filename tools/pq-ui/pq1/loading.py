@@ -6,27 +6,46 @@ token with a result-coloured ring and glyph — the one loading film behind
 every status screen (the "qubit" animation; see pq1.status for the
 registry). The old orbit loader (the lighter cancel spinner) is gone:
 success and cancellation share this film and differ only in the resolve.
+
+The film is OPEN-ENDED on the device (DESIGN.md § Status animations, the
+film's length): its steady orbit — the loop region (t_orbit, t5) — is
+pixel-periodic in one turn, so while the real work is outstanding the pose
+clock wraps that region in whole turns (film_time / wraps_for) and the
+outcome is latched at the spiral, never later than t6; the split, the
+spiral, the flash and the rest never stretch. With no answer pending the
+helpers are the identity: every render is the stock film.
 """
 import math
 
 from . import colors, components
 from .layout import BASELINE_Y, CENTER_X
-from .motion import back_out, clamp01, ease, lerp
+from .motion import SEED_ART, SEED_MS, back_out, clamp01, ease, ease_out, lerp
 
 
 # ------------------------------------------------------------ qubit status --
+REVS = 3          # the stock orbit: whole turns before the spiral (a signature)
+REVS_LONG = 5     # a loading that must endure (the firmware reboot, the wipe):
+                  # two turns more, at the same spin
+TURN_MS = 850     # one orbit turn — the unit of loading length: a film is made
+                  # longer only in whole turns (revs at build time, the wrap at
+                  # run time), never with a slower spin or a longer spiral
+
+
 class QubitCfg:
     """geometry / timing of the qubit status sequence"""
 
     def __init__(self, gc=(214.0, 72.0), orbit_r=23.0, r_big=30.0, r_q=13.0,
-                 split_x=120.0, t_hold=250, t_split=650, t_join=1300, t_ramp=1300,
-                 rev_ms=850, revs=3, t_spiral=1000, t_flash=400):
+                 split_x=120.0, t_seed=SEED_MS, t_split=650, t_join=1300, t_ramp=1300,
+                 rev_ms=TURN_MS, revs=REVS, t_spiral=1000, t_flash=400):
+        if not isinstance(revs, int) or isinstance(revs, bool) or revs < 1:
+            raise ValueError(f"revs must be a whole number of orbit turns "
+                             f">= 1, got {revs!r}")
         self.gc = gc
         self.orbit_r = orbit_r
         self.r_big = r_big
         self.r_q = r_q
         self.split_x = split_x
-        self.T_HOLD = t_hold
+        self.T_SEED = t_seed
         self.T_SPLIT = t_split
         self.T_JOIN = t_join
         self.T_RAMP = t_ramp
@@ -34,10 +53,16 @@ class QubitCfg:
         self.T_SPIN = revs * rev_ms
         self.T_SPIRAL = t_spiral
         self.T_FLASH = t_flash
-        self.t2 = self.T_HOLD
-        self.t5 = self.t2 + self.T_SPLIT + self.T_JOIN + self.T_SPIN
-        self.t6 = self.t5 + self.T_SPIRAL
-        self.t7 = self.t6 + self.T_FLASH
+        self.t2 = self.T_SEED
+        self.t_orbit = self.t2 + self.T_SPLIT + self.T_JOIN   # the pair is ON the orbit
+        self.t5 = self.t_orbit + self.T_SPIN                   # the spiral starts: the loop seam
+        self.t6 = self.t5 + self.T_SPIRAL                      # the flash: the OUTCOME seam —
+        self.t7 = self.t6 + self.T_FLASH                       # the first frame that differs
+        # the loop region — the only part of the film that may repeat (and
+        # the only part over which a busy caption may show): from the join
+        # done to the spiral, whole turns of loop_ms
+        self.loop = (self.t_orbit, self.t5)
+        self.loop_ms = rev_ms
 
 
 def spin_th(e, c):
@@ -47,24 +72,69 @@ def spin_th(e, c):
     return w * (e - c.T_RAMP / 2)
 
 
-def qubit_pose(t, c):
-    """bodies + overlay alphas of the status sequence at time t ms"""
+def wraps_for(c, t_ready):
+    """whole turns the film adds before its spiral when the work answers at
+    film time t_ready: none if the answer is in before the loop seam t5 (a
+    film is a MINIMUM-length depiction), else enough that the spiral starts
+    at the first whole-turn boundary at or after the answer — a loading
+    lengthens only in whole turns"""
+    if t_ready is None or t_ready <= c.t5:
+        return 0
+    return math.ceil((t_ready - c.t5) / c.loop_ms)
+
+
+def film_time(t, c, wraps=0):
+    """pose time for film time t on a film lengthened by `wraps` whole turns
+    (math.inf while the answer is pending): the identity up to the loop
+    seam t5, then the orbit's last turn (t5 - loop_ms, t5] repeats until
+    the wraps are spent and the spiral runs — pixel-exact, the orbit being
+    periodic in one turn. The identity when wraps is 0: every stock render
+    is untouched. Pure in (t, wraps), so any frame stays seekable"""
+    if not wraps or t <= c.t5 or not math.isfinite(t):
+        return t
+    return t - c.loop_ms * min(wraps, math.ceil((t - c.t5) / c.loop_ms))
+
+
+def qubit_pose(t, c, seed=None):
+    """bodies + overlay alphas of the status sequence at time t ms.
+
+    seed — (x, y, r): the circle the film was HANDED, at the token's VISIBLE
+    radius (flow.Sim.draw). The film opens on the SEED (c.T_SEED): that one
+    body travels to gc, shrinks to r_q and — in draw_status — tints into the
+    film's colour on one ease_out, its ring and its art fading over the first
+    SEED_ART of the WINDOW (linear time: the eased travel front-loads and
+    would empty the dress inside one panel frame at 14 fps).
+    A bare qubit lands on the frame the split begins,
+    and divides into its identical twin: the seed IS a qubit, so the two
+    halves part at r_q. None — a standalone render, or a film nobody handed a
+    circle to: the same morph in place at gc, from the token's visible radius.
+    """
     gx, gy = c.gc
-    P = dict(bodies=[dict(x=gx, y=gy, r=c.r_big)], glyph_a=1.0, glyph_r=c.r_big,
-             check_a=0.0, text_a=0.0, flash_a=0.0, flash_r=0.0, bind=0)
+    # the defaults are the RESTING pose: the landed disc at full size, no
+    # dress (the tail branch past t7 returns P unchanged)
+    P = dict(bodies=[dict(x=gx, y=gy, r=c.r_big)], glyph_a=0.0, glyph_r=c.r_q,
+             seed_u=1.0, check_a=0.0, text_a=0.0, flash_a=0.0, flash_r=0.0,
+             bind=0)
     t = max(0.0, t)
     if t < c.t2:
+        sx, sy, sr = seed or (gx, gy, c.r_big - components.TOKEN_INSET)
+        u = ease_out(clamp01(t / c.T_SEED))
+        r = lerp(sr, c.r_q, u)
+        P["bodies"] = [dict(x=lerp(sx, gx, u), y=lerp(sy, gy, u), r=r)]
+        # the dress leaves on LINEAR time, not the eased travel: ease_out
+        # front-loads u, which would empty it in under one panel frame
+        P["glyph_a"] = clamp01(1 - (t / c.T_SEED) / SEED_ART)
+        P["glyph_r"] = r
+        P["seed_u"] = u
         return P
     if t < c.t5:
         e = t - c.t2
         if e < c.T_SPLIT:
             u = ease(e / c.T_SPLIT)
             R = c.split_x * u
-            r = lerp(c.r_big, c.r_q, u)
-            P["glyph_a"] = clamp01(1 - u / 0.45)
-            P["glyph_r"] = c.r_big * (1 - 0.75 * u)
             P["bind"] = 1
-            P["bodies"] = [dict(x=gx - R, y=gy, r=r), dict(x=gx + R, y=gy, r=r)]
+            P["bodies"] = [dict(x=gx - R, y=gy, r=c.r_q),
+                           dict(x=gx + R, y=gy, r=c.r_q)]
         else:
             je = e - c.T_SPLIT
             th = spin_th(je, c)
@@ -73,7 +143,6 @@ def qubit_pose(t, c):
             y_max = 44.0
             ry = R if R <= c.orbit_r else c.orbit_r + (y_max - c.orbit_r) * \
                 (R - c.orbit_r) / (c.split_x - c.orbit_r)
-            P["glyph_a"] = 0.0
             P["bind"] = 0
             P["bodies"] = [dict(x=gx + math.cos(a) * R, y=gy + math.sin(a) * ry, r=c.r_q)
                            for a in (math.pi + th, th)]
@@ -87,18 +156,15 @@ def qubit_pose(t, c):
         r = c.r_q + 4 * u
         P["bodies"] = [dict(x=gx + math.cos(a) * R, y=gy + math.sin(a) * R, r=r)
                        for a in (math.pi + th, th)]
-        P["glyph_a"] = 0.0
         P["bind"] = 1
         return P
     if t < c.t7:
         u = clamp01((t - c.t6) / c.T_FLASH)
         P["bodies"] = [dict(x=gx, y=gy, r=lerp(17, c.r_big, back_out(u)))]
-        P["glyph_a"] = 0.0
         P["flash_a"] = (1 - u) * 0.85
         P["flash_r"] = c.r_big + 55 * u
         return P
     e = t - c.t7
-    P["glyph_a"] = 0.0
     P["check_a"] = clamp01(e / 350)
     P["text_a"] = clamp01((e - 120) / 350)
     return P
@@ -153,7 +219,7 @@ def metaball(cv, b1, b2, max_dist, color):
 def draw_status(cv, t, caption_text, cfg=None, result_color=None,
                 glyph_name="eth", body_fill=None, trail=None,
                 result_glyph="check", unknown_ramp=None, ring_color=None,
-                resting=None, glyph_color=None):
+                resting=None, glyph_color=None, seed=None):
     """Draw one frame of the qubit status sequence at time t ms.
 
     body_fill=None renders unknown-token gradient bodies on the placeholder
@@ -168,6 +234,16 @@ def draw_status(cv, t, caption_text, cfg=None, result_color=None,
     branded ending overrides the resting disc fill / ring / result-glyph
     colours and strokes the ring flush at the disc edge (flush=True);
     default: black disc, result_color ring + glyph.
+
+    seed is the circle the flow HANDED the film (flow.Sim.draw) —
+    dict(x, y, r, fill, ring, icon, icon_color) at the token's VISIBLE
+    radius; the dress that leaves is the icon it was wearing, glyph_name /
+    glyph_color dressing only a seed nobody handed over. Over the
+    seed window (QubitCfg.T_SEED) that one body travels to gc, shrinks to
+    r_q and tints from its own fill into body_fill, its stroke and its art
+    fading over the first motion.SEED_ART of that WINDOW, on linear time (two
+    panel frames at 14 fps): a BARE qubit lands on the frame the split begins. None — the same morph in place at gc. The
+    follower stream is dark over the seed.
     """
     c = cfg or QubitCfg()
     result_color = result_color or colors.GREEN
@@ -175,23 +251,36 @@ def draw_status(cv, t, caption_text, cfg=None, result_color=None,
                            glyph=result_color, flush=False)
     ramp = colors.NEUTRAL_RAMP if unknown_ramp is None else unknown_ramp
     trail = trail or colors.ramp_palette(ramp)[1]
-    P = qubit_pose(min(t, c.t7 + 800), c)
+    src = None if seed is None else (seed["x"], seed["y"], seed["r"])
+    P = qubit_pose(min(t, c.t7 + 800), c, src)
     done = t > c.t5
+    u = P["seed_u"]          # 0 -> the circle the flow handed over, 1 -> a qubit
+    seed_fill = (seed or {}).get("fill") or body_fill
+    seed_ring = (seed or {}).get("ring") or ring_color
+    if seed is not None:
+        # the dress that leaves is the one the flow was drawing; the film's
+        # own icon dresses only a seed nobody handed over (a standalone render)
+        glyph_name = seed.get("icon") or glyph_name
+        if "icon_color" in seed:
+            glyph_color = seed["icon_color"]
 
-    # follower stream: one solid gradient colour per circle
-    gap = (0.22 / (2 * math.pi)) * c.rev_ms
-    for bi, b in enumerate(P["bodies"]):
-        prev = b
-        pts = []
-        for j in range(1, 6):
-            Q = qubit_pose(min(t, c.t7 + 800) - j * gap, c)
-            q = Q["bodies"][min(bi, len(Q["bodies"]) - 1)]
-            if abs(q["x"] - prev["x"]) < 0.8 and abs(q["y"] - prev["y"]) < 0.8:
-                break
-            pts.append(q)
-            prev = q
-        for j in range(len(pts) - 1, -1, -1):
-            cv.circle(pts[j]["x"], pts[j]["y"], b["r"], trail[min(j, len(trail) - 1)])
+    # follower stream: one solid gradient colour per circle. DARK over the
+    # seed — one body arriving has nothing to trail, and every sample behind
+    # it would smear back to where the flow handed it over
+    if u >= 1.0:
+        gap = (0.22 / (2 * math.pi)) * c.rev_ms
+        for bi, b in enumerate(P["bodies"]):
+            prev = b
+            pts = []
+            for j in range(1, 6):
+                Q = qubit_pose(min(t, c.t7 + 800) - j * gap, c, src)
+                q = Q["bodies"][min(bi, len(Q["bodies"]) - 1)]
+                if abs(q["x"] - prev["x"]) < 0.8 and abs(q["y"] - prev["y"]) < 0.8:
+                    break
+                pts.append(q)
+                prev = q
+            for j in range(len(pts) - 1, -1, -1):
+                cv.circle(pts[j]["x"], pts[j]["y"], b["r"], trail[min(j, len(trail) - 1)])
 
     single = len(P["bodies"]) == 1
 
@@ -208,19 +297,28 @@ def draw_status(cv, t, caption_text, cfg=None, result_color=None,
         if single and done:
             cv.circle(b["x"], b["y"], b["r"], rest["fill"])
         elif body_fill:
-            cv.circle(b["x"], b["y"], b["r"], body_fill)
+            # over the seed the body tints from the token's own fill into
+            # the film's; past it the film colour, as before
+            cv.circle(b["x"], b["y"], b["r"],
+                      body_fill if u >= 1.0 else
+                      colors.grad_color(u, [(0.0, tuple(seed_fill)),
+                                            (1.0, tuple(body_fill))]))
         else:
             components.unknown_disc(cv, b["x"], b["y"], b["r"], ramp)
-        if single:
+        if single and done:
             cv.ring(b["x"], b["y"], b["r"] if rest["flush"] else b["r"] - 1.2,
-                    rest["ring"] if done else colors.WHITE, 2.4)
+                    rest["ring"], components.TOKEN_RING_W)
 
-    if P["glyph_a"] > 0.01:
-        components.glyph(cv, glyph_name, c.gc[0], c.gc[1], P["glyph_r"],
-                         P["glyph_a"], color=glyph_color)
-        if ring_color is not None and not done:
-            cv.ring(c.gc[0], c.gc[1], P["glyph_r"],
-                    (*ring_color, int(round(255 * P["glyph_a"]))), 2.4)
+    if u < 1.0 and P["glyph_a"] > 0.01:
+        # the token's own dress leaving over the first SEED_ART of the morph:
+        # the art, then its stroke OVER it (components.token's layer order),
+        # both on the arriving body — a BARE qubit is what divides
+        b, a = P["bodies"][0], P["glyph_a"]
+        components.glyph(cv, glyph_name, b["x"], b["y"], P["glyph_r"], a,
+                         color=glyph_color)
+        cv.ring(b["x"], b["y"], b["r"],
+                (*(seed_ring or colors.WHITE), int(round(255 * a))),
+                components.TOKEN_RING_W)
     if result_glyph is not None and P["check_a"] > 0.01:
         components.GLYPHS[result_glyph](cv, c.gc[0], c.gc[1], c.r_big,
                                         P["check_a"], rest["glyph"])

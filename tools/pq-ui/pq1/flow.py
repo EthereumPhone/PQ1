@@ -64,6 +64,14 @@ class Sim:
         # screen out instead of morphing a token that was never there
         self._tokenless = [s["kind"] == "status" and not status.rests_on_token(s)
                            for s in screens]
+        # status screens whose film opens on a SEED (status.seeded): leaving
+        # for one there is no spring leg — draw() plays one scripted beat:
+        # FADE_MS of text, chevrons and trail going out with the circle
+        # PARKED, then SEED_HOLD_MS of the bare circle holding alone; then it
+        # hands the pose to the film, which travels, shrinks and tints it
+        # into its first qubit itself (loading.qubit_pose)
+        self._seeds = [s["kind"] == "status" and status.seeded(s)
+                       for s in screens]
         # per-screen pure-function results, resolved once (screens are frozen)
         self._layouts = [layout_of(s) for s in screens]
         self._nexts = [self._resolve_next(i) for i in range(len(screens))]
@@ -159,6 +167,7 @@ class Sim:
             sp.velocity = 0.0
         self.text_in_at = None
         self.hold = None
+        self.seed = None
         self.page = [0] * len(self.screens)
         self._flip = [None] * len(self.screens)
         self.settled = True
@@ -167,6 +176,24 @@ class Sim:
         n = len(self.screens)
         nxt %= n
         if nxt == self._cur:
+            return
+        # into a SEEDED film: no spring leg. The circle parks where it stands
+        # while the screen goes out over FADE_MS, holds alone for
+        # SEED_HOLD_MS; draw() then hands the pose to the film, which morphs
+        # it into its first qubit. A
+        # token-less screen has no circle to hand over — those keep the
+        # ordinary leg and the film seeds in place at its own centre
+        if self._seeds[nxt] and not self._tokenless[self._cur]:
+            st = self._tok_styles[self._cur]
+            self.seed = dict(
+                idx=nxt, t0=now,
+                src=dict(x=self.sx.value + self.osc, y=self.sy.value,
+                         r=self.sr.value - components.TOKEN_INSET,
+                         fill=st["fill"] if st["variant"] != "unknown" else None,
+                         ring=st["ring"],
+                         icon=self._layouts[self._cur]["circle"]["icon"],
+                         icon_color=st["icon_color"]))
+            self.settled = False
             return
         # retarget every spring from its live pose — presses are never dropped
         if nxt == self.a:            # reversing mid-flight: same endpoints, new goal
@@ -286,6 +313,21 @@ class Sim:
         dt = min(100.0, now - self.last_now if self.last_now else 16.0)
         self.last_now = now
 
+        # the seed beat: FADE_MS of the screen going out with the circle
+        # parked, SEED_HOLD_MS of the bare circle holding, then the film
+        # takes the canvas and morphs the pose it was handed
+        seed_fade = 1.0
+        if self.seed is not None:
+            e = now - self.seed["t0"]
+            if e >= motion.FADE_MS + motion.SEED_HOLD_MS:
+                sd, self.seed = self.seed, None
+                self._anim(sd["idx"]).enter_from(sd["src"])
+                self.cur = sd["idx"]     # snaps every spring onto the film
+                self.idle_since = now    # the film's t 0
+                self.chain = None
+            else:
+                seed_fade = 1 - motion.ease_out(clamp01(e / motion.FADE_MS))
+
         h = self.hold
         if (h is not None and h["t_rel"] is not None
                 and now - h["t_rel"] >= HOLD_SNAPBACK_MS):
@@ -294,7 +336,7 @@ class Sim:
         if self.text_in_at is not None and now >= self.text_in_at:
             self.alpha[self._cur].retarget(1.0)   # release the incoming text
             self.text_in_at = None
-        if not self.settled:  # settled => every spring at target, asleep
+        if not self.settled and self.seed is None:  # the beat steps no spring
             for s in self._springs():
                 s.step(dt)
             if self._all_settled():
@@ -371,11 +413,11 @@ class Sim:
         ang_r = lerp(ca[1], cb[1], m)
         ang_l += (0 - ang_l) * hint_up
         ang_r += (0 - ang_r) * hint_up
-        components.chevron_pair(cv, ang_l, ang_r, chev_y, a_chev)
+        components.chevron_pair(cv, ang_l, ang_r, chev_y, a_chev * seed_fade)
 
         # text ---------------------------------------------------------------
         for i, s in enumerate(self.screens):
-            al = clamp01(self.alpha[i].value)
+            al = clamp01(self.alpha[i].value) * seed_fade
             if al > 0.01:
                 if self._layouts[i].get("pages"):
                     self._draw_pages(cv, i, al, now)
@@ -403,7 +445,8 @@ class Sim:
         target = (self.osc_dir * math.sin(idle_t / SWEEP_PERIOD_MS * 2 * math.pi) * SWEEP_AMP
                   if (self.settled and self.hold is None
                       and cur_s.get("sweep", cur_s["kind"] == "hero")) else 0.0)
-        self.osc = motion.tau_chase(self.osc, target, dt, OSC_TAU)
+        if self.seed is None:   # parked: the offset the film was handed holds
+            self.osc = motion.tau_chase(self.osc, target, dt, OSC_TAU)
         c["cx"] += self.osc
 
         if self.settled and cur_s["kind"] == "status":
@@ -429,10 +472,14 @@ class Sim:
         if self.chain is None:
             self.chain = motion.FollowerChain(c["cx"], c["cy"])
         tau = CHAIN_TAU_IDLE if (self.settled and cur_s["kind"] == "hero") else CHAIN_TAU
-        self.chain.step(c["cx"], c["cy"], dt, tau)
+        if self.seed is None:   # over the beat the trail fades where it stands
+            self.chain.step(c["cx"], c["cy"], dt, tau)
         bi = self.b if m >= 0.5 else self.a
+        pal = self._trail_pals[bi]
+        if seed_fade < 1.0:
+            pal = [colors.scale(col, seed_fade) for col in pal]
         components.trail_chain(cv, self.chain, c["cx"], c["cy"], c["r"],
-                               palette=self._trail_pals[bi])
+                               palette=pal)
 
         # pulse rings (screens flagged "pulse" — e.g. SAFE BLIND SIGN) --------
         for i, col in enumerate(self._pulse_cols):
@@ -448,8 +495,10 @@ class Sim:
             k = motion.hold_fill(now - h["t0"],
                                  None if h["t_rel"] is None else h["t_rel"] - h["t0"])
             ha = 1.0
-            if h["done"]:   # committed: the full fill fades out riding the morph spring
-                ha = 1 - (m if h["mix_dir"] >= 0.5 else 1 - m)
+            if h["done"]:   # committed: the full fill fades out riding the leg —
+                            # the seed beat when there is one, else the morph spring
+                ha = (seed_fade if self.seed is not None
+                      else 1 - (m if h["mix_dir"] >= 0.5 else 1 - m))
             placement, col = self._hold_styles[h["idx"]]
             hold = dict(k=k, placement=placement, color=col, alpha=ha)
         components.token_styled(cv, c["cx"], c["cy"], c["r"], self._tok_styles[bi],

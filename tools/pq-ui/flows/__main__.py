@@ -156,6 +156,10 @@ def main(argv=None):
                                      "(a symbol), or 'all'; default: the "
                                      "variant's slot in the ending matrix "
                                      "cycles through them")
+    ap.add_argument("--ready", type=float, default=None, metavar="MS",
+                    help="the ending's loading film waits: the work answers "
+                         "at MS of film time, the orbit wrapping whole turns "
+                         "until then (an ending with no film raises)")
     ap.add_argument("--manifest", action="store_true",
                     help="rewrite flows/MANIFEST.md from the registry and exit")
     a = ap.parse_args(argv)
@@ -197,10 +201,12 @@ def main(argv=None):
             if picked is None and names:
                 picked = names[flows.sample_slot(a.flow, end, a.early)]
             try:
-                scr = flows.screens(a.flow, end, early=a.early, sample=picked)
+                scr = flows.screens(a.flow, end, early=a.early, sample=picked,
+                                    ready=a.ready)
             except ValueError as e:
                 raise SystemExit(str(e))
-            tag = f"_{picked.lower()}" if picked else ""
+            tag = ((f"_{picked.lower()}" if picked else "")
+                   + (f"_ready{a.ready:g}" if a.ready is not None else ""))
             if a.out:
                 out = a.out
             elif end:

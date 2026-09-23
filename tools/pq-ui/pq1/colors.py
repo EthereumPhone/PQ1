@@ -67,14 +67,22 @@ def luma(color):
 #     stop 4 -> trail[1]          stop 1 -> trail[4]
 #
 # i.e. fill = ramp[-1], trail = ramp[-2::-1]. Use placeholder_palette().
+#
+# Stop 6 is held at >= 4.5:1 against WHITE: the token disc carries the
+# system's white ring (TOKEN_RING_W) and a white mark, so the top circle's
+# luminance is a legibility constraint, not a free choice. 4.5:1 also lands
+# these colours near the balance point between the two grounds they must
+# work on -- roughly 4.6:1 against the black panel behind them. Ramps 0, 2,
+# 5, 7, 8, 9 and 12 were darkened to this floor (Sep 2026); the taper leaves
+# stop 1 untouched so the far trail circles keep their exact values.
 PLACEHOLDER_GRADIENTS = [
     (
         "#413D2E",
-        "#4B452E",
-        "#655A26",
-        "#867200",
-        "#967900",
-        "#AD9300",
+        "#48422C",
+        "#5C5223",
+        "#756400",
+        "#7D6500",
+        "#8A7500",
     ),
 
     (
@@ -88,11 +96,11 @@ PLACEHOLDER_GRADIENTS = [
 
     (
         "#051923",
-        "#00304D",
-        "#005680",
-        "#006EAD",
-        "#008BD3",
-        "#009EDE",
+        "#002E4A",
+        "#004F75",
+        "#006097",
+        "#0074B1",
+        "#007EB2",
     ),
 
     (
@@ -115,11 +123,11 @@ PLACEHOLDER_GRADIENTS = [
 
     (
         "#5C2E0C",
-        "#753B11",
-        "#8F4916",
-        "#AA581B",
-        "#C66720",
-        "#E37626",
+        "#703810",
+        "#834314",
+        "#954D18",
+        "#A6571B",
+        "#B65F1F",
     ),
 
     (
@@ -133,29 +141,29 @@ PLACEHOLDER_GRADIENTS = [
 
     (
         "#03312E",
-        "#005656",
-        "#007067",
-        "#007E76",
-        "#00918D",
-        "#00A5A2",
+        "#005252",
+        "#00675E",
+        "#006E67",
+        "#007A76",
+        "#008482",
     ),
 
     (
         "#640E30",
-        "#78183C",
-        "#8D2249",
-        "#A22D56",
-        "#B9375E",
-        "#E05780",
+        "#75173A",
+        "#862045",
+        "#962A50",
+        "#A73255",
+        "#C54C71",
     ),
 
     (
         "#7C050A",
-        "#8D1917",
-        "#9E2824",
-        "#AF3630",
-        "#C1443B",
-        "#D35148",
+        "#8C1917",
+        "#9B2723",
+        "#AA352F",
+        "#BA4239",
+        "#CA4D45",
     ),
 
     (
@@ -178,11 +186,11 @@ PLACEHOLDER_GRADIENTS = [
 
     (
         "#07238B",
-        "#1639A1",
-        "#274EB8",
-        "#3964D0",
-        "#4B79E7",
-        "#5E8EFF",
+        "#15379A",
+        "#2448A9",
+        "#3258B8",
+        "#4067C4",
+        "#4C73CF",
     ),
 
     # 13 — MONO: the recognized-logo treatment (black body, white ring, grey
@@ -326,12 +334,70 @@ def ramp_from(hex_color, steps=RAMP_STEPS):
 TOKEN_COLORS = {"USDC": "#2775CA", "USDT": "#50AF95", "DAI": "#F5AC37"}
 TOKEN_GRADIENTS = {sym: ramp_from(h) for sym, h in TOKEN_COLORS.items()}
 
-# every named ramp — brands, popular tokens, device operations — pinned by
-# name, outside the placeholder hash space
+# ------------------------------------------------------------ chain ramps --
+# A chain screen shows the CHAIN's identity, not the flow's: the disc takes
+# the chain's official brand colour and the trail its ramp, so the network
+# announces itself and then hands the disc back to the flow's palette.
+#
+# The keys are namespaced "CHAIN:<NAME>" on purpose. OP, BNB, BASE and SCROLL
+# are also real token tickers, and components.token_ramp resolves ANY palette
+# string matching a BRAND_GRADIENTS key (an exact-name pin, outside the hash
+# space). A bare "OP" would therefore make the OP *token's* disc wear the
+# Optimism *chain's* colours with no code change at that call site — and on a
+# signer the disc colour is part of what the user checks. Namespacing shuts
+# that door; nothing else here depends on the spelling.
+CHAIN_COLORS = {
+    "CHAIN:MAINNET":   "#627EEA",
+    "CHAIN:OP":        "#FF0420",
+    "CHAIN:BNB":       "#F0B90B",
+    "CHAIN:POLYGON":   "#8247E5",
+    "CHAIN:ZKSYNC":    "#1E69FF",
+    "CHAIN:MANTLE":    "#B4B4B4",   # trail only — the disc fills BLACK below
+    "CHAIN:BASE":      "#0000FF",
+    "CHAIN:ARBITRUM":  "#1554C8",
+    "CHAIN:AVALANCHE": "#E84142",
+    "CHAIN:LINEA":     "#61DFFF",   # trail only — the disc fills BLACK below
+    "CHAIN:SCROLL":    "#FFEEDA",
+}
+CHAIN_GRADIENTS = {k: ramp_from(h) for k, h in CHAIN_COLORS.items()}
+# A chain whose DISC is not simply the last stop of its ramp pins the fill
+# here. Splitting the two is what keeps a dark brand legible in motion: the
+# ramp above stays the network's bright accent so the trail still reads on the
+# panel, while the disc takes the brand's own value. Ramping from the dark
+# colour instead would fade the far followers into the black background — and
+# would darken stop 6, which does not paint the disc at all but is the status
+# film's body colour (components.token_style_from_spec), the black-on-black
+# qubit trap ROTATE_GRADIENT documents.
+#
+#   black brands (Mantle, Linea)   the ROTATE treatment
+#   mark-on-white (Base, zkSync)   the FINGERPRINT / FIRMWARE look, per chain:
+#                                  the mark is the brand, the disc is the paper,
+#                                  and the ordinary white ring reads as no
+#                                  stroke at all on a white body
+#
+# Only pin a disc that CANNOT come from the ramp. A merely dark brand should
+# darken its ramp instead: pinning a dark disc over a bright ramp puts the
+# nearest follower ABOVE the token in luminance and inverts the trail law —
+# every ramp here darkens AWAY from the disc.
+CHAIN_DISC_FILL = {
+    "CHAIN:MANTLE":   "#000000",
+    "CHAIN:LINEA":    "#000000",
+    "CHAIN:BASE":     "#FFFFFF",
+    "CHAIN:ZKSYNC":   "#FFFFFF",
+}
+# The mark colour is normally decided by luma (below), which is right for every
+# chain but one: a white disc says BLACK, and that is what zkSync wants — but
+# Base's whole identity is the BLUE square, so it pins its mark explicitly.
+CHAIN_MARK_COLORS = {"CHAIN:BASE": "#0000FF"}
+# above this relative brightness a disc takes a BLACK mark instead of white
+CHAIN_DARK_MARK_LUMA = 0.62
+
+# every named ramp — brands, popular tokens, device operations, chains —
+# pinned by name, outside the placeholder hash space
 BRAND_GRADIENTS = {"SAFE": SAFE_GRADIENT, "COWSWAP": COWSWAP_GRADIENT,
                    "ROTATE": ROTATE_GRADIENT, "ERC7730": ERC7730_GRADIENT,
                    "FINGERPRINT": FINGERPRINT_GRADIENT, "FIRMWARE": FIRMWARE_GRADIENT,
-                   **TOKEN_GRADIENTS}
+                   **TOKEN_GRADIENTS, **CHAIN_GRADIENTS}
 BRAND_PALETTES = {k: _ramp_to_palette(g) for k, g in BRAND_GRADIENTS.items()}
 # the rotation and ERC-7730 discs fill BLACK (white mark + white ring),
 # their trails gold
@@ -341,6 +407,24 @@ for _k in ("ROTATE", "ERC7730"):
 # (black mark), their trails the mono grey
 for _k in ("FINGERPRINT", "FIRMWARE"):
     BRAND_PALETTES[_k] = (WHITE, BRAND_PALETTES[_k][1])
+# a chain that pins its disc keeps its ramp for the trail (see CHAIN_DISC_FILL)
+for _k, _hex in CHAIN_DISC_FILL.items():
+    BRAND_PALETTES[_k] = (hex_to_rgb(_hex), BRAND_PALETTES[_k][1])
+
+
+def chain_mark_color(ramp_key):
+    """the mark colour a chain disc knocks out: WHITE, or BLACK once the
+    fill is light enough to swallow it (luma — "is this body dark or light?"),
+    read off the disc's ACTUAL fill, so a chain that pins one in CHAIN_DISC_FILL
+    is judged on what it really shows rather than on its ramp.
+    A chain in CHAIN_MARK_COLORS pins its own instead — the one case luma gets
+    wrong, where the disc is white (so luma says BLACK) but the BRAND colour is
+    meant to ride the mark."""
+    if ramp_key in CHAIN_MARK_COLORS:
+        return hex_to_rgb(CHAIN_MARK_COLORS[ramp_key])
+    fill = BRAND_PALETTES[ramp_key][0]
+    return BLACK if luma(fill) > CHAIN_DARK_MARK_LUMA else WHITE
+
 BRAND_RAMP_STOPS = {
     k: tuple((i / (len(g) - 1), hex_to_rgb(h)) for i, h in enumerate(g))
     for k, g in BRAND_GRADIENTS.items()}

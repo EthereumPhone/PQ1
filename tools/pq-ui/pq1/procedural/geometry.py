@@ -53,6 +53,149 @@ def rounded_polygon(pts, rr, n=10):
     return out
 
 
+_TOKENS = re.compile(r"[MmLlHhVvCcSsQqTtAaZz]"
+                     r"|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?")
+_ARGC = {"M": 2, "L": 2, "H": 1, "V": 1, "C": 6, "S": 4, "Q": 4, "T": 2, "A": 7, "Z": 0}
+
+
+def _seg(a, b, k=3.0, lo=3, hi=24):
+    """segments for a curve spanning a to b in SVG units — a long sweep gets
+    the detail, a corner fillet does not pay for it"""
+    return max(lo, min(hi, int(math.ceil(math.dist(a, b) * k))))
+
+
+def _arc(p0, rx, ry, phi_deg, large, sweep, p1):
+    """flatten an SVG elliptical arc: endpoint -> centre parameterization
+    (SVG 1.1 implementation notes F.6.5 / F.6.6), then sampled every ~11.25
+    degrees. Returns the points AFTER p0."""
+    x0, y0 = p0
+    x1, y1 = p1
+    if (x0, y0) == (x1, y1):
+        return []
+    rx, ry = abs(rx), abs(ry)
+    if rx == 0 or ry == 0:                       # degenerate radii: a straight line
+        return [p1]
+    phi = math.radians(phi_deg)
+    cp, sp = math.cos(phi), math.sin(phi)
+    dx2, dy2 = (x0 - x1) / 2.0, (y0 - y1) / 2.0
+    x1p, y1p = cp * dx2 + sp * dy2, -sp * dx2 + cp * dy2
+    lam = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry)
+    if lam > 1:                                  # F.6.6: scale the radii up to fit
+        s = math.sqrt(lam)
+        rx, ry = rx * s, ry * s
+    den = rx * rx * y1p * y1p + ry * ry * x1p * x1p
+    num = rx * rx * ry * ry - den
+    co = math.sqrt(max(0.0, num / den)) if den else 0.0
+    if large == sweep:
+        co = -co
+    cxp, cyp = co * rx * y1p / ry, -co * ry * x1p / rx
+    cx = cp * cxp - sp * cyp + (x0 + x1) / 2.0
+    cy = sp * cxp + cp * cyp + (y0 + y1) / 2.0
+
+    def ang(ux, uy, vx, vy):
+        n = math.hypot(ux, uy) * math.hypot(vx, vy)
+        if not n:
+            return 0.0
+        a = math.acos(max(-1.0, min(1.0, (ux * vx + uy * vy) / n)))
+        return -a if ux * vy - uy * vx < 0 else a
+
+    ux, uy = (x1p - cxp) / rx, (y1p - cyp) / ry
+    vx, vy = (-x1p - cxp) / rx, (-y1p - cyp) / ry
+    th0, dth = ang(1, 0, ux, uy), ang(ux, uy, vx, vy)
+    if not sweep and dth > 0:
+        dth -= 2 * math.pi
+    elif sweep and dth < 0:
+        dth += 2 * math.pi
+    n = max(2, int(math.ceil(abs(dth) / (math.pi / 16))))
+    pts = []
+    for i in range(1, n + 1):
+        th = th0 + dth * i / n
+        xp, yp = rx * math.cos(th), ry * math.sin(th)
+        pts.append((cp * xp - sp * yp + cx, sp * xp + cp * yp + cy))
+    return pts
+
+
+def svg_outline(d):
+    """flatten ANY SVG path data into closed point lists.
+
+    The whole command set — M L H V C S Q T A Z, absolute and relative —
+    plus implicit command repetition (the pairs trailing an `m` are linetos)
+    and elliptical arcs. `svg_subpaths` below reads only the absolute
+    M/L/H/V/C/Z subset the older marks happen to carry and drops anything
+    else *silently*, so new traced art uses this one; the old parser stays
+    exactly as it was, and with it the marks that already ship.
+    """
+    toks = _TOKENS.findall(d)
+    out, cur = [], []
+    pos = start = (0.0, 0.0)
+    prev_c = prev_q = None       # last cubic / quadratic control, for S and T
+    cmd, i = None, 0
+    while i < len(toks):
+        if toks[i][-1].isalpha():
+            cmd, i = toks[i], i + 1
+            if cmd in "Zz":
+                if len(cur) >= 3:
+                    out.append(cur)
+                cur, pos = [], start
+                prev_c = prev_q = None
+            continue
+        if cmd is None:
+            break
+        up, rel = cmd.upper(), cmd.islower()
+        n = _ARGC[up]
+        if len(toks) - i < n:
+            break
+        v = [float(t) for t in toks[i:i + n]]
+        i += n
+        ox, oy = pos if rel else (0.0, 0.0)
+        if up == "M":
+            if len(cur) >= 3:
+                out.append(cur)
+            pos = start = (ox + v[0], oy + v[1])
+            cur = [pos]
+            cmd = "l" if rel else "L"        # the pairs after an M are linetos
+            prev_c = prev_q = None
+        elif up == "L":
+            pos = (ox + v[0], oy + v[1])
+            cur.append(pos)
+            prev_c = prev_q = None
+        elif up == "H":
+            pos = (ox + v[0], pos[1])
+            cur.append(pos)
+            prev_c = prev_q = None
+        elif up == "V":
+            pos = (pos[0], oy + v[0])
+            cur.append(pos)
+            prev_c = prev_q = None
+        elif up in ("C", "S"):
+            if up == "C":
+                c1, c2 = (ox + v[0], oy + v[1]), (ox + v[2], oy + v[3])
+                end = (ox + v[4], oy + v[5])
+            else:                            # S: reflect the previous cubic control
+                c1 = ((2 * pos[0] - prev_c[0], 2 * pos[1] - prev_c[1])
+                      if prev_c else pos)
+                c2, end = (ox + v[0], oy + v[1]), (ox + v[2], oy + v[3])
+            cur.extend(bezier(pos, c1, c2, end, _seg(pos, end))[1:])
+            pos, prev_c, prev_q = end, c2, None
+        elif up in ("Q", "T"):
+            if up == "Q":
+                c1, end = (ox + v[0], oy + v[1]), (ox + v[2], oy + v[3])
+            else:                            # T: reflect the previous quad control
+                c1 = ((2 * pos[0] - prev_q[0], 2 * pos[1] - prev_q[1])
+                      if prev_q else pos)
+                end = (ox + v[0], oy + v[1])
+            cur.extend(quad_bezier(pos, c1, end, max(3, _seg(pos, end) // 2))[1:])
+            pos, prev_q, prev_c = end, c1, None
+        elif up == "A":
+            end = (ox + v[5], oy + v[6])
+            cur.extend(_arc(pos, v[0], v[1], v[2], int(v[3]), int(v[4]), end))
+            pos = end
+            prev_c = prev_q = None
+    if len(cur) >= 3:
+        out.append(cur)
+    return out
+
+
 def svg_subpaths(d):
     """flatten absolute SVG path data (M/L/H/V/C/Z) into closed point
     lists — a traced mark carries its SVG's path data verbatim (rotate, dev)"""

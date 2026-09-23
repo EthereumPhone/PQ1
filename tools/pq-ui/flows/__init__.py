@@ -4,6 +4,9 @@
     python3 -m flows send                 # -> renders/flows/send_flow.gif
     python3 -m flows send --end declined  # -> renders/flows/send/cancel/send_full_declined.gif
     python3 -m flows send --end all       # one GIF per ending
+    python3 -m flows send --end failed --ready 7000   # the loading film waiting: the
+                                          #   orbit wraps whole turns until the work
+                                          #   answers at 7 s, then collides into the X
     python3 -m flows send --fps 14 --frames DIR   # panel-rate PNGs
     python3 -m flows --manifest           # regenerate flows/MANIFEST.md
 
@@ -127,8 +130,12 @@ def _source(mod, sample):
     return built.get("DEFAULTS"), built.get("ENDS", {}), built["SCREENS"]
 
 
-def screens(name, end=None, early=False, sample=None):
+def screens(name, end=None, early=False, sample=None, ready=None):
     """A flow's normalized screen list (deep-copied — safe to mutate).
+
+    ready (ms) answers the ending's loading film at that film time: the
+    orbit wraps whole turns until then (StatusAnim "ready" — a render of
+    the open-ended film; an ending with no film raises).
 
     sample picks one of the flow's SAMPLES (an index or a symbol) and
     rebuilds the flow from it via build(**sample); None plays the module's
@@ -174,6 +181,14 @@ def screens(name, end=None, early=False, sample=None):
         if not si:
             raise ValueError(f"flow {name!r} has no status screen to commit to")
         scr[ci[0]]["next"] = si[-1]
+    if ready is not None:
+        si = [i for i, s in enumerate(scr) if s.get("kind") == "status"]
+        if not si or not status.loops(scr[si[-1]]):
+            raise ValueError(f"flow {name!r}: the ending {end or '(default)'} "
+                             f"plays no loading film, nothing waits for an "
+                             f"answer (ready needs the qubit film or an "
+                             f"explosion lead)")
+        scr[si[-1]]["ready"] = ready
     return layout.normalize_screens(scr, defaults)
 
 
@@ -185,11 +200,16 @@ def playable(name, end=None, decline=None):
     so the driver can branch to either at runtime — hold-right signs, hold-
     left declines. decline defaults to the first ENDS entry whose state is
     not "done" (preferring "declined"); returns (screens, sign_index,
-    decline_index), decline_index None when no such ending exists. Raises
-    for a flow with no ending or no navigable screens ahead of it."""
+    decline_index), decline_index None when no such ending exists. A flow's
+    FILM-FAILURE ending (status.film_failure — send's TRANSACTION FAILED,
+    the loading colliding into the X) is appended too, so the driver can
+    restyle the running film when the host answers "failed"
+    (pq1.driver.FlowDriver.answer); it is never the decline. Raises for a
+    flow with no ending or no navigable screens ahead of it."""
     mod = get(name)
     ends = getattr(mod, "ENDS", {})
-    scr = screens(name, getattr(mod, "DEFAULT_END", None) if end is None else end)
+    sign_end = getattr(mod, "DEFAULT_END", None) if end is None else end
+    scr = screens(name, sign_end)
     # an ENTRY (a PIN row — status.is_interactive) is navigable, typed
     # live; its verdicts play inside it, so it is never a sign / decline
     # target: a flow of attempts alone has neither (both None)
@@ -202,9 +222,12 @@ def playable(name, end=None, decline=None):
         raise ValueError(f"flow {name!r} is not playable: it needs navigable "
                          f"screens (a hero, a detail, an entry) ahead of a "
                          f"status ending")
+    film_fail = next((n for n, e in sorted(ends.items())
+                      if e.get("kind") == "status" and status.film_failure(e)),
+                     None)
     if decline is None:
         fails = sorted(n for n, e in ends.items()
-                       if e.get("state", "done") != "done"
+                       if e.get("state", "done") != "done" and n != film_fail
                        and not (e.get("kind") == "status"
                                 and status.is_interactive(e)))
         decline = ("declined" if "declined" in fails
@@ -218,4 +241,8 @@ def playable(name, end=None, decline=None):
         layout.normalize_screens([d], getattr(mod, "DEFAULTS", None))
         di = len(scr)
         scr.append(d)
+    if film_fail is not None and film_fail not in (sign_end, decline):
+        f = copy.deepcopy(ends[film_fail])       # the look the host's "no" swaps in
+        layout.normalize_screens([f], getattr(mod, "DEFAULTS", None))
+        scr.append(f)
     return scr, (si[0] if si else None), di

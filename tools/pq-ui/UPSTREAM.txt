@@ -1,12 +1,21 @@
 # Vendored subset of the PQ-UI design system (Elie Munsi, EthereumPhone/PQ-UI).
-# Only the design-system package, the Safe + fingerprint flow families and the
-# flow loader are vendored; renders/, screens/, archive/ and tools/ are not
-# (upstream tracks ~380 MB of GIF renders, so a submodule is not an option).
+# Vendored: the design-system package, every flow family, the library
+# animations (screens/), the design-rule checker (tools/check), the handoff
+# generator sources (tools/handoff, no report dumps) and the generated handoff
+# catalogue (handoff/spec + catalog + rules + the pq1-conformance port_diff);
+# renders/, archive/ and handoff/previews are not (upstream tracks ~380 MB of
+# GIF renders, so a submodule is not an option). See sync.sh for the exact set.
 #
 # Re-sync with ./sync.sh <path-to-PQ-UI-checkout>; it refuses to copy from a
-# checkout that is not at the pinned commit unless UPSTREAM_SHA is updated first.
+# checkout that is not at the pinned commit unless `commit` is updated first.
+# `./sync.sh --check` (make pq-ui-check) verifies the vendored bytes and file
+# set against MANIFEST.sha256.
 repo   = https://github.com/EthereumPhone/PQ-UI
-commit = d9f1468e1fd1696f9de6e2eac216dabd7a7406c6
-date   = 2026-09-18T17:53:54+02:00
+commit = 0b3ca4950243304942f32be1e79e783a00ce500b
+date   = 2026-09-22T14:25:12+02:00
 # Deliberate local deviation: upstream ships pq1/assets/OFL.txt, which is the
 # Chakra Petch OFL text (wrong file); Aileron is CC0 — see LICENSES/Aileron.md.
+# Device-side deviations from the reference input model (TAP_MAX_MS, the
+# chord-click sign, hold-right) are listed in PORT_DEVIATIONS.toml and checked
+# by `make pq-ui-port-diff` against handoff/spec/motion.json.
+deviations = tools/pq-ui/PORT_DEVIATIONS.toml

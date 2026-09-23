@@ -2,8 +2,9 @@
 
 The finale of major_explosion / minor_explosion rebuilt on pq1.loading:
 the split / orbit / spiral leg is loading.qubit_pose on a stock QubitCfg
-(whose defaults match the forks' timeline — hold 250, split 650, join
-1300, ramp 1300, 3 x 850 ms revs, spiral 1000 — and whose gc (214, 72)
+(whose defaults match the forks' timeline — split 650, join 1300, ramp
+1300, 3 x 850 ms revs, spiral 1000, with the seed (motion.SEED_MS) where
+the forks held 250 — and whose gc (214, 72)
 fixes their 1 px GY drift), with loading.metaball for the goo bridge.
 Module-local are the pieces the loader does not have: the brightness-
 faded follower stream, the trembling clump polygon that compresses and
@@ -18,7 +19,7 @@ import bisect
 import functools
 import math
 
-from .. import colors, gradients, loading
+from .. import colors, components, gradients, loading
 from ..layout import SUP, VALUE_PARK_X, W
 from ..motion import ENTER_MS, clamp01, ease, spring_travel
 
@@ -160,7 +161,7 @@ def t_tail(cfg):
     return cfg.stagger_ms * (cfg.rings - 1)
 
 
-def pose(t, cfg, enter=None):
+def pose(t, cfg, enter=None, seed=None):
     """loading-leg bodies at t: the side entrance (enter="left"/"right":
     one full-size body travelling in from off the panel — the value
     screen's park spot, layout.VALUE_PARK_X, mirrored for "right" — on
@@ -188,9 +189,14 @@ def pose(t, cfg, enter=None):
         gx, gy = q.gc
         x0 = VALUE_PARK_X if enter == "left" else W - VALUE_PARK_X
         k = spring_travel(t)
-        return dict(bodies=[dict(x=x0 + (gx - x0) * k, y=gy, r=q.r_big)],
+        # the body slides in at the token's VISIBLE radius: the seed it lands
+        # on opens there (loading.qubit_pose), so the edge never steps out
+        return dict(bodies=[dict(x=x0 + (gx - x0) * k, y=gy,
+                                 r=q.r_big - components.TOKEN_INSET)],
                     bind=0)
-    return loading.qubit_pose(t - t0, q)
+    # a side entrance IS the travel: the seed then runs in place, so the
+    # flow's circle is handed on only to the plain film
+    return loading.qubit_pose(t - t0, q, seed if enter is None else None)
 
 
 def clump_poly(cx, cy, r, t, intensity):
@@ -209,7 +215,7 @@ def clump_poly(cx, cy, r, t, intensity):
 
 def draw(cv, t, cfg=MAJOR, *, trail=None, body=colors.WHITE,
          clump_from=colors.WHITE, clump_to=None, ring=colors.WHITE,
-         enter=None):
+         enter=None, seed=None):
     """Draw one frame of the burst at time t ms (pure in t).
 
     trail is one colour (default white, like the sources) faded per
@@ -225,15 +231,20 @@ def draw(cv, t, cfg=MAJOR, *, trail=None, body=colors.WHITE,
     gx, gy = q.gc
     t0 = t_shift(cfg, enter)
 
+    src = None if seed is None else (seed["x"], seed["y"], seed["r"])
     if t < t0 + q.t6:
         # loading leg: entrance, split, orbit, spiral, with the follower stream
-        P = pose(t, cfg, enter)
+        P = pose(t, cfg, enter, src)
+        u = P.get("seed_u", 1.0)
+        seed_fill = (seed or {}).get("fill") or body
         gap = (0.22 / (2 * math.pi)) * q.rev_ms
-        for bi, b in enumerate(P["bodies"]):
+        # the stream is DARK over the seed: one arriving body has nothing to
+        # trail, and every sample behind it smears back to the handover
+        for bi, b in enumerate(P["bodies"] if u >= 1.0 else []):
             prev = b
             pts = []
             for j in range(1, 6):
-                Q = pose(t - j * gap, cfg, enter)
+                Q = pose(t - j * gap, cfg, enter, src)
                 p = Q["bodies"][min(bi, len(Q["bodies"]) - 1)]
                 if (abs(p["x"] - prev["x"]) < 0.8
                         and abs(p["y"] - prev["y"]) < 0.8):
@@ -251,7 +262,8 @@ def draw(cv, t, cfg=MAJOR, *, trail=None, body=colors.WHITE,
             if clamp01((max_dist - d) / 8) > 0.5:
                 loading.metaball(cv, b1, b2, max_dist, body)
         for b in P["bodies"]:
-            cv.circle(b["x"], b["y"], b["r"], body)
+            cv.circle(b["x"], b["y"], b["r"],
+                      body if u >= 1.0 else gradients.mix(seed_fill, body, u))
         return
     t -= t0
     t7 = q.t6 + cfg.t_clump

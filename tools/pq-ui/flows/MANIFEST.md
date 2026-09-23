@@ -8,7 +8,7 @@ samples (table = the first): USDC → full/approved, DAI → full/rejected, USDT
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | APPROVE | hero | APPROVE USDC? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | SPENDER | detail | SPENDER: 0x000000000022D473030 / F116dDEE9F6B43aC78BA3 |  |
 | 4 | AMOUNT | detail | AMOUNT: Unlimited |  |
 | 5 | CONTRACT | detail | CONTRACT: **USD Coin** / 0x833589fCD6eDb6E08f4 / c7C32D4f71b54bdA02913 |  |
@@ -29,7 +29,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 | 1 | BATCH 1 | hero | BATCH SIGN TX 1 OF 3 | band chevron ▸, no corner chevrons |
 | 2 | SEND | hero | SEND 1,250 TOSHI? | hint, commit |
 | 3 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
-| 4 | CHAIN | detail | on BASE |  |
+| 4 | CHAIN | detail | on Base |  |
 | 5 | AMOUNT | detail | AMOUNT: 1,250 TOSHI |  |
 | 6 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
 | 7 | WORST CASE | detail | WORST CASE: Max: 0.0030 ETH / Gas: 65000 |  |
@@ -39,7 +39,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 | 11 | BATCH 2 | hero | BATCH SIGN TX 2 OF 3 | band chevron ▸, no corner chevrons |
 | 12 | SEND | hero | SEND 840.5 TOSHI? | hint, commit |
 | 13 | TO | detail | TO: 0x4B20993Bc481177ec7E / 8f571ceCaE8A9e22C02db |  |
-| 14 | CHAIN | detail | on BASE |  |
+| 14 | CHAIN | detail | on Base |  |
 | 15 | AMOUNT | detail | AMOUNT: 840.5 TOSHI |  |
 | 16 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
 | 17 | WORST CASE | detail | WORST CASE: Max: 0.0030 ETH / Gas: 65000 |  |
@@ -49,7 +49,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 | 21 | BATCH 3 ASK | hero | BATCH SIGN TX 3 OF 3 TX? | hint, commit |
 | 22 | SEND | hero | SEND 12,000 TOSHI? | hint, commit |
 | 23 | TO | detail | TO: 0x1aE0EA34a72D944a8C7 / 603FfB3eC30a6669E454C |  |
-| 24 | CHAIN | detail | on BASE |  |
+| 24 | CHAIN | detail | on Base |  |
 | 25 | AMOUNT | detail | AMOUNT: 12,000 TOSHI |  |
 | 26 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
 | 27 | WORST CASE | detail | WORST CASE: Max: 0.0030 ETH / Gas: 65000 |  |
@@ -67,7 +67,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 | 1 | BATCH 1 | hero | BATCH SIGN TX 1 OF 3 | band chevron ▸, no corner chevrons |
 | 2 | SEND | hero | SEND 1,250 TOSHI? | hint, commit |
 | 3 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
-| 4 | CHAIN | detail | on BASE |  |
+| 4 | CHAIN | detail | on Base |  |
 | 5 | AMOUNT | detail | AMOUNT: 1,250 TOSHI |  |
 | 6 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
 | 7 | WORST CASE | detail | WORST CASE: Max: 0.0030 ETH / Gas: 65000 |  |
@@ -77,7 +77,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 | 11 | BATCH 2 | hero | BATCH SIGN TX 2 OF 3 | band chevron ▸, no corner chevrons |
 | 12 | SEND | hero | SEND 840.5 TOSHI? | hint, commit |
 | 13 | TO | detail | TO: 0x4B20993Bc481177ec7E / 8f571ceCaE8A9e22C02db |  |
-| 14 | CHAIN | detail | on BASE |  |
+| 14 | CHAIN | detail | on Base |  |
 | 15 | AMOUNT | detail | AMOUNT: 840.5 TOSHI |  |
 | 16 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
 | 17 | WORST CASE | detail | WORST CASE: Max: 0.0030 ETH / Gas: 65000 |  |
@@ -93,7 +93,7 @@ defaults: icon `blind`, trail palette `0x9E3b5c0f7A1d24e86C3F0b7d5a2E4c6F8b1D3a7
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | UNKNOWN CALL | hero | CONFIRM UNKNOWN CALL? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | TO | detail | TO: 0x9E3b5c0f7A1d24e86C3 / F0b7d5a2E4c6F8b1D3a7c |  |
 | 4 | AMOUNT | detail | AMOUNT: 0 ETH |  |
 | 5 | DATA HASH | detail | DATA HASH: 0x6a2f9c1e8b / …a4c7e2d9b1f5 |  |
@@ -113,7 +113,7 @@ defaults: icon `blind`, trail palette `0x2626664c2603336E57B271c5C0b26F421741e48
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | UNKNOWN CALL | hero | CONFIRM UNKNOWN CALL? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | TO | detail | TO: 0x2626664c2603336E57B / 271c5C0b26F421741e481 |  |
 | 4 | AMOUNT | detail | AMOUNT: 0.25 ETH |  |
 | 5 | DATA HASH | detail | DATA HASH: 0xd41c7b3e9a / …0e1d3b5a7c9e |  |
@@ -133,7 +133,7 @@ defaults: icon `blind`, trail palette `0xB7c4E1f92a6D3058Fe7b21C9a4d0E6f83B5c9A1
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | BLIND SIGN | hero | CONFIRM BLIND SIGN? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | TO | detail | TO: 0xB7c4E1f92a6D3058Fe7 / b21C9a4d0E6f83B5c9A17 |  |
 | 4 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
 | 5 | WORST CASE | detail | WORST CASE: Max: 0.0091 ETH / Gas: 200000 |  |
@@ -156,7 +156,7 @@ defaults: icon `blind`, trail palette `0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD2
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | UNKNOWN CALL | hero | CONFIRM UNKNOWN CALL? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | FUNCTION | detail | FUNCTION: Swap exact tokens / for tokens |  |
 | 4 | TO | detail | TO: 0x4752ba5DBc23f44D878 / 26276BF6Fd6b1C372aD24 |  |
 | 5 | AMOUNT | detail | AMOUNT: 0 ETH |  |
@@ -177,7 +177,7 @@ defaults: trail palette `0x78D8526282Ac09f1885D0F39B8875a0180Fc081e`
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | CONTRACT CALL | hero | CONFIRM CONTRACT CALL? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | VALUE | detail | VALUE: 0 ETH |  |
 | 4 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
 | 5 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
@@ -232,7 +232,7 @@ defaults: icon `eth`, trail palette `0x5Ea1c7D93b04F6a28E7c3D0b9F1e6A4c8B2d7E05`
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | SIGN | hero | SIGN EIP–1271? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | ACCOUNT | detail | ACCOUNT: On Account 1 |  |
 | 4 | SLOT | detail | SLOT: On Slot 3 |  |
 | 5 | SIGNER | detail | SIGNER: 0x5Ea1c7D93b04F6a28E7 / c3D0b9F1e6A4c8B2d7E05 |  |
@@ -251,7 +251,7 @@ defaults: icon `eth`, trail palette `0x5Ea1c7D93b04F6a28E7c3D0b9F1e6A4c8B2d7E05`
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | SIGN | hero | SIGN EIP–1271? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | ACCOUNT | detail | ACCOUNT: On Account 1 |  |
 | 4 | SLOT | detail | SLOT: On Slot 3 |  |
 | 5 | SIGNER | detail | SIGNER: 0x5Ea1c7D93b04F6a28E7 / c3D0b9F1e6A4c8B2d7E05 |  |
@@ -271,7 +271,7 @@ defaults: icon `eth`, trail palette `0x2626664c2603336E57B271c5C0b26F421741e481`
 |---|----|------|------|--------|
 | 1 | ERC7730 | hero | ERC-7730 CLEAR SIGNING | band chevron ▸, no corner chevrons |
 | 2 | SIGN | hero | SIGN SWAP COINBASE UNISWAP V3? | hint, commit |
-| 3 | NETWORK | detail | on BASE |  |
+| 3 | NETWORK | detail | on Base |  |
 | 4 | AMOUNT | detail | AMOUNT: 0 ETH |  |
 | 5 | FUNCTION | detail | FUNCTION: Approve / unlimited USDC |  |
 | 6 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
@@ -318,6 +318,26 @@ defaults: icon `download`, trail palette `FIRMWARE`
 | 5 | UPDATED | status | FIRMWARE UPDATED TO 1.0.3 | lead explosion major busy "RECONNECTING…", arrive → check |
 
 ends: declined (lead explosion minor, arrive → x, failed), updated (lead explosion major busy "RECONNECTING…", arrive → check)
+
+## palettes — 14 screens
+defaults: icon `eth`
+
+| # | id | kind | text | extras |
+|---|----|------|------|--------|
+| 1 | RAMP0 | hero | RAMP 0 #8A7500 NEW | hint, commit |
+| 2 | RAMP1 | hero | RAMP 1 #E01E37 | hint, commit |
+| 3 | RAMP2 | hero | RAMP 2 #007EB2 NEW | hint, commit |
+| 4 | RAMP3 | hero | RAMP 3 #7E503C | hint, commit |
+| 5 | RAMP4 | hero | RAMP 4 #8B2FC9 | hint, commit |
+| 6 | RAMP5 | hero | RAMP 5 #B65F1F NEW | hint, commit |
+| 7 | RAMP6 | hero | RAMP 6 #176849 | hint, commit |
+| 8 | RAMP7 | hero | RAMP 7 #008482 NEW | hint, commit |
+| 9 | RAMP8 | hero | RAMP 8 #C54C71 NEW | hint, commit |
+| 10 | RAMP9 | hero | RAMP 9 #CA4D45 NEW | hint, commit |
+| 11 | RAMP10 | hero | RAMP 10 #6A6B70 | hint, commit |
+| 12 | RAMP11 | hero | RAMP 11 #8C57BC | hint, commit |
+| 13 | RAMP12 | hero | RAMP 12 #4C73CF NEW | hint, commit |
+| 14 | RAMP13 | hero | RAMP 13 #000000 | hint, commit |
 
 ## pin/unlock — 3 screens
 
@@ -367,7 +387,7 @@ defaults: icon `safe`, trail palette `SAFE`
 | 2 | SAFE ACCT | detail | SAFE ACCT: 0x1111111111222222222 / 3333333333444444444aa |  |
 | 3 | BLIND SIGN | detail | BLIND SIGN: Can not decode data / Confirm on dapp | **pulse** |
 | 4 | TO | detail | TO: 0x123456789abcdef1234 / 56789abcdef123456789a |  |
-| 5 | CHAIN | detail | on BASE |  |
+| 5 | CHAIN | detail | on Base |  |
 | 6 | CONFIRM? | confirm | Confirm? | early exit — OR VIEW MORE ▸ / ◂ TO GO BACK, commit |
 | 7 | TX INFO | detail | TX INFO: Nonce: 8 / Type: Standard |  |
 | 8 | CALL DATA | detail | CALL DATA: Function: 0x12345678 / Data: 64 B |  |
@@ -455,14 +475,14 @@ defaults: trail palette `13`
 |---|----|------|------|--------|
 | 1 | SEND | hero | SEND 5.25 ETH? | hint, commit |
 | 2 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
-| 3 | CHAIN | detail | on BASE |  |
+| 3 | CHAIN | detail | on Base |  |
 | 4 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
 | 5 | WORST CASE | detail | WORST CASE: Max: 0.0036 ETH / Gas: 80000 |  |
 | 6 | DETAILS | detail | DETAILS: Nonce: 42 / Data:  0B |  |
 | 7 | SEND | hero | SEND 5.25 ETH? | hint, commit |
 | 8 | CONFIRMED | status | TRANSACTION CONFIRMED | qubit → check |
 
-ends: confirmed (qubit → check), declined (resolve → x, failed), failed (resolve → x, failed)
+ends: confirmed (qubit → check), declined (resolve → x, failed), failed (qubit → x, failed)
 
 ## send_token — 9 screens
 defaults: icon `eth`, trail palette `TOSHI`
@@ -470,7 +490,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | SEND | hero | SEND 12,500 TOSHI? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
 | 4 | VALUE | detail | VALUE: 12,500 TOSHI |  |
 | 5 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
@@ -487,7 +507,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | SEND | hero | SEND 12,500 TOSHI? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | TO | detail | TO: **Hardware Wallet** / 0x78D852…80Fc081e |  |
 | 4 | VALUE | detail | VALUE: 12,500 TOSHI |  |
 | 5 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
@@ -505,7 +525,7 @@ samples (table = the first): USDC → full/declined, DAI → full/successful
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | SEND | hero | SEND 1,250.00 USDC? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
 | 4 | CONTRACT | detail | CONTRACT: **USD Coin** / 0x833589fCD6eDb6E08f4 / c7C32D4f71b54bdA02913 |  |
 | 5 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
@@ -522,7 +542,7 @@ defaults: trail palette `0x3cA9e5F1b72D04E8a6c1D9B3f57E28a0C4d6B1e9`
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | TRANSFER | hero | TRANSFER UNKNOWN TOKEN? | hint, commit |
-| 2 | NETWORK | detail | on BASE |  |
+| 2 | NETWORK | detail | on Base |  |
 | 3 | CONTRACT | detail | CONTRACT: 0x3cA9e5F1b72D04E8a6c / 1D9B3f57E28a0C4d6B1e9 |  |
 | 4 | AMOUNT | detail | AMOUNT: (RAW) / 12345678901234567890 |  |
 | 5 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |

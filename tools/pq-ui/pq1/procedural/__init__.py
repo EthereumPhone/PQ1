@@ -6,7 +6,13 @@ marks without dragging the whole art library (or pq1.loading, via burst)
 into every import.
 
 Modules
-    geometry  rounded_polygon, quad_bezier, bezier, svg_subpaths — shared path math
+    geometry  rounded_polygon, quad_bezier, bezier — shared path math;
+              svg_outline flattens ANY SVG path data (the whole command
+              set, arcs and relative forms), svg_subpaths only the
+              absolute M/L/H/V/C/Z subset the older marks carry
+    chains    every supported EVM chain's logo, traced from
+              reference/logos/ — one module for the whole set (pq1.chains
+              maps chain id -> mark). Ethereum mainnet is eth.py
     marks     check, x (cancel), exclamation — the result/notice marks;
               plus, minus — the entry signs beside the corner chevrons
     blind     the blind-signing mark (assets/blind_icon.svg traced)

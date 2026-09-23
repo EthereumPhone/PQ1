@@ -20,14 +20,32 @@ Screen description (dict / JSON object per screen)
 Common
     "id"     : name used on the command line
     "kind"   : "hero" | "detail" | "value" | "confirm" | "status"
-    "icon"   : "eth" | "base" | "blind" | "rotate"
-               | "dev" | "fingerprint" | "download"  glyph inside the circle
+    "icon"   : "eth" | "blind" | "rotate" | "dev"
+               | "fingerprint" | "download"
+               | a chain mark ("base", "op", ...)
+               | "letter:X"                      glyph inside the circle
                                                  (components.GLYPHS; a popular
                                                  token's logo art comes via
-                                                 components.token_defaults)
+                                                 components.token_defaults;
+                                                 "letter:X" draws that initial
+                                                 — an unknown chain, pq1.chains)
     "icon_color": [r, g, b]                      vector-mark colour override
                                                  (image logos keep their art;
                                                  SAFE flows pin it black)
+    "chain"  : 1 | 8453 | 42161 | ...            numeric EIP-155 chain id on a
+                                                 chain screen; the mark, the
+                                                 disc colour, the trail ramp
+                                                 and the caption are DERIVED
+                                                 from it (pq1.chains), so the
+                                                 network can never disagree
+                                                 with the art naming it. Detail
+                                                 screens only — never a flow's
+                                                 DEFAULTS
+    "chain_name": "Celo"                         the chain's name when the id
+                                                 is not in pq1.chains.CHAINS:
+                                                 the disc shows its first
+                                                 letter instead of borrowing
+                                                 another network's mark
     "chev"   : "lr" | "up" | None                "lr" tap-nav available, "up"
                                                  hold armed, None = no input
     "dwell"  : ms held before auto-advancing     (optional; demo loops only —
@@ -227,7 +245,7 @@ status — animated loading, then the shared resting look: black token,
     "busy"   : "SIGNING…"                        caption while loading (optional;
                                                  film only — the cancel resolve
                                                  has no loading window)
-    dwell defaults to the animation's duration (qubit 8600 ms, the cancel
+    dwell defaults to the animation's duration (qubit 8650 ms, the cancel
     resolve 2850 ms). Any extra
     fields ride along to the registered animation via its spec (the screens/
     library uses this for per-screen params like pin= or direction=).
@@ -268,6 +286,12 @@ CONFIRM_INDEX = 5
 
 CONFIRM_CIRCLE_X = 291      # confirm circle right of centre ...
 CONFIRM_TEXT_X = 175        # ... prompt centred to its left (the CHAIN nudges)
+CHAIN_GAP = 18              # chain screen: the FIXED air between the caption's
+                            # right edge and the disc's left edge. A chain screen
+                            # composes itself — caption + gap + disc as one group,
+                            # centred — instead of pinning the disc to a column, so
+                            # the spacing reads identical whatever the network is
+                            # called (user rule, Sep 2026)
 
 VALUE_TEXT_CX = CENTER_X    # a value screen's text: the full region, centred ...
 VALUE_PARK_X = -2 * CIRCLE_R   # ... its token parked off the panel to the left
@@ -396,6 +420,93 @@ def layout_of(s):
     return out
 
 
+def _expand_chain(s):
+    """`chain=<id>` -> the mark, the disc colour and the caption it implies.
+
+    Runs AFTER the per-flow DEFAULTS have landed and ASSIGNS rather than
+    defaults: a branded family has already written its own `icon`, `token`
+    and `icon_color` onto every screen by this point, so setdefault would be
+    a no-op and the chain would never reach the disc. On a chain screen the
+    chain owns the disc — it says which network is being signed for, and the
+    flow's palette resumes on the next screen.
+
+    The family's `ring` / `fill` are dropped for the same reason: they dress
+    the flow's token, and a Safe-black ring around a Base-blue disc belongs
+    to neither identity.
+
+    `lines` and `size` are only filled when the screen states neither, so a
+    flow can still write its own caption.
+    """
+    if "chain" not in s:
+        return
+    from . import chains        # local: layout is a leaf, and typography (which
+    #                             chain_caption_size needs) imports IT — a
+    #                             module-level import here would be a cycle
+    cid = s["chain"]
+    if not isinstance(cid, int) or isinstance(cid, bool):
+        raise ValueError(
+            f"screen {s.get('id')!r}: \"chain\" is a numeric EIP-155 chain id "
+            f"(1, 8453, 42161 ...), not {cid!r}")
+    kind = s.get("kind", "detail")
+    if kind not in ("detail", "value"):
+        raise ValueError(
+            f"screen {s.get('id')!r}: \"chain\" belongs on the chain screen (a "
+            f"detail), not on a {kind} — a flow's DEFAULTS must never carry it, "
+            f"or every screen would wear the network's colours")
+    st = chains.style(cid, s.get("chain_name"))
+    s["icon"] = st["icon"]
+    s["icon_color"] = st["icon_color"]
+    tok = dict(s.get("token") or {})
+    for k in ("fill", "ring", "address", "symbol", "variant"):
+        tok.pop(k, None)                  # the family's dress, not the chain's
+    tok.update(st["token"])
+    s["token"] = tok
+    if "lines" not in s and "pages" not in s and "words" not in s:
+        s["lines"] = [chains.caption(cid, s.get("chain_name"))]
+    line = s["lines"][0] if s.get("lines") else ""
+    s.setdefault("size", chain_caption_size(line))
+    # the caption and the disc are ONE centred group with a fixed gap, so the
+    # air between them never changes with the length of the network's name.
+    # Assigned, not defaulted: a flow that still carries the old x nudges gets
+    # the composition anyway.
+    tx, cx = chain_compose(line, s["size"])
+    s["text_x"], s["circle_x"] = tx, cx
+
+
+def chain_group_w(line, size):
+    """width of a chain screen's caption + CHAIN_GAP + disc, as one group"""
+    from . import typography
+    return typography.text_width(line, size) + CHAIN_GAP + 2 * CIRCLE_R
+
+
+def chain_caption_size(line):
+    """the largest Big tier at which the whole chain group fits the panel.
+
+    Because the caption and the disc compose as a group rather than sitting on
+    fixed anchors, the constraint is the MARGINs, not the disc: nothing can run
+    under the token any more. Every network in the registry clears this at the
+    top tier; the ladder is the safety net for a longer name later.
+    """
+    from . import chains
+    for size in chains.CAPTION_TIERS:
+        if chain_group_w(line, size) <= W - 2 * MARGIN:
+            return size
+    return chains.CAPTION_TIERS[-1]
+
+
+def chain_compose(line, size):
+    """(text_x, circle_x) for a chain screen: the caption and the disc as one
+    group centred on the panel, CHAIN_GAP of air between them.
+
+    Rounded to whole pixels — every other anchor in this module is an integer,
+    and a port should not have to carry a repeating fraction to place a disc.
+    The gap it costs is under half a pixel."""
+    from . import typography
+    tw = typography.text_width(line, size)
+    left = CENTER_X - chain_group_w(line, size) / 2.0
+    return round(left + tw / 2.0), round(left + tw + CHAIN_GAP + CIRCLE_R)
+
+
 def normalize_screens(data, defaults=None):
     """Fill schema defaults in place (the JSON contract of transitions.py).
 
@@ -405,6 +516,7 @@ def normalize_screens(data, defaults=None):
     for i, s in enumerate(data):
         for k, v in (defaults or {}).items():
             s.setdefault(k, copy.deepcopy(v))
+        _expand_chain(s)
         s.setdefault("id", f"screen{i}")
         s.setdefault("kind", "detail")
         s.setdefault("icon", "eth")

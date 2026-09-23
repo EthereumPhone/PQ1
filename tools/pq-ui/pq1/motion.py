@@ -130,12 +130,29 @@ ENTER_MS = 800  # a film's side entrance (off-panel -> centre) at KIOSK pace:
 TEXT_IN_DELAY_MS = 150  # incoming text starts its alpha spring this long after
                         # the leg begins: the circle leads, the text lands just
                         # after it (outgoing text starts fading immediately)
-FADE_MS = 180           # pre-spring serial fade; survives as a span estimate
+FADE_MS = 180           # the scripted serial fade: text and trail away before a
+                        # SEEDED loading film takes the canvas (flow.Sim, the
+                        # beat before SEED_MS); also survives as a span estimate
+SEED_HOLD_MS = 180      # ... then the bare circle HOLDS, parked alone on black,
+                        # before the seed begins: fade, hold, morph (flow.Sim —
+                        # the beat is FADE_MS + SEED_HOLD_MS; the film's t 0 is
+                        # its end, so the film's own timing is unchanged)
+SEED_MS = 300          # the loading film's SEED: the circle the flow was
+                        # drawing travels to the film's centre, shrinks to one
+                        # qubit and tints into the film's colour, on ease_out —
+                        # a film is never handed a cold canvas. It REPLACES the
+                        # old 250 ms hold: the split begins the frame the seed
+                        # lands (loading.QubitCfg.T_SEED, loading.qubit_pose)
+SEED_ART = 0.5          # ... and the token's dress — its ring and its icon or
+                        # logo art — is gone by this fraction of that WINDOW, on
+                        # linear time (the eased travel front-loads, and would
+                        # empty the dress inside one panel frame): 150 ms, two
+                        # frames at 14 fps, so a BARE qubit is what divides
 MOVE_MS = 900           # pre-spring travel time; MOVE_MS + 2*FADE_MS still
                         # bounds a transition (springs settle well inside it)
 HERO_DWELL = 5000       # hero screens idle time (one full sweep)
 DETAIL_DWELL = 4100     # detail screens idle time
-STATUS_DWELL = 8600     # the qubit status animation's duration (loading +
+STATUS_DWELL = 8650     # the qubit status animation's duration (loading +
                         # resolve + hold); status screens now dwell for their
                         # own animation's duration — status.py asserts the
                         # film ("qubit", the done-ending default) still equals

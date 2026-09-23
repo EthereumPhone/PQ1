@@ -2,12 +2,13 @@
 
 PQ1 type scale (all sizes in UI pixels; font() supersamples internally)
   36/32 big - 28 mid - 22 default - 18 question caps - 16 label caps
-  (SEMIBOLD) - 12 paging. Two weights: Regular everywhere, SemiBold for
-  the label caps (font(px, weight="semibold")).
+  (SEMIBOLD) - 12 paging. Three weights: Regular everywhere, SemiBold for
+  the label caps, Bold for a monogram standing alone on a disc
+  (font(px, weight="semibold" | "bold")).
 
 Font resolution order:
   1. $PQ1_FONT (absolute path override, used by the render-verification harness)
-  2. the bundled copies in pq1/assets/ (Aileron-Regular/SemiBold.otf, so
+  2. the bundled copies in pq1/assets/ (Aileron-Regular/SemiBold/Bold.otf, so
      pq1 is self-contained)
   3. system font directories
   4. PIL's built-in default (last resort)
@@ -40,6 +41,7 @@ _FONT_NAMES = {
     "regular": ("Aileron-Regular.otf", "Aileron-Regular.ttf",
                 "Aileron.otf", "Aileron.ttf"),
     "semibold": ("Aileron-SemiBold.otf", "Aileron-SemiBold.ttf"),
+    "bold": ("Aileron-Bold.otf", "Aileron-Bold.ttf"),
 }
 _SEARCH_DIRS = (
     _ASSET_FONTS,

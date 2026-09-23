@@ -11,18 +11,16 @@
 Enables a module on the Safe: the chain context, the Safe account, what
 enabling means (execution authority granted to the module address), the
 module address itself and the transaction nonce. The chain screen is
-variable content like every label and value line — "on Mainnet" +
-icon="mainnet" is a representative sample. The id stays NETWORK:
-canonical id CHAIN must directly follow TO or AMOUNT, and this flow has
-neither.
+variable content like every label and value line — chain=1 is a
+representative sample. The id stays NETWORK: canonical id CHAIN must
+directly follow TO or AMOUNT, and this flow has neither.
 Render with `python -m flows safe/enable_module --end all`.
 """
 from flows.safe import DEFAULTS, ends  # noqa: F401  (DEFAULTS read by flows.screens)
 
 BODY = [
     dict(id="ENABLE MODULE", kind="hero", bottom="APPROVE ENABLE MODULE?", hint=True),
-    dict(id="NETWORK", kind="detail", side="right", icon="mainnet", label=None,
-         lines=["on Mainnet"], size=32, text_x=175, circle_x=291),
+    dict(id="NETWORK", kind="detail", side="right", chain=1, label=None),
     dict(id="SAFE ACCT", kind="detail", side="left", label="SAFE ACCT",
          lines=["0x1111111111222222222", "3333333333444444444aa"], size=22),
     dict(id="ENABLE", kind="detail", side="right", label="ENABLE",

@@ -22,8 +22,7 @@ from flows.safe import DEFAULTS, ends  # noqa: F401  (DEFAULTS read by flows.scr
 
 BODY = [
     dict(id="TRANSFER", kind="hero", bottom="SEND 250 USDC?", hint=True),
-    dict(id="NETWORK", kind="detail", side="right", icon="mainnet", label=None,
-         lines=["on Mainnet"], size=32, text_x=175, circle_x=291),
+    dict(id="NETWORK", kind="detail", side="right", chain=1, label=None),
     dict(id="SAFE ACCT", kind="detail", side="left", label="SAFE ACCT",
          lines=["0x1111111111222222222", "3333333333444444444aa"], size=22),
     dict(id="SEND", kind="detail", side="right", label="SEND",

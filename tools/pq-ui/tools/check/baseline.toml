@@ -1,0 +1,225 @@
+# Known exceptions — the debt the conformance checker tolerates TODAY.
+#
+# The Sep-2026 consistency audit (handoff/REPORT.md) was report-only; `audit` is that
+# report's finding id: nothing in
+# pq1/, flows/ or screens/ was changed. Every violation it found is listed here,
+# one block each, so a clean tree passes and any NEW violation fails.
+#
+# A row matches on rule + where + key (never a line number, so ordinary edits
+# cannot orphan it). When you fix one, the checker reports the row as STALE —
+# delete it. That is the ratchet: this file only ever gets shorter.
+#
+#   python3 -m tools.check            what is still open (exit 1 on anything new)
+#   python3 -m tools.check --propose  blocks for a new violation you decide to accept
+#
+# Never add a row to silence a failure you have not discussed with the owner.
+
+# --------------------------------------------------------------- verdict law --
+
+[[known]]
+rule = "V-ENTRANCE"
+where = "screens/verdict/padlock.py::Padlock.draw_icon"
+key = "arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))"
+audit = "D1-06"
+reason = """the padlock re-derives the entrance inline because it overrides T_IN to its whole
+mechanism window (1070 lock / 1600 unlock), so VerdictAnim's u is the mechanism's progress, not
+the entrance's. The fix is the same as V-TIN's: move the mechanism into T_WAIT and let the
+inherited entrance() run. Output is identical today — this is a structural exception, not a
+visual one."""
+
+[[known]]
+rule = "V-ENTRANCE"
+where = "pq1/status.py::ArriveStatus.draw"
+key = "motion.arrive(u)"
+audit = "D1-07"
+reason = """ArriveStatus is a StatusAnim, not a VerdictAnim, so it cannot inherit entrance();
+it re-implements the same two lines. Either lift entrance() to StatusAnim or have ArriveStatus
+subclass VerdictAnim. Zero pixel change."""
+
+[[known]]
+rule = "V-ENTRANCE"
+where = "screens/confirm/hold_to_confirm.py::HoldToConfirm._draw_cancel"
+key = "motion.arrive(u)"
+audit = "D1-07"
+reason = """the cancel branch of the hold demo copies the entrance law's two lines for the same
+reason as ArriveStatus. Fixed by the same lift. Zero pixel change."""
+
+[[known]]
+rule = "V-TIN"
+where = "anim:verdict/padlock"
+key = "T_IN=1070"
+audit = "D1-06"
+reason = """padlock lock spends its whole mechanism (turn-in 520 -> drop 260 -> click 290) inside
+T_IN instead of T_WAIT, so T_IN reads as a 1070 ms entrance. The icon's own fade + rise still
+finish within ARRIVE_MS — the law is obeyed on screen, only the bookkeeping differs."""
+
+[[known]]
+rule = "V-TIN"
+where = "anim:verdict/padlock|unlock"
+key = "T_IN=1600"
+audit = "D1-06"
+reason = "as above, for unlock (snap 145 -> kick 250 -> pause 250 -> swing 800)."
+
+[[known]]
+rule = "V-HOLD"
+where = "anim:pin/pin_entering"
+key = "hold=2840"
+audit = "D1-11"
+reason = """the PIN entry is an ENTRY, not an ending: its duration is the typed row plus whichever
+verdict tail follows, so the 2450 ms result hold does not apply to the screen as a whole (the tail
+inside it does rest 2450). The rule should arguably skip interactive screens."""
+
+[[known]]
+rule = "V-LAWCOPY"
+where = "pq1/status.py::ArriveStatus"
+key = "T_HOLD/T_IN/T_TEXT/T_WAIT"
+audit = "D1-07"
+reason = """ArriveStatus re-declares 400 / 300 / 450 / 300 instead of inheriting them. Same root
+cause as its V-ENTRANCE row: it is a StatusAnim that behaves like a verdict."""
+
+[[known]]
+rule = "V-LAWCOPY"
+where = "pq1/status.py::LedAnim"
+key = "HANDOFF_MS"
+audit = "D4-02"
+reason = """the 400 ms handoff crossfade is declared three times (VerdictAnim.T_HOLD,
+ArriveStatus.T_HOLD, LedAnim.HANDOFF_MS). They mean the same span and should be one token."""
+
+# ------------------------------------------------------------ motion / curves --
+
+[[known]]
+rule = "M-EASE"
+where = "pq1/loading.py::qubit_pose"
+key = "(1 - uj) ** 2"
+audit = "D3-06"
+reason = """the qubit join uses a hand-rolled smoothstep ((1-u)^2 * (1+2u)) that is not in the
+motion vocabulary. DESIGN.md § Motion says scripted motion uses named curves. Either name this
+curve in motion.py or replace it with the nearest named one after a look at the render."""
+
+[[known]]
+rule = "M-EASE"
+where = "pq1/procedural/burst.py::pose"
+key = "(1 - u) ** 3"
+audit = "D3-04"
+reason = "an inlined ease_out inside the explosion — call motion.ease_out. Zero pixel change."
+
+[[known]]
+rule = "M-EASE"
+where = "pq1/procedural/burst.py::draw"
+key = "(1 - ru) ** cfg.grow_p"
+audit = "D3-04"
+reason = """an inlined decel with the ring's own exponent (2.6 major / 2.4 minor). motion.decel's
+default p is 2.6 — the same curve, uncoupled. Call decel(ru, cfg.grow_p)."""
+
+[[known]]
+rule = "M-EASE"
+where = "pq1/procedural/burst.py::_sides"
+key = "(1 - i / n) ** SIDES_K"
+audit = "D3-04"
+reason = """the side-entrance arc's speed profile. This one is geometry (arc-length spacing along
+a spiral), not a time easing — the rule catches it by shape. Keep, or move the helper into
+motion.py so the exception disappears."""
+
+[[known]]
+rule = "M-DIVLIT"
+where = "pq1/loading.py::qubit_pose"
+key = "e / 350"
+audit = "D3-07"
+reason = """the result glyph's fade-in span, written as a bare literal in two places (here and
+ResolveStatus) — one 350 ms token owned by status.py would link them."""
+
+[[known]]
+rule = "M-DIVLIT"
+where = "pq1/loading.py::qubit_pose"
+key = "(e - 120) / 350"
+audit = "D3-07"
+reason = "the caption's 120 ms stagger behind the glyph, same duplication."
+
+[[known]]
+rule = "M-DIVLIT"
+where = "pq1/status.py::ResolveStatus.draw"
+key = "e / 350"
+audit = "D3-07"
+reason = "the second copy of the 350 ms result fade."
+
+[[known]]
+rule = "M-DIVLIT"
+where = "pq1/status.py::ResolveStatus.draw"
+key = "(e - 120) / 350"
+audit = "D3-07"
+reason = "the second copy of the 120 ms caption stagger."
+
+[[known]]
+rule = "M-DIVLIT"
+where = "pq1/motion.py::chevron_hint"
+key = "p / 350"
+audit = "D4-15"
+reason = """the chevron hint's envelope (350 up / 1200 bob / 350 down) is written inline inside
+the helper. It is self-contained and documented in DESIGN.md, but the three spans deserve names
+so the hint envelope can be shared with the other hints (PIN labels, confirm band)."""
+
+[[known]]
+rule = "M-DIVLIT"
+where = "pq1/motion.py::chevron_hint"
+key = "math.pi * (p - 350) / 1200"
+audit = "D4-15"
+reason = "the bob span of the same envelope."
+
+[[known]]
+rule = "M-DIVLIT"
+where = "pq1/motion.py::chevron_hint"
+key = "(p - 1550) / 350"
+audit = "D4-15"
+reason = "the return span of the same envelope."
+
+[[known]]
+rule = "M-UNUSED"
+where = "pq1/motion.py"
+key = "MOVE_MS"
+audit = "D4-12"
+reason = """MOVE_MS (900) is a legacy span estimate from before the springs; FADE_MS (180) is still
+read by hold_to_confirm, MOVE_MS by nothing. Keep it as documentation of the old pace or delete it
+— but it should not look like a live token."""
+
+# -------------------------------------------------------------------- flows ---
+
+[[known]]
+rule = "F-DEFEND"
+where = "flow:unlock_batch"
+key = "DEFAULT_END=None"
+audit = "D9-11"
+reason = """unlock_batch is a splice demo (three library screens), not a transaction flow: it
+declares ENDS = {locked} but no DEFAULT_END, so `python3 -m flows unlock_batch` renders the
+no-end form. Give it DEFAULT_END = "locked", or document it as a demo that has none."""
+
+# ------------------------------------------------------- schema validation ----
+
+[[known]]
+rule = "X-VALIDATE"
+where = "pq1/layout.py::normalize_screens"
+key = "kind='banner'"
+audit = "G17-05"
+reason = """an unknown kind is accepted and only fails later (or not at all). DESIGN.md
+§ Screen schema says unknown names raise. Anims, results and states DO raise — kinds, sizes,
+sides and chev values do not."""
+
+[[known]]
+rule = "X-VALIDATE"
+where = "pq1/layout.py::normalize_screens"
+key = "size=30"
+audit = "G17-05"
+reason = "an off-scale type size is accepted silently; the tiers are 36 / 32 / 28 / 22."
+
+[[known]]
+rule = "X-VALIDATE"
+where = "pq1/layout.py::normalize_screens"
+key = "side='top'"
+audit = "G17-05"
+reason = "an unknown side is accepted silently; only left / right exist."
+
+[[known]]
+rule = "X-VALIDATE"
+where = "pq1/layout.py::normalize_screens"
+key = "chev='down'"
+audit = "G17-05"
+reason = "an unknown chev is accepted silently; only lr / up / None exist."

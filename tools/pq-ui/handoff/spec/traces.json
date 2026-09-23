@@ -1,0 +1,1191 @@
+{
+ "frame_ms": 71.429,
+ "note": "edges: tap = press, 100 ms, release; hold = press held HOLD_COMMIT_MS + 3 frames; the log lists each gesture's result and every screen change with the armed set.",
+ "schema_version": 1,
+ "traces": {
+  "PIN: cancel the open row": {
+   "final": {
+    "armed": [],
+    "kind": "status",
+    "page": 0,
+    "screen": "TRY 1",
+    "state": "resolving"
+   },
+   "flow": "pin/unlock",
+   "log": [
+    {
+     "armed": [
+      "cancel",
+      "dec",
+      "enter",
+      "inc"
+     ],
+     "event": "tap right",
+     "kind": "status",
+     "result": "tick",
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "back",
+      "cancel",
+      "dec",
+      "enter",
+      "inc"
+     ],
+     "event": "chord (both)",
+     "kind": "status",
+     "result": null,
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 929
+    },
+    {
+     "armed": [],
+     "event": "hold left 2214ms",
+     "kind": "status",
+     "result": "fired",
+     "screen": "TRY 1",
+     "state": "resolving",
+     "t": 3500
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "chord"
+    ],
+    [
+     "hold",
+     "left"
+    ]
+   ]
+  },
+  "PIN: three digits, back, next": {
+   "final": {
+    "armed": [
+     "back",
+     "cancel",
+     "dec",
+     "enter",
+     "inc"
+    ],
+    "kind": "status",
+    "page": 0,
+    "screen": "TRY 1",
+    "state": "navigating"
+   },
+   "flow": "pin/unlock",
+   "log": [
+    {
+     "armed": [
+      "cancel",
+      "dec",
+      "enter",
+      "inc"
+     ],
+     "event": "tap right",
+     "kind": "status",
+     "result": "tick",
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "cancel",
+      "dec",
+      "enter",
+      "inc"
+     ],
+     "event": "tap right",
+     "kind": "status",
+     "result": "tick",
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 857
+    },
+    {
+     "armed": [
+      "back",
+      "cancel",
+      "dec",
+      "enter",
+      "inc"
+     ],
+     "event": "chord (both)",
+     "kind": "status",
+     "result": null,
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 1214
+    },
+    {
+     "armed": [
+      "back",
+      "cancel",
+      "dec",
+      "enter",
+      "inc"
+     ],
+     "event": "tap left",
+     "kind": "status",
+     "result": "tick",
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 1714
+    },
+    {
+     "armed": [
+      "cancel",
+      "dec",
+      "enter",
+      "inc",
+      "next"
+     ],
+     "event": "chord (both)",
+     "kind": "status",
+     "result": null,
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 2143
+    },
+    {
+     "armed": [
+      "back",
+      "cancel",
+      "dec",
+      "enter",
+      "inc"
+     ],
+     "event": "chord (both)",
+     "kind": "status",
+     "result": "enter",
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 2714
+    },
+    {
+     "armed": [
+      "cancel",
+      "dec",
+      "enter",
+      "inc",
+      "next"
+     ],
+     "event": "double left",
+     "kind": "status",
+     "result": "back",
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 3357
+    },
+    {
+     "armed": [
+      "back",
+      "cancel",
+      "dec",
+      "enter",
+      "inc"
+     ],
+     "event": "double right",
+     "kind": "status",
+     "result": "next",
+     "screen": "TRY 1",
+     "state": "navigating",
+     "t": 4071
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "chord"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "chord"
+    ],
+    [
+     "chord"
+    ],
+    [
+     "double",
+     "left"
+    ],
+    [
+     "double",
+     "right"
+    ]
+   ]
+  },
+  "decline from a detail": {
+   "final": {
+    "armed": [],
+    "kind": "status",
+    "page": 0,
+    "screen": "DECLINED",
+    "state": "resolving"
+   },
+   "flow": "send_token",
+   "log": [
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "enter",
+     "screen": "NETWORK",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "TO",
+     "state": "navigating",
+     "t": 1429
+    },
+    {
+     "armed": [],
+     "event": "moved",
+     "kind": "status",
+     "result": null,
+     "screen": "DECLINED",
+     "state": "resolving",
+     "t": 4143
+    },
+    {
+     "armed": [],
+     "event": "hold left 2214ms",
+     "kind": "status",
+     "result": "fired",
+     "screen": "DECLINED",
+     "state": "resolving",
+     "t": 4357
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "hold",
+     "left"
+    ]
+   ]
+  },
+  "early release snaps back": {
+   "final": {
+    "armed": [
+     "back",
+     "decline",
+     "forward"
+    ],
+    "kind": "detail",
+    "page": 0,
+    "screen": "NETWORK",
+    "state": "navigating"
+   },
+   "flow": "send_token",
+   "log": [
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "hold right 1200ms",
+     "kind": "hero",
+     "result": "snapback",
+     "screen": "SEND",
+     "state": "navigating",
+     "t": 1643
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "enter",
+     "screen": "NETWORK",
+     "state": "navigating",
+     "t": 2000
+    }
+   ],
+   "script": [
+    [
+     "hold",
+     "right",
+     "1200"
+    ],
+    [
+     "tap",
+     "right"
+    ]
+   ]
+  },
+  "intro leads to the ask": {
+   "final": {
+    "armed": [
+     "back",
+     "decline",
+     "forward",
+     "sign"
+    ],
+    "kind": "hero",
+    "page": 0,
+    "screen": "SIGN",
+    "state": "navigating"
+   },
+   "flow": "erc7730/swap",
+   "log": [
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "tap right",
+     "kind": "hero",
+     "result": "enter",
+     "screen": "SIGN",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "enter",
+     "screen": "NETWORK",
+     "state": "navigating",
+     "t": 1429
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "tap left",
+     "kind": "hero",
+     "result": "back",
+     "screen": "SIGN",
+     "state": "navigating",
+     "t": 2286
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "left"
+    ]
+   ]
+  },
+  "paged detail: page first, then screen": {
+   "final": {
+    "armed": [
+     "back",
+     "decline",
+     "forward"
+    ],
+    "kind": "detail",
+    "page": 0,
+    "screen": "HASH",
+    "state": "navigating"
+   },
+   "flow": "eip1271/personal_counterfactual_hash",
+   "log": [
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "enter",
+     "screen": "NETWORK",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "ACCOUNT",
+     "state": "navigating",
+     "t": 1429
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "SLOT",
+     "state": "navigating",
+     "t": 2286
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "SIGNER",
+     "state": "navigating",
+     "t": 3143
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "tap right",
+     "kind": "confirm",
+     "result": "forward",
+     "screen": "CONFIRM?",
+     "state": "navigating",
+     "t": 4000
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "HASH",
+     "state": "navigating",
+     "t": 4857
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "page",
+     "screen": "HASH",
+     "state": "navigating",
+     "t": 5714
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "DETAILS",
+     "state": "navigating",
+     "t": 6000
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "KEYS",
+     "state": "navigating",
+     "t": 6857
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "back",
+     "screen": "DETAILS",
+     "state": "navigating",
+     "t": 7714
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "back",
+     "screen": "HASH",
+     "state": "navigating",
+     "t": 8571
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "page",
+     "screen": "HASH",
+     "state": "navigating",
+     "t": 9429
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "tap",
+     "left"
+    ]
+   ]
+  },
+  "right hold where commit is not armed": {
+   "final": {
+    "armed": [
+     "back",
+     "decline",
+     "forward"
+    ],
+    "kind": "detail",
+    "page": 0,
+    "screen": "NETWORK",
+    "state": "navigating"
+   },
+   "flow": "send_token",
+   "log": [
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "enter",
+     "screen": "NETWORK",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "hold right 2214ms",
+     "kind": "detail",
+     "result": null,
+     "screen": "NETWORK",
+     "state": "navigating",
+     "t": 3500
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "hold",
+     "right"
+    ]
+   ]
+  },
+  "sign, the host answers no": {
+   "final": {
+    "armed": [],
+    "caption": "TRANSACTION FAILED",
+    "kind": "status",
+    "outcome": "x",
+    "page": 0,
+    "pending": false,
+    "screen": "CONFIRMED",
+    "state": "finished"
+   },
+   "flow": "send",
+   "log": [
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "enter",
+     "screen": "TO",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "CHAIN",
+     "state": "navigating",
+     "t": 1429
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "MAX FEE",
+     "state": "navigating",
+     "t": 2286
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "back",
+     "screen": "CHAIN",
+     "state": "navigating",
+     "t": 3143
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "back",
+     "screen": "TO",
+     "state": "navigating",
+     "t": 4000
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "tap left",
+     "kind": "hero",
+     "result": "back",
+     "screen": "SEND",
+     "state": "navigating",
+     "t": 4857
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "hold right 2214ms",
+     "kind": "hero",
+     "result": "fired",
+     "screen": "SEND",
+     "state": "resolving",
+     "t": 7786
+    },
+    {
+     "armed": [],
+     "event": "moved",
+     "kind": "status",
+     "result": null,
+     "screen": "CONFIRMED",
+     "state": "resolving",
+     "t": 8000
+    },
+    {
+     "armed": [],
+     "event": "host answers no",
+     "kind": "status",
+     "result": "fail",
+     "screen": "CONFIRMED",
+     "state": "resolving",
+     "t": 14143
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "hold",
+     "right"
+    ],
+    [
+     "run",
+     "6000"
+    ],
+    [
+     "answer",
+     "False"
+    ],
+    [
+     "run",
+     "6000"
+    ]
+   ]
+  },
+  "sign, the host answers yes": {
+   "final": {
+    "armed": [],
+    "caption": "TRANSACTION CONFIRMED",
+    "kind": "status",
+    "outcome": "check",
+    "page": 0,
+    "pending": false,
+    "screen": "CONFIRMED",
+    "state": "finished"
+   },
+   "flow": "send",
+   "log": [
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "enter",
+     "screen": "TO",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "CHAIN",
+     "state": "navigating",
+     "t": 1429
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "MAX FEE",
+     "state": "navigating",
+     "t": 2286
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "back",
+     "screen": "CHAIN",
+     "state": "navigating",
+     "t": 3143
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "back",
+     "screen": "TO",
+     "state": "navigating",
+     "t": 4000
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "tap left",
+     "kind": "hero",
+     "result": "back",
+     "screen": "SEND",
+     "state": "navigating",
+     "t": 4857
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "hold right 2214ms",
+     "kind": "hero",
+     "result": "fired",
+     "screen": "SEND",
+     "state": "resolving",
+     "t": 7786
+    },
+    {
+     "armed": [],
+     "event": "moved",
+     "kind": "status",
+     "result": null,
+     "screen": "CONFIRMED",
+     "state": "resolving",
+     "t": 8000
+    },
+    {
+     "armed": [],
+     "event": "host answers yes",
+     "kind": "status",
+     "result": "ok",
+     "screen": "CONFIRMED",
+     "state": "resolving",
+     "t": 14143
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "hold",
+     "right"
+    ],
+    [
+     "run",
+     "6000"
+    ],
+    [
+     "answer",
+     "True"
+    ],
+    [
+     "run",
+     "6000"
+    ]
+   ]
+  },
+  "walk in, sign": {
+   "final": {
+    "armed": [],
+    "caption": "TRANSACTION SUCCESSFUL",
+    "kind": "status",
+    "outcome": null,
+    "page": 0,
+    "pending": true,
+    "screen": "SUCCESSFUL",
+    "state": "resolving"
+   },
+   "flow": "send_token",
+   "log": [
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "enter",
+     "screen": "NETWORK",
+     "state": "navigating",
+     "t": 571
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "TO",
+     "state": "navigating",
+     "t": 1429
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap right",
+     "kind": "detail",
+     "result": "forward",
+     "screen": "VALUE",
+     "state": "navigating",
+     "t": 2286
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "back",
+     "screen": "TO",
+     "state": "navigating",
+     "t": 3143
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward"
+     ],
+     "event": "tap left",
+     "kind": "detail",
+     "result": "back",
+     "screen": "NETWORK",
+     "state": "navigating",
+     "t": 4000
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "tap left",
+     "kind": "hero",
+     "result": "back",
+     "screen": "SEND",
+     "state": "navigating",
+     "t": 4857
+    },
+    {
+     "armed": [
+      "back",
+      "decline",
+      "forward",
+      "sign"
+     ],
+     "event": "hold right 2214ms",
+     "kind": "hero",
+     "result": "fired",
+     "screen": "SEND",
+     "state": "resolving",
+     "t": 7786
+    },
+    {
+     "armed": [],
+     "event": "moved",
+     "kind": "status",
+     "result": null,
+     "screen": "SUCCESSFUL",
+     "state": "resolving",
+     "t": 8000
+    }
+   ],
+   "script": [
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "right"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "tap",
+     "left"
+    ],
+    [
+     "hold",
+     "right"
+    ]
+   ]
+  }
+ }
+}

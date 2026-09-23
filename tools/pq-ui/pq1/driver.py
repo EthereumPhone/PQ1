@@ -44,7 +44,12 @@ class FlowDriver:
     declines from any navigable screen, hold-right signs where "commit" is
     armed. sign/decline are indices of the two terminal status screens
     (flows.playable builds a list carrying both); decline may be None for
-    a flow that declares no failing ending."""
+    a flow that declares no failing ending. A LOADING FILM ending (the
+    qubit film, an explosion lead — status.loops) is built LIVE: it waits
+    on its orbit until the host answers — answer(now, ok), the bench's
+    y / n — then finishes the turn and collides into the check, or into
+    the flow's film-failure ending's look (fail: send's TRANSACTION
+    FAILED, appended by flows.playable)."""
 
     def __init__(self, screens, sign=None, decline=None, profile=motion.NAV):
         scr = copy.deepcopy(list(screens))
@@ -53,12 +58,23 @@ class FlowDriver:
         # the animation to start empty instead of dialing its demo digits
         self._entry = [s.get("kind") == "status" and status.is_interactive(s)
                        for s in scr]
+        # a LOADING FILM waits on the bench (status.loops): built live, its
+        # orbit repeats until answer(). Only the done-state ending waits —
+        # a failed film played as the sign target (--end failed) is the
+        # closed script, a demo of the look
+        self._loops = [s.get("kind") == "status" and not self._entry[i]
+                       and status.loops(s) for i, s in enumerate(scr)]
         for i, s in enumerate(scr):     # the driver advances, never the dwell
             s["dwell"] = float("inf")
             if self._entry[i]:
                 s["live"] = True
+            elif self._loops[i] and s.get("state", "done") == "done":
+                s["live"] = True
         statuses = [i for i, s in enumerate(scr)
                     if s.get("kind") == "status" and not self._entry[i]]
+        # the film-failure ending: the look a "failed" answer swaps in
+        self.fail = next((i for i in statuses if status.film_failure(scr[i])),
+                         None)
         nav = [i for i, s in enumerate(scr)
                if s.get("kind") != "status" or self._entry[i]]
         if not nav or (statuses and statuses[0] < nav[0]):
@@ -69,7 +85,7 @@ class FlowDriver:
         self.sign = (statuses[0] if statuses else None) if sign is None else sign
         if decline is None:
             fails = [i for i in statuses
-                     if scr[i].get("state", "done") != "done"]
+                     if scr[i].get("state", "done") != "done" and i != self.fail]
             decline = fails[0] if fails else None
         self.decline = decline
         # the segments: (start, closing status) per transaction — one for
@@ -88,6 +104,10 @@ class FlowDriver:
     def state(self):
         """"navigating" on the pass, "resolving" while an ending plays,
         "finished" once it rests"""
+        if self.sim.seed is not None:
+            # the beat into a seeded film (fade, then hold): the commit is
+            # made, the film just not current yet — no press may land
+            return "resolving"
         i = self.sim.cur
         if self.screens[i].get("kind") != "status":
             return "navigating"
@@ -194,6 +214,10 @@ class FlowDriver:
             an = self._anim()
             typed = an.digits(self._t()).ljust(8, "_")
             kind = f"entry {typed}" + (f" · {an.outcome}" if an.outcome else "")
+        elif self._loops[i] and self.sim.settled:
+            an = self._anim()
+            kind = ("status · waiting (y ok / n fail)" if an.pending
+                    else f"status · answered → {an.outcome}")
         line = (f"[{i + 1}/{len(self.screens)}] {s.get('id')}{paged} "
                 f"({kind}) · {self.state} · input: {armed}")
         h = self.sim.hold
@@ -266,6 +290,34 @@ class FlowDriver:
             an.input("submit", t)
             return "submit"
         return "enter"
+
+    def answer(self, now, ok=True):
+        """the host's word on the work behind the current ending (the
+        bench's y / n; on the device the signing core): the loading film
+        finishes its turn and spirals into the check, or into the flow's
+        film-failure ending's look (self.fail). None when nothing is
+        waiting; "no-fail" when the flow authors no failure film"""
+        i = self.sim.cur
+        if (self.screens[i].get("kind") != "status" or self._entry[i]
+                or not self.sim.settled or self.state != "resolving"):
+            return None
+        an = self._anim()
+        if not an.pending:
+            return None
+        if ok:
+            an.resolve(self._t(now))
+            return "ok"
+        if self.fail is None:
+            return "no-fail"
+        an.resolve(self._t(now), self.screens[self.fail])
+        return "fail"
+
+    def auto_answer(self, now, after_ms):
+        """a stand-in host (play_flow --ready): the work succeeds once the
+        film has waited after_ms"""
+        if self.sim.settled and self._t(now) >= after_ms:
+            return self.answer(now, True)
+        return None
 
     def restart(self, now):
         """back to the opening screen, springs snapped (post-ending); the
@@ -438,10 +490,11 @@ class FlowDriver:
         self.sim.hold_commit(side, idx, now)   # the full fill fades over the leg
 
     def _fresh(self, idx):
-        """an entry is empty on every visit: its built animation (the
-        events typed last time) is dropped on ARRIVAL — never on leaving,
-        so the transit still fades the frame it rests on"""
-        if self._entry[idx]:
+        """an entry is empty on every visit, a loading film pending again:
+        its built animation (the events typed last time, the answer given)
+        is dropped on ARRIVAL — never on leaving, so the transit still
+        fades the frame it rests on"""
+        if self._entry[idx] or self._loops[idx]:
             self.sim._anims.pop(idx, None)
 
     def _go(self, nxt, now):

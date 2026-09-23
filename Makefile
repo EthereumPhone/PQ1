@@ -4600,6 +4600,17 @@ ui-golden:
 # from the vendored PQ-UI design system (tools/pq-ui/, pinned in UPSTREAM.txt).
 # The outputs are committed; `ui-px-assets-check` re-bakes into a temp dir and
 # diffs the manifest so a stale or hand-edited atlas fails CI.
+# The vendored PQ-UI subset itself (tools/pq-ui/, pin in UPSTREAM.txt): re-sync
+# from a local upstream checkout at the pinned commit, or verify that the
+# committed bytes + file set still match MANIFEST.sha256.
+PQ_UI_SRC ?= ../PQ-UI
+.PHONY: pq-ui-sync pq-ui-check
+pq-ui-sync: ## Re-vendor tools/pq-ui/ from $(PQ_UI_SRC) (must be at the UPSTREAM.txt pin)
+	@tools/pq-ui/sync.sh $(PQ_UI_SRC)
+
+pq-ui-check: ## Verify tools/pq-ui/ against MANIFEST.sha256 (bytes + file set)
+	@tools/pq-ui/sync.sh --check
+
 .PHONY: ui-px-assets ui-px-assets-check
 ui-px-assets: ## Re-bake secure/assets/ui-px/* + pqsigner-ui-px/src/metrics_gen.rs
 	@python3 tools/ui_px_assets.py

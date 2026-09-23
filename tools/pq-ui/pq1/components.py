@@ -14,6 +14,7 @@ from PIL import Image, ImageChops, ImageDraw
 from . import colors, typography
 from .procedural.marks import check, exclamation, minus, plus, x_mark  # noqa: F401
 from .procedural import blind as blind_mark
+from .procedural import chains as chain_marks
 from .procedural import dev as dev_mark
 from .procedural import download as download_mark
 from .procedural import eth as eth_logo
@@ -142,23 +143,6 @@ def circle_image(cv, path, cx, cy, r, alpha=1.0, rot=0.0):
 
 
 # ----------------------------------------------------------- vector glyphs --
-def base_mark(cv, cx, cy, r, alpha=1.0, color=None, rot=0.0):
-    if alpha <= 0.01:
-        return
-    # true alpha compositing: the mark sits on the gradient disc, so a
-    # colour-scaled fill would read as a dark square while fading
-    col = tuple(color) if color else (255, 255, 255)
-    s = 0.66 * r
-    x0, y0 = (cx - s / 2) * SUP, (cy - s / 2) * SUP
-    side = int(math.ceil(s * SUP)) + 2
-    tile = Image.new("RGBA", (side, side), (*col, 0))
-    fx, fy = x0 - int(x0), y0 - int(y0)
-    ImageDraw.Draw(tile).rounded_rectangle(
-        [fx, fy, fx + s * SUP, fy + s * SUP], radius=0.14 * r * SUP,
-        fill=(*col, int(round(255 * alpha))))
-    cv.paste(tile, int(x0), int(y0), tile)
-
-
 def eth_mark(cv, cx, cy, r, alpha=1.0, color=None, rot=0.0):
     """vector Ethereum diamond (fallback when no image logo is available)"""
     if alpha <= 0.01:
@@ -174,20 +158,34 @@ def eth_mark(cv, cx, cy, r, alpha=1.0, color=None, rot=0.0):
     cv.d.polygon([pt(-.34, .10), pt(0, .58), pt(.34, .10), pt(0, .30)], fill=col)
 
 
+MONOGRAM_SCALE = 1.34   # cap height ~= a chain mark's, so a letter disc and a
+#                         mark disc carry the same weight in a walk
+
+
 def monogram(letter):
-    """glyph function drawing the first letter of a symbol"""
+    """glyph function drawing the first letter of a symbol.
+
+    BOLD: unlike every other caption on the device this letter stands alone as
+    a disc's entire content — an unknown chain's initial (pq1.chains) — so it
+    carries the weight a mark would, not the weight of running text."""
     ch = (letter or "?")[0].upper()
 
     def draw(cv, cx, cy, r, alpha=1.0, color=None, rot=0.0):
-        cv.text(ch, cx, cy, 1.05 * r, alpha, color=color or colors.WHITE)
+        cv.text(ch, cx, cy, MONOGRAM_SCALE * r, alpha,
+                color=color or colors.WHITE, weight="bold")
     return draw
 
 
 # ---------------------------------------------------------- glyph registry --
 GLYPHS = {
     "eth": image_glyph(ETH_LOGO, recolor_white=True),
-    "base": base_mark,
     "mainnet": eth_logo.glyph(),  # rounded-edge eth, black on chain discs
+    # the chain marks — every network the device can name, traced from its
+    # logo (pq1/procedural/chains.py). Registered EAGERLY here, never from a
+    # flow package: the legal icon set the handoff spec publishes must not
+    # depend on which flows happened to be imported (audit G17-07). Ethereum
+    # mainnet is not in the set — chain id 1 wears "mainnet" above.
+    **{n: chain_marks.glyph(n) for n in chain_marks.NAMES},
     "blind": blind_mark.glyph(),  # blind-signing mark (assets/blind_icon.svg traced)
     "dev": dev_mark.glyph(),  # ERC-7730 intro mark (assets/dev_icon.svg traced)
     "rotate": rotate_mark.glyph(),  # slot-rotation mark (assets/rotate_icon.svg traced)
@@ -202,6 +200,31 @@ GLYPHS = {
 VECTOR_SYMBOLS = {"ETH": eth_mark}
 
 
+LETTER_PREFIX = "letter:"   # pq1.chains — an unknown chain wears its initial
+
+
+@functools.lru_cache(maxsize=64)
+def _letter_glyph(ch):
+    """the monogram glyph for one character, built once.
+
+    Deliberately NOT a GLYPHS entry: the registry is dumped as the legal icon
+    set the handoff spec publishes (introspect.screens_schema), so registering
+    letters lazily at draw time would make that set depend on what had been
+    rendered first — the same import-order trap warm_registries() exists to
+    close (audit G17-07). The namespace is published instead; the dict stays
+    a constant."""
+    return monogram(ch)
+
+
+def letter_glyph(name):
+    """the glyph for a "letter:X" name, or None if this is not one"""
+    if isinstance(name, str) and name.startswith(LETTER_PREFIX):
+        ch = name[len(LETTER_PREFIX):]
+        if len(ch) == 1:
+            return _letter_glyph(ch.upper())
+    return None
+
+
 def register_glyph(name, fn):
     GLYPHS[name] = fn
 
@@ -210,6 +233,9 @@ def resolve_glyph(icon=None, logo=None, symbol=None):
     """glyph lookup: named icon -> image logo -> vector for symbol -> monogram"""
     if icon and icon in GLYPHS:
         return GLYPHS[icon]
+    fn = letter_glyph(icon)
+    if fn is not None:
+        return fn
     if logo:
         path = logo if os.path.isabs(logo) else os.path.join(ASSET_DIR, logo)
         if os.path.exists(path):
@@ -226,8 +252,15 @@ def resolve_glyph(icon=None, logo=None, symbol=None):
 
 
 def glyph(cv, name, cx, cy, r, alpha=1.0, color=None, rot=0.0):
-    """draw a registered glyph (unknown names fall back to the eth mark)"""
-    GLYPHS.get(name, GLYPHS["eth"])(cv, cx, cy, r, alpha=alpha, color=color, rot=rot)
+    """draw a registered glyph.
+
+    A "letter:X" name draws that initial — an unknown CHAIN says which network
+    it is rather than borrowing another one's mark (pq1.chains). Any other
+    unregistered name still falls back to the ether mark, which stays the
+    deliberate answer for art the device genuinely lacks (DESIGN.md,
+    Components; tools/check F-ICON keeps it from ever answering a typo)."""
+    fn = letter_glyph(name) or GLYPHS.get(name, GLYPHS["eth"])
+    fn(cv, cx, cy, r, alpha=alpha, color=color, rot=rot)
 
 
 # ------------------------------------------------------ token logo assets --

@@ -234,6 +234,36 @@ The SAFE token pairs its ramp with full-bleed logo art and an explicit black
 flush at the disc edge, stroking inward (`components.token`), and it rides
 the glyph through the status handoff so it never pops.
 
+**Chain ramps (the network's own identity).** `colors.CHAIN_COLORS` pins one
+ramp per supported network, keyed `CHAIN:<NAME>`, and a chain screen's disc
+fills with it while the trail takes the ramp — derived from `chain=<id>`, never
+written by a flow. The `CHAIN:` prefix is a safety property, not a style: `OP`,
+`BNB`, `BASE` and `SCROLL` are also real token tickers, and `token_ramp`
+resolves ANY palette string that matches a brand key, so a bare `"OP"` would
+make the OP *token's* disc wear the Optimism *chain's* colours with no change
+at that call site. The mark colour is not a per-chain taste decision either: it
+is WHITE, or BLACK once `colors.luma` says the fill is light enough to swallow
+it. Not every brand is a filled disc, though, and the registry names the exceptions
+rather than pretending otherwise: `colors.CHAIN_DISC_FILL` pins the disc for a
+chain whose body is not simply the last stop of its ramp, and the ramp stays the
+network's bright accent for the trail. **Splitting the disc from the ramp is
+what keeps a dark brand legible in motion** — ramping from the dark colour
+instead fades the far followers into the black panel, and it darkens stop 6,
+which does not paint the disc at all but is the status film's body colour, the
+black-on-black qubit trap `ROTATE_GRADIENT` documents. Three shapes use it:
+black-brand networks (Mantle, Linea) take the `ROTATE` treatment, and a network
+that reads as a mark ON WHITE (Base, zkSync) fills WHITE — the `FINGERPRINT` /
+`FIRMWARE` shape per chain — under the ordinary white ring, which on a white body
+reads as no stroke at all, because the mark is the brand and the disc is the
+paper behind it. **Only pin a disc that cannot come from the ramp**: a merely
+dark brand darkens its ramp instead, because pinning a dark disc over a bright
+ramp puts the nearest follower ABOVE the token in luminance and inverts the
+trail law, which darkens away from the disc everywhere else. The mark then
+follows the same luma rule as everywhere else,
+read off the disc's ACTUAL fill; the single pinned exception is
+`CHAIN_MARK_COLORS`, because Base's identity is specifically the BLUE square
+(user rule, Sep 2026).
+
 **The mono entry (recognized token with a logo).** The last ramp,
 `colors.MONO_RAMP`, is the treatment for a recognized token that shows its
 own logo: black body, white ring, white glyph, grey trail (its palette fill
@@ -310,10 +340,28 @@ each flow's driver (`pq1.flow.Sim` or a flow's transitions module).
   while the circle travels and the incoming text arrives. A KIOSK leg
   settles in ~700 ms, NAV in ~500 ms; `MOVE_MS + 2*FADE_MS` (1260 ms)
   survives only as the span bound harnesses render into.
+- **Entering a loading film is the exception — it is SEQUENTIAL** (user
+  rule, Sep 2026). There is no spring leg into a film. The screen goes
+  out first: text, chevrons and follower trail fade over `FADE_MS`
+  (180 ms) with the circle PARKED where it stands and a committed hold
+  fill draining with them. The bare circle then HOLDS alone on black for
+  `SEED_HOLD_MS` (180 ms; user rule, Sep 2026 — fade, hold, morph). Then
+  the film takes the canvas and does the travelling itself — the circle it was handed travels to the film's
+  centre, shrinks from the token's VISIBLE radius to `r_q` and tints
+  into the film's colour over `SEED_MS` (300 ms), all on `ease_out`,
+  its ring and its art fading out over the first half of that window
+  (`motion.SEED_ART`, linear time so the fade survives two panel
+  frames). A BARE qubit lands on the frame the split begins: the seed
+  IS a qubit, and it divides into its identical twin. The seed replaces
+  the film's old 250 ms hold — a film is never handed a cold canvas; the
+  hold before it is the flow's, so the film's own timing is unchanged.
+  `flow.Sim` marks the beat and calls `StatusAnim.enter_from`; the film
+  owns the morph (`loading.qubit_pose`), so a standalone render seeds
+  in place at `gc` and the page flip's sequential law now has company.
 - **Dwell**: hero 5000 ms (one full sweep), detail 4100 ms — per page on a
   paged detail; a status screen
   dwells for its animation's duration — loading + resolve + a 2450 ms result
-  hold (qubit 8600 ms; the film-less cancel resolve 2850 ms). Dwell counts
+  hold (qubit 8650 ms; the film-less cancel resolve 2850 ms). Dwell counts
   from spring settle.
 - **Hold fill (demo loops)**: the demo performs the hold gesture through
   the last 2000 ms (`HOLD_COMMIT_MS`) of a commit screen's dwell before an
@@ -394,10 +442,37 @@ each flow's driver (`pq1.flow.Sim` or a flow's transitions module).
   total, so a 6-detail transaction gets no Confirm? however many
   transactions follow it (`layout._segments`).
 - **The chain screen follows TO / AMOUNT.** A chain context screen
-  (canonical id `CHAIN` — `on BASE`, Big tier, the x 291 / x 175 nudges)
+  (canonical id `CHAIN` — `on Base`, Big tier, self-composing)
   sits **directly after** the `TO` or `AMOUNT` detail it contextualizes —
   the chain qualifies the address or value just shown, never floats
   elsewhere. Enforced with the flow-shape checks.
+- **One id, one identity.** A chain screen states its network as a numeric
+  EIP-155 chain id and nothing else — `chain=8453`. The mark, the disc
+  fill, the trail ramp and the caption are all derived from that one number
+  (`pq1/chains.py`, expanded in `layout.normalize_screens`), and the
+  caption and the disc compose as ONE centred group with `CHAIN_GAP` of air
+  between them, so the spacing never changes with the length of the network's
+  name and the disc is not pinned to a column. Writing the
+  icon or the caption by hand is a rule violation (`tools/check` rule
+  `F-CHAIN`), because two hand-typed fields can name two different
+  networks, and on a signer the disc is part of what the user is checking
+  (user rule, Sep 2026).
+- **A chain screen wears the chain, not the flow.** The disc takes the
+  network's own brand colour with the mark knocked out of it, over that
+  chain's trail — pinned by name in `colors.CHAIN_COLORS` under a
+  `CHAIN:` prefix, outside the hash space. The prefix is load-bearing:
+  `OP`, `BNB`, `BASE` and `SCROLL` are also token tickers, and an
+  un-namespaced ramp would silently repaint those *tokens*. A branded
+  family's palette yields for that one screen and resumes on the next.
+- **An unknown chain says which one it is.** A chain id the registry does
+  not hold draws the **first letter of the chain's name** on its disc
+  (`letter:<X>`, a glyph namespace, not a registry entry) on a solid ramp
+  hashed from the chain id — deterministic, so the same network looks the
+  same on every device. The circle does **not** leave the screen. This
+  narrows the ether fallback rather than replacing it: the ether mark
+  stays the honest answer for a token or a mark the device cannot resolve,
+  but naming Celo with Ethereum's mark would be a different network's
+  identity, so a chain answers with a letter (user rule, Sep 2026).
 - **Dwell**: 10 s in demo loops (`motion.CONFIRM_DWELL` — one full band
   cycle, so both messages play); on hardware it idles until input.
 
@@ -409,9 +484,9 @@ icon instead of the resting token: the icon arrives on the circle grid
 the caption fades onto the y 128 baseline, then the screen rests.
 Chevrons are hidden (no input), like every status screen.
 
-When to use which: a **status** screen shows work the device did
-resolving (the token loads, then lands on the result) — signing,
-broadcasting. A **verdict** states a fact — LOCKED, BACKUP OK, WALLET
+When to use which: a **status** screen shows work the device is doing
+resolving (the token loads — on the device for as long as the work
+takes — then lands on the result) — signing, broadcasting. A **verdict** states a fact — LOCKED, BACKUP OK, WALLET
 WIPED, RNG FAILED, LAST ATTEMPT. No loading: the icon *is* the message.
 
 Anatomy and timing (`pq1/verdict.py`):
@@ -613,7 +688,9 @@ yet; the grammar below is fixed ahead of it.
   action is armed; `None` = no input. The hero hint cycle (rotate up → bob)
   is the periodic reminder that holds are armed on that screen.
 - **Dwell auto-advance is demo-loop behavior only** — on hardware nothing
-  moves without a press.
+  moves without a press. The film's clock is the other demo-only time: on
+  hardware a loading film starts at dispatch and loops until the work
+  answers (Components, Status animations — the film's length).
 - **Commit arming.** Every hero — the opening ask as much as the
   returning "back on the idle ask" of § Flow shape — and the
   auto-inserted mid-flow `Confirm?` carry `commit=True`
@@ -643,6 +720,7 @@ keyboard input while streaming live-rendered frames to the panel
 | `A`, or `a` `a` within 250 ms | left double-tap | PIN entry: BACK — the cursor to the previous digit |
 | hold `s` / `enter` ~2 s | right hold | sign / commit (armed screens only); unbound on a PIN entry |
 | hold `x` / `backspace` ~2 s | left hold | decline from anywhere → DECLINED; PIN entry: cancel |
+| `y` / `n` | — (the host, not a button) | answer a loading film: the work succeeded / failed — the film finishes its turn and spirals into the check / the X (`FlowDriver.answer`; `n` needs a flow with a failure film — `send`'s TRANSACTION FAILED). `--ready MS` answers "succeeded" by itself |
 | `r` | — | restart after an ending (an entry starts empty again) |
 | `q` / Ctrl-C | — | quit |
 
@@ -668,9 +746,32 @@ glass before that firmware lands.
   white ring, the normal treatment for a known token. `variant="unknown"`:
   the gradient disc. Ring width 2.4, inset 1.2; inner glyphs crossfade
   during transitions.
-- **Glyph resolution**: named icon in the registry → image logo
-  (circle-masked) → vector for the symbol (ETH diamond) → monogram of the
-  symbol's first letter. Never an empty circle.
+- **Glyph resolution**: a screen's `icon` is looked up in the registry
+  (`components.GLYPHS`); a registered logo draws its circle-masked image.
+  An icon the registry does not hold — and a screen that names none —
+  draws the **ether mark**, and that is a design decision, not a gap
+  (user rule, Sep 2026): this is an Ethereum wallet, so the ether mark is
+  the honest answer for art the device cannot resolve, and `"eth"` is the
+  schema default (`layout.normalize_screens`). `screens/idle/batch_sign`
+  is the worked example. Never an empty circle, and never a `?` in place
+  of an icon — the monogram is only the answer for a *missing logo file*,
+  which is a build error, not a screen.
+  What the fallback does **not** license: a name the registry DOES hold
+  must never degrade to a different mark. Family marks (`safe`,
+  `cowswap`) register when their flow package is imported, so resolve
+  them eagerly — a brand mark silently becoming another brand's is a bug
+  (it also drops the screen's `icon_color`). `tools/check` rule `F-ICON`
+  fails the build on any icon name the registry cannot resolve, so the
+  fallback only ever answers art that is genuinely absent.
+  The one narrowing: a **chain** does not take the ether mark. An
+  unrecognised chain id resolves to `letter:<X>` and the disc shows the
+  network's initial (`components.letter_glyph`, the `monogram`) — the
+  ether mark would name Ethereum, which is a different network, and that
+  is the one case where the fallback would state something false rather
+  than merely generic. The disc is still never empty, and `letter:` is a
+  namespace resolved at draw time, never a `GLYPHS` entry: the registry is
+  dumped as the legal icon set the handoff spec publishes, so writing to
+  it lazily would make that set depend on render order (audit G17-07).
 - **Chevrons**: corner slots only; `"lr"` points out (tap navigation
   available), `"up"` points up (a hold action is armed), `None` hidden (no
   input — status screens). The one exception: a `band_chev` hero — the
@@ -698,16 +799,21 @@ glass before that firmware lands.
   disc, state-coloured ring, result glyph, caption on the y 128 baseline —
   unless the screen brands it with a `resting` override (see Color).
   The default splits on outcome (`status.default_anim`): a done ending
-  plays `"qubit"` — **the film, the depiction of work**: the token
-  splits into two qubits that orbit (metaball merge), spiral in, flash
+  plays `"qubit"` — **the film, the depiction of work**: the flow's
+  circle is handed over and SEEDS — it travels in, shrinks and tints
+  into one qubit (see Motion, entering a loading film) — then splits
+  into two qubits that orbit (metaball merge), spiral in, flash
   and resolve green under the check. A cancel ending (any non-done
   state) plays `"resolve"` — **no film**: the arrived token resolves in
   place over one flash beat — the token glyph hands off, disc and ring
   crossfade into the resting look, the flash ring fires in the state
   colour, and the X and caption land on the film's own resolve timing
-  (400 ms + the shared result hold). There is no other cancel or failure
-  choreography — the old orbit spinner is gone from the project and must
-  not come back. The film follows the screen's token palette; an
+  (400 ms + the shared result hold). A FAILURE the host reports after
+  dispatch is not a cancel: the ending names the film (`anim="qubit"`,
+  `result="x"`, `state="failed"` — `flows/send.py` FAILED) and the same
+  loading collides into the red X. There is no other cancel choreography
+  — the old orbit spinner is gone from the project and must not come
+  back. The film follows the screen's token palette; an
   optional `busy` caption ("SIGNING…") shows during the film's loading
   and BREATHES: it fades in and out on a slow pulse (`motion.busy_pulse`,
   `BUSY_PULSE_MS` 2 s a cycle, whole cycles fitted to the window so it
@@ -729,6 +835,36 @@ glass before that firmware lands.
   own disc resolved, the FIRMWARE VERIFIED look); the minor
   explosion, then the red disc + black X. The `screens` package registers
   further animations (verdicts, explosion).
+- **The film's length is the demo's.** A film is a scripted depiction of
+  work whose real length the device does not know. On hardware it starts
+  when the work is dispatched (the hold fires); the steady orbit —
+  `QubitCfg.loop` = (`t_orbit` 2250, `t5` 4800), the loop region, the only
+  part of the film that is pixel-periodic — repeats in whole turns of
+  `QubitCfg.loop_ms` (the orbit's `rev_ms`: `TURN_MS` (850), the unit of
+  loading length) until the work answers; the film then finishes the
+  current turn and spirals in, and the outcome is LATCHED there — at the
+  spiral, no later than `t6` of the last turn, the first frame that
+  differs between check and X — instead of at construction
+  (`StatusAnim.resolve(t)`; `t_resolve` is a property, `t7` + wraps ×
+  `loop_ms`, infinite while a live film is unanswered; `loading.film_time`
+  maps the real clock to the pose clock and is the identity with no
+  wraps, so every stock render is untouched). The spiral + flash tail
+  (`T_SPIRAL` 1000 + `T_FLASH` 400) and the result hold
+  (`RESULT_HOLD_MS` 2450) are fixed; a finished ending freezes forever.
+  The pose wraps, the busy caption does not: it breathes on the unwrapped
+  clock — whole cycles fitted to the film's stock window, continuing at
+  that period while the loop runs — and fades out over `BUSY_FADE_MS`
+  (300) as the spiral starts, so a wrap never jumps the caption. A film is
+  made longer only in whole turns — at build time with `revs` (`REVS` (3)
+  stock, `REVS_LONG` (5) where a loading must endure: the firmware reboot,
+  the wipe — the film's MINIMUM), at run time with a wrap — never with a
+  slower spin, a longer split or a longer spiral. A port that cannot loop
+  holds the last orbit frame; it never starts the film after the work is
+  done. The waiting state is not a `state` value (`awaiting` stays the
+  input colour). On the bench every qubit / explosion ending is live
+  (`FlowDriver` sets `live`; `y` / `n` answer it — Input, The bench
+  player); `ready` in a spec (`--ready MS` on both CLIs) renders a film
+  answered at that ms. The checker's `L-LOOP` proves the wrap pixel-exact.
 
 ## Screen schema
 
@@ -737,6 +873,11 @@ A screen is a plain dict (see `layout.py` for the full contract):
 - Common: `id`, `kind` (`"hero"` | `"detail"` | `"value"` | `"confirm"` | `"status"`), `icon`
   (+ optional `icon_color` — vector-mark colour override; image logos keep
   their own art — the SAFE family pins it black),
+  `chain` (a numeric EIP-155 chain id on a chain screen — the mark, the
+  disc colour, the trail ramp and the caption are derived from it, so a
+  chain screen sets no `icon`, `lines` or `size`; detail screens only,
+  never a flow's DEFAULTS) with `chain_name` beside it when the id is one
+  the registry does not hold (the disc then shows the name's initial),
   `chev` (`"lr"` | `"up"` | `None`), optional `dwell`, `next` (where the
   demo loop advances after dwell — an index or a screen id, first match
   scanning forward; the branch primitive behind the confirm screen's
@@ -791,8 +932,13 @@ A screen is a plain dict (see `layout.py` for the full contract):
   severity="major", busy="RECONNECTING…")`; Motion, Status animations),
   `result` (`"check"` | `"x"` | `None`, default `"check"`),
   `state` (a `colors.STATE` key, default `"done"`; explicit `color` wins),
-  `busy` (optional loading caption). Dwell defaults to the animation's
-  duration. Unknown names raise — no silent fallback. Extra fields ride
+  `busy` (optional loading caption), `revs` (whole orbit turns of a qubit
+  / explosion film before the spiral — `REVS` (3) stock, `REVS_LONG` (5);
+  the film's minimum), `ready` (demo only: the ms at which the work
+  answers — the film renders its loop), `live` (set by the bench driver,
+  never by a flow: the film loops until `FlowDriver.answer`). Dwell
+  defaults to the animation's duration (a live film waits). Unknown names
+  raise — no silent fallback. Extra fields ride
   through to the registered animation — the PIN entry's `pin` (the PIN
   the device accepts), `typed` (what the demo dials), `exit` (`"rest"` /
   `"submit"`), `miss` / `match` (the verdict screen dicts it plays after
@@ -802,7 +948,7 @@ A screen is a plain dict (see `layout.py` for the full contract):
 
 Largest fitting tier used · nothing below 12 px · bottom text on the y 128
 baseline · addresses unbroken by ellipsis · one primary value per screen ·
-text color matches screen state · gradient only on unknown tokens · the
+text color matches screen state · gradient only on unknown tokens · a chain screen named by `chain=<id>`, never a hand-written mark or caption · the
 unknown ramp derived from token identity, never fixed · every screen
 answers what left, right, and both holds do · decline reachable until
 dispatch · commit screens fill up before their ending (a see-through
