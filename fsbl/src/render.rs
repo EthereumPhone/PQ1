@@ -149,10 +149,25 @@ pub fn render_fingerprint(digest: &[u8; 32]) -> u32 {
     //   * A failed `configure` leaves HWEN LOW, which disables the I2C
     //     interface outright, so a refusal reads `0x01FFFFFF`, not 0x00032615.
     //
-    // A dark panel is precisely the failure invariant #10's boot-time window
-    // cannot absorb: the GRAM can be perfect and the user still sees nothing,
-    // which is indistinguishable from a panel that was never written. So it
-    // refuses handoff, on the same footing as a failed SPI transfer.
+    // The refusal is MEASURED, not reasoned. A throwaway FSBL with `CHIP_ID`
+    // mutated 0x03 -> 0x04 was flashed to the same board and recorded
+    // `RenderFlushed` (the SPI leg still worked, isolating the I2C leg),
+    // `Branching` ABSENT (it really does refuse to hand off) and stage 18 =
+    // `0x01FFFFFF` (HWEN left low). That run is the negative control for both
+    // bullets above; without it, `0x01FFFFFF` would be a derivation.
+    //
+    // WHAT THIS REFUSES ON, precisely: the AW99703 is absent or not answering,
+    // the over-voltage limit did not land, or the enable did not read back.
+    // Those are worth refusing because the boot-time fingerprint window is
+    // invariant #10's trust anchor, and a window the user cannot read is not a
+    // window.
+    //
+    // WHAT IT DOES NOT REFUSE ON — measured, not assumed: an open LED string,
+    // an unseated panel connector, or no panel at all. Every run that armed
+    // this check ran on bench board `002F0023`, which has NO LCD fitted: the
+    // boost drove an open load and `MODE` still read back 0x15. So this gate
+    // proves the driver IC entered Backlight mode. It cannot prove light
+    // reached the user's eye, and must not be described as "the panel is lit".
     ok &= backlight_on;
 
     if !ok {

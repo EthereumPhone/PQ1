@@ -663,9 +663,10 @@ fn negative_fsbl_i2c_leg_stays_within_its_safety_rails() {
     );
     assert!(
         render_code.contains("ok &= backlight_on;"),
-        "the backlight verdict must stay FOLDED INTO the display verdict: a \
-         dark panel is the failure invariant #10's boot-time window cannot \
-         absorb, so it refuses handoff like any failed SPI transfer"
+        "the backlight verdict must stay FOLDED INTO the display verdict: an \
+         AW99703 that is absent, unprogrammed or not in Backlight mode means \
+         the boot-time fingerprint window — invariant #10's trust anchor — \
+         cannot be read, so it refuses handoff like any failed SPI transfer"
     );
     assert!(
         !render_code.contains("let _ = backlight_on"),
