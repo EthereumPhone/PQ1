@@ -4354,25 +4354,21 @@ fn PendSV() {
                 break;
             }
 
-            // #729 verification aid (dev images): show which re-unlock attempt
-            // this is. On IdleWipe the loop just `continue`s and redraws the
-            // SAME screen, so a stalled tick and a healthy one look identical
-            // from the outside. With the counter visible, "does it advance
-            // unattended?" is directly observable — and before the SHPR3 fix
-            // it could not, because SysTick could not preempt PendSV.
-            #[cfg(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd"))]
-            {
-                let n = attempts.min(99) as u8;
-                let m = PENDSV_MAX_REUNLOCK_ATTEMPTS.min(99) as u8;
-                let d = |x: u8| -> [u8; 2] { [b'0' + x / 10, b'0' + x % 10] };
-                let (a, b) = (d(n), d(m));
-                let sub = [
-                    b't', b'o', b' ', b'u', b'n', b'l', b'o', b'c', b'k', b' ',
-                    a[0], a[1], b'/', b[0], b[1],
-                ];
-                ui::show_status("Enter PIN", ui::ascii_str(&sub));
-            }
-            #[cfg(not(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd")))]
+            // The #729 attempt counter that used to render here (`to unlock
+            // NN/12`, dev images only) was REMOVED 2026-09-23. It existed to
+            // make "does the tick advance inside a PendSV-driven prompt?"
+            // observable, which it did: #729 is closed on a measured 120 s
+            // cadence, 01/12 -> 02/12 -> 03/12, two independent observers.
+            //
+            // Removed rather than left in because this is the PIN entry
+            // dialog — a trusted-path screen. Diagnostic text that varies
+            // between boots there habituates the reader to unexpected content
+            // on exactly the screen where unexpected content is the attack.
+            // That the images are dev-only does not help: the people being
+            // trained are the ones who would have to notice a fake.
+            //
+            // Recoverable verbatim from `db524a12` if the re-unlock loop ever
+            // needs observing again.
             ui::show_status("Enter PIN", "to unlock");
 
             timeout::reset_activity();

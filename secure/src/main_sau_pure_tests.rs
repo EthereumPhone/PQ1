@@ -1869,20 +1869,25 @@ fn negative_both_unlock_loops_reset_activity_before_prompting() {
     // report cannot leave the other behind again.
     let mut sites = Vec::new();
     let mut from = 0usize;
-    // Match the PROMPT, not its exact subtitle: the PendSV site carries an
-    // attempt counter on dev images (#729 verification aid), so pinning the
-    // literal string would miss it.
+    // Match the PROMPT, not its exact subtitle, so a future change to the
+    // wording cannot silently drop a site from this check.
     while let Some(i) = MAIN_SRC[from..].find(r#"show_status("Enter PIN","#) {
         sites.push(from + i);
         from += i + 1;
     }
     assert_eq!(
         sites.len(),
-        3, // boot + PendSV dev-counter + PendSV plain fallback
+        2, // boot + PendSV re-unlock
         "expected exactly two unlock prompts (boot + PendSV re-unlock); found {}. \
          A new one must also reset the inactivity timer — see #728.",
         sites.len()
     );
+    // Was 3 while the #729 attempt counter split the PendSV site into a
+    // dev-gated arm and a plain fallback. The counter was removed 2026-09-23
+    // (its question is answered and it drew on the trusted PIN screen), so the
+    // count is back to one prompt per loop. Note the old assertion said THREE
+    // while its own message said "exactly two" — the number and the prose had
+    // drifted apart, which is why the message is now consistent with the count.
     for (n, &at) in sites.iter().enumerate() {
         // The reset must appear between the prompt and the enter_pin() call.
         let tail = &MAIN_SRC[at..];
