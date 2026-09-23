@@ -1283,6 +1283,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "pqsigner-erc7730",
+ "pqsigner-ui-px",
  "sha2",
 ]
 

@@ -226,7 +226,19 @@ jobs:
             -p sphincs-c10 -p pqsigner-fi \
             -p sphincs-tz-bip39 -p fw-manifest -p sphincs-tz-shared \
             -p pqsigner-hal -p pqsigner-pq-seal -p masked-sha2 -p pqsigner-xtask \
-            -p fwsign -p fwmeasure
+            -p fwsign -p fwmeasure \
+            -p pqsigner-ui-px
+      # Pixel trusted-UI design-rule gates (docs/ui/pixel-ui-port-plan.md,
+      # step 1 Safe): the vendored PQ-UI tree matches its manifest, the asset bake
+      # (fonts + marks + the NS atlas container + its pinned root) is
+      # reproducible, and the firmware's motion / input / film constants match
+      # the design spec except for the recorded device deviations.
+      - name: Pixel-UI design gates (pq-ui-check, ui-px-assets-check, pq-ui-port-diff)
+        run: |
+          python3 -m pip install --quiet -r tools/pq-ui/requirements.txt
+          make pq-ui-check
+          make ui-px-assets-check
+          make pq-ui-port-diff
       # Keep the host-only fsbl-tests suites enrolled explicitly.
       # The whole fsbl-tests crate stays out of this job because its footprint
       # suite cross-compiles the real FSBL; these named suites have no Thumb or
@@ -360,8 +372,9 @@ jobs:
     name: QEMU unified-sign E2E
     runs-on: ubuntu-latest
     # Generous bound for two release cross-builds + the ~40-scenario QEMU run
-    # (normally ~5-10 min); a hang previously ran to the 6 h default.
-    timeout-minutes: 30
+    # (normally ~5-10 min) — twice, once with the pixel UI; a hang previously
+    # ran to the 6 h default.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -380,6 +393,11 @@ jobs:
       # 5p/5n, to reach the explicit ALL ASSERTIONS PASSED sentinel.
       - name: make e2e
         run: make e2e
+      # The same suite through the pixel trusted UI (`ui-px`): the four Safe
+      # scenarios must produce pixel transcripts with zero page-wrapped
+      # Legacy records (port plan step 1).
+      - name: make e2e-px
+        run: make e2e-px
       # TZP-12 (#483): publish the QEMU ELF pair + the interactive runner so
       # companion/third-party developers can exercise the wallet UX without a
       # firmware toolchain. The paths are exactly $(SECURE_ELF)/$(NONSECURE_ELF)
@@ -442,6 +460,16 @@ jobs:
           cp target/secure/thumbv8m.main-none-eabi/release/sphincs-tz-secure target/pqsigner-release/secure.elf
           cp target/nonsecure/thumbv8m.main-none-eabi/release/sphincs-tz-nonsecure target/pqsigner-release/nonsecure.elf
           make size-report
+      # Pixel-UI flash budget (port plan § Flash): the nearest buildable
+      # ship-shaped dual-SE image with ui-px, linked at slot A, against the v6
+      # secure slot with 40 KB headroom. INFORMATIONAL until the owner's flash
+      # decision: measured 2026-09-23 the image is 9.2 KB OVER the v6 slot
+      # with the atlas already relocated to the NS slot, so this step fails by
+      # design and must not block the pipeline yet. Flip continue-on-error
+      # off once the budget lever lands.
+      - name: Pixel-UI flash budget (make size-report-px, informational)
+        continue-on-error: true
+        run: make size-report-px BOARD=pq1 PX_EXTRA_FEATURES=,ui-px-spi40
 
   miri:
     name: Miri (UB in host-reachable unsafe)

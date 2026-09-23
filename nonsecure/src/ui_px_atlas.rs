@@ -7,7 +7,7 @@
 //! table), so the secure world can find it at the same slot-relative address
 //! in either A/B slot without any NS-supplied pointer. It lives here, not in
 //! the secure A/B slot, because the secure image cannot hold it (port plan
-//! Phase 1.5) and the NS slot is already measured by the FSBL at boot
+//! § Flash) and the NS slot is already measured by the FSBL at boot
 //! (invariant #10).
 //!
 //! Nothing on the NS side reads these bytes. The secure world treats them as

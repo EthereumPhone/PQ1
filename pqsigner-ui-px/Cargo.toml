@@ -29,6 +29,9 @@ edition.workspace = true
 
 [features]
 default = []
+# Host-side rendering helpers (`png` module): full-frame render + PNG writer
+# for the frame goldens and the `render_record` example. Never in firmware.
+std = []
 
 [dependencies]
 pqsigner-erc7730 = { workspace = true }
@@ -36,6 +39,12 @@ pqsigner-erc7730 = { workspace = true }
 [dev-dependencies]
 hex = { workspace = true }
 sha2 = { version = "0.10", default-features = false }
+# The crate's own tests and examples render frames through `png`.
+pqsigner-ui-px = { path = ".", features = ["std"] }
+
+[[example]]
+name = "render_record"
+required-features = ["std"]
 
 [lints]
 workspace = true

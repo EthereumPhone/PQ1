@@ -85,10 +85,14 @@ brand mark in a production image without `safe_logo_approved`.
 
 Assets: `fonts.bin` 68,867 B (4-bit, eight tiers, trimmed charsets) +
 three marks 5,070 B. Engine code ≈ 17 KB, screen emitter/lift/driver ≈ 26 KB.
-**The 464 KB A/B release slot cannot hold the dual-SE image plus the atlas**
-(≈ 428 KB + 74 KB). Levers, in order: code diet in `safe_screens.rs` /
-`confirm_px`, 2-bit alpha on the 36/32/28 tiers (−18 KB), drop SB22
-(−7 KB), fewer tiers, or a different flash geometry. Owner decision pending.
+**UPDATE 2026-09-23:** the atlas no longer lives in the secure image (owner
+decision, port plan § Flash: `nonsecure/assets/ui-px/atlas.pq1a`
+at a fixed NS-slot offset, root-pinned and re-proved by the secure world
+around every dialog). Measured with `make size-report-px` on the nearest
+buildable ship shape: 432,448 B without `ui-px`, **476,160 B with it** —
+still 9.2 KB over the 466,944 B v6 secure slot; the ≥ 40 KB headroom gate is
+not met and the remaining lever (geometry / feature set / deeper diet) is an
+open owner decision.
 Strip buffer: 13,696 B BSS on `ui-lcd` builds; the transcript costs no BSS
 (overlay). QEMU e2e stack/BSS: unchanged vs baseline.
 
@@ -114,21 +118,28 @@ no-op, hold-left declines; the disc floods while the chord is held. See
 
 ## Known gaps / next steps
 
+The port of every remaining screen (single-UserOp families, structured flows,
+PIN/verdicts/boot, switch-over) is `docs/ui/pixel-ui-port-plan.md`
+(rewritten 2026-09-23); this pilot is its step 1.
+
 1. ~~Run on the EVT~~ — done 2026-09-22 over the cable-free DFU loop
    (`FEAT_S=... tools/evt-dev-flash.sh`, `tools/hid_sign_safe.py`): strip
    orientation correct, `ui-px-spi40` clean, ≈ 40 fps on the sweep, taps and
    the chord sign verified after the fixes above. Next lever if more is wanted:
    GPDMA for the SPI stream so render and blit overlap (≈ 13 ms frames).
-2. **Endings during the sign:** the design's qubit loading film is not
-   implemented; signing shows the legacy progress text painted through the
-   engine, then the branded resolve plays (`px::lcd::show_ending`).
-3. **Native trailer screens** (fees, signer, target, gas lane, DATA HASH,
-   paymaster, nonce lane, deploy) with `*_screen_proof` twins; batch and
+2. ~~**Endings during the sign**~~ — done 2026-09-23 (port plan step 1): the qubit loading film (`pqsigner_ui_px::loading`,
+   `ui::px::lcd::film_*`) plays around the sign, paced by the signer's
+   progress hook, and lands with the design's `RESULT_HOLD_MS`.
+3. ~~**Native trailer screens**~~ — done 2026-09-23 (`tx/display/
+   trailer_screens.rs`, eleven slots with per-slot + set proofs; the
+   `Legacy` kind is unused on the Safe route). Still open: batch and
    off-chain routes; the remaining families (boot, PIN, wizard, verdicts).
-4. `tools/ui_screens_export.py --px` (the screens catalogue on this branch
-   does not exist yet; master has `docs/ui-screens/`).
-5. `cargo kani -p pqsigner-ui-px` harnesses exist (`fit`, `driver`) but
-   Kani is not installed on this box.
-6. Two branch fixes rode along: `hw/sca_trigger.rs` referenced `crate::board`
+4. ~~`tools/ui_screens_export.py --px`~~ — done: `docs/ui-screens/px/`.
+5. ~~Kani~~ — installed (`kani-verifier 0.67.0`); `cargo kani -p
+   pqsigner-ui-px` runs the `fit`, `driver` and `check` harnesses.
+6. **Flash (owner decision still open):** the atlas moved to the NS slot
+   (see the port plan § Flash), yet the ship-shaped image with `ui-px`
+   is 476,160 B vs the 466,944 B v6 secure slot — 9.2 KB over.
+7. Two branch fixes rode along: `hw/sca_trigger.rs` referenced `crate::board`
    on QEMU builds (gated on `sca-trigger`), and the QEMU mailbox transport
    lacked `get_pin_attempt_log_call`.

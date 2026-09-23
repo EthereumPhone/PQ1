@@ -213,7 +213,26 @@ fn golden(b: &Both) -> String {
     hex::encode(h.finalize())
 }
 
+/// With `UI_PX_EXPORT=1`, write the scenario's records to
+/// `pqsigner-ui-px/tests/fixtures/safe/<name>.hex` (one 512-hex record per
+/// line) — the input of the crate's per-scenario frame goldens
+/// (`tests/golden.rs::safe_flows`, `make ui-px-goldens-bless`).
+fn export_fixture(name: &str, screens: &Screens) {
+    if std::env::var_os("UI_PX_EXPORT").is_none() {
+        return;
+    }
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../pqsigner-ui-px/tests/fixtures/safe");
+    std::fs::create_dir_all(&dir).expect("fixture dir");
+    let mut out = String::new();
+    for s in screens.as_slice() {
+        out.push_str(&hex::encode(s.0));
+        out.push('\n');
+    }
+    std::fs::write(dir.join(format!("{name}.hex")), out).expect("fixture write");
+}
+
 fn assert_golden(name: &str, b: &Both, expected: &str) {
+    export_fixture(name, &b.screens);
     let got = golden(b);
     assert_eq!(got, expected, "{name}: screen golden changed — re-bless after reviewing the exported PNGs:\n{}", screen_text(&b.screens));
 }
@@ -574,7 +593,7 @@ fn lifted(fx: &TrailerFixture) -> Lifted {
     px_lift::append_returning_hero(&mut screens).unwrap();
     let confirm_at = px_lift::insert_confirm(&mut screens).unwrap();
     // The finished transcript passes the design-rule checker (flow shape
-    // included) — the gate the port plan's Phase 1 item 2 asks for.
+    // included) — the design-rule gate on the Safe route.
     assert_eq!(pqsigner_ui_px::check::check_flow(&screens), Ok(()));
     Lifted { screens, pages, body_len, receipt, confirm_at }
 }
@@ -598,6 +617,9 @@ fn copy_of(screens: &Screens) -> Screens {
 fn lift_proof_accepts_the_assembled_transcript() {
     let fx = fixture(0, false, false, false);
     let l = lifted(&fx);
+    // The exported fixture is named by the test, not by `lifted`: several
+    // tests lift different fixtures, and a shared name raced (last writer won).
+    export_fixture("lifted_erc20_known", &l.screens);
     // 8 body screens + 7 trailers + hero = 16 ≥ 7 details → Confirm? at 5.
     assert_eq!(l.confirm_at, Some(5));
     assert_eq!(l.receipt.trailers.screens, 7);
@@ -627,6 +649,7 @@ fn lift_proof_accepts_the_assembled_transcript() {
 fn every_optional_trailer_renders_and_carries_its_facts() {
     let fx = fixture(1_500_000_000_000_000_000, true, true, true);
     let l = lifted(&fx);
+    export_fixture("lifted_all_trailers", &l.screens);
     assert_eq!(l.receipt.trailers.screens, 11);
     assert_eq!(proof(&l, &l.screens, &fx.facts(), l.confirm_at), crate::fi::OK_SENTINEL);
     let id = ids(&l.screens);

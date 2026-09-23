@@ -1,7 +1,7 @@
 //! Pixel-UI assets: a VERIFIED view over the atlas container the NON-SECURE
 //! image carries (`ui-px` + `ui-lcd`).
 //!
-//! Owner decision 2026-09-23 (port plan Phase 1.5): the glyph atlas + disc
+//! Owner decision 2026-09-23 (port plan § Flash): the glyph atlas + disc
 //! marks (~74 KB, `nonsecure/assets/ui-px/atlas.pq1a`, baked by
 //! `tools/ui_px_assets.py`) no longer live in the secure A/B slot. The NS
 //! image parks them at a fixed slot-relative offset (`ATLAS_SLOT_OFFSET`,

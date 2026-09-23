@@ -8,11 +8,10 @@
 
 use pqsigner_ui_px::driver::Btn;
 use pqsigner_ui_px::font::Font;
-use pqsigner_ui_px::raster::{render_strip, Frame, Rgb, Strip, H, W};
+use pqsigner_ui_px::raster::W;
 use pqsigner_ui_px::scene::{parse_mark, Anim, Ending, Marks};
 use pqsigner_ui_px::{Icon, Screen, ScreenBuilder, Side, Tier, Weight};
 use sha2::{Digest, Sha256};
-use std::io::Write;
 
 const FONTS: &[u8] = include_bytes!("../../secure/assets/ui-px/fonts.bin");
 const SAFE: &[u8] = include_bytes!("../../secure/assets/ui-px/safe.a4");
@@ -30,19 +29,7 @@ fn marks() -> Marks<'static> {
 /// Render a frame in 16-row strips into a full RGB565 image (like the device).
 fn render_full(anim: &Anim) -> Vec<u16> {
     let font = Font::parse(FONTS).expect("atlas");
-    let mut frame = Frame::new();
-    anim.build(&marks(), &font, &mut frame);
-    let mut out = vec![0u16; (W * H) as usize];
-    let mut strip_buf = vec![0u16; (W * 16) as usize];
-    let mut y0 = 0;
-    while y0 < H {
-        let h = 16.min(H - y0);
-        let mut s = Strip::new(y0, h, &mut strip_buf).unwrap();
-        render_strip(&frame, &font, &mut s);
-        out[(y0 * W) as usize..((y0 + h) * W) as usize].copy_from_slice(&s.buf[..(W * h) as usize]);
-        y0 += h;
-    }
-    out
+    pqsigner_ui_px::png::render_full(anim, &marks(), &font)
 }
 
 fn sha(px: &[u16]) -> String {
@@ -53,65 +40,8 @@ fn sha(px: &[u16]) -> String {
     hex::encode(h.finalize())
 }
 
-// ---- minimal PNG writer (stored deflate) ----------------------------------
-fn crc32(data: &[u8]) -> u32 {
-    let mut c = 0xFFFF_FFFFu32;
-    for &b in data {
-        c ^= u32::from(b);
-        for _ in 0..8 {
-            c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
-        }
-    }
-    !c
-}
-
-fn adler32(data: &[u8]) -> u32 {
-    let (mut a, mut b) = (1u32, 0u32);
-    for &d in data {
-        a = (a + u32::from(d)) % 65521;
-        b = (b + a) % 65521;
-    }
-    (b << 16) | a
-}
-
-fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
-    out.extend_from_slice(&(data.len() as u32).to_be_bytes());
-    let mut c = Vec::with_capacity(4 + data.len());
-    c.extend_from_slice(kind);
-    c.extend_from_slice(data);
-    out.extend_from_slice(&c);
-    out.extend_from_slice(&crc32(&c).to_be_bytes());
-}
-
 fn write_png(path: &str, px: &[u16]) {
-    let mut raw = Vec::with_capacity((H * (W * 3 + 1)) as usize);
-    for y in 0..H {
-        raw.push(0u8);
-        for x in 0..W {
-            let c = Rgb::from565(px[(y * W + x) as usize]);
-            raw.extend_from_slice(&[c.r, c.g, c.b]);
-        }
-    }
-    let mut z = vec![0x78u8, 0x01];
-    for (i, block) in raw.chunks(65535).enumerate() {
-        let last = (i + 1) * 65535 >= raw.len();
-        z.push(u8::from(last));
-        z.extend_from_slice(&(block.len() as u16).to_le_bytes());
-        z.extend_from_slice(&(!(block.len() as u16)).to_le_bytes());
-        z.extend_from_slice(block);
-    }
-    z.extend_from_slice(&adler32(&raw).to_be_bytes());
-    let mut out = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
-    let mut ihdr = Vec::new();
-    ihdr.extend_from_slice(&(W as u32).to_be_bytes());
-    ihdr.extend_from_slice(&(H as u32).to_be_bytes());
-    ihdr.extend_from_slice(&[8, 2, 0, 0, 0]);
-    chunk(&mut out, b"IHDR", &ihdr);
-    chunk(&mut out, b"IDAT", &z);
-    chunk(&mut out, b"IEND", &[]);
-    std::fs::create_dir_all("../target/ui-px-golden").ok();
-    let mut f = std::fs::File::create(format!("../target/ui-px-golden/{path}")).expect("png file");
-    f.write_all(&out).unwrap();
+    pqsigner_ui_px::png::write_png(std::path::Path::new(&format!("../target/ui-px-golden/{path}")), px).expect("png file");
 }
 
 fn check(name: &str, px: &[u16], expected: &str) {
@@ -263,3 +193,57 @@ const GOLDEN_FILM_SPIRAL: &str = "296ff6e3bd0ac87c1c4630d7658022709f2bb46dfe1ec1
 const GOLDEN_FILM_FLASH: &str = "e4574e263ed8452307cc7ac9871161e81d71ae5c42ed20d87efda605d75db810";
 const GOLDEN_FILM_CHECK: &str = "1fc1479648e0fb9bd2fbb31423f6de392115c8c67af4e5bdfd2a0cc6894ab39c";
 const GOLDEN_FILM_HOLD_END: &str = "9dd674e78b15221c8a5effedd5a5121c0fba5183741bdacf90a58cabc647da33";
+
+/// Every Safe scenario transcript the secure host tests export
+/// (`UI_PX_EXPORT=1 cargo test -p sphincs-tz-secure ... safe_screens`):
+/// render the settled frame of every (screen, page) and compare the hash
+/// list with `tests/fixtures/safe/<name>.sha`. `UI_PX_BLESS=1` rewrites the
+/// `.sha` files (`make ui-px-goldens-bless`); `UI_PX_PNG=1` writes the
+/// frames under `target/ui-px-golden/safe/<name>/`.
+#[test]
+fn safe_flows() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/safe");
+    let mut fixtures: Vec<_> = std::fs::read_dir(&dir)
+        .expect("tests/fixtures/safe exists")
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "hex"))
+        .collect();
+    fixtures.sort();
+    assert!(!fixtures.is_empty(), "no Safe transcript fixtures");
+    let bless = std::env::var_os("UI_PX_BLESS").is_some();
+    let font = Font::parse(FONTS).expect("atlas");
+    let mut mismatches = Vec::new();
+    for path in fixtures {
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut hashes = Vec::new();
+        for (i, line) in text.lines().enumerate() {
+            let screen = pqsigner_ui_px::png::screen_from_hex(line).unwrap_or_else(|| panic!("{name}: record {i} malformed"));
+            assert_eq!(pqsigner_ui_px::check::check_screens(&[screen]), Ok(()), "{name}: record {i}");
+            for page in 0..screen.npages().max(1) {
+                let mut a = Anim::new(&screen, page, 0);
+                let mut t = 16;
+                while a.step(t) && t < 4000 {
+                    t += 16;
+                }
+                let px = pqsigner_ui_px::png::render_full(&a, &marks(), &font);
+                if std::env::var_os("UI_PX_PNG").is_some() {
+                    write_png(&format!("safe/{name}/{i:02}-p{page}.png"), &px);
+                }
+                hashes.push(format!("{i:02} p{page} {}", sha(&px)));
+            }
+        }
+        let got = hashes.join("\n") + "\n";
+        let sha_path = path.with_extension("sha");
+        if bless {
+            std::fs::write(&sha_path, &got).unwrap();
+            continue;
+        }
+        let want = std::fs::read_to_string(&sha_path).unwrap_or_default();
+        if want != got {
+            mismatches.push(name);
+        }
+    }
+    assert!(mismatches.is_empty(), "frame goldens changed for {mismatches:?} — review target/ui-px-golden/safe/ (UI_PX_PNG=1) and `make ui-px-goldens-bless`");
+}

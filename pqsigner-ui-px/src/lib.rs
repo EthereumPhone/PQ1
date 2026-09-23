@@ -61,6 +61,8 @@ pub mod loading;
 #[allow(clippy::unreadable_literal, missing_docs)]
 pub mod metrics_gen;
 pub mod motion;
+#[cfg(feature = "std")]
+pub mod png;
 pub mod pq1a;
 pub mod raster;
 pub mod scene;

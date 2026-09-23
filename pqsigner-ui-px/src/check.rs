@@ -111,7 +111,7 @@ pub fn check_screens(screens: &[Screen]) -> Result<(), Violation> {
 /// (and pages), must total 40 or 64.
 fn check_words_unbroken(s: &Screen, i: usize) -> Result<(), Violation> {
     let mut run: Option<usize> = None;
-    let mut finish = |run: &mut Option<usize>| -> Result<(), Violation> {
+    let finish = |run: &mut Option<usize>| -> Result<(), Violation> {
         if let Some(n) = run.take() {
             if n != 40 && n != 64 {
                 return Err(Violation::AddressBroken(i));

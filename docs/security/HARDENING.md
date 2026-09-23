@@ -84,6 +84,38 @@ a no-op until the returning ask has been displayed); the loop maintains
 owner decision without new evidence; record any change here and in
 `CLAUDE.md` Pre-Production Caveats.
 
+**Device input model (frozen 2026-09-23, port plan step 1).** The
+device's gesture grammar on the pixel path is this table; the conformance
+oracle is the vendored PQ-UI `handoff/spec/gestures.json` (an 80-row executed
+truth table) + `traces.json`, and the deliberate deviations from it are the
+single list `tools/pq-ui/PORT_DEVIATIONS.toml`, machine-checked against
+`handoff/spec/motion.json` by `make pq-ui-port-diff` (an unrecorded drift is
+a red build).
+
+| Constant (`pqsigner-ui-px`) | Device | Reference | Note |
+|---|---|---|---|
+| `DEBOUNCE_MS` (`input.rs`) | 25 | — | SysTick ISR lockout per side, first edge exact; device-only |
+| `TAP_MAX_MS` (`motion.rs`) | **500** | 250 | recorded deviation (EVT #1 2026-09-22: deliberate presses run 250–400 ms) |
+| `DOUBLE_TAP_MS` | 250 | 250 | entry contexts only |
+| `CHORD_MS` | 150 | 150 | the other side within this = the chord |
+| `HOLD_COMMIT_MS` | 2000 | 2000 | hold-left decline fires here |
+| `HOLD_SNAPBACK_MS` | 200 | 200 | early-release drain |
+| `PRESS_FEEDBACK_MS` | 120 | 120 | chevron nudge |
+
+| Screen kind | tap L / R | hold-left | hold-right | chord click (both down, fires on release) |
+|---|---|---|---|---|
+| Hero (opening / returning ask), `Confirm?` | navigate | decline | **no-op** (reference: sign) | **sign** (reference: unbound) |
+| Detail / Value | navigate, page-turn | decline | no-op | ignored (never armed) |
+| Status / film / ending | **input-dead**: edges are ignored while the film plays and its result holds; the inactivity deadline and idle wipe stay enforced | | | |
+
+Input during a transit retargets the springs and is never dropped. The film
+(`ui::px::lcd::film_*`) runs around the signer's FI chain, paced by its opaque
+`fn(u8)` progress hook, and cannot change any decision: by the time it
+starts, the `OK_SENTINEL` has been minted and re-proved. The upstream
+catalogue (`handoff/catalog/actions/{hold-right-sign,unbound-gestures,
+tap-navigate}.md`) still describes the reference grammar; a device-deviation
+note for those pages is proposed upstream (see `tools/pq-ui/UPSTREAM.txt`).
+
 ## 3. SE050 Configuration
 
 ### 3.1 Authentication Object

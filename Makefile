@@ -438,6 +438,10 @@ flash-hw: build-hw ## Flash + run on real STM32U585 (probe-rs/OpenOCD)
 # Extra secure-side features for the e2e build (e.g. `,ui-px`). Set by the
 # `e2e-px` alias below; leave empty for the byte-identical legacy run.
 E2E_EXTRA_FEATURES ?=
+# Keep the QEMU semihosting log (default: a deleted mktemp) — e.g.
+# `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px` feeds `tools/ui_screens_export.py
+# --px LOG` (the docs/ui-screens/px/ catalogue).
+E2E_LOG_KEEP ?=
 
 .PHONY: e2e-px
 e2e-px: E2E_EXTRA_FEATURES = ,ui-px
@@ -461,7 +465,7 @@ e2e: ## Automated unified-sign E2E (QEMU)
 	@# `e2e-test` cargo feature) so a failed assertion terminates QEMU
 	@# instead of looping forever — without that, this target would
 	@# never return on any test bug.
-	@log=$$(mktemp); \
+	@log=$${E2E_LOG_KEEP:-$$(mktemp)}; \
 	qemu-system-arm \
 		-M mps2-an505 \
 		-monitor null \
@@ -562,7 +566,18 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		echo "  FAIL  RT-ERC20 regressed to unverified or Safe-attributed display"; fail=1; \
 	fi; \
 	rm -f $$rt_region; \
-	rm -f $$log; \
+	case "$(E2E_EXTRA_FEATURES)" in *ui-px*) \
+		px_flows=$$(grep -c '^\[UI-PX\] 0000/' $$log || true); \
+		if [ "$$px_flows" -eq 4 ]; then echo "  PASS  ui-px: 4 pixel transcripts (Safe scenarios 5, 0h, 5q, 5s)"; \
+		else echo "  FAIL  ui-px: expected 4 pixel transcripts, saw $$px_flows"; fail=1; fi; \
+		legacy=$$(grep -cE '^\[UI-PXR\] [0-9a-f]{4} p[0-9] 4c' $$log || true); \
+		if [ "$$legacy" -eq 0 ]; then echo "  PASS  ui-px: zero Legacy (page-wrapped) records on the Safe routes"; \
+		else echo "  FAIL  ui-px: $$legacy Legacy records on the Safe routes"; fail=1; fi; \
+		short=$$(grep -E '^\[UI-PXR\] ' $$log | awk '{ if (length($$4) != 512) n++ } END { print n+0 }'); \
+		if [ "$$short" -eq 0 ]; then echo "  PASS  ui-px: every [UI-PXR] record is 512 hex characters"; \
+		else echo "  FAIL  ui-px: $$short malformed [UI-PXR] records"; fail=1; fi; \
+		;; esac; \
+	[ -n "$(E2E_LOG_KEEP)" ] || rm -f $$log; \
 	if [ $$fail -eq 0 ]; then \
 		echo "==> e2e: ALL ASSERTIONS PASSED"; \
 		exit 0; \
@@ -2790,7 +2805,7 @@ size-report: ## Report secure/NS/FSBL image sizes against their flash/SRAM budge
 	  arm-none-eabi-size -B $(FSBL_ELF) | awk 'NR==2 { u=$$1+$$2; printf "    fsbl   : %d B of 32768 B legacy bench region (%.1f%%), %d B free\n", u, u*100.0/32768, 32768-u }'; \
 	fi
 
-# Pixel trusted-UI flash-budget gate (docs/ui/pixel-ui-port-plan.md Phase 1.5).
+# Pixel trusted-UI flash-budget gate (docs/ui/pixel-ui-port-plan.md § Flash).
 # Builds the nearest BUILDABLE ship-shaped dual-SE image with `ui-px` linked at
 # A/B slot A and measures its physical span with fwmeasure against the frozen
 # v6 secure-slot span (geometry::SECURE_SLOT_SPAN = 0x72000, stricter than the
@@ -4667,6 +4682,12 @@ pq-ui-check: ## Verify tools/pq-ui/ against MANIFEST.sha256 (bytes + file set)
 # input / film constants (recorded deviations in PORT_DEVIATIONS.toml), the
 # crate's own tests (incl. the `check` design-rule checker) and the secure
 # host tests that run the checker over every Safe scenario transcript.
+.PHONY: ui-px-goldens-bless
+ui-px-goldens-bless: ## Re-export the Safe scenario transcripts and re-bless their per-frame goldens (review the PNGs first)
+	@UI_PX_EXPORT=1 cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests >/dev/null
+	@UI_PX_BLESS=1 UI_PX_PNG=1 cargo test --locked -p pqsigner-ui-px --test golden safe_flows >/dev/null
+	@ls pqsigner-ui-px/tests/fixtures/safe/*.sha | wc -l | xargs -I{} echo "blessed {} Safe transcript goldens (frames under target/ui-px-golden/safe/)"
+
 .PHONY: pq-ui-port-diff ui-px-check
 pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails on an unrecorded MISMATCH
 	@python3 tools/pq_ui_port_diff.py
