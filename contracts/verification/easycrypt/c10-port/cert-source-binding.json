@@ -9,7 +9,7 @@
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",
-    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "a5c686029b4aa551d045b9d97c16cc7ebf5173d8ff396a2cab420cf7ae0ad101",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "a2908caafabdc5489cc4f9c7928715087597f978d0f71b4052b10bcb9d82ad90",
     "contracts/verification/scripts/run_easycrypt_split.py": "c675c91dab371086af6ff2937d5b09b04118878b51fbd4060bbfc334431e774f",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
@@ -35,6 +35,19 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HashDomains.ec": "d30cfb53c82208aa22abb83b6d8f9c0fa7e7f4dac312862970035456a9b256f5",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10SharedSearch.ec": "4f1fe64c0d8d6ae0b83a515ec76d16bef950906c0e1a768212c71782b549b5d8",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10SearchBounds.ec": "328adb6af957032a5c6e97d68bd84d3ffc21627fffe44d4dba68bb24fa7eacaa",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HypertreeCharged.ec": "1ce03a9d707ecd40b5edf01186beb953c1d8e8621597b07cbd8d8cc2b6aca586"
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HypertreeCharged.ec": "1ce03a9d707ecd40b5edf01186beb953c1d8e8621597b07cbd8d8cc2b6aca586",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10WOTSCorrect.ec": "e22b4b56e0b338215ffae65868e5e6ce19c87be24cd5de403d96c779074e4bd2",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HypertreeCorrect.ec": "573ca856e04847914f55fa0dcdb41e5baf17cc2eff4dac655b12f011b3309ce1",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10CubeCorrect.ec": "6f35d67ceefe569b872776a1903511dec0e16dfe08607e4b8c2e2c18ebab83cd",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10CubeConstruction.ec": "72b18623112f00926bd8c59d8036df650418acb23f7d34f8a3b599755fdb4a27",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10ReductionChoose.ec": "53f0fcdbf179a0babada7811952987c43399757fae0b2f0de25c72b807eecc9d",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10ReductionForge.ec": "469e04863b851c40a1f54fd849183747d3a2622594ec04b8149717d1ef482ef7",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10AcceptedReduction.ec": "9a63dc7a27187a0d4b2178af3345eeb64705c812631abedfe35f6b3a0860eeeb",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HypertreeAccepted.ec": "6225d712ddbb2d2e8f688d1938f77ffdd1de3e3bf4f40ef0d3892e0898a2cb11",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10StatefulSearch.ec": "21c2058c209ed75e6427af6106f0d021c3ffc02cfac7ba0b5aaee366266f5957",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec": "bf87e10779968fb910aa907188a7814a406def59d89e77534c12c3a13d8be7a2",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawGrind.ec": "5679f591d11a4f43e27529b3e57bae2f200b1c0ff49c85ed3469f48482b7fbd3",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/FORSC10Digest.ec": "3f659f40957b9b58fd92f9dc740458c3f6fb8c2df02f66d2850a2e06586d5c02",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/XmssmtCC_All.ec": "d64780527cde6328ba3d1f3df33234f71d32795b6f1742eaf31fe6f39f8018cd"
   }
 }

@@ -5,13 +5,14 @@ research limits are owned by the [FV surface map](../contracts/verification/docs
 rows 4 and 9. Historical draft receipts below do not certify the vendored split.
 Implementation/review evidence: [remediation record](security/adversarial-review/findings/fv-evidence-remediation-2026-09-16.md).
 
-**EasyCrypt research update (2026-09-22):** the bounded hypertree now has an
-N2-free bound retaining its explicit failure charge. History-aware classical
-search, hash-layout and repeated-R laws advance the four remaining research
-areas; charge-free whole-scheme composition, actual shared-SHA refinement and
-numerical forgery bounds remain open. See the
+**EasyCrypt research update (2026-09-23):** accepted public histories now
+remove the grind-failure charge from the bounded nonadaptive hypertree theorem.
+A persistent raw-input oracle models the secret-keyed R/H_msg loop, repeated
+answers and its worst-case call count; fresh H_msg acceptance is exactly `2^-11`.
+Full costed scheme/reduction simulation and numerical forgery bounds remain
+open. See the
 [current artifact boundary](../contracts/verification/easycrypt/c10-port/README.md)
-and [research obligations](verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-22-remaining-research-checked-advances-and-exact-unresolved-statements).
+and [research obligations](verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-23-accepted-history-composition-and-persistent-raw-oracle).
 
 > **The front door.** Read this first. It's a **router, not an encyclopedia**: §0 maps *where the truth
 > lives* (one owner per concern — everyone else links); §A–§D are the **security/verification frontier**,

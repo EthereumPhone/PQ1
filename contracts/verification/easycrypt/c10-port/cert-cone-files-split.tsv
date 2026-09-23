@@ -1,5 +1,3 @@
-# Certified dependency cone: 78 files, 66 roots.
-# 2026-09-22 remaining C10 research.
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -16,6 +14,7 @@ cdrafts-split/BadEncSplit.ec
 cdrafts-split/BadEncStep4.ec
 cdrafts-split/BadEncToTColl.ec
 cdrafts-split/BoundedIID.ec
+cdrafts-split/C10AcceptedReduction.ec
 cdrafts-split/C10BoundedGame.ec
 cdrafts-split/C10BoundedGrind.ec
 cdrafts-split/C10BoundedHypertree.ec
@@ -26,6 +25,8 @@ cdrafts-split/C10BoundedReduction.ec
 cdrafts-split/C10BoundedSigning.ec
 cdrafts-split/C10Bytes.ec
 cdrafts-split/C10Counter.ec
+cdrafts-split/C10CubeConstruction.ec
+cdrafts-split/C10CubeCorrect.ec
 cdrafts-split/C10DeployedCapstone.ec
 cdrafts-split/C10DeployedGeometry.ec
 cdrafts-split/C10DeployedInstance.ec
@@ -33,17 +34,26 @@ cdrafts-split/C10DeployedScope.ec
 cdrafts-split/C10DigitUniform.ec
 cdrafts-split/C10Encoding.ec
 cdrafts-split/C10HashDomains.ec
+cdrafts-split/C10HypertreeAccepted.ec
 cdrafts-split/C10HypertreeCharged.ec
+cdrafts-split/C10HypertreeCorrect.ec
 cdrafts-split/C10HypertreeCoverage.ec
 cdrafts-split/C10Randomizer.ec
+cdrafts-split/C10RawGrind.ec
+cdrafts-split/C10RawOracle.ec
+cdrafts-split/C10ReductionChoose.ec
+cdrafts-split/C10ReductionForge.ec
 cdrafts-split/C10SearchBounds.ec
 cdrafts-split/C10SharedSearch.ec
 cdrafts-split/C10SpecControls.ec
+cdrafts-split/C10StatefulSearch.ec
 cdrafts-split/C10Surface.ec
 cdrafts-split/C10SurfaceKernel.ec
+cdrafts-split/C10WOTSCorrect.ec
 cdrafts-split/CountDS.ec
 cdrafts-split/DarkSide.ec
 cdrafts-split/DarkSideC10.ec
+cdrafts-split/FORSC10Digest.ec
 cdrafts-split/FORS_C.ec
 cdrafts-split/FORS_C10.ec
 cdrafts-split/FORS_C10_Multi.ec

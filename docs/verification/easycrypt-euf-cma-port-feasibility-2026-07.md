@@ -1,17 +1,15 @@
 # Mechanizing C10 EUF-CMA in EasyCrypt — a sourced feasibility verdict (2026-07)
 
-> **Current assessment — 2026-09-22:** the July parameter-impossibility notice
-> below is historical for the old unsplit development. The current split model
-> admits C10's numerical geometry, and the counter/serialization/bounded-search
-> batch has landed. The encoder/abort batch now defines the actual digit
-> encoder, proves target 205 and uniform-input acceptance, and adds explicit
-> bounded-failure semantics. The latest batch adds a charged bounded-hypertree
-> bound, history-aware classical-RO search and repeated-R laws. Charge-free
-> end-to-end composition, actual shared-oracle refinement and numerical forgery
-> bounds remain open. Read the
-> [September literature reassessment](#update-2026-09-21--literature-reassessment-after-the-concrete-grind-batch)
-> and the [current artifact boundary](../../contracts/verification/easycrypt/c10-port/README.md)
-> before quoting the older verdicts.
+> **Current assessment — 2026-09-23:** the July parameter-impossibility notice
+> below describes the old unsplit development. The current split model admits
+> C10's numerical geometry. Accepted-history composition now gives the bounded
+> nonadaptive hypertree a four-term bound without N2 or a grind-failure charge.
+> A shared raw-input oracle preserves history through secret-keyed R/H_msg
+> grinding and counts its calls. Full costed scheme/reduction simulation,
+> secret-input guessing bounds and numerical forgery bounds remain open. Read
+> the [latest obligations](#2026-09-23-accepted-history-composition-and-persistent-raw-oracle)
+> and [current artifact boundary](../../contracts/verification/easycrypt/c10-port/README.md)
+> before quoting older verdicts.
 
 > ### ⚠ READ FIRST — PARAMETER QUALIFIER (2026-07-25)
 > **Every EUF-CMA / capstone claim in this document holds at MM45-admissible WOTS parameters
@@ -4839,3 +4837,34 @@ The remaining-research Phase D evidence is complete: all 78 files pass both
 drivers and all 90 controls meet their expected outcomes. See the
 [remaining-research receipt](../security/adversarial-review/findings/easycrypt-remaining-2026-09-22/README.md)
 for exact review dispositions and the unresolved statements above.
+
+
+## 2026-09-23 accepted-history composition and persistent raw oracle
+
+This milestone closes the first September 22 obligation: the accepted-history
+join for the actual bounded nonadaptive hypertree. The existing event-discarding
+original/C/V and leaf proofs are strengthened in place; their original
+statements remain compatibility corollaries. Functional WOTS/Merkle correctness,
+actual nested cube construction, exact oracle records and actual forge transcript
+shape establish that an accepted public transcript excludes `gfail_of`.
+`C10HypertreeAccepted.bounded_hypertree_accepted` composes four real challenge
+probabilities without N2 or a grind-failure summand. Its RHS explicitly contains
+the same adversary inside a private transcript observer. The theorem retains
+address/encoder/member/type separation, target cap and forge termination.
+It does not turn the nonadaptive independently sampled cube into a deployed
+adaptive signer or supply efficient challenge reductions.
+
+The other obligations advance but stay open:
+
+| Obligation | New checked foundation | Still required |
+|---|---|---|
+| Persistent shared raw oracle | Private lazy table, replay/call/draw laws, arbitrary adaptive-context instrumentation, and length-partition coupling with raw access retained. Functional search also returns its final history. | Map every scheme and reduction hash role to this oracle and prove the full common-adversary simulation. Existing pure hash operators remain uncosted. |
+| Actual secret-keyed R/H_msg | One stateful loop uses the deployed secret-prefixed R layout, high-half truncation, padding, H_msg layout and 10-million counter bound. It proves termination, acceptance, width and at most 20 million calls. | Account for adversarial prior secret-input queries, deterministic repeated derivation inputs, R collisions and inter-procedure histories in the full game. Rust uses `sk_seed` for R and WOTS/FORS derivation; an independent R key must not be silently substituted. |
+| Quantitative ITSR/EUF-CMA | Fresh full-digest forced-zero mass is exactly `2^-11`, with freshness explicit. | Prove query bounds for the actual common reduction and adaptive conditioned-history laws before obtaining numerical forgery estimates. Cached answers are not new IID trials. |
+
+No new project axiom, admit or clone assumption is added. The old abstract ITSR
+countermodel still excludes a universal bound for that game as axiomatized.
+The new raw model is a classical idealization, not a proof that SHA-256 is random
+or a QROM result. #100/#295 continue to own the remaining obligations; #509
+remains the deferred combined playbook pass. The campaign continues beyond this
+milestone without changing firmware, APIs, parameters or production authority.

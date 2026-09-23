@@ -74,6 +74,7 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'bounded_hypertree_accepted',
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED',
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT',
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS',
