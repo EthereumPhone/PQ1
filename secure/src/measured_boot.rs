@@ -157,11 +157,17 @@ fn render_all_words(hash: &[u8; 32]) {
     // of a renderer-width artifact.
     let rows = firmware_fingerprint_lines(hash);
 
-    // Port step 4: the same eight prefixes on the design's words grid. The
-    // FSBL's own window is NOT ported — it stays text (plan § 4).
+    // Port step 4: the design's words grid has room for the eight words
+    // whole (BIP-39 words are at most eight letters), so it shows them
+    // uncut; the FSBL's own text window keeps its five-letter prefixes (plan
+    // § 4), which are the starts of these words.
     #[cfg(feature = "ui-px")]
-    if crate::ui::px::screens::show(&crate::ui::px::status_map::fingerprint_grid(&rows)) {
-        return;
+    {
+        let indices = sphincs_tz_bip39::hash_to_word_indices(hash);
+        let words: [[u8; 8]; 8] = core::array::from_fn(|i| sphincs_tz_bip39::word_bytes_at(indices[i]).0);
+        if crate::ui::px::screens::show(&crate::ui::px::status_map::fingerprint_grid(&words)) {
+            return;
+        }
     }
 
     let d = display();

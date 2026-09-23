@@ -337,24 +337,22 @@ pub fn choice(title: &[u8], option: &[u8]) -> Screen {
         .unwrap_or(Screen::BLANK)
 }
 
-/// The boot fingerprint grid from the FSBL's own 4×16 rows (`1 word 5 word`
-/// per row), so the pixel grid shows exactly the prefixes the FSBL shows.
+/// The boot fingerprint grid: the eight words whole, as NUL-padded cells
+/// (`word_bytes_at`). BIP-39 English words are at most eight letters, so
+/// nothing is cut. The FSBL's text window can only fit five-letter
+/// prefixes; each prefix is the start of the word shown here, and the first
+/// four letters already identify a BIP-39 word, so the two rows still
+/// compare at a glance.
 #[must_use]
-pub fn fingerprint_grid(rows: &[[u8; 16]; 4]) -> Screen {
-    let mut words: [&[u8]; 8] = [b"-"; 8];
-    let trim = |w: &[u8]| -> usize { w.iter().position(|&b| b == b' ').unwrap_or(w.len()) };
-    for (r, row) in rows.iter().enumerate() {
-        let l = &row[2..8];
-        let rr = &row[10..16];
-        let (ll, rl) = (trim(l), trim(rr));
-        if ll > 0 {
-            words[r] = &l[..ll];
-        }
-        if rl > 0 {
-            words[r + 4] = &rr[..rl];
+pub fn fingerprint_grid(words: &[[u8; 8]; 8]) -> Screen {
+    let mut cells: [&[u8]; 8] = [b"-"; 8];
+    for (cell, w) in cells.iter_mut().zip(words) {
+        let n = w.iter().position(|&b| b == 0).unwrap_or(w.len());
+        if n > 0 {
+            *cell = &w[..n];
         }
     }
-    ScreenBuilder::words(b"FPRINT", b"", &words).finish().unwrap_or(Screen::BLANK)
+    ScreenBuilder::words(b"FPRINT", b"", &cells).finish().unwrap_or(Screen::BLANK)
 }
 
 /// The seed-page record: `n` placeholder cells numbered from `first` — the
@@ -683,19 +681,22 @@ mod tests {
     }
 
     #[test]
-    fn fingerprint_grid_keeps_the_fsbl_prefixes() {
-        let mut rows = [[b' '; 16]; 4];
-        let words = [b"clos", b"agen", b"own ", b"depu", b"grap", b"thou", b"sail", b"simp"];
-        for r in 0..4 {
-            rows[r][0] = b'1' + r as u8;
-            rows[r][2..6].copy_from_slice(words[r]);
-            rows[r][8] = b'5' + r as u8;
-            rows[r][10..14].copy_from_slice(words[r + 4]);
-        }
-        let g = fingerprint_grid(&rows);
-        assert_eq!(g.grid_word(0), Some(&b"clos"[..]));
+    fn fingerprint_grid_shows_whole_words() {
+        let w = |s: &[u8]| {
+            let mut c = [0u8; 8];
+            c[..s.len()].copy_from_slice(s);
+            c
+        };
+        let words = [w(b"close"), w(b"agent"), w(b"own"), w(b"deputy"), w(b"grape"), w(b"though"), w(b"sail"), w(b"category")];
+        let g = fingerprint_grid(&words);
+        assert!(g.is_well_formed());
+        assert_eq!(g.grid_word(0), Some(&b"close"[..]));
         assert_eq!(g.grid_word(2), Some(&b"own"[..]));
-        assert_eq!(g.grid_word(7), Some(&b"simp"[..]));
+        assert_eq!(g.grid_word(3), Some(&b"deputy"[..]));
+        // The longest BIP-39 English words (eight letters) fit whole.
+        assert_eq!(g.grid_word(7), Some(&b"category"[..]));
+        let longest = sphincs_tz_bip39::wordlist::WORDLIST.iter().map(|w| w.len()).max().unwrap();
+        assert_eq!(longest, 8);
     }
 
     #[test]
@@ -737,13 +738,6 @@ mod tests {
             c[..s.len()].copy_from_slice(s);
             c
         };
-        let mut rows = [[b' '; 16]; 4];
-        for (r, (a, b)) in [(b"clos", b"grap"), (b"agen", b"thou"), (b"own ", b"sail"), (b"depu", b"simp")].iter().enumerate() {
-            rows[r][0] = b'1' + r as u8;
-            rows[r][2..6].copy_from_slice(*a);
-            rows[r][8] = b'5' + r as u8;
-            rows[r][10..14].copy_from_slice(*b);
-        }
         let fw = [w(b"close"), w(b"agent"), w(b"own"), w(b"deputy"), w(b"grape"), w(b"though"), w(b"sail"), w(b"simple")];
         let key = [w(b"zoo"), w(b"abandon"), w(b"mountain"), w(b"withdraw"), w(b"ill"), w(b"jewel"), w(b"quality"), w(b"fix")];
         let mut fwt = std::boxed::Box::new(pqsigner_ui_px::Screens::blank());
@@ -768,7 +762,7 @@ mod tests {
         )
         .unwrap();
         let scenarios: std::vec::Vec<(&str, std::vec::Vec<Screen>)> = std::vec![
-            ("boot", std::vec![splash(), st("OS Fingerprint", ""), fingerprint_grid(&rows), st("PQSigner OS", "Ready")]),
+            ("boot", std::vec![splash(), st("OS Fingerprint", ""), fingerprint_grid(&fw), st("PQSigner OS", "Ready")]),
             (
                 "unlock",
                 std::vec![

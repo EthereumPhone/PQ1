@@ -188,7 +188,7 @@ batch idle → padlock) are screens outside the sign dialog — step 4 (done).
 | ~300 `ui::show_status` / `show_progress` sites | `screens/verdict/*`, status / film | `ui/px/status_map.rs` maps each to its screen; `ui/px/screens.rs` presents it |
 | PIN entry (`pin_entry.rs`) | `pin/pin_entering` (PIN row) | `status_map::pin_row` — painting only, the entry loop unchanged |
 | wrong PIN / PINs differ / checking / last attempt / locked / unlocked | `pin_mismatch`, `last_attempt`, `padlock` | verdicts |
-| boot splash + OS fingerprint | words grid | `splash`, `fingerprint_grid` (the FSBL's own 4×16 prefixes, so both rows still compare) |
+| boot splash + OS fingerprint | words grid | `splash`, `fingerprint_grid` (the eight words whole — BIP-39 words are ≤ 8 letters; the FSBL text window keeps its 5-letter prefixes, which start these words) |
 | seed wizard: chooser, 24 words, word entry, candidate pick, backup check | words grid, entry row, `shield` | `choice`, `seed_page` + the constant-time run, `letter_row`, `candidate_list` |
 | 120 s idle lock, re-unlock | `padlock` | PendSV plays LOCKED, then the PIN row; UNLOCKED before READY |
 | wipe / tamper / RNG / factory | `wipe`, `tamper`, `rng_failed`, `factory_signing` | verdicts |
@@ -263,7 +263,7 @@ must exist in its face (the 18 px / 16 px faces carry caps, digits and
 draft). Every existing fixture passes it.
 
 Evidence: `ui_px_status_map` host tests (9: the lifecycle verdict map, the
-notice keeping every word, caption charset, PIN masking, the FSBL-prefix
+notice keeping every word, caption charset, PIN masking, the whole-word
 grid, both fw-update transcripts passing `check_flow`, the lifted consents
 carrying every page fact, secret records holding no words, and the fixture
 drift check); `pqsigner-ui-px` 93 unit + 7 golden (new: shape / verdict /
