@@ -64,6 +64,16 @@ impl DeploymentConfirmContext {
         }
     }
 
+    /// Whether the confirmation covers an `initCode` deployment.
+    pub(crate) fn requested(&self) -> bool {
+        self.requested
+    }
+
+    /// The factory the deployment page names.
+    pub(crate) fn factory(&self) -> &[u8; 20] {
+        &self.factory
+    }
+
     fn receipt_digest(&self) -> [u8; 32] {
         let mut h = Sha256::new();
         h.update(DEPLOYMENT_CONFIRM_DOMAIN);
@@ -240,7 +250,7 @@ pub(crate) fn deployment_output_binding_proof(
     })
 }
 
-fn build_deployment_page(factory: &[u8; 20]) -> DeploymentPage {
+pub(crate) fn build_deployment_page(factory: &[u8; 20]) -> DeploymentPage {
     let mut page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     page[0][..15].copy_from_slice(b"DEPLOY FACTORY:");
     let [_label, first, second, third] = &mut page;

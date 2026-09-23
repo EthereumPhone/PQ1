@@ -179,6 +179,12 @@ pub mod safe_screens;
 #[allow(dead_code)]
 pub mod px_lift;
 
+// The native trailer twins (`trailer_screens`) over the mounted page
+// painters, so the lift's trailer proofs run against real trailer pages.
+#[path = "../tx/display/trailer_screens.rs"]
+#[allow(dead_code)]
+pub mod trailer_screens;
+
 // `safe_mgmt` IS re-mounted: it has no unused helpers in the host-test
 // configuration, and its per-op renderers are pure-display logic that
 // should be host-asserted against expected page rows.

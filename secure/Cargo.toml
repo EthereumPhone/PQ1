@@ -946,6 +946,9 @@ png = "0.17"
 # `pqsigner_sha256_*` externs. Instead build.rs requires the caller
 # to supply a precomputed 32-byte pubkey file via FSBL_VENDOR_PUBKEY;
 # `make dev-pubkey-fixture` generates one for dev builds.
+# Also pins the NS-resident pixel-UI atlas: `validate_ui_px_assets`
+# recomputes sha256(nonsecure/assets/ui-px/atlas.pq1a) and refuses a stale
+# `src/ui/px/atlas_root.rs`.
 sha2        = "0.10"
 
 [dev-dependencies]

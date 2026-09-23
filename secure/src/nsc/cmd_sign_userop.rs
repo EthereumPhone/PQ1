@@ -1837,6 +1837,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // screens, bound to them by `px_lift::transcript_proof`, and confirmed
     // through the design's grammar. Every other route — and every build
     // without `ui-px` — keeps the page dialog.
+    // The facts every trailer page above was painted from, for the pixel
+    // route's native trailer twins (`tx::display::trailer_screens`): the
+    // same values, never the pages and never companion bytes.
+    let px_trailer_facts = crate::tx::display::TrailerFacts {
+        tx: &tx_for_display,
+        legacy_fee_required: legacy_fee_pages_required,
+        paymaster_and_data_hash: &paymaster_and_data_hash,
+        account_index,
+        sender: &sender,
+        target: &to_address,
+        nonce: &type2_nonce,
+        call_gas: &call_gas_limit,
+        verification_gas: &verification_gas_limit,
+        pre_verification_gas: &pre_verification_gas,
+        fingerprint: fingerprint_kind,
+        deployment: &deployment_context,
+    };
     let px_decision = px_route_confirm(
         px_scratch,
         &pages,
@@ -1846,6 +1863,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         cow_order_verified.as_ref(),
         chain_verified_meta.as_ref(),
         &resolver,
+        &px_trailer_facts,
     );
     // Whether the pixel UI owns this confirmation (and therefore its ending).
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
@@ -1859,7 +1877,22 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         None => confirm_checked(pages.as_slice()),
     };
     match cr {
-        ConfirmResult::Confirmed => {}
+        ConfirmResult::Confirmed => {
+            // Second, spatially separate re-proof of the NS-resident glyph
+            // atlas the pixel dialog just painted with (the first sits in
+            // `px_confirm_safe`): the handler does not trust the returned
+            // tuple alone, same A/B shape as the dispatch final gates.
+            #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+            if px_route {
+                crate::fi::scrub_sentinel_register();
+                if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+                    super::zeroize_sensitive_state();
+                    ui::show_status("Sign refused", "px atlas");
+                    return NscStatus::InternalError as u32;
+                }
+                crate::fi::scrub_sentinel_register();
+            }
+        }
         ConfirmResult::Cancelled => {
             #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
             if px_route {
@@ -2716,11 +2749,12 @@ fn px_route_confirm(
     cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
     erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
     resolver: &crate::names::NameResolver<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
 ) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
     if safe_v1.is_none() && safe_exec.is_none() {
         return None;
     }
-    Some(super::px_confirm_safe(scratch, pages, chain_id, safe_v1, safe_exec, cow, erc20, resolver))
+    Some(super::px_confirm_safe(scratch, pages, chain_id, safe_v1, safe_exec, cow, erc20, resolver, facts))
 }
 
 #[cfg(not(feature = "ui-px"))]
@@ -2734,6 +2768,7 @@ fn px_route_confirm(
     _cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
     _erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
     _resolver: &crate::names::NameResolver<'_>,
+    _facts: &crate::tx::display::TrailerFacts<'_>,
 ) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
     None
 }

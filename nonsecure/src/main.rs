@@ -113,6 +113,8 @@ mod erc20_db;
 #[cfg(all(feature = "e2e-test", not(feature = "gtzc-test")))]
 mod names_db;
 mod nsc_api;
+#[cfg(feature = "ui-px-atlas")]
+mod ui_px_atlas;
 // The selectors DB blob lives on the host; only the e2e-test build
 // stubs in a companion-side bundle builder so the QEMU NS test
 // driver can act as a dev-only companion.

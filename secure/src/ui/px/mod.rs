@@ -19,6 +19,15 @@ pub mod lcd;
 
 pub use confirm_px::{confirm_screens_checked, PX_COMMIT_REQUIRES_SEEN_LAST};
 
+/// The verified atlas a dialog paints with. On the NV3007 it is the view
+/// `assets::verify_atlas` returned for THIS dialog; the text presenters
+/// (QEMU, `ui-capture`) have no atlas and take a unit placeholder, so the
+/// call shape is the same on every backend.
+#[cfg(feature = "ui-lcd")]
+pub type AtlasArg<'a> = &'a assets::AtlasRef;
+#[cfg(not(feature = "ui-lcd"))]
+pub type AtlasArg<'a> = &'a ();
+
 /// Outcome of a pixel-UI confirm loop. The FI gate returned alongside it is
 /// `OK_SENTINEL` only for `Signed`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

@@ -33,7 +33,10 @@ use super::safe_display_render_pure_tests::{
 };
 use super::px_lift;
 use super::safe_screens::{emit_safe_v1, SafeBodyReceipt};
+use super::trailer_screens::{self, TrailerFacts, TrailerReceipt};
 use super::Pages;
+use crate::tx::display::erc8213::Kind as FpKind;
+use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::erc20::bundle::Erc20Metadata;
 use crate::names::NameResolver;
 use crate::tx::eip712::cowswap::VerifiedCowswapV3;
@@ -43,6 +46,7 @@ use crate::tx::eip712::safe::multi_send::test_util::{
 };
 use crate::tx::eip712::safe::{compute_safe_tx_hash, verify_and_bind_trailer};
 use pqsigner_ui_px::{Kind, Screen, Screens, MAX_SCREENS};
+use super::deployment::DeploymentConfirmContext;
 use sphincs_tz_shared::{APPROVE_HASH_CALLDATA_LEN, APPROVE_HASH_SELECTOR, SAFE_OFF_DATA_HASH};
 
 /// A trailer whose canonical the caller can tweak (refund / value / gas
@@ -153,7 +157,25 @@ fn assert_facts_carry_over(b: &Both) {
             );
         }
     }
-    for run in legacy.split(|c: char| !c.is_ascii_digit()) {
+    // Decimal runs are amounts, counts and nonces — NOT the digit
+    // substrings of a hex word (an address the design wraps at a different
+    // column than the 16-col page did splits such a substring; the hex-run
+    // check above already binds every hex word in full). Blank the hex runs
+    // first, then require every decimal run verbatim.
+    let mut numeric = String::with_capacity(legacy.len());
+    for run in legacy.split_inclusive(|c: char| !c.is_ascii_hexdigit()) {
+        let (body, sep) = match run.char_indices().last() {
+            Some((i, c)) if !c.is_ascii_hexdigit() => (&run[..i], &run[i..]),
+            _ => (run, ""),
+        };
+        if body.len() >= 8 {
+            numeric.push(' ');
+        } else {
+            numeric.push_str(body);
+        }
+        numeric.push_str(sep);
+    }
+    for run in numeric.split(|c: char| !c.is_ascii_digit()) {
         if run.len() >= 2 {
             assert!(screens.contains(run), "decimal run {run:?} missing from the screens:\n{screens}");
         }
@@ -381,110 +403,384 @@ const GOLDEN_MGMT_ADD_OWNER: &str = "1b2d79da3775b7e39dc384ce9899989b5ae5d39e060
 
 
 // ---------------------------------------------------------------------------
-// The lift: legacy tail wrap + returning hero + Confirm? + transcript proof
+// The lift: native trailers + returning hero + Confirm? + transcript proof
 // ---------------------------------------------------------------------------
 
-/// A full pipeline for the ERC-20 known scenario with two synthetic trailer
-/// pages appended after the Safe body (standing in for the dispatcher's
-/// fee pages and the handler's mandatory trailers).
-fn lifted() -> (Screens, Pages, usize, SafeBodyReceipt, Option<usize>) {
+fn u256(n: u64) -> U256 {
+    let mut out = [0u8; 32];
+    out[24..].copy_from_slice(&n.to_be_bytes());
+    U256(out)
+}
+
+fn word(n: u64) -> [u8; 32] {
+    u256(n).0
+}
+
+/// The outer UserOp display shim the Safe routes carry (the same shape the
+/// handler builds as `tx_for_display`).
+fn outer_tx(value: u64) -> Eip1559Tx {
+    let mut tx = Eip1559Tx::default();
+    tx.chain_id = CHAIN_ID;
+    tx.nonce = 0;
+    tx.to = Some(SAFE_ADDR);
+    tx.value = u256(value);
+    tx.gas_limit = 210_000;
+    tx.max_fee_per_gas = u256(30_000_000_000);
+    tx.max_priority_fee_per_gas = u256(1_500_000_000);
+    tx
+}
+
+/// Owns every trailer fact so a `TrailerFacts` can borrow them.
+struct TrailerFixture {
+    tx: Eip1559Tx,
+    paymaster: [u8; 32],
+    sender: [u8; 20],
+    target: [u8; 20],
+    nonce: [u8; 32],
+    call: [u8; 32],
+    verify: [u8; 32],
+    prever: [u8; 32],
+    fp: FpKind,
+    deployment: DeploymentConfirmContext,
+}
+
+const SHA256_OF_EMPTY: [u8; 32] = [
+    0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+    0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+];
+
+/// `value` in wei; `lane` puts a non-zero key in the nonce; `deploy` sets
+/// the initCode mode; `paymaster` marks a sponsor present.
+fn fixture(value: u64, lane: bool, deploy: bool, paymaster: bool) -> TrailerFixture {
+    let sender: [u8; 20] = core::array::from_fn(|i| 0x30u8.wrapping_add(i as u8));
+    let mut nonce = [0u8; 32];
+    if lane {
+        nonce[..24].copy_from_slice(&[0x5a; 24]);
+    }
+    nonce[24..].copy_from_slice(&3u64.to_be_bytes());
+    TrailerFixture {
+        tx: outer_tx(value),
+        paymaster: if paymaster { [0x11; 32] } else { SHA256_OF_EMPTY },
+        sender,
+        target: SAFE_ADDR,
+        nonce,
+        call: word(120_000),
+        verify: word(80_000),
+        prever: word(10_000),
+        fp: FpKind::CalldataDigest(core::array::from_fn(|i| 0xc0u8.wrapping_add(i as u8))),
+        deployment: DeploymentConfirmContext::new(deploy, CHAIN_ID, 0, 1, sender, nonce, [0xfa; 20]),
+    }
+}
+
+impl TrailerFixture {
+    fn facts(&self) -> TrailerFacts<'_> {
+        TrailerFacts {
+            tx: &self.tx,
+            legacy_fee_required: true,
+            paymaster_and_data_hash: &self.paymaster,
+            account_index: 0,
+            sender: &self.sender,
+            target: &self.target,
+            nonce: &self.nonce,
+            call_gas: &self.call,
+            verification_gas: &self.verify,
+            pre_verification_gas: &self.prever,
+            fingerprint: self.fp,
+            deployment: &self.deployment,
+        }
+    }
+}
+
+/// Append the real trailer pages in the handler's order with the real
+/// painters and their proofs (dispatcher native-value + fee splice, then
+/// paymaster, signer, target, nonce lane, gas lane, ERC-8213, deployment).
+fn append_trailer_pages(pages: &mut Pages, f: &TrailerFacts<'_>) {
+    let ok = crate::fi::OK_SENTINEL;
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::value_page::enforce_native_value_page(pages, &f.tx.value, f.tx.chain_id, &mut cfi).unwrap();
+    assert_eq!(super::value_page::native_value_page_proof(pages, before, &f.tx.value, f.tx.chain_id), ok);
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::value_page::enforce_gas_pages(pages, f.tx, &mut cfi).unwrap();
+    assert_eq!(super::value_page::legacy_fee_pages_proof(pages, before, f.tx), ok);
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::value_page::enforce_paymaster_page(pages, f.paymaster_and_data_hash, &mut cfi).unwrap();
+    assert_eq!(super::value_page::paymaster_page_proof(pages, before, f.paymaster_and_data_hash), ok);
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::value_page::enforce_from_page(pages, f.account_index, f.sender, &mut cfi).unwrap();
+    assert_eq!(super::value_page::from_page_proof(pages, before, f.account_index, f.sender), ok);
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::value_page::enforce_target_page(pages, f.target, &mut cfi).unwrap();
+    assert_eq!(super::value_page::target_page_proof(pages, before, f.target), ok);
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::nonce_lane::enforce_nonce_lane_page(pages, f.nonce, &mut cfi).unwrap();
+    assert_eq!(super::nonce_lane::nonce_lane_page_proof(pages, before, f.nonce), ok);
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::userop_gas_lane::enforce_userop_gas_page(pages, f.call_gas, f.verification_gas, f.pre_verification_gas, &mut cfi).unwrap();
+    assert_eq!(super::userop_gas_lane::userop_gas_page_proof(pages, before, f.call_gas, f.verification_gas, f.pre_verification_gas), ok);
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::erc8213::append_fingerprint_page(pages, f.fingerprint, &mut cfi).unwrap();
+    assert_eq!(super::erc8213::fingerprint_page_proof(pages, before, f.fingerprint), ok);
+    let mut cfi = crate::fi::CfiCounter::new();
+    let before = pages.len;
+    super::deployment::enforce_deployment_page(pages, f.deployment, &mut cfi).unwrap();
+    assert_eq!(super::deployment::deployment_page_proof(pages, before, f.deployment), ok);
+}
+
+struct Lifted {
+    screens: Screens,
+    pages: Pages,
+    body_len: usize,
+    receipt: px_lift::ContentReceipt,
+    confirm_at: Option<usize>,
+}
+
+/// The full pipeline for the ERC-20 known scenario: the Safe body, the real
+/// trailer pages, the content emit (body + native trailers), the returning
+/// hero and the `Confirm?`.
+fn lifted(fx: &TrailerFixture) -> Lifted {
     let meta = usdc_meta();
     let (bundle, cd) = build_trailer_with(TOKEN, 0, &erc20_transfer(recipient(), 250_000_000), |_| {});
     let verified = verify_and_bind_trailer(&bundle, &cd, CHAIN_ID, &SAFE_ADDR).unwrap();
     let resolver = NameResolver::new();
     let mut pages = render_safe_v1_pages(&verified, None, Some(&meta), &resolver).unwrap();
     let body_len = pages.len;
-    for (i, label) in [&b"Fees: max / tip"[..], b"Worst-case:", b"Signer acct #0"].iter().enumerate() {
-        let slot = pages.push_blank().expect("room");
-        pages.buf[slot][0][..label.len()].copy_from_slice(label);
-        pages.buf[slot][1][0] = b'0' + i as u8;
-    }
+    let facts = fx.facts();
+    append_trailer_pages(&mut pages, &facts);
     let mut screens = Screens::blank();
-    let receipt = px_lift::emit_safe_body(&mut screens, Some(&verified), None, None, Some(&meta), &resolver).unwrap();
-    assert_eq!(receipt.legacy_pages, body_len);
-    let tail = px_lift::append_legacy_tail(&mut screens, &pages, body_len).unwrap();
-    assert_eq!(tail, 3);
+    let inputs = px_lift::ContentInputs {
+        safe_v1: Some(&verified),
+        safe_exec: None,
+        cow: None,
+        erc20: Some(&meta),
+        resolver: &resolver,
+        trailers: &facts,
+    };
+    let receipt = px_lift::emit_content(&mut screens, &inputs).unwrap();
+    assert_eq!(receipt.body.legacy_pages, body_len);
+    assert_eq!(receipt.trailers.start, receipt.body.screens);
+    assert_eq!(receipt.trailers.screens, pages.len - body_len, "one trailer screen per trailer page");
     px_lift::append_returning_hero(&mut screens).unwrap();
     let confirm_at = px_lift::insert_confirm(&mut screens).unwrap();
-    (screens, pages, body_len, receipt, confirm_at)
+    Lifted { screens, pages, body_len, receipt, confirm_at }
+}
+
+fn ids(screens: &Screens) -> Vec<String> {
+    screens.as_slice().iter().map(|s| String::from_utf8_lossy(s.id()).trim_end().to_owned()).collect()
+}
+
+fn proof(l: &Lifted, screens: &Screens, facts: &TrailerFacts<'_>, confirm_at: Option<usize>) -> u32 {
+    px_lift::transcript_proof(screens, &l.pages, l.body_len, &l.receipt, facts, confirm_at)
+}
+
+fn copy_of(screens: &Screens) -> Screens {
+    let mut t = Screens::blank();
+    t.set_len(screens.len());
+    t.buf = screens.buf;
+    t
 }
 
 #[test]
 fn lift_proof_accepts_the_assembled_transcript() {
-    let (screens, pages, body_len, receipt, confirm_at) = lifted();
-    // 8 body screens + 3 tail + hero = 12 ≥ 7 details → Confirm? at 5.
-    assert_eq!(confirm_at, Some(5));
-    assert_eq!(screens.len(), receipt.screens + 3 + 1 + 1);
-    assert_eq!(px_lift::transcript_proof(&screens, &pages, body_len, &receipt, confirm_at), crate::fi::OK_SENTINEL);
-    // Legacy pages after the body are wrapped byte-exactly; the confirm
-    // footer is the one page dropped.
-    let text = screen_text(&screens);
-    assert!(text.contains("Fees: max / tip"));
+    let fx = fixture(0, false, false, false);
+    let l = lifted(&fx);
+    // 8 body screens + 7 trailers + hero = 16 ≥ 7 details → Confirm? at 5.
+    assert_eq!(l.confirm_at, Some(5));
+    assert_eq!(l.receipt.trailers.screens, 7);
+    assert_eq!(l.screens.len(), l.receipt.body.screens + 7 + 1 + 1);
+    assert_eq!(proof(&l, &l.screens, &fx.facts(), l.confirm_at), crate::fi::OK_SENTINEL);
+    let text = screen_text(&l.screens);
+    assert!(text.contains("Fees: max / tip"), "{text}");
+    assert!(text.contains("Worst-case:"));
+    assert!(text.contains("Signer acct #0"));
     assert!(!text.contains("Long-press to"));
-    assert_eq!(screens.as_slice()[5].kind(), Some(Kind::Confirm));
-    assert_eq!(screens.as_slice()[screens.len() - 1].kind(), Some(Kind::Hero));
+    assert!(!text.contains("> next"), "navigation footers are not facts");
+    assert_eq!(l.screens.as_slice()[5].kind(), Some(Kind::Confirm));
+    assert_eq!(l.screens.as_slice()[l.screens.len() - 1].kind(), Some(Kind::Hero));
+    let id = ids(&l.screens);
+    let start = l.receipt.trailers.start + 1; // shifted by the Confirm? at 5
+    assert_eq!(&id[start..start + 7], &["MAXFEE", "WORST", "SIGNER", "TARGET", "GASLANE", "FP8213", "DIGEST"]);
+    for s in l.screens.as_slice() {
+        assert_ne!(s.kind(), Some(Kind::Legacy), "no page-wrapped record on the pixel route");
+    }
+    // The digest is a full-width value screen with the fingerprint identity.
+    let digest = &l.screens.as_slice()[start + 6];
+    assert_eq!(digest.kind(), Some(Kind::Value));
+    assert_eq!(digest.icon(), Some(pqsigner_ui_px::Icon::Fingerprint));
+}
+
+#[test]
+fn every_optional_trailer_renders_and_carries_its_facts() {
+    let fx = fixture(1_500_000_000_000_000_000, true, true, true);
+    let l = lifted(&fx);
+    assert_eq!(l.receipt.trailers.screens, 11);
+    assert_eq!(proof(&l, &l.screens, &fx.facts(), l.confirm_at), crate::fi::OK_SENTINEL);
+    let id = ids(&l.screens);
+    let start = l.receipt.trailers.start + 1;
+    assert_eq!(
+        &id[start..start + 11],
+        &["NATIVE", "MAXFEE", "WORST", "PAYMSTR", "SIGNER", "TARGET", "LANE", "GASLANE", "FP8213", "DIGEST", "DEPLOY"]
+    );
+    // Loud trailers pulse; ordinary ones do not.
+    let vis = l.screens.as_slice();
+    assert!(vis[start].pulse() && vis[start + 3].pulse() && vis[start + 10].pulse());
+    assert!(!vis[start + 1].pulse() && !vis[start + 4].pulse() && !vis[start + 7].pulse());
+    // Every hex / decimal fact of the legacy trailer pages is on the screens.
+    let both = Both { pages: l.pages, screens: copy_of(&l.screens), receipt: l.receipt.body };
+    assert_facts_carry_over(&both);
+    let text = screen_text(&l.screens);
+    assert!(text.contains("! NATIVE"), "{text}");
+    assert!(text.contains("1.5"), "{text}");
+    assert!(text.contains("! PAYMASTER SET"));
+    assert!(text.contains("5a5a5a5a5a5a5a5a"), "48-hex nonce lane key");
+    assert!(text.contains("Call:120000") && text.contains("Total:210000"));
+    assert!(text.contains("DEPLOY FACTORY:"));
+    // Nothing truncates: every line fits its region at its tier.
+    for s in vis {
+        if let Some(t) = s.tier() {
+            let region = if s.kind() == Some(Kind::Value) { pqsigner_ui_px::fit::Region::Full } else { pqsigner_ui_px::fit::Region::Docked };
+            for p in 0..s.npages() {
+                for i in 0..s.nlines(p) {
+                    let (_, line) = s.line(p, i).unwrap();
+                    assert!(line.len() <= region.chars(t), "{s:?}");
+                }
+            }
+        }
+    }
 }
 
 #[test]
 fn lift_proof_rejects_tampering() {
-    let (screens, pages, body_len, receipt, confirm_at) = lifted();
+    let fx = fixture(0, false, false, false);
+    let l = lifted(&fx);
+    let facts = fx.facts();
     let ok = crate::fi::OK_SENTINEL;
-    let proof = |s: &Screens, c: Option<usize>| px_lift::transcript_proof(s, &pages, body_len, &receipt, c);
+    let tail_idx = l.receipt.trailers.start + 1; // shifted by the Confirm? at 5
 
-    // A flipped byte in a wrapped trailer page.
-    let mut t = Screens::blank();
-    t.set_len(screens.len());
-    t.buf = screens.buf;
-    let tail_idx = receipt.screens + 1; // shifted by the Confirm? at 5
+    // A flipped byte in a trailer screen.
+    let mut t = copy_of(&l.screens);
     t.buf[tail_idx].0[70] ^= 0x01;
-    assert_ne!(proof(&t, confirm_at), ok, "flipped legacy byte");
+    assert_ne!(proof(&l, &t, &facts, l.confirm_at), ok, "flipped trailer byte");
 
     // A missing trailer screen.
-    let mut t = Screens::blank();
-    t.set_len(screens.len() - 1);
-    t.buf = screens.buf;
-    t.buf.copy_within(tail_idx + 1..screens.len(), tail_idx);
-    assert_ne!(proof(&t, confirm_at), ok, "dropped trailer");
+    let mut t = copy_of(&l.screens);
+    t.set_len(l.screens.len() - 1);
+    t.buf.copy_within(tail_idx + 1..l.screens.len(), tail_idx);
+    assert_ne!(proof(&l, &t, &facts, l.confirm_at), ok, "dropped trailer");
 
     // A duplicated trailer screen (replacing the next one).
-    let mut t = Screens::blank();
-    t.set_len(screens.len());
-    t.buf = screens.buf;
+    let mut t = copy_of(&l.screens);
     t.buf[tail_idx + 1] = t.buf[tail_idx];
-    assert_ne!(proof(&t, confirm_at), ok, "duplicated trailer");
+    assert_ne!(proof(&l, &t, &facts, l.confirm_at), ok, "duplicated trailer");
+
+    // A trailer swapped with its neighbour (right screens, wrong order).
+    let mut t = copy_of(&l.screens);
+    t.buf.swap(tail_idx, tail_idx + 1);
+    assert_ne!(proof(&l, &t, &facts, l.confirm_at), ok, "reordered trailers");
+
+    // A page-wrapped Legacy record standing in for a trailer.
+    let mut t = copy_of(&l.screens);
+    t.buf[tail_idx] = Screen::legacy(&l.pages.buf[l.body_len]);
+    assert_ne!(proof(&l, &t, &facts, l.confirm_at), ok, "legacy record");
 
     // Wrong Confirm? index claim.
-    assert_ne!(proof(&screens, Some(4)), ok, "wrong confirm index");
-    assert_ne!(proof(&screens, None), ok, "confirm present but unclaimed");
+    assert_ne!(proof(&l, &l.screens, &facts, Some(4)), ok, "wrong confirm index");
+    assert_ne!(proof(&l, &l.screens, &facts, None), ok, "confirm present but unclaimed");
 
     // A returning hero that is not the opening hero.
-    let mut t = Screens::blank();
-    t.set_len(screens.len());
-    t.buf = screens.buf;
+    let mut t = copy_of(&l.screens);
     let last = t.len() - 1;
     t.buf[last] = pqsigner_ui_px::ScreenBuilder::hero(b"OTHER", pqsigner_ui_px::Icon::Safe, b"OTHER ASK?").finish().unwrap();
-    assert_ne!(proof(&t, confirm_at), ok, "different returning hero");
+    assert_ne!(proof(&l, &t, &facts, l.confirm_at), ok, "different returning hero");
 
     // A detail that arms commit.
-    let mut t = Screens::blank();
-    t.set_len(screens.len());
-    t.buf = screens.buf;
+    let mut t = copy_of(&l.screens);
     t.buf[2].0[5] = b'Y';
-    assert_ne!(proof(&t, confirm_at), ok, "commit-armed detail");
+    assert_ne!(proof(&l, &t, &facts, l.confirm_at), ok, "commit-armed detail");
 
     // A body length that does not land on the legacy confirm footer.
-    assert_ne!(px_lift::transcript_proof(&screens, &pages, body_len - 1, &receipt, confirm_at), ok);
-    let _ = Screen::BLANK;
+    assert_ne!(px_lift::transcript_proof(&l.screens, &l.pages, l.body_len - 1, &l.receipt, &facts, l.confirm_at), ok);
+
+    // Facts that disagree with the screens: a different target, a value
+    // the screens do not show, a lane key they do not show.
+    let mut other = fixture(0, false, false, false);
+    other.target = [0x77; 20];
+    assert_ne!(proof(&l, &l.screens, &other.facts(), l.confirm_at), ok, "target mismatch");
+    let other = fixture(5, false, false, false);
+    assert_ne!(proof(&l, &l.screens, &other.facts(), l.confirm_at), ok, "hidden native value");
+    let other = fixture(0, true, false, false);
+    assert_ne!(proof(&l, &l.screens, &other.facts(), l.confirm_at), ok, "hidden nonce lane");
+    let other = fixture(0, false, true, false);
+    assert_ne!(proof(&l, &l.screens, &other.facts(), l.confirm_at), ok, "hidden deployment");
+    let other = fixture(0, false, false, true);
+    assert_ne!(proof(&l, &l.screens, &other.facts(), l.confirm_at), ok, "hidden paymaster");
+}
+
+#[test]
+fn trailer_slot_proofs_reject_a_present_screen_on_a_skip() {
+    // Screens built for a non-zero value, proven against zero-value facts:
+    // the NATIVEVAL screen is present but the facts say skip.
+    let fx = fixture(5, false, false, false);
+    let l = lifted(&fx);
+    let zero = fixture(0, false, false, false);
+    let mut receipt: TrailerReceipt = l.receipt.trailers;
+    receipt.at[0] = None;
+    assert_ne!(trailer_screens::trailer_set_proof(&l.screens, &receipt, &zero.facts(), l.confirm_at), crate::fi::OK_SENTINEL);
+    assert_ne!(trailer_screens::trailer_screen_proof(&l.screens, 0, &l.receipt.trailers, &zero.facts(), l.confirm_at), crate::fi::OK_SENTINEL);
+    // And the genuine receipt against the genuine facts passes per slot.
+    for i in 0..trailer_screens::N_TRAILERS {
+        assert_eq!(trailer_screens::trailer_screen_proof(&l.screens, i, &l.receipt.trailers, &fx.facts(), l.confirm_at), crate::fi::OK_SENTINEL, "slot {i}");
+    }
 }
 
 #[test]
 fn lift_helpers_fail_closed() {
-    let mut pages = Pages::with_len(0);
+    let fx = fixture(0, false, false, false);
+    let facts = fx.facts();
     let mut screens = Screens::blank();
-    assert!(px_lift::append_legacy_tail(&mut screens, &pages, 0).is_err(), "empty");
-    let slot = pages.push_blank().unwrap();
-    pages.buf[slot][0][..5].copy_from_slice(b"Safe:");
-    assert!(px_lift::append_legacy_tail(&mut screens, &pages, 1).is_err(), "not a confirm footer");
     assert!(px_lift::append_returning_hero(&mut screens).is_err(), "no hero");
-    assert!(px_lift::emit_safe_body(&mut screens, None, None, None, None, &NameResolver::new()).is_err());
+    let inputs = px_lift::ContentInputs {
+        safe_v1: None,
+        safe_exec: None,
+        cow: None,
+        erc20: None,
+        resolver: &NameResolver::new(),
+        trailers: &facts,
+    };
+    assert!(px_lift::emit_content(&mut screens, &inputs).is_err());
+    let _ = Screen::BLANK;
 }
+
+#[test]
+fn worst_case_multisend_with_every_trailer_fits() {
+    // The heaviest Safe body the tests exercise plus all eleven trailers,
+    // the returning hero and the Confirm? stays under MAX_SCREENS.
+    let approve = erc20_approve(GPV2_VAULT_RELAYER_ADDRESS, 456);
+    let mut packed = pack_record(0, &WSTETH, &ZERO_VALUE, &approve);
+    packed.extend_from_slice(&pack_record(0, &GPV2_SETTLEMENT_ADDRESS, &ZERO_VALUE, &presign_calldata_stub()));
+    let raw = encode_multisend(&packed);
+    let meta = wsteth_meta();
+    let cow = bound_cow_stub();
+    let b = both(MULTISEND_CALL_ONLY_ADDRESSES[0], 1, &raw, Some(&cow), Some(&meta));
+    let body = b.screens.len();
+    assert!(body + trailer_screens::N_TRAILERS + 2 <= MAX_SCREENS, "body {body} + 11 trailers + 2 > {MAX_SCREENS}");
+}
+
+#[test]
+fn every_trailer_slot_renders_for_both_fixtures() {
+    for (name, fx) in [("minimal", fixture(0, false, false, false)), ("maximal", fixture(1_500_000_000_000_000_000, true, true, true))] {
+        let facts = fx.facts();
+        for (i, slot) in trailer_screens::SLOTS.iter().enumerate() {
+            let r = trailer_screens::expected(*slot, &facts, 9 + i);
+            assert!(r.is_ok(), "{name}: slot {slot:?} refused to render");
+        }
+    }
+}
+

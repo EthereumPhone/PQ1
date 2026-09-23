@@ -154,9 +154,10 @@ impl Display {
         // Under `ui-px` every legacy 16×4 page is painted through the pixel
         // engine (design typography) — the constant-time secret-row path
         // below stays on the glyph blitter.
+        // If the NS-resident atlas failed verification the engine declines
+        // and the glyph blitter below keeps the device readable.
         #[cfg(feature = "ui-px")]
-        {
-            crate::ui::px::lcd::paint_legacy(&self.rows);
+        if crate::ui::px::lcd::paint_legacy(&self.rows) {
             return;
         }
         for r in 0..DISPLAY_ROWS {

@@ -116,7 +116,8 @@ pub fn verify_images(ctx: &FwUpdateCtx, m: &ManifestRef) -> Result<(), ImageChec
 
 /// Stream-hash a flash region. Reads through a volatile pointer so the
 /// compiler can't fold "we just wrote X, so X is the value" optimisations.
-fn hash_flash(base: u32, len: u32) -> [u8; 32] {
+/// Also used by `ui::px::assets` to prove the NS-resident pixel-UI atlas.
+pub(crate) fn hash_flash(base: u32, len: u32) -> [u8; 32] {
     let mut hasher = Sha256::new();
     let mut chunk = [0u8; 256];
     let mut off = 0u32;

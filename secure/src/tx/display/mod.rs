@@ -49,6 +49,13 @@ mod safe_screens;
 /// The legacy-pages → screens lift and its transcript proof (`ui-px`).
 #[cfg(feature = "ui-px")]
 pub mod px_lift;
+// The native pixel-UI twins of the handler-owned trailer pages. Always
+// compiled (pure, host-testable; dead-stripped without a `ui-px` caller) so
+// the sign handler's `TrailerFacts` exists on every configuration.
+#[cfg(not(test))]
+mod trailer_screens;
+#[cfg(not(test))]
+pub(crate) use trailer_screens::TrailerFacts;
 #[cfg(feature = "ui-px")]
 pub(crate) use dispatch::safe_route_meta;
 #[cfg(not(test))]

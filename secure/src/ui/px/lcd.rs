@@ -394,12 +394,20 @@ fn build_and_present(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, overlay: O
 /// Paint a legacy 16×4 page through the pixel engine (the `Display::flush`
 /// path under `ui-px`, so every status / progress / PIN screen shares the
 /// design's typography).
-pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS]) {
+///
+/// Returns `false` when the NS-resident atlas failed its boot verification
+/// (`assets::atlas`), so the caller paints with the legacy glyph blitter
+/// instead — the device stays readable, the pixel dialogs refuse.
+pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS]) -> bool {
+    let Some(atlas) = assets::atlas() else {
+        return false;
+    };
     // The legacy glyph blitter may have painted between calls.
     invalidate_shown();
     let s = Screen::legacy(rows);
     let anim = Anim::new(&s, 0, timeout::now());
-    let _ = build_and_present(&anim, &assets::marks(), &assets::font(), None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
+    true
 }
 
 /// Clear the panel (before the legacy glyph blitter paints again).
@@ -410,13 +418,16 @@ pub fn clear() {
 
 /// Play an ending over ~1.3 s and leave its resting frame on the glass.
 pub fn show_ending(e: Ending) {
+    let Some(atlas) = assets::atlas() else {
+        return;
+    };
     let hero = Screen::BLANK;
     let now = timeout::now();
     let mut anim = Anim::new(&hero, 0, now);
     anim.ending(e, now);
     let start = now;
-    let marks = assets::marks();
-    let font = assets::font();
+    let marks = atlas.marks();
+    let font = atlas.font();
     invalidate_shown();
     loop {
         let t = timeout::now();
@@ -434,16 +445,19 @@ pub fn show_busy(caption: &[u8]) {
     let s = pqsigner_ui_px::ScreenBuilder::status(b"BUSY", pqsigner_ui_px::Icon::Safe, caption, pqsigner_ui_px::State::Awaiting, pqsigner_ui_px::ResultMark::None)
         .finish()
         .unwrap_or(Screen::BLANK);
+    let Some(atlas) = assets::atlas() else {
+        return;
+    };
     invalidate_shown();
     let anim = Anim::new(&s, 0, timeout::now());
-    let _ = build_and_present(&anim, &assets::marks(), &assets::font(), None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
 }
 
 // ---- the flow ------------------------------------------------------------------
 
 /// Run the design's confirm loop over a proven transcript on the panel.
 /// Returns the outcome and the FI gate (`OK_SENTINEL` only for `Signed`).
-pub fn run_flow(screens: &Screens, deadline_expired: &mut dyn FnMut() -> bool) -> (PxOutcome, u32) {
+pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &mut dyn FnMut() -> bool) -> (PxOutcome, u32) {
     let visible = screens.as_slice();
     let Some(mut driver) = FlowDriver::new(visible) else {
         return (PxOutcome::Cancelled, crate::fi::FAIL_SENTINEL);
@@ -451,10 +465,11 @@ pub fn run_flow(screens: &Screens, deadline_expired: &mut dyn FnMut() -> bool) -
     if deadline_expired() {
         return (PxOutcome::DeadlineExpired, crate::fi::FAIL_SENTINEL);
     }
-    // Parsed once per flow: the atlas header walk is cheap but it is per
-    // frame otherwise, and the marks likewise.
-    let marks = assets::marks();
-    let font = assets::font();
+    // Parsed once per flow from the view `assets::verify_atlas` proved for
+    // this dialog: the atlas header walk is cheap but it is per frame
+    // otherwise, and the marks likewise.
+    let marks = atlas.marks();
+    let font = atlas.font();
     let mut fsm = InputFsm::new(InputCtx::NAV);
     let now = timeout::now();
     let mut anim = Anim::new(&visible[0], 0, now);

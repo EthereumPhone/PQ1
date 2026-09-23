@@ -45,9 +45,9 @@ enum LoopResult {
 
 /// Run the confirmation dialog over `screens`. Returns the user's decision
 /// and the FI gate: `crate::fi::OK_SENTINEL` only on the accept branch.
-pub fn confirm_screens_checked(screens: &Screens) -> (ConfirmResult, u32) {
+pub fn confirm_screens_checked(screens: &Screens, atlas: super::AtlasArg<'_>) -> (ConfirmResult, u32) {
     let mut never = || false;
-    let (r, gate) = confirm_inner(screens, &mut never);
+    let (r, gate) = confirm_inner(screens, atlas, &mut never);
     let cr = match r {
         LoopResult::Confirmed => ConfirmResult::Confirmed,
         LoopResult::Cancelled | LoopResult::DeadlineExpired => ConfirmResult::Cancelled,
@@ -56,7 +56,8 @@ pub fn confirm_screens_checked(screens: &Screens) -> (ConfirmResult, u32) {
     (cr, gate)
 }
 
-fn confirm_inner(screens: &Screens, deadline_expired: &mut dyn FnMut() -> bool) -> (LoopResult, u32) {
+fn confirm_inner(screens: &Screens, atlas: super::AtlasArg<'_>, deadline_expired: &mut dyn FnMut() -> bool) -> (LoopResult, u32) {
+    let _ = &atlas;
     let visible = screens.as_slice();
     let Some(mut driver) = FlowDriver::new(visible) else {
         return (LoopResult::Cancelled, crate::fi::FAIL_SENTINEL);
@@ -87,7 +88,7 @@ fn confirm_inner(screens: &Screens, deadline_expired: &mut dyn FnMut() -> bool) 
     #[cfg(all(not(feature = "e2e-test"), feature = "ui-lcd"))]
     {
         let _ = &mut driver;
-        let (out, gate) = super::lcd::run_flow(screens, deadline_expired);
+        let (out, gate) = super::lcd::run_flow(screens, atlas, deadline_expired);
         return match out {
             super::PxOutcome::Signed => (LoopResult::Confirmed, gate),
             super::PxOutcome::Declined | super::PxOutcome::Cancelled => (LoopResult::Cancelled, crate::fi::FAIL_SENTINEL),

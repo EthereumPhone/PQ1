@@ -66,10 +66,12 @@ pub const LEGACY_LINES: usize = DISPLAY_ROWS;
 /// Pages a single screen may turn through.
 pub const PAGES_PER_SCREEN: usize = 2;
 /// Hard cap on the number of screens in one confirmation transcript. Sized
-/// for the worst Safe-UI case (2-record multiSend approve + presign, refund,
-/// safeTxGas, nine trailer screens, `Confirm?`, returning hero = 36) plus
-/// headroom. The budget gate refuses beyond it — never truncates.
-pub const MAX_SCREENS: usize = 40;
+/// for the worst Safe-UI case (a multiSend batch of ERC-20 records, refund
+/// block, safeTxGas, the eleven native trailer slots, `Confirm?`, returning
+/// hero) plus headroom; the secure world overlays the transcript on the sign
+/// snapshot buffer's tail, whose const assert bounds this. The budget gate
+/// refuses beyond it — never truncates.
+pub const MAX_SCREENS: usize = 48;
 
 const OFF_KIND: usize = 0;
 const OFF_ICON: usize = 1;

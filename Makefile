@@ -314,7 +314,7 @@ play-hw-px: ## Interactive NV3007 play with the pixel trusted UI (ui-px), physic
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
+			-p sphincs-tz-nonsecure --features stm32u585,ui-px-atlas,$(BOARD_FEATURE)
 	@arm-none-eabi-size $(SECURE_ELF)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
@@ -2790,6 +2790,57 @@ size-report: ## Report secure/NS/FSBL image sizes against their flash/SRAM budge
 	  arm-none-eabi-size -B $(FSBL_ELF) | awk 'NR==2 { u=$$1+$$2; printf "    fsbl   : %d B of 32768 B legacy bench region (%.1f%%), %d B free\n", u, u*100.0/32768, 32768-u }'; \
 	fi
 
+# Pixel trusted-UI flash-budget gate (docs/ui/pixel-ui-port-plan.md Phase 1.5).
+# Builds the nearest BUILDABLE ship-shaped dual-SE image with `ui-px` linked at
+# A/B slot A and measures its physical span with fwmeasure against the frozen
+# v6 secure-slot span (geometry::SECURE_SLOT_SPAN = 0x72000, stricter than the
+# legacy 464 KB fw-manifest cap), failing under PX_HEADROOM_MIN of headroom
+# (the reserve Phases 2-4 of the port need). Two production features cannot be
+# in the measured set today and are NOT counted: `mode-production` (the
+# OPTIGA_S2_PRODUCTION_BLOCKED fence rejects every mode-production +
+# optiga-trust-m build while S-2 is open) and `rdp2-self-lock` (requires
+# mode-production; secure/src/first_boot/ is ~1.8 kLOC, so budget a few KB for
+# it on top). The two dev fences `legacy-fw-rollback-unsafe` /
+# `erc7730-dev-unattested` are needed to link at all and add no image code.
+# The NS image is measured against geometry::NS_SLOT_SPAN because the pixel
+# atlas lives there (make ui-px-assets, S2 of the port).
+PX_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)
+PX_NS_FEATURES := stm32u585,ui-px-atlas,$(BOARD_FEATURE)
+PX_SECURE_CAP := 466944
+PX_NS_CAP := 499712
+PX_HEADROOM_MIN := 40960
+.PHONY: size-report-px
+size-report-px: VENEERS := $(CURDIR)/target/secure-px/veneers.o
+size-report-px: dev-pubkey-fixture
+size-report-px: ## Ship-shaped dual-SE + ui-px image at slot A vs the v6 slot; fails under 40 KB headroom
+	$(if $(findstring i,$(filter-out --%,$(firstword $(MAKEFLAGS)) $(firstword $(MFLAGS)))),$(error size-report-px refuses make --ignore-errors; a capacity failure must propagate))
+	@grep -q 'pub const SECURE_SLOT_SPAN: u32 = 0x72000;' geometry/src/lib.rs || { echo "size-report-px: PX_SECURE_CAP drifted from geometry::SECURE_SLOT_SPAN"; exit 1; }
+	@grep -q 'pub const NS_SLOT_SPAN: u32 = 0x7A000;' geometry/src/lib.rs || { echo "size-report-px: PX_NS_CAP drifted from geometry::NS_SLOT_SPAN"; exit 1; }
+	@echo "==> size-report-px: secure ($(PX_SHIP_FEATURES),ui-px$(PX_EXTRA_FEATURES)) at slot A"
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) PQSIGNER_SECURE_SLOT=a $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure-px \
+			-p sphincs-tz-secure --no-default-features --features $(PX_SHIP_FEATURES),ui-px$(PX_EXTRA_FEATURES)
+	@echo "==> size-report-px: nonsecure ($(PX_NS_FEATURES))"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure-px \
+			-p sphincs-tz-nonsecure --features $(PX_NS_FEATURES)
+	@report=$$(cargo run --locked --quiet -p fwmeasure -- \
+	  target/secure-px/$(TARGET)/release/sphincs-tz-secure --require-secure-slot 2>&1 >/dev/null) || { \
+	    echo "    secure : FAIL — strict fwmeasure/capacity check rejected the ELF"; printf '%s\n' "$$report" >&2; exit 1; }; \
+	used=$$(printf '%s\n' "$$report" | sed -n 's/^Flash end:.*(\([0-9][0-9]*\) bytes)$$/\1/p'); \
+	case "$$used" in ''|*[!0-9]*) echo "    secure : FAIL — could not parse fwmeasure receipt"; printf '%s\n' "$$report" >&2; exit 1 ;; esac; \
+	arm-none-eabi-size -B target/secure-px/$(TARGET)/release/sphincs-tz-secure | awk 'NR==2 { printf "    secure : text %d  data %d  bss %d\n", $$1, $$2, $$3 }'; \
+	awk -v used="$$used" -v cap="$(PX_SECURE_CAP)" -v min="$(PX_HEADROOM_MIN)" 'BEGIN { \
+	  free=cap-used; \
+	  printf "    secure : %d B physical span of %d B v6 slot (%.1f%%), headroom %d B (gate >= %d B)\n", used, cap, used*100.0/cap, free, min; \
+	  if (free<min) { printf "    secure : FAIL — under %d B headroom for Phases 2-4 of the pixel-UI port\n", min; exit 1 } }'; \
+	arm-none-eabi-size -B target/nonsecure-px/$(TARGET)/release/sphincs-tz-nonsecure | awk -v cap="$(PX_NS_CAP)" -v sram=$(NS_SRAM_CAP) -v min=$(NS_STACK_MIN) 'NR==2 { \
+	  fl=$$1+$$2; st=$$2+$$3; \
+	  printf "    ns     : %d B flash (text+data) of %d B v6 NS slot (%.1f%%); %d B static of %d B SRAM2, %d B left for stack\n", fl, cap, fl*100.0/cap, st, sram, sram-st; \
+	  if (fl>cap) { print "    ns     : FAIL — NS image exceeds the v6 NS slot"; exit 1 } \
+	  if (sram-st<min) { printf "    ns     : FAIL — under %d B stack reserve\n", min; exit 1 } }'; \
+	echo "    note   : mode-production + rdp2-self-lock are not in the measured set (S-2 fence); budget their code separately"
+
 .PHONY: release _release
 # Refusal-only while the rollback implementation is quarantined. Keeping the
 # old cleanup/package recipe here would let `make -i` ignore a prerequisite
@@ -4612,15 +4663,17 @@ pq-ui-check: ## Verify tools/pq-ui/ against MANIFEST.sha256 (bytes + file set)
 	@tools/pq-ui/sync.sh --check
 
 .PHONY: ui-px-assets ui-px-assets-check
-ui-px-assets: ## Re-bake secure/assets/ui-px/* + pqsigner-ui-px/src/metrics_gen.rs
+ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1a, atlas_root.rs + metrics_gen.rs
 	@python3 tools/ui_px_assets.py
 
-ui-px-assets-check: ## Verify the committed ui-px assets are reproducible
+ui-px-assets-check: ## Verify the committed ui-px assets (incl. the NS atlas container + pinned root) are reproducible
 	@tmp=$$(mktemp -d); \
-	python3 tools/ui_px_assets.py --out $$tmp --metrics $$tmp/metrics_gen.rs >/dev/null && \
+	python3 tools/ui_px_assets.py --out $$tmp --ns-out $$tmp/ns --metrics $$tmp/metrics_gen.rs --root-rs $$tmp/atlas_root.rs >/dev/null && \
 	for f in fonts.bin safe.a4 mainnet.a4 base.a4 manifest.json; do \
 	  cmp -s $$tmp/$$f secure/assets/ui-px/$$f || { echo "ui-px asset drift: $$f (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
 	done; \
+	cmp -s $$tmp/ns/atlas.pq1a nonsecure/assets/ui-px/atlas.pq1a || { echo "ui-px asset drift: atlas.pq1a (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	cmp -s $$tmp/atlas_root.rs secure/src/ui/px/atlas_root.rs || { echo "ui-px atlas root drift (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
 	cmp -s $$tmp/metrics_gen.rs pqsigner-ui-px/src/metrics_gen.rs || { echo "ui-px metrics drift (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
 	rm -rf $$tmp; echo "ui-px assets reproducible"
 

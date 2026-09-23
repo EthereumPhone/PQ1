@@ -59,6 +59,7 @@ pub mod input;
 #[allow(clippy::unreadable_literal, missing_docs)]
 pub mod metrics_gen;
 pub mod motion;
+pub mod pq1a;
 pub mod raster;
 pub mod scene;
 pub mod screen;

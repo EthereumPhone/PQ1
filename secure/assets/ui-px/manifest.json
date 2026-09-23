@@ -7,6 +7,10 @@
     "tools/pq-ui/pq1/assets/safe.png": "249f5b4d3b85c1910310827de29d898e04b9d337ebd9ceb3ac6f97f1fe1f9c34"
   },
   "outputs": {
+    "atlas.pq1a": {
+      "bytes": 74038,
+      "sha256": "e3be84584e574cb0c2ac05b07ba6d0ea8c631b943fcabb69c79ad7dab327da1f"
+    },
     "base.a4": {
       "bytes": 1690,
       "sha256": "8246fc6f54e750f719b40bcb54b9383360f46ea7c15f96174ecbea7303506b20"

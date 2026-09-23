@@ -12,6 +12,13 @@ board-iota2 = []
 board-pq1 = []
 
 default = []
+# Carry the pixel trusted-UI asset container (`assets/ui-px/atlas.pq1a`:
+# glyph atlas + disc marks, ~74 KB) at a fixed offset of the NS flash slot
+# (owner decision 2026-09-23, port plan Phase 1.5). The NS world never reads
+# it; the secure world hashes that window against its pinned root before
+# AND after every pixel dialog. Pair with a secure `ui-lcd,ui-px` build; a
+# secure pixel build without it refuses every pixel dialog (atlas mismatch).
+ui-px-atlas = []
 # Non-interactive automated end-to-end test mode. Replaces the
 # default interactive main() with a scripted runner that exercises
 # the sign-dispatch trust levels (value transfer, ERC20 known, blind

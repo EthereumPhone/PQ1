@@ -1075,10 +1075,12 @@ fn px_screens_view(scratch: &mut [u8]) -> Option<&mut pqsigner_ui_px::Screens> {
 ///
 /// The legacy `pages` stay the proof substrate: every dispatcher / trailer
 /// `*_proof` has already run over them. The lift (`tx::display::px_lift`)
-/// re-emits the Safe body as screens (twice, hash-compared), wraps every
-/// page after the body 1:1 as `Legacy` screens, appends the returning hero
-/// and the design's `Confirm?`, and proves the assembly before anything is
-/// shown. Any failure is a refusal — never a fall-back to the page dialog.
+/// re-emits the Safe body AND the handler's trailers as design screens
+/// (twice, hash-compared; every trailer screen derived from the same page
+/// builder as its proven page), appends the returning hero and the design's
+/// `Confirm?`, and proves the assembly — no `Legacy` record anywhere —
+/// before anything is shown. Any failure is a refusal — never a fall-back
+/// to the page dialog.
 #[cfg(feature = "ui-px")]
 pub(super) fn px_confirm_safe(
     scratch: &mut [u8],
@@ -1089,25 +1091,48 @@ pub(super) fn px_confirm_safe(
     cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
     erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
     resolver: &crate::names::NameResolver<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
 ) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
     use crate::tx::display::px_lift;
     let screens = px_screens_view(scratch).ok_or("px scratch")?;
     let meta = crate::tx::display::safe_route_meta(tx_chain_id, safe_v1, safe_exec, erc20);
-    let receipt = px_lift::emit_safe_body(screens, safe_v1, safe_exec, cow, meta, resolver)
-        .map_err(|()| "px body")?;
-    let body_len = receipt.legacy_pages;
-    px_lift::append_legacy_tail(screens, pages, body_len).map_err(|()| "px tail")?;
+    let inputs = px_lift::ContentInputs {
+        safe_v1,
+        safe_exec,
+        cow,
+        erc20: meta,
+        resolver,
+        trailers: facts,
+    };
+    let receipt = px_lift::emit_content(screens, &inputs).map_err(|()| "px body")?;
+    let body_len = receipt.body.legacy_pages;
     px_lift::append_returning_hero(screens).map_err(|()| "px hero")?;
     let confirm_at = px_lift::insert_confirm(screens).map_err(|()| "px confirm")?;
     crate::fi::scrub_sentinel_register();
-    let verdict = px_lift::transcript_proof(screens, pages, body_len, &receipt, confirm_at);
+    let verdict = px_lift::transcript_proof(screens, pages, body_len, &receipt, facts, confirm_at);
     crate::fi::scrub_sentinel_register();
     if verdict != crate::fi::OK_SENTINEL {
         return Err("px transcript");
     }
-    let out = crate::ui::px::confirm_screens_checked(screens);
+    // The glyph atlas is a WYSIWYS input that lives in the NS slot: prove it
+    // against the pinned root right before the dialog paints with it, and
+    // again after the user's answer — a swap during the dialog is a refusal.
+    #[cfg(feature = "ui-lcd")]
+    let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| "px atlas")?;
+    #[cfg(not(feature = "ui-lcd"))]
+    let atlas = ();
+    let out = crate::ui::px::confirm_screens_checked(screens, &atlas);
     // The transcript holds no secret, but leave nothing stale behind.
     screens.volatile_poison_and_reset();
+    #[cfg(feature = "ui-lcd")]
+    {
+        drop(atlas);
+        crate::fi::scrub_sentinel_register();
+        if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+            return Err("px atlas changed");
+        }
+        crate::fi::scrub_sentinel_register();
+    }
     Ok(out)
 }
 

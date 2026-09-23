@@ -179,11 +179,13 @@ opt-level = 3
 [profile.release.package.hmac]
 opt-level = 3
 
-# The pixel trusted-UI rasteriser runs per frame on the NV3007 (~40 ms budget
-# at the design's frame rate); `s` cost it roughly 2× on the M33 for ~8 KB of
-# flash. Pure logic, no secrets — speed it.
+# The pixel trusted-UI rasteriser runs per frame on the NV3007. Owner decision
+# 2026-09-23 (port plan Phase 1.5): size over speed for this crate — `s` buys
+# ~8 KB of the A/B slot; the EVT #1 hero sweep measured 8–11 ms render at `3`
+# against a 24 ms frame period, so `s` (~2× slower) still fits the budget.
+# Re-measure with `make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime`.
 [profile.release.package.pqsigner-ui-px]
-opt-level = 3
+opt-level = "s"
 
 # `micromath` provides the f32 sin/cos/sqrt/powf for the `splash-test` animated
 # preview. It is the per-frame hot path there (the nebula noise field alone is

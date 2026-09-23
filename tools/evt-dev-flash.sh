@@ -41,12 +41,18 @@ wait_dfu() {
 }
 ob() { $P -ob displ 2>&1 | strip | grep -E '^\s*(RDP|TZEN|nSWBOOT0|nBOOT0|SECWM1_PSTRT|SECWM1_PEND|SECWM2_PSTRT|SECWM2_PEND|SECBOOTADD0)\s'; }
 
+# A pixel-UI secure build (`ui-px`) needs the NS image to carry the atlas
+# container (`ui-px-atlas`); the secure world refuses every pixel dialog
+# without it. Derived from FEAT_S unless FEAT_N is given explicitly.
+case ",${FEAT_S:-}," in *,ui-px,*|*,ui-px-spi40,*|*,ui-px-frametime,*) FEAT_N=${FEAT_N-,ui-px-atlas} ;; *) FEAT_N=${FEAT_N-} ;; esac
+
 if [ $BUILD = 1 ]; then
   mkdir -p $IMG
   echo "==> building dev image: $FEAT_S"
   make -n build-hw-dual-se-lcd-standalone BOARD=pq1 \
     | grep -B1 -A3 'cargo build' | grep -v -E '^--$|probe-rs|^echo' \
     | sed -e "s/dual-se,optiga-hw-counter,dev-testkey,ui-lcd,stm32u585,usb,board-pq1/$FEAT_S/" \
+          -e "s/-p sphincs-tz-nonsecure --features stm32u585,usb,board-pq1/-p sphincs-tz-nonsecure --features stm32u585,usb,board-pq1$FEAT_N/" \
     > $IMG.cmds.sh
   grep -q -- "--features $FEAT_S" $IMG.cmds.sh || { echo "!! feature substitution failed; see $IMG.cmds.sh" >&2; exit 1; }
   bash -e $IMG.cmds.sh > $IMG.build.log 2>&1 || { grep -n -A12 '^error' $IMG.build.log | head -60; exit 1; }
