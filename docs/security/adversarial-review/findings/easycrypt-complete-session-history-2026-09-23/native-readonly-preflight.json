@@ -1,0 +1,18 @@
+{
+  "command": [
+    "codex",
+    "sandbox",
+    "-P",
+    ":read-only",
+    "-C",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-context-history",
+    "--",
+    "python3",
+    "-c",
+    "import os,json; paths=['/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-context-history', '/home/nicola/repos/PQSigner_OS/.git/worktrees/review-target-context-history', '/home/nicola/repos/PQSigner_OS/.git']; rows=[{\"path\":p,\"read_only\":bool(os.statvfs(p).f_flag & os.ST_RDONLY)} for p in paths]; print(json.dumps(rows)); assert all(x[\"read_only\"] for x in rows)"
+  ],
+  "exit": 0,
+  "stdout": "[{\"path\": \"/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-context-history\", \"read_only\": true}, {\"path\": \"/home/nicola/repos/PQSigner_OS/.git/worktrees/review-target-context-history\", \"read_only\": true}, {\"path\": \"/home/nicola/repos/PQSigner_OS/.git\", \"read_only\": true}]\n",
+  "stderr": "",
+  "utc": "2026-09-23T16:39:53.500767+00:00"
+}
