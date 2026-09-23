@@ -1,0 +1,25 @@
+VERDICT: GO
+TARGET: e45e977a76867b2e72bf5e2e143be6baba04d537 / af7f51132c5459b8480782dcfbadb75409e4872f
+FINDINGS: none
+
+What I checked in the source (read-only; I did not re-run EasyCrypt):
+
+1. **Bounded-game win, cube and history.** `bounded_win_le_total_good` (`C10HypertreeCorrect.ec:321`) goes from the win in `BoundedHypertreeGame(A_ht)` to the real EUF game with the observer attached, under `res /\ good_transcript`. It uses `observer_preserves_bounded_game`, `bounded_transcript_good` and the total main-event coupling. `C10AcceptedReduction.ec` links `choose_build`, `cube_good` and `size pks = d` to `qs = cube_records …`. From there, `completed_cube_records` and `accepted_cube_no_failure` show that an accepted transcript means no recorded leaf query has a grind failure. `reduced_game_good_probability` turns that into a probability inequality using `hoare` plus `mu_split`. The history is carried across the hops by the new `_event` forms of `EqPr_…Orig_V`, `seam_branch1_WOTSC`, `Eqv_…C_V` and `Eqv_…Orig_C`. These now also conclude `={glob A}`, and the event is threaded through the conseq in `seam_branch1`.
+2. **Same adversary, private observer, unchanged requirements.** The premises of `bounded_hypertree_accepted` are the same as those of `bounded_hypertree_charged`: forge lossless, `c <= p_tgts`, emb/wgp disjointness, the encode bridge, the three `dfC0` inequalities, and the four `choose` hoare premises. All of them are stated on `A_ht` itself. The theorem transfers them to `Observe(A_ht)` inside the proof (`observed_pkco_choose` and `observed_trh_choose` do this through a `proc` equiv). `A_ht` is declared `{-Observe}`, and the `C10HypertreeObserverPrivacy` control, which drops that restriction, must fail. The four-term right-hand side has no reachability term and no grind-failure charge.
+3. **Raw oracle.**
+   - `Shared.hash` keeps one persistent table and counts calls and draws.
+   - `hash_replay` shows that a cached input returns the same value with no new draw.
+   - `adaptive_instrumentation` and `adaptive_split` hold for any adaptive context. The split works for any partition predicate, so it does not depend on the 103/119 lengths being disjoint.
+   - `StatefulGrind` keeps the secret-keyed `r_input` and the padded `hmsg_input`, and repeated inputs go through the same table.
+   - `grind_cost` gives the exact bound `calls = c0 + 2*i` with `i <= signing_budget`.
+   - `fresh_hash_acceptance` requires `x0 \notin h`. The zero chunk it tests (`drop 132`, `take 11`) is the 13th 11-bit FORS index (12×11 = 132), which is the right position.
+   - `search_state` records a successful fresh answer in the returned history.
+4. **Assumptions.** The diff adds no axioms or admits. The existing contracts keep their original names as wrappers instantiated with `(fun _ => true)`, and their statement pins in `cert-statements-split.tsv` are unchanged; only five `_event` rows are new. The file header and `STATUS.md` both say that the numerical bound and the costed full-scheme shared-oracle simulation are not claimed.
+5. **Enrollment and controls.**
+   - The same 12 new modules appear in the cone file list, `closure-c10-split.txt` and `check_source_binding.py`. The source-binding script also adds `XmssmtCC_All`.
+   - Every new lemma has a pin (pins ≥ lemmas in each file, with ops pinned too).
+   - The gate constants are PINS 1422→1561, STMTS 1271→1374 and CTLS 90→98, and there are 8 new control rows.
+   - Each of the six MUST-FAIL controls removes something real: the good-transcript premise, the `-Observe` restriction, the freshness premise, cached-draw semantics, retention of a successful answer in history, and scope isolation (`FORS_C_TreePort` must be unknown).
+   - `nodes_input` now proves the index bound `hh` (`0 <= size nodes-1 < size nodes`) before `nth_change_dfl` and passes it with `1:hh` instead of `1:/#`. The rest of the proof is unchanged, and the gate's CLI settings in `cert_gate_split.sh` did not change.
+
+GAPS: The mandatory cold two-driver replay on this snapshot has not finished, and I did not re-run the `nodes_input` CLI proof myself. Merge GO depends on that replay passing.

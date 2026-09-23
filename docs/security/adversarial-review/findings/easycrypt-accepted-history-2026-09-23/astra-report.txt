@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: e45e977a76867b2e72bf5e2e143be6baba04d537 / af7f51132c5459b8480782dcfbadb75409e4872f
+FINDINGS: none
+GAPS: Mandatory complete cold two-driver replay on this corrected snapshot remains pending. Source review, independently passing static/source-binding checks, and the supplied focused receipts do not establish completion of that merge gate.
