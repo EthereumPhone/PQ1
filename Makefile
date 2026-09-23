@@ -2236,6 +2236,22 @@ measure: build-hw-dual-se-oled-standalone ## Build + print the 8 BIP-39 measurem
 BOOTPROOF_VERSION ?= 1
 BOOTPROOF_DIR ?= target/bootproof
 
+# Extra FSBL features for a boot-proof run. Empty by default so the ordinary
+# proof builds the FSBL a shipping image would carry.
+#
+#   BOOTPROOF_FSBL_EXTRA=stage-marker make bootproof-hw
+#
+# `stage-marker` is the one that matters: it gives the FSBL a flash-write path
+# recording one quad-word per boot stage at 0x0C00_A000, which is how a run is
+# read back at all. It is NOT default because that write path is exactly what
+# invariant #10 forbids in a shipping image — the September proof carried it and
+# `evt-silicon-validation.md` scopes the result accordingly.
+#
+# The marker page is manifest B's page (sector 5), reused deliberately because
+# this layout leaves manifest B erased. Erase it between runs (`-e 5`) or the
+# second run silently records nothing and you re-read the first run's stages.
+BOOTPROOF_FSBL_EXTRA ?=
+
 .PHONY: bootproof-build
 bootproof-build: ## Build FSBL + slot-A secure + NS for the non-monolithic boot proof
 	@test -n "$(BOOTPROOF_PUBKEY)" || { echo "set BOOTPROOF_PUBKEY=<vendor-pubkey.bin>"; exit 1; }
@@ -2243,7 +2259,7 @@ bootproof-build: ## Build FSBL + slot-A secure + NS for the non-monolithic boot 
 	@echo "==> FSBL (vendor key $(BOOTPROOF_PUBKEY))"
 	@FSBL_VENDOR_PUBKEY=$(BOOTPROOF_PUBKEY) $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/fsbl \
-			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe,$(BOARD_FEATURE)
+			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe,$(BOARD_FEATURE)$(if $(BOOTPROOF_FSBL_EXTRA),$(comma)$(BOOTPROOF_FSBL_EXTRA))
 	@echo "==> secure world LINKED AT SLOT A (0x0C00E000)"
 	@FSBL_VENDOR_PUBKEY=$(BOOTPROOF_PUBKEY) PQSIGNER_SECURE_SLOT=a $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/secure \
