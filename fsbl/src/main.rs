@@ -233,7 +233,36 @@ fn main() -> ! {
     #[cfg(feature = "stage-marker")]
     marker::record(marker::Stage::RenderEntered, 0);
 
-    render::render_fingerprint(&secure_digest);
+    // #705 RECOVERABLE FAIL-CLOSED. The verdict is a control input, not a
+    // diagnostic: if any SPI transfer timed out, the words on the panel are
+    // incomplete or absent, and handing off anyway would let the FIRST screen
+    // the user ever sees come from the updatable firmware this stage exists to
+    // check — the forged-fingerprint hole invariant #10 closes.
+    //
+    // Refuse instead. `halt()` is the same primitive the option-byte tripwire
+    // uses, and it is `-> !`, so the type system forbids falling through to
+    // `into_slot` even if this `if` were ever edited wrong.
+    //
+    // RECOVERABLE means exactly this: nothing here writes flash, OTP, option
+    // bytes, the boot-state page or the marker page, so a transient fault
+    // blocks ONE boot and a power-cycle retries from an identical state. It is
+    // deliberately NOT a latch — a permanent brick from a marginal pull-up or
+    // an aging part would be worse than the plain halt this policy replaced,
+    // and unfixable once the RDP-2 self-lock freezes this code.
+    //
+    // ACCEPTED RESIDUAL, stated here because this is where it bites: the
+    // signalling channel IS the thing that failed. A user facing a dark, silent
+    // device cannot tell this refusal from a flat battery or a dead unit. No
+    // other channel exists at this point — the RGB driver shares both the I2C
+    // bus and the display connector, so it is dark in common mode with the most
+    // likely failure. The policy prevents a forged fingerprint; it cannot
+    // explain itself.
+    let display_verdict = render::render_fingerprint(&secure_digest);
+    if display_verdict != fi::OK_SENTINEL {
+        #[cfg(feature = "stage-marker")]
+        marker::record(marker::Stage::RenderFlushed, u32::MAX);
+        halt();
+    }
 
     // SAFETY: we verified the slot's manifest signature and image
     // hash. Branching is the last thing FSBL does; control passes to

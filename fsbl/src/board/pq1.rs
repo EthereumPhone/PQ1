@@ -74,10 +74,17 @@ pub const LCD_BACKLIGHT_EN: Option<(u32, u32)> = Some((GPIOB_S, 15));
 // I2C stage here needs a bus-idle check and clock recovery rather than an
 // unconditional START.
 
+// `allow(dead_code)` until the transport lands — these are declared ahead of
+// their consumer so the drift test against the secure map is in place BEFORE
+// any code depends on the values, not after.
 /// I2C2 SCL/SDA port — shared bus carrying both LED-driver ICs.
+#[allow(dead_code)]
 pub const AUX_I2C_PORT: u32 = GPIOB_S;
+#[allow(dead_code)]
 pub const AUX_I2C_SCL_PIN: u32 = 13;
+#[allow(dead_code)]
 pub const AUX_I2C_SDA_PIN: u32 = 14;
 
 /// AW99703 backlight boost driver, 7-bit address.
+#[allow(dead_code)]
 pub const BACKLIGHT_I2C_ADDR: u8 = 0x36;

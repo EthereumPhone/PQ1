@@ -549,6 +549,100 @@ fn negative_fsbl_board_map_matches_the_secure_board_map() {
 }
 
 // ---------------------------------------------------------------------------
+// 3b. The display verdict gates the branch (#705 recoverable fail-closed)
+// ---------------------------------------------------------------------------
+
+/// The FSBL must refuse to hand off to the slot when the fingerprint render
+/// failed. Owner decision (#705): **recoverable fail-closed**.
+///
+/// Proceeding instead would mean the immutable stage detected that the display
+/// failed and branched anyway — so the first screen the user ever sees comes
+/// from the updatable firmware this stage exists to check. That is the
+/// forged-fingerprint hole invariant #10 closes, and it was explicitly
+/// rejected; the driver's own comment used to argue FOR it ("booting beats
+/// hanging"), which is why this is pinned rather than left to a code comment.
+///
+/// The vacuity trap this is shaped around: a version that computes the verdict
+/// and drops it compiles, passes a `contains` check for the call, and gates
+/// nothing. So the gate is asserted as one contiguous block, the same trick
+/// `negative_tz1_tripwire_runs_before_branch_and_never_writes` uses.
+#[test]
+fn negative_main_gates_branch_on_display_verdict() {
+    let src = read_workspace_file("fsbl/src/main.rs");
+
+    let verdict_idx = src
+        .find("let display_verdict = render::render_fingerprint(&secure_digest);")
+        .expect(
+            "fsbl/src/main.rs must BIND the render verdict — calling \
+             render_fingerprint and discarding its result is the plain-proceed \
+             policy that #705 rejected",
+        );
+    let branch_idx = src
+        .find("branch::into_slot(slot)")
+        .expect("fsbl/src/main.rs must call branch::into_slot(slot) on the success path");
+    assert!(
+        verdict_idx < branch_idx,
+        "the display verdict must be computed BEFORE the slot branch: found the \
+         verdict at byte {verdict_idx} and the branch at byte {branch_idx}"
+    );
+
+    assert!(
+        src.contains("if display_verdict != fi::OK_SENTINEL {"),
+        "the verdict must be compared against fi::OK_SENTINEL — a bare truthiness \
+         check would accept a glitched return value"
+    );
+    let gate = &src[verdict_idx..branch_idx];
+    assert!(
+        gate.contains("halt();"),
+        "the display verdict must gate `halt()` between the render and the \
+         branch; computing it and ignoring it is a vacuous fail-closed policy"
+    );
+
+    // Recoverable, not a latch. A durable fault record would turn a transient
+    // failure into a permanent brick in code the RDP-2 self-lock freezes —
+    // strictly worse than the plain halt this policy was chosen over.
+    //
+    // Matched on CODE ONLY. The first version of this check scanned the raw
+    // file for "flash" and tripped on the prose "every build ever flashed" —
+    // an over-broad matcher asserting something it could not see.
+    //
+    // `marker::record` is deliberately NOT forbidden: it is `stage-marker`,
+    // default-off and bench-only, and the refusal path records through it on
+    // purpose so a bench run can tell a display refusal from any other halt.
+    let render = read_workspace_file("fsbl/src/render.rs");
+    let render_code: String = render
+        .lines()
+        .map(|l| match l.find("//") {
+            Some(i) => &l[..i],
+            None => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    for forbidden in ["write_volatile", "boot_state", "crate::otp"] {
+        assert!(
+            !render_code.contains(forbidden),
+            "fsbl/src/render.rs must persist NO state on the refusal path \
+             (found `{forbidden}` in code): the policy is recoverable \
+             fail-closed, so a power-cycle must retry from an identical state"
+        );
+    }
+
+    // On failure the hold must be SKIPPED — ten seconds of blank screen before
+    // a refusal teaches nothing and delays the only recovery there is.
+    let fail_idx = render
+        .find("return 0;")
+        .expect("render_fingerprint must return a non-OK verdict on failure");
+    let hold_idx = render
+        .find("delay_ms(FINGERPRINT_HOLD_MS);")
+        .expect("render_fingerprint must hold the fingerprint on the success path");
+    assert!(
+        fail_idx < hold_idx,
+        "the failure return must come BEFORE the fingerprint hold: found the \
+         return at byte {fail_idx} and the hold at byte {hold_idx}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // 4. measured_boot still calls firmware_hash() (defense in depth)
 // ---------------------------------------------------------------------------
 

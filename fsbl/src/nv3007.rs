@@ -56,11 +56,14 @@
 //! ## Backlight — a dark pq1 panel is NOT a failure of this driver
 //!
 //! `LCM_EN` (PB15) only enables an AW99703 LED-driver IC whose brightness is
-//! programmed over I2C2 at `0x36`, and there is no driver for that chip in the
-//! tree. The FSBL has no I2C stage by design, so it cannot program it. The
-//! success criterion for this display port is therefore the `stage-marker`
-//! page reaching `LcdInited` and `RenderFlushed` with a zero timeout count —
-//! not visible pixels.
+//! programmed over I2C2 at `0x36`. The FSBL has no I2C stage YET — #705 is
+//! adding one, and the owner has chosen recoverable fail-closed for it — so
+//! until that lands the success criterion for this display port is the
+//! `stage-marker` page reaching `LcdInited` and `RenderFlushed` with a zero
+//! timeout count, not visible pixels.
+//!
+//! (The secure world HAS had a driver for that chip since 2026-09; the claim
+//! that none exists in the tree was true when written and is not now.)
 //!
 //! ## Clocking — 4 MHz MSIS, NOT the 16 MHz this file used to claim
 //!
@@ -480,25 +483,36 @@ fn spi_begin(tsize: u16) {
 
 /// Bounded poll of an SPI status flag. Spins until `flag` is set or the cap is
 /// hit, returning whether it was seen. On a healthy panel the flag is ready
-/// within microseconds, so the cap (~10M iterations ≈ **10 s** at the FSBL's
-/// 4 MHz MSIS clock) never trips in normal operation — it exists only so a
-/// STALLED SPI/LCD (dead panel, cracked ribbon, cold-solder joint) cannot hang
-/// the legacy bench bootloader forever: the FSBL arms no watchdog,
-/// so an unbounded `while` here would be an unrecoverable boot hang. On timeout
-/// we give up on this transfer and let boot proceed — a broken display renders
-/// nothing either way, so booting (device still usable over USB) beats hanging.
-/// Count of [`spi_wait`] polls that hit their bound. Diagnostic only
-/// (`stage-marker`), and deliberately NOT a control input: the bound and every
-/// caller's behaviour are unchanged, so enabling this cannot alter the control
-/// flow it measures.
+/// within microseconds, so the cap never trips in normal operation — it exists
+/// only so a stalled SPI cannot hang the bootloader forever: the FSBL arms no
+/// watchdog, and an unbounded `while` here would be an unrecoverable boot hang.
 ///
-/// Why it exists: `spi_send_byte` and `spi_end` DISCARD `spi_wait`'s result,
-/// so a wrong pin map — where SPI1 never receives its pins and `TXP` stops
-/// asserting once the FIFO fills — makes every byte burn the full bound with
-/// no trace anywhere. At 121,552 bytes for a single `fill_screen` that is on
-/// the order of 10^12 wait iterations: bounded in principle, and
-/// indistinguishable from a hang at any observation window anyone would use.
-/// A silent discarded timeout is what let a pin-map bug masquerade as a stall.
+/// The cap is ~10M iterations. The old comment priced that at "≈ 10 s at the
+/// FSBL's 4 MHz MSIS clock", which has been stale since the clock switch — the
+/// FSBL now runs HSI16 (`clock.rs`), so the same loop is ~4x faster.
+///
+/// **The result is now a control input** (#705). It used to be discarded, and
+/// the comment here used to justify that: *"on timeout we give up on this
+/// transfer and let boot proceed — booting beats hanging"*. That is the
+/// plain-proceed policy, and it was REJECTED: proceeding means the immutable
+/// stage hands off to updatable firmware after detecting that the display
+/// failed, which is the forged-fingerprint hole invariant #10 exists to close.
+/// The owner chose recoverable fail-closed instead, so every caller now
+/// propagates this bool and `main` refuses the branch on a false verdict.
+///
+/// **What threading it buys, stated narrowly.** A computed verdict, and a
+/// bounded time-to-decision: the first timeout aborts the chain instead of
+/// letting all 121,552 bytes of a `fill_screen` each burn the full cap. It
+/// does NOT detect a wrong pin map — `evt-silicon-validation.md` settles that
+/// against us: *"`TXP`/`EOT` come from the shift logic and `TSIZE`, not pad
+/// routing"* is **right about `spi_wait` specifically**, *"which is why the
+/// timeout count is NOT the receipt"*, and the real blocking mechanism in that
+/// incident is *"not yet identified"*. And with no MISO on pq1 it cannot prove
+/// a single pixel appeared. See the module header's residuals.
+/// Count of [`spi_wait`] polls that hit their bound. Diagnostic only
+/// (`stage-marker`); the control input is the returned bool, not this counter.
+/// Kept because it distinguishes "one timeout, aborted early" from "the bus is
+/// dead" in a marker payload, which a bool cannot.
 #[cfg(feature = "stage-marker")]
 static mut SPI_WAIT_TIMEOUTS: u32 = 0;
 
@@ -532,52 +546,73 @@ fn spi_wait(flag: u32) -> bool {
     false
 }
 
-fn spi_send_byte(b: u8) {
-    let _ = spi_wait(SR_TXP);
+/// `false` if `TXP` never asserted. The byte is written either way, so the
+/// hardware sequence is byte-identical to the pre-threading behaviour on every
+/// path — only what the CALLER does next is new.
+fn spi_send_byte(b: u8) -> bool {
+    let ok = spi_wait(SR_TXP);
     // SAFETY: TXDR is a real MMIO register; CFG1 set DSIZE=7 (8-bit), so a
     // byte-wide store is the access the peripheral expects.
     unsafe { write_volatile(SPI_TXDR as *mut u8, b) }
+    ok
 }
 
-fn spi_end() {
-    let _ = spi_wait(SR_EOT);
+/// `false` if `EOT` never asserted. The teardown runs regardless: leaving `SPE`
+/// set on a failing transfer would strand the peripheral, and the caller is
+/// about to abort rather than retry.
+fn spi_end() -> bool {
+    let ok = spi_wait(SR_EOT);
     // ES0499 mitigation: let the last SCK pulse complete before dropping SPE.
     cortex_m::asm::delay(16);
     modify(SPI_CR1, |v| v & !CR1_SPE);
     wr(SPI_IFCR, IFCR_EOTC | IFCR_TXTFC | IFCR_OVRC);
+    ok
 }
 
-fn spi_transfer(bytes: &[u8]) {
+fn spi_transfer(bytes: &[u8]) -> bool {
     let mut off = 0usize;
     while off < bytes.len() {
         let n = core::cmp::min(bytes.len() - off, MAX_CHUNK as usize);
         spi_begin(n as u16);
+        let mut ok = true;
         for &b in &bytes[off..off + n] {
-            spi_send_byte(b);
+            ok = spi_send_byte(b);
+            if !ok {
+                // Abort this chunk. Without this a dead bus burns the full cap
+                // once per byte — 121,552 times for one `fill_screen`.
+                break;
+            }
         }
-        spi_end();
+        // Always close the frame, even when aborting, so `SPE` does not stay set.
+        if !(spi_end() && ok) {
+            return false;
+        }
         off += n;
     }
+    true
 }
 
 /// Command byte (DC=LOW) then its params (DC=HIGH) inside one CS-low window.
 /// NV3007 resets the parameter index on CS rising, so multi-param commands
 /// MUST keep CS asserted across the command and every parameter.
-fn write_cmd_data(cmd: u8, params: &[u8]) {
+fn write_cmd_data(cmd: u8, params: &[u8]) -> bool {
     cs_assert();
     dc_low();
     spi_begin(1);
-    spi_send_byte(cmd);
-    spi_end();
-    if !params.is_empty() {
+    let sent = spi_send_byte(cmd);
+    // `spi_end` unconditionally, then AND — never short-circuit past the
+    // teardown, or a failed command leaves SPE set and CS asserted.
+    let mut ok = spi_end() && sent;
+    if ok && !params.is_empty() {
         dc_high();
-        spi_transfer(params);
+        ok = spi_transfer(params);
     }
     cs_deassert();
+    ok
 }
 
-fn write_cmd(cmd: u8) {
-    write_cmd_data(cmd, &[]);
+fn write_cmd(cmd: u8) -> bool {
+    write_cmd_data(cmd, &[])
 }
 
 // ---------------------------------------------------------------------------
@@ -713,79 +748,106 @@ const INIT_SEQ: &[u8] = &[
     0x3A, 1, 0x05,
 ];
 
-fn run_init_sequence() {
+fn run_init_sequence() -> bool {
     let mut i = 0usize;
     while i + 1 < INIT_SEQ.len() {
         let cmd = INIT_SEQ[i];
         let n = INIT_SEQ[i + 1] as usize;
         let params = &INIT_SEQ[i + 2..i + 2 + n];
-        write_cmd_data(cmd, params);
+        if !write_cmd_data(cmd, params) {
+            return false;
+        }
         i += 2 + n;
     }
-    write_cmd(0x11); // SLPOUT
+    if !write_cmd(0x11) {
+        return false;
+    } // SLPOUT
     delay_ms(200);
-    write_cmd(0x29); // DISPON
+    if !write_cmd(0x29) {
+        return false;
+    } // DISPON
     delay_ms(150);
-    set_window(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
+    if !set_window(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1) {
+        return false;
+    }
     delay_ms(20);
+    true
 }
 
 // ---------------------------------------------------------------------------
 // Address window + bulk pixel write
 // ---------------------------------------------------------------------------
 
-fn set_window(x0: u16, y0: u16, x1: u16, y1: u16) {
+fn set_window(x0: u16, y0: u16, x1: u16, y1: u16) -> bool {
     let cx0 = x0 + X_OFFSET;
     let cx1 = x1 + X_OFFSET;
     let cy0 = y0 + Y_OFFSET;
     let cy1 = y1 + Y_OFFSET;
     let caset = [(cx0 >> 8) as u8, cx0 as u8, (cx1 >> 8) as u8, cx1 as u8];
     let raset = [(cy0 >> 8) as u8, cy0 as u8, (cy1 >> 8) as u8, cy1 as u8];
-    write_cmd_data(0x2A, &caset); // CASET
-    write_cmd_data(0x2B, &raset); // RASET
-    write_cmd(0x2C); // RAMWR — pixel data follows
+    // Short-circuiting is the point: on a dead bus each of these would
+    // otherwise burn the full `spi_wait` cap per byte.
+    write_cmd_data(0x2A, &caset) // CASET
+        && write_cmd_data(0x2B, &raset) // RASET
+        && write_cmd(0x2C) // RAMWR — pixel data follows
 }
 
 /// Write RGB565 pixels to the current window, big-endian (NV3007 wants high
 /// byte first), chunked by pixel count. CS held low across all chunks.
-fn write_pixels(buf: &[u16]) {
+fn write_pixels(buf: &[u16]) -> bool {
     if buf.is_empty() {
-        return;
+        return true;
     }
     cs_assert();
     dc_high();
     let pixels_per_chunk = (MAX_CHUNK / 2) as usize;
+    let mut ok = true;
     for chunk in buf.chunks(pixels_per_chunk) {
         spi_begin((chunk.len() * 2) as u16);
         for &px in chunk {
-            spi_send_byte((px >> 8) as u8);
-            spi_send_byte(px as u8);
+            ok = spi_send_byte((px >> 8) as u8) && spi_send_byte(px as u8);
+            if !ok {
+                break;
+            }
         }
-        spi_end();
+        ok = spi_end() && ok;
+        if !ok {
+            break;
+        }
     }
     cs_deassert();
+    ok
 }
 
 /// Fill the visible area with one color, streamed (never a 121 KB buffer).
-fn fill_screen(color: u16) {
-    set_window(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
+fn fill_screen(color: u16) -> bool {
+    if !set_window(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1) {
+        return false;
+    }
     let hi = (color >> 8) as u8;
     let lo = color as u8;
     cs_assert();
     dc_high();
     let pixels_per_chunk: u32 = u32::from(MAX_CHUNK / 2);
     let mut remaining = u32::from(FRAME_WIDTH) * u32::from(FRAME_HEIGHT);
+    let mut ok = true;
     while remaining > 0 {
         let chunk_px = core::cmp::min(remaining, pixels_per_chunk);
         spi_begin((chunk_px * 2) as u16);
         for _ in 0..chunk_px {
-            spi_send_byte(hi);
-            spi_send_byte(lo);
+            ok = spi_send_byte(hi) && spi_send_byte(lo);
+            if !ok {
+                break;
+            }
         }
-        spi_end();
+        ok = spi_end() && ok;
+        if !ok {
+            break;
+        }
         remaining -= chunk_px;
     }
     cs_deassert();
+    ok
 }
 
 // ---------------------------------------------------------------------------
@@ -810,7 +872,11 @@ impl Lcd {
 
     /// Bring up SPI1 + DC/RES GPIO + the NV3007, then clear to black.
     /// Mirrors the validated secure `lcd::init()` (SWRESET, full dgen1 init).
-    pub fn init(&mut self) {
+    ///
+    /// `false` means an SPI transfer timed out. Under the #705 fail-closed
+    /// policy the caller must NOT paint over that and must not hand off.
+    #[must_use]
+    pub fn init(&mut self) -> bool {
         spi1_init();
         init_dc_res_gpios();
 
@@ -820,14 +886,18 @@ impl Lcd {
         // PD15 both proved un-drivable at bring-up), so it issues SWRESET;
         // pq1 routes LCM_RST to PB1 and gets a real pulse, which also resets
         // state SWRESET leaves alone.
+        // NOTE the `ok &=` form on the SWRESET arm: `source_invariants.rs`
+        // pins the literal substring `write_cmd(0x01); // SWRESET`, so an
+        // `if !write_cmd(0x01) {` rewrite would break that test while looking
+        // like an improvement.
+        let mut ok = true;
         if board::LCD_RST_IS_DRIVABLE {
             hard_reset();
         } else {
-            write_cmd(0x01); // SWRESET (RES tied to 3V3 → software reset)
+            ok &= write_cmd(0x01); // SWRESET (RES tied to 3V3 → software reset)
         }
         delay_ms(150);
-        run_init_sequence();
-        fill_screen(BG);
+        ok && run_init_sequence() && fill_screen(BG)
     }
 
     /// Reset the char grid to spaces.
@@ -859,7 +929,11 @@ impl Lcd {
 
     /// Blit the whole 16×4 grid. Every glyph cell is fully repainted (FG and
     /// BG), and the inter-cell gaps stay black from `init`'s clear.
-    pub fn flush(&mut self) {
+    ///
+    /// `false` means a glyph's transfer timed out, so the rendered words are
+    /// incomplete and must not be treated as a fingerprint the user read.
+    #[must_use]
+    pub fn flush(&mut self) -> bool {
         for r in 0..DISPLAY_ROWS {
             for c in 0..DISPLAY_COLS {
                 let ch = self.rows[r][c];
@@ -870,9 +944,12 @@ impl Lcd {
                     glyph_col(ch, 3),
                     glyph_col(ch, 4),
                 ];
-                self.blit_glyph(c, r, &cols);
+                if !self.blit_glyph(c, r, &cols) {
+                    return false;
+                }
             }
         }
+        true
     }
 
     /// Render one glyph cell `(col, row)` from its 5 column-bytes. Logical
@@ -880,7 +957,7 @@ impl Lcd {
     /// validated `FLIP` (flip native-X only). Ported verbatim from
     /// `secure/src/ui/lcd.rs::blit_glyph` (public path; the FSBL never renders
     /// secrets, so the constant-time secret path is intentionally omitted).
-    fn blit_glyph(&mut self, col: usize, row: usize, cols: &[u8; FONT_W]) {
+    fn blit_glyph(&mut self, col: usize, row: usize, cols: &[u8; FONT_W]) -> bool {
         let lx0 = ORIGIN_X + col * COL_PITCH;
         let ly0 = ORIGIN_Y + row * ROW_PITCH;
 
@@ -920,8 +997,7 @@ impl Lcd {
             ny0 as u16,
             (nx0 + CELL_NX - 1) as u16,
             (ny0 + CELL_NY - 1) as u16,
-        );
-        write_pixels(&self.cell[..CELL_N]);
+        ) && write_pixels(&self.cell[..CELL_N])
     }
 }
 
@@ -949,14 +1025,17 @@ pub fn lcd_test_loop() -> ! {
     const SAMPLE_DIGEST: [u8; 32] = [0xA5; 32];
 
     let mut lcd = Lcd::new();
-    lcd.init();
+    // Bench bring-up: the verdict is deliberately discarded here. This loop
+    // exists to look at the panel, and halting on a timeout would remove the
+    // only thing it can tell you.
+    let _ = lcd.init();
 
     loop {
-        fill_screen(0x07E0); // green
+        let _ = fill_screen(0x07E0); // green
         delay_ms(800);
-        fill_screen(0xF800); // red
+        let _ = fill_screen(0xF800); // red
         delay_ms(800);
-        fill_screen(0x001F); // blue
+        let _ = fill_screen(0x001F); // blue
         delay_ms(800);
         fill_screen(BG);
 
