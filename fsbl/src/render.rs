@@ -42,8 +42,9 @@ pub const FINGERPRINT_HOLD_MS: u32 = 10_000;
 
 /// Drive the LCD end-to-end: init, render, flush, hold, return a VERDICT.
 ///
-/// Returns [`fi::OK_SENTINEL`] iff every SPI transfer completed. Any other
-/// value means a transfer timed out, and under the #705 recoverable
+/// Returns [`fi::OK_SENTINEL`] iff every SPI transfer completed **and** the
+/// backlight came on. Any other value means a transfer timed out or the
+/// AW99703 did not reach Backlight mode, and under the #705 recoverable
 /// fail-closed policy the caller must refuse to hand off to the slot.
 ///
 /// Safe to call exactly once during FSBL boot, immediately before
@@ -52,10 +53,13 @@ pub const FINGERPRINT_HOLD_MS: u32 = 10_000;
 /// # What the verdict does NOT mean — accepted residuals, invariant #10
 ///
 /// The NV3007 is write-only and pq1 has **no LCD MISO** (PA6 is `NC`), so
-/// nothing here can prove the panel received a byte, that the pixels are
-/// right, or that the backlight is on. `TXP`/`EOT` are internal to the SPI
-/// peripheral. `OK_SENTINEL` therefore means only *"no transfer we can observe
-/// failed"* — never *"the user saw the fingerprint"*.
+/// nothing here can prove the panel received a byte or that the pixels are
+/// right. `TXP`/`EOT` are internal to the SPI peripheral. The backlight leg is
+/// the one part that IS read back — `BSTCTR1` and `MODE` over I2C — but that
+/// proves the driver IC entered Backlight mode, not that light reached the
+/// user's eye: the LED string, its connector and the panel are all downstream
+/// of the last thing we can observe. `OK_SENTINEL` therefore still means only
+/// *"no step we can observe failed"* — never *"the user saw the fingerprint"*.
 ///
 /// It also does not detect a wrong pin map:
 /// `docs/hardware/evt-silicon-validation.md` settles that against us, noting
@@ -117,31 +121,47 @@ pub fn render_fingerprint(digest: &[u8; 32]) -> u32 {
     // enabling earlier would have lit undefined GRAM.
     let backlight_on = lcd.backlight_on();
 
-    // DELIBERATELY NOT FOLDED INTO `ok` — this is a staged rollout, not an
-    // oversight, and `negative_fsbl_i2c_leg_is_not_armed_without_a_receipt`
-    // pins it so nobody "fixes" it by arming it early.
+    // The receipt: CHIP_ID, BSTCTR1 and MODE as read back by THIS transport,
+    // packed `0x00_CC_BB_MM` with the top byte set if any NACKed.
     //
-    // The fail-closed refusal compares three read-backs. The secure world has
-    // confirmed all three on silicon (#705: `ID03 B1=26 MO=15`), but the
-    // FSBL's transport is a DIFFERENT code path — a fixed 40-cycle bit-bang
-    // quarter-period at HSI16, against the secure world's 400 sized for
-    // 160 MHz — so that receipt licenses the VALUES, not the TIMING.
-    //
-    // Arming a comparison nobody has run on THIS path is the one mistake this
-    // design cannot recover from: a constant that mismatches on HEALTHY
-    // silicon means every unit refuses handoff forever, unfixable once the
-    // RDP-2 self-lock freezes it, and strictly worse than the plain halt the
-    // owner rejected. So the verdict is RECORDED here and gated later.
-    let _ = backlight_on;
-
-    // The receipt itself: CHIP_ID, BSTCTR1 and MODE as read back by THIS
-    // transport, packed `0x00_CC_BB_MM` with the top byte set if any NACKed.
-    // Expected `0x00_03_26_15`.
+    // RECORDED BEFORE THE FOLD BELOW, deliberately. A unit that refuses handoff
+    // has one observable left — this page — and the refusal is worth far less
+    // without the reason. Moving this after the fold would erase the
+    // diagnostic in exactly the case it is needed.
     #[cfg(all(feature = "stage-marker", feature = "board-pq1"))]
     crate::marker::record(
         crate::marker::Stage::BacklightProbe,
         crate::aw99703::read_receipt(),
     );
+
+    // ARMED 2026-09-23 on the receipt this marker recorded: bench board
+    // `002F0023 30465002 2033314C`, stage 18 payload `0x00032615` — CHIP_ID
+    // 0x03, BSTCTR1 0x26, MODE 0x15, nack 0, read back by THIS bit-banged
+    // transport at HSI16 rather than by the secure world's.
+    //
+    // Two properties make that payload a receipt for `backlight_on` itself and
+    // not merely for "some chip answered":
+    //
+    //   * `configure` opens with a HWEN low pulse, which resets every register
+    //     to its default. `BSTCTR1`'s default is 0x2E; reading 0x26 therefore
+    //     cannot be state left by a previous secure-world boot, and `MODE`
+    //     0x15 is the value `enable` writes.
+    //   * A failed `configure` leaves HWEN LOW, which disables the I2C
+    //     interface outright, so a refusal reads `0x01FFFFFF`, not 0x00032615.
+    //
+    // A dark panel is precisely the failure invariant #10's boot-time window
+    // cannot absorb: the GRAM can be perfect and the user still sees nothing,
+    // which is indistinguishable from a panel that was never written. So it
+    // refuses handoff, on the same footing as a failed SPI transfer.
+    ok &= backlight_on;
+
+    if !ok {
+        // Same policy as the flush failure above: refuse WITHOUT the hold, and
+        // drop HWEN so a refusal is never accompanied by a lit panel.
+        #[cfg(feature = "board-pq1")]
+        crate::aw99703::off();
+        return 0;
+    }
 
     // Hold so the user can read the words — MEASURED 10.002 s against the
     // 10,000 ms nominal now that the clock switch and the delay calibration

@@ -635,40 +635,59 @@ fn negative_main_gates_branch_on_display_verdict() {
     );
 }
 
-/// The FSBL's I2C leg must NOT gate the boot until its read-backs have been
-/// observed on an FSBL.
+/// The FSBL's I2C leg gates the boot, and must keep the safety rails that
+/// made arming it survivable.
 ///
-/// This pins a STAGED ROLLOUT so it cannot be mistaken for an oversight and
-/// "fixed" by someone arming it. The fail-closed refusal compares three
-/// read-backs; the secure world has confirmed all three on silicon (#705,
-/// `ID03 B1=26 MO=15`), but the FSBL's transport is a different code path —
-/// a fixed 40-cycle bit-bang quarter-period at HSI16 against the secure
-/// world's 400 sized for 160 MHz — so that receipt licenses the VALUES, not
-/// the TIMING.
+/// ARMED 2026-09-23. It was a staged rollout until then: the secure world had
+/// confirmed the read-backs on silicon (#705, `ID03 B1=26 MO=15`) but the
+/// FSBL's transport is a different code path — a fixed 40-cycle bit-bang
+/// quarter-period at HSI16 against the secure world's 400 sized for 160 MHz —
+/// so that receipt licensed the VALUES, not the TIMING. A marker-FSBL run on
+/// bench board `002F0023 30465002 2033314C` then recorded stage 18 =
+/// `0x00032615` from THIS transport, which closed the gap.
 ///
-/// Why this specific asymmetry is worth a test: a constant that mismatches on
-/// HEALTHY silicon means every unit refuses handoff forever, unfixable once
-/// the RDP-2 self-lock freezes it, and strictly worse than the plain halt the
-/// owner rejected. Arming it is a deliberate act that should require deleting
-/// this test and saying why.
+/// The asymmetry that made the staging worth it has not gone away: a constant
+/// that mismatches on HEALTHY silicon means every unit refuses handoff
+/// forever, unfixable once the RDP-2 self-lock freezes it, and strictly worse
+/// than the plain halt the owner rejected. What this test now pins is the set
+/// of properties that keep that from happening — the ones an innocent-looking
+/// edit to the driver would break.
 #[test]
-fn negative_fsbl_i2c_leg_is_not_armed_without_a_receipt() {
+fn negative_fsbl_i2c_leg_stays_within_its_safety_rails() {
     let render = read_workspace_file("fsbl/src/render.rs");
+    let render_code = code_only(&render);
     assert!(
         render.contains("let backlight_on = lcd.backlight_on();"),
         "render must still CALL backlight_on — the illuminate-last step (#730) \
-         is not optional even while its verdict is unenforced"
+         is what keeps undefined GRAM from being lit"
     );
     assert!(
-        render.contains("let _ = backlight_on;"),
-        "the backlight verdict must stay UNENFORCED until an on-FSBL read-back \
-         receipt exists. If you are arming it deliberately, delete this test in \
-         the same commit and cite the receipt."
+        render_code.contains("ok &= backlight_on;"),
+        "the backlight verdict must stay FOLDED INTO the display verdict: a \
+         dark panel is the failure invariant #10's boot-time window cannot \
+         absorb, so it refuses handoff like any failed SPI transfer"
     );
-    let code = code_only(&render);
     assert!(
-        !code.contains("ok &= backlight_on") && !code.contains("ok && backlight_on"),
-        "the backlight verdict must not be folded into the display verdict yet"
+        !render_code.contains("let _ = backlight_on"),
+        "the backlight verdict must not be discarded again — it was armed on \
+         the stage-18 receipt `0x00032615`; unarming it needs its own reason"
+    );
+
+    // The receipt must be recorded BEFORE the fold. A unit that refuses
+    // handoff has one observable left, and the refusal is worth far less
+    // without its reason; recording after the fold erases the diagnostic in
+    // exactly the case it is needed.
+    let probe_idx = render_code
+        .find("Stage::BacklightProbe")
+        .expect("render must record the BacklightProbe receipt");
+    let fold_idx = render_code
+        .find("ok &= backlight_on;")
+        .expect("checked above");
+    assert!(
+        probe_idx < fold_idx,
+        "the BacklightProbe receipt must be recorded BEFORE the verdict is \
+         folded in (found the receipt at byte {probe_idx} and the fold at byte \
+         {fold_idx}), so a refusing unit still says WHY"
     );
 
     // The FSBL must never touch the fault registers: reading one is a
