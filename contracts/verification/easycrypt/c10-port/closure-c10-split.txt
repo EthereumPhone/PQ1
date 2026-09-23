@@ -101,3 +101,9 @@ ByteReplay
 GrindJointCoverage
 SignerReturned
 GrindHypertree
+
+# Complete live-session classification and repeat-aware accepted-output laws.
+ClassifiedBound
+ClassifiedSession
+ByteHistory
+SignerTrace

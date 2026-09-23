@@ -35,6 +35,12 @@ memoized grinder and complete signer. Fixed prior-opening sets and cached
 query charges remain explicit; adaptive accumulated coverage and the final
 component reduction are still open.
 
+The [complete-session history results](COMPLETE-SESSION-HISTORY.md) establish
+new-message freshness and classify live signing contexts as fresh or previously
+completed. Repeated contexts retain their accepted digest; the novel-event
+bound accounts for those repeats explicitly. The accumulated-opening and
+complete byte-model component reductions remain open.
+
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a
