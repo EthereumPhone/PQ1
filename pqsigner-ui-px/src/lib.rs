@@ -51,11 +51,13 @@
 #[macro_use]
 extern crate std;
 
+pub mod check;
 pub mod driver;
 pub mod fit;
 pub mod fixed;
 pub mod font;
 pub mod input;
+pub mod loading;
 #[allow(clippy::unreadable_literal, missing_docs)]
 pub mod metrics_gen;
 pub mod motion;

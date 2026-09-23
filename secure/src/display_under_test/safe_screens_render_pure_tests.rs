@@ -183,6 +183,10 @@ fn assert_facts_carry_over(b: &Both) {
 }
 
 fn assert_shape(b: &Both) {
+    // The design rules as a checker (pqsigner_ui_px::check): every record
+    // of every scenario, so an emitter cannot drift from the design without
+    // a red test.
+    assert_eq!(pqsigner_ui_px::check::check_screens(b.screens.as_slice()), Ok(()));
     assert_eq!(b.receipt.legacy_pages, b.pages.len, "the two classifications must agree on the legacy page count");
     assert_eq!(b.receipt.screens, b.screens.len());
     assert!(b.screens.len() <= MAX_SCREENS);
@@ -569,6 +573,9 @@ fn lifted(fx: &TrailerFixture) -> Lifted {
     assert_eq!(receipt.trailers.screens, pages.len - body_len, "one trailer screen per trailer page");
     px_lift::append_returning_hero(&mut screens).unwrap();
     let confirm_at = px_lift::insert_confirm(&mut screens).unwrap();
+    // The finished transcript passes the design-rule checker (flow shape
+    // included) — the gate the port plan's Phase 1 item 2 asks for.
+    assert_eq!(pqsigner_ui_px::check::check_flow(&screens), Ok(()));
     Lifted { screens, pages, body_len, receipt, confirm_at }
 }
 

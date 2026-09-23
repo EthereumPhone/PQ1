@@ -1,0 +1,20 @@
+# Deliberate, owner-decided deviations of the DEVICE from the PQ-UI reference
+# input/motion tokens (tools/pq-ui/handoff/spec/motion.json). `make
+# pq-ui-port-diff` runs upstream's port_diff over the firmware's constants and
+# fails on any MISMATCH not listed here — so a drift is a red build, and a
+# listed deviation is a recorded decision, not an accident. Every entry names
+# the decision and its evidence. See docs/security/HARDENING.md § 2.4.
+
+[[deviation]]
+token = "TAP_MAX_MS"
+device = 500
+reference = 250
+decided = "2026-09-22"
+why = "EVT #1: deliberate presses on the pq1 switches run 250-400 ms and were demoted to aborted holds; 500 ms is the value the legacy button driver already validated on this hardware."
+
+# Grammar deviations that carry no numeric token (recorded here so the file
+# is the single list; port_diff cannot see them):
+#   * the sign gesture on the device is the two-button chord CLICK (both
+#     down together, fires on release) - the reference signs on hold-right;
+#   * hold-right is a no-op on the device; hold-left declines everywhere
+#     (reference: same).

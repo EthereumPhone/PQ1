@@ -16,6 +16,7 @@
 use crate::driver::Btn;
 use crate::fixed::{lerp, q16, Q16, Q8, ONE_Q16, ONE_Q8};
 use crate::font::{Align, Font, TextRun, TierId};
+use crate::loading::{self, Body, Phase, QubitFilm, ResolveFilm, TRAIL_COUNT};
 use crate::motion::{
     self, Profile, Spring, CHAIN_GAP_CAP_PX, CHAIN_TAU_IDLE_MS, CHAIN_TAU_MS, HOLD_OVERLAY_A8, OSC_TAU_MS,
     PRESS_FEEDBACK_MS, TEXT_IN_DELAY_MS,
@@ -312,6 +313,27 @@ struct Hold {
     committed: bool,
 }
 
+/// The status film playing over the disc, if any (DESIGN.md § Status
+/// animations): the qubit loading loop that resolves into the result, or
+/// the film-less cancel resolve.
+#[derive(Clone, Copy, Debug)]
+enum Film {
+    Qubit {
+        film: QubitFilm,
+        /// The circle the film was handed (position + visible radius).
+        seed: Body,
+        /// Known once the work answered.
+        outcome: Option<Ending>,
+    },
+    Resolve {
+        film: ResolveFilm,
+        outcome: Ending,
+    },
+}
+
+/// One trail copy every `TRAIL_STEP_TURNS` of orbit: 0.035 turns × 850 ms.
+const TRAIL_DT_MS: u32 = 30;
+
 /// The animation runtime for one transcript walk.
 pub struct Anim {
     prev: Screen,
@@ -336,7 +358,7 @@ pub struct Anim {
     last_step: u32,
     hold: Option<Hold>,
     press: Option<(Btn, u32)>,
-    ending: Option<(Ending, u32)>,
+    film: Option<Film>,
     /// Idle-since (last settle or last input), for the ambient cycles.
     idle_since: u32,
 }
@@ -365,7 +387,7 @@ impl Anim {
             last_step: now,
             hold: None,
             press: None,
-            ending: None,
+            film: None,
             idle_since: now,
         };
         a.alpha_out.snap(0);
@@ -450,10 +472,58 @@ impl Anim {
         }
     }
 
-    /// Resolve the disc into an ending look (after the sign / decline).
+    /// Resolve the disc into an ending look with the film-less cancel
+    /// resolve (no work was done: the arrived token resolves in place over
+    /// one flash beat, then the result holds `RESULT_HOLD_MS`).
     pub fn ending(&mut self, e: Ending, now: u32) {
-        self.ending = Some((e, now));
+        self.film = Some(Film::Resolve { film: ResolveFilm::start(now), outcome: e });
+        self.leave_flow(now);
+    }
+
+    /// Start the qubit loading film (the work is under way): the disc where
+    /// it stands becomes the seed, the texts fade, the orbit loops until
+    /// [`Self::film_resolve`].
+    pub fn film_start(&mut self, now: u32) {
+        let seed = Body {
+            x: (self.sx.value + self.sweep) >> 8,
+            y: self.sy.value >> 8,
+            r: (CIRCLE_R << 8) - TOKEN_INSET_Q8,
+        };
+        self.film = Some(Film::Qubit { film: QubitFilm::start(now), seed, outcome: None });
+        self.leave_flow(now);
+    }
+
+    /// The work answered: a running qubit film finishes its turn and lands
+    /// on `e`; with no film running this is the cancel resolve.
+    pub fn film_resolve(&mut self, e: Ending, now: u32) {
+        match &mut self.film {
+            Some(Film::Qubit { film, outcome, .. }) => {
+                film.resolve(now);
+                *outcome = Some(e);
+            }
+            _ => self.ending(e, now),
+        }
+    }
+
+    /// A film is playing (loading, resolving, or holding its result).
+    #[must_use]
+    pub fn film_live(&self) -> bool {
+        self.film.is_some()
+    }
+
+    /// The film has landed its result and held it for `RESULT_HOLD_MS`.
+    #[must_use]
+    pub fn film_done(&self, now: u32) -> bool {
+        match self.film {
+            Some(Film::Qubit { film, outcome: Some(_), .. }) => film.done(now),
+            Some(Film::Resolve { film, .. }) => film.done(now),
+            _ => false,
+        }
+    }
+
+    fn leave_flow(&mut self, now: u32) {
         self.hold = None;
+        self.press = None;
         self.sx.retarget(q16(CENTER_X));
         self.sy.retarget(q16(CIRCLE_CY));
         self.alpha_out.retarget(0);
@@ -509,7 +579,7 @@ impl Anim {
         // Idle sweep (hero only): chase the sine target with τ 180.
         let l = layout_of(&self.cur, self.cur_page);
         let idle = now.wrapping_sub(self.idle_since);
-        let target = if l.sweep && !moving && self.hold.is_none() && self.ending.is_none() {
+        let target = if l.sweep && !moving && self.hold.is_none() && self.film.is_none() {
             q16(motion::sweep_offset(idle))
         } else {
             0
@@ -539,8 +609,8 @@ impl Anim {
         if !flip_live {
             self.flip_at = None;
         }
-        let ambient = (l.sweep || l.hint || l.band) && self.ending.is_none();
-        let ending_live = self.ending.is_some_and(|(_, t)| now.wrapping_sub(t) < 1500);
+        let ambient = (l.sweep || l.hint || l.band) && self.film.is_none();
+        let ending_live = self.film.is_some() && !self.film_done(now);
         // The trail is still catching up with the head.
         let chain_live = self
             .chain
@@ -554,7 +624,7 @@ impl Anim {
     #[must_use]
     pub fn next_wake(&self, now: u32) -> Option<u32> {
         let l = layout_of(&self.cur, self.cur_page);
-        if self.ending.is_some() || self.hold.is_some() || self.settled_at.is_none() || self.flip_at.is_some() {
+        if self.film.is_some() || self.hold.is_some() || self.settled_at.is_none() || self.flip_at.is_some() {
             return Some(now.wrapping_add(16));
         }
         if l.sweep || l.hint {
@@ -573,7 +643,7 @@ impl Anim {
         let idle = now.wrapping_sub(self.idle_since);
 
         // ---- corner chevrons ----------------------------------------------
-        if l.chev != Chev::None && self.ending.is_none() {
+        if l.chev != Chev::None && self.film.is_none() {
             let (hint_up, bob) = if l.hint || l.band {
                 motion::chevron_hint(idle)
             } else {
@@ -607,7 +677,7 @@ impl Anim {
         if a_out > 0 && !(self.prev.0 == self.cur.0 && self.prev_page == self.cur_page) {
             push_texts(frame, &self.prev, self.prev_page, a_out);
         }
-        if self.ending.is_none() {
+        if self.film.is_none() {
             if let Some(t) = self.flip_at {
                 let (out_a, in_a) = motion::page_flip(now.wrapping_sub(t));
                 let ao = (i64::from(out_a) * i64::from(a_in) >> 16) as u8;
@@ -669,25 +739,40 @@ impl Anim {
                     color: Rgb::WHITE.scale(a),
                 });
             }
-        } else if let Some((e, t)) = self.ending {
-            let caption: &'static [u8] = match e {
-                Ending::Signed => b"SIGNED SAFE TX",
-                Ending::Declined => b"SAFE TX DECLINED",
+        } else if let Some(film) = self.film {
+            // The film's captions: the breathing busy line over the orbit,
+            // the resolved caption after the flash.
+            let (busy_a, text_a, outcome) = match film {
+                Film::Qubit { film, outcome, .. } => {
+                    let p = film.pose(now, Body { x: 0, y: 0, r: 0 });
+                    (film.busy_alpha(now), p.text_a, outcome)
+                }
+                Film::Resolve { film, outcome } => (0, film.pose(now).text_a, Some(outcome)),
             };
-            let a = (i64::from(motion::ease_out(motion::phase(now.wrapping_sub(t), 400, 300))) * 255 >> 16) as u8;
-            frame.push(Item::Text {
-                run: TextRun {
-                    text: caption,
-                    tier: TierId::regular(18),
-                    x: CENTER_X,
-                    y: BASELINE_Y,
-                    align: Align::Center,
-                    baseline: true,
-                    ls_q6: LS_QUESTION_Q6,
-                    alpha: a,
-                },
-                color: Rgb::WHITE,
-            });
+            let caption_of = |e: Ending| -> &'static [u8] {
+                match e {
+                    Ending::Signed => b"SIGNED SAFE TX",
+                    Ending::Declined => b"SAFE TX DECLINED",
+                }
+            };
+            for (text, a_q16) in [(&b"SIGNING"[..], busy_a), (outcome.map_or(&b""[..], caption_of), text_a)] {
+                let a = (i64::from(a_q16.clamp(0, ONE_Q16)) * 255 >> 16) as u8;
+                if a > 0 && !text.is_empty() {
+                    frame.push(Item::Text {
+                        run: TextRun {
+                            text,
+                            tier: TierId::regular(18),
+                            x: CENTER_X,
+                            y: BASELINE_Y,
+                            align: Align::Center,
+                            baseline: true,
+                            ls_q6: LS_QUESTION_Q6,
+                            alpha: a,
+                        },
+                        color: Rgb::WHITE,
+                    });
+                }
+            }
         }
 
         // ---- the disc, its trail, film and ring ---------------------------
@@ -697,7 +782,12 @@ impl Anim {
         let cx_q8 = head_x >> 8;
         let cy_q8 = self.sy.value >> 8;
         let visible_r = (CIRCLE_R << 8) - TOKEN_INSET_Q8;
-        let has_disc = l.circle.is_some() || !self.sx.settled() || self.ending.is_some();
+        if let Some(film) = self.film {
+            self.build_film(frame, marks, &style, icon, film, now);
+            let _ = font;
+            return;
+        }
+        let has_disc = l.circle.is_some() || !self.sx.settled();
         if has_disc && cx_q8 > -(CIRCLE_R << 8) {
             // Trail: farthest link first, only while the chain is spread out.
             for (i, (lx, ly)) in self.chain.iter().enumerate().rev() {
@@ -713,8 +803,8 @@ impl Anim {
                     color: style.trail[i.min(4)],
                 });
             }
-            match self.ending {
-                None => {
+            {
+                {
                     frame.push(Item::Disc { cx: cx_q8, cy: cy_q8, r: visible_r, color: style.fill });
                     let mark = match icon {
                         Some(Icon::Safe) => marks.safe,
@@ -749,31 +839,122 @@ impl Anim {
                     }
                     frame.push(Item::Ring { cx: cx_q8, cy: cy_q8, r: visible_r, w: TOKEN_RING_W_Q8, color: style.ring });
                 }
-                Some((e, t)) => {
-                    // Resolve: the arrived disc crossfades to the result look
-                    // over a 400 ms flash beat, the mark draws in after.
-                    let since = now.wrapping_sub(t);
-                    let u = motion::ease_out(motion::phase(since, 0, 400));
-                    let (fill, ring, mark_c) = match e {
-                        Ending::Signed => (Rgb::SAFE_FILL, Rgb::BLACK, Rgb::BLACK),
-                        Ending::Declined => (Rgb::RED, Rgb::BLACK, Rgb::BLACK),
-                    };
-                    let f = blend_rgb(style.fill, fill, u);
-                    let rg = blend_rgb(style.ring, ring, u);
-                    frame.push(Item::Disc { cx: cx_q8, cy: cy_q8, r: visible_r, color: f });
-                    let k = motion::ease_out(motion::phase(since, 400, 350));
-                    if k > 0 {
-                        match e {
-                            Ending::Signed => frame.push(Item::Check { cx: cx_q8, cy: cy_q8, r: visible_r, color: mark_c, k }),
-                            Ending::Declined => frame.push(Item::Cross { cx: cx_q8, cy: cy_q8, r: visible_r, color: mark_c, k }),
-                        };
-                    }
-                    frame.push(Item::Ring { cx: cx_q8, cy: cy_q8, r: visible_r, w: TOKEN_RING_W_Q8, color: rg });
-                }
             }
         }
         let _ = font;
     }
+
+    /// The resting look an ending lands on: (fill, ring, mark colour).
+    fn resting(e: Ending) -> (Rgb, Rgb, Rgb) {
+        match e {
+            Ending::Signed => (Rgb::SAFE_FILL, Rgb::BLACK, Rgb::BLACK),
+            Ending::Declined => (Rgb::RED, Rgb::BLACK, Rgb::BLACK),
+        }
+    }
+
+    fn push_result(frame: &mut Frame<'_>, e: Ending, cx: Q8, cy: Q8, r: Q8, mark_c: Rgb, k: Q16) {
+        if k > 0 {
+            match e {
+                Ending::Signed => frame.push(Item::Check { cx, cy, r, color: mark_c, k }),
+                Ending::Declined => frame.push(Item::Cross { cx, cy, r, color: mark_c, k }),
+            };
+        }
+    }
+
+    /// The status film over the disc (DESIGN.md § Status animations).
+    fn build_film<'a>(&self, frame: &mut Frame<'a>, marks: &Marks<'a>, style: &DiscStyle, icon: Option<Icon>, film: Film, now: u32) {
+        let visible_r = (CIRCLE_R << 8) - TOKEN_INSET_Q8;
+        let mark = match icon {
+            Some(Icon::Safe) => marks.safe,
+            Some(Icon::Chain) => marks.mainnet,
+            Some(Icon::Fingerprint) => marks.fingerprint,
+            _ => None,
+        };
+        match film {
+            Film::Resolve { film, outcome } => {
+                // The arrived disc crossfades to the result look over the
+                // flash beat; the flash ring fires in the state colour; the
+                // mark draws in after.
+                let p = film.pose(now);
+                let cx = self.sx.value >> 8;
+                let cy = self.sy.value >> 8;
+                let (fill, ring, mark_c) = Self::resting(outcome);
+                let state = match outcome {
+                    Ending::Signed => Rgb::GREEN,
+                    Ending::Declined => Rgb::RED,
+                };
+                let r = lerp(visible_r, CIRCLE_R << 8, p.u);
+                frame.push(Item::Disc { cx, cy, r, color: blend_rgb(style.fill, fill, p.u) });
+                if let (Some(m), true) = (mark, p.glyph_a > 0) {
+                    frame.push(Item::Mask { cx, cy, mask: m, scale: ONE_Q8, color: style.mark, a: p.glyph_a });
+                }
+                frame.push(Item::Ring { cx, cy, r, w: TOKEN_RING_W_Q8, color: blend_rgb(style.ring, ring, p.u) });
+                if p.flash_a > 0 {
+                    frame.push(Item::Ring { cx, cy, r: p.flash_r, w: (2 << 8) + 128, color: state.scale(p.flash_a) });
+                }
+                Self::push_result(frame, outcome, cx, cy, r, mark_c, p.check_k);
+            }
+            Film::Qubit { film, seed, outcome } => {
+                let p = film.pose(now, seed);
+                let cx = loading::GC_X_Q8;
+                let cy = loading::GC_Y_Q8;
+                match p.phase {
+                    Phase::Seed => {
+                        let b = p.bodies[0];
+                        frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: style.fill });
+                        if let (Some(m), true) = (mark, p.glyph_a > 0) {
+                            let scale = ((i64::from(b.r) << 8) / i64::from(visible_r.max(1))) as Q8;
+                            frame.push(Item::Mask { cx: b.x, cy: b.y, mask: m, scale, color: style.mark, a: p.glyph_a });
+                        }
+                        if p.glyph_a > 0 {
+                            frame.push(Item::Ring { cx: b.x, cy: b.y, r: b.r, w: TOKEN_RING_W_Q8, color: style.ring.scale(p.glyph_a) });
+                        }
+                    }
+                    Phase::Split | Phase::Join | Phase::Orbit | Phase::Spiral => {
+                        // Trail: past poses behind each qubit, farthest first.
+                        let ft = film.film_t(now);
+                        for k in (1..=TRAIL_COUNT).rev() {
+                            let back = k * TRAIL_DT_MS;
+                            if ft < loading::T2 + back {
+                                continue;
+                            }
+                            let q = loading::qubit_pose(ft - back, seed);
+                            if !matches!(q.phase, Phase::Split | Phase::Join | Phase::Orbit | Phase::Spiral) {
+                                continue;
+                            }
+                            let c = style.trail[(k as usize - 1).min(4)];
+                            for b in &q.bodies[..usize::from(q.n)] {
+                                frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: c });
+                            }
+                        }
+                        for b in &p.bodies[..usize::from(p.n)] {
+                            frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: style.fill });
+                        }
+                    }
+                    Phase::Flash | Phase::Result => {
+                        let e = outcome.unwrap_or(Ending::Declined);
+                        let (fill, ring, mark_c) = Self::resting(e);
+                        let state = match e {
+                            Ending::Signed => Rgb::GREEN,
+                            Ending::Declined => Rgb::RED,
+                        };
+                        let b = p.bodies[0];
+                        let u = if p.phase == Phase::Flash { motion::ease_out(motion::phase(ft_of(&film, now), loading::T6, loading::QUBIT_T_FLASH)) } else { ONE_Q16 };
+                        frame.push(Item::Disc { cx, cy, r: b.r, color: blend_rgb(style.fill, fill, u) });
+                        frame.push(Item::Ring { cx, cy, r: b.r, w: TOKEN_RING_W_Q8, color: blend_rgb(style.ring, ring, u) });
+                        if p.flash_a > 0 {
+                            frame.push(Item::Ring { cx, cy, r: p.flash_r, w: (2 << 8) + 128, color: state.scale(p.flash_a) });
+                        }
+                        Self::push_result(frame, e, cx, cy, b.r, mark_c, p.check_k);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn ft_of(film: &QubitFilm, now: u32) -> u32 {
+    film.film_t(now)
 }
 
 fn blend_rgb(a: Rgb, b: Rgb, t: Q16) -> Rgb {

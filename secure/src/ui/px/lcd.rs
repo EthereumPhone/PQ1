@@ -399,6 +399,9 @@ fn build_and_present(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, overlay: O
 /// (`assets::atlas`), so the caller paints with the legacy glyph blitter
 /// instead — the device stays readable, the pixel dialogs refuse.
 pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS]) -> bool {
+    // Any legacy paint ends a running film (an error status after the
+    // sign started, for instance).
+    film_abort();
     let Some(atlas) = assets::atlas() else {
         return false;
     };
@@ -416,16 +419,107 @@ pub fn clear() {
     lcd::fill_screen(0);
 }
 
-/// Play an ending over ~1.3 s and leave its resting frame on the glass.
+/// Play an ending (the film-less cancel resolve, or the running film's
+/// landing) through its result hold and leave the resting frame on the glass.
 pub fn show_ending(e: Ending) {
+    film_resolve(e);
+}
+
+// ---- the signing film ------------------------------------------------------
+//
+// The qubit loading film plays AROUND `crypto::c10_sign_verified*`: it is
+// started by the handler before the sign, paced by the signer's opaque
+// `fn(u8)` progress hook (`film_tick`: one frame at most per `FRAME_PERIOD_MS`,
+// never more than one frame of delay), and resolved by the handler at the
+// existing post-release site (`film_resolve(Signed)`) or on the decline path.
+// The hook returns unit and captures nothing, so the film cannot alter, delay
+// past one frame, or skip any gate of the FI chain; the film state lives
+// here, never in `crypto.rs`. Frames are timed off the S-only SysTick clock.
+
+/// A film is running (started and not yet resolved).
+static FILM_LIVE: AtomicBool = AtomicBool::new(false);
+/// The film's runtime + the wall-clock ms of its last presented frame.
+/// Single-threaded driver state: touched only from the sign handler's
+/// thread of execution, never from an ISR.
+static mut FILM: Option<(Anim, u32)> = None;
+
+/// The centred status screen the film plays over (the Safe disc).
+fn film_screen() -> Screen {
+    pqsigner_ui_px::ScreenBuilder::status(b"SIGN", pqsigner_ui_px::Icon::Safe, b"", pqsigner_ui_px::State::Awaiting, pqsigner_ui_px::ResultMark::None)
+        .finish()
+        .unwrap_or(Screen::BLANK)
+}
+
+/// Start the loading film: the disc seeds into the qubits and the orbit
+/// loops until [`film_resolve`]. Without a verified atlas nothing plays
+/// (and the ticks stay no-ops).
+pub fn film_start() {
     let Some(atlas) = assets::atlas() else {
         return;
     };
-    let hero = Screen::BLANK;
     let now = timeout::now();
-    let mut anim = Anim::new(&hero, 0, now);
-    anim.ending(e, now);
-    let start = now;
+    let s = film_screen();
+    let mut anim = Anim::new(&s, 0, now);
+    anim.film_start(now);
+    invalidate_shown();
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
+    // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
+    // this is the only writer while `FILM_LIVE` is false.
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM) = Some((anim, now));
+    }
+    FILM_LIVE.store(true, Ordering::Relaxed);
+}
+
+/// One frame of the running film, if one is due — the signer's `fn(u8)`
+/// progress hook. `_percent` is not used for the pose: the film is a pure
+/// function of the S-only clock. Bounded: at most one frame per
+/// `FRAME_PERIOD_MS`, and a frame that overran 50 ms skips the next slot, so
+/// the sign chain is never delayed by more than one frame per call.
+pub fn film_tick(_percent: u8) {
+    if !FILM_LIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    let now = timeout::now();
+    // SAFETY: single-threaded driver state; `film_start` published it and
+    // no other reference is live during this call.
+    let Some((anim, last)) = (unsafe { &mut *core::ptr::addr_of_mut!(FILM) }).as_mut() else {
+        return;
+    };
+    if now.wrapping_sub(*last) < FRAME_PERIOD_MS {
+        return;
+    }
+    let Some(atlas) = assets::atlas() else {
+        return;
+    };
+    anim.step(now);
+    let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None);
+    let after = timeout::now();
+    *last = if after.wrapping_sub(now) > 50 { after.wrapping_add(FRAME_PERIOD_MS) } else { after };
+}
+
+/// The work answered: land the running film on `e` (the current turn
+/// completes, then the spiral, flash, result and its hold), or — with no
+/// film running — play the film-less resolve. Returns when the result has
+/// held `RESULT_HOLD_MS`; the resting frame stays on the glass.
+pub fn film_resolve(e: Ending) {
+    let Some(atlas) = assets::atlas() else {
+        film_abort();
+        return;
+    };
+    let now = timeout::now();
+    FILM_LIVE.store(false, Ordering::Relaxed);
+    // SAFETY: single-threaded driver state; taking it leaves `None` behind
+    // so a later tick is a no-op.
+    let taken = unsafe { core::ptr::replace(core::ptr::addr_of_mut!(FILM), None) };
+    let mut anim = match taken {
+        Some((anim, _)) => anim,
+        None => {
+            let s = film_screen();
+            Anim::new(&s, 0, now)
+        }
+    };
+    anim.film_resolve(e, now);
     let marks = atlas.marks();
     let font = atlas.font();
     invalidate_shown();
@@ -433,9 +527,24 @@ pub fn show_ending(e: Ending) {
         let t = timeout::now();
         anim.step(t);
         let _ = build_and_present(&anim, &marks, &font, None);
-        if t.wrapping_sub(start) > 1300 {
+        if anim.film_done(t) {
             break;
         }
+    }
+}
+
+/// A film is running (started and not yet resolved).
+#[must_use]
+pub fn film_live() -> bool {
+    FILM_LIVE.load(Ordering::Relaxed)
+}
+
+/// Drop a running film without landing it (error paths).
+pub fn film_abort() {
+    FILM_LIVE.store(false, Ordering::Relaxed);
+    // SAFETY: single-threaded driver state.
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM) = None;
     }
 }
 

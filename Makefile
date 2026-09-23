@@ -4662,6 +4662,19 @@ pq-ui-sync: ## Re-vendor tools/pq-ui/ from $(PQ_UI_SRC) (must be at the UPSTREAM
 pq-ui-check: ## Verify tools/pq-ui/ against MANIFEST.sha256 (bytes + file set)
 	@tools/pq-ui/sync.sh --check
 
+# Design-rule gates for the pixel trusted UI: the vendored PQ-UI tree, the
+# reproducible asset bake, upstream's port_diff over the firmware's motion /
+# input / film constants (recorded deviations in PORT_DEVIATIONS.toml), the
+# crate's own tests (incl. the `check` design-rule checker) and the secure
+# host tests that run the checker over every Safe scenario transcript.
+.PHONY: pq-ui-port-diff ui-px-check
+pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails on an unrecorded MISMATCH
+	@python3 tools/pq_ui_port_diff.py
+
+ui-px-check: pq-ui-check ui-px-assets-check pq-ui-port-diff ## All pixel-UI design-rule gates (vendored tree, bake, port_diff, checker tests)
+	@cargo test --locked -p pqsigner-ui-px
+	@cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests
+
 .PHONY: ui-px-assets ui-px-assets-check
 ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1a, atlas_root.rs + metrics_gen.rs
 	@python3 tools/ui_px_assets.py

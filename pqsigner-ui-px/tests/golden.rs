@@ -119,20 +119,34 @@ fn check(name: &str, px: &[u16], expected: &str) {
         write_png(&format!("{name}.png"), px);
     }
     let got = sha(px);
+    // An empty expectation is a golden being blessed: print it, do not fail.
+    if expected.is_empty() {
+        eprintln!("BLESS {name} = \"{got}\"");
+        return;
+    }
     assert_eq!(got, expected, "{name}: frame golden changed — review target/ui-px-golden/{name}.png (UI_PX_PNG=1) and re-bless");
 }
 
+/// Every fixture passes the design-rule checker before it is rendered.
+fn checked(s: Screen) -> Screen {
+    assert_eq!(pqsigner_ui_px::check::check_screens(&[s]), Ok(()));
+    s
+}
+
 fn hero() -> Screen {
-    ScreenBuilder::hero(b"APPROVE", Icon::Safe, b"APPROVE SAFE TX?").finish().unwrap()
+    checked(ScreenBuilder::hero(b"APPROVE", Icon::Safe, b"APPROVE SAFE TX?").finish().unwrap())
 }
 
 fn detail_addr() -> Screen {
-    ScreenBuilder::detail(b"SAFEACCT", Icon::Safe, Side::Left, b"SAFE ACCT")
-        .tier(Tier::T22)
-        .line(b"0x5aFE0000000000000000", Weight::Regular)
-        .line(b"00000000000000000001", Weight::Regular)
-        .finish()
-        .unwrap()
+    checked(
+        ScreenBuilder::detail(b"SAFEACCT", Icon::Safe, Side::Left, b"SAFE ACCT")
+            .tier(Tier::T22)
+            // The design's 2 × 21 address split (`fit::split_address`).
+            .line(b"0x5aFE000000000000000", Weight::Regular)
+            .line(b"000000000000000000001", Weight::Regular)
+            .finish()
+            .unwrap(),
+    )
 }
 
 #[test]
@@ -199,9 +213,53 @@ fn confirm_and_legacy_and_ending() {
 }
 
 const GOLDEN_HERO_REST: &str = "5f500074a2b03fa16185ee065f8daa6a194f1e9b43f5f0a38f7c45fe77efb842";
-const GOLDEN_DETAIL_SETTLED: &str = "c8dd2591cd71da03fd6999993314cdc0b9616ea707a4033b58cb39e9d3332d80";
-const GOLDEN_TRANSITION: &str = "13faf48dbc034cba4d66f4c5c0a3b7378bcc3a68e5a03d40a917e93e7cb7d98a";
+const GOLDEN_DETAIL_SETTLED: &str = "2d225ec2e04e26a53e67abc7fec2807678a5562aae334cab8862523a8ba935a4";
+const GOLDEN_TRANSITION: &str = "6419a6a0877ca9bb1bcf48db01d8cbb75a00b98fe733ff3e43494479557cb43e";
 const GOLDEN_HOLD: &str = "c106d99f364d818fa0794713dc92cbe5d58810896fe608fdfcd96bce31f21db2";
 const GOLDEN_CONFIRM: &str = "bcec64bf35da2468dbbf5ab543083a3ece0ad548f16c81fc5dfc1e7e9e87bfd7";
 const GOLDEN_LEGACY: &str = "8329677829040e41857dc59f8d0480fa1f2653fca0783746238ead85aec2850f";
-const GOLDEN_ENDING: &str = "357ca89d17cf2be77750b5f09d26a3702a4e9afcef6c292e9b6a778e5168799d";
+const GOLDEN_ENDING: &str = "9dd674e78b15221c8a5effedd5a5121c0fba5183741bdacf90a58cabc647da33";
+
+/// The signing film at its beats (pq1/loading.py timeline): seed, split,
+/// orbit (the loop), spiral, flash, the landed check, and the end of the
+/// result hold. The film is started on the hero at t 0 and answered at
+/// 3000 ms (inside the loop, so the stock timeline plays with no wraps).
+#[test]
+fn signing_film_frames() {
+    let mut a = Anim::new(&hero(), 0, 0);
+    a.film_start(0);
+    assert!(a.film_live());
+    let beats: [(&str, u32, &str); 7] = [
+        ("film_seed_200", 200, GOLDEN_FILM_SEED),
+        ("film_split_1000", 1000, GOLDEN_FILM_SPLIT),
+        ("film_orbit_3000", 3000, GOLDEN_FILM_ORBIT),
+        ("film_spiral_5000", 5000, GOLDEN_FILM_SPIRAL),
+        ("film_flash_6000", 6000, GOLDEN_FILM_FLASH),
+        ("film_check_6400", 6400, GOLDEN_FILM_CHECK),
+        ("film_hold_end_8650", 8650, GOLDEN_FILM_HOLD_END),
+    ];
+    let mut t = 16;
+    for (name, at, expected) in beats {
+        while t < at {
+            a.step(t);
+            t += 16;
+        }
+        if at == 3000 {
+            a.film_resolve(Ending::Signed, at);
+        }
+        a.step(at);
+        t = at + 16;
+        let px = render_full(&a);
+        assert!((0..W).any(|x| px[(72 * W + x) as usize] != 0), "{name}: nothing drawn on the film's centre row");
+        check(name, &px, expected);
+        assert_eq!(a.film_done(at), at >= 8650, "{name}");
+    }
+}
+
+const GOLDEN_FILM_SEED: &str = "33706780ad7bcce4de1763d5032a34a3340517055544914a23119caf16d98049";
+const GOLDEN_FILM_SPLIT: &str = "4be77777e056380c6be53c6e5bbd0314fc0507efdeb46dbfa31da3942c757546";
+const GOLDEN_FILM_ORBIT: &str = "4394b9eecf185d2520aeba0563489e9f3ed728fe7e4c50f07f52b46995935339";
+const GOLDEN_FILM_SPIRAL: &str = "296ff6e3bd0ac87c1c4630d7658022709f2bb46dfe1ec18607c5eb69562c1623";
+const GOLDEN_FILM_FLASH: &str = "e4574e263ed8452307cc7ac9871161e81d71ae5c42ed20d87efda605d75db810";
+const GOLDEN_FILM_CHECK: &str = "1fc1479648e0fb9bd2fbb31423f6de392115c8c67af4e5bdfd2a0cc6894ab39c";
+const GOLDEN_FILM_HOLD_END: &str = "9dd674e78b15221c8a5effedd5a5121c0fba5183741bdacf90a58cabc647da33";

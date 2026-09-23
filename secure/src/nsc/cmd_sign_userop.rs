@@ -2458,6 +2458,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     let t2_digest = compute_sphincs_digest_v06(&t2_params, &t2_call_digest);
 
+    // The pixel route plays the qubit loading film around the sign (started
+    // here, paced by the signer's opaque progress hook, landed at the
+    // post-release site below); every other route keeps the progress text.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_route {
+        crate::ui::px::lcd::film_start();
+    } else {
+        ui::show_progress("Slot C10 sign", 0);
+    }
+    #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
     ui::show_progress("Slot C10 sign", 0);
     let t2_sig = {
         // SAFETY: category 5 — read-only borrow of `static mut
@@ -2656,16 +2666,24 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     crate::timeout::reset_activity();
+    // The pixel route lands the film: the current orbit turn completes,
+    // the pair spirals in, the flash, the check, then the design's
+    // RESULT_HOLD_MS — the film's own hold replaces the legacy spin below.
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
     if px_route {
-        crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Signed);
+        crate::ui::px::lcd::film_resolve(pqsigner_ui_px::scene::Ending::Signed);
     } else {
         ui::show_status("Signed", "");
+        for _ in 0..3_000_000u32 {
+            cortex_m::asm::nop();
+        }
     }
     #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
-    ui::show_status("Signed", "");
-    for _ in 0..3_000_000u32 {
-        cortex_m::asm::nop();
+    {
+        ui::show_status("Signed", "");
+        for _ in 0..3_000_000u32 {
+            cortex_m::asm::nop();
+        }
     }
     ui::show_status("PQSigner OS", "Ready");
 
@@ -2717,10 +2735,23 @@ fn add_one_to_be_u256(v: &mut [u8; 32]) {
 }
 
 fn c10_sign_progress_bootstrap(percent: u8) {
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if crate::ui::px::lcd::film_live() {
+        crate::ui::px::lcd::film_tick(percent);
+        return;
+    }
     crate::ui::show_progress("C10 sign", percent);
 }
 
 fn c10_sign_progress_slot(percent: u8) {
+    // On the pixel route the signer's progress hook paces the film (one
+    // frame at most per period); the pose is a pure function of the S-only
+    // clock, never of `percent`.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if crate::ui::px::lcd::film_live() {
+        crate::ui::px::lcd::film_tick(percent);
+        return;
+    }
     crate::ui::show_progress("Slot C10 sign", percent);
 }
 
