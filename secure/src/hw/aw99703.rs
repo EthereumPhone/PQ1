@@ -41,7 +41,21 @@ const REG_LEDMSB: u8 = 0x07; // [7:0] brightness MSBs
 /// 20 mA full-scale (code 0b10011, the chip default) on channel 1 only.
 const LEDCUR_CH1_20MA: u8 = (0b10011 << 3) | 0b001;
 /// No frequency shift, 1 MHz switching, **OVP = 24 V** (001), OCP 2.7 A (default).
-const BSTCTR1_OVP24V: u8 = (0b00 << 6) | (1 << 5) | (0b001 << 2) | 0b10;
+///
+/// NOT a claim that 001 is safe for C140: Awinic V1.2 gives that setting as
+/// 22.5 V min / 24 V typ / **25.5 V max**, so its upper bound already exceeds
+/// the 25 V part. See `aw99703-ovp-low` for the experiment that tests whether
+/// the one setting below it is usable on this panel.
+#[cfg(not(feature = "aw99703-ovp-low"))]
+const BSTCTR1_OVP: u8 = (0b00 << 6) | (1 << 5) | (0b001 << 2) | 0b10;
+
+/// DEV EXPERIMENT (#705): OVP = **19 V max** (`OVPSEL=000`, 16 / 17.5 / 19 V),
+/// comfortably under C140's 25 V rating. Viable only if the LED string stays
+/// below the 16 V MINIMUM trip; if it does not, the boost protection fires and
+/// the backlight fails or flickers — which is the readable outcome this
+/// experiment wants. Everything else in the byte is unchanged.
+#[cfg(feature = "aw99703-ovp-low")]
+const BSTCTR1_OVP: u8 = (0b00 << 6) | (1 << 5) | (0b000 << 2) | 0b10;
 /// PWM-pin dimming disabled (pin floats), linear map, backlight mode.
 const MODE_I2C_LINEAR_BACKLIGHT: u8 = (1 << 4) | (1 << 2) | 0b01;
 /// Demo brightness: 11-bit code 0x5FF of 0x7FF ≈ 75 % of full scale (linear map).
@@ -293,7 +307,7 @@ pub fn configure() -> Option<Configured> {
     // enable — required before any transplant into immutable FSBL code (#705).
     for (reg, val) in [
         (REG_LEDCUR, LEDCUR_CH1_20MA),
-        (REG_BSTCTR1, BSTCTR1_OVP24V),
+        (REG_BSTCTR1, BSTCTR1_OVP),
         (REG_LEDLSB, BRIGHTNESS_LSB),
         (REG_LEDMSB, BRIGHTNESS_MSB),
     ] {

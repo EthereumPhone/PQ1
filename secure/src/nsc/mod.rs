@@ -183,6 +183,17 @@ compile_error!(
      Bench it via a single-boot hardware test image (e2e-test / dev-testkey)."
 );
 // Belt-and-braces: the canonical ship profile must never carry it.
+#[cfg(all(feature = "mode-production", feature = "aw99703-ovp-low"))]
+compile_error!(
+    "mode-production and aw99703-ovp-low are mutually exclusive. That feature \
+     is a #705 bench experiment: it programs the AW99703's lowest OVP \
+     threshold (16/17.5/19 V) to find out whether this panel's LED string \
+     stays under the 16 V minimum trip. One unit at room temperature is not \
+     the worst-case envelope, so it cannot select a shipping value. The \
+     shipping OVP setting is an owner decision that needs the ODM's operating \
+     envelope for the ZT165M017AT backlight."
+);
+
 #[cfg(all(feature = "mode-production", feature = "mlkem-inner-wrap"))]
 compile_error!(
     "mode-production and mlkem-inner-wrap are mutually exclusive (#28 piece \
