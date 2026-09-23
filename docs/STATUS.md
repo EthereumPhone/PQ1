@@ -7,10 +7,13 @@ Implementation/review evidence: [remediation record](security/adversarial-review
 
 **EasyCrypt research update (2026-09-23):** accepted public histories now
 remove the grind-failure charge from the bounded nonadaptive hypertree theorem.
-A persistent raw-input oracle models the secret-keyed R/H_msg loop, repeated
-answers and its worst-case call count; fresh H_msg acceptance is exactly `2^-11`.
-Full costed scheme/reduction simulation and numerical forgery bounds remain
-open. See the
+A persistent raw-input oracle now covers the complete adaptive byte-session
+model and its costs. The
+[quantitative foundations](../contracts/verification/easycrypt/c10-port/QUANTITATIVE-FOUNDATIONS.md)
+add exact-coordinate replay accounting and accepted-output bounds for the
+memoized grinder and complete signer. Adaptive accumulated opening coverage,
+the component reduction and numerical end-to-end forgery bounds remain open.
+See the
 [current artifact boundary](../contracts/verification/easycrypt/c10-port/README.md)
 and [research obligations](verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-23-accepted-history-composition-and-persistent-raw-oracle).
 The [merge receipt](security/adversarial-review/findings/easycrypt-accepted-history-2026-09-23/README.md)

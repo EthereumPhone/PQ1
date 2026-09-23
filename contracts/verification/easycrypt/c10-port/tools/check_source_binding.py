@@ -52,6 +52,14 @@ SOURCES = (
         'RoleGrindCost', 'SecretPrefix', 'SessionClosedForm', 'SessionKeygen',
         'SessionPhysical', 'StreamBound', 'StreamExpectation', 'TrialExpectation',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'AcceptedCoverage', 'AcceptedHypertree', 'AcceptedSampling', 'AuditComplete',
+        'AuditPrefix', 'ByteAudit', 'ByteReplay', 'DigestCoordinates',
+        'DigestPair', 'DigestPrefix', 'DigestWindow', 'FreshCoverage',
+        'GrindHypertree', 'GrindJointCoverage', 'GrindReturned', 'PrefixAudit',
+        'RawHistoryPreservation', 'SignerAccepted', 'SignerReturned', 'StreamAccepted',
+        'TrialAccepted',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

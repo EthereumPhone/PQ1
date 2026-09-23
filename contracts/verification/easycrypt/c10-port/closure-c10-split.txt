@@ -95,3 +95,9 @@ RawSessionCost
 ByteBound
 RawSignerWidths
 FullFailure
+
+# Quantitative foundations: exact replay and memoized accepted-output laws.
+ByteReplay
+GrindJointCoverage
+SignerReturned
+GrindHypertree
