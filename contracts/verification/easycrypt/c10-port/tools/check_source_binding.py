@@ -31,6 +31,7 @@ SOURCES = (
         'C10AcceptedReduction', 'C10HypertreeAccepted', 'C10StatefulSearch',
         'C10RawOracle', 'C10RawGrind', 'FORSC10Digest')),
     'sphincs-c10/src/shuffle.rs',
+    'sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/merkle.rs',
     *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
         'AcceptedContexts', 'ByteBound', 'ByteSession', 'ContextExhaustion',
         'ExhaustionCharges', 'FullFailure', 'FullPrefix', 'FullSession', 'FullSessionCost',

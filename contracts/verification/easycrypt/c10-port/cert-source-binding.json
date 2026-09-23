@@ -9,7 +9,7 @@
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",
-    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "1f8858473451d801c4986b3948dd0e61706291e84e9f1f67a566069f3f4c6162",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "96d73c60e4114de3c3e0622c310c92bd7edcf06ddcf834a0082c3ce24deb2cca",
     "contracts/verification/scripts/run_easycrypt_split.py": "4568d51ccd1e07082c816cb59432759a60fbe879b66fa72fefeb2a1e410f4487",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
@@ -126,6 +126,8 @@
     "contracts/verification/easycrypt/c10-port/tools/fullsign_model/Cargo.lock": "841066878fb7673836172817b5b7d756fc98505adf976fdde7465eea4e8b2ea8",
     "contracts/verification/easycrypt/c10-port/tools/fullsign_model/check.py": "fbc7bac09f2d7dd0026dde7741b8be70bd2966f59a875f1d51bec7507298b2b6",
     "contracts/verification/easycrypt/c10-port/tools/fullsign_model/src/main.rs": "5a9ba5d9985c68dd60751f2543f3ced31df6afe94096b539373a95e2d6d4faa9",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/FullFailure.ec": "6a7ebb40564953acea43868aecd62a0a0d104eca29c2a47ada2168fedd859d7a"
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/FullFailure.ec": "6a7ebb40564953acea43868aecd62a0a0d104eca29c2a47ada2168fedd859d7a",
+    "sphincs-c10/src/hypertree.rs": "0541fe8f4b6f284d060c620e9aa38f02a9384e551f47577e85cd7f648ab14b7b",
+    "sphincs-c10/src/merkle.rs": "f787428b15cea6fb353eb3e1830f9f737067ce70a74e4d6b79113b83a1f3aed0"
   }
 }
