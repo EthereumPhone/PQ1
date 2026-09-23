@@ -113,3 +113,13 @@ RawPathComparison
 RawForsComparison
 RawPathReplay
 RawForsPathReplay
+
+# Actual raw builders, retained initial FORS leaf hashes and recovery comparison.
+BuildRootProjection
+TotalBuilderReference
+ForsBuilderSecret
+ForsBuilderComparison
+MerkleBuilderComparison
+ForsBuilderPrivate
+ForsSignCorrect
+ForsSignRecord
