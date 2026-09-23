@@ -39,7 +39,7 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10WOTSCorrect.ec": "e22b4b56e0b338215ffae65868e5e6ce19c87be24cd5de403d96c779074e4bd2",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HypertreeCorrect.ec": "573ca856e04847914f55fa0dcdb41e5baf17cc2eff4dac655b12f011b3309ce1",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10CubeCorrect.ec": "6f35d67ceefe569b872776a1903511dec0e16dfe08607e4b8c2e2c18ebab83cd",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10CubeConstruction.ec": "72b18623112f00926bd8c59d8036df650418acb23f7d34f8a3b599755fdb4a27",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10CubeConstruction.ec": "798e89ef434b224d175cdcd19adf2ce4b383881a8f728a476433ad7487f4c198",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10ReductionChoose.ec": "53f0fcdbf179a0babada7811952987c43399757fae0b2f0de25c72b807eecc9d",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10ReductionForge.ec": "469e04863b851c40a1f54fd849183747d3a2622594ec04b8149717d1ef482ef7",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10AcceptedReduction.ec": "9a63dc7a27187a0d4b2178af3345eeb64705c812631abedfe35f6b3a0860eeeb",

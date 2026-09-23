@@ -28,9 +28,9 @@ proof.
   case (size nodes = 0) => hz.
   + rewrite hz /= (nth_out leaves nodes) 1:/# eq_sym; apply subtree_leaf.
     by move: hj; rewrite hz /nr_nodesx /= -/l' -hs.
-  rewrite (nth_change_dfl witness leaves) 1:/#.
-  have he : size nodes-1+1 = size nodes by ring.
   have hh : 0 <= size nodes-1 < size nodes by smt(size_ge0).
+  rewrite (nth_change_dfl witness leaves) 1:hh.
+  have he : size nodes-1+1 = size nodes by ring.
   have hj' : 0 <= j < nr_nodesx (size nodes-1+1) by rewrite he.
   have hx := hc (size nodes-1) j hh hj'.
   by rewrite he in hx.
