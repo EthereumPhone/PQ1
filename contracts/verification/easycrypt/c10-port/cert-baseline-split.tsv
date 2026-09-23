@@ -1946,3 +1946,22 @@ cdrafts-split/SignerAccepted.ec	module:7b2eea65bea5	ObservedSignEvent	# line 30
 cdrafts-split/SignerAccepted.ec	module:8f19c94df68d	ObservedSigner	# line 12
 cdrafts-split/SignerReturned.ec	module:148cf999d2ec	SignatureDigestEvent	# line 60
 cdrafts-split/StreamAccepted.ec	defined-op:9e10b4079e02	stream_acceptance_potential	# line 9
+
+# Complete-session history and repeat accounting; existing census preserved.
+cdrafts-split/ClassifiedHistory.ec	defined-op:5bc2a70bbd94	classified_context	# line 8
+cdrafts-split/ClassifiedHistory.ec	defined-op:6205bbe77f21	classified_history	# line 11
+cdrafts-split/ClassifiedHistory.ec	defined-op:6d4bf4aa426e	classified_except	# line 13
+cdrafts-split/ClassifiedSession.ec	defined-op:2a890db6c053	live_classified	# line 8
+cdrafts-split/FullHistory.ec	defined-op:0379f7a4ec48	full_history	# line 7
+cdrafts-split/GrindTrace.ec	defined-op:b62285ec6014	trial_random	# line 7
+cdrafts-split/GrindTrace.ec	defined-op:b65857ba6bec	trial_input	# line 9
+cdrafts-split/GrindTrace.ec	defined-op:55de3367a839	trial_digest	# line 11
+cdrafts-split/GrindTrace.ec	defined-op:d2b072306fe7	trial_recorded	# line 13
+cdrafts-split/GrindTrace.ec	defined-op:236224ec3522	rejected_prefix	# line 16
+cdrafts-split/GrindTrace.ec	defined-op:e156f25db2cc	completed_trace	# line 20
+cdrafts-split/PreparedFinish.ec	module:3cd36402ab3e	PreparedFinish	# line 7
+cdrafts-split/PreparedFinish.ec	module-type:b23274a765bd	PreparationFinisher	# line 32
+cdrafts-split/SessionDigest.ec	module:fc1580497c63	SessionDigestEvent	# line 9
+cdrafts-split/SignerTrace.ec	defined-op:78b61e9e8fda	signature_trace	# line 29
+cdrafts-split/SignerTrace.ec	module-type:6c9229487b83	CompleteSigner	# line 49
+cdrafts-split/VerifierHistory.ec	module-type:ef40244dd7ef	PublicVerifier	# line 5

@@ -60,6 +60,13 @@ SOURCES = (
         'RawHistoryPreservation', 'SignerAccepted', 'SignerReturned', 'StreamAccepted',
         'TrialAccepted',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'ByteHistory', 'ClassifiedBound', 'ClassifiedGrind', 'ClassifiedHistory',
+        'ClassifiedSession', 'ClassifiedSigner', 'FullHistory', 'FullMessageHistory',
+        'GrindTrace', 'GrindTraceRecorded', 'GrindTraceReplay', 'MessageHistory',
+        'MonotoneHistory', 'PreparedFinish', 'SessionDigest', 'SignerMessages',
+        'SignerRecorded', 'SignerTrace', 'VerifierHistory',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

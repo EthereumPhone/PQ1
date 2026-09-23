@@ -1,0 +1,29 @@
+{
+  "candidate": "d0c2999c92932d46806322af96a637e186d9b170",
+  "pull_request": 738,
+  "overall_ci": "red",
+  "known_failures": {
+    "660": "TRNG ledger anchor missing",
+    "711": "Existing proto receipt drift and locked fuzz Cargo.lock mismatch",
+    "717": "Foundry installer cannot execute binary file"
+  },
+  "logs": [
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q2-ci-logs/107281276300.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q2-ci-logs/107281274836.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q2-ci-logs/107281276208.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q2-ci-logs/107281276267.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q2-ci-logs/107281276345.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q2-ci-logs/107281276216.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q2-ci-logs/107281275934.log"
+  ],
+  "unchanged_baseline_inputs": [
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "proto",
+    "secure/data/erc7730/curations/manifest.json",
+    ".github/workflows"
+  ],
+  "source_scope": "Only EasyCrypt proof/enrollment/owner-status files changed."
+}

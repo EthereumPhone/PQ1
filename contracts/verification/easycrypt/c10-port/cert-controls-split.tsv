@@ -238,3 +238,16 @@ scratch/_scope_neg_op_ByteReplay.ec	MUST-FAIL	unknown variable or constant: `FOR
 scratch/_scope_neg_op_GrindJointCoverage.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_SignerReturned.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_GrindHypertree.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Complete-session history, repeat-accounting and scope controls.
+scratch/C10Q2FreshRepeatFalse.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q2HistoryPositive.ec	MUST-PASS	-
+scratch/C10Q2NovelPositive.ec	MUST-PASS	-
+scratch/C10Q2PrivateStateExposed.ec	MUST-FAIL	the module A is not allowed to use
+scratch/C10Q2RepeatPositive.ec	MUST-PASS	-
+scratch/C10Q2UnaccountedRepeat.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q2WithoutFailStop.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ByteHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ClassifiedBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ClassifiedSession.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerTrace.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

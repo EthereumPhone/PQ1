@@ -1,0 +1,29 @@
+{
+  "source_commit": "d0c2999c92932d46806322af96a637e186d9b170",
+  "source_tree": "e7fd222a409acf077c2a44914d230b064982caf3",
+  "base": "38976ea50b0f79e083759feb33f43876504d2738",
+  "input_identity": "fa1c76ddce3555c0565a9dfdbbe429ac",
+  "inventory": {
+    "files": 203,
+    "roots": 91,
+    "pins": 2128,
+    "statements": 1863,
+    "census": 1962,
+    "controls": 133,
+    "new_pins": 125,
+    "assumptions_unchanged": true,
+    "headlines_added": 4,
+    "source_bindings": 167
+  },
+  "full_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-23T16:39:53.460544+00:00",
+    "finished_utc": "2026-09-23T19:34:39.958021+00:00",
+    "elapsed_seconds": 10486.5,
+    "commit": "d0c2999c92932d46806322af96a637e186d9b170",
+    "tree": "e7fd222a409acf077c2a44914d230b064982caf3"
+  },
+  "focused_receipts": 38,
+  "scope": "Live complete-session message history, fresh/completed classification and repeat-aware accepted-output bounds in the independent-table intermediate model.",
+  "metadata_delta": "Receipt only. No proof, runtime or gate inputs change. External path-correspondence continuation is excluded."
+}

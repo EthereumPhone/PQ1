@@ -11,8 +11,11 @@ A persistent raw-input oracle now covers the complete adaptive byte-session
 model and its costs. The
 [quantitative foundations](../contracts/verification/easycrypt/c10-port/QUANTITATIVE-FOUNDATIONS.md)
 add exact-coordinate replay accounting and accepted-output bounds for the
-memoized grinder and complete signer. Adaptive accumulated opening coverage,
-the component reduction and numerical end-to-end forgery bounds remain open.
+memoized grinder and complete signer. The
+[complete-session history results](../contracts/verification/easycrypt/c10-port/COMPLETE-SESSION-HISTORY.md)
+establish new-message freshness and account for repeated signing contexts.
+Adaptive accumulated opening coverage, the component reduction and numerical
+end-to-end forgery bounds remain open.
 See the
 [current artifact boundary](../contracts/verification/easycrypt/c10-port/README.md)
 and [research obligations](verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-23-accepted-history-composition-and-persistent-raw-oracle).
