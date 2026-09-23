@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: e45e977a76867b2e72bf5e2e143be6baba04d537 / af7f51132c5459b8480782dcfbadb75409e4872f
+FINDINGS: none
+GAPS: Source review could not run: every shell invocation failed before execution with “bwrap: No permissions to create new namespace”; target identity, diff, callers and nodes_input proof remain unverified. Mandatory complete cold two-driver replay also remains pending.

@@ -37,7 +37,7 @@ trap 'rm -rf "$TMPD"' EXIT
 # cone files (1016).  Bumping only one turns the gate RED at PHASE 1c with
 # "statement pin file truncated" -- which is exactly what it did on the first
 # run of this promotion.
-EXPECT_PINS=1422
+EXPECT_PINS=1561
 # 1167 -> 1166 on 2026-09-15: a DUPLICATE row removed.  op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f
 # sat on two identical rows from 92ecb63 (2026-08-20), so this count was one pin HIGH for 26 days.
 # PHASE 1c now also requires the UNIQUE key count to equal it.
@@ -48,7 +48,7 @@ EXPECT_PINS=1422
 # somebody must say why.  896 measured 2026-08-20; 993 after the 2026-08-25 pins;
 # 1016 on 2026-08-31 when cdrafts-split/BadEncCountermodel.ec was promoted into the
 # closure (+23 statements, all pinned in the same commit).
-EXPECT_STMTS=1271
+EXPECT_STMTS=1374
 # 1081 -> 1082 on 2026-09-14: GprocTCollNamed.ec (one lemma, pinned in the same commit).
 # 1024 -> 1081 on 2026-09-14 (+57, the T_COLL_RES_ENUM chain; all pinned in the same commit).
 # COMMITTED CONTROL COUNT (added 2026-09-14).  The PHASE 3 guard used to be
@@ -57,7 +57,7 @@ EXPECT_STMTS=1271
 # nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
 # itself, authored in this tree.  Now an equality against a committed constant, the
 # same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
-EXPECT_CTLS=90
+EXPECT_CTLS=98
 # 44 -> 49 on 2026-09-15 (later): a per-file scope negative for each of the other five headline
 # files.  Kimi K3 review: they had inherited isolation through GprocTCollNamed's require chain,
 # which nothing gated (all six are closure roots).

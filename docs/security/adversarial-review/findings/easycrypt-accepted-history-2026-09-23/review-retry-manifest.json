@@ -1,0 +1,138 @@
+{
+  "base": "d3e6dd0303888010ef1425355031b1e4c06fd058",
+  "created_at": "2026-09-23T08:16:37.001317+00:00",
+  "executables": {
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "0753dfe1d8b87a52436deb13eb1c549661ef4c84fee2c5aa688385eebeccb761",
+      "version": "codex-cli 0.155.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-fix",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.0,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": true,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/fix-review-prompt.txt",
+    "sha256": "f0b038476f03e1903b88cdeae0c974d504d57884c56a2e798858355f59b9b055"
+  },
+  "reviewers": {
+    "codex": {
+      "artifact_bytes": 443933,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-fix",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-fix",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-fix",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--enable",
+        "use_legacy_landlock",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-fix",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/fix-review-retry/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 275.57,
+      "ended_at": "2026-09-23T08:16:36.778184+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "f0b038476f03e1903b88cdeae0c974d504d57884c56a2e798858355f59b9b055",
+        "report_sha256": "025fb1040cae7268e2a49a3799dd232701139816db263f3f3f855306ffd7e6b7",
+        "runtime_sha256": "46a628ec9931a62d257ad642db4e04a700a0610a67c4817e8b4527b613041b96",
+        "stderr_sha256": "1cd45fd2cd9f5ffbb303fdaba86b502b10694900fc7900cab1e59417644bd8e8"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/fix-review-retry/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/fix-review-retry/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/fix-review-retry/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/fix-review-retry/codex/stderr.txt"
+      },
+      "report_words": 39,
+      "started_at": "2026-09-23T08:12:01.208414+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "EasyCrypt C10 accepted histories and persistent raw oracle",
+  "target": {
+    "commit_after": "e45e977a76867b2e72bf5e2e143be6baba04d537",
+    "commit_before": "e45e977a76867b2e72bf5e2e143be6baba04d537",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-fix",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "af7f51132c5459b8480782dcfbadb75409e4872f",
+    "tree_before": "af7f51132c5459b8480782dcfbadb75409e4872f"
+  },
+  "timeout_seconds": 813,
+  "version_contract": {
+    "mismatches": {
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.155.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-23T08:12:01.208331+00:00"
+}

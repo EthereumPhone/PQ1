@@ -1,0 +1,22 @@
+You are an independent reviewer of an owner-authorized formal-verification change. Do not launch agents or other models.
+Review PQSigner OS for MERGE.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-fix
+Commit: e45e977a76867b2e72bf5e2e143be6baba04d537
+Tree: af7f51132c5459b8480782dcfbadb75409e4872f
+Compare: d3e6dd0303888010ef1425355031b1e4c06fd058..e45e977a76867b2e72bf5e2e143be6baba04d537
+Focus only on the EasyCrypt C10 accepted-history and persistent raw-oracle diff:
+1. Actual bounded-game wins, complete cube construction, recorded leaf queries and accepted-history preservation across the game hops.
+2. Same-adversary composition, private observer globals, and unchanged address, member, cap and termination requirements.
+3. Shared raw-table replay, secret-input R/H_msg layouts, retained final history, fresh-only acceptance probability and worst-case query accounting.
+4. No new assumptions, vacuous premises or understated remaining full-scheme/model/resource obligations.
+5. Exact proof-source enrollment, statement/census pins, semantic controls and unchanged existing theorem contracts. Verify the explicit index-bound proof in C10CubeConstruction.nodes_input under unchanged CLI limits.
+Evidence already green: all changed modules have source-matched focused direct/CLI receipts; the corrected cube file also passes the gate-default CLI settings. Static 90-file/1,561-pin contract, unchanged existing statement types/assumptions, eight new control outcomes and ten checker regressions pass. The mandatory complete cold two-driver replay on this corrected snapshot is running; its result is not yet available.
+Non-goals: firmware/API/parameter changes, hardware, QROM, numerical forgery bounds, or completing the remaining full costed shared-oracle scheme simulation in this milestone.
+Inspect the exact diff and affected callers source-first for concrete correctness blockers. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs or follow-up model turns. Ignore style and optional hardening. You have 15 minutes total and at most 800 words; reserve time to return your report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: e45e977a76867b2e72bf5e2e143be6baba04d537 / af7f51132c5459b8480782dcfbadb75409e4872f
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+Use at most three findings. FIX requires a source anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none. Verdict is merge-only; pending coordinator gates are recorded honestly, not assumed passed.

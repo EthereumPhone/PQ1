@@ -2675,17 +2675,17 @@ qed.
    query-level hop Eqv_O_MEUFGCMA_WOTSC_query_Orig_V and each OC.query / tree-hash
    loop by sim.  +C-transparent: the counter rides inside the (sigWOTS,cntr) cube,
    qs is shared via `include var`, so the accounting is byte-identical. *)
-lemma EqPr_MEUFGCMAWOTSC_Orig_V
+lemma EqPr_MEUFGCMAWOTSC_Orig_V_event
   (A_ht <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{ -O_MEUFGCMA_WOTSC_Default,
              -O_MEUFGCMA_WOTSC_V, -FC.O_THFC_Default,
-             -R_MEUFGCMAWOTSC_EUFNAGCMA_C }) &m :
+             -R_MEUFGCMAWOTSC_EUFNAGCMA_C }) (event : glob A_ht -> bool) &m :
     Pr[M_EUF_GCMA_WOTSC_NPRF(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht),
-         O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m : res]
+         O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m : res /\ event (glob A_ht)]
     =
     Pr[M_EUF_GCMA_WOTSC_NPRF(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht),
-         O_MEUFGCMA_WOTSC_V, FC.O_THFC_Default).main() @ &m : res].
+         O_MEUFGCMA_WOTSC_V, FC.O_THFC_Default).main() @ &m : res /\ event (glob A_ht)].
 proof.
-byequiv => //.
+byequiv (_ : ={glob A_ht} ==> ={res, glob A_ht}) => //.
 proc.
 seq 4 4 : (   ={glob A_ht, glob R_MEUFGCMAWOTSC_EUFNAGCMA_C, ps}
            /\ ={O_MEUFGCMA_WOTSC_Default.qs, FC.O_THFC_Default.tws}); 2: by sim.
@@ -2710,6 +2710,17 @@ inline *.
 by wp; rnd; skip.
 qed.
 
+lemma EqPr_MEUFGCMAWOTSC_Orig_V
+  (A_ht <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{ -O_MEUFGCMA_WOTSC_Default,
+             -O_MEUFGCMA_WOTSC_V, -FC.O_THFC_Default,
+             -R_MEUFGCMAWOTSC_EUFNAGCMA_C }) &m :
+    Pr[M_EUF_GCMA_WOTSC_NPRF(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht),
+         O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m : res]
+    =
+    Pr[M_EUF_GCMA_WOTSC_NPRF(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht),
+         O_MEUFGCMA_WOTSC_V, FC.O_THFC_Default).main() @ &m : res].
+proof. exact (EqPr_MEUFGCMAWOTSC_Orig_V_event A_ht (fun _ => true) &m). qed.
+
 (* ==========================================================================
    SEAM: first ler_add branch byequiv (WOTS-forgery bucket).
    +C port of MM45 FL_SL_XMSS_MT_ES.ec:4107-4696 first branch.
@@ -2724,12 +2735,12 @@ qed.
        (valid_WOTSTWES is C's module var, shared with V via `import var`).
      * RHS is LITERALLY the leaf-bound RHS term so the SECOND ler_add step chains.
    ========================================================================== *)
-lemma seam_branch1_WOTSC
+lemma seam_branch1_WOTSC_event
   (A_ht <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{ -R_int_STCRC, -R_int_WOTSTW,
              -O_MEUFGCMA_WOTSC_Default, -O_MEUFGCMA_WOTSTWESNPRF,
              -STCRC_WC.O_STCRC_Default, -FC.O_THFC_Default, -O_THFC_MA, -G0_INT,
              -R_MEUFGCMAWOTSC_EUFNAGCMA_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C,
-             -O_MEUFGCMA_WOTSC_V }) &m :
+             -O_MEUFGCMA_WOTSC_V }) (event : glob A_ht -> bool) &m :
     c <= p_tgts =>
     (forall (a b : adrs), valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)) =>
     (* 2026-07-25 VACUITY REPAIR (POST-ASSEMBLY EDIT, see header): the unguarded
@@ -2760,9 +2771,9 @@ lemma seam_branch1_WOTSC
              FC.O_THFC_Default.tws = [] ==>
              all (fun (ad : adrs) => get_typeidx ad <> chtype) FC.O_THFC_Default.tws ] =>
     Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_V(A_ht, FC.O_THFC_Default).main() @ &m :
-         res /\ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C.valid_WOTSTWES]
+         res /\ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C.valid_WOTSTWES /\ event (glob A_ht)]
     <= Pr[M_EUF_GCMA_WOTSC_NPRF(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht),
-             O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m : res].
+             O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m : res /\ event (glob A_ht)].
 proof.
 (* ==========================================================================
    STATEMENT NOTE (this session): the A_ht restriction gained
@@ -2925,7 +2936,7 @@ move=> hc hembdisj hencb hdf8n hdflen hdf2 A_wf_ht allnchads.
 (* O_V oracle-hop: swap the whole-key challenge oracle O_MEUFGCMA_WOTSC_Default for
    the element-sampling O_MEUFGCMA_WOTSC_V (both share qs via `include var`, so P's
    qs references below stay valid), aligning the RHS with the V-game's fused loop. *)
-rewrite (EqPr_MEUFGCMAWOTSC_Orig_V A_ht).
+rewrite (EqPr_MEUFGCMAWOTSC_Orig_V_event A_ht event).
 byequiv => //.
 proc.
 inline{2} 5; inline{2} 4.
@@ -3398,7 +3409,7 @@ seq 2 2 : (#pre /\ ={sigl}).
 inline{2} 23; inline{2} 22; inline{2} 21; inline{2} 20; inline{2} 17.
 wp 15 19 => /=.
 conseq (:
-  (((size sig'{1} = d /\
+  ={glob A_ht} /\ ((((size sig'{1} = d /\
      ((if d = 0 then m'{1} else nth witness rootss'{1} (d - 1)) =
       if d = 0 then nth witness ml{1} (Index.val idx'{1})
       else nth witness rootss{1} (d - 1)) /\
@@ -3410,14 +3421,15 @@ conseq (:
      (if i1 = 0 then m'{1} else nth witness rootss'{1} (i1 - 1)) <>
      if i1 = 0 then nth witness ml{1} (Index.val idx'{1})
      else nth witness rootss{1} (i1 - 1))
-  => is_valid{2} /\ m'{2} <> m{2} /\ 0 <= i{2} < size O_MEUFGCMA_WOTSC_Default.qs{2}).
+  => is_valid{2} /\ m'{2} <> m{2} /\ 0 <= i{2} < size O_MEUFGCMA_WOTSC_Default.qs{2})).
 - (* #A conseq bookkeeping (MM45 4539-4546), ANTECEDENT REFRAMED 2026-07-19 to
      POST_good's REAL unfolded antecedent (the +C `allOkC<-true` shifted
      valid_WOTSTWES/is_valid past `wp 15 19` so the folded refs were stale). *)
   move=> &1 &2 [#] eqps0 eqglob eqml eqps1 eqps2 eqpp1 eqpp2 eqad1 eqad2 eqpkwtd eqsigwtd eqlvtd eqrtd qsmem qsnth allchqs uqwgpqs szqs allnchtws eqsigl.
-  move=> allOkC_L idx'_L is_fresh_L m'_L pkWOTSs_L pkWOTSs'_L rootss_L rootss'_L sig'_L i_R is_valid_R m_R m'_R HNEW HOLD.
-  have [isv [neqm irng]] := HNEW HOLD.
+  move=> gAL allOkC_L idx'_L is_fresh_L m'_L pkWOTSs_L pkWOTSs'_L rootss_L rootss'_L sig'_L gAR i_R is_valid_R m_R m'_R [hglobal HNEW] [HOLD [HVALID HEVENT]].
+  have [isv [neqm irng]] := HNEW _; first by split.
   have cE : c = StdBigop.Bigint.BIA.bigi predT (fun (d' : int) => nr_nodes_ht d' 0) 0 d by rewrite /c.
+  split; 2: by rewrite -hglobal.
   split; first by smt(size_ge0).
   split; first exact irng.
   split; first exact isv.
@@ -3442,6 +3454,7 @@ conseq (:
    true-in-principle (address alignment is sound + counter-independent), so #B is
    an honest deferral, not a vacuous/false post the discharge exploits. *)
 seq 15 18 : (
+  ={glob A_ht} /\ (
   (((size sig'{1} = d /\
      ((if d = 0 then m'{1} else nth witness rootss'{1} (d - 1)) =
       if d = 0 then nth witness ml{1} (Index.val idx'{1})
@@ -3462,7 +3475,7 @@ seq 15 18 : (
            (BaseW.val (encode_msgWOTS_C ps{2} ad{2} m'{2} (sigc'{2}).`2).[k])
            (w - 1 - BaseW.val (encode_msgWOTS_C ps{2} ad{2} m'{2} (sigc'{2}).`2).[k])
            (DigestBlock.val (nth witness (DBLL.val (sigc'{2}).`1) k))) len)
-    /\ predC (ThC ps{2} ad{2} m'{2} (sigc'{2}).`2)).
+    /\ predC (ThC ps{2} ad{2} m'{2} (sigc'{2}).`2))).
 + wp => /=.
   while (   ={pkWOTSs, rootss, pkWOTSs', rootss', tkpidxs, tidx, kpidx, root'}
          /\ ps{1} = ps0{2}
@@ -3645,7 +3658,7 @@ seq 15 18 : (
         by rewrite (: h' * (d - 1) + h' = h' * d) 1:/#.
       by rewrite hl; move: hb; rewrite /l /h; smt().
     rewrite !fold0 mkseq0 /=.
-    do! split; smt(Index.valP).
+    do! split; smt(Index.valP ge1_d).
 inline{2} 1.
 wp.
 while{2} (   pkWOTS_l{2} = mkseq (fun (k : int) => cf ps1{2} (set_chidx ad0{2} k)
@@ -3677,6 +3690,47 @@ have insubdeq : DBLL.insubd pkwlR = pkWOTS{2}.
 + by rewrite pkrec; congr; rewrite {1}eqpkwlR szeq.
 by rewrite insubdeq okc neqm ge0i ltiqs /=.
 qed.
+
+lemma seam_branch1_WOTSC
+  (A_ht <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{ -R_int_STCRC, -R_int_WOTSTW,
+             -O_MEUFGCMA_WOTSC_Default, -O_MEUFGCMA_WOTSTWESNPRF,
+             -STCRC_WC.O_STCRC_Default, -FC.O_THFC_Default, -O_THFC_MA, -G0_INT,
+             -R_MEUFGCMAWOTSC_EUFNAGCMA_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C,
+             -O_MEUFGCMA_WOTSC_V }) &m :
+    c <= p_tgts =>
+    (forall (a b : adrs), valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)) =>
+    (* 2026-07-25 VACUITY REPAIR (POST-ASSEMBLY EDIT, see header): the unguarded
+       emb_tw injectivity premise that used to sit here was JOINTLY CONTRADICTORY
+       with the disjointness premise above, so this lemma was VACUOUS.  ELIMINATED
+       -- the `dist` obligation is discharged from the PROVEN game invariant
+       R_ts_allvalid (WOTS_C_Interactive.ec). *)
+    (forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+       encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+    dfC0 <> 8 * n =>
+    dfC0 <> 8 * n * len =>
+    dfC0 <> 8 * n * 2 =>
+    hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma ] =>
+    (* STEP 1 (MM45-faithful, +C analog of allnchads, FL_SL_XMSS_MT_ES.ec:4079/4096):
+       a TYPE-based well-formedness premise on A_ht run over the SAME collection oracle
+       it is handed in this byequiv (FC.O_THFC_Default -- both the V-game LHS and
+       R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht) RHS pass OC := FC.O_THFC_Default directly to
+       A_ht(OC).choose).  This is what establishes P's conjunct
+       `all (get_typeidx <> chtype) FC.O_THFC_Default.tws{2}` at the part-0 choose step
+       (via `conseq (<sim equiv>) _ (<this hoare>)`), which then rides through the
+       cube-build's pkco/trhx OC.query calls (all non-chtype).  Carried here, NOT
+       discharged (a downstream consumer discharges it exactly as MM45 discharges
+       allnchads at FL_SL:4338).  BOTH this and the member-based A_wf_ht are needed:
+       allnchads for the chtype WOTS-chain axis; A_wf_ht for the +C pkcotype/dfC0 axis. *)
+    hoare[ A_ht(FC.O_THFC_Default).choose :
+             FC.O_THFC_Default.tws = [] ==>
+             all (fun (ad : adrs) => get_typeidx ad <> chtype) FC.O_THFC_Default.tws ] =>
+    Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_V(A_ht, FC.O_THFC_Default).main() @ &m :
+         res /\ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C.valid_WOTSTWES]
+    <= Pr[M_EUF_GCMA_WOTSC_NPRF(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht),
+             O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m : res].
+proof. exact (seam_branch1_WOTSC_event A_ht (fun _ => true) &m). qed.
 
 
 (* ==========================================================================
@@ -4053,15 +4107,15 @@ qed.
 
 
 (* ===== HOP 2 : C ~ V ===== *)
-equiv Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_C_V
+equiv Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_C_V_event
   (A <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C})
   (OC <: FSSLXMTWES.TRHC.Oracle_THFC{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -A}) :
   EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C(A, OC).main ~ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_V(A, OC).main :
-    ={glob A, glob OC} ==> ={res}.
+    ={glob A, glob OC} ==> ={res, glob A}.
 proof.
 proc.
 swap{1} 17 14.
-conseq (: _ ==> ={is_valid, is_fresh}) => //.
+conseq (: _ ==> ={is_valid, is_fresh, glob A}) => //.
 swap{1} [12..13] 2; swap{2} [11..12] 2.
 seq 13 12 : (={glob A, glob OC, ps, ad, ml, sigl, rootstd}).
 + seq 4 4 : (={glob A, glob OC, ad, ps, ml}); 1: by sim.
@@ -4213,7 +4267,7 @@ seq 13 12 : (={glob A, glob OC, ps, ad, ml, sigl, rootstd}).
       smt(size_rcons).
     by wp; skip => />; smt(ge1_d size_rcons).
   by wp; skip => />; smt(ge2_l size_ge0).
-seq 14 4 : (   ={is_fresh, ps, ad, m', sig', idx'}
+seq 14 4 : (   ={glob A, is_fresh, ps, ad, m', sig', idx'}
             /\ pk{1} = (nth witness (nth witness rootstd (d - 1)) 0, ps, ad){2}).
 + while{1} (true) (d - size pkWOTSs'{1}).
   - move=> ? z.
@@ -4313,6 +4367,13 @@ move: (rtsrel hd0); rewrite eqd_szpk h0 => rtsE.
 by rewrite hne0 /= rtsE.
 qed.
 
+equiv Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_C_V
+  (A <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C})
+  (OC <: FSSLXMTWES.TRHC.Oracle_THFC{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -A}) :
+  EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C(A, OC).main ~ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_V(A, OC).main :
+    ={glob A, glob OC} ==> ={res}.
+proof. by conseq (Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_C_V_event A OC). qed.
+
 
 (* ==========================================================================
    HOP 1 : the REAL EUF-NAGCMA game ~ the instrumented C game.
@@ -4336,11 +4397,11 @@ qed.
      * the hypertree signature element is ((sigWOTS, counter), ap);
      * trhtype -> trhxtype, nr_nodes -> nr_nodesx under our clone.
    ========================================================================== *)
-equiv Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_C
+equiv Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_C_event
   (A <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C})
   (OC <: FSSLXMTWES.TRHC.Oracle_THFC{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -A}) :
   EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, OC).main ~ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C(A, OC).main :
-    ={glob A, glob OC} ==> ={res}.
+    ={glob A, glob OC} ==> ={res, glob A}.
 proof.
 proc.
 seq 7 15 : (={glob A, glob OC, sigl, pk, ml}); last first.
@@ -4971,23 +5032,38 @@ by wp; skip => />; smt(ge2_l size_ge0).
 
 qed.
 
+equiv Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_C
+  (A <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C})
+  (OC <: FSSLXMTWES.TRHC.Oracle_THFC{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -A}) :
+  EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, OC).main ~ EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C(A, OC).main :
+    ={glob A, glob OC} ==> ={res}.
+proof. by conseq (Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_C_event A OC). qed.
+
 (* ==========================================================================
    COMPOSITION : Pr[REAL game : res] = Pr[V game : res].
    MM45 analog: the `have ->:` transitivity at FL_SL_XMSS_MT_ES.ec:4098-4102.
    ========================================================================== *)
+lemma EqPr_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_V_event
+  (A <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C})
+  (OC <: FSSLXMTWES.TRHC.Oracle_THFC{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -A}) (event : glob A -> bool) &m :
+  Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, OC).main() @ &m : res /\ event (glob A)]
+  =
+  Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_V(A, OC).main() @ &m : res /\ event (glob A)].
+proof.
+byequiv (: ={glob A, glob OC} ==> ={res, glob A}) => //.
+transitivity EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C(A, OC).main
+  (={glob A, glob OC} ==> ={res, glob A}) (={glob A, glob OC} ==> ={res, glob A}) => [/# | // | |].
++ by apply (Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_C_event A OC).
+by apply (Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_C_V_event A OC).
+qed.
+
 lemma EqPr_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_V
   (A <: Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C})
   (OC <: FSSLXMTWES.TRHC.Oracle_THFC{-EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C, -A}) &m :
   Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF(A, OC).main() @ &m : res]
   =
   Pr[EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_V(A, OC).main() @ &m : res].
-proof.
-byequiv (: ={glob A, glob OC} ==> ={res}) => //.
-transitivity EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C(A, OC).main
-  (={glob A, glob OC} ==> ={res}) (={glob A, glob OC} ==> ={res}) => [/# | // | |].
-+ by apply (Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_C A OC).
-by apply (Eqv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_C_V A OC).
-qed.
+proof. exact (EqPr_EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Orig_V_event A OC (fun _ => true) &m). qed.
 
 (* ==========================================================================
    THE LIFT.  Branch-1 (seam_branch1_leaf_composed) bounds the V-game probability

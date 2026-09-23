@@ -74,3 +74,17 @@ C10HashDomains
 C10SharedSearch
 C10SearchBounds
 C10HypertreeCharged
+
+# Accepted-history hypertree composition and persistent raw-oracle foundations.
+C10WOTSCorrect
+C10HypertreeCorrect
+C10CubeCorrect
+C10CubeConstruction
+C10ReductionChoose
+C10ReductionForge
+C10AcceptedReduction
+C10HypertreeAccepted
+C10StatefulSearch
+C10RawOracle
+C10RawGrind
+FORSC10Digest

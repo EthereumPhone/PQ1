@@ -122,22 +122,28 @@ index so failure cannot prevent termination. These are mathematical termination
 claims, not useful wall-clock bounds or a recoverable Rust error API.
 
 `C10BoundedLeaf.bounded_leaf_member_aware` instantiates the N2-free WOTS
-bound with the actual `R_MEUFGCMAWOTSC_EUFNAGCMA_C` reduction from
-`XmssmtCC_All`. `C10HypertreeCharged.bounded_hypertree_charged` now gives the
-bounded hypertree a five-term bound for the same adversary: WOTS-TW, member-aware
-S-TCR, PK-compression and tree-collision games, plus the existing charged
-`GAME1_INT` grind-failure event. It preserves the original address, encoder,
-member-separation and target-cap premises and adds explicit forge termination.
-**N2 is absent, but the charge remains.** It is neither the operational
-exhaustion probability nor a numerical estimate of it.
+bound with the actual `R_MEUFGCMAWOTSC_EUFNAGCMA_C` reduction.
+`C10HypertreeAccepted.bounded_hypertree_accepted` now gives the bounded
+hypertree a **four-term bound with neither N2 nor a grind-failure charge**:
+WOTS-TW, member-aware S-TCR, PK-compression collision and tree collision.
+The older five-term `C10HypertreeCharged` theorem remains available.
 
-`C10HypertreeCoverage` corrects the earlier “unused cube entry” concern for this
-specific nonadaptive experiment: it signs **all 262,144 leaf indices**, whose
-paths cover all 262,656 cells of the two-layer cube. The proof links its indexing
-to the signer's repeated division. A single path does not cover the cube.
-Removing the charge still requires an accepted-history event to survive the
-actual game hops and reach the leaf-reduction transcript. Address coverage alone
-does not prove that probability coupling; the charge-free join remains open.
+The proof observes the same adversary's public signing transcript. Its bounded
+win implies acceptance of every supplied path. Strengthened original/C/V and
+leaf game hops retain this observation; proofs of the actual reduction's
+`choose` and `forge` establish cube consistency, transcript shape and exact leaf
+query accounting. `C10HypertreeCoverage` supplies the all-path coverage step:
+262,144 paths cover all 262,656 cells. Hence the accepted transcript excludes
+`gfail_of` on the actual leaf records. A single path cannot support this argument.
+
+The RHS reductions explicitly use `Observe(A)`. The observer records public
+inputs and delegates to the same `A`; its private globals are excluded from
+`A`'s access. The original collision-oracle type premises are transferred by
+proved equivalences. Target cap, address separation, encoder bridge,
+member/type separation and forge termination remain explicit premises. This
+is the existing nonadaptive, independently sampled key-cube model. It is not
+an adaptive full-SPHINCS+C theorem, a numerical challenge bound, or a
+query-efficient reduction.
 
 `SharedROBounded` models a classical lazy random oracle with memoized answers.
 For a unique input list, exhaustion is at most `(1-p)^fresh`, counting inputs
@@ -150,6 +156,24 @@ for counters 0 through 9,999,999. `C10SearchBounds` proves exhaustion at most
 This is a **search-failure bound in that classical model, not a scheme security
 level**. The search has no interleaved external oracle calls, and does not
 return an updated history for a multi-procedure simulation.
+`C10StatefulSearch` adds a final-history result, including successful fresh
+answers, and proves its result projection equals the existing search.
+
+`C10RawOracle` supplies a procedural classical raw-input oracle with one private
+persistent table. Instrumentation preserves arbitrary adaptive contexts' results
+and complete histories. Cached calls increment total calls without consuming
+another random draw. Its R-length partition coupling preserves raw access to
+both partitions; it does not assume the adversary cannot guess a secret input.
+`C10RawGrind` runs the actual secret-prefixed R layout and padded high-128-bit R
+through that same oracle before H_msg. It proves termination, accepted-output
+and width properties, and at most **20 million calls** per 10-million-trial
+search. The explicit secret input represents the same `sk_seed` used by the
+implementation, not a newly independent R key. No secret-input freshness or
+key-guess bound is assumed or established.
+
+`FORSC10Digest` proves exact `2^-11` forced-zero acceptance for a fresh full
+256-bit query, conditional on its absence from the entry history. This is not
+the conditional law of an arbitrary cached query or the full signing stream.
 
 `C10HashDomains` checks manual physical layouts: H_msg is 160 bytes, R derivation
 is 103 or 119, and WOTS digest/pair hashing are 128. Equal-width WOTS/tree inputs
@@ -187,8 +211,8 @@ Rust extraction is implied. Both abstract digest members must be projections
 of the **same** SHA-256 result: dfC0 is the low half (bytes 16–31 in physical
 big-endian order), dfC1 the high half. The collection is still abstract.
 
-The current perimeter contains 78 proof files, 66 roots, 1,422 unique declaration
-pins, 1,271 statements and 90 controls. The new controls preserve the guarded
+The current perimeter contains 90 proof files, 78 roots, 1,561 unique declaration
+pins, 1,374 statements and 98 controls. The new controls preserve the guarded
 comparison and absorbing-failure contract, and reject dropping the guard or
 clearing the failure flag. The member-aware controls also reject erasing the
 good-history premise and appending a failed-query record; a positive control
@@ -197,9 +221,13 @@ erasing successful-output conditioning, releasing an empty signature after
 exhaustion, and omitting the leaf wrapper's PK-compression member separation.
 The new history/domain/randomizer controls also reject independent resampling
 of cached or duplicate inputs, single-path cube coverage, the wrong H_msg width,
-truncating the low half, and erased FORS exhaustion. The raw census adds defined operators, one SMT-export annotation, and the
-fully instantiated Birthday clone, with its explicit
-losslessness/call-budget premises; existing axioms/admits are unchanged.
+truncating the low half, and erased FORS exhaustion. The accepted-history/raw-oracle
+controls additionally reject removed history or
+observer privacy, treating cached queries as fresh, drawing again on replay,
+and dropping a successful answer from the returned history. The raw census
+contains 1,813 rows; this batch adds definitions and module interfaces, with
+no new axioms, admits or clone assumptions. The earlier fully instantiated
+Birthday clone retains its explicit losslessness/call-budget premises; existing axioms/admits are unchanged.
 The earlier encoder/abort replay and review remain
 recorded in the [September 21 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md).
 The bounded-game batch passes its full replay and bounded Astra/Opus source

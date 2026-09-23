@@ -25,7 +25,11 @@ SOURCES = (
         'C10BoundedGame', 'C10BoundedReduction', 'C10BoundedMA',
         'C10BoundedHypertree', 'C10BoundedLeaf',
         'FORS_C10', 'C10HypertreeCoverage', 'SharedROBounded', 'C10Randomizer',
-        'C10HashDomains', 'C10SharedSearch', 'C10SearchBounds', 'C10HypertreeCharged')),
+        'C10HashDomains', 'C10SharedSearch', 'C10SearchBounds', 'C10HypertreeCharged',
+        'XmssmtCC_All', 'C10WOTSCorrect', 'C10HypertreeCorrect', 'C10CubeCorrect',
+        'C10CubeConstruction', 'C10ReductionChoose', 'C10ReductionForge',
+        'C10AcceptedReduction', 'C10HypertreeAccepted', 'C10StatefulSearch',
+        'C10RawOracle', 'C10RawGrind', 'FORSC10Digest')),
 )
 
 

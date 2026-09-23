@@ -197,3 +197,14 @@ scratch/C10FORSBoundedPositive.ec	MUST-PASS	-
 scratch/C10FORSNoExhaustion.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10RandomizerWrongHalf.ec	MUST-FAIL	[by]: cannot close goals
 scratch/C10FORSBoundedSMT.ec	MUST-PASS	-
+
+# Accepted-history composition, observer privacy and persistent raw-oracle semantics.
+# Reasons observed under the pinned toolchain; positives consume the exact contracts.
+scratch/C10HypertreeAcceptedPositive.ec	MUST-PASS	-
+scratch/C10HypertreeObserverPrivacy.ec	MUST-FAIL	the module A_ht is not allowed
+scratch/C10AcceptedCubeNoHistory.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10RawOraclePositive.ec	MUST-PASS	-
+scratch/C10RawCachedAcceptance.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10RawReplayDraw.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10StatefulLostSuccess.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_C10HypertreeAccepted.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

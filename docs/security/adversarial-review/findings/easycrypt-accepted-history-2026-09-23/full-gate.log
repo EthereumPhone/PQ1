@@ -1,0 +1,354 @@
+make: Entering directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-fix/contracts/verification'
+/usr/bin/python3 -E -S -B scripts/run_easycrypt_split.py
+OK EasyCrypt manual source binding: 47 inputs (not extraction)
+   Compiling sphincs-c10 v0.1.0 (/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-fix/sphincs-c10)
+    Finished `test` profile [optimized + debuginfo] target(s) in 1.04s
+     Running tests/easycrypt_transcript.rs (/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/host-target/x86_64-unknown-linux-gnu/debug/deps/easycrypt_transcript-dcf76e94d34527c4)
+
+running 4 tests
+test concrete_digits_match_easycrypt_bit_order_and_target ... ok
+test concrete_hash_domains_match_easycrypt_layouts ... ok
+test concrete_fors_and_hypertree_fields_match_lsb_model ... ok
+test concrete_digest_matches_easycrypt_byte_adapter ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+### INPUTS_SHA256 d1d88a7319995db0b21c47869c79fa8d
+OK   INPUTS_SHA256 matches the committed identity
+OK   coverage: all 1374 top-level statements across 90 CONE files are pinned (roots 78 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 10 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   scope-probe linkage: 7 headline files <-> 7 registered scope probes (exact bijection)
+OK unique statement pins: 1561
+OK split static contract: 90 files; proof execution not performed
+OK toolchain: r2026.02, 25 pinned prover configurations
+### IMAGE ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3
+OK proof controls: direct dependency failure / import acceptance / open-proof rejection / abstract require and EOF
+OK   no dual-extension theory names on the include path
+### ECO_PURGED=1
+### ECO_REMAINING=0
+### PHASE 1 — TARGETS
+OK   target base-c10-split/BinaryTrees.ec
+OK   target base-c10-split/MerkleTrees.ec
+OK   target base-c10-split/KeyedHashFunctions.eca
+OK   target base-c10-split/TweakableHashFunctions.eca
+OK   target base-c10-split/HashAddresses.eca
+OK   target base-c10-split/RadixEncoding.ec
+OK   target base-c10-split/WOTS_TW_ES.ec
+OK   target base-c10-split/FL_SL_XMSS_MT_ES.ec
+OK   target base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca
+OK   target base-c10-split/FORS_ES.ec
+OK   target base-c10-split/SPHINCS_PLUS.ec
+OK   target cdrafts-split/BadEncCountermodel.ec
+OK   target cdrafts-split/Grind.ec
+OK   target cdrafts-split/STCR_C.ec
+OK   target cdrafts-split/C10Counter.ec
+OK   target cdrafts-split/C10Bytes.ec
+OK   target cdrafts-split/WOTS_C_Real.ec
+OK   target cdrafts-split/TCollResEnum.ec
+OK   target cdrafts-split/BadEncSplit.ec
+OK   target cdrafts-split/WOTS_C_Scheme.ec
+OK   target cdrafts-split/WOTS_C_Reduction.ec
+OK   target cdrafts-split/WOTS_C_Interactive.ec
+OK   target cdrafts-split/BadEncToTColl.ec
+OK   target cdrafts-split/BadEncStep4.ec
+OK   target cdrafts-split/BoundedIID.ec
+OK   target cdrafts-split/C10BoundedGrind.ec
+OK   target cdrafts-split/C10BoundedSigning.ec
+OK   target cdrafts-split/XMSSMT_C_Scheme.ec
+OK   target cdrafts-split/C10WOTSCorrect.ec
+OK   target cdrafts-split/XmssmtCC_All.ec
+OK   target cdrafts-split/C10BoundedHypertree.ec
+OK   target cdrafts-split/C10HypertreeCoverage.ec
+OK   target cdrafts-split/C10HypertreeCorrect.ec
+OK   target cdrafts-split/C10BoundedGame.ec
+OK   target cdrafts-split/GFailCharged.ec
+OK   target cdrafts-split/C10BoundedMA.ec
+OK   target cdrafts-split/C10CubeCorrect.ec
+OK   target cdrafts-split/C10CubeConstruction.ec
+OK   target cdrafts-split/C10ReductionChoose.ec
+OK   target cdrafts-split/C10ReductionForge.ec
+OK   target cdrafts-split/C10AcceptedReduction.ec
+OK   target cdrafts-split/RtopCSoundness.ec
+OK   target cdrafts-split/FxChain.ec
+OK   target cdrafts-split/FORS_C10.ec
+OK   target cdrafts-split/FORS_C10_Multi.ec
+OK   target cdrafts-split/GprocFORSC10.ec
+OK   target cdrafts-split/SphincsC10CapstoneWired.ec
+OK   target cdrafts-split/SphincsC10Content.ec
+OK   target cdrafts-split/C10DeployedInstance.ec
+OK   target cdrafts-split/VecDP.ec
+OK   target cdrafts-split/CountDS.ec
+OK   target cdrafts-split/C10DigitUniform.ec
+OK   target cdrafts-split/C10SurfaceKernel.ec
+OK   target cdrafts-split/C10Surface.ec
+OK   target cdrafts-split/C10Encoding.ec
+OK   target cdrafts-split/C10BoundedIID.ec
+OK   target cdrafts-split/C10BoundedLeaf.ec
+OK   target cdrafts-split/C10BoundedReduction.ec
+OK   target cdrafts-split/C10DeployedCapstone.ec
+OK   target cdrafts-split/C10DeployedGeometry.ec
+OK   target cdrafts-split/C10DeployedScope.ec
+OK   target cdrafts-split/C10HashDomains.ec
+OK   target cdrafts-split/C10HypertreeAccepted.ec
+OK   target cdrafts-split/XmssmtCCCharged.ec
+OK   target cdrafts-split/C10HypertreeCharged.ec
+OK   target cdrafts-split/C10Randomizer.ec
+OK   target cdrafts-split/C10RawOracle.ec
+OK   target cdrafts-split/C10RawGrind.ec
+OK   target cdrafts-split/SharedROBounded.ec
+OK   target cdrafts-split/C10SharedSearch.ec
+OK   target cdrafts-split/C10SearchBounds.ec
+OK   target cdrafts-split/C10SpecControls.ec
+OK   target cdrafts-split/C10StatefulSearch.ec
+OK   target cdrafts-split/DarkSide.ec
+OK   target cdrafts-split/DarkSideC10.ec
+OK   target cdrafts-split/FORSC10Digest.ec
+OK   target cdrafts-split/FORS_C.ec
+OK   target cdrafts-split/FORS_C_TreePort.ec
+OK   target cdrafts-split/GprocVI.ec
+OK   target cdrafts-split/SphincsC10CapstoneCharged.ec
+OK   target cdrafts-split/GprocT1Opre.ec
+OK   target cdrafts-split/GprocT2Trh.ec
+OK   target cdrafts-split/GprocT3Trco.ec
+OK   target cdrafts-split/GprocQBound.ec
+OK   target cdrafts-split/GprocQWired.ec
+OK   target cdrafts-split/GprocChargedQWired.ec
+OK   target cdrafts-split/WotsLegCharged.ec
+OK   target cdrafts-split/GprocWotsNamed.ec
+OK   target cdrafts-split/GprocTCollNamed.ec
+OK   target cdrafts-split/WOTS_C_Multi.ec
+### CONE_COMPILED=90 EXPECTED=90
+### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)
+OK   all closure files are requirable
+### PHASE 1e — BOTH DRIVERS (compile AND cli)
+OK   base-c10-split/BinaryTrees.ec (cli, 303 cmds)
+OK   base-c10-split/MerkleTrees.ec (cli, 105 cmds)
+OK   base-c10-split/KeyedHashFunctions.eca (cli, 156 cmds)
+OK   base-c10-split/TweakableHashFunctions.eca (cli, 84 cmds)
+OK   base-c10-split/HashAddresses.eca (cli, 63 cmds)
+OK   base-c10-split/RadixEncoding.ec (cli, 42 cmds)
+OK   base-c10-split/WOTS_TW_ES.ec (cli, 2193 cmds)
+OK   base-c10-split/FL_SL_XMSS_MT_ES.ec (cli, 679 cmds)
+OK   base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca (cli, 703 cmds)
+OK   base-c10-split/FORS_ES.ec (cli, 2191 cmds)
+OK   base-c10-split/SPHINCS_PLUS.ec (cli, 456 cmds)
+OK   cdrafts-split/BadEncCountermodel.ec (cli, 164 cmds)
+OK   cdrafts-split/Grind.ec (cli, 59 cmds)
+OK   cdrafts-split/STCR_C.ec (cli, 37 cmds)
+OK   cdrafts-split/C10Counter.ec (cli, 57 cmds)
+OK   cdrafts-split/C10Bytes.ec (cli, 67 cmds)
+OK   cdrafts-split/WOTS_C_Real.ec (cli, 120 cmds)
+OK   cdrafts-split/TCollResEnum.ec (cli, 135 cmds)
+OK   cdrafts-split/BadEncSplit.ec (cli, 52 cmds)
+OK   cdrafts-split/WOTS_C_Scheme.ec (cli, 41 cmds)
+OK   cdrafts-split/WOTS_C_Reduction.ec (cli, 204 cmds)
+OK   cdrafts-split/WOTS_C_Interactive.ec (cli, 744 cmds)
+OK   cdrafts-split/BadEncToTColl.ec (cli, 91 cmds)
+OK   cdrafts-split/BadEncStep4.ec (cli, 196 cmds)
+OK   cdrafts-split/BoundedIID.ec (cli, 47 cmds)
+OK   cdrafts-split/C10BoundedGrind.ec (cli, 36 cmds)
+OK   cdrafts-split/C10BoundedSigning.ec (cli, 87 cmds)
+OK   cdrafts-split/XMSSMT_C_Scheme.ec (cli, 58 cmds)
+OK   cdrafts-split/C10WOTSCorrect.ec (cli, 65 cmds)
+OK   cdrafts-split/XmssmtCC_All.ec (cli, 2645 cmds)
+OK   cdrafts-split/C10BoundedHypertree.ec (cli, 111 cmds)
+OK   cdrafts-split/C10HypertreeCoverage.ec (cli, 53 cmds)
+OK   cdrafts-split/C10HypertreeCorrect.ec (cli, 180 cmds)
+OK   cdrafts-split/C10BoundedGame.ec (cli, 66 cmds)
+OK   cdrafts-split/GFailCharged.ec (cli, 103 cmds)
+OK   cdrafts-split/C10BoundedMA.ec (cli, 87 cmds)
+OK   cdrafts-split/C10CubeCorrect.ec (cli, 111 cmds)
+OK   cdrafts-split/C10CubeConstruction.ec (cli, 247 cmds)
+OK   cdrafts-split/C10ReductionChoose.ec (cli, 65 cmds)
+OK   cdrafts-split/C10ReductionForge.ec (cli, 64 cmds)
+OK   cdrafts-split/C10AcceptedReduction.ec (cli, 45 cmds)
+OK   cdrafts-split/RtopCSoundness.ec (cli, 673 cmds)
+OK   cdrafts-split/FxChain.ec (cli, 1219 cmds)
+OK   cdrafts-split/FORS_C10.ec (cli, 81 cmds)
+OK   cdrafts-split/FORS_C10_Multi.ec (cli, 69 cmds)
+OK   cdrafts-split/GprocFORSC10.ec (cli, 400 cmds)
+OK   cdrafts-split/SphincsC10CapstoneWired.ec (cli, 102 cmds)
+OK   cdrafts-split/SphincsC10Content.ec (cli, 198 cmds)
+OK   cdrafts-split/C10DeployedInstance.ec (cli, 285 cmds)
+OK   cdrafts-split/VecDP.ec (cli, 5 cmds)
+OK   cdrafts-split/CountDS.ec (cli, 132 cmds)
+OK   cdrafts-split/C10DigitUniform.ec (cli, 71 cmds)
+OK   cdrafts-split/C10SurfaceKernel.ec (cli, 23 cmds)
+OK   cdrafts-split/C10Surface.ec (cli, 67 cmds)
+OK   cdrafts-split/C10Encoding.ec (cli, 77 cmds)
+OK   cdrafts-split/C10BoundedIID.ec (cli, 39 cmds)
+OK   cdrafts-split/C10BoundedLeaf.ec (cli, 55 cmds)
+OK   cdrafts-split/C10BoundedReduction.ec (cli, 12 cmds)
+OK   cdrafts-split/C10DeployedCapstone.ec (cli, 64 cmds)
+OK   cdrafts-split/C10DeployedGeometry.ec (cli, 121 cmds)
+OK   cdrafts-split/C10DeployedScope.ec (cli, 91 cmds)
+OK   cdrafts-split/C10HashDomains.ec (cli, 51 cmds)
+OK   cdrafts-split/C10HypertreeAccepted.ec (cli, 59 cmds)
+OK   cdrafts-split/XmssmtCCCharged.ec (cli, 66 cmds)
+OK   cdrafts-split/C10HypertreeCharged.ec (cli, 12 cmds)
+OK   cdrafts-split/C10Randomizer.ec (cli, 51 cmds)
+OK   cdrafts-split/C10RawOracle.ec (cli, 65 cmds)
+OK   cdrafts-split/C10RawGrind.ec (cli, 43 cmds)
+OK   cdrafts-split/SharedROBounded.ec (cli, 52 cmds)
+OK   cdrafts-split/C10SharedSearch.ec (cli, 31 cmds)
+OK   cdrafts-split/C10SearchBounds.ec (cli, 53 cmds)
+OK   cdrafts-split/C10SpecControls.ec (cli, 11 cmds)
+OK   cdrafts-split/C10StatefulSearch.ec (cli, 19 cmds)
+OK   cdrafts-split/DarkSide.ec (cli, 153 cmds)
+OK   cdrafts-split/DarkSideC10.ec (cli, 14 cmds)
+OK   cdrafts-split/FORSC10Digest.ec (cli, 30 cmds)
+OK   cdrafts-split/FORS_C.ec (cli, 95 cmds)
+OK   cdrafts-split/FORS_C_TreePort.ec (cli, 289 cmds)
+OK   cdrafts-split/GprocVI.ec (cli, 190 cmds)
+OK   cdrafts-split/SphincsC10CapstoneCharged.ec (cli, 48 cmds)
+OK   cdrafts-split/GprocT1Opre.ec (cli, 880 cmds)
+OK   cdrafts-split/GprocT2Trh.ec (cli, 1184 cmds)
+OK   cdrafts-split/GprocT3Trco.ec (cli, 385 cmds)
+OK   cdrafts-split/GprocQBound.ec (cli, 12 cmds)
+OK   cdrafts-split/GprocQWired.ec (cli, 46 cmds)
+OK   cdrafts-split/GprocChargedQWired.ec (cli, 53 cmds)
+OK   cdrafts-split/WotsLegCharged.ec (cli, 145 cmds)
+OK   cdrafts-split/GprocWotsNamed.ec (cli, 27 cmds)
+OK   cdrafts-split/GprocTCollNamed.ec (cli, 29 cmds)
+OK   cdrafts-split/WOTS_C_Multi.ec (cli, 172 cmds)
+### CLI_FILES_RUN=90 CLI_DISAGREEMENTS=0
+### PHASE 1f — WATCHED FILES (T1/T2/T3 branch proofs; NOT certified)
+### WATCHED_FILES_RUN=0 WATCHED_FAILURES=0
+### PHASE 1b — NAMED RESULTS EXIST AS LEMMAS (not axioms)
+OK   EUFCMA_SPHINCS_PLUS_C10_GROUNDED is a lemma in cdrafts-split/SphincsC10CapstoneWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CONTENTFUL_AT_DEPLOYED_ENCODER is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CHARGED is a lemma in cdrafts-split/SphincsC10CapstoneCharged.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_QWIRED is a lemma in cdrafts-split/GprocQWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER_QWIRED is a lemma in cdrafts-split/GprocQWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED is a lemma in cdrafts-split/GprocChargedQWired.ec
+### PHASE 1c — STATEMENT DIGESTS (names are not enough)
+OK unique statement pins: 1561
+### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)
+OK   coverage: all 1374 top-level statements across 90 CONE files are pinned (roots 78 + transitively required)
+### PHASE 1g — POLICY-CAP QUARANTINE (cdrafts-split/C10DeployedScope.ec)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+### PHASE 2 — CONE CENSUS vs cert-baseline-split.tsv (ADDITIONS FATAL)
+cone: keys now=1733 baseline=1733 | ROWS now=1813 baseline=1813 | added=0 removed=0
+  ledger=248  parameters=217  bindings=371  meaning=433  definitions=544  total=1813
+### PHASE 2b — CENSUS REGRESSION CANARY (admitted.)
+OK   census detects 'admitted.' (canary caught)
+### PHASE 2c — DIGEST DISCRIMINATION CANARY
+OK   module-type digest discriminates (module-type:1ed74e3a5614 vs module-type:f9d6086d602e)
+OK   admit statement digest discriminates (admit:7c56af2d53b1 vs admit:4eeb8521bd94)
+OK   no live row carries a degenerate digest
+OK   no live admit row degraded to 'nostmt'
+### PHASE 3 — CONTROLS (polarity AND declared reason)
+OK   control scratch/vac_probe_full.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/probe_len46.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/c10_spec_vacuity_canary.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control cdrafts-split/C10SpecControls.ec (MUST-PASS)
+OK   control scratch/tier0_degenerate_encoder_excluded.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/encode_compat_derivable.ec (MUST-PASS)
+OK   control scratch/badenc_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/badenc_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/badenc_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/badenc_ctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/wlc_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/wlc_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/wlc_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gwn_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gwn_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlE.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlF.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlE.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlF.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlG.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlZ.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlE.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlF.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlG.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gtn_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gtn_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gtn_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GprocTCollNamed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_lemma.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_pos_op.ec (MUST-PASS)
+OK   control scratch/_scope_pos_lemma.ec (MUST-PASS)
+OK   control scratch/_scope_env_n_m.ec (MUST-PASS)
+OK   control scratch/_scope_neg_op_GprocChargedQWired.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SphincsC10CapstoneWired.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GprocQWired.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GprocQBound.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GprocWotsNamed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10CounterWrongCardinality.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BytesWrongPadding.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10GrindSkip.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control experiments/wots-badenc/count/controls/KctlC.ec (MUST-PASS)
+OK   control experiments/wots-badenc/count/controls/KctlE.ec (MUST-PASS)
+OK   control experiments/wots-badenc/count/controls/KctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control experiments/wots-badenc/count/controls/CtlSum204.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control experiments/wots-badenc/count/controls/CtlLen42.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control experiments/wots-badenc/count/controls/CtlVal.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10EncoderPositive.ec (MUST-PASS)
+OK   control scratch/C10IIDPositive.ec (MUST-PASS)
+OK   control scratch/C10EncoderWrongOrder.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10EncoderWrongTarget.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10IIDErasedFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10IIDMissingSuccessFactor.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedGamePositive.ec (MUST-PASS)
+OK   control scratch/C10BoundedGameNoGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedGameResetFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedMAPositive.ec (MUST-PASS)
+OK   control scratch/C10BoundedMAEraseHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedMAAppendFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedHypertreePositive.ec (MUST-PASS)
+OK   control scratch/C10BoundedHypertreeNoGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedHypertreePartialRelease.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedLeafPositive.ec (MUST-PASS)
+OK   control scratch/C10BoundedLeafNoPKSeparation.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10HypertreeCoveragePositive.ec (MUST-PASS)
+OK   control scratch/SharedROBoundedPositive.ec (MUST-PASS)
+OK   control scratch/C10RandomizerPositive.ec (MUST-PASS)
+OK   control scratch/C10HashDomainsPositive.ec (MUST-PASS)
+OK   control scratch/C10SharedSearchPositive.ec (MUST-PASS)
+OK   control scratch/C10SearchBoundsPositive.ec (MUST-PASS)
+OK   control scratch/C10HypertreeChargedPositive.ec (MUST-PASS)
+OK   control scratch/SharedROKnownNotFresh.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/SharedRODuplicateNotFresh.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10HashWrongLength.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10CoverageSinglePath.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10FORSBoundedPositive.ec (MUST-PASS)
+OK   control scratch/C10FORSNoExhaustion.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10RandomizerWrongHalf.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10FORSBoundedSMT.ec (MUST-PASS)
+OK   control scratch/C10HypertreeAcceptedPositive.ec (MUST-PASS)
+OK   control scratch/C10HypertreeObserverPrivacy.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10AcceptedCubeNoHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10RawOraclePositive.ec (MUST-PASS)
+OK   control scratch/C10RawCachedAcceptance.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10RawReplayDraw.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10StatefulLostSuccess.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_C10HypertreeAccepted.ec (MUST-FAIL, rejected for the DECLARED reason)
+controls executed (unique)=98 expected=98
+### PHASE 4 — FORS+C GRINDING MARGIN (heuristic figures, NOT a theorem)
+OK   margin guardrails 4/4 (happy path)
+OK   margin negative controls 3/3 (--self-test: the model inverts; guard blocks 1-3 NOT exercised)
+OK   margin figures match the committed manifest (7/7)
+### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundness proof)
+     OK   taint containment: closure = 2 lemmas, none of the 10 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+     OK   scope-probe linkage: 7 headline files <-> 7 registered scope probes (exact bijection)
+OK   taint controls: pass=15 unique=15 fail=0 expected=15
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run (d1d88a7319995db0b21c47869c79fa8d)
+### RESULT: GREEN
+make: Leaving directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-fix/contracts/verification'
