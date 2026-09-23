@@ -74,6 +74,11 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'merkle_recover_leaf_or_collision',
+    'fors_recover_secret_or_collision',
+    'merkle_recover_recorded',
+    'fors_recover_recorded',
+
     'session_novel_digest_bound',
     'byte_game_classified',
     'byte_game_history',

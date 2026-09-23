@@ -251,3 +251,16 @@ scratch/_scope_neg_op_ByteHistory.ec	MUST-FAIL	unknown variable or constant: `FO
 scratch/_scope_neg_op_ClassifiedBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_ClassifiedSession.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_SignerTrace.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Raw authentication-path correspondence and scope controls.
+scratch/C10Q3ForsRepeatPositive.ec	MUST-PASS	-
+scratch/C10Q3MerkleRepeatPositive.ec	MUST-PASS	-
+scratch/C10Q3PrivateRecovery.ec	MUST-FAIL	not allowed to use
+scratch/C10Q3WidthPositive.ec	MUST-PASS	-
+scratch/C10Q3WithoutFORSLeaf.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q3WithoutReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q3WithoutWidths.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_RawForsComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawForsPathReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawPathComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawPathReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

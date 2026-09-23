@@ -9,7 +9,7 @@
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",
-    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "ada3051979805aeea390dfc1f864c61835728de095a17b87e2e5a768d0c6b5dc",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "7e48e9ed70704a2a69f65ebaa82b55ba19caa57e63561043d760c3086f42018e",
     "contracts/verification/scripts/run_easycrypt_split.py": "4568d51ccd1e07082c816cb59432759a60fbe879b66fa72fefeb2a1e410f4487",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
@@ -168,6 +168,16 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/SignerMessages.ec": "90b3b9622b0778aee39f0c86fbcedac78cdf84d85a0efa3bab8b2184103b19d0",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/SignerRecorded.ec": "f704bfac3e843f2c08f3b725c3f616797372cdbee43b54fdafa39e1a94dcaaa4",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/SignerTrace.ec": "d45be49b4d269e33ada838764a539fe2ad0cc9bae3d11a21dc02c54d23843c3f",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/VerifierHistory.ec": "b5dbeb4056e0e814fd242929777be19fa20165758c58bbf2f744b19efd6a09fb"
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/VerifierHistory.ec": "b5dbeb4056e0e814fd242929777be19fa20165758c58bbf2f744b19efd6a09fb",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsLeafInputs.ec": "3d91c9a06f14baf60e2864f66173133b11a58123bb1261d1704015b6a575f6b0",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/PathCollision.ec": "77db526238564de8286e211e28f6674e3f26d63c03fb9695e471de39fbacca2c",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/PathInputs.ec": "2b4f2f1143ff2149546abe997a6187245d868fd88490c35778ddfc8f0ec03dec",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/PathOracle.ec": "af5d3ba4f4b7dee7ce1d1ce3f3529320e3a52ec47219acaab56ad803ef515393",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/PathReplay.ec": "65d84c6c208933a218282e005df97986c7318fdc833d312274b7b310f0634961",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForsComparison.ec": "d56fa7daf83f069f72f8c50b325792c3042358f713f0be3363d6f45dbc992deb",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForsPathReplay.ec": "1ed75ae98d0f90f77eea8200f40a93ddd85ef6bb3f1c6a5100c8f376782bd270",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/RawPathComparison.ec": "03ce1c959af949da3449df9a7c6711042532fac6b7b70ffef6b4d4dcb4e05d58",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/RawPathReplay.ec": "c7edffc1626561dae3339e9a08b42a68a2668813df0b784afacf8f4e5965b79a",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/RecoveryHistory.ec": "fb19f6a989fe17d3dd86e5d26232d4874c25d05b31182bbb9f9c31e9fca82d0f"
   }
 }

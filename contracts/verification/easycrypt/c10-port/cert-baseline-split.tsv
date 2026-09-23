@@ -1965,3 +1965,19 @@ cdrafts-split/SessionDigest.ec	module:fc1580497c63	SessionDigestEvent	# line 9
 cdrafts-split/SignerTrace.ec	defined-op:78b61e9e8fda	signature_trace	# line 29
 cdrafts-split/SignerTrace.ec	module-type:6c9229487b83	CompleteSigner	# line 49
 cdrafts-split/VerifierHistory.ec	module-type:ef40244dd7ef	PublicVerifier	# line 5
+
+# Raw authentication-path correspondence; existing census preserved.
+cdrafts-split/ForsLeafInputs.ec	defined-op:495c7df78850	fors_leaf_collision	# line 5
+cdrafts-split/PathCollision.ec	defined-op:2605fd618410	path_pair_collision	# line 6
+cdrafts-split/PathInputs.ec	defined-op:e1c0f4939f5c	pair_input_injective	# line 6
+cdrafts-split/PathInputs.ec	defined-op:dbef748185e5	path_input_collision	# line 12
+cdrafts-split/PathReplay.ec	defined-type:457154cd16b2	path_state	# line 5
+cdrafts-split/PathReplay.ec	defined-op:4e21451840c5	path_input	# line 7
+cdrafts-split/PathReplay.ec	defined-op:6cd3758a27a2	path_step	# line 13
+cdrafts-split/PathReplay.ec	defined-op:9674b131a1e6	path_value	# line 16
+cdrafts-split/PathReplay.ec	defined-op:68d0552e4ba7	path_recorded	# line 18
+cdrafts-split/RawForsPathReplay.ec	defined-op:58fd40ad4e6f	fors_leaf_input	# line 6
+cdrafts-split/RawForsPathReplay.ec	defined-op:20e5bdb9f5ca	fors_pair	# line 8
+cdrafts-split/RawPathReplay.ec	defined-op:357a1fad28ff	merkle_pair	# line 6
+cdrafts-split/RecoveryHistory.ec	module-type:62e168c5874c	MerkleRecovery	# line 7
+cdrafts-split/RecoveryHistory.ec	module-type:e56c8b1cb3f4	ForsRecovery	# line 12

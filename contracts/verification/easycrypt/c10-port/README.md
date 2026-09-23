@@ -41,6 +41,12 @@ completed. Repeated contexts retain their accepted digest; the novel-event
 bound accounts for those repeats explicitly. The accumulated-opening and
 complete byte-model component reductions remain open.
 
+The [raw authentication-path results](RAW-PATH-CORRESPONDENCE.md) connect
+actual Merkle/FORS recovery to retained oracle entries and compare it with
+a recorded reference path. Matching roots imply matching leaves/secrets or
+a recorded node collision, under explicit width and reference premises.
+Honest-tree construction and the complete component reduction remain open.
+
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a
