@@ -1,0 +1,25 @@
+Review PQSigner OS for merge of its EasyCrypt actual tree construction and FORS signing.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-builder-paths
+Commit: dd99b605c6f670e0cb7af3d25cd89c3b3409e3df
+Tree: 10e463060b9d75d041e4d5da121ff323dd428167
+Compare: 78c6ad337a7109a4296d734cb2f971ec89392a35..dd99b605c6f670e0cb7af3d25cd89c3b3409e3df
+
+Focus only on formal-verification correctness:
+1. Observer equivalences preserve actual RawMerkle.build, RawFors.tree and RawKeygen.root outputs and oracle effects, without assuming honest-tree correctness.
+2. The actual binary-carry stack builds the complete catalog. Authentication capture selects the correct nine/eleven siblings, with explicit target ranges and 16-byte widths.
+3. The actual initial FORS leaf hash and private derivation supply the reference secret and path. Memoized entries persist through later calls; cached outputs are not treated as fresh samples.
+4. Actual build/recover matching roots yield equal reference leaves/secrets or explicit retained node collisions. Actual FORS signing/recovery equals its internally computed root, with termination proved.
+5. Source/statement/census/control enrollment preserves earlier contracts, adds no project axiom/admit/clone assumption, and negative controls fail for declared reasons. Zero values remain permitted.
+6. Independent external-root identity, WOTS, the special forest tree, adaptive accumulated opening coverage and a numerical end-to-end forgery bound are not proved by this batch.
+
+Evidence already green: all 53 new enrolled modules pass source-matched direct compilation and default CLI with repository-only imports; 24 new semantic/scope controls, 11 checker regressions, static contract and 230-input source binding pass. Candidate: 266 files, 103 roots, 2393 pins, 2086 statements, 2020 census rows, 168 controls. Full cold 266-target two-driver replay plus 168 controls is running separately and remains required for landing; the coordinator will confirm its unchanged-source receipt without another model turn.
+Non-goals: runtime/API/parameter changes, Rust extraction, concrete SHA-256 or QROM, hardware/shipment, deferred playbook sweep, optional hardening, and later WOTS/forest/layer/signer research.
+
+Inspect the diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: dd99b605c6f670e0cb7af3d25cd89c3b3409e3df / 10e463060b9d75d041e4d5da121ff323dd428167
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

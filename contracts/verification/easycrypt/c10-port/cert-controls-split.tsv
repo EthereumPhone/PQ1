@@ -264,3 +264,29 @@ scratch/_scope_neg_op_RawForsComparison.ec	MUST-FAIL	unknown variable or constan
 scratch/_scope_neg_op_RawForsPathReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_RawPathComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_RawPathReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Actual raw tree construction, reference paths and scope controls.
+scratch/C10Q4ForsPositive.ec	MUST-PASS	-
+scratch/C10Q4ForsWithoutRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q4MerklePositive.ec	MUST-PASS	-
+scratch/C10Q4MerkleWithoutRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q4WithoutCatalogWidths.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q4WrongRootProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_BuildRootProjection.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TotalBuilderReference.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q5ForsPositive.ec	MUST-PASS	-
+scratch/C10Q5ForsWithoutCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q5MerklePositive.ec	MUST-PASS	-
+scratch/C10Q5MerkleWithoutCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q5WithoutLeafOrigins.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ForsBuilderComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsBuilderSecret.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_MerkleBuilderComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q6FirstPositive.ec	MUST-PASS	-
+scratch/C10Q6LastPositive.ec	MUST-PASS	-
+scratch/C10Q6WithoutPrivateEntry.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q6WithoutRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q6WrongSignatureProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ForsBuilderPrivate.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsSignCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsSignRecord.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

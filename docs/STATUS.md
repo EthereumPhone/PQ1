@@ -16,7 +16,10 @@ memoized grinder and complete signer. The
 establish new-message freshness and account for repeated signing contexts.
 The [raw authentication-path results](../contracts/verification/easycrypt/c10-port/RAW-PATH-CORRESPONDENCE.md)
 connect actual Merkle/FORS recovery to recorded reference paths and explicit
-node-collision events. Honest-tree reference witnesses remain to be supplied.
+node-collision events. The
+[actual construction results](../contracts/verification/easycrypt/c10-port/RAW-BUILDER-PATHS.md)
+supply the reference witnesses and actual FORS secret provenance, and prove
+signing/recovery equality to the tree root computed during signing.
 Adaptive accumulated opening coverage, the component reduction and numerical
 end-to-end forgery bounds remain open.
 See the

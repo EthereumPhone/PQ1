@@ -47,11 +47,10 @@ by this milestone.
 
 ## Boundary
 
-The reference-path premises are not discharged by these results. A complete
-component reduction still needs to connect the actual stack-based honest
-tree construction to those reference witnesses, handle WOTS recovery and the
-special omitted-path FORS tree, and compose the components with accumulated
-adaptive opening coverage.
+The [actual construction results](RAW-BUILDER-PATHS.md) supply the
+reference-path premises from the actual stack-based builders and retained
+FORS leaf hashes. WOTS recovery, the special omitted-path FORS tree, complete
+component composition and accumulated adaptive opening coverage remain open.
 
 Zero nodes are allowed by the path lemmas. The actual WOTS invalid-sum
 sentinel therefore remains part of the later WOTS/component obligation.

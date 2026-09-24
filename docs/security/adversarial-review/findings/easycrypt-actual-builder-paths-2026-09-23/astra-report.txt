@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: dd99b605c6f670e0cb7af3d25cd89c3b3409e3df / 10e463060b9d75d041e4d5da121ff323dd428167
+FINDINGS: none
+GAPS: Full cold 266-target two-driver replay plus 168 controls still requires the coordinator’s unchanged-source receipt before landing.

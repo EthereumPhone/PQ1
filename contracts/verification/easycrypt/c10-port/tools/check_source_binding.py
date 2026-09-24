@@ -72,6 +72,22 @@ SOURCES = (
         'PathReplay', 'RawForsComparison', 'RawForsPathReplay', 'RawPathComparison',
         'RawPathReplay', 'RecoveryHistory',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'AuthAdvance', 'AuthCaptureIndex', 'AuthCaptureSchedule', 'AuthCaptureValue',
+        'AuthPhase', 'AuthSlots', 'AuthStepInvariant', 'AuthSteps',
+        'BuildRootProjection', 'BuilderPath', 'BuilderTotality', 'CatalogForest',
+        'CatalogForestMerge', 'CatalogMerge', 'CatalogOracle', 'CatalogPath',
+        'CatalogStack', 'CatalogWidths', 'DyadicStack', 'ForsBuildWitness',
+        'ForsBuilderPath', 'ForsCatalogAuth', 'ForsCatalogObserver', 'ForsCatalogSound',
+        'MerkleBuildWitness', 'MerkleBuilderPath', 'MerkleCatalogAuth', 'MerkleCatalogObserver',
+        'MerkleCatalogSound', 'NodeCatalog', 'NodeCatalogDomain', 'NodeGridIndex',
+        'NodeGridPath', 'RawBuilderReference', 'StackAlignment', 'StackPowers',
+        'StackProjection', 'TotalBuilderReference', 'ForsBuilderComparison', 'ForsBuilderSecret',
+        'ForsLeafOrigins', 'LeafOriginOracle', 'LeafOrigins', 'MerkleBuilderComparison',
+        'ForsBuilderPrivate', 'ForsKnownSecret', 'ForsPrivateEntry', 'ForsPrivateLeaves',
+        'ForsSignCorrect', 'ForsSignRecord', 'ForsSignWitness', 'SecretLeafOracle',
+        'SecretLeafOrigins',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

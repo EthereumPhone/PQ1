@@ -45,7 +45,11 @@ The [raw authentication-path results](RAW-PATH-CORRESPONDENCE.md) connect
 actual Merkle/FORS recovery to retained oracle entries and compare it with
 a recorded reference path. Matching roots imply matching leaves/secrets or
 a recorded node collision, under explicit width and reference premises.
-Honest-tree construction and the complete component reduction remain open.
+The [actual construction results](RAW-BUILDER-PATHS.md) now supply those
+reference witnesses from the real stack, authentication capture and leaf-hash
+calls. Actual FORS signing/recovery agrees with its internally computed root.
+WOTS, the special FORS tree, full composition and adaptive opening coverage
+remain open.
 
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
