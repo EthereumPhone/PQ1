@@ -1,0 +1,25 @@
+Review PQSigner OS for merge of linked byte-game subtree-extraction proofs. Do not launch agents or other models.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-subtree-extraction
+Commit: 7e099a632794c633ed14a9dc7a6e1bb0a3274f29
+Tree: ff6778bb8f7adb6b42ef78766b19c62640d735c5
+Compare: 451594d4dda89054cb38ab87e6c2d504c8bcefd2..7e099a632794c633ed14a9dc7a6e1bb0a3274f29
+
+Focus only on formal-verification correctness:
+1. Recovery records must follow actual WOTS/Merkle calls and both iterations of RawSigner.verify, with linked intermediate values, digest-derived addresses, exact widths, full-u32 counts and retained message-hash entries.
+2. Reference extraction from final retained histories must need neither new oracle calls nor an assumed missing subtree. Check root-catalogue completeness, path/leaf comparison and collision/zero guards.
+3. Actual successful signing must establish the recorded lower root used as its top message, tied to the returned signature and digest. Failure remains explicit; per-root persistence must not be represented as completed accumulated-exposure accounting.
+4. The unrecorded-top or paired-opening split must keep its missing-reference branch. The existential forest value supplies no FORS extraction. Neither case receives a numerical charge, and linked openings alone need not be forgeries.
+5. The byte transfer and probability hop must preserve the same initialized client, original seed/root, final new-message guard and explicit successful-forgery residual, with unchanged existing charges.
+6. Statement/operator/source/census/control enrollment must preserve prior contracts without a new project axiom/admit/clone assumption. Rejected exact applications establish only declared diagnostics, not falsity or premise necessity; positive checks are not complete-game nonvacuity evidence.
+
+Evidence already green: ten enrolled modules passed 20 repository-only direct/default-interactive checks; all 21 controls match declared outcomes (7 positives, 6 scope probes, 8 rejected exact applications). Eleven checker regression groups, static contract and 367-input source binding pass. Inventory: 403 targets, 153 roots, 2835 pins, 2467 statements, 2117 census rows and 325 controls. The unchanged-source full cold two-driver replay is running separately and remains required before landing.
+Non-goals: runtime/API/parameter changes, FORS extraction, accumulated-exposure probabilities, private/encoding-event charges or closed numerical EUF, guaranteed signing success, Rust extraction, concrete SHA-256/QROM, hardware/shipment, deferred playbook sweep, optional hardening.
+
+Inspect the exact diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 7e099a632794c633ed14a9dc7a6e1bb0a3274f29 / ff6778bb8f7adb6b42ef78766b19c62640d735c5
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

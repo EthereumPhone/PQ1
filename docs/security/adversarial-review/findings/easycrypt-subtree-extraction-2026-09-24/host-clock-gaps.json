@@ -1,0 +1,18 @@
+{
+  "observed_utc": "2026-09-24T18:31:31.072685+00:00",
+  "monitor_timestamps": [
+    "2026-09-24T16:57:53.339784+00:00",
+    "2026-09-24T17:05:09.200255+00:00",
+    "2026-09-24T17:10:21.190227+00:00",
+    "2026-09-24T17:11:30.897619+00:00",
+    "2026-09-24T18:27:43.689276+00:00",
+    "2026-09-24T18:30:47+00:00",
+    "2026-09-24T18:31:28.694669+00:00"
+  ],
+  "observation": "Long wall-clock gaps while the same XmssmtCC_All direct process remained alive with about twelve CPU minutes; consistent with host suspension. Exact suspension intervals were not independently measured.",
+  "review_effect": "Both review legs completed before the gaps; their measured wall-clock bounds and raw receipts remain valid.",
+  "gate_started_utc": "2026-09-24T16:37:01.344886+00:00",
+  "wall_elapsed_seconds": 6869.73,
+  "gate_wall_limit_seconds": 18000,
+  "action": "Keep the original replay running while within its original limit. No source edits, review restart or budget extension."
+}

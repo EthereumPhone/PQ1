@@ -2122,3 +2122,15 @@ cdrafts-split/WotsRecoveryTrace.ec	defined-op:101830981509	recovery_leaf_input	#
 cdrafts-split/SessionTopExtraction.ec	defined-op:0d4840863b4e	new_message_top_opening	# line 7
 cdrafts-split/TopVerifierOpening.ec	defined-op:3054edcdc5bb	top_layer_opening	# line 8
 cdrafts-split/TopVerifierOpening.ec	defined-op:f4d915b969e7	verified_top_opening	# line 13
+
+# Linked byte-game subtree extraction; existing census preserved.
+cdrafts-split/HonestSubtreeMessages.ec	defined-op:69262643507b	returned_subtree_reference	# line 6
+cdrafts-split/LayerRecoveryRecord.ec	defined-op:467a5b1e3339	layer_recovery_record	# line 7
+cdrafts-split/SessionSubtreeExtraction.ec	defined-op:f6c8f9035051	new_message_subtree_opening	# line 7
+cdrafts-split/SignerSubtreeReference.ec	defined-op:1c9b160d5cf0	signed_subtree_reference	# line 7
+cdrafts-split/SubtreeOpeningCases.ec	defined-op:7548487ec15c	unrecorded_top_message	# line 8
+cdrafts-split/SubtreeOpeningCases.ec	defined-op:c1a00d72d625	paired_layer_openings	# line 14
+cdrafts-split/SubtreeOpeningCases.ec	defined-op:ba18b1dcad8b	subtree_opening_cases	# line 22
+cdrafts-split/SubtreeOpeningCases.ec	defined-op:ede2db67f132	verified_subtree_opening	# line 25
+cdrafts-split/VerifierLayerRecords.ec	defined-op:3d4b59b359d2	verifier_layer_records	# line 7
+cdrafts-split/VerifierLayerRecords.ec	defined-op:51e37db424da	verified_layer_records	# line 14

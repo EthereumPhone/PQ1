@@ -441,3 +441,26 @@ scratch/_scope_neg_op_RootSessionHistory.ec	MUST-FAIL	unknown variable or consta
 scratch/_scope_neg_op_VerifierTopExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_ByteGameTopExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_ByteTopOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Byte-game subtree extraction: positives, scope probes and exact mismatches.
+scratch/C10Q18LayerPositive.ec	MUST-PASS	-
+scratch/C10Q18WithoutRecordedRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18WithoutCollisionGuard.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18WithoutZeroGuard.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18VerifierPositive.ec	MUST-PASS	-
+scratch/C10Q18WithoutSignatureWidth.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18SignerPositive.ec	MUST-PASS	-
+scratch/C10Q18ForgetsFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18CasesPositive.ec	MUST-PASS	-
+scratch/C10Q18DropsUnrecordedCase.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18ByteGamePositive.ec	MUST-PASS	-
+scratch/C10Q18WrongInitialSeed.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18HopPositive.ec	MUST-PASS	-
+scratch/C10Q18DropsPrefixCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18RecordedRootPersists.ec	MUST-PASS	-
+scratch/_scope_neg_op_LayerRecordExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_VerifierLayerRecords.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HonestSubtreeMessages.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SubtreeOpeningCases.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteGameSubtreeExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteSubtreeOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

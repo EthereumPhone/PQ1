@@ -75,6 +75,12 @@ the message hash and supplied top signature. The remaining forgery event stays
 explicit; lower-layer/FORS extraction and adaptive probability charges remain
 open, and this bridge alone gives no smaller numerical bound.
 
+The [linked subtree bridge](RAW-SUBTREE-EXTRACTION.md) now records both actual
+verifier layers and separates a top message without a recorded lower root
+from linked WOTS openings in both layers. Actual successful signing establishes
+the matching lower-root reference. The same-game probability residual remains
+explicit; FORS and adaptive probability charges are still open.
+
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every
