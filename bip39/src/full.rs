@@ -299,6 +299,24 @@ impl Mnemonic {
     /// different seed and brick recovery.
     #[must_use]
     pub fn to_seed(&self, passphrase: &str) -> [u8; SEED_BYTES] {
+        self.seed_inner(passphrase, None, 0, 0)
+    }
+
+    /// [`Self::to_seed`] reporting `progress(percent)` every
+    /// [`PBKDF2_REPORT_EVERY`] PBKDF2 iterations, interpolated from `pct_lo`
+    /// to `pct_hi`, so a trusted-UI film keeps moving through the stretch.
+    /// The report points depend only on the public iteration counter; the
+    /// seed is byte-identical to [`Self::to_seed`]'s.
+    ///
+    /// # Panics
+    ///
+    /// As [`Self::to_seed`].
+    #[must_use]
+    pub fn to_seed_with_progress(&self, passphrase: &str, progress: fn(u8), pct_lo: u8, pct_hi: u8) -> [u8; SEED_BYTES] {
+        self.seed_inner(passphrase, Some(progress), pct_lo, pct_hi)
+    }
+
+    fn seed_inner(&self, passphrase: &str, progress: Option<fn(u8)>, pct_lo: u8, pct_hi: u8) -> [u8; SEED_BYTES] {
         // F-22 constant-time password assembly. Three phases, all
         // value-only — no address-keyed loads or stores depend on the
         // secret indices.
@@ -394,6 +412,9 @@ impl Mnemonic {
             &salt[..salt_len],
             PBKDF2_ITERS,
             &mut out,
+            progress,
+            pct_lo,
+            pct_hi,
         );
 
         // password reveals the mnemonic; salt may carry a user passphrase.
@@ -726,29 +747,51 @@ fn ct_eq_u8(a: u8, b: u8) -> u8 {
 
 type HmacSha512 = Hmac<Sha512>;
 
+/// PBKDF2 iterations between two progress reports (32 reports per seed).
+pub const PBKDF2_REPORT_EVERY: u32 = 64;
+
 /// PBKDF2 with HMAC-SHA512 PRF, RFC 2898. `out` is exactly one HMAC-SHA512
 /// output block, so a single iteration of the outer block loop suffices.
-fn pbkdf2_hmac_sha512(password: &[u8], salt: &[u8], iters: u32, out: &mut [u8; SEED_BYTES]) {
+///
+/// The password is keyed into the HMAC once and the keyed state cloned per
+/// iteration: re-keying hashed the 215-byte password plus both pads every
+/// round (~6 SHA-512 blocks per iteration instead of 2).
+fn pbkdf2_hmac_sha512(
+    password: &[u8],
+    salt: &[u8],
+    iters: u32,
+    out: &mut [u8; SEED_BYTES],
+    progress: Option<fn(u8)>,
+    pct_lo: u8,
+    pct_hi: u8,
+) {
     // HMAC accepts any key length, so new_from_slice never returns Err here;
     // it is the only path to a typed Hmac instance.
-    let new_mac = || HmacSha512::new_from_slice(password).expect("HMAC accepts any key length");
+    let keyed = HmacSha512::new_from_slice(password).expect("HMAC accepts any key length");
 
     // U_1 = HMAC(password, salt || INT(1))
-    let mut mac = new_mac();
+    let mut mac = keyed.clone();
     mac.update(salt);
     mac.update(&1u32.to_be_bytes());
     let mut u_prev = mac.finalize().into_bytes();
     out.copy_from_slice(&u_prev);
 
     // T = U_1 ^ U_2 ^ ... ^ U_iters, where U_n = HMAC(password, U_{n-1}).
-    for _ in 1..iters {
-        let mut mac = new_mac();
+    for i in 1..iters {
+        let mut mac = keyed.clone();
         mac.update(&u_prev);
         u_prev = mac.finalize().into_bytes();
         for (b, x) in out.iter_mut().zip(u_prev.iter()) {
             *b ^= *x;
         }
+        if let Some(f) = progress {
+            if (i + 1) % PBKDF2_REPORT_EVERY == 0 {
+                let span = u32::from(pct_hi.saturating_sub(pct_lo));
+                f((u32::from(pct_lo) + (i + 1) * span / iters) as u8);
+            }
+        }
     }
+    u_prev.as_mut_slice().zeroize();
 }
 
 

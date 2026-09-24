@@ -321,6 +321,23 @@ fn with_bip39_seed<T>(entropy: &[u8; ENTROPY_LEN], f: impl FnOnce(&[u8; 64]) -> 
     result
 }
 
+/// [`with_bip39_seed`] whose PBKDF2 stretch reports `progress` from
+/// `pct_lo` to `pct_hi` (the stretch is ~2048 software HMAC-SHA512 rounds).
+fn with_bip39_seed_progress<T>(
+    entropy: &[u8; ENTROPY_LEN],
+    progress: fn(u8),
+    pct_lo: u8,
+    pct_hi: u8,
+    f: impl FnOnce(&[u8; 64]) -> T,
+) -> T {
+    let mnemonic = Mnemonic::from_entropy(entropy);
+    let mut bip39_seed = mnemonic.to_seed_with_progress("", progress, pct_lo, pct_hi);
+    let result = f(&bip39_seed);
+    bip39_seed.zeroize();
+    // mnemonic Drop zeros its 24 word indices.
+    result
+}
+
 /// Derive a fully-formed SPHINCS+C10 signing key from a 48-byte seed.
 /// Calls `SigningKey::keygen` which builds the full hypertree — the
 /// `pk_root` Merkle root is *computed* from `(sk_seed, pk_seed)`.
@@ -642,12 +659,14 @@ pub fn derive_c10_master_keypair_from_entropy(
 pub fn derive_c10_master_keypair_from_entropy_with_progress(
     entropy: &[u8; ENTROPY_LEN],
     account_index: u32,
-    progress: impl Fn(u8),
+    progress: fn(u8),
 ) -> (SigningKey, [u8; 32], [u8; 32]) {
     progress(0);
-    let (pk_seed_32, mut sk_seed_32) = derive_c10_master_from_entropy(entropy, account_index);
-    progress(10);
-    let (sk, pk_root_32) = c10_keygen_from_n_masked_seeds(&sk_seed_32, &pk_seed_32);
+    // PBKDF2 stretch 0..20 %, top-subtree keygen 20..100 %.
+    let (pk_seed_32, mut sk_seed_32) = with_bip39_seed_progress(entropy, progress, 0, 20, |bip39_seed| {
+        derive_c10_master_from_bip39_seed(bip39_seed, account_index)
+    });
+    let (sk, pk_root_32) = c10_keygen_from_n_masked_seeds(&sk_seed_32, &pk_seed_32, progress, 20, 100);
     // The secret sk_seed is not returned — keygen folded it into the
     // (ZeroizeOnDrop) `SigningKey`. Wipe the leftover transient so it does
     // not linger in this frame (audit secret-lifecycle 20260611, MEDIUM-2).
@@ -667,10 +686,13 @@ pub fn derive_c10_master_keypair_from_entropy_with_progress(
 fn c10_keygen_from_n_masked_seeds(
     sk_seed_32: &[u8; 32],
     pk_seed_32: &[u8; 32],
+    progress: fn(u8),
+    pct_lo: u8,
+    pct_hi: u8,
 ) -> (SigningKey, [u8; 32]) {
     let mut pk_seed_16 = [0u8; 16];
     pk_seed_16.copy_from_slice(&pk_seed_32[..16]);
-    let sk = SigningKey::keygen(*sk_seed_32, pk_seed_16);
+    let sk = SigningKey::keygen_with_progress(*sk_seed_32, pk_seed_16, progress, pct_lo, pct_hi);
 
     let mut pk_root_32 = [0u8; 32];
     pk_root_32[..16].copy_from_slice(sk.pk_root());
@@ -761,15 +783,14 @@ pub fn derive_c10_slot_keypair_with_progress(
     master_entropy: &[u8; 32],
     chain_id: u64,
     slot_index: u32,
-    progress: impl Fn(u8),
+    progress: fn(u8),
 ) -> (SigningKey, [u8; 32], [u8; 32]) {
     progress(0);
     let mut entropy = slot_entropy(master_entropy, chain_id, slot_index);
     let (mut sk_seed_32, pk_seed_32) = derive_c10_slot_seeds(&entropy);
     entropy.zeroize();
 
-    progress(10);
-    let (sk, pk_root_32) = c10_keygen_from_n_masked_seeds(&sk_seed_32, &pk_seed_32);
+    let (sk, pk_root_32) = c10_keygen_from_n_masked_seeds(&sk_seed_32, &pk_seed_32, progress, 0, 100);
     // Wipe the secret slot sk_seed transient post-keygen (audit
     // secret-lifecycle 20260611, MEDIUM-2). The slot `entropy` is already
     // wiped above; `pk_seed_32` is the public N-masked seed.
@@ -1187,9 +1208,9 @@ mod differential_sha256_bytes_tests {
         let bip39: [u8; 64] = Mnemonic::from_entropy(&[0x11u8; 32]).to_seed("");
         for &acct in &[0u32, 1, 255] {
             let (pk_seed_n, sk_seed_n) = derive_c10_master_from_bip39_seed(&bip39, acct);
-            let (_, pk_root_n) = c10_keygen_from_n_masked_seeds(&sk_seed_n, &pk_seed_n);
+            let (_, pk_root_n) = c10_keygen_from_n_masked_seeds(&sk_seed_n, &pk_seed_n, |_| {}, 0, 0);
             let (pk_seed_l, sk_seed_l) = derive_c10_master_from_bip39_seed_legacy(&bip39, acct);
-            let (_, pk_root_l) = c10_keygen_from_n_masked_seeds(&sk_seed_l, &pk_seed_l);
+            let (_, pk_root_l) = c10_keygen_from_n_masked_seeds(&sk_seed_l, &pk_seed_l, |_| {}, 0, 0);
             assert_eq!(
                 salt(&pk_seed_n, &pk_root_n),
                 salt(&pk_seed_l, &pk_root_l),

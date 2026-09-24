@@ -54,6 +54,17 @@ const CFI_STEP_SENDER_BIND_DONE: u32 = 0x6B_4D_A2_17;
 pub(super) const SENDER_BIND_CFI_EXPECTED: u32 =
     crate::cfi_expected!(CFI_STEP_SENDER_BIND_DONE);
 
+/// Keygen progress for the sender binding before a sign dialog (a plain
+/// `fn(u8)`: the C10 keygen reports through arrow-free fn pointers).
+fn wallet_check_progress(percent: u8) {
+    crate::ui::show_progress("Wallet check", percent);
+}
+
+/// Keygen progress for `CMD_GET_WALLET_ADDRESS`.
+fn wallet_addr_progress(percent: u8) {
+    crate::ui::show_progress("Wallet addr", percent);
+}
+
 /// Return the bootstrap public-key halves for an account, deriving and caching
 /// them on a miss.
 ///
@@ -62,7 +73,7 @@ pub(super) const SENDER_BIND_CFI_EXPECTED: u32 =
 /// Callers must hold the non-reentrant NSC handler guard.
 unsafe fn bootstrap_public_key_for_account(
     account_index: u32,
-    progress_title: &'static str,
+    progress: fn(u8),
 ) -> Result<([u8; 32], [u8; 32]), NscStatus> {
     if account_index > MAX_ACCOUNT_INDEX {
         return Err(NscStatus::InvalidPointer);
@@ -91,12 +102,12 @@ unsafe fn bootstrap_public_key_for_account(
                 .map_err(|_| NscStatus::CryptoError)?,
             );
 
-            crate::ui::show_progress(progress_title, 0);
+            progress(0);
             let (c10_sk, pk_seed_32, pk_root_32) =
                 crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
                     &*entropy,
                     account_index,
-                    |p| crate::ui::show_progress(progress_title, p),
+                    progress,
                 );
             drop(c10_sk); // ZeroizeOnDrop wipes the bootstrap secret key.
             super::state::with_state(|s| {
@@ -120,11 +131,11 @@ unsafe fn bootstrap_public_key_for_account(
 /// Callers must hold the non-reentrant NSC handler guard.
 pub(super) unsafe fn wallet_address_for_account(
     account_index: u32,
-    progress_title: &'static str,
+    progress: fn(u8),
 ) -> Result<[u8; ADDR_LEN], NscStatus> {
     // SAFETY: forwarded from this function's contract.
     let (pk_seed, pk_root) = unsafe {
-        bootstrap_public_key_for_account(account_index, progress_title)?
+        bootstrap_public_key_for_account(account_index, progress)?
     };
 
     Ok(crate::aa::eip1271::proxy_address(&pk_seed, &pk_root))
@@ -178,11 +189,11 @@ fn proxy_address_cross_check(
 #[inline(never)]
 unsafe fn wallet_address_for_account_cross_check(
     account_index: u32,
-    progress_title: &'static str,
+    progress: fn(u8),
 ) -> Result<[u8; ADDR_LEN], NscStatus> {
     // SAFETY: forwarded from this function's contract.
     let (pk_seed, pk_root) = unsafe {
-        bootstrap_public_key_for_account(account_index, progress_title)?
+        bootstrap_public_key_for_account(account_index, progress)?
     };
     Ok(proxy_address_cross_check(&pk_seed, &pk_root))
 }
@@ -245,7 +256,7 @@ pub(super) unsafe fn bind_userop_sender(
     // must remain absent if the entire `bl bind_userop_sender` is skipped.
     let mut binding = SenderBinding::fail_closed();
     // SAFETY: forwarded from this function's contract.
-    match unsafe { wallet_address_for_account(account_index, "Wallet check") } {
+    match unsafe { wallet_address_for_account(account_index, wallet_check_progress) } {
         Err(error) => binding.error = error,
         Ok(expected_a) => {
             // Only a mnemonic-derived address can ever be published.
@@ -258,7 +269,7 @@ pub(super) unsafe fn bind_userop_sender(
             crate::fi::wait_random();
             // SAFETY: forwarded from this function's contract.
             match unsafe {
-                wallet_address_for_account_cross_check(account_index, "Wallet check")
+                wallet_address_for_account_cross_check(account_index, wallet_check_progress)
             } {
                 Err(error) => binding.error = error,
                 Ok(expected_b) => {
@@ -377,7 +388,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let was_cached =
         super::state::with_state(|s| s.bootstrap_cache_lookup(account_index)).is_some();
     // SAFETY: `run` holds `HandlerGuard`, satisfying the helper contract.
-    let address = match unsafe { wallet_address_for_account(account_index, "Wallet addr") } {
+    let address = match unsafe { wallet_address_for_account(account_index, wallet_addr_progress) } {
         Ok(address) => address,
         Err(status) => return status as u32,
     };

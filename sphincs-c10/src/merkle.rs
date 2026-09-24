@@ -14,11 +14,17 @@ use crate::wots;
 /// the Merkle tree root using iterative Treehash.
 ///
 /// Stack usage: O(SUBTREE_H * N) = O(192) bytes for the Treehash stack.
+///
+/// Progress: reported every [`REPORT_EVERY`] leaves exactly as in
+/// [`build_subtree_with_auth`] (public leaf counter, percentage only).
 pub fn compute_subtree_root(
     seed: &[u8; 32],
     sk_seed: &[u8; 32],
     layer: u32,
     tree: u64,
+    progress: &crate::hypertree::ProgressSink,
+    pct_lo: u8,
+    pct_hi: u8,
 ) -> [u8; N] {
     let n_leaves = SUBTREE_LEAVES; // 512
     let mut stack = [[0u8; N]; SUBTREE_H + 1]; // 13 entries = 208 bytes
@@ -41,6 +47,12 @@ pub fn compute_subtree_root(
         stack[sp] = node;
         stack_heights[sp] = node_h;
         sp += 1;
+
+        if (kp + 1) % REPORT_EVERY == 0 {
+            let span = u32::from(pct_hi.saturating_sub(pct_lo));
+            let pct = u32::from(pct_lo) + (kp as u32 + 1) * span / n_leaves as u32;
+            crate::hypertree::report(progress, pct as u8);
+        }
     }
 
     debug_assert_eq!(sp, 1);

@@ -25,9 +25,22 @@ use crate::wots;
 ///
 /// Matches Python: `_build_hypertree_d2(seed, sk_seed, subtree_h, cfg)`.
 pub fn compute_pk_root(sk_seed: &[u8; 32], pk_seed: &[u8; N]) -> [u8; N] {
+    compute_pk_root_inner(sk_seed, pk_seed, &progress_none(), 0, 0)
+}
+
+/// Like [`compute_pk_root`] but reports `progress(percent)` every
+/// [`merkle::REPORT_EVERY`] leaves, interpolated from `pct_lo` to `pct_hi`,
+/// so a UI film stays fluid through keygen. Absent under
+/// `--cfg lean_extract` (arrow-typed parameter).
+#[cfg(not(lean_extract))]
+pub fn compute_pk_root_with_progress(sk_seed: &[u8; 32], pk_seed: &[u8; N], progress: fn(u8), pct_lo: u8, pct_hi: u8) -> [u8; N] {
+    compute_pk_root_inner(sk_seed, pk_seed, &ProgressSink(Some(progress)), pct_lo, pct_hi)
+}
+
+fn compute_pk_root_inner(sk_seed: &[u8; 32], pk_seed: &[u8; N], progress: &ProgressSink, pct_lo: u8, pct_hi: u8) -> [u8; N] {
     let seed = pad16(pk_seed);
     // Build subtree at top layer (layer=1, tree=0)
-    merkle::compute_subtree_root(&seed, sk_seed, 1, 0)
+    merkle::compute_subtree_root(&seed, sk_seed, 1, 0, progress, pct_lo, pct_hi)
 }
 
 /// Full SPHINCS+C10 signing.

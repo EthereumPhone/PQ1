@@ -151,3 +151,27 @@ fn debug_does_not_leak_words() {
     assert!(s.contains("redacted"), "Debug must not print word contents");
     assert!(!s.contains("abandon"), "Debug must not print word contents");
 }
+
+// The progress variant (the pixel busy film ticks through the PBKDF2
+// stretch) derives the same seed and reports densely inside its band.
+#[test]
+fn to_seed_with_progress_matches_vectors_and_reports_in_band() {
+    use std::cell::RefCell;
+    thread_local!(static PROG: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) });
+    fn cb(pct: u8) {
+        PROG.with(|v| v.borrow_mut().push(pct));
+    }
+    for (entropy_hex, _, seed_hex) in VECTORS {
+        let entropy: [u8; 32] = hex::decode(entropy_hex).unwrap().try_into().unwrap();
+        let m = Mnemonic::from_entropy(&entropy);
+        PROG.with(|v| v.borrow_mut().clear());
+        let seed = m.to_seed_with_progress("TREZOR", cb, 10, 40);
+        assert_eq!(hex::encode(seed), *seed_hex);
+        assert_eq!(seed, m.to_seed("TREZOR"));
+        let prog: Vec<u8> = PROG.with(|v| v.borrow().clone());
+        assert_eq!(prog.len(), 32, "one report per 64 of the 2048 iterations: {prog:?}");
+        assert_eq!(prog.last().copied(), Some(40));
+        assert!(prog.iter().all(|p| (10..=40).contains(p)), "{prog:?}");
+        assert!(prog.windows(2).all(|w| w[0] <= w[1]), "{prog:?}");
+    }
+}
