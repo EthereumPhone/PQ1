@@ -62,6 +62,11 @@ failure remains explicit. The [shared-oracle honest-error transfer](RAW-PHYSICAL
 terms. Adaptive opening coverage, component forgery extraction and the
 numerical end-to-end forgery bound remain open.
 
+The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
+scope checks and expected proof-driver rejections. An exact theorem-statement
+mismatch does not establish that the altered statement is false or that every
+term in a bound is necessary.
+
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a

@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	c9df582cf29fce12ff9c7d1a31a33c18
+split	45a497ff6ac7dfb7869ed3b84a51469f
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1438,3 +1438,7 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Adds 15 proof modules and 38 controls; cone 371, roots 134,
 # pins 2727, statements 2378, controls 263.
 # No new project axiom, admit or clone assumption. Adaptive EUF remains open.
+
+# 2026-09-24 Control evidence clarification: c9df582cf29fce12ff9c7d1a31a33c18 -> 45a497ff6ac7dfb7869ed3b84a51469f.
+# Manifest comments now distinguish proof rejection from semantic falsity.
+# All proof/control bodies and enrollment inventories are unchanged.
