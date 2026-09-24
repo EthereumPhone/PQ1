@@ -9,7 +9,7 @@
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",
-    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "138301228a311c1885290996c6d7bdb28ab95a5b992194a24bb93100888c2ca6",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "448eac28364e590be609f5a937cf08db6b4f1343313f7202a12472c5883fd9c8",
     "contracts/verification/scripts/run_easycrypt_split.py": "4568d51ccd1e07082c816cb59432759a60fbe879b66fa72fefeb2a1e410f4487",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
@@ -321,6 +321,21 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignerBytes.ec": "bee6bb432bddff0222c6a5e0959a05b0a0fd23c5a49756b2729e8d565d3fd052",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/RawTreeBytes.ec": "c01f9ae1c468869d385ab9b7c63b92784b6e08362bfd7e47cecfca75048d51bd",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWotsBytes.ec": "466eba953934baa3b8eec1a6c4e37ecfeb6c0d88aa8611e6934a13ba29f52ea5",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/SignerEncodingCorrect.ec": "c2bb709f020fdca9ed5dd8c6962afa8d04be5256f81515da0a46d49fdc0c470c"
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/SignerEncodingCorrect.ec": "c2bb709f020fdca9ed5dd8c6962afa8d04be5256f81515da0a46d49fdc0c470c",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/HonestByteContext.ec": "5962469ea03c4076e2d0b97c3df044bed0e25b4657a3f2aea7c48e127d11d6fe",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/HonestByteCost.ec": "a2acdeb0945b3f6f22a04c70aa845c7bb814549649386ef5fe33e9b1b49f217a",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/HonestBytePhysical.ec": "82775fca86f83f21575df80f06c86767262da6c94451abc01ae764760b1a861b",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/MemoNodeCollision.ec": "ead4f802e60f7893d31aeac94e44201737a408fc6144f9736b47dc1098d9a15b",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/NodeCollisionEvents.ec": "1907bce6221955a7c3a82b75c689847852153e73237cbb629b0d38ff462b5edf",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/NodeDistribution.ec": "88bd91c35525125184f7d325b8b194b97e17c0b6ec8eacceb7625ae51c680af6",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ProjectedBirthday.ec": "61abdbaa4b16c8bc533478b84f15a09267a5e638b6c7843c31e6a363d85c14ba",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ProjectedMemoOracle.ec": "92ba7004d673d857ef161582a97ab83d6fc99bf4349eb00b39eb96178b637e45",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/PublicCollisionBound.ec": "4a154e3fae5a631d5bc52abdcb782b481072ab877d4f8c7de4caaeb2e19f5ec8",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/PublicCollisionGame.ec": "4429301a5278a75c07ea1fc88bada6d85518078f62d4b9dc96bb63d822f23c8e",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/BytePublicCollision.ec": "e18b7fa7d2857073a3a3eaa5fc62692142dda547928b3830b0e20f83f637f823",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/PublicCollisionState.ec": "374ee4eafc736013e7b76a5cb81c5b0a2d96453ca6b1a2d9be38624cc7c094d6",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/BytePublicNodeBad.ec": "eb15fbd635b7de65ce8d0f168ae6725d0eaa29cad72297d87b5b5104a481256f",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/PublicNodeZero.ec": "4712270808f4cad2ca4f9f39c9a4122ea7158b7d23d563610da369f3011fae99",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/WotsZeroSentinel.ec": "6b0edf75a6f0c09bbd6e5593df63c200eacc62589155d900a4e692712e403b72"
   }
 }

@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	8094018baa5245a04bd5ab8bbc9fcc16
+split	c9df582cf29fce12ff9c7d1a31a33c18
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1432,4 +1432,9 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 2026-09-24 Complete actual honest signing correctness: 0ffc0d10b386ad36420dc7f39df774dc -> 8094018baa5245a04bd5ab8bbc9fcc16.
 # Adds 90 proof modules and 57 controls; cone 356, roots 122,
 # pins 2672, statements 2329, controls 225.
+# No new project axiom, admit or clone assumption. Adaptive EUF remains open.
+
+# 2026-09-24 Physical honest-error transfer and actual public-node collision charges: 8094018baa5245a04bd5ab8bbc9fcc16 -> c9df582cf29fce12ff9c7d1a31a33c18.
+# Adds 15 proof modules and 38 controls; cone 371, roots 134,
+# pins 2727, statements 2378, controls 263.
 # No new project axiom, admit or clone assumption. Adaptive EUF remains open.

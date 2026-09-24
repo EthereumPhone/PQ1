@@ -2088,3 +2088,22 @@ cdrafts-split/WotsSignCorrect.ec	module:22a94065caf4	RawWotsSignRecover	# line 7
 cdrafts-split/WotsSignWitness.ec	defined-op:e61deadce810	wots_opening	# line 7
 cdrafts-split/WotsSignatureValue.ec	defined-op:0bc73528630a	wots_signature	# line 5
 cdrafts-split/WotsSignatureValue.ec	defined-op:587d0f0ac000	visited_signature	# line 9
+
+# Honest correctness transfer and public collision charges; existing census preserved.
+cdrafts-split/HonestByteContext.ec	module:b4101fe7f55b	HonestByteInputs	# line 7
+cdrafts-split/HonestByteContext.ec	module:cb2a780f7401	HonestByteError	# line 10
+cdrafts-split/HonestByteContext.ec	module:6c6cf4960df9	CheckedByteError	# line 25
+cdrafts-split/HonestByteCost.ec	defined-op:8bd64054869d	honest_byte_public_budget	# line 6
+cdrafts-split/MemoNodeCollision.ec	defined-op:4781b9b194c8	public_node_collision	# line 5
+cdrafts-split/MemoNodeCollision.ec	defined-op:e956eecf810a	nodes_cover	# line 7
+cdrafts-split/MemoNodeCollision.ec	defined-op:e9709ac2a79b	node_table_recorded	# line 9
+cdrafts-split/ProjectedBirthday.ec	module:781e96d01219	ProjectedSamples	# line 6
+cdrafts-split/ProjectedBirthday.ec	module-type:f9b405db7328	ProjectedSampler	# line 16
+cdrafts-split/ProjectedBirthday.ec	module-type:fc3e8e6e5260	ProjectedClient	# line 17
+cdrafts-split/ProjectedBirthday.ec	module:c0f90c9d7227	ProjectedGame	# line 18
+cdrafts-split/ProjectedMemoOracle.ec	defined-op:8252acd9450c	memo_nodes_valid	# line 66
+cdrafts-split/ProjectedMemoOracle.ec	module:0530e3073f30	ProjectedMemo	# line 6
+cdrafts-split/PublicCollisionGame.ec	module:e1094a83f2b4	IndependentNodeCollision	# line 6
+cdrafts-split/PublicCollisionGame.ec	module:5ab9a16c1a3a	PublicDraws	# line 14
+cdrafts-split/PublicNodeZero.ec	defined-op:c38b2bea1a84	public_node_zero	# line 7
+cdrafts-split/PublicNodeZero.ec	module:6083c77db3b1	IndependentNodeZero	# line 29

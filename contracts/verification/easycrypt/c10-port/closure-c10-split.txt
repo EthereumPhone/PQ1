@@ -144,3 +144,17 @@ ActualByteSignerCorrect
 EncodedSignature
 SignerEncodingCorrect
 RawSignerBytes
+
+# Physical honest-byte correctness and public-node collision charges.
+HonestByteContext
+HonestByteCost
+HonestBytePhysical
+NodeDistribution
+ProjectedBirthday
+PublicCollisionBound
+NodeCollisionEvents
+PublicCollisionState
+BytePublicCollision
+PublicNodeZero
+BytePublicNodeBad
+WotsZeroSentinel

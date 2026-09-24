@@ -27,6 +27,10 @@ and the special last FORS tree explicit. The
 [full honest-correctness result](../contracts/verification/easycrypt/c10-port/RAW-BYTE-SIGNER-CORRECTNESS.md)
 now connects actual key generation, complete signing, the exact byte codec
 and verification against the earlier root, with bounded signing failure explicit.
+The [shared-oracle correctness transfer](../contracts/verification/easycrypt/c10-port/RAW-PHYSICAL-HONEST-CORRECTNESS.md)
+now bounds honest byte-error probability. The
+[public-node collision and zero-node charges](../contracts/verification/easycrypt/c10-port/RAW-ZERO-NODE-CHARGE.md)
+apply to the actual byte game while retaining its remaining forgery event.
 Adaptive accumulated opening coverage, the component reduction and numerical
 end-to-end forgery bounds remain open.
 See the
