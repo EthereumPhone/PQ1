@@ -242,7 +242,8 @@ jobs:
             --test draft09_codec_candidates \
             --test draft09_resource_envelope \
             --test draft11_deletion_experiments \
-            --test source_invariants
+            --test source_invariants \
+            --test paired_constants
       # ERC-7730 descriptor catalog gate: (1) the firmware-pinned
       # `ERC7730_DESCRIPTORS_ROOT` in secure/src/db_roots.rs must match a
       # fresh dbgen build — catches a forgotten `cargo run -p dbgen` after a
@@ -343,7 +344,8 @@ jobs:
             --test draft09_codec_candidates \
             --test draft09_resource_envelope \
             --test draft11_deletion_experiments \
-            --test source_invariants
+            --test source_invariants \
+            --test paired_constants
           cargo llvm-cov --locked --no-report -p sphincs-tz-secure \
             --no-default-features \
             --features mock-se,debug-log,ui-semihosting
