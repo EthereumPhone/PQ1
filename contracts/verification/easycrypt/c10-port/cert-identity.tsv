@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	6df326d66261b1b266bbc2688b2ec799
+split	dfffe3f932c98a5ae98c9ae0075d2868
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1447,3 +1447,7 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Adds 13 proof modules and 22 controls; cone 384, roots 142,
 # pins 2772, statements 2417, controls 285. No new project axiom, admit
 # or clone assumption. Verifier counts use full u32; adaptive EUF remains open.
+
+# 2026-09-24 Q17: actual byte-game top-layer extraction. Nine added modules,
+# 19 controls, 24 statement/operator pins; existing assumptions unchanged.
+# Split identity 6df326d66261b1b266bbc2688b2ec799 -> dfffe3f932c98a5ae98c9ae0075d2868.

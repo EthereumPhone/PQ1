@@ -34,6 +34,9 @@ apply to the actual byte game while retaining its remaining forgery event.
 The [reverse WOTS recovery result](../contracts/verification/easycrypt/c10-port/RAW-WOTS-EXTRACTION.md)
 now derives reference chain openings from matching WOTS/layer recovery,
 including actual key-generation and Merkle-builder comparison harnesses.
+The [byte-game top-layer bridge](../contracts/verification/easycrypt/c10-port/RAW-BYTE-TOP-EXTRACTION.md)
+now derives a top reference opening from arbitrary successful complete
+verification after adaptive calls, using the earlier key-generation history.
 Adaptive accumulated opening coverage, the complete byte-game component
 reduction and numerical end-to-end forgery bounds remain open.
 See the

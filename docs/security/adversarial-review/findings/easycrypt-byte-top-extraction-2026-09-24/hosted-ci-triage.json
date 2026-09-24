@@ -1,0 +1,78 @@
+{
+  "candidate": "0feb5137262318961c57b96fc5773cbc72ae0885",
+  "base": "ef9102f8e5c21c14558035306d8dc839420b786c",
+  "overall_ci": "red",
+  "known_failures": {
+    "660": "TRNG ledger anchor missing",
+    "711": "Existing proto receipt drift and locked fuzz Cargo.lock mismatch",
+    "717": "Foundry installer cannot execute binary file"
+  },
+  "failure_evidence": [
+    {
+      "job": "107651777069",
+      "name": "Contracts (forge test)",
+      "existing_issue": 717,
+      "log": "q17-ci-logs/107651777069.log",
+      "sha256": "876cc60a4aa05191ba86f25b7df52e92809d47cee1354848a5444c8995ab85d1"
+    },
+    {
+      "job": "107651777003",
+      "name": "Host unit tests (pure-logic crates)",
+      "existing_issue": 711,
+      "log": "q17-ci-logs/107651777003.log",
+      "sha256": "84dafa0083ddf0ce17ccfbf0aba5c2eece15dc6be9ddf9aab836549264919512"
+    },
+    {
+      "job": "107651776839",
+      "name": "Line coverage (cargo llvm-cov \u2014 report-only baseline)",
+      "existing_issue": 711,
+      "log": "q17-ci-logs/107651776839.log",
+      "sha256": "2a68f507383eb0e6f1d1d970bfb82f508a5fb5728afb2f8404e686df30013632"
+    },
+    {
+      "job": "107651776836",
+      "name": "Slither (contracts static analysis)",
+      "existing_issue": 717,
+      "log": "q17-ci-logs/107651776836.log",
+      "sha256": "daa9045010061500e72d1b0caed68de5c10aa437fc41479d612b48f01e391230"
+    },
+    {
+      "job": "107651776809",
+      "name": "Invariant gates (#5 /",
+      "existing_issue": 660,
+      "log": "q17-ci-logs/107651776809.log",
+      "sha256": "2eef366ecb4b0f183a91cbc2dafddf946e8f9ea7380cc27ae5a650f11545bffc"
+    },
+    {
+      "job": "107651776801",
+      "name": "Production quarantine gates (rollback + ERC-7730 provenance OPEN)",
+      "existing_issue": 711,
+      "log": "q17-ci-logs/107651776801.log",
+      "sha256": "fb9b8fbefdf6fb54627677222e241190b30232010d9ffa01f42117ed533c9fdc"
+    },
+    {
+      "job": "107651776627",
+      "name": "PR",
+      "existing_issue": 711,
+      "log": "q17-ci-logs/107651776627.log",
+      "sha256": "245435c51ad979c670811b03caa317ec81909e9eb0e204a349d0f0f85192e543"
+    }
+  ],
+  "unchanged_baseline_inputs": [
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "proto",
+    "secure/data/erc7730/curations/manifest.json",
+    ".github/workflows"
+  ],
+  "checked_utc": "2026-09-24T13:31:46.866713+00:00",
+  "coordinator_review_required": false,
+  "coordinator_confirmed": true,
+  "source_scope": "Only EasyCrypt proof/enrollment and owner-status files changed.",
+  "coordinator_notes": [
+    "Read all seven failing-job excerpts; they reproduce #660 TRNG ledger anchor drift, #711 proto receipt and locked fuzz lockfile mismatches, and #717 Foundry installer failure. No affected input changed.",
+    "All fifteen jobs completed. Miri, Lean proof/lint/axiom audit, QEMU, firmware linking, G1, secure unit tests, cargo-vet and advisory CI review passed. Overall CI remains red."
+  ]
+}

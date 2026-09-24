@@ -68,6 +68,13 @@ the charged collision/zero events. Actual key-generation and Merkle-builder
 comparison harnesses supply the references. The complete adaptive byte-game
 component reduction and its probability charges remain open.
 
+The [actual byte-game top-layer extraction](RAW-BYTE-TOP-EXTRACTION.md) now
+selects the reference from the earlier key-generation history after arbitrary
+adaptive calls. Successful complete verification yields a top opening tied to
+the message hash and supplied top signature. The remaining forgery event stays
+explicit; lower-layer/FORS extraction and adaptive probability charges remain
+open, and this bridge alone gives no smaller numerical bound.
+
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every

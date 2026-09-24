@@ -420,3 +420,24 @@ scratch/_scope_neg_op_LinearCollision.ec	MUST-FAIL	unknown variable or constant:
 scratch/_scope_neg_op_RecoveryCompression.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_RawRecoveryTrace.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_LayerWotsExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Byte-game top extraction: positives, scope probes and exact mismatches.
+scratch/C10Q17ReferencePositive.ec	MUST-PASS	-
+scratch/C10Q17WithoutIndexRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17WithoutRootWitness.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q17SessionPositive.ec	MUST-PASS	-
+scratch/C10Q17VerifierPositive.ec	MUST-PASS	-
+scratch/C10Q17WithoutSignatureWidth.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17WithoutVerifierRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17DropsCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17DropsZero.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17ByteGamePositive.ec	MUST-PASS	-
+scratch/C10Q17WrongInitialSeed.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17HopPositive.ec	MUST-PASS	-
+scratch/C10Q17DropsPrefixCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17IndexEdgesPositive.ec	MUST-PASS	-
+scratch/_scope_neg_op_RootCoverage.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RootSessionHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_VerifierTopExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteGameTopExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteTopOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

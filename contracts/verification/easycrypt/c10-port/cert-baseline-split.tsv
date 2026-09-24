@@ -2117,3 +2117,8 @@ cdrafts-split/WotsRecoveryTrace.ec	defined-op:57d0417aaa04	recovery_endpoint	# l
 cdrafts-split/WotsRecoveryTrace.ec	defined-op:578feeba3432	recovery_prefix	# line 9
 cdrafts-split/WotsRecoveryTrace.ec	defined-op:29def0cefc32	recovery_elements	# line 13
 cdrafts-split/WotsRecoveryTrace.ec	defined-op:101830981509	recovery_leaf_input	# line 15
+
+# Complete byte-game top-layer extraction; existing census preserved.
+cdrafts-split/SessionTopExtraction.ec	defined-op:0d4840863b4e	new_message_top_opening	# line 7
+cdrafts-split/TopVerifierOpening.ec	defined-op:3054edcdc5bb	top_layer_opening	# line 8
+cdrafts-split/TopVerifierOpening.ec	defined-op:f4d915b969e7	verified_top_opening	# line 13
