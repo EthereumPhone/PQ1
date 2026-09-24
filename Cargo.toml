@@ -51,6 +51,11 @@ members = [
     # no_std, no heap. Companion ships compiled IR + Merkle proof in a
     # trailer on every sign; this crate parses & binds it.
     "pqsigner-erc7730",
+    # Pixel trusted-UI substrate: 256-byte printable-ASCII `Screen` transcript
+    # records, the design tier fitter, fixed-point motion, the two-button
+    # input grammar and the strip rasteriser for the NV3007. Pure-logic,
+    # no_std, no heap, no unsafe. Feature-gated into `secure` by `ui-px`.
+    "pqsigner-ui-px",
     # Trait-only HAL surface (Rng / Sha256 / Saes / Flash / Otp / Tamp
     # / ConsumptionMask / I2cBus / SpiBus / Buttons / Uart + Platform
     # aggregate + BootStage). Phase 6 PR 1 of the modularity refactor.
@@ -116,6 +121,7 @@ pqsigner-tx-core  = { path = "tx-core" }
 pqsigner-aa       = { path = "aa" }
 pqsigner-domain   = { path = "domain" }
 pqsigner-tx       = { path = "tx" }
+pqsigner-ui-px    = { path = "pqsigner-ui-px" }
 pqsigner-erc7730  = { path = "pqsigner-erc7730" }
 pqsigner-hal      = { path = "hal" }
 sphincs-tz-shared = { path = "shared" }
@@ -171,6 +177,14 @@ opt-level = 3
 
 [profile.release.package.hmac]
 opt-level = 3
+
+# The pixel trusted-UI rasteriser runs per frame on the NV3007. Owner decision
+# 2026-09-23 (port plan § Flash): size over speed for this crate — `s` buys
+# ~8 KB of the A/B slot; the EVT #1 hero sweep measured 8–11 ms render at `3`
+# against a 24 ms frame period, so `s` (~2× slower) still fits the budget.
+# Re-measure with `make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime`.
+[profile.release.package.pqsigner-ui-px]
+opt-level = "s"
 
 # `micromath` provides the f32 sin/cos/sqrt/powf for the `splash-test` animated
 # preview. It is the per-frame hot path there (the nebula noise field alone is

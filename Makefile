@@ -304,7 +304,32 @@ play-hw-lcd:
 	@echo "==> Drive the wizard with the physical buttons; streaming logs (Ctrl-C to quit)..."
 	@python3 tools/wallet_run_hw.py
 
-# §32 P4/P5 interactive UI test — drive JUST the duress-PIN setup dialogs
+.PHONY: play-hw-px
+play-hw-px: ## Interactive NV3007 play with the pixel trusted UI (ui-px), physical buttons
+	@echo "==> Building secure + nonsecure for interactive pixel-UI play (NV3007, ui-px)"
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-lcd,ui-px,stm32u585,dev-testkey,$(BOARD_FEATURE)$(PX_EXTRA_FEATURES)
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features stm32u585,ui-px-atlas,$(BOARD_FEATURE)
+	@arm-none-eabi-size $(SECURE_ELF)
+	@echo "==> Flashing..."
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Drive the flow with the physical buttons; streaming logs (Ctrl-C to quit)..."
+	@python3 tools/wallet_run_hw.py
+
+# Extra features for play-hw-px (e.g. `,ui-px-spi40`).
+PX_EXTRA_FEATURES ?=
+
+
 # on the real OLED. No SE, no provisioning (mock-se + duress-ui-test
 # short-circuits into a dialog loop at boot). Driven by the PHYSICAL
 # perfboard buttons (gpio-buttons: LEFT=PC1/D8, RIGHT=PA8/D9; both = OK,
@@ -410,12 +435,30 @@ flash-hw: build-hw ## Flash + run on real STM32U585 (probe-rs/OpenOCD)
 # pre-sign, all through on-device native decode.
 #
 # Pass → exits 0. Any missing assertion or non-zero status → exits 1.
+# Extra secure-side features for the e2e build (e.g. `,ui-px`). Set by the
+# `e2e-px` alias below; leave empty for the byte-identical legacy run.
+E2E_EXTRA_FEATURES ?=
+# Keep the QEMU semihosting log (default: a deleted mktemp) — e.g.
+# `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px` feeds `tools/ui_screens_export.py
+# --px LOG` (the docs/ui-screens/px/ catalogue).
+E2E_LOG_KEEP ?=
+
+.PHONY: e2e-px
+e2e-px: E2E_EXTRA_FEATURES = ,ui-px
+# Dialogs the suite confirms through the pixel UI: every sign dialog — the
+# Safe routes, every single-UserOp route, each slot-rotation consent, direct
+# CoW, ERC-7730, the off-chain kinds and every batch member + final ask
+# (port steps 1-3).
+E2E_PX_TRANSCRIPTS ?= 0
+e2e-px: E2E_PX_TRANSCRIPTS = 47
+e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — pixel routes print [UI-PX]
+
 e2e: ## Automated unified-sign E2E (QEMU)
 	@echo "==> Building secure + nonsecure with e2e-test feature (QEMU mailbox transport)"
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-semihosting,e2e-test
+			--features mock-se,debug-log,ui-semihosting,e2e-test$(E2E_EXTRA_FEATURES)
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test
@@ -428,7 +471,7 @@ e2e: ## Automated unified-sign E2E (QEMU)
 	@# `e2e-test` cargo feature) so a failed assertion terminates QEMU
 	@# instead of looping forever — without that, this target would
 	@# never return on any test bug.
-	@log=$$(mktemp); \
+	@log=$${E2E_LOG_KEEP:-$$(mktemp)}; \
 	qemu-system-arm \
 		-M mps2-an505 \
 		-monitor null \
@@ -453,6 +496,9 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 2: repeat sign on chain A slot 1" \
 		"\\[NS\\]\\[e2e\\] Scenario 3: rotate to slot 2 on chain A" \
 		"\\[NS\\]\\[e2e\\] Scenario 4: register slot 1 on chain B" \
+		"\\[NS\\]\\[e2e\\] Scenario 4a: zero-value contract call" \
+		"\\[NS\\]\\[e2e\\] Scenario 4b: unknown-token ERC-20 transfer" \
+		"\\[NS\\]\\[e2e\\] Scenario 4c: first deploy with initCode" \
 		"\\[NS\\]\\[e2e\\] Scenario 5: Safe approveHash clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5b: verified function-selector bundle" \
 		"\\[NS\\]\\[e2e\\] Scenario 5v: companion-supplied ERC-20 metadata trailer" \
@@ -474,8 +520,11 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 5m-nested: ERC-7730 nested proof set matches + signs" \
 		"\\[NS\\]\\[e2e\\] Scenario 5m-multi-tail: ERC-7730 two-string tails match + signs" \
 		"\\[NS\\]\\[e2e\\] Scenario 5p: EIP-712 typed sign + binding differential" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-personal: personal_sign off-chain signature" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-raw32: RAW32 off-chain signature" \
 		"\\[NS\\]\\[e2e\\] Scenario 5n: known-call mis-bound descriptor is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5q: Safe-wrapped CoW presign clear-sign" \
+		"\\[NS\\]\\[e2e\\] Scenario 5q-direct: direct CoW order clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5r: safe-wrapped presign without cow_order is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5s: multiSend (approve+presign) safe-wrapped CoW clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5t: multiSend with a delegatecall record is refused" \
@@ -491,45 +540,74 @@ e2e: ## Automated unified-sign E2E (QEMU)
 	done; \
 	names_region=$$(mktemp); \
 	awk '/Scenario 5w:/{capture=1} capture{print} /names bundle verified/{exit}' $$log > $$names_region; \
-	for text in \
-		"+ Uniswap V3 Rou" \
-		" ter" \
-		"0xE59242..861564" \
-		"0.000001 ETH"; do \
+	case "$(E2E_EXTRA_FEATURES)" in \
+		*ui-px*) names_texts="s:Uniswap V3 Router|0xE592427A0AEce92De3E|dee1F18E0157C05861564|0.000001 ETH" ;; \
+		*) names_texts="+ Uniswap V3 Rou| ter|0xE59242..861564|0.000001 ETH" ;; \
+	esac; \
+	IFS='|'; for text in $$names_texts; do \
 		if ! grep -Fq "$$text" $$names_region; then \
 			echo "  MISS  names trailer trusted row: $$text"; \
 			fail=1; \
 		fi; \
-	done; \
+	done; unset IFS; \
 	rm -f $$names_region; \
 	if ! grep -q "\\[ERC-7730\\] matched: chain=31337 contract=0x34343434..34343434 .* nested=true" $$log; then \
 		echo "  MISS  secure nested ERC-7730 dispatch receipt"; fail=1; \
 	fi; \
 	rt_region=$$(mktemp); \
 	awk '/Scenario 5e-rt-erc20:/{capture=1} capture{print} /RT-ERC20 trusted pages complete/{exit}' $$log > $$rt_region; \
-	for text in \
-		"0x1CDD2EaB611126" \
-		"97626F7b4bB0e23D" \
-		"a4FeBF7B7C" \
-		"0xdAC17F958D2ee5" \
-		"23a2206206994597" \
-		"C13D831ec7"; do \
+	case "$(E2E_EXTRA_FEATURES)" in \
+		*ui-px*) rt_texts="0x1CDD2EaB61112697626|F7b4bB0e23Da4FeBF7B7C|0xdAC17F958D2ee523a22|06206994597C13D831ec7" ;; \
+		*) rt_texts="0x1CDD2EaB611126|97626F7b4bB0e23D|a4FeBF7B7C|0xdAC17F958D2ee5|23a2206206994597|C13D831ec7" ;; \
+	esac; \
+	IFS='|'; for text in $$rt_texts; do \
 		if ! grep -Fq "$$text" $$rt_region; then \
 			echo "  MISS  RT-ERC20 trusted row: $$text"; \
 			fail=1; \
 		fi; \
-	done; \
+	done; unset IFS; \
 	if [ $$(grep -Fc "Token contract" $$rt_region) -lt 2 ]; then \
 		echo "  MISS  RT-ERC20 two exact token-identity pages"; fail=1; \
 	fi; \
-	if [ $$(grep -Fc "Amount" $$rt_region) -lt 2 ] || [ $$(grep -Fc "USDT" $$rt_region) -lt 2 ]; then \
+	if [ $$(grep -Fic "Amount" $$rt_region) -lt 2 ] || [ $$(grep -Fc "USDT" $$rt_region) -lt 2 ]; then \
 		echo "  MISS  RT-ERC20 two decoded amount+ticker displays"; fail=1; \
 	fi; \
 	if grep -Fq "Token (UNVERI" $$rt_region || grep -Fq "Approve Safe TX" $$rt_region; then \
 		echo "  FAIL  RT-ERC20 regressed to unverified or Safe-attributed display"; fail=1; \
 	fi; \
 	rm -f $$rt_region; \
-	rm -f $$log; \
+	case "$(E2E_EXTRA_FEATURES)" in *ui-px*) \
+		px_flows=$$(grep -c '^\[UI-PX\] 0000/[0-9a-f]* p0' $$log || true); \
+		if [ "$$px_flows" -eq $(E2E_PX_TRANSCRIPTS) ]; then echo "  PASS  ui-px: $(E2E_PX_TRANSCRIPTS) pixel transcripts (every sign dialog)"; \
+		else echo "  FAIL  ui-px: expected $(E2E_PX_TRANSCRIPTS) pixel transcripts, saw $$px_flows"; fail=1; fi; \
+		for hero in APPROVE EXECUTE SEND CALL TRANSFER UNKNOWN BLIND ROTATE; do \
+			if grep -Eq "^\[UI-PX\] 0000/[0-9a-f]{4} p0 H.* id=$$hero " $$log; then echo "  PASS  ui-px: family hero $$hero"; \
+			else echo "  FAIL  ui-px: no pixel transcript opens with $$hero"; fail=1; fi; \
+		done; \
+		if grep -q '^\[UI-PX\] .* id=DEPLOY ' $$log; then echo "  PASS  ui-px: deployment trailer twin (Scenario 4c)"; \
+		else echo "  FAIL  ui-px: no DEPLOY trailer screen"; fail=1; fi; \
+		for want in 'cap="SIGN COWSWAP[?]"' 'cap="SIGN EIP-1271[?]"' 'cap="SIGN BLIND HASH[?]"' 'id=INTENT ' 'id=BATCH ' 'cap="SIGN [0-9] TXS[?]"' 'id=OFFSIGNR '; do \
+			if grep -Eq "^\[UI-PX\] .* $$want" $$log; then echo "  PASS  ui-px: structured route screen $$want"; \
+			else echo "  FAIL  ui-px: no $$want screen (port step 3)"; fail=1; fi; \
+		done; \
+		legacy=$$(grep -cE '^\[UI-PXR\] [0-9a-f]{4} p[0-9] 4c' $$log || true); \
+		if [ "$$legacy" -eq 0 ]; then echo "  PASS  ui-px: zero Legacy (page-wrapped) records on the pixel routes"; \
+		else echo "  FAIL  ui-px: $$legacy Legacy records on the pixel routes"; fail=1; fi; \
+		short=$$(grep -E '^\[UI-PXR\] ' $$log | awk '{ if (length($$4) != 512) n++ } END { print n+0 }'); \
+		if [ "$$short" -eq 0 ]; then echo "  PASS  ui-px: every [UI-PXR] record is 512 hex characters"; \
+		else echo "  FAIL  ui-px: $$short malformed [UI-PXR] records"; fail=1; fi; \
+		for want in 'id=SPLASH ' 'id=READY ' 'id=SIGNED ' 'id=NOTICE ' 'id=BUSY cap="GENERATING KEYS"'; do \
+			if grep -Eq "^\[UI-PXS\] .* $$want" $$log; then echo "  PASS  ui-px: status screen $$want (port step 4)"; \
+			else echo "  FAIL  ui-px: no $$want status screen (port step 4)"; fail=1; fi; \
+		done; \
+		pages=$$(grep -c -- '^    +----------------+' $$log || true); \
+		if [ "$$pages" -eq 0 ]; then echo "  PASS  ui-px: zero 16x4 text pages in the whole run (port step 4)"; \
+		else echo "  FAIL  ui-px: $$((pages / 2)) 16x4 text pages shown"; fail=1; fi; \
+		badpxs=$$(grep -E '^\[UI-PXSR\] ' $$log | awk '{ if (length($$2) != 512) n++ } END { print n+0 }'); \
+		if [ "$$badpxs" -eq 0 ]; then echo "  PASS  ui-px: every [UI-PXSR] record is 512 hex characters"; \
+		else echo "  FAIL  ui-px: $$badpxs malformed [UI-PXSR] records"; fail=1; fi; \
+		;; esac; \
+	[ -n "$(E2E_LOG_KEEP)" ] || rm -f $$log; \
 	if [ $$fail -eq 0 ]; then \
 		echo "==> e2e: ALL ASSERTIONS PASSED"; \
 		exit 0; \
@@ -2546,7 +2624,7 @@ RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-
 # forbidden set. Independent of the `mode-production` compile fences in
 # nsc/mod.rs: this also catches a release built as `stm32u585,…` WITHOUT
 # mode-production. `make release` depends on it; CI runs it as a fast gate.
-override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key \
+override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key se-lcd-diag dev-dfu \
                  ui-capture bhk-hardcoded-master-key uart-console \
                  boot-pulse sca-trigger erc7730-dev-unattested optiga-reset-oids \
                  erc7730-forced-blind \
@@ -2557,7 +2635,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  se050-crash-safety-e2e se050-admin-extract-attempt-e2e se050-stress \
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e duress-provision-e2e \
-                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe
+                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required
@@ -2730,6 +2808,57 @@ size-report: ## Report secure/NS/FSBL image sizes against their flash/SRAM budge
 	elif [ -f $(FSBL_ELF) ]; then \
 	  arm-none-eabi-size -B $(FSBL_ELF) | awk 'NR==2 { u=$$1+$$2; printf "    fsbl   : %d B of 32768 B legacy bench region (%.1f%%), %d B free\n", u, u*100.0/32768, 32768-u }'; \
 	fi
+
+# Pixel trusted-UI flash-budget gate (docs/ui/pixel-ui-port-plan.md § Flash).
+# Builds the nearest BUILDABLE ship-shaped dual-SE image with `ui-px` linked at
+# A/B slot A and measures its physical span with fwmeasure against the frozen
+# v6 secure-slot span (geometry::SECURE_SLOT_SPAN = 0x72000, stricter than the
+# legacy 464 KB fw-manifest cap), failing under PX_HEADROOM_MIN of headroom
+# (the reserve Phases 2-4 of the port need). Two production features cannot be
+# in the measured set today and are NOT counted: `mode-production` (the
+# OPTIGA_S2_PRODUCTION_BLOCKED fence rejects every mode-production +
+# optiga-trust-m build while S-2 is open) and `rdp2-self-lock` (requires
+# mode-production; secure/src/first_boot/ is ~1.8 kLOC, so budget a few KB for
+# it on top). The two dev fences `legacy-fw-rollback-unsafe` /
+# `erc7730-dev-unattested` are needed to link at all and add no image code.
+# The NS image is measured against geometry::NS_SLOT_SPAN because the pixel
+# atlas lives there (make ui-px-assets, S2 of the port).
+PX_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)
+PX_NS_FEATURES := stm32u585,ui-px-atlas,$(BOARD_FEATURE)
+PX_SECURE_CAP := 466944
+PX_NS_CAP := 499712
+PX_HEADROOM_MIN := 40960
+.PHONY: size-report-px
+size-report-px: VENEERS := $(CURDIR)/target/secure-px/veneers.o
+size-report-px: dev-pubkey-fixture
+size-report-px: ## Ship-shaped dual-SE + ui-px image at slot A vs the v6 slot; fails under 40 KB headroom
+	$(if $(findstring i,$(filter-out --%,$(firstword $(MAKEFLAGS)) $(firstword $(MFLAGS)))),$(error size-report-px refuses make --ignore-errors; a capacity failure must propagate))
+	@grep -q 'pub const SECURE_SLOT_SPAN: u32 = 0x72000;' geometry/src/lib.rs || { echo "size-report-px: PX_SECURE_CAP drifted from geometry::SECURE_SLOT_SPAN"; exit 1; }
+	@grep -q 'pub const NS_SLOT_SPAN: u32 = 0x7A000;' geometry/src/lib.rs || { echo "size-report-px: PX_NS_CAP drifted from geometry::NS_SLOT_SPAN"; exit 1; }
+	@echo "==> size-report-px: secure ($(PX_SHIP_FEATURES),ui-px$(PX_EXTRA_FEATURES)) at slot A"
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) PQSIGNER_SECURE_SLOT=a $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure-px \
+			-p sphincs-tz-secure --no-default-features --features $(PX_SHIP_FEATURES),ui-px$(PX_EXTRA_FEATURES)
+	@echo "==> size-report-px: nonsecure ($(PX_NS_FEATURES))"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure-px \
+			-p sphincs-tz-nonsecure --features $(PX_NS_FEATURES)
+	@report=$$(cargo run --locked --quiet -p fwmeasure -- \
+	  target/secure-px/$(TARGET)/release/sphincs-tz-secure --require-secure-slot 2>&1 >/dev/null) || { \
+	    echo "    secure : FAIL — strict fwmeasure/capacity check rejected the ELF"; printf '%s\n' "$$report" >&2; exit 1; }; \
+	used=$$(printf '%s\n' "$$report" | sed -n 's/^Flash end:.*(\([0-9][0-9]*\) bytes)$$/\1/p'); \
+	case "$$used" in ''|*[!0-9]*) echo "    secure : FAIL — could not parse fwmeasure receipt"; printf '%s\n' "$$report" >&2; exit 1 ;; esac; \
+	arm-none-eabi-size -B target/secure-px/$(TARGET)/release/sphincs-tz-secure | awk 'NR==2 { printf "    secure : text %d  data %d  bss %d\n", $$1, $$2, $$3 }'; \
+	awk -v used="$$used" -v cap="$(PX_SECURE_CAP)" -v min="$(PX_HEADROOM_MIN)" 'BEGIN { \
+	  free=cap-used; \
+	  printf "    secure : %d B physical span of %d B v6 slot (%.1f%%), headroom %d B (gate >= %d B)\n", used, cap, used*100.0/cap, free, min; \
+	  if (free<min) { printf "    secure : FAIL — under %d B headroom for Phases 2-4 of the pixel-UI port\n", min; exit 1 } }'; \
+	arm-none-eabi-size -B target/nonsecure-px/$(TARGET)/release/sphincs-tz-nonsecure | awk -v cap="$(PX_NS_CAP)" -v sram=$(NS_SRAM_CAP) -v min=$(NS_STACK_MIN) 'NR==2 { \
+	  fl=$$1+$$2; st=$$2+$$3; \
+	  printf "    ns     : %d B flash (text+data) of %d B v6 NS slot (%.1f%%); %d B static of %d B SRAM2, %d B left for stack\n", fl, cap, fl*100.0/cap, st, sram, sram-st; \
+	  if (fl>cap) { print "    ns     : FAIL — NS image exceeds the v6 NS slot"; exit 1 } \
+	  if (sram-st<min) { printf "    ns     : FAIL — under %d B stack reserve\n", min; exit 1 } }'; \
+	echo "    note   : mode-production + rdp2-self-lock are not in the measured set (S-2 fence); budget their code separately"
 
 .PHONY: release _release
 # Refusal-only while the rollback implementation is quarantined. Keeping the
@@ -4367,6 +4496,8 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
 	@echo "         + Safe management-op decoder (classify_safe_mgmt: accept => length-exact + selector-match + canonical address words + faithful threshold, reconstructed from original bytes; selector-gating reject + accept/reject controls)"
 	cargo kani -p pqsigner-tx
+	@echo "==> Kani: pixel trusted-UI tier fitter / splitters (total, lossless) + FlowDriver arming"
+	cargo kani -p pqsigner-ui-px
 	@echo "==> Kani: ERC-7730 IR header parser (offset-bounds safety)"
 	@echo "         + TLV param parser (panic/OOB-free over symbolic pool+offset; per-tag width/value soundness: enum_ref/decimals/token/visibility; reject unknown-tag + out-of-range visibility byte)"
 	@echo "         + visibility evaluator (should_render_with_mode total + spec-exact over all (visibility,compact))"
@@ -4534,6 +4665,56 @@ ui-golden:
 # in seconds.
 #   make ui-golden-render               # check vs tests/ui_golden_render_fixtures.json
 #   make ui-golden-render-bless         # re-baseline after an intentional UI change
+# ---------------------------------------------------------------------------
+# Pixel trusted-UI assets (`ui-px`): Aileron glyph atlases + disc marks baked
+# from the vendored PQ-UI design system (tools/pq-ui/, pinned in UPSTREAM.txt).
+# The outputs are committed; `ui-px-assets-check` re-bakes into a temp dir and
+# diffs the manifest so a stale or hand-edited atlas fails CI.
+# The vendored PQ-UI subset itself (tools/pq-ui/, pin in UPSTREAM.txt): re-sync
+# from a local upstream checkout at the pinned commit, or verify that the
+# committed bytes + file set still match MANIFEST.sha256.
+PQ_UI_SRC ?= ../PQ-UI
+.PHONY: pq-ui-sync pq-ui-check
+pq-ui-sync: ## Re-vendor tools/pq-ui/ from $(PQ_UI_SRC) (must be at the UPSTREAM.txt pin)
+	@tools/pq-ui/sync.sh $(PQ_UI_SRC)
+
+pq-ui-check: ## Verify tools/pq-ui/ against MANIFEST.sha256 (bytes + file set)
+	@tools/pq-ui/sync.sh --check
+
+# Design-rule gates for the pixel trusted UI: the vendored PQ-UI tree, the
+# reproducible asset bake, upstream's port_diff over the firmware's motion /
+# input / film constants (recorded deviations in PORT_DEVIATIONS.toml), the
+# crate's own tests (incl. the `check` design-rule checker) and the secure
+# host tests that run the checker over every Safe scenario transcript.
+.PHONY: ui-px-goldens-bless
+ui-px-goldens-bless: ## Re-export every family's scenario transcripts and re-bless their per-frame goldens (review the PNGs first)
+	@UI_PX_EXPORT=1 cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests >/dev/null
+	@UI_PX_BLESS=1 UI_PX_PNG=1 cargo test --locked -p pqsigner-ui-px --test golden safe_flows >/dev/null
+	@ls pqsigner-ui-px/tests/fixtures/*/*.sha | wc -l | xargs -I{} echo "blessed {} transcript goldens (frames under target/ui-px-golden/<family>/)"
+
+.PHONY: pq-ui-port-diff ui-px-check
+pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails on an unrecorded MISMATCH
+	@python3 tools/pq_ui_port_diff.py
+
+ui-px-check: pq-ui-check ui-px-assets-check pq-ui-port-diff ## All pixel-UI design-rule gates (vendored tree, bake, port_diff, checker tests)
+	@cargo test --locked -p pqsigner-ui-px
+	@cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests ui_px_status_map
+
+.PHONY: ui-px-assets ui-px-assets-check
+ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1a, atlas_root.rs + metrics_gen.rs
+	@python3 tools/ui_px_assets.py
+
+ui-px-assets-check: ## Verify the committed ui-px assets (incl. the NS atlas container + pinned root) are reproducible
+	@tmp=$$(mktemp -d); \
+	python3 tools/ui_px_assets.py --out $$tmp --ns-out $$tmp/ns --metrics $$tmp/metrics_gen.rs --root-rs $$tmp/atlas_root.rs >/dev/null && \
+	for f in fonts.bin safe.a4 mainnet.a4 base.a4 eth.a4 blind.a4 rotate.a4 usdc.a4 usdt.a4 dai.a4 cowswap.a4 fprint.a4 manifest.json; do \
+	  cmp -s $$tmp/$$f secure/assets/ui-px/$$f || { echo "ui-px asset drift: $$f (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	done; \
+	cmp -s $$tmp/ns/atlas.pq1a nonsecure/assets/ui-px/atlas.pq1a || { echo "ui-px asset drift: atlas.pq1a (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	cmp -s $$tmp/atlas_root.rs secure/src/ui/px/atlas_root.rs || { echo "ui-px atlas root drift (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	cmp -s $$tmp/metrics_gen.rs pqsigner-ui-px/src/metrics_gen.rs || { echo "ui-px metrics drift (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	rm -rf $$tmp; echo "ui-px assets reproducible"
+
 .PHONY: ui-golden-render ui-golden-render-bless
 ui-golden-render: ## Render UI golden frames + compare to baseline
 	@echo "==> Building secure (ui-golden-render harness) + NS loader payload"

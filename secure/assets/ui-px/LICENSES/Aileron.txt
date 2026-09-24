@@ -1,0 +1,14 @@
+Aileron — Regular and SemiBold (Sora Sagano, dot colon / TipoType)
+
+Licence: CC0 1.0 Universal (public domain dedication),
+https://creativecommons.org/publicdomain/zero/1.0/legalcode
+Upstream distribution: http://dotcolon.net/font/aileron/
+
+The glyph atlases in ../fonts.bin are derived from the OTF files vendored at
+tools/pq-ui/pq1/assets/ (sha256 recorded in ../manifest.json under "inputs").
+CC0 imposes no attribution or redistribution condition; this file exists so
+the provenance of every byte embedded in the firmware is written down.
+
+Note: the upstream PQ-UI repository ships an `OFL.txt` beside these fonts that
+is the SIL Open Font License text for Chakra Petch, an unrelated typeface.
+That file does not apply to Aileron and is not vendored here.

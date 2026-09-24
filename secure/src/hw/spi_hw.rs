@@ -211,9 +211,13 @@ pub fn init() {
     // clean 20 MHz below (this faster clock is splash-preview-only).
     #[cfg(feature = "splash-test")]
     const MBR: u32 = 0b000; // ÷2  → 80 MHz (splash preview, ~13 ms full repaint; HW-validated)
+    // The pixel trusted UI on a production board (no LED load on SCK): ÷4 →
+    // 40 MHz halves the ~48 ms full-frame blit. Opt-in until measured on the EVT.
+    #[cfg(all(feature = "ui-px-spi40", not(feature = "splash-test")))]
+    const MBR: u32 = 0b001; // ÷4  → 40 MHz
     // The `not(ui-lcd)` ÷32 arm that used to sit here was unreachable: this
     // module only compiles under `ui-lcd`.
-    #[cfg(not(feature = "splash-test"))]
+    #[cfg(not(any(feature = "splash-test", feature = "ui-px-spi40")))]
     const MBR: u32 = 0b010; // ÷8  → 20 MHz (NV3007 trusted UI, ~48 ms full repaint)
     REG.spi_cfg1.write((MBR << 28) | 7);
     // ÷8 = 20 MHz (SCK half-period 25 ns = 2.5× the NV3007 10 ns setup/hold).
