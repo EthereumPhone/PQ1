@@ -1,0 +1,24 @@
+Review PQSigner OS for merge of actual byte-game top-layer extraction proofs. Do not launch agents or other models.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-byte-extraction
+Commit: 0feb5137262318961c57b96fc5773cbc72ae0885
+Tree: cf8db39d9c31f53af7ec514196aeeb5514e62cb5
+Compare: ef9102f8e5c21c14558035306d8dc839420b786c..0feb5137262318961c57b96fc5773cbc72ae0885
+
+Focus only on formal-verification correctness:
+1. Every later-selected top-tree index must obtain its WOTS key and reference path from the actual earlier key-generation history, with no new reference-building oracle calls. Check catalogue completeness, node widths and index endpoints.
+2. The root witness must survive all permitted adaptive client hash/sign calls, including failures, under the stated module restrictions. No final-history premise may be silently assumed at call entry.
+3. Complete RawSigner.verify must yield the extraction consequence from its actual two-layer loop. Check digest-derived addresses, exact signature widths, full-u32 WOTS counts, hash-entry persistence, padding injectivity, and both public collision/zero events.
+4. The byte-game transfer must use the same initialized client, original public seed/root and final signed-message guard. The probability hop must retain its successful-forgery residual; the existential lower-tree value alone supplies neither a lower/FORS extraction nor a new numerical probability charge.
+5. Statement/operator/source/census/control enrollment must preserve prior contracts without a new project axiom/admit/clone assumption. Rejected exact applications establish only declared diagnostic behavior, not falsity or premise necessity; positive index examples are not complete-game nonvacuity evidence.
+
+Evidence already green: nine enrolled modules passed 18 repository-only direct/default-interactive checks; 19 controls match declared outcomes (6 positives, 5 scope probes, 8 rejected exact applications). Eleven checker regression groups, static contract and 357-input source binding pass. Inventory: 393 targets, 147 roots, 2796 pins, 2438 statements, 2107 census rows and 304 controls. The unchanged-source full cold two-driver replay is running separately and remains required before landing.
+Non-goals: runtime/API/parameter changes, lower-layer/FORS extraction, private/encoding-event charges or closed numerical EUF, guaranteed signing success, Rust extraction, concrete SHA-256/QROM, hardware/shipment, deferred playbook sweep, optional hardening.
+
+Inspect the exact diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 0feb5137262318961c57b96fc5773cbc72ae0885 / cf8db39d9c31f53af7ec514196aeeb5514e62cb5
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

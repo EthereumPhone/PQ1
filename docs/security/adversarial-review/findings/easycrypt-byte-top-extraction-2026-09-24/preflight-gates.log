@@ -1,0 +1,68 @@
+make: Entering directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-byte-extraction/contracts/verification'
+/usr/bin/python3 -E -S -B easycrypt/c10-port/tools/check_source_binding.py
+OK EasyCrypt manual source binding: 357 inputs (not extraction)
+cd easycrypt/c10-port && /usr/bin/python3 -E -S -B -W ignore::ResourceWarning tools/test_split_contract.py
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 3.544s
+
+OK
+OK EasyCrypt manual source binding: 357 inputs (not extraction)
+cd easycrypt/c10-port && /usr/bin/python3 -E -S -B tools/split_contract.py
+OK   coverage: all 2438 top-level statements across 393 CONE files are pinned (roots 147 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 86 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   scope-probe linkage: 78 headline files <-> 78 registered scope probes (exact bijection)
+OK unique statement pins: 2796
+OK split static contract: 393 files; proof execution not performed
+cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
+### INPUTS_SHA256 dfffe3f932c98a5ae98c9ae0075d2868
+FAIL INPUTS_SHA256 DRIFT: committed 6df326d66261b1b266bbc2688b2ec799, computed dfffe3f932c98a5ae98c9ae0075d2868
+     a certified input or the certification machinery changed;
+     re-baseline deliberately and update cert-identity.tsv in the same commit
+make: *** [Makefile:2223: verify-easycrypt-split-pins] Error 1
+make: Leaving directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-byte-extraction/contracts/verification'
+
+Explicit rebaseline followed by verified identity:
+### INPUTS_SHA256 dfffe3f932c98a5ae98c9ae0075d2868
+OK   INPUTS_SHA256 matches the committed identity
+
+Repository-only focused checks:
+OK ByteGameTopExtraction.ec compile
+OK ByteGameTopExtraction.ec cli
+OK ByteTopOpeningHop.ec compile
+OK ByteTopOpeningHop.ec cli
+OK RootCoverage.ec compile
+OK RootCoverage.ec cli
+OK RootExtractionHistory.ec compile
+OK RootExtractionHistory.ec cli
+OK RootLayerExtraction.ec compile
+OK RootLayerExtraction.ec cli
+OK RootSessionHistory.ec compile
+OK RootSessionHistory.ec cli
+OK SessionTopExtraction.ec compile
+OK SessionTopExtraction.ec cli
+OK TopVerifierOpening.ec compile
+OK TopVerifierOpening.ec cli
+OK VerifierTopExtraction.ec compile
+OK VerifierTopExtraction.ec cli
+OK control C10Q17ReferencePositive.ec MUST-PASS
+OK control C10Q17WithoutIndexRange.ec MUST-FAIL
+OK control C10Q17WithoutRootWitness.ec MUST-FAIL
+OK control C10Q17SessionPositive.ec MUST-PASS
+OK control C10Q17VerifierPositive.ec MUST-PASS
+OK control C10Q17WithoutSignatureWidth.ec MUST-FAIL
+OK control C10Q17WithoutVerifierRoot.ec MUST-FAIL
+OK control C10Q17DropsCollision.ec MUST-FAIL
+OK control C10Q17DropsZero.ec MUST-FAIL
+OK control C10Q17ByteGamePositive.ec MUST-PASS
+OK control C10Q17WrongInitialSeed.ec MUST-FAIL
+OK control C10Q17HopPositive.ec MUST-PASS
+OK control C10Q17DropsPrefixCharge.ec MUST-FAIL
+OK control C10Q17IndexEdgesPositive.ec MUST-PASS
+OK control _scope_neg_op_RootCoverage.ec MUST-FAIL
+OK control _scope_neg_op_RootSessionHistory.ec MUST-FAIL
+OK control _scope_neg_op_VerifierTopExtraction.ec MUST-FAIL
+OK control _scope_neg_op_ByteGameTopExtraction.ec MUST-FAIL
+OK control _scope_neg_op_ByteTopOpeningHop.ec MUST-FAIL
+GREEN: 18 source-matched proof checks and 19 enrolled controls

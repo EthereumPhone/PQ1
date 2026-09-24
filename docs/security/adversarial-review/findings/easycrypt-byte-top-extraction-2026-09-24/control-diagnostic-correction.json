@@ -1,0 +1,6 @@
+{
+  "file": "C10Q17WithoutRootWitness.ec",
+  "reason": "The exact application leaves the removed reference premise as an unclosed goal; no parse or import failure. Corrected the declared diagnostic and reran this unchanged control. No falsity or necessity inference.",
+  "diagnostic": "[by]: cannot close goals",
+  "no_proof_source_change": true
+}

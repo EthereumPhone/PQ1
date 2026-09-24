@@ -1,0 +1,38 @@
+VERDICT: GO
+TARGET: 0feb5137262318961c57b96fc5773cbc72ae0885 / cf8db39d9c31f53af7ec514196aeeb5514e62cb5
+FINDINGS: none
+GAPS: The separate unchanged-source full cold two-driver replay is still required before landing; I compiled and ran nothing myself (source-only review).
+
+I read every changed proof file against the definitions it depends on. Brief notes per focus item:
+
+1. **Reference comes from the actual key-generation history.**
+   - `RootCoverage.root_reference_at` (`RootCoverage.ec:51`) is a pure lemma over `merkle_root_witness`. That witness requires an exact catalogue: `catalog_exact c 512`, so every due node at every level from 0 to 9 is present. It also requires a sound catalogue and a WOTS catalogue.
+   - `RootLayerExtraction.ec:16-29` pulls the leaf and path out as an existential, then applies the existing `raw_layer_extracts_wots_opening`. No oracle calls are added.
+   - Node widths come from `wots_catalog_width` / `node_width`. The index range is 0≤target<512, sibling heights run from 0 to 8, and the root sits at node (9,0).
+
+2. **The root witness survives the adaptive session.**
+   - The invariant only reads `Independent`'s histories, and every hash/derive call just extends them.
+   - The proc-invariant lemmas cover `CompleteSigner`, `FullClient` (restricted from writing `FullSession` and `Independent`) and `PublicVerifier`. The branches for an exhausted budget, invalid input and a failed signature all fall through `if; auto`.
+   - In `VerifierTopExtraction.ec:25`, `h0`/`s0` are captured right after the message-hash call, not at the final state.
+
+3. **The actual two-layer verify loop.**
+   - The loop invariant `idx_tree = signer_tree ht layer` makes layer 1 run on tree 0 with leaf `hypertree_index d0 / 512`.
+   - `layer_width` comes from `signature_width` via `mem_nth`, and it carries the full-u32 WOTS count.
+   - The message-hash entry survives through `extends`, and `pad` is injective (`catIs`). Both the public-collision and public-zero events are kept.
+
+4. **Transfer and probability hop.**
+   - `byte_context_equiv` keeps `res`, the oracle state and the full `FullSession` state. `Independent.init` doesn't touch `KeygenInputs`, so the initial public seed is unchanged. The `!mem signed_messages` guard carries through verify.
+   - The existential `root0` has to equal the key-generation root. That follows from `merkle_root_witness_unique` plus the witness being preserved.
+   - The hop keeps `res` in its residual, and its three charges match `byte_public_node_bad_hop` term for term. The docs say honest signatures also have top openings, so they claim no new numerical bound.
+
+5. **Enrollment and assumptions.** None of the nine files contains an admit, axiom, clone or declare. The counts are consistent:
+
+| Item | Change |
+|---|---|
+| Statements | +21 (2417→2438) |
+| Pins | +24 (21 lemmas + 3 operators; 2772→2796) |
+| Controls | +19 (285→304) |
+| Targets | +9 (384→393) |
+| Roots | +5 (142→147) |
+
+The control rows match the declared outcomes. As you noted, the rejected exact applications and index-edge positives are diagnostic only.
