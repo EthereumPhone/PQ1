@@ -420,6 +420,8 @@ const RDP_LEVEL2: u32 = 0xCC;
 const SECWM1R1_OFF: u32 = 0x50;
 #[cfg(feature = "rdp2-self-lock")]
 const WRP1AR_OFF: u32 = 0x58;
+/// RM0456 §7.9.23 — bank-2 WRP area A. Bank-1 twin is `WRP1AR_OFF` (§7.9.19).
+const WRP2AR_OFF: u32 = 0x68;
 #[cfg(feature = "rdp2-self-lock")]
 const SECWM2R1_OFF: u32 = 0x60;
 
@@ -453,6 +455,20 @@ pub fn secwm2r1_raw() -> u32 {
 pub fn wrp1ar_raw() -> u32 {
     // SAFETY: as `optr_raw`.
     unsafe { RoReg32::new(FLASH + WRP1AR_OFF) }.read()
+}
+
+/// Raw `WRP2AR` (bank-2 FSBL-mirror write-protect span). **Address offset
+/// `0x68`**, RM0456 §7.9.23 "FLASH WPR2 area A address register" — the bank-2
+/// twin of `WRP1AR` at `0x58` (§7.9.19).
+///
+/// Added 2026-09-24: `verify_ship_profile` checked only bank 1, so the FSBL
+/// copy the frozen geometry puts in bank 2 was never verified write-protected
+/// before RDP-2 froze the option bytes for good.
+#[cfg(feature = "rdp2-self-lock")]
+#[must_use]
+pub fn wrp2ar_raw() -> u32 {
+    // SAFETY: as `optr_raw`.
+    unsafe { RoReg32::new(FLASH + WRP2AR_OFF) }.read()
 }
 
 /// Raw OEM-lock status. BENCH-CONFIRM register (FLASH_NSSR vs FLASH_OPTSR) —

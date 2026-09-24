@@ -187,6 +187,7 @@ pub fn run_pre_lock_and_maybe_lock() {
         flash::secwm2r1_raw(),
         flash::secboot_add0_reg(),
         flash::wrp1ar_raw(),
+        flash::wrp2ar_raw(),
         flash::oem_lock_status_raw(),
         &lockdown::SHIP_PROFILE_U585,
     ) {
