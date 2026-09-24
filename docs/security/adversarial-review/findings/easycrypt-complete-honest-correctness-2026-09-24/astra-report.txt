@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: e405562e14fa3d656a3334b5c2959623ff5356ad / f26a20e6d71bc2e6254c7e649db0d278d8f691c2
+FINDINGS: none
+GAPS: Full cold two-driver replay remains required before landing; coordinator must confirm its unchanged-source receipt.
