@@ -74,6 +74,18 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'raw_forest_recovery_recorded',
+    'fors_root_reference_at',
+    'recorded_fors_extracts',
+    'recorded_forest_extracts',
+    'raw_forest_sign_root',
+    'verifier_records_forest',
+    'full_sign_forest_entry',
+    'full_client_forest_preserved',
+    'recorded_verifier_forest_cases',
+    'byte_game_forest_extraction',
+    'byte_forest_opening_hop',
+
     'recorded_layer_extracts',
     'verifier_records_layers',
     'full_sign_subtree_entry',

@@ -66,3 +66,8 @@ rejected exact theorem applications. The additional positive checks persistence
 of a recorded root under history extension. Rejected exact applications show
 only their declared diagnostics, not falsity or premise necessity; the
 positives are not complete-game nonvacuity evidence.
+
+The later [actual FORS bridge](RAW-FOREST-EXTRACTION.md) closes the earlier
+existential-forest connection and conditional FORS extraction gap. It supplies
+actual construction references while preserving missing-reference cases, the
+root-as-secret distinction and the uncharged adaptive exposure boundary.

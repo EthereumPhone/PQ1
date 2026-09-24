@@ -183,3 +183,16 @@ HonestSubtreeMessages
 SubtreeOpeningCases
 ByteGameSubtreeExtraction
 ByteSubtreeOpeningHop
+
+# Linked byte-game forest extraction.
+ForestRecoveryRecord
+ForsRootWitness
+ForsRecordExtraction
+ForestRecordExtraction
+ForestRootRecording
+VerifierForestRecords
+HonestForestMessages
+ForestReferenceHistory
+ForestOpeningCases
+ByteGameForestExtraction
+ByteForestOpeningHop
