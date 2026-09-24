@@ -130,6 +130,11 @@ SOURCES = (
         'RootLayerExtraction', 'RootSessionHistory', 'SessionTopExtraction', 'TopVerifierOpening',
         'VerifierTopExtraction',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'ByteGameSubtreeExtraction', 'ByteSubtreeOpeningHop', 'HonestSubtreeMessages', 'LayerRecordExtraction',
+        'LayerRecoveryRecord', 'LayerReturnedRoot', 'SessionSubtreeExtraction', 'SignerSubtreeReference',
+        'SubtreeOpeningCases', 'VerifierLayerRecords',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

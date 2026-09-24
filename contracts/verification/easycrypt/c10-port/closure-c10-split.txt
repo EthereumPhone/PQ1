@@ -175,3 +175,11 @@ RootSessionHistory
 VerifierTopExtraction
 ByteGameTopExtraction
 ByteTopOpeningHop
+
+# Linked byte-game subtree extraction.
+LayerRecordExtraction
+VerifierLayerRecords
+HonestSubtreeMessages
+SubtreeOpeningCases
+ByteGameSubtreeExtraction
+ByteSubtreeOpeningHop

@@ -37,6 +37,9 @@ including actual key-generation and Merkle-builder comparison harnesses.
 The [byte-game top-layer bridge](../contracts/verification/easycrypt/c10-port/RAW-BYTE-TOP-EXTRACTION.md)
 now derives a top reference opening from arbitrary successful complete
 verification after adaptive calls, using the earlier key-generation history.
+The [subtree bridge](../contracts/verification/easycrypt/c10-port/RAW-SUBTREE-EXTRACTION.md)
+now links both actual verifier layers and separates unrecorded top messages
+from paired WOTS openings, without assigning either case a numerical charge.
 Adaptive accumulated opening coverage, the complete byte-game component
 reduction and numerical end-to-end forgery bounds remain open.
 See the

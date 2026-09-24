@@ -52,3 +52,8 @@ No project axiom, admit, clone assumption, runtime behavior, byte format or
 parameter is added or changed. This remains a manually written classical
 ideal-oracle model. Rust extraction, concrete SHA-256, QROM and production
 assurance remain separate boundaries.
+
+The later [subtree bridge](RAW-SUBTREE-EXTRACTION.md) records both actual
+recovery layers and conditionally descends to the lower WOTS opening. It keeps
+an explicit unrecorded-top-message alternative and supplies no new numerical
+charge; FORS and adaptive coverage remain open.

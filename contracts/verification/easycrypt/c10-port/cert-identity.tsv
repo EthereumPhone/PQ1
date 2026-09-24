@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	dfffe3f932c98a5ae98c9ae0075d2868
+split	7d32af4a46730ea4aa82d37d99387b52
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1451,3 +1451,9 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 2026-09-24 Q17: actual byte-game top-layer extraction. Nine added modules,
 # 19 controls, 24 statement/operator pins; existing assumptions unchanged.
 # Split identity 6df326d66261b1b266bbc2688b2ec799 -> dfffe3f932c98a5ae98c9ae0075d2868.
+
+# Linked subtree extraction, 2026-09-24: 10 checked modules, 21 controls,
+# 403 targets, 153 roots, 2835 pins, 2467 statements, 2117 census rows, 325 controls.
+# No new project axiom/admit/clone assumption. Unrecorded-top and paired-opening
+# residuals remain uncharged; FORS/adaptive/private/encoding obligations stay open.
+# Split identity dfffe3f932c98a5ae98c9ae0075d2868 -> 7d32af4a46730ea4aa82d37d99387b52.
