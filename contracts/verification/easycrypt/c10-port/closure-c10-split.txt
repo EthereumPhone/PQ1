@@ -168,3 +168,10 @@ WotsKeyExtraction
 LayerWotsExtraction
 LayerBuildExtraction
 VerifierWotsReplay
+
+# Complete byte-game top-layer extraction.
+RootCoverage
+RootSessionHistory
+VerifierTopExtraction
+ByteGameTopExtraction
+ByteTopOpeningHop

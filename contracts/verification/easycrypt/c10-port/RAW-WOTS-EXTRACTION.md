@@ -44,10 +44,11 @@ counter outside the signing search range. These small examples establish
 only their stated properties. A negative `exact` diagnostic does not prove
 the altered theorem false or establish that every premise is necessary.
 
-The next obligation is to connect the arbitrary successful byte-game
-forgery to component reference openings, account for openings accumulated
-through later adaptive signing, and charge private preimage/guess and encoding
-events in one initialized game. This result does not bound those events,
+The [byte-game bridge](RAW-BYTE-TOP-EXTRACTION.md) now connects arbitrary
+successful complete verification to a top-layer reference opening from the
+earlier key-generation history. Lower-layer/FORS extraction, accumulated
+adaptive opening coverage, and private preimage/guess and encoding-event
+charges remain open in the initialized game. This result does not bound those events,
 finish the WOTS/FORS forgery reduction, or close the numerical EUF bound.
 Issues #100 and #295 remain open. The model is classical and manually written;
 Rust extraction, concrete SHA-256 and QROM remain separate boundaries.

@@ -125,6 +125,11 @@ SOURCES = (
         'VerifierWotsOpening', 'VerifierWotsReplay', 'WotsKeyExtraction', 'WotsRecoveryHistory',
         'WotsRecoveryTrace',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'ByteGameTopExtraction', 'ByteTopOpeningHop', 'RootCoverage', 'RootExtractionHistory',
+        'RootLayerExtraction', 'RootSessionHistory', 'SessionTopExtraction', 'TopVerifierOpening',
+        'VerifierTopExtraction',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 
