@@ -136,11 +136,21 @@ impl<'a> Font<'a> {
     }
 
     fn tier_at(&self, i: usize) -> Option<Tier<'a>> {
-        let h = self.data.get(FILE_HDR + i * TIER_HDR..FILE_HDR + (i + 1) * TIER_HDR)?;
+        // CHECKED throughout: `tab`, `bmp` and `n_glyphs` are read straight
+        // out of the atlas container, which lives in NON-SECURE flash. The
+        // release profile sets `overflow-checks = true`, so a plain
+        // `tab + n_glyphs * GLYPH_REC` on a 32-bit target is an
+        // attacker-reachable PANIC in the secure world, not a wrap — and a
+        // panic while painting re-enters the panic handler's own paint.
+        // A malformed tier must yield `None` (refuse), never a trap.
+        let h_start = FILE_HDR.checked_add(i.checked_mul(TIER_HDR)?)?;
+        let h_end = h_start.checked_add(TIER_HDR)?;
+        let h = self.data.get(h_start..h_end)?;
         let n_glyphs = h[3];
         let tab = u32::from_le_bytes([h[8], h[9], h[10], h[11]]) as usize;
         let bmp = u32::from_le_bytes([h[12], h[13], h[14], h[15]]) as usize;
-        let table = self.data.get(tab..tab + usize::from(n_glyphs) * GLYPH_REC)?;
+        let tab_end = tab.checked_add(usize::from(n_glyphs).checked_mul(GLYPH_REC)?)?;
+        let table = self.data.get(tab..tab_end)?;
         let bitmap = self.data.get(bmp..)?;
         Some(Tier {
             id: TierId {

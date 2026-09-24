@@ -107,6 +107,26 @@ pub fn atlas_root_proof() -> u32 {
 /// dialog (never a fall-back to unverified glyphs).
 #[inline(never)]
 pub fn verify_atlas() -> Result<AtlasRef, ()> {
+    // Latch the verdict on BOTH outcomes. Before 2026-09-24 only the
+    // `atlas()` miss-path wrote `BOOT_STATE`, so a failure here left a
+    // previously cached `BOOT_OK` standing for ever — and because a
+    // tampered atlas makes THIS function fail, the tamper itself forced
+    // every caller onto the legacy paint, which then rendered through that
+    // stale `BOOT_OK`. Fail-open, in the one place that must fail closed.
+    match verify_atlas_inner() {
+        Ok(a) => {
+            BOOT_STATE.store(BOOT_OK, Ordering::Relaxed);
+            Ok(a)
+        }
+        Err(()) => {
+            BOOT_STATE.store(BOOT_BAD, Ordering::Relaxed);
+            Err(())
+        }
+    }
+}
+
+#[inline(never)]
+fn verify_atlas_inner() -> Result<AtlasRef, ()> {
     crate::fi::scrub_sentinel_register();
     if atlas_root_proof() != crate::fi::OK_SENTINEL {
         return Err(());
@@ -127,24 +147,36 @@ const BOOT_BAD: u8 = 2;
 /// Once-verified verdict for the non-dialog painters.
 static BOOT_STATE: AtomicU8 = AtomicU8::new(BOOT_UNKNOWN);
 
-/// The cached view for status / progress paints: verified on first use
-/// (boot), `None` forever after a failed verification. Dialogs never use
-/// this — they call [`verify_atlas`] fresh and re-prove afterwards.
-pub fn atlas() -> Option<AtlasRef> {
+/// A FRESHLY VERIFIED view — re-hashes the NS window on every call, so the
+/// bytes are the authority rather than a cached verdict. This is what every
+/// paint the user READS AND ACTS ON must use, including `lcd::paint_legacy`,
+/// which is where `ui::confirm`'s pages land under `ui-px`.
+///
+/// Costs one `hash_flash` over `ATLAS_LEN` (75 KB) per call. That is fine
+/// for page-rate paints; it is NOT fine per animation frame — see
+/// [`atlas_film_frame`].
+pub fn atlas_verified() -> Option<AtlasRef> {
+    match verify_atlas() {
+        Ok(a) => Some(a),
+        Err(()) => {
+            secure_log!("[S] UI_PX_ATLAS_BAD: NS atlas window does not match ATLAS_ROOT; pixel dialogs will refuse");
+            None
+        }
+    }
+}
+
+/// The loading film's IN-BETWEEN FRAMES ONLY. Returns a view WITHOUT
+/// re-hashing, so it is sound only inside a window that a successful
+/// [`atlas_verified`] opened (`film_start_with`) and a later one closes
+/// (`film_resolve`) — the same verify-before-and-after bracket the sign
+/// dialogs use. Refused for ever once any verification has failed.
+///
+/// The film is an orbit animation and a fixed caption; it carries nothing
+/// the user authorises. NEVER use this for a paint that does.
+pub fn atlas_film_frame() -> Option<AtlasRef> {
     match BOOT_STATE.load(Ordering::Relaxed) {
         BOOT_OK => Atlas::parse(window()).map(|atlas| AtlasRef { atlas }),
-        BOOT_BAD => None,
-        _ => match verify_atlas() {
-            Ok(a) => {
-                BOOT_STATE.store(BOOT_OK, Ordering::Relaxed);
-                Some(a)
-            }
-            Err(()) => {
-                BOOT_STATE.store(BOOT_BAD, Ordering::Relaxed);
-                secure_log!("[S] UI_PX_ATLAS_BAD: NS atlas window does not match ATLAS_ROOT; pixel dialogs will refuse");
-                None
-            }
-        },
+        _ => None,
     }
 }
 

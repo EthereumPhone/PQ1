@@ -132,6 +132,33 @@ fn after(now: u32, t: u32) -> u32 {
 }
 
 impl InputFsm {
+    /// Start a flow from the CURRENT physical button level instead of from
+    /// "nothing pressed".
+    ///
+    /// [`InputFsm::new`] starts both sides `down: false`, so the very first
+    /// `poll` of a button the user is ALREADY holding reads as a rising
+    /// EDGE. Hold both buttons across a dialog boundary and the fresh FSM
+    /// therefore manufactures `Press`, `Press` -> `overlap` -> `Chord`, and
+    /// on release `ChordClick` — the sign gesture — for a dialog the user
+    /// has not read and whose first frame may not even be painted yet.
+    ///
+    /// Adopting the level here, with the held sides already `consumed`,
+    /// makes the carried-over hold produce nothing but bare `Release`
+    /// events: the `consumed` branch swallows them, `chord_overlap` is
+    /// false so no `ChordClick` follows, and the hold timers skip consumed
+    /// sides. The user must let go and press again inside the new dialog.
+    #[must_use]
+    pub fn resumed(ctx: InputCtx, left_down: bool, right_down: bool) -> Self {
+        let mut f = Self::new(ctx);
+        f.left.down = left_down;
+        f.left.consumed = left_down;
+        f.right.down = right_down;
+        f.right.consumed = right_down;
+        f
+    }
+}
+
+impl InputFsm {
     #[must_use]
     pub const fn new(ctx: InputCtx) -> Self {
         Self {
@@ -377,6 +404,61 @@ mod tests {
         let mut f = InputFsm::new(InputCtx::NAV);
         f.poll(0, false, true);
         assert_eq!(collect(f.poll(TAP_MAX_MS + 1, false, false)), [Gesture::Release(Btn::Right), Gesture::HoldCancel(Btn::Right)]);
+    }
+
+    /// A chord HELD across a dialog boundary must not sign the new dialog.
+    ///
+    /// The negative control is the first half: a fresh `new()` FSM
+    /// reconstructs the presses from the level and DOES emit `ChordClick`,
+    /// which is the bug. If that half ever stops firing, this test has
+    /// stopped discriminating and the `resumed` half proves nothing.
+    #[test]
+    fn a_chord_held_across_a_dialog_boundary_does_not_sign() {
+        // NEGATIVE CONTROL — `new()` manufactures the gesture.
+        let mut naive = InputFsm::new(InputCtx::NAV);
+        let ev = collect(naive.poll(0, true, true));
+        assert_eq!(
+            ev,
+            [Gesture::Press(Btn::Left), Gesture::Chord],
+            "control: a fresh FSM must read a held chord as a fresh press pair"
+        );
+        assert!(
+            collect(naive.poll(100, false, false)).contains(&Gesture::ChordClick),
+            "control: and must then sign on release — this is the bug being fixed"
+        );
+
+        // FIX — adopt the level, so the carried-over hold is inert.
+        let mut fsm = InputFsm::resumed(InputCtx::NAV, true, true);
+        assert!(
+            fsm.poll(0, true, true).is_empty(),
+            "a level already held at entry is not an edge"
+        );
+        // Holding on does not start a hold clock either.
+        assert!(fsm.poll(HOLD_COMMIT_MS + 500, true, true).is_empty());
+        assert!(fsm.hold_progress(HOLD_COMMIT_MS + 500).is_none());
+        // Releasing yields bare releases: no tap, no hold, above all no click.
+        let ev = collect(fsm.poll(HOLD_COMMIT_MS + 600, false, false));
+        assert_eq!(ev, [Gesture::Release(Btn::Left), Gesture::Release(Btn::Right)]);
+        assert!(!ev.contains(&Gesture::ChordClick));
+
+        // A FRESH chord made inside the new dialog still signs normally.
+        // Timestamps stay monotonic and clear of DEBOUNCE_MS: `clamp_now`
+        // would otherwise pin a backward poll to the last edge and the
+        // debounce lockout would swallow the press.
+        let t = HOLD_COMMIT_MS + 600 + DEBOUNCE_MS + 100;
+        assert_eq!(collect(fsm.poll(t, true, true)), [Gesture::Press(Btn::Left), Gesture::Chord]);
+        assert!(collect(fsm.poll(t + DEBOUNCE_MS + 10, false, false)).contains(&Gesture::ChordClick));
+    }
+
+    /// One side held across the boundary, the other free.
+    #[test]
+    fn a_single_button_held_across_a_boundary_is_inert_but_the_other_still_works() {
+        let mut fsm = InputFsm::resumed(InputCtx::NAV, false, true);
+        assert!(fsm.poll(0, false, true).is_empty());
+        // The held right side produces nothing on release.
+        assert_eq!(collect(fsm.poll(50, false, false)), [Gesture::Release(Btn::Right)]);
+        // The untouched left side taps normally.
+        assert_eq!(collect(fsm.poll(50 + DEBOUNCE_MS + 100, true, false)), [Gesture::Press(Btn::Left)]);
     }
 
     #[test]

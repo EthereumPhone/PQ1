@@ -164,7 +164,7 @@ fn progress_film(s: &Screen) -> bool {
             super::lcd::film_tick(0);
             return true;
         }
-        if super::assets::atlas().is_none() {
+        if super::assets::atlas_verified().is_none() {
             return false;
         }
         record(s);

@@ -388,6 +388,21 @@ compile_error!(
         feature = "duress-provision-e2e",
         feature = "pin-gate-e2e",
         feature = "dual-se-multi-unlock-e2e",
+        // Added 2026-09-24 with the ui-px-evt merge. `se-lcd-diag` replaces
+        // normal boot, is terminal, and performs the SAME OPTIGA E140
+        // pairing write a first boot performs — squarely this fence's
+        // subject. `dev-dfu` is worse than destructive: two buttons at
+        // power-up clear nSWBOOT0/nBOOT0 and drop the part into the ROM
+        // USB-DFU bootloader, i.e. a physical-access firmware-replacement
+        // path that bypasses the FSBL measured-boot chain of invariant #10.
+        // Both were in the Makefile's PROD_FORBIDDEN and NOTHING else: a
+        // direct `cargo build --features dev-dfu,mode-production` was
+        // accepted, because the denylist is a Makefile-only barrier.
+        feature = "se-lcd-diag",
+        feature = "dev-dfu",
+        // Frame-time overlay: prints render/blit timings over the trusted
+        // display. Not destructive, but it paints over consent screens.
+        feature = "ui-px-frametime",
     )
 ))]
 compile_error!(

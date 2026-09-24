@@ -407,14 +407,19 @@ fn build_and_present(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, overlay: O
 /// path under `ui-px`, so every status / progress / PIN screen shares the
 /// design's typography).
 ///
-/// Returns `false` when the NS-resident atlas failed its boot verification
-/// (`assets::atlas`), so the caller paints with the legacy glyph blitter
-/// instead — the device stays readable, the pixel dialogs refuse.
+/// Returns `false` when the NS-resident atlas does not hash to
+/// `ATLAS_ROOT`, so the caller paints with the SECURE-RESIDENT glyph
+/// blitter instead — the device stays readable, the pixel dialogs refuse.
+///
+/// This re-verifies on EVERY call (`assets::atlas_verified`), not once at
+/// boot. It has to: `ui::lcd::Display::flush` routes every legacy 16x4
+/// page — `ui::confirm`'s pages among them — through here, so a cached
+/// verdict would let a tampered NS atlas paint a consent screen.
 pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS]) -> bool {
     // Any legacy paint ends a running film (an error status after the
     // sign started, for instance).
     film_abort();
-    let Some(atlas) = assets::atlas() else {
+    let Some(atlas) = assets::atlas_verified() else {
         return false;
     };
     // The legacy glyph blitter may have painted between calls.
@@ -518,7 +523,7 @@ pub fn film_start() {
 /// status record whose disc seeds the qubits and whose caption breathes
 /// over the orbit (GENERATING KEYS, WIPING, …).
 pub fn film_start_with(s: &Screen) {
-    let Some(atlas) = assets::atlas() else {
+    let Some(atlas) = assets::atlas_verified() else {
         return;
     };
     let now = timeout::now();
@@ -552,7 +557,7 @@ pub fn film_tick(_percent: u8) {
     if now.wrapping_sub(*last) < FRAME_PERIOD_MS {
         return;
     }
-    let Some(atlas) = assets::atlas() else {
+    let Some(atlas) = assets::atlas_film_frame() else {
         return;
     };
     anim.step(now);
@@ -566,7 +571,7 @@ pub fn film_tick(_percent: u8) {
 /// film running — play the film-less resolve. Returns when the result has
 /// held `RESULT_HOLD_MS`; the resting frame stays on the glass.
 pub fn film_resolve(e: Ending) {
-    let Some(atlas) = assets::atlas() else {
+    let Some(atlas) = assets::atlas_verified() else {
         film_abort();
         reset_film_look();
         return;
@@ -619,7 +624,7 @@ pub fn show_busy(caption: &[u8]) {
     let s = pqsigner_ui_px::ScreenBuilder::status(b"BUSY", pqsigner_ui_px::Icon::Safe, caption, pqsigner_ui_px::State::Awaiting, pqsigner_ui_px::ResultMark::None)
         .finish()
         .unwrap_or(Screen::BLANK);
-    let Some(atlas) = assets::atlas() else {
+    let Some(atlas) = assets::atlas_verified() else {
         return;
     };
     invalidate_shown();
@@ -724,7 +729,6 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     // otherwise, and the marks likewise.
     let marks = atlas.marks();
     let font = atlas.font();
-    let mut fsm = InputFsm::new(InputCtx::NAV);
     let now = timeout::now();
     let mut anim = Anim::new(&visible[0], 0, now);
     // F14/SCAFI-2: FI-hardened arming flag (complement pair + double read).
@@ -732,6 +736,15 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     // Whatever the panel shows now, the flow's first frame repaints it all.
     invalidate_shown();
     sampling_enable();
+    // Seed the gesture FSM with the buttons' CURRENT level, which
+    // `sampling_enable` just latched into `STABLE_BITS`. A plain
+    // `InputFsm::new` starts from "nothing pressed", so a chord the user is
+    // still holding from the previous dialog reads as a fresh press pair on
+    // the first drain and fires `ChordClick` — the sign gesture — here.
+    // Flushing the ring (`sampling_enable`) does NOT prevent that: the
+    // gesture is reconstructed from the LEVEL, not replayed from the ring.
+    let sb = stable_bits();
+    let mut fsm = InputFsm::resumed(InputCtx::NAV, sb & 1 != 0, sb & 2 != 0);
     // The whole navigation phase is "waiting on physical input" for the
     // watchdog; it does NOT reset the inactivity timer (confirm.rs HIGH-13).
     let _trusted_ui_wait = timeout::TrustedUiWaitGuard::enter();
@@ -746,6 +759,8 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     let mut last_frame_at = now;
 
     let mut painted_idx = usize::MAX;
+    // (screen index, page) most recently handed to `build_and_present`.
+    let mut presented_at: Option<(usize, u8)> = None;
     let result = loop {
         if deadline_expired() {
             break (PxOutcome::DeadlineExpired, crate::fi::FAIL_SENTINEL);
@@ -756,7 +771,16 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         // Arming follows the screen currently shown (kind ∈ {hero, confirm},
         // commit byte double-read, and the consent policy).
         let armed = driver.armed(visible);
-        let sign_ok = armed.sign && (!super::PX_COMMIT_REQUIRES_SEEN_LAST || driver.seen_last());
+        // Arming also requires that THIS screen and page have already been
+        // presented. `build_and_present` sits at the BOTTOM of this loop, so
+        // without the latch an affirmative gesture drained on the first
+        // iteration returns `Signed` before the request's first frame is
+        // ever painted — consent for something the glass never showed.
+        // Navigating disarms for exactly one frame, until the new page lands.
+        let here = (driver.index(), driver.page());
+        let sign_ok = presented_at == Some(here)
+            && armed.sign
+            && (!super::PX_COMMIT_REQUIRES_SEEN_LAST || driver.seen_last());
         if sign_ok {
             commit_armed.set_true();
         } else {
@@ -837,6 +861,7 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         let animating = anim.step(now);
         let overlay = if overlay_len > 0 { Some(&overlay_buf[..overlay_len]) } else { None };
         let cost = build_and_present(&anim, &marks, &font, overlay);
+        presented_at = Some((driver.index(), driver.page()));
         #[cfg(feature = "ui-px-frametime")]
         {
             let t = timeout::now();
