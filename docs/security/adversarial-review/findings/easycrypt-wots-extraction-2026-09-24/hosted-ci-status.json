@@ -1,0 +1,92 @@
+[
+  {
+    "name": "QEMU unified-sign E2E",
+    "status": "completed",
+    "conclusion": "success",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397899"
+  },
+  {
+    "name": "Contracts (forge test)",
+    "status": "completed",
+    "conclusion": "failure",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397863"
+  },
+  {
+    "name": "Host unit tests (pure-logic crates)",
+    "status": "completed",
+    "conclusion": "failure",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397842"
+  },
+  {
+    "name": "Firmware-target gates (FSBL footprint + thumbv8m pair link)",
+    "status": "completed",
+    "conclusion": "success",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397839"
+  },
+  {
+    "name": "Slither (contracts static analysis)",
+    "status": "completed",
+    "conclusion": "failure",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397833"
+  },
+  {
+    "name": "G1 \u2014 gate-enforcement lint (every soundness gate fires on its surface)",
+    "status": "completed",
+    "conclusion": "success",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397805"
+  },
+  {
+    "name": "cargo-vet (dependency audit attestation)",
+    "status": "completed",
+    "conclusion": "success",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397768"
+  },
+  {
+    "name": "Production quarantine gates (rollback + ERC-7730 provenance OPEN)",
+    "status": "completed",
+    "conclusion": "failure",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397751"
+  },
+  {
+    "name": "Invariant gates (#5 /",
+    "status": "completed",
+    "conclusion": "failure",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397723"
+  },
+  {
+    "name": "Miri (UB in host-reachable unsafe)",
+    "status": "completed",
+    "conclusion": "success",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397716"
+  },
+  {
+    "name": "Line coverage (cargo llvm-cov \u2014 report-only baseline)",
+    "status": "completed",
+    "conclusion": "failure",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397690"
+  },
+  {
+    "name": "PR",
+    "status": "completed",
+    "conclusion": "failure",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108889/job/107550397665"
+  },
+  {
+    "name": "Secure-world unit tests (host)",
+    "status": "completed",
+    "conclusion": "success",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108931/job/107550397520"
+  },
+  {
+    "name": "lake build + FV-lints + axiom audit",
+    "status": "completed",
+    "conclusion": "success",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108916/job/107550397319"
+  },
+  {
+    "name": "Claude security review",
+    "status": "completed",
+    "conclusion": "success",
+    "details_url": "https://github.com/EthereumPhone/PQ1/actions/runs/35974108895/job/107550397001"
+  }
+]

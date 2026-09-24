@@ -1,0 +1,24 @@
+Review PQSigner OS for merge of reverse WOTS recovery proofs. Do not launch agents or other models.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-component-extraction
+Commit: 444c1d4aca22d7b676a0b64b4be1fc13881c813d
+Tree: 2cbbf5202001e3c0c8fff788b84d4414c594263e
+Compare: faa06863f908adf14c3f96150dc0fb5e16c6c290..444c1d4aca22d7b676a0b64b4be1fc13881c813d
+
+Focus only on formal-verification correctness:
+1. Recorded chain reversal and compression decomposition use the charged public-node collision event, all 43 digit suffixes including empty ones, exact padded row widths, and retained memoized inputs. Check every range, nth/default and input-injectivity premise.
+2. The trace theorem models the actual RawWots.recover loop and preserves its counter entry, completed suffixes and compression entry. Rejected counts return the zero sentinel; matching a reference zero key must retain the separately charged zero-node event.
+3. The new verifier-opening predicate uses the full u32 counter domain. It must not assume the signer's ten-million search bound. Both reverse extraction and forward replay concern the existing actual recovery procedure and current/extended histories.
+4. The actual Merkle-layer composition retains the reference key/path and intermediate recovery trace. The key-generation leaf and Merkle-builder harnesses must supply those references and justify probability-one termination, without assuming the desired opening or silently changing the game.
+5. Statement/operator/source/census/control enrollment preserves earlier contracts, with no new project axiom/admit/clone assumption. Claims must stay within component comparison: arbitrary complete byte-session forgery extraction, adaptive accumulated openings and their probability charges remain open. Exact-statement mismatch controls do not establish falsity or premise necessity.
+
+Evidence already green: thirteen enrolled modules passed 26 repository-only direct/default-interactive checks. All 22 controls match declared outcomes (5 positives, 8 scope probes, 9 exact-statement mismatches). Eleven checker regression groups, static contract and 348-input source binding pass. Inventory: 384 proof files, 142 roots, 2772 pins, 2417 statements, 2104 census rows, 285 controls. The full cold two-driver replay is running separately and remains required for landing; the coordinator will confirm its unchanged-source receipt without another model turn.
+Non-goals: runtime/API/parameter changes, guaranteed signing success, complete adaptive forgery reduction or numerical EUF, Rust extraction, concrete SHA-256/QROM, hardware/shipment, deferred playbook sweep, optional hardening.
+
+Inspect the exact diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 444c1d4aca22d7b676a0b64b4be1fc13881c813d / 2cbbf5202001e3c0c8fff788b84d4414c594263e
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

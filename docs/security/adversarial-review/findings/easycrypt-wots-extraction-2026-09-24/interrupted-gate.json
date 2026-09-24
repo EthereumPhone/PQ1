@@ -1,0 +1,14 @@
+{
+  "status": "interrupted by host crash; no completed gate evidence",
+  "archive": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q16-interrupted-gate-20260924T101511Z",
+  "prior_started": {
+    "started_utc": "2026-09-24T08:14:40.525423+00:00",
+    "epoch": 1790237680.5254393,
+    "commit": "444c1d4aca22d7b676a0b64b4be1fc13881c813d",
+    "tree": "2cbbf5202001e3c0c8fff788b84d4414c594263e"
+  },
+  "boot_id": "74e0e910-9c9f-4692-a239-4d5411014c43",
+  "source": "444c1d4aca22d7b676a0b64b4be1fc13881c813d",
+  "tree": "2cbbf5202001e3c0c8fff788b84d4414c594263e",
+  "review_reuse": "Both reports and raw artifacts hash-match the completed bounded wave; target unchanged."
+}
