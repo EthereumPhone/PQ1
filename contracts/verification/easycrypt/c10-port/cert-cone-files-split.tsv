@@ -180,6 +180,8 @@ cdrafts-split/IndependentSignerWidth.ec
 cdrafts-split/IndependentWidths.ec
 cdrafts-split/KeygenExhaustion.ec
 cdrafts-split/KeygenPrefixes.ec
+cdrafts-split/LayerBuildExtraction.ec
+cdrafts-split/LayerExtractionHistory.ec
 cdrafts-split/LayerOpeningReplay.ec
 cdrafts-split/LayerPath.ec
 cdrafts-split/LayerPriorRoot.ec
@@ -189,10 +191,12 @@ cdrafts-split/LayerSignCorrect.ec
 cdrafts-split/LayerSignOpening.ec
 cdrafts-split/LayerSignWitness.ec
 cdrafts-split/LayerWitness.ec
+cdrafts-split/LayerWotsExtraction.ec
 cdrafts-split/LayerWotsSign.ec
 cdrafts-split/LeafOriginOracle.ec
 cdrafts-split/LeafOrigins.ec
 cdrafts-split/LinearChain.ec
+cdrafts-split/LinearCollision.ec
 cdrafts-split/LinearOracle.ec
 cdrafts-split/LinearSplit.ec
 cdrafts-split/MemoNodeCollision.ec
@@ -274,6 +278,7 @@ cdrafts-split/RawMerkleRootWitness.ec
 cdrafts-split/RawPathComparison.ec
 cdrafts-split/RawPathReplay.ec
 cdrafts-split/RawRHistory.ec
+cdrafts-split/RawRecoveryTrace.ec
 cdrafts-split/RawSession.ec
 cdrafts-split/RawSessionBound.ec
 cdrafts-split/RawSessionCost.ec
@@ -292,10 +297,13 @@ cdrafts-split/RawWidths.ec
 cdrafts-split/RawWots.ec
 cdrafts-split/RawWotsBytes.ec
 cdrafts-split/RawWotsCost.ec
+cdrafts-split/RawWotsExtraction.ec
 cdrafts-split/RawWotsFill.ec
 cdrafts-split/RawWotsRecovery.ec
 cdrafts-split/RawWotsReference.ec
+cdrafts-split/RecoveryCompression.ec
 cdrafts-split/RecoveryHistory.ec
+cdrafts-split/RecoveryTraceOracle.ec
 cdrafts-split/RoleGrind.ec
 cdrafts-split/RoleGrindCost.ec
 cdrafts-split/RtopCSoundness.ec
@@ -343,6 +351,8 @@ cdrafts-split/TrialAccepted.ec
 cdrafts-split/TrialExpectation.ec
 cdrafts-split/VecDP.ec
 cdrafts-split/VerifierHistory.ec
+cdrafts-split/VerifierWotsOpening.ec
+cdrafts-split/VerifierWotsReplay.ec
 cdrafts-split/WOTS_C_Interactive.ec
 cdrafts-split/WOTS_C_Multi.ec
 cdrafts-split/WOTS_C_Real.ec
@@ -354,9 +364,12 @@ cdrafts-split/WotsChainReference.ec
 cdrafts-split/WotsChainSplit.ec
 cdrafts-split/WotsCountWitness.ec
 cdrafts-split/WotsFillCorrect.ec
+cdrafts-split/WotsKeyExtraction.ec
 cdrafts-split/WotsLeafReference.ec
 cdrafts-split/WotsLegCharged.ec
 cdrafts-split/WotsOpeningRecovery.ec
+cdrafts-split/WotsRecoveryHistory.ec
+cdrafts-split/WotsRecoveryTrace.ec
 cdrafts-split/WotsReference.ec
 cdrafts-split/WotsReferenceOracle.ec
 cdrafts-split/WotsReferenceRoot.ec

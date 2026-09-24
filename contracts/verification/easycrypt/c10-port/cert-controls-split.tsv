@@ -395,3 +395,28 @@ scratch/C10Q15ZeroWitnessPositive.ec	MUST-PASS	-
 scratch/_scope_neg_op_BytePublicNodeBad.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_PublicNodeZero.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_WotsZeroSentinel.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Reverse WOTS recovery controls: positives, scope probes and exact mismatches.
+scratch/C10Q16WotsPositive.ec	MUST-PASS	-
+scratch/C10Q16DropsCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16DropsZero.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WithoutRows.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WithoutReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WrongCounterDomain.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16LayerPositive.ec	MUST-PASS	-
+scratch/C10Q16WithoutTargetBound.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WithoutLayerWidth.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WithoutRootMatch.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16TracePositive.ec	MUST-PASS	-
+scratch/C10Q16ReplayPositive.ec	MUST-PASS	-
+scratch/C10Q16WithoutHistory.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16DomainAndCollisionPositive.ec	MUST-PASS	-
+scratch/_scope_neg_op_RawWotsExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_WotsKeyExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_LayerBuildExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_VerifierWotsReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+scratch/_scope_neg_op_LinearCollision.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RecoveryCompression.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawRecoveryTrace.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_LayerWotsExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

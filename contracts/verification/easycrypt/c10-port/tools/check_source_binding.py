@@ -119,6 +119,12 @@ SOURCES = (
         'PublicCollisionBound', 'PublicCollisionGame', 'BytePublicCollision', 'PublicCollisionState',
         'BytePublicNodeBad', 'PublicNodeZero', 'WotsZeroSentinel',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'LayerBuildExtraction', 'LayerExtractionHistory', 'LayerWotsExtraction', 'LinearCollision',
+        'RawRecoveryTrace', 'RawWotsExtraction', 'RecoveryCompression', 'RecoveryTraceOracle',
+        'VerifierWotsOpening', 'VerifierWotsReplay', 'WotsKeyExtraction', 'WotsRecoveryHistory',
+        'WotsRecoveryTrace',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

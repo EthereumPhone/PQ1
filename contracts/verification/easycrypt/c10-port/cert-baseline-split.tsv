@@ -2107,3 +2107,13 @@ cdrafts-split/PublicCollisionGame.ec	module:e1094a83f2b4	IndependentNodeCollisio
 cdrafts-split/PublicCollisionGame.ec	module:5ab9a16c1a3a	PublicDraws	# line 14
 cdrafts-split/PublicNodeZero.ec	defined-op:c38b2bea1a84	public_node_zero	# line 7
 cdrafts-split/PublicNodeZero.ec	module:6083c77db3b1	IndependentNodeZero	# line 29
+
+# Actual reverse WOTS and Merkle-layer recovery; existing census preserved.
+cdrafts-split/LayerBuildExtraction.ec	module:120deef1fcf4	LayerBuildCompare	# line 7
+cdrafts-split/RawRecoveryTrace.ec	defined-op:59aed94add02	wots_recovery_trace	# line 6
+cdrafts-split/VerifierWotsOpening.ec	defined-op:9e8fd9415e36	wots_verifier_opening	# line 7
+cdrafts-split/WotsKeyExtraction.ec	module:0eb4fe85f13f	WotsKeyCompare	# line 7
+cdrafts-split/WotsRecoveryTrace.ec	defined-op:57d0417aaa04	recovery_endpoint	# line 6
+cdrafts-split/WotsRecoveryTrace.ec	defined-op:578feeba3432	recovery_prefix	# line 9
+cdrafts-split/WotsRecoveryTrace.ec	defined-op:29def0cefc32	recovery_elements	# line 13
+cdrafts-split/WotsRecoveryTrace.ec	defined-op:101830981509	recovery_leaf_input	# line 15
