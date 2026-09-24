@@ -52,7 +52,7 @@ route.
 * **FINDING 1 — the ship-shaped image does not fit, by ~68 KB.** Pre-existing,
   not caused by the merge. This is what the flash-geometry v7 engagement exists
   to solve; see `flash-geometry-v7-2026-09-24.md`.
-* **FINDING 3 — two production ship-fence tests fail on the merged tree.**
+* **FINDING 3 (#754) — two production ship-fence tests fail on the merged tree.**
   `fsbl-tests/tests/rollback_ship_fences.rs` at `:294` and `:443`, one root
   cause: `rng-consumer-audit` sees a raw `rng::fill` in `secure/src/main.rs:1091`
   inside the `se-lcd-diag` screen. The gate scans source TEXT, so a `#[cfg]`-gated
@@ -60,41 +60,82 @@ route.
   ancestry, not the pixel work. Fix: allowlist the call site with the
   justification that `se-lcd-diag` is in `PROD_FORBIDDEN`, or route it through
   the reviewed accessor.
-* **FINDING 5 — CONFIRMED 2026-09-24, WYSIWYS break on the pixel route.** See
-  below.
+* **FINDING 5 (#751) — CONFIRMED end-to-end 2026-09-24, WYSIWYS break on the
+  pixel route.** See below.
 * `seen_last` is a plain `bool` on the pixel path where the legacy path uses
-  `FihBool` — same class as #470.
+  `FihBool` — same class as #470, recorded there as a comment. It became
+  load-bearing when `f1fde83a` turned the consent gate ON: a single-fault flip
+  of that bool now buys exactly the bypass the gate was turned on to prevent.
 
-## FINDING 5, confirmed: the pixel adapter drops rows by matching their text
+## FINDING 5 (#751), confirmed end-to-end: the pixel adapter drops rows by text
 
-Astra reported it and flagged that it had not verified reachability; I then
-reduced it to the adapter and it reproduces.
+Astra reported it and flagged that it had **not** verified reachability. Both
+halves now reproduce.
 
 `erc7730_screens::is_nav_row` classifies a row by its **text**: anything
-beginning `"> "` is taken for the legacy navigation vocabulary, and the field
-loop drops it (`erc7730_screens.rs:333`). The proven page keeps that row and the
-signature commits to it. So a rendered **value** that begins with a chevron is a
-row the user signs but never sees.
+matching the legacy navigation vocabulary is dropped by the field loop
+(`erc7730_screens.rs:333`). The proven page keeps that row and the signature
+commits to it. The vocabulary is not reserved, so a rendered **value** that
+collides with it is a row the user signs but never sees.
 
-Demonstrated by
-`a_data_row_beginning_with_a_chevron_is_dropped_from_the_pixel_transcript` in
-`secure/src/display_under_test/structured_screens_render_pure_tests.rs`, which
-drives the adapter directly: a body page of `NAME` / `> Alice` lifts to a
-transcript with no `Alice` anywhere.
+**Reachable today, with the shipped corpus.** `calldata-celo_accounts.json`
+(Celo Accounts, chain 42220) admits `setName(string name)` with
+`format: "raw"`, `visible: always` — the attacker's string goes straight onto a
+row. `setName("> Alice")` renders:
 
-Why the existing gates miss it: the render-faithfulness differential checks
-every hex run >= 8 and every decimal run >= 2 of the legacy pages against the
-screen text. `"> Alice"` is neither, so alphabetic content is unchecked.
+```
+NAME
 
-A second consequence of the same textual test: `is_confirm_page` is "every row
-empty or nav", so a page whose only content row is `"> Alice"` classifies as a
-**confirm page**.
+7 bytes
+```
 
-**Toward a fix.** Every chevron-prefixed navigation row in the tree is written
-to **row index 3** (`erc20_known.rs`, `erc20_unknown.rs`, `value_transfer.rs`,
-`erc8213.rs`, `forced_blind.rs` — all `pages.buf[p][3]`). So position is a far
-better discriminator than text. The principled fix is structural: the renderer
-knows which rows it emitted as navigation, and the adapter should be told rather
-than guess. The minimum honest fix is to refuse rather than silently drop — a
-display adapter that decides what to show by pattern-matching the text it is
-showing is wrong regardless of which calldata can reach it today.
+The name is gone. `setName("> Alice")` and `setName("> Carol")` differ on the
+trusted display in **exactly one place**, measured by diffing the transcripts:
+
+```
+-0xae284c3e3e2d0a4a1f5032b0ca416b78e50f09f2b5cc00bd08981918faef54a6
++0x88a23209505ecf8de0964aa0db846733e6afdc189a289cfa3ec8513bfc5707b3
+```
+
+That is the ERC-8213 calldata digest. Everything else is byte-identical, so the
+only thing separating two different signed operands on the device is a hash the
+user would have to recompute off-device — blind signing with extra steps, inside
+the flow whose whole purpose is that it is not.
+
+**Wider than the chevron.** Measured: `"vote > next"`, `"ok > sign"`,
+`"R=Confirm"` and `"to confirm"` are all signed and never displayed.
+
+**Why nothing caught it.** The render-faithfulness differential checks every hex
+run >= 8 and decimal run >= 2 of the legacy pages against the screen text.
+`"> Alice"` is neither, so alphabetic content is unchecked. Second consequence of
+the same textual test: `is_confirm_page` is "every row empty or nav", so a page
+whose only content row is `"> Alice"` classifies as a **confirm page**.
+
+**Evidence** — `7099dc48` on `merge/ui-px-evt`, in
+`secure/src/display_under_test/structured_screens_render_pure_tests.rs`. Two
+controls first, without which a failure proves nothing:
+`control_an_ordinary_field_value_reaches_the_pixel_transcript` (the hand-built
+page shape lifts at all) and `control_celo_set_name_reaches_the_pixel_transcript`
+(`setName("Alice")` renders end-to-end through the real descriptor, decoder and
+renderer). Both pass, so the only variable left in the probes is the value's
+text. `measured_two_chevron_names_differ_only_by_the_erc8213_digest` asserts the
+**broken** behaviour, pinning the finding before a fix exists. The four probes
+themselves are `#[ignore]`d so the branch is not red.
+
+**Toward a fix.** Every chevron-prefixed nav row in the tree is written to **row
+index 3** (`erc20_known.rs`, `erc20_unknown.rs`, `value_transfer.rs`,
+`erc8213.rs`, `forced_blind.rs` — all `pages.buf[p][3]`), so position
+discriminates better than text. But position alone is **not** sufficient: the
+confirm-page vocabulary spans several rows and a body page's row 3 can hold
+data. In order of durability: (1) structural — the renderer knows which rows it
+emitted as navigation, so carry that out of the page painter instead of
+re-deriving it downstream; (2) until then, **refuse** rather than silently drop,
+matching the codebase's hard-refuse discipline; (3) widen the differential from
+hex/decimal runs to all non-nav text, which catches the class rather than the
+instance.
+
+**Caveat.** The harness renders the leaf with the `! DEV BUILD / Unattested
+descriptor` banner, because `synth_bundle` synthesises the attestation. The
+field-rendering path is the same one an attested descriptor takes — the control
+proves an ordinary value renders through it — but reachability on a
+production-attested corpus should be confirmed before severity is finalised.

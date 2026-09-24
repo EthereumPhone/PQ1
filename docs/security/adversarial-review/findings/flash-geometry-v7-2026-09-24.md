@@ -122,7 +122,9 @@ change.
 
 ## What is STILL OPEN
 
-v7 cannot be ratified until these are answered. None is a coding task.
+Tracked as **#752**; the factory-sequencing item is **#753**, split out because
+it binds the current geometry too. v7 cannot be ratified until these are
+answered. None is a coding task.
 
 1. **Artifact incompatibility is unspecified.** No geometry digest exists. A
    schema and domain must be chosen and legacy rejection made a blocker across
@@ -134,7 +136,7 @@ v7 cannot be ratified until these are answered. None is a coding task.
 3. **The factory reservation has no owner, format bound, authentication,
    pre-lock failure behaviour or update/wipe preservation rule.** Capacity is
    not authorisation.
-4. **Factory sequencing must state the DFU cutoff.** `SECBOOTADD0` and
+4. **Factory sequencing must state the DFU cutoff (#753).** `SECBOOTADD0` and
    `SWAP_BANK` before `BOOT_LOCK` (RM §7.4.2); SWD verification after. A factory
    `BOOT_LOCK` ends the sealed-EVT ROM-DFU route, so `tools/flash-evt-dfu.sh`
    needs a separate `BOOT_LOCK=0` bench profile.
