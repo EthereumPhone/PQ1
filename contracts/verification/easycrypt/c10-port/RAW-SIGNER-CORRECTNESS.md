@@ -36,11 +36,12 @@ substituted for the retained histories.
 
 This is honest correctness of the structured manual model. The
 [byte-signature result](RAW-BYTE-SIGNER-CORRECTNESS.md) separately proves
-serialization/parsing correctness for the generated signatures. The physical
-prefix-oracle transfer and Rust extraction remain separate boundaries.
+serialization/parsing correctness for the generated signatures. The
+[physical prefix-oracle transfer](RAW-PHYSICAL-HONEST-CORRECTNESS.md) separately
+bounds honest error; Rust extraction remains outside these manual-model results.
 
 It is not an unforgeability theorem. Accumulated adaptive opening coverage,
-component forgery reduction, bad-event probability charges and a meaningful
-numerical end-to-end bound remain open under #100/#295. No concrete SHA-256,
+component forgery reduction and a meaningful numerical end-to-end bound
+remain open under #100/#295. No concrete SHA-256,
 QROM, hardware or production claim follows. The combined owner-triggered
 playbook pass #509 remains deferred.

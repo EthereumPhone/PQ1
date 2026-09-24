@@ -5,6 +5,9 @@
 # the sibling gate RED.  My run-2 remediation broke the fork gate; found by
 # adversarial review, run 3.
 #
+# MUST-FAIL checks the declared proof-driver rejection, not logical falsity of
+# the attempted statement. Exact-term mismatch can also reject a true weaker
+# statement. Evidence classes and limitations: CONTROL-EVIDENCE.md.
 # path	polarity	declared-reason
 scratch/vac_probe_full.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/probe_len46.ec	MUST-FAIL	cannot prove goal (strict)
@@ -349,3 +352,46 @@ scratch/_scope_neg_op_ActualByteSignerCorrect.ec	MUST-FAIL	unknown variable or c
 scratch/_scope_neg_op_EncodedSignature.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_RawSignerBytes.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_SignerEncodingCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Honest correctness transfer and public collision controls.
+# These 38 rows contain 6 positive proof checks, 12 scope rejections,
+# 19 exact-statement mismatches and 1 unfinished proof obligation. None of the
+# negative diagnostics alone proves a charge necessary or an alternative false.
+scratch/C10Q12BoundPositive.ec	MUST-PASS	-
+scratch/C10Q12DropsPrefixCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q12UnderchargedCost.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q12WrongEvent.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_HonestByteContext.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HonestByteCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HonestBytePhysical.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q13BoundPositive.ec	MUST-PASS	-
+scratch/C10Q13ClientsPositive.ec	MUST-PASS	-
+scratch/C10Q13UnderchargedClient.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q13WithoutBudget.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q13WithoutRecording.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q13WrongEvent.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q13WrongProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q13ZeroCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_NodeCollisionEvents.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_NodeDistribution.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ProjectedBirthday.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_PublicCollisionBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q14BoundPositive.ec	MUST-PASS	-
+scratch/C10Q14DropsCapBinding.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14DropsCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14DropsPrefix.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14DropsResidual.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14Undercharged.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14WrongEvent.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_BytePublicCollision.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_PublicCollisionState.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q15BoundPositive.ec	MUST-PASS	-
+scratch/C10Q15DropsResidual.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15DropsZeroCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15SentinelWithoutEvent.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15WithoutBudget.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15WrongProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15ZeroWitnessPositive.ec	MUST-PASS	-
+scratch/_scope_neg_op_BytePublicNodeBad.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_PublicNodeZero.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_WotsZeroSentinel.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

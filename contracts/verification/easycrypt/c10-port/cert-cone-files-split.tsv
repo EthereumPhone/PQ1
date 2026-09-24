@@ -39,6 +39,8 @@ cdrafts-split/BuilderTotality.ec
 cdrafts-split/ByteAudit.ec
 cdrafts-split/ByteBound.ec
 cdrafts-split/ByteHistory.ec
+cdrafts-split/BytePublicCollision.ec
+cdrafts-split/BytePublicNodeBad.ec
 cdrafts-split/ByteReplay.ec
 cdrafts-split/ByteSession.ec
 cdrafts-split/C10AcceptedReduction.ec
@@ -170,6 +172,9 @@ cdrafts-split/GrindTrace.ec
 cdrafts-split/GrindTraceRecorded.ec
 cdrafts-split/GrindTraceReplay.ec
 cdrafts-split/GrindWitness.ec
+cdrafts-split/HonestByteContext.ec
+cdrafts-split/HonestByteCost.ec
+cdrafts-split/HonestBytePhysical.ec
 cdrafts-split/IdealWitness.ec
 cdrafts-split/IndependentSignerWidth.ec
 cdrafts-split/IndependentWidths.ec
@@ -190,6 +195,7 @@ cdrafts-split/LeafOrigins.ec
 cdrafts-split/LinearChain.ec
 cdrafts-split/LinearOracle.ec
 cdrafts-split/LinearSplit.ec
+cdrafts-split/MemoNodeCollision.ec
 cdrafts-split/MerkleBuildWitness.ec
 cdrafts-split/MerkleBuilderComparison.ec
 cdrafts-split/MerkleBuilderPath.ec
@@ -204,6 +210,8 @@ cdrafts-split/MessageHistory.ec
 cdrafts-split/MonotoneHistory.ec
 cdrafts-split/NodeCatalog.ec
 cdrafts-split/NodeCatalogDomain.ec
+cdrafts-split/NodeCollisionEvents.ec
+cdrafts-split/NodeDistribution.ec
 cdrafts-split/NodeGridIndex.ec
 cdrafts-split/NodeGridPath.ec
 cdrafts-split/PathCollision.ec
@@ -225,6 +233,12 @@ cdrafts-split/PreparedFinish.ec
 cdrafts-split/PreparedGrind.ec
 cdrafts-split/PreparedHistory.ec
 cdrafts-split/PreparedRaw.ec
+cdrafts-split/ProjectedBirthday.ec
+cdrafts-split/ProjectedMemoOracle.ec
+cdrafts-split/PublicCollisionBound.ec
+cdrafts-split/PublicCollisionGame.ec
+cdrafts-split/PublicCollisionState.ec
+cdrafts-split/PublicNodeZero.ec
 cdrafts-split/RHistoryOps.ec
 cdrafts-split/RSession.ec
 cdrafts-split/RSessionBound.ec
@@ -351,6 +365,7 @@ cdrafts-split/WotsRootDeterminism.ec
 cdrafts-split/WotsSignCorrect.ec
 cdrafts-split/WotsSignWitness.ec
 cdrafts-split/WotsSignatureValue.ec
+cdrafts-split/WotsZeroSentinel.ec
 cdrafts-split/XMSSMT_C_Scheme.ec
 cdrafts-split/XmssmtCCCharged.ec
 cdrafts-split/XmssmtCC_All.ec

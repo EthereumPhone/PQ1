@@ -1,0 +1,20 @@
+VERDICT: FIX
+TARGET: 8af846fc28832fc88f92bb392936b2d98fa9a17e / 6f69a11e8079c4e09d8fa8f37d897a2058761b95
+FINDINGS:
+- MEDIUM contracts/verification/easycrypt/c10-port/cert-controls-split.tsv:355 — Item 6 says the controls reject missing or stronger terms "for declared semantic reasons," but the reasons they declare are not semantic. 27 of the 28 new non-scope MUST-FAIL rows declare `the given proof-term proves:`. That is EasyCrypt's generic `exact` mismatch between goal and term. It fires on any change to the statement, including a weaker statement that is true, so it adds nothing beyond the statement hashes already pinned.
+  - **Clearest case:** `scratch/C10Q12DropsPrefixCharge.ec` targets `Pr[RealGame(HonestByteError).run() : res] <= 0`. Nothing in the tree refutes that. The control fails only because `physical_honest_byte_error_concrete` has a different type.
+  - **How to falsify:** rerun the same `exact` against a strictly weaker bound that is true, such as `2*30520798*(1/2)^256`. It should fail with the identical message.
+  - **Scope:** 47 of the 174 MUST-FAIL rows before this change already use this reason. This is an overstated claim, not a regression in the proofs. The theorems themselves are sound.
+  - **Controls that do carry semantic weight:** `C10Q13WithoutRecording` (it leaves an unprovable `node_table_recorded` obligation), `C10Q12WrongEvent` (its target is false, since the complementary event has probability close to 1), `C10Q15ZeroWitnessPositive` and `C10Q13ClientsPositive`.
+  - **Smallest fix:** either say "exact-statement mismatch" instead of "semantic" for these rows, or add semantic witnesses. For example, a MUST-PASS lower bound showing two fresh public draws collide with probability at least 2^-128 (from `node_draw_distribution`) would refute `C10Q13WrongProjection`'s 2^-256. `DropsPrefixCharge` then needs a real refutation or a changed label.
+
+Items 1–5 hold as stated:
+- **Honest error:** the event requires a returned wire; a `None` signature is outside it. The independent game's error is exactly 0 by an exact equivalence to `CheckedByteError` plus the existing `actual_byte_signer_correct`. The physical charge comes from the existing same-client prefix hop.
+- **Public cost:** the budget adds up to 30520798: 155135 for keygen, 3·10^7+364892 for signing (grind plus both count searches) and 771 for verification. `Independent.hash` records every call before the cache check, and `derive` never adds to the query count.
+- **Node projection:** the node is a 128-bit projection, and its distribution is proven equal to the uniform 128-bit law. Only fresh public draws are recorded, from empty tables. The memoized-oracle refinement is exact, and a retained collision implies a repeated recorded node.
+- **Byte-game hop:** it uses the same client and state and keeps the collision-free forgery probability as a residual. The charges are Q(Q-1)/2·2^-128, Q·2^-128 and Q·2^-256.
+- **Zero sentinel:** the existing recovery result (invalid sum returns zero) plus the definition of `wots_root` gives a public zero-node event, charged at Q·2^-128. No nonzero premise is added.
+
+Enrollment only adds rows: +49 statements, +6 ops, +55 pins, +38 controls.
+
+GAPS: none

@@ -55,8 +55,17 @@ The [hypertree layer](RAW-LAYER-CORRECTNESS.md),
 [complete structured signer](RAW-SIGNER-CORRECTNESS.md) and
 [serialized signer](RAW-BYTE-SIGNER-CORRECTNESS.md) now have honest correctness
 theorems against the earlier actual key-generation root. Bounded signing
-failure remains explicit. Physical transfer, adaptive opening coverage and
-numerical forgery bounds remain separate obligations.
+failure remains explicit. The [shared-oracle honest-error transfer](RAW-PHYSICAL-HONEST-CORRECTNESS.md),
+[public-node collision bound](RAW-PUBLIC-NODE-COLLISIONS.md),
+[complete byte-game application](RAW-BYTE-PUBLIC-COLLISIONS.md) and
+[zero-sentinel charge](RAW-ZERO-NODE-CHARGE.md) supply explicit probability
+terms. Adaptive opening coverage, component forgery extraction and the
+numerical end-to-end forgery bound remain open.
+
+The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
+scope checks and expected proof-driver rejections. An exact theorem-statement
+mismatch does not establish that the altered statement is false or that every
+term in a bound is necessary.
 
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement

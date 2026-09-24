@@ -1,0 +1,11 @@
+{
+  "utc": "2026-09-24T03:15:38.354649+00:00",
+  "prior_source": "8af846fc28832fc88f92bb392936b2d98fa9a17e",
+  "old_input": "c9df582cf29fce12ff9c7d1a31a33c18",
+  "new_input": "45a497ff6ac7dfb7869ed3b84a51469f",
+  "proof_and_control_sources_unchanged": true,
+  "reused_source_matched_focused_checks": 30,
+  "reused_source_matched_controls": 38,
+  "fresh_static_source_and_regression_checks": true,
+  "fresh_full_cold_gate_required": true
+}

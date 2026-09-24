@@ -32,8 +32,9 @@ the candidate identity.
 The [forest component](RAW-FOREST-CORRECTNESS.md) separately supplies actual
 forest composition. The [complete honest-signing theorem](RAW-BYTE-SIGNER-CORRECTNESS.md)
 now supplies hypertree/full correctness. Adaptive opening coverage, component
-forgery reduction, collision-event charges and numerical end-to-end bounds
-remain separate obligations under #100/#295. There is no new project axiom, admit or clone assumption. The
+forgery reduction and numerical end-to-end bounds remain open under #100/#295.
+The [public collision](RAW-PUBLIC-NODE-COLLISIONS.md) and
+[zero-sentinel](RAW-ZERO-NODE-CHARGE.md) charges have separate checked statements. There is no new project axiom, admit or clone assumption. The
 independent-table intermediate statements are not transferred literally to
 physical Rust by the whole-game prefix hop. No extraction, concrete SHA-256,
 QROM, deployed 96-bit security or production authority is claimed.

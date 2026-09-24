@@ -1,0 +1,8 @@
+{
+  "total": 38,
+  "positive": 6,
+  "scope_negative": 12,
+  "non_scope_negative": 20,
+  "exact_mismatch": 19,
+  "open_obligation": 1
+}

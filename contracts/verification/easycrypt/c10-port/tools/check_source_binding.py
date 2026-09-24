@@ -113,6 +113,12 @@ SOURCES = (
         'RawByteValues', 'RawCompositeBytes', 'RawSignerBytes', 'RawTreeBytes',
         'RawWotsBytes', 'SignerEncodingCorrect',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'HonestByteContext', 'HonestByteCost', 'HonestBytePhysical', 'MemoNodeCollision',
+        'NodeCollisionEvents', 'NodeDistribution', 'ProjectedBirthday', 'ProjectedMemoOracle',
+        'PublicCollisionBound', 'PublicCollisionGame', 'BytePublicCollision', 'PublicCollisionState',
+        'BytePublicNodeBad', 'PublicNodeZero', 'WotsZeroSentinel',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

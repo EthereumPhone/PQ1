@@ -31,8 +31,8 @@ that witness; the verifier reaches the earlier key-generation root.
 ## Boundary
 
 This is a theorem about the independent-oracle manual model and exact codec.
-It is not Rust extraction or a theorem about concrete SHA-256. The physical
-secret-prefix game transfer and adaptive unforgeability reduction remain
-separate obligations. There is no QROM or numerical end-to-end forgery claim.
+It is not Rust extraction or a theorem about concrete SHA-256. The [shared-oracle transfer](RAW-PHYSICAL-HONEST-CORRECTNESS.md) now
+bounds the physical honest-error event. The adaptive unforgeability reduction
+remains separate. There is no QROM or numerical end-to-end forgery claim.
 The broader remaining work is tracked under #100/#295; the owner-triggered
 combined playbook pass #509 stays deferred.
