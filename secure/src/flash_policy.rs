@@ -54,6 +54,57 @@ impl GenericSecureQwAddr {
     }
 }
 
+/// A page proven erasable through the NON-SECURE erase API, carrying the
+/// PHYSICAL BANK it belongs to.
+///
+/// The twin of [`GenericSecurePage`], and it exists for the mirror-image
+/// reason. `erase_ns_page` set `BKER` UNCONDITIONALLY — correct only while
+/// "non-secure page" and "bank 2 page" are the same claim, which they are
+/// under the current geometry and are NOT under one that puts an NS slot in
+/// bank 1. There the failure is worse than the secure-side one: erasing the
+/// INACTIVE bank-1 NS slot would target the bank-2 page of the same number,
+/// i.e. **the NS slot the device is currently running from**, mid-update.
+///
+/// No owner exclusion here, deliberately. The secure twin excludes the
+/// first-boot journal; the NS side has no such page today, and the pages the
+/// frozen registry WOULD protect (the bank-2 FSBL mirror, pages 0..=4) are
+/// currently inside the live NS slot A — the #540 conflict pinned by
+/// `fsbl-tests/tests/geometry_consistency.rs`. Enforcing
+/// `updater_must_preserve` here would break the live NS update; it belongs in
+/// the cutover, and that test says so in its own failure message.
+pub(crate) struct GenericNsPage {
+    page: u32,
+    bank: pqsigner_geometry::Bank,
+}
+
+impl GenericNsPage {
+    /// Validate a BANK-2 non-secure page. Bank 2 is the only bank with
+    /// non-secure pages under the current geometry, so this is the ordinary
+    /// constructor; [`new_in`] is the general form.
+    pub(crate) const fn new(page: u32) -> Option<Self> {
+        Self::new_in(pqsigner_geometry::Bank::Two, page)
+    }
+
+    /// Validate a non-secure page number in an explicit bank.
+    pub(crate) const fn new_in(bank: pqsigner_geometry::Bank, page: u32) -> Option<Self> {
+        if page < PAGE_COUNT {
+            Some(Self { page, bank })
+        } else {
+            None
+        }
+    }
+
+    /// Recover the validated page number for the MMIO driver.
+    pub(crate) const fn get(&self) -> u32 {
+        self.page
+    }
+
+    /// The physical bank. The driver MUST set `BKER` from this.
+    pub(crate) const fn bank(&self) -> pqsigner_geometry::Bank {
+        self.bank
+    }
+}
+
 /// A page proven erasable through the generic secure erase API, carrying the
 /// PHYSICAL BANK it belongs to.
 ///
@@ -196,6 +247,54 @@ mod tests {
             !matches!(a.bank(), Bank::Two) && matches!(b.bank(), Bank::Two),
             "...but distinguishable banks — which is the whole point: erasing \
              bank-2 page 5 must not erase bank-1 page 5 (Manifest A)"
+        );
+    }
+
+    /// The NS page proof carries its bank too — the mirror of
+    /// [`the_page_proof_carries_its_bank`], and the more dangerous half.
+    ///
+    /// `erase_secure_page` without a bank would erase the wrong INACTIVE page.
+    /// `erase_ns_page` without a bank, under a geometry with an NS slot in
+    /// bank 1, would erase the page the device is RUNNING FROM: the updater
+    /// erases the inactive slot, the write lands in the other bank, and that is
+    /// the live NS image. Mid-update, with no valid fallback.
+    #[test]
+    fn the_ns_page_proof_carries_its_bank() {
+        use pqsigner_geometry::Bank;
+
+        // `new` still means bank 2 — the only bank with NS pages today.
+        let p = GenericNsPage::new(63).expect("bank-2 page 63 is erasable");
+        assert_eq!(p.get(), 63);
+        assert!(matches!(p.bank(), Bank::Two), "new() must mean bank 2");
+
+        // Bank 1 is representable, for the geometry that needs it.
+        let q = GenericNsPage::new_in(Bank::One, 120).expect("bank-1 NS page");
+        assert!(matches!(q.bank(), Bank::One));
+
+        // Both banks reject out-of-range pages.
+        assert!(GenericNsPage::new_in(Bank::One, PAGE_COUNT).is_none());
+        assert!(GenericNsPage::new_in(Bank::Two, PAGE_COUNT).is_none());
+
+        // NO owner exclusion here, deliberately — unlike the secure twin, which
+        // excludes the first-boot journal. The pages the frozen registry would
+        // protect (bank-2 0..=4, the FSBL mirror) are currently INSIDE the live
+        // NS slot A, so enforcing `updater_must_preserve` here would break the
+        // live update. That conflict is pinned in
+        // `fsbl-tests/tests/geometry_consistency.rs` instead.
+        assert!(
+            GenericNsPage::new_in(Bank::Two, 0).is_some(),
+            "bank-2 page 0 must stay erasable while the legacy NS slot A starts there"
+        );
+
+        // The discriminating property, stated as the hazard it prevents.
+        let a = GenericNsPage::new_in(Bank::One, 120).unwrap();
+        let b = GenericNsPage::new_in(Bank::Two, 120).unwrap();
+        assert_eq!(a.get(), b.get());
+        assert!(
+            !matches!(a.bank(), Bank::Two) && matches!(b.bank(), Bank::Two),
+            "same page number, distinguishable banks: erasing the INACTIVE bank-1 \
+             NS slot must not erase the bank-2 page of the same number, which \
+             under v7 is the RUNNING NS slot"
         );
     }
 

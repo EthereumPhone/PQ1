@@ -26,7 +26,7 @@
 
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::flash_policy::{self, GenericSecurePage, GenericSecureQwAddr};
+use crate::flash_policy::{self, GenericNsPage, GenericSecurePage, GenericSecureQwAddr};
 use crate::hw::mmio::{Reg32, RoReg32};
 
 // ---------------------------------------------------------------------------
@@ -1136,8 +1136,33 @@ fn clear_errors_ns() {
 /// Erases a non-secure-bank page. Caller must ensure the page is part
 /// of the inactive A/B slot.
 pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
-    assert!(page <= 127, "ns-bank page out of range");
-    let page = page as u32;
+    // SAFETY: forwarded contract. Bank 2 is the only bank with non-secure
+    // pages under the current geometry, so this stays the ordinary entry.
+    unsafe { erase_ns_page_in(pqsigner_geometry::Bank::Two, page) }
+}
+
+/// Erase one non-secure page in an EXPLICIT bank.
+///
+/// `erase_ns_page` used to set `BKER` unconditionally, i.e. always bank 2 —
+/// correct only while "non-secure page" and "bank-2 page" are the same claim.
+/// A geometry that puts an NS slot in bank 1 breaks that equivalence, and the
+/// failure is worse than the secure-side twin's: erasing the INACTIVE bank-1
+/// NS slot would target the bank-2 page of the same number, i.e. the NS slot
+/// the device is currently RUNNING FROM, in the middle of an update.
+///
+/// The bank now comes from a [`GenericNsPage`] proof, so the control-register
+/// write and the caller's intent cannot disagree.
+///
+/// # Safety
+/// Erases a non-secure page. Caller must ensure the page is part of the
+/// INACTIVE A/B slot.
+pub unsafe fn erase_ns_page_in(bank: pqsigner_geometry::Bank, page: u8) -> Result<(), ()> {
+    let proof = GenericNsPage::new_in(bank, page as u32).ok_or(())?;
+    let page = proof.get();
+    let bker = match proof.bank() {
+        pqsigner_geometry::Bank::One => 0,
+        pqsigner_geometry::Bank::Two => BKER,
+    };
 
     // NSCR is reached via the NS alias of the FLASH register block
     // (see `FLASH_NS` at top of file). The single-shot CR write matches
@@ -1147,15 +1172,9 @@ pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
         clear_errors_ns();
         unlock_ns();
 
-        // BKER is UNCONDITIONAL here: every non-secure page is in bank 2 under
-        // the current geometry, so "NS page" and "bank 2" are the same claim.
-        // A geometry that puts an NS slot in BANK 1 (v7 does) breaks that
-        // equivalence — erasing the inactive bank-1 NS slot would target the
-        // bank-2 page of the same number, i.e. the RUNNING NS slot. This must
-        // become bank-aware in the same change that moves an NS slot, exactly
-        // like `erase_secure_page` above. Pinned by
-        // `hw_platform_under_test::pure_tests`.
-        let cr = PER | BKER | (page << PNB_SHIFT) | STRT;
+        // BKER comes from the proof (see `erase_ns_page_in`), not from the
+        // assumption that every NS page is in bank 2.
+        let cr = PER | bker | (page << PNB_SHIFT) | STRT;
         REG.nscr.write(cr);
 
         wait_bsy_ns();

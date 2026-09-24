@@ -1332,13 +1332,29 @@ fn negative_flash_erase_secure_page_inside_interrupt_free() {
 
 #[test]
 fn negative_flash_erase_ns_page_inside_interrupt_free() {
+    // The work moved to `erase_ns_page_in` on 2026-09-24 when the NS erase
+    // gained an explicit bank; `erase_ns_page` is now a thin bank-2 wrapper.
+    // Pin BOTH: the property in the implementation, and that the wrapper stays
+    // a pure delegation so nothing can be smuggled in ahead of it.
     let body = extract_body(
+        FLASH_SRC,
+        "pub unsafe fn erase_ns_page_in(bank: pqsigner_geometry::Bank, page: u8) -> Result<(), ()> {",
+    );
+    assert!(
+        body.contains("cortex_m::interrupt::free"),
+        "erase_ns_page_in MUST run inside cortex_m::interrupt::free"
+    );
+    let wrapper = extract_body(
         FLASH_SRC,
         "pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {",
     );
     assert!(
-        body.contains("cortex_m::interrupt::free"),
-        "erase_ns_page MUST run inside cortex_m::interrupt::free"
+        wrapper.contains("erase_ns_page_in(pqsigner_geometry::Bank::Two, page)"),
+        "erase_ns_page must delegate to the bank-explicit form, not re-implement it"
+    );
+    assert!(
+        !wrapper.contains("REG.nscr.write"),
+        "the thin wrapper must not touch the control register itself"
     );
 }
 
@@ -1400,8 +1416,8 @@ fn negative_flash_bank2_program_erase_invalidate_icache() {
             "unsafe fn write_ns_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {",
         ),
         (
-            "erase_ns_page",
-            "pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {",
+            "erase_ns_page_in",
+            "pub unsafe fn erase_ns_page_in(bank: pqsigner_geometry::Bank, page: u8) -> Result<(), ()> {",
         ),
         (
             "erase_secure_page",
