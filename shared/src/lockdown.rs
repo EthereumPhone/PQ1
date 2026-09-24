@@ -1098,4 +1098,59 @@ mod tests {
         assert_eq!(FSBL_LAST_PAGE_LEGACY, 3);
     }
 
+    /// The EVERY-BOOT tripwire catches a bank swap — including after RDP-2.
+    ///
+    /// This is the most valuable consequence of adding SWAP_BANK to
+    /// `optr_matches_ship`, and it is easy to lose by "simplifying" the
+    /// tripwire's subset later, so it is pinned here rather than left implicit.
+    ///
+    /// Why this specific pairing matters: RM0456 §7.6.2 freezes the option
+    /// bytes at RDP-2 but EXCEPTS `SWAP_BANK`, and §7.4.2 closes that only when
+    /// `TZEN` and `BOOT_LOCK` are both set — and `BOOT_LOCK` is not asserted by
+    /// either shipped profile yet (`ShipProfile::require_boot_lock == false`).
+    /// So on a locked unit today, `SWAP_BANK` is the one option byte an
+    /// attacker with option-byte access could still move, and the FSBL's
+    /// every-boot pass is the only thing that would notice.
+    #[test]
+    fn the_every_boot_tripwire_catches_a_post_lock_bank_swap() {
+        // A well-formed LOCKED unit passes the confirmed subset.
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR_LOCKED, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &LOCKED_PROFILE_U585,
+            ),
+            Ok(()),
+            "control: an honest locked unit must NOT halt every boot"
+        );
+        // The same unit with the banks swapped is rejected.
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR_LOCKED | OPTR_SWAP_BANK, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &LOCKED_PROFILE_U585,
+            ),
+            Err(ObField::SwapBank),
+            "a post-RDP-2 bank swap must be caught on every boot: it is the ONE \
+             option byte §7.6.2 leaves mutable at Level 2, and BOOT_LOCK — which \
+             §7.4.2 would use to close it — is not asserted by either profile yet"
+        );
+        // And in the pre-lock phase too, against the ship profile.
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR | OPTR_SWAP_BANK, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &SHIP_PROFILE_U585,
+            ),
+            Err(ObField::SwapBank),
+        );
+        // The tripwire's documented scope is otherwise unchanged: it still does
+        // NOT cover WRP (that is the `verify_ship_profile` / #46 story).
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &SHIP_PROFILE_U585,
+            ),
+            Ok(()),
+            "adding SWAP_BANK must not have widened the subset into WRP territory"
+        );
+    }
+
 }
