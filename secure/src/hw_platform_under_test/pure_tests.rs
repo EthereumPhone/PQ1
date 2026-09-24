@@ -1869,7 +1869,22 @@ fn negative_page_127_has_no_generic_erase_or_key_storage_owner() {
         FLASH_SRC,
         "pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {",
     );
-    assert!(generic_erase.contains("GenericSecurePage::new(page).ok_or(())?.get()"));
+    // The proof is still the only way in. Split across two lines since
+    // 2026-09-24, when `GenericSecurePage` gained its bank — the driver has to
+    // hold the proof to ask it, so the single-expression form no longer works.
+    assert!(generic_erase.contains("GenericSecurePage::new(page).ok_or(())?"));
+    assert!(generic_erase.contains("let page = proof.get();"));
+    // And the bank must come FROM the proof, not be assumed. Erasing without
+    // consulting it is bank-1-only by construction, which silently erases the
+    // bank-1 twin of any bank-2 page a future geometry introduces.
+    assert!(
+        generic_erase.contains("match proof.bank()"),
+        "erase_secure_page must take BKER from the page proof, not assume bank 1"
+    );
+    assert!(
+        generic_erase.contains("PER | bker | (page << PNB_SHIFT)"),
+        "the computed BKER must reach the control-register write"
+    );
 
     let journal_write = extract_body(
         FLASH_SRC,

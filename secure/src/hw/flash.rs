@@ -1147,6 +1147,14 @@ pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
         clear_errors_ns();
         unlock_ns();
 
+        // BKER is UNCONDITIONAL here: every non-secure page is in bank 2 under
+        // the current geometry, so "NS page" and "bank 2" are the same claim.
+        // A geometry that puts an NS slot in BANK 1 (v7 does) breaks that
+        // equivalence — erasing the inactive bank-1 NS slot would target the
+        // bank-2 page of the same number, i.e. the RUNNING NS slot. This must
+        // become bank-aware in the same change that moves an NS slot, exactly
+        // like `erase_secure_page` above. Pinned by
+        // `hw_platform_under_test::pure_tests`.
         let cr = PER | BKER | (page << PNB_SHIFT) | STRT;
         REG.nscr.write(cr);
 
@@ -1280,13 +1288,25 @@ pub unsafe fn write_ns_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(
 pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {
     // The proof constructor fails closed for page 127 and every out-of-range
     // value before the flash controller is unlocked or any MMIO write occurs.
-    let page = GenericSecurePage::new(page).ok_or(())?.get();
+    let proof = GenericSecurePage::new(page).ok_or(())?;
+    let page = proof.get();
+    // BKER selects the bank for a page erase. This used to be omitted
+    // entirely, i.e. hard-wired to bank 1 — correct only while every secure
+    // page lives in bank 1, and silently catastrophic under a geometry that
+    // puts a secure slot in bank 2: a bank-2 page number would erase the
+    // BANK-1 page of the same number (the manifests, slot A, or the
+    // per-device pages). The bank now comes from the proof, so the two cannot
+    // disagree.
+    let bker = match proof.bank() {
+        pqsigner_geometry::Bank::One => 0,
+        pqsigner_geometry::Bank::Two => BKER,
+    };
     cortex_m::interrupt::free(|_| {
         wait_bsy();
         clear_errors();
         unlock();
 
-        let cr = PER | (page << PNB_SHIFT);
+        let cr = PER | bker | (page << PNB_SHIFT);
         REG.seccr.write(cr);
         REG.seccr.write(cr | STRT);
 
