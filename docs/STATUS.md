@@ -20,6 +20,13 @@ node-collision events. The
 [actual construction results](../contracts/verification/easycrypt/c10-port/RAW-BUILDER-PATHS.md)
 supply the reference witnesses and actual FORS secret provenance, and prove
 signing/recovery equality to the tree root computed during signing.
+The [WOTS component](../contracts/verification/easycrypt/c10-port/RAW-WOTS-CORRECTNESS.md)
+and [complete FORS forest](../contracts/verification/easycrypt/c10-port/RAW-FOREST-CORRECTNESS.md)
+now have actual sign/recover correctness proofs, with bounded WOTS failure
+and the special last FORS tree explicit. The
+[full honest-correctness result](../contracts/verification/easycrypt/c10-port/RAW-BYTE-SIGNER-CORRECTNESS.md)
+now connects actual key generation, complete signing, the exact byte codec
+and verification against the earlier root, with bounded signing failure explicit.
 Adaptive accumulated opening coverage, the component reduction and numerical
 end-to-end forgery bounds remain open.
 See the

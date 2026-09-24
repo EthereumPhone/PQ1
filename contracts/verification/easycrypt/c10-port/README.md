@@ -48,8 +48,15 @@ a recorded node collision, under explicit width and reference premises.
 The [actual construction results](RAW-BUILDER-PATHS.md) now supply those
 reference witnesses from the real stack, authentication capture and leaf-hash
 calls. Actual FORS signing/recovery agrees with its internally computed root.
-WOTS, the special FORS tree, full composition and adaptive opening coverage
-remain open.
+The [actual WOTS](RAW-WOTS-CORRECTNESS.md) and
+[complete FORS forest](RAW-FOREST-CORRECTNESS.md) results supply component
+sign/recover correctness, including count failure and the special last tree.
+The [hypertree layer](RAW-LAYER-CORRECTNESS.md),
+[complete structured signer](RAW-SIGNER-CORRECTNESS.md) and
+[serialized signer](RAW-BYTE-SIGNER-CORRECTNESS.md) now have honest correctness
+theorems against the earlier actual key-generation root. Bounded signing
+failure remains explicit. Physical transfer, adaptive opening coverage and
+numerical forgery bounds remain separate obligations.
 
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement

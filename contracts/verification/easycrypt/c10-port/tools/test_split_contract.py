@@ -133,38 +133,39 @@ class ContractTests(unittest.TestCase):
     def test_shuffle_u16_magnitude_exception_is_source_and_path_exact(self):
         port = Path(__file__).resolve().parents[1]
         checker = port / 'tools/policy_cap_fence.py'
-        original = (port / 'cdrafts-split/RawShuffle.ec').read_text()
         fenced = (port / 'cdrafts-split/C10DeployedScope.ec').read_text()
         manifest = (port / 'cert-quarantine-split.tsv').read_text()
-        variants = {
-            'unmodified arithmetic': ('RawShuffle.ec', original, True),
-            'policy appended': ('RawShuffle.ec', original + '\nop policy_limit = 65536.\n', False),
-            'arithmetic changed': ('RawShuffle.ec', original.replace('hi*256', 'hi*257'), False),
-            'copied to another file': ('Other.ec', original, False),
-            'alternate policy spelling': ('RawShuffle.ec', original + '\nop policy_limit = 2^16.\n', False),
-            'whole-file substitution': ('RawShuffle.ec', 'op policy_limit = 65536.\n', False),
-        }
-        for name, (filename, source, expected) in variants.items():
-            with self.subTest(name=name), fixture() as root:
-                (root / 'cdrafts-split').mkdir()
-                (root / 'cdrafts-split/C10DeployedScope.ec').write_text(fenced)
-                (root / 'cert-quarantine-split.tsv').write_text(manifest)
-                (root / 'cdrafts-split' / filename).write_text(source)
-                result = subprocess.run([sys.executable, str(checker)],
-                                        text=True, capture_output=True, timeout=20)
-                self.assertEqual(result.returncode == 0, expected, result.stdout + result.stderr)
-                if not expected:
+        for source_name in ('RawShuffle.ec', 'RawShufflePermutation.ec', 'ShuffleBytes.ec'):
+            original = (port / 'cdrafts-split' / source_name).read_text()
+            variants = {
+                'unmodified arithmetic': (source_name, original, True),
+                'policy appended': (source_name, original + '\nop policy_limit = 65536.\n', False),
+                'arithmetic changed': (source_name, original.replace('65536', '(65536 + 1)', 1), False),
+                'copied to another file': ('Other.ec', original, False),
+                'alternate policy spelling': (source_name, original + '\nop policy_limit = 2^16.\n', False),
+                'whole-file substitution': (source_name, 'op policy_limit = 65536.\n', False),
+            }
+            for name, (filename, source, expected) in variants.items():
+                with self.subTest(source=source_name, name=name), fixture() as root:
+                    (root / 'cdrafts-split').mkdir()
+                    (root / 'cdrafts-split/C10DeployedScope.ec').write_text(fenced)
+                    (root / 'cert-quarantine-split.tsv').write_text(manifest)
+                    (root / 'cdrafts-split' / filename).write_text(source)
+                    result = subprocess.run([sys.executable, str(checker)],
+                                            text=True, capture_output=True, timeout=20)
+                    self.assertEqual(result.returncode == 0, expected, result.stdout + result.stderr)
+                    if not expected:
+                        self.assertIn('FENCE Q5 deployment magnitude', result.stdout)
+                    # Even the exact shuffle exception cannot conceal another file's policy.
+                    (root / 'cdrafts-split/Policy.ec').write_text('op policy_limit = 65536.\n')
+                    result = subprocess.run([sys.executable, str(checker)],
+                                            text=True, capture_output=True, timeout=20)
+                    self.assertNotEqual(result.returncode, 0)
                     self.assertIn('FENCE Q5 deployment magnitude', result.stdout)
-                # Even the exact shuffle exception cannot conceal another file's policy.
-                (root / 'cdrafts-split/Policy.ec').write_text('op policy_limit = 65536.\n')
-                result = subprocess.run([sys.executable, str(checker)],
-                                        text=True, capture_output=True, timeout=20)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn('FENCE Q5 deployment magnitude', result.stdout)
 
     def test_targets_cover_pinned_dependencies_in_order(self):
         targets = gate.targets()
-        self.assertEqual(len(targets), 266)
+        self.assertEqual(len(targets), 356)
         self.assertEqual(set(targets), set(gate.rows('cert-cone-files-split.tsv')))
         self.assertIn('base-c10-split/HashAddresses.eca', targets)
         for i, p in enumerate(targets):

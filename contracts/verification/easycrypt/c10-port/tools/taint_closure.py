@@ -74,6 +74,27 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'total_actual_wots_correct',
+    'total_raw_leaf_recorded',
+    'raw_shuffle_permutation',
+    'raw_wots_recovers_reference',
+    'raw_wots_invalid_sum_sentinel',
+    'total_actual_forest_correct',
+    'forest_sign_recorded',
+    'forest_recover_witness',
+    'total_actual_layer_correct',
+    'total_keygen_root_recorded',
+    'total_merkle_build_wots_path',
+    'total_layer_sign_matches_builder',
+    'total_actual_signer_correct',
+    'raw_signer_complete_opening',
+    'raw_verify_opening',
+    'raw_finish_recorded',
+    'total_actual_byte_signer_correct',
+    'signature_encoding_roundtrip',
+    'actual_signed_encoding',
+    'raw_signer_bytes',
+
     'merkle_build_root_projection',
     'total_merkle_build_reference',
     'total_fors_tree_reference',
