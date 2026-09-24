@@ -914,3 +914,51 @@ fn pixel_sign_gesture_requires_every_screen_to_have_been_displayed() {
          a counter reached the end, not that the user was shown anything"
     );
 }
+
+/// The pixel atlas is located from the SAME constant the secure world boots
+/// the NS image from. If one moves and the other does not, every pixel dialog
+/// fails closed — or worse, hashes the wrong window and passes.
+///
+/// Not a defect today, and deliberately not "fixed": `ui::px::assets::ns_image_base`
+/// returns `crate::NS_FLASH_BASE` because the whole secure world is slot-A-only
+/// (there is no `running_slot()`, `boot_ns::boot` takes the same constant, and
+/// `secure/build.rs` accepts only `PQSIGNER_SECURE_SLOT=a`). Rewriting the
+/// atlas base to `slot_ns_addr(running_slot())` alone would imply a concept
+/// that does not exist anywhere else.
+///
+/// What CAN go wrong now is divergence: the #540 cutover moves the NS slots,
+/// someone updates the boot path, and the atlas keeps pointing at the old
+/// address. The atlas is a WYSIWYS input verified against a pinned hash, so a
+/// wrong window means "hash mismatch → every pixel dialog refuses" on a good
+/// unit. This pin makes the two move together or fail.
+#[test]
+fn the_px_atlas_base_tracks_the_ns_boot_base() {
+    let assets = code_only(&read_workspace_file("secure/src/ui/px/assets.rs"));
+    let main_rs = code_only(&read_workspace_file("secure/src/main.rs"));
+
+    assert!(
+        assets.contains("fn ns_image_base() -> u32 {") && assets.contains("crate::NS_FLASH_BASE"),
+        "the atlas must locate its window from NS_FLASH_BASE, not a literal"
+    );
+    assert!(
+        !assets.contains("0x0810_0000") && !assets.contains("0x08100000"),
+        "the atlas base must never hard-code the NS flash address — that is the \
+         divergence this pin exists to prevent"
+    );
+    assert!(
+        main_rs.contains("boot_ns::boot(NS_FLASH_BASE)"),
+        "the secure world must boot NS from the same constant the atlas is \
+         located from; if this moved to a slot-derived address, the atlas base \
+         must move in the SAME commit (#540)"
+    );
+    // The offset within the slot is the linker's, and must agree with it.
+    assert!(
+        assets.contains("pub const ATLAS_SLOT_OFFSET: u32 = 0x1000;"),
+        "atlas offset must stay the value nonsecure/memory-stm32u585-px.x reserves"
+    );
+    let ld = read_workspace_file("nonsecure/memory-stm32u585-px.x");
+    assert!(
+        ld.contains("_pq1a_start = ORIGIN(FLASH) + 0x1000;"),
+        "the NS linker script must place .pq1a at the offset assets.rs assumes"
+    );
+}
