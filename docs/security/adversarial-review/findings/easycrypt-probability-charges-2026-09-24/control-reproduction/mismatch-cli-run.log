@@ -1,0 +1,54 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+Current goal
+
+Type variables: <none>
+
+&m: {}
+------------------------------------------------------------------------
+Pr[RealGame(HonestByteError).run() @ &m : res] <=
+30520798%r * (1%r / 2%r) ^ 256 + 1%r
+[5|check]>
+Current goal
+
+Type variables: <none>
+
+&m: {}
+------------------------------------------------------------------------
+Pr[RealGame(HonestByteError).run() @ &m : res] <=
+30520798%r * (1%r / 2%r) ^ 256 + 1%r
+[6|check]>
+<tty>: line 7 (7-54): the given proof-term proves:
+                      
+                        Pr[RealGame(HonestByteError).run() @ &m : res] <=
+                        30520798%r * (1%r / 2%r) ^ 256
+                      
+                      it does not apply to the goal
+                      
+                      
+
+
+[6|check]>
+[6|check]>
+Current goal
+
+Type variables: <none>
+
+&m: {}
+------------------------------------------------------------------------
+<tty>: line 7 (55-59): cannot save an incomplete proof
+
+Pr[RealGame(HonestByteError).run() @ &m : res] <=
+30520798%r * (1%r / 2%r) ^ 256 + 1%r

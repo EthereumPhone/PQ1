@@ -1,0 +1,44 @@
+VERDICT: GO
+TARGET: a25c9122ac294bea966ac9ac7b909dc3dfb39514 / d6b72bea2152c135c0de37e9d78c2e0b535c7e77
+FINDINGS: none
+GAPS: none
+
+I didn't run the prover or the gate. This verdict rests on reading the diff and its callers, plus your green evidence. Landing still needs the cold two-driver replay receipt. The target tree is still clean.
+
+1. **Honest-error event.** `HonestByteContext.ec:22` returns `wire<>None /\ (!byte_signature (oget wire) \/ !verified)`.
+   - `wire` is `None` exactly when signing returns `None`, so a failed signing attempt is outside the event.
+   - `byte_signature` means exactly 4008 bytes, each a valid byte (`ByteSession.ec:8`).
+   - Verification uses `pad root` from the earlier keygen call.
+   - The equivalence to `ActualByteSignerConstruction` is exact (`HonestByteContext.ec:34-48`). With `actual_byte_signer_correct`, the independent-game error is 0.
+   - `physical_to_independent` (`PrefixIdeal.ec:23`) is the same-client prefix hop. It takes the cost Hoare from empty queries.
+
+2. **Public cost.** The pieces add up: keygen root 155135 + signing `3*signing_budget+364892` + verification 771 = `3*signing_budget+520798`. With `signing_budget = 10000000` that is 30520798.
+   - The signing term covers the grind plus both layer count searches.
+   - `Independent.hash` logs every call, cached ones included (`PrefixGuess.ec:23`). `derive` logs nothing, so private calls are never counted as public ones.
+
+3. **Node projection.** `node d = compact_r d` for 256-bit `d`, which keeps the last 128 bits (`drop 128`). The exact distribution equality and the per-point and history mass bounds are proved.
+   - `ProjectedMemo` samples only on fresh public inputs, starts from empty tables, and keeps `size nodes <= size queries`.
+   - `node_table_insert` keeps the invariant, and a collision in the retained table implies a repeated node.
+   - The refinement is a pointwise equivalence against `Independent`.
+   - The birthday bound applies `fel` to the event `size nodes <= q /\ !uniq nodes`.
+   - The context cannot touch `Independent`, `ProjectedMemo` or `ProjectedSamples`.
+
+4. **Budgets and byte-session hop.** There are two birthday versions: a generic one (`PublicCollisionBound`) and one tied to the initial client state (`PublicCollisionState`, via `(glob A){m}`).
+   - The byte session uses `full_public_budget qr qs`, and the caps are bound through `FullLimits` in `&m`.
+   - `byte_public_collision_hop` and `byte_public_node_bad_hop` both use `ByteContext(A)` from start to finish.
+   - They keep the residual `res /\ !collision /\ !zero` and add `Q(Q-1)/2·2^-128 + Q·2^-128 + Q·2^-256`.
+
+5. **Zero sentinel.** The recovery lemma `raw_wots_invalid_sum_sentinel` already existed; it proves `res = nseq 16 0`.
+   - `wots_root` defines `root = node d` from a retained table entry. So `res = root0` implies `public_node_zero h0`, and `extends` carries that into the final table.
+   - The zero-node charge is `Q·2^-128` through the same recorded-draw setup.
+   - No nonzero premise is added.
+   - `C10Q15ZeroWitnessPositive` gives an actual in-support digest whose node is zero (`128 false ++ zero bytes`).
+   - `C10Q15SentinelWithoutEvent` tries the unconditional claim `res<>root0` and is expected to fail.
+
+6. **Enrollment.** The existing baseline, statement and control TSVs only gain lines. The line-level changes are:
+   - identity-digest rows,
+   - `EXPECT_*` counts in `cert_gate_split.sh`,
+   - the target count 356→371 in `test_split_contract.py`,
+   - prose.
+
+   There are 15 new source hashes, 13 new pinned roots and 12 new closure roots; the other 3 modules are pulled in through imports. I found no new project axiom, admit or clone. The 38 control rows are classified 6/12/19/1 as you stated. The docs say rejected proofs establish nothing about falsity, necessity or tightness, and they claim no adaptive opening and no component forgery extraction.

@@ -1,0 +1,560 @@
+[
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q12BoundPositive.ec",
+    "source_sha256": "58bd0fcd29679e30ad118e4fcc663f154190ee77073d50263a6eb6a7b69e380f",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 6.08,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q12BoundPositive-compile-1790218268484037360.log",
+    "diagnostics": [],
+    "expected": 0,
+    "reason": "-",
+    "matched": true,
+    "log_sha256": "5af22d2fa135330f49a8c1c32cf8ea0d6c2647bf315c3ef0f103ddaecc068ba7"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q12DropsPrefixCharge.ec",
+    "source_sha256": "91286085bedd7bf35c2b801fecc93f86a150b8434445acbeb9832403155998a5",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 6.08,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q12DropsPrefixCharge-compile-1790218274590599456.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q12DropsPrefixCharge.ec: line 7 (7-54)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "7b8ccb3265ed306d92383640f8ca9dc6744dc06163144071502ecbfb52178a5e"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q12UnderchargedCost.ec",
+    "source_sha256": "c57592199d36610632ed6ed5950c163e4663eedf9abf12996f60c8cc485bcdb8",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 6.09,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q12UnderchargedCost-compile-1790218280698413754.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q12UnderchargedCost.ec: line 9 (7-42)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "f4b60cb568be3b559eecfce9749c668fffd2b1ad89954136fd4dd37ab6f8323f"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q12WrongEvent.ec",
+    "source_sha256": "634a73539baa586cef51861c0a32fb57abaf4fecb77ddbc7189df0056dee4c72",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 6.13,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q12WrongEvent-compile-1790218286824360764.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q12WrongEvent.ec: line 7 (7-54)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "a9c1d6e995c5bd1d62d9480dc1338411282983d96d5745ce7a1fb5b42119d503"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_HonestByteContext.ec",
+    "source_sha256": "d601032dff47964d841a419ad31c49f296edcf1dd1ea53e61a36441d98d957be",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 5.84,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_HonestByteContext-compile-1790218292986256731.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_HonestByteContext.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "1e3a0d986a26b5df442aef18db2950cc2bdb2a3a45555f3bf80f5f5757f1176a"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_HonestByteCost.ec",
+    "source_sha256": "fa74d9f4cf7aeb6846893a140a6553839a72e2ef2b5c2df5c3c67a42cd1c244e",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 6.03,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_HonestByteCost-compile-1790218298850395877.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_HonestByteCost.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "710037bf837d1ff346ce2aba4b435692e05a19a7bb066b02845ab799f5fe10e3"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_HonestBytePhysical.ec",
+    "source_sha256": "61d1e1cac6fa6d18093af547a67e3ccca6ef888c806bcbca9537dcb101e3c562",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 6.09,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_HonestBytePhysical-compile-1790218304912895269.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_HonestBytePhysical.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "9894088d78fe8702fe7c90008d4401d3bb797a99998589d50b567f7af860f903"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q13BoundPositive.ec",
+    "source_sha256": "227853a2fed473b15e24c79f32e3ac32d306c272308b08afb4e6fac637d7cb25",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.53,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q13BoundPositive-compile-1790218311038587570.log",
+    "diagnostics": [],
+    "expected": 0,
+    "reason": "-",
+    "matched": true,
+    "log_sha256": "ae2d881946b9a2753021d2478cca238f3d9949d9ca5ad14dcc5b513995370ceb"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q13ClientsPositive.ec",
+    "source_sha256": "75b77177638a68c19e168c078488ed93a16c819e045c567c92577c744497d927",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.37,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q13ClientsPositive-compile-1790218314602608814.log",
+    "diagnostics": [],
+    "expected": 0,
+    "reason": "-",
+    "matched": true,
+    "log_sha256": "1ca8bfd09c67078861cf7f645174051fcd4115e592e7ba89cbaf790856e0943e"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q13UnderchargedClient.ec",
+    "source_sha256": "c36fa3bb748a5733adaf18b633cd23a7d701a13eb6844d5b8865edabfae56148",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q13UnderchargedClient-compile-1790218319002742371.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q13UnderchargedClient.ec: line 19 (7-30)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "3917b9b3c71fd75efd54788dabbb1ec72b9122e1cc4c1348718bad61478dde5f"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q13WithoutBudget.ec",
+    "source_sha256": "e62a4cf1fb7e8dd92acb30bd4723fefda7c3350993a83a320bb97fea58c2e451",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q13WithoutBudget-compile-1790218322751544404.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q13WithoutBudget.ec: line 9 (7-43)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "4e5918f83554c30ef550269d9e0652cc7abb51ae5caf534ea22bda978a3d8975"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q13WithoutRecording.ec",
+    "source_sha256": "246870e80b9a645f657cda3230dce1cbefa07c17dfa233c832099aeecffc8148",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.53,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q13WithoutRecording-compile-1790218326355293734.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q13WithoutRecording.ec: line 7 (7-57)] [by]: cannot close goals"
+    ],
+    "expected": 1,
+    "reason": "[by]: cannot close goals",
+    "matched": true,
+    "log_sha256": "5fbd126f2d6b8bb9fd4559d61515c4926b26b1e738a7c4b750b059b4e781b040"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q13WrongEvent.ec",
+    "source_sha256": "e908c4d6f073a5a3bb879df1acb4d2c15ea614a8a4dfa7d2b29fa430d85f8be8",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q13WrongEvent-compile-1790218329919797064.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q13WrongEvent.ec: line 10 (7-43)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "76f7f516b3f9e114fc1ed26c26be4b671a08a169ecb9971213680377aecd0660"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q13WrongProjection.ec",
+    "source_sha256": "88f8bc85aec804acfc3ea6ba78e9a91b6ae1646da64374a20226063576abd205",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q13WrongProjection-compile-1790218333521075482.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q13WrongProjection.ec: line 10 (7-43)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "90a14ac4fef72629be75175cafc323029b21942b5c4861b71915971dffb0f38b"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q13ZeroCharge.ec",
+    "source_sha256": "108c6354e80bbc317ad2d4f8da4f7777c546c499881f5a0afd959b847d79c9f5",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.63,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q13ZeroCharge-compile-1790218337126071839.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q13ZeroCharge.ec: line 10 (7-43)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "bb7b2a617847e51f8fe384a3bdb2afbd05654758d65dbf777adaef4fb628d522"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_NodeCollisionEvents.ec",
+    "source_sha256": "238975006c1dba08cc7151e66f2589ba60677bbc7c3078d2c1c3fd0efa1a4124",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.47,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_NodeCollisionEvents-compile-1790218340784201369.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_NodeCollisionEvents.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "5c35d9322dfee44ad96b1451ec68751a02066fd880fe90c1971d8dc8dc392c38"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_NodeDistribution.ec",
+    "source_sha256": "40de633a86a823850f6b3064566a8fd459d13d533b684dc6a0ca88a52cb7dbf9",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 2.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_NodeDistribution-compile-1790218344284075767.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_NodeDistribution.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "1731cf4e58b016613fba9b9479275b6a710175bd25a527cbcbf029459762ac8b"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ProjectedBirthday.ec",
+    "source_sha256": "f7d5ac198e1c8a83181fa9ef20e8a0208d7e735c85ffa3cca2a6026788644ec0",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 2.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ProjectedBirthday-compile-1790218347083130763.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ProjectedBirthday.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "5fe90874dc12743eb84d0bbbb5746f6c0609ed7e60e2c6d9a1451a8f916f7c99"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_PublicCollisionBound.ec",
+    "source_sha256": "ab1f54182edb946f2823f1d960923051341b95946f76d790f2b121ba7ba9b391",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 2.88,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_PublicCollisionBound-compile-1790218349887026803.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_PublicCollisionBound.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "a93e68b3b4ad8799608dc51b6f5edd0db56228f6053a885b50e2d95d7b10a0d2"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q14BoundPositive.ec",
+    "source_sha256": "fa1db3d5ebe86dfac7c808e652ab1c0ac5d4dd83b3716cd9475435bc4fc8cc8f",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 3.62,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q14BoundPositive-compile-1790218352801133249.log",
+    "diagnostics": [],
+    "expected": 0,
+    "reason": "-",
+    "matched": true,
+    "log_sha256": "3e32cfb7b3b5d37e083826b5ffe40dd1d76e1a997c0b4f1f2e09620deeccc655"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q14DropsCapBinding.ec",
+    "source_sha256": "e3de44233164e3f1366876df291a440590bd4ba36a1d18bd7dbe15e5a27692d0",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.58,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q14DropsCapBinding-compile-1790218356457482254.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q14DropsCapBinding.ec: line 17 (7-52)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "bfb4c75135d8ea33a0bface8647f7e8b78d017206d06f9cf6b0a644435e68d25"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q14DropsCollision.ec",
+    "source_sha256": "26653e5a8a9da8af76fc6f32285058b8f106f67d1003b8b6953233321c24c12e",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.62,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q14DropsCollision-compile-1790218360064511991.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q14DropsCollision.ec: line 16 (7-52)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "4d09d4a23731854977daa446d3db50175440fd42624618574fcdaaed43392360"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q14DropsPrefix.ec",
+    "source_sha256": "0a6ae47643c93b8856b3463a53236a27c8503624d8d4c6767b8e62c097cc348f",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.67,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q14DropsPrefix-compile-1790218363712087536.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q14DropsPrefix.ec: line 16 (7-52)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "9a132a7ac0cfa9e36f395a777a488df239c46198d4edc9fd2dc97052a8654280"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q14DropsResidual.ec",
+    "source_sha256": "93a241777b75babdd856c60ba1fa2e6159214a830a45df9e189f95dc5abaeae1",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.62,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q14DropsResidual-compile-1790218367413337027.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q14DropsResidual.ec: line 15 (7-52)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "fe8ee84b97842c53a7fab1f58f6efb1d74f06226906559320cd3bf0d09e70b66"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q14Undercharged.ec",
+    "source_sha256": "66aed65e11a738514e9079dfb35872c4126528a0c4b619f71c67880c4a100b64",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.58,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q14Undercharged-compile-1790218371069972917.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q14Undercharged.ec: line 12 (7-48)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "fafed28be256a51674fca32b81435b1f949abc2517ce907d1c0d7975d888f6f5"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q14WrongEvent.ec",
+    "source_sha256": "4cb7f4f769a7d131390ce9a0ad29eb5d4356c60032379ff2fe46205e85df07ae",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.58,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q14WrongEvent-compile-1790218374687684033.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q14WrongEvent.ec: line 17 (7-52)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "1e26bcf0079d825fda1a58a71fff46deb33ad4938f0370e262663673600ce555"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_BytePublicCollision.ec",
+    "source_sha256": "15a36df963f6928437131eec4be99a1eac6deb77eab062499ecb12a87b23e6ac",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.57,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_BytePublicCollision-compile-1790218378299869293.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_BytePublicCollision.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "a9fdb92bc2ecf49760a0123981a6d7b7a571bdc9b37dbb45ffe2568ac45a5984"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_PublicCollisionState.ec",
+    "source_sha256": "19ef58683e3b99911d50081dd2b4a72beb3b887e6390e3be7e67938e828c03ee",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 2.82,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_PublicCollisionState-compile-1790218381895547822.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_PublicCollisionState.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "9833071a071a35f23246d878127cea82cdf101be7028516118074c1622a3525d"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q15BoundPositive.ec",
+    "source_sha256": "9e6756d19b194a501f1cffd0dfe6e7781ac748bfe5814d4ff7a411bf0311e43b",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.14,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q15BoundPositive-compile-1790218384748123420.log",
+    "diagnostics": [],
+    "expected": 0,
+    "reason": "-",
+    "matched": true,
+    "log_sha256": "72b0b31f69cd13f9704cb9f1ab78bcb5a858f6f3a1fdf702fa274931f472ba75"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q15DropsResidual.ec",
+    "source_sha256": "08e8be22d1e32408911e94afaef7fd73e9099b0fcbae6dbeb2dec8928eb68ad1",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 4.17,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q15DropsResidual-compile-1790218388915634411.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q15DropsResidual.ec: line 17 (7-51)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "5a4c64d17f2ca19c30a74d765a963899861f05931330195e99c84bb770a2f717"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q15DropsZeroCharge.ec",
+    "source_sha256": "198d928a46deba6863209e26570510c8fd592904fecb73c749067ef45e4f539c",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 4.17,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q15DropsZeroCharge-compile-1790218393116395326.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q15DropsZeroCharge.ec: line 18 (7-51)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "04283eeff022574826fa50106418ac3f7651dbdadfcf7013e46d52a25c0e5a12"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q15SentinelWithoutEvent.ec",
+    "source_sha256": "f3b9bf734059b0a02b3387b1edab6c7240fd62129f26b08ffa423e1130071b13",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 4.17,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q15SentinelWithoutEvent-compile-1790218397331240173.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q15SentinelWithoutEvent.ec: line 14 (7-99)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "9ff1464467ad5ef76c8cb37508135e10c020333c1b833349bebb30a77cd6d2b9"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q15WithoutBudget.ec",
+    "source_sha256": "f96f2de20a92af90b5cca0a35a682ffcfe36d4e076183144ce632d8b3f6133c1",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 4.22,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q15WithoutBudget-compile-1790218401535170825.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q15WithoutBudget.ec: line 10 (7-48)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "afad5825461bdd1c8f25eabbc2c9f2c0617450c698970298f904cd9ecca81862"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q15WrongProjection.ec",
+    "source_sha256": "7e67ebf936f7fa17a9591d735b95841e7b9d565896894fe9c8cbcbe3a998dbf1",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 4.18,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q15WrongProjection-compile-1790218405791077526.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/C10Q15WrongProjection.ec: line 19 (7-51)] the given proof-term proves:"
+    ],
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "matched": true,
+    "log_sha256": "09b05737e28471a2b412c6196bac2fd39e20fbfd33c015ec4104e2259fa3d7ec"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/C10Q15ZeroWitnessPositive.ec",
+    "source_sha256": "a7f46c551aae675b46a93dab6c93d5eedd53a554b1063c949461d4182abd5041",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.33,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q15ZeroWitnessPositive-compile-1790218410007348182.log",
+    "diagnostics": [],
+    "expected": 0,
+    "reason": "-",
+    "matched": true,
+    "log_sha256": "4d0230918702a328825f0420ca5188f40bcb1b112e67a2aed61acfc61d3539a5"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_BytePublicNodeBad.ec",
+    "source_sha256": "8f59056559ed1555a8c32eae7c8ddd52fd701203aff6cce6a0d7a54924928a02",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.68,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_BytePublicNodeBad-compile-1790218414371701514.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_BytePublicNodeBad.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "fa57d81c0810cf7683d6c0f800b9bd2a61f8ba9f6691917a80a5c95dcc5be040"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_PublicNodeZero.ec",
+    "source_sha256": "5c6f340e771aef2975e63a3679940226a51d8f8c89492d28ac24a1afac5f0f15",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 2.87,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_PublicNodeZero-compile-1790218418078725226.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_PublicNodeZero.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "dc73a9ba77d0d14b828866e7740779ea0f7217a770465d86b8847d25503348e4"
+  },
+  {
+    "file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_WotsZeroSentinel.ec",
+    "source_sha256": "369c35c979a60e6b51a6dc9419f5fd739ed719bea0730381aba6aa3646131e55",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 3.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_WotsZeroSentinel-compile-1790218420974199674.log",
+    "diagnostics": [
+      "[critical] [/work/candidate-probability-charges/contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_WotsZeroSentinel.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "expected": 1,
+    "reason": "unknown variable or constant: `FORS_C_TreePort.fverify_structural'",
+    "matched": true,
+    "log_sha256": "7a16c2eb73594d8a78863f06a7fa94ed1ba0b8e75e3a1478aa9f0eed37c5b005"
+  }
+]

@@ -1,0 +1,193 @@
+{
+  "base": "e4687547e2b194c397b8a43f0ddaf15134bf7119",
+  "created_at": "2026-09-24T03:19:24.237334+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "56fe3da88458465fb27d7e9299dddb3fead55750fb9c2de795f233b5eea6dce1",
+      "version": "2.1.281 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "0b2e9301d6100dddda3b9d5c80ebaeaa3a2f1962388f2f36f6b96a9f08b1f33f",
+      "version": "codex-cli 0.156.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "codex_native_readonly": true,
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "native-codex-read-only-and-outer-bubblewrap-other-legs",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-probability-charges-v2",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Codex native read-only filesystem/socket isolation, approval never; other legs outer Bubblewrap candidate/Git mounts; Git drift check"
+  },
+  "launch_skew_seconds": 0.000431,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-prompt.txt",
+    "sha256": "9287e9d883b67449f804fd98fef3d0c5673653d7b71ee5859b79cc472d4263ad"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 9657,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-probability-charges-v2",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-probability-charges-v2",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-probability-charges-v2",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 136.623,
+      "ended_at": "2026-09-24T03:18:16.522064+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9287e9d883b67449f804fd98fef3d0c5673653d7b71ee5859b79cc472d4263ad",
+        "report_sha256": "8104813d42953a095503d1085c0f3ef82d73265016ff20d87f98c1077d2bcf13",
+        "runtime_sha256": "59a6c6bd3207294ad68d9d44ff8df6624d17eca38ec415e021d634e0869a5a95",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/claude",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/claude/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/claude/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/claude/stderr.txt"
+      },
+      "report_words": 545,
+      "started_at": "2026-09-24T03:15:59.899383+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 370394,
+      "command": [
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "-c",
+        "approval_policy=\"never\"",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-probability-charges-v2",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 204.116,
+      "ended_at": "2026-09-24T03:19:24.014863+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9287e9d883b67449f804fd98fef3d0c5673653d7b71ee5859b79cc472d4263ad",
+        "report_sha256": "7610880ba8497dad750cf6538df278d3c1db08388590449d62de8f941609c855",
+        "runtime_sha256": "c18af4b95f12bae6bc8285e74258853443414cad3ce23614cb7cbcfae0ac23a0",
+        "stderr_sha256": "278f477a5e898ff13782db55baf7b651959a414af5677a81f94032773330ac45"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q1215-review-wave/codex/stderr.txt"
+      },
+      "report_words": 24,
+      "started_at": "2026-09-24T03:15:59.898954+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "EasyCrypt honest-error and public-node probability charges",
+  "target": {
+    "commit_after": "a25c9122ac294bea966ac9ac7b909dc3dfb39514",
+    "commit_before": "a25c9122ac294bea966ac9ac7b909dc3dfb39514",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-probability-charges-v2",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "d6b72bea2152c135c0de37e9d78c2e0b535c7e77",
+    "tree_before": "d6b72bea2152c135c0de37e9d78c2e0b535c7e77"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.281 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.156.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-24T03:15:59.898891+00:00"
+}

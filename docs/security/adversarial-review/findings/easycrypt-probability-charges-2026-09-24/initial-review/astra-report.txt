@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 8af846fc28832fc88f92bb392936b2d98fa9a17e / 6f69a11e8079c4e09d8fa8f37d897a2058761b95
+FINDINGS: none
+GAPS: Full cold two-driver replay remains pending; coordinator must confirm its successful unchanged-source receipt before landing.

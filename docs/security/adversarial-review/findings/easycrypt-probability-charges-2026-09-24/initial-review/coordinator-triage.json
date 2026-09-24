@@ -1,0 +1,23 @@
+{
+  "utc": "2026-09-24T03:05:44.291585+00:00",
+  "source": "8af846fc28832fc88f92bb392936b2d98fa9a17e",
+  "tree": "6f69a11e8079c4e09d8fa8f37d897a2058761b95",
+  "reviewers": {
+    "codex": "GO; cold replay pending",
+    "claude": "FIX; control-evidence overstatement"
+  },
+  "coordinator": "CONFIRMED evidence-description issue; no probability-theorem defect reported.",
+  "corrected_counts": {
+    "total": 38,
+    "positive": 6,
+    "scope_negative": 12,
+    "non_scope_negative": 20,
+    "exact_mismatch": 19,
+    "open_obligation": 1
+  },
+  "reproduction": "A true weaker B+1 bound fails with the same exact-term mismatch, while a proof using the existing theorem and arithmetic succeeds.",
+  "nuance": "Exact-mismatch controls remain useful proof-driver rejection regressions and statement-application checks; they are not logical countermodels or demonstrations that each omitted term is necessary.",
+  "remedy": "Explicit control-evidence legend and scoped counts; correct semantic shorthand in the new review/PR/receipt descriptions. No proof or control body change.",
+  "classification": "Evidence claim correction; re-freeze and run one bounded remediation wave plus the required unchanged-snapshot cold gate.",
+  "initial_gate": "Cancelled deliberately after finding confirmation; retained initial result is not a proof failure or a passing receipt."
+}

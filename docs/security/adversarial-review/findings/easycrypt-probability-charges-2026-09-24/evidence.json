@@ -1,0 +1,27 @@
+{
+  "source_commit": "a25c9122ac294bea966ac9ac7b909dc3dfb39514",
+  "source_tree": "d6b72bea2152c135c0de37e9d78c2e0b535c7e77",
+  "base": "e4687547e2b194c397b8a43f0ddaf15134bf7119",
+  "input_identity": "45a497ff6ac7dfb7869ed3b84a51469f",
+  "inventory": {
+    "files": 371,
+    "roots": 134,
+    "pins": 2727,
+    "statements": 2378,
+    "census": 2096,
+    "controls": 263,
+    "new_pins": 55,
+    "assumptions_unchanged": true,
+    "headlines_added": 13,
+    "source_bindings": 335
+  },
+  "full_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-24T03:15:59.055838+00:00",
+    "finished_utc": "2026-09-24T05:45:55.645864+00:00",
+    "elapsed_seconds": 8996.59,
+    "commit": "a25c9122ac294bea966ac9ac7b909dc3dfb39514",
+    "tree": "d6b72bea2152c135c0de37e9d78c2e0b535c7e77"
+  },
+  "metadata_delta": "Receipt only; no proof or gate inputs change."
+}
