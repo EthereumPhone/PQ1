@@ -123,3 +123,24 @@ MerkleBuilderComparison
 ForsBuilderPrivate
 ForsSignCorrect
 ForsSignRecord
+
+# Actual layer and complete structured/byte keygen-sign-verify correctness.
+ActualWotsCorrect
+RawWotsReference
+RawShufflePermutation
+RawWotsRecovery
+ActualForestCorrect
+ForestSignRecorded
+ForestRecoveryReplay
+ActualLayerCorrect
+RawMerkleRootWitness
+MerkleBuilderWots
+LayerSignCorrect
+ActualSignerCorrect
+SignerReturnedOpening
+SignerVerifierReplay
+SignerFinishRecorded
+ActualByteSignerCorrect
+EncodedSignature
+SignerEncodingCorrect
+RawSignerBytes

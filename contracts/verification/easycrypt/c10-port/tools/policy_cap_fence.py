@@ -68,15 +68,20 @@ DECL_RE = re.compile(
 # NOT a closure of the class -- see the module docstring; `l %/ 4` defeats this.
 # Q5 IS A TRIPWIRE, NOT A RULE: `2 ^ 16` will match legitimate arithmetic in some
 # future certified file; do not treat a Q5 hit as proof of a policy import.
-# The sole exception below binds an exact source, not a whole file or directory.
+# Each exception below binds an exact source, not a whole file or directory.
 MAGNITUDES = [r'\b65536\b', r'\b0x10000\b', r'2\s*\^\s*16', r'\b4\s*\^\s*8\b']
-# RawShuffle's sole 65536 occurrence divides a 16-bit multiply-shift index. It is
-# unrelated to wallet usage. Any source edit, duplicate occurrence, different
+# Each shuffle source's sole 65536 occurrence divides a 16-bit multiply-shift
+# index or proves that same division's bounds/permutation. It is unrelated to
+# wallet usage. Any source edit, duplicate occurrence, different
 # spelling or different path falls back to the ordinary tripwire. Reviewing a
 # changed shuffle source requires deliberately updating this digest as well.
 NONPOLICY_MAGNITUDES = {
     ('cdrafts-split/RawShuffle.ec', r'\b65536\b'):
         '2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639',
+    ('cdrafts-split/RawShufflePermutation.ec', r'\b65536\b'):
+        '5c66a8de34c2fca7c0affc3f4e71bfe2e142e22564e7194e017eaf66a20a4c60',
+    ('cdrafts-split/ShuffleBytes.ec', r'\b65536\b'):
+        'da97fa1e1c8c680ee3d9904b64f509522397d23497dba36fe0098ea2e5545b09',
 }
 
 

@@ -290,3 +290,62 @@ scratch/C10Q6WrongSignatureProjection.ec	MUST-FAIL	the given proof-term proves:
 scratch/_scope_neg_op_ForsBuilderPrivate.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_ForsSignCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_ForsSignRecord.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Actual WOTS, forest, layer, signer and byte correctness controls.
+scratch/C10Q7ForgetsCountFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7IdentityPositive.ec	MUST-PASS	-
+scratch/C10Q7ShuffledPositive.ec	MUST-PASS	-
+scratch/C10Q7WithoutAcceptedCount.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7WithoutPrivateHistory.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7WithoutReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7WrongLeafProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7WrongSentinel.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualWotsCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawShufflePermutation.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawWotsRecovery.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawWotsReference.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q8IdentityPositive.ec	MUST-PASS	-
+scratch/C10Q8ShuffledPositive.ec	MUST-PASS	-
+scratch/C10Q8WithoutCompressionEntry.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q8WithoutSpecialEntry.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q8WithoutTreeOpenings.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q8WrongSpecialTree.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualForestCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestRecoveryReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestSignRecorded.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q9FirstPositive.ec	MUST-PASS	-
+scratch/C10Q9ForgetsCountFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q9LastPositive.ec	MUST-PASS	-
+scratch/C10Q9WithoutPriorRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q9WithoutRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q9WithoutSecondWitness.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q9WrongProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualLayerCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_LayerSignCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_MerkleBuilderWots.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawMerkleRootWitness.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q10ForgetsFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10IdentityPositive.ec	MUST-PASS	-
+scratch/C10Q10ShufflePositive.ec	MUST-PASS	-
+scratch/C10Q10WithoutAcceptedDigest.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10WithoutDigestEntry.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10WithoutPriorRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10WrongProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10WrongTopLayer.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualSignerCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerFinishRecorded.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerReturnedOpening.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerVerifierReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q11CountBoundaryPositive.ec	MUST-PASS	-
+scratch/C10Q11ForgetsFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q11IdentityPositive.ec	MUST-PASS	-
+scratch/C10Q11ShufflePositive.ec	MUST-PASS	-
+scratch/C10Q11WithoutCountRange.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q11WithoutHistory.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q11WithoutWidth.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q11WrongFormatLength.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q11WrongRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualByteSignerCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_EncodedSignature.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawSignerBytes.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerEncodingCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
