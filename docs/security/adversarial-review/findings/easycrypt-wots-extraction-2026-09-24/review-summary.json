@@ -1,0 +1,38 @@
+{
+  "target": "444c1d4aca22d7b676a0b64b4be1fc13881c813d",
+  "tree": "2cbbf5202001e3c0c8fff788b84d4414c594263e",
+  "reviewers": {
+    "claude": {
+      "duration_seconds": 150.844,
+      "report_words": 10,
+      "verdict": "GO",
+      "findings": []
+    },
+    "codex": {
+      "duration_seconds": 213.927,
+      "report_words": 24,
+      "verdict": "GO",
+      "findings": []
+    }
+  },
+  "drift": false,
+  "remaining_gate": "Resolved by unchanged-source full cold replay",
+  "coordinator_notes": [
+    "Both reports read, identities and all prompt/report/raw-runtime hashes verified after the crash. No findings. The interrupted gate supplies no passing evidence.",
+    "Component-only claims retain the arbitrary byte-game forgery and adaptive probability residuals. Controls distinguish positive proofs, scope checks and exact mismatches."
+  ],
+  "substitutions": "Astra ultra replaces SOL; Kimi omitted under standing owner instructions.",
+  "opus_runtime_model": [
+    "claude-opus-5-5"
+  ],
+  "astra_model_evidence": "gpt-6-astra ultra requested; CLI stream does not independently expose remote model identity.",
+  "coordinator_checked_utc": "2026-09-24T10:15:11.939693+00:00",
+  "resolved_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-24T10:15:11.978114+00:00",
+    "finished_utc": "2026-09-24T12:50:57.325925+00:00",
+    "elapsed_seconds": 9345.35,
+    "commit": "444c1d4aca22d7b676a0b64b4be1fc13881c813d",
+    "tree": "2cbbf5202001e3c0c8fff788b84d4414c594263e"
+  }
+}

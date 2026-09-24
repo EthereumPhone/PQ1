@@ -38,3 +38,8 @@ The [public collision](RAW-PUBLIC-NODE-COLLISIONS.md) and
 independent-table intermediate statements are not transferred literally to
 physical Rust by the whole-game prefix hop. No extraction, concrete SHA-256,
 QROM, deployed 96-bit security or production authority is claimed.
+
+The [reverse recovery theorem](RAW-WOTS-EXTRACTION.md) now derives a
+verifier-domain reference opening from matching recovery, outside the already
+charged public-node collision and zero-node events. Its counter range is the
+full u32 wire range, distinct from the bounded signing-search witness.

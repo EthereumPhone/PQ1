@@ -31,8 +31,11 @@ The [shared-oracle correctness transfer](../contracts/verification/easycrypt/c10
 now bounds honest byte-error probability. The
 [public-node collision and zero-node charges](../contracts/verification/easycrypt/c10-port/RAW-ZERO-NODE-CHARGE.md)
 apply to the actual byte game while retaining its remaining forgery event.
-Adaptive accumulated opening coverage, the component reduction and numerical
-end-to-end forgery bounds remain open.
+The [reverse WOTS recovery result](../contracts/verification/easycrypt/c10-port/RAW-WOTS-EXTRACTION.md)
+now derives reference chain openings from matching WOTS/layer recovery,
+including actual key-generation and Merkle-builder comparison harnesses.
+Adaptive accumulated opening coverage, the complete byte-game component
+reduction and numerical end-to-end forgery bounds remain open.
 See the
 [current artifact boundary](../contracts/verification/easycrypt/c10-port/README.md)
 and [research obligations](verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-23-accepted-history-composition-and-persistent-raw-oracle).

@@ -62,6 +62,12 @@ failure remains explicit. The [shared-oracle honest-error transfer](RAW-PHYSICAL
 terms. Adaptive opening coverage, component forgery extraction and the
 numerical end-to-end forgery bound remain open.
 
+The [reverse WOTS recovery result](RAW-WOTS-EXTRACTION.md) derives reference
+chain openings from matching actual WOTS and Merkle-layer recovery, outside
+the charged collision/zero events. Actual key-generation and Merkle-builder
+comparison harnesses supply the references. The complete adaptive byte-game
+component reduction and its probability charges remain open.
+
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every

@@ -158,3 +158,13 @@ BytePublicCollision
 PublicNodeZero
 BytePublicNodeBad
 WotsZeroSentinel
+
+# Actual reverse WOTS and Merkle-layer recovery.
+LinearCollision
+RecoveryCompression
+RawRecoveryTrace
+RawWotsExtraction
+WotsKeyExtraction
+LayerWotsExtraction
+LayerBuildExtraction
+VerifierWotsReplay
