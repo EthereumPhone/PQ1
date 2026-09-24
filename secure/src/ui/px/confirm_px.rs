@@ -30,10 +30,31 @@ use crate::ui::{Button, Press};
 use pqsigner_ui_px::driver::{Btn, FlowDriver, Gesture, NavResult};
 use pqsigner_ui_px::Screens;
 
-/// `true` restores the 2026-06-26 scroll-to-end gate on the pixel path:
-/// the sign chord works only after the returning ask has been displayed.
-/// Owner decision 2026-09-22: follow the design (`false`).
-pub const PX_COMMIT_REQUIRES_SEEN_LAST: bool = false;
+/// The scroll-to-end consent gate on the pixel path: the sign chord arms only
+/// after the LAST screen has actually been painted.
+///
+/// **Owner decision 2026-09-24: `true` — "all screens should be viewed before
+/// the user can sign."** This reverses the 2026-09-22 decision (`false`,
+/// "follow the design") and restores the rule the legacy path has enforced
+/// since 2026-06-26 (`ccfa5f61`, `ui::confirm_core::NavigationCore`).
+///
+/// Why it matters, concretely: an ERC-20 transfer is 8 screens. The first says
+/// "Send USDC" and little else — the RECIPIENT is screen 3 and the AMOUNT is
+/// screen 4 (`tx::display::erc20_known`). With this `false` the opening hero
+/// is commit-armed, so one chord click approves a transfer whose destination
+/// and value were never displayed.
+///
+/// This is NOT the same property as the present-before-arm latch in
+/// `lcd::run_flow`. That one only proves the CURRENT screen was painted before
+/// a gesture is accepted; it says nothing about screens 3 and 4. Both are
+/// needed.
+///
+/// The evidence is a real paint, not an index: `FlowDriver::mark_rendered` is
+/// called by the presenter immediately after `build_and_present`
+/// (`px/lcd.rs`) / `text::present` (below), and sets `seen_last` only when
+/// `cur + 1 == count` — the same "evidence of display, not merely an index
+/// assignment" rule `confirm_core.rs` states for the legacy path.
+pub const PX_COMMIT_REQUIRES_SEEN_LAST: bool = true;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum LoopResult {
