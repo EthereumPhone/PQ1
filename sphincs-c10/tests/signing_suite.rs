@@ -229,6 +229,32 @@ fn positive_progress_reports_inside_each_hypertree_layer() {
     assert!(layer1 >= 24, "layer 1 reported {layer1} times: {prog:?}");
 }
 
+// Keygen's top-subtree build (512 WOTS leaves, ~0.5 s on the EVT) runs
+// before the sign dialog on a cold cache; it reports every 16 leaves so the
+// pixel busy film ticks through it. Pins: the key is byte-identical to
+// `keygen`'s and the reports are monotone, dense, and end at 100.
+#[cfg(not(lean_extract))]
+#[test]
+fn positive_keygen_with_progress_matches_keygen_and_reports_densely() {
+    use std::cell::RefCell;
+    thread_local!(static PROG: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) });
+    fn cb(pct: u8) {
+        PROG.with(|v| v.borrow_mut().push(pct));
+    }
+    PROG.with(|v| v.borrow_mut().clear());
+    let reported = SigningKey::keygen_with_progress(SK_SEED, PK_SEED, cb, 20, 100);
+    let prog: Vec<u8> = PROG.with(|v| v.borrow().clone());
+
+    assert_eq!(reported.pk_root(), sk().pk_root());
+    assert_eq!(reported.sign(&MSG, None).as_slice(), sk().sign(&MSG, None).as_slice());
+    assert_eq!(prog.len(), 32, "one report per 16 of 512 leaves: {prog:?}");
+    assert_eq!(prog.last().copied(), Some(100));
+    assert!(prog.iter().all(|p| (20..=100).contains(p)), "{prog:?}");
+    for w in prog.windows(2) {
+        assert!(w[0] <= w[1], "progress must be non-decreasing: {prog:?}");
+    }
+}
+
 // ===========================================================================
 // NEGATIVE: assumption-challenging tests
 // ===========================================================================

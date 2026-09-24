@@ -149,6 +149,25 @@ impl SigningKey {
         key
     }
 
+    /// [`Self::keygen`] reporting `progress(percent)` every 16 leaves of
+    /// the top-subtree build, interpolated from `pct_lo` to `pct_hi`, so a
+    /// trusted-UI film keeps moving through the ~0.5 s keygen. The key is byte-identical to
+    /// [`Self::keygen`]'s. Absent under `--cfg lean_extract` (the `fn(u8)`
+    /// parameter is an arrow type; see [`Self::sign_with_shuffle`]).
+    #[cfg(not(lean_extract))]
+    #[must_use]
+    pub fn keygen_with_progress(mut sk_seed: [u8; 32], pk_seed: [u8; N], progress: fn(u8), pct_lo: u8, pct_hi: u8) -> Self {
+        let pk_root = hypertree::compute_pk_root_with_progress(&sk_seed, &pk_seed, progress, pct_lo, pct_hi);
+        let key = Self {
+            sk_seed,
+            pk_seed,
+            pk_root,
+        };
+        // Same `Copy` residue scrub as `keygen`.
+        sk_seed.zeroize();
+        key
+    }
+
     /// Return the corresponding verifying key.
     #[must_use]
     pub fn verifying_key(&self) -> VerifyingKey {

@@ -12,7 +12,7 @@ use pqsigner_domain::{
     slot_master_entropy_from_bip39, slot_master_entropy_from_entropy, ENTROPY_LEN, SEED_LEN,
 };
 use sphincs_c10::params::SIGNATURE_LEN;
-use std::cell::RefCell;
+use std::sync::Mutex;
 
 const ZERO_ENTROPY: [u8; ENTROPY_LEN] = [0u8; ENTROPY_LEN];
 
@@ -147,28 +147,35 @@ fn positive_derive_c10_slot_keypair_signs_and_verifies() {
 
 #[test]
 fn positive_derive_c10_master_keypair_with_progress_reports_0_and_100() {
-    let calls = RefCell::new(std::vec::Vec::<u8>::new());
+    static CALLS: Mutex<Vec<u8>> = Mutex::new(Vec::new());
     let _ = derive_c10_master_keypair_from_entropy_with_progress(&ZERO_ENTROPY, 0, |p| {
-        calls.borrow_mut().push(p);
+        CALLS.lock().unwrap().push(p);
     });
-    let v = calls.borrow();
+    let v = CALLS.lock().unwrap();
     assert!(v.first().copied() == Some(0), "first progress call must be 0");
     assert!(v.last().copied() == Some(100), "last progress call must be 100");
     // Must be non-decreasing.
     for w in v.windows(2) {
         assert!(w[0] <= w[1], "progress must be non-decreasing: {w:?}");
     }
+    // The PBKDF2 stretch (0..20 %) and the top-subtree keygen (20..100 %)
+    // both report inside their loops, so the UI film ticks through them.
+    let stretch = v.iter().filter(|&&p| p > 0 && p <= 20).count();
+    let keygen = v.iter().filter(|&&p| p > 20).count();
+    assert!(stretch >= 16, "PBKDF2 must report inside the stretch: {v:?}");
+    assert!(keygen >= 24, "keygen must report inside the subtree build: {v:?}");
 }
 
 #[test]
 fn positive_derive_c10_slot_keypair_with_progress_reports_0_and_100() {
-    let calls = RefCell::new(std::vec::Vec::<u8>::new());
+    static CALLS: Mutex<Vec<u8>> = Mutex::new(Vec::new());
     let _ = derive_c10_slot_keypair_with_progress(&[0u8; 32], 1, 0, |p| {
-        calls.borrow_mut().push(p);
+        CALLS.lock().unwrap().push(p);
     });
-    let v = calls.borrow();
+    let v = CALLS.lock().unwrap();
     assert_eq!(v.first().copied(), Some(0));
     assert_eq!(v.last().copied(), Some(100));
+    assert!(v.len() >= 32, "keygen must report inside the subtree build: {} calls", v.len());
 }
 
 #[test]
