@@ -16,11 +16,12 @@
 //!
 //! **This is also why the HASH-peripheral port is no longer worth its cost.**
 //! It would cut ~1.19 s of hashing here plus most of the 0.375 s
-//! `filter_valid` (a C10 verify is almost entirely hashing) — ~1.5 s of a
-//! 12.932 s boot, for 1–2 KB of driver in a range that WRP + RDP-2 freeze
-//! permanently. And 10.002 s of that boot is the deliberate fingerprint hold,
-//! so hashing is ~12% of wall-clock: the HASH port would be optimising a small
-//! slice of a boot whose length is a policy choice.
+//! `filter_valid` (a C10 verify is almost entirely hashing) — ~1.5 s of a boot
+//! that measured 12.932 s at the old 10 s hold, for 1–2 KB of driver in a
+//! range that WRP + RDP-2 freeze permanently. The hold is now 4 s, so the
+//! expected boot is ~6.93 s and hashing is a LARGER share (~21%) of a shorter
+//! wall-clock — the trade is closer than it was, but 1–2 KB in a WRP-frozen
+//! range is still the binding constraint, not the seconds.
 
 use fw_manifest::ManifestRef;
 use sha2::{Digest, Sha256};

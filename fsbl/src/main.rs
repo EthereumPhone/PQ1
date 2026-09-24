@@ -41,9 +41,10 @@
 //!   software. MEASURED on pq1 at HSI16: **1.167 s** for the 385,568 B
 //!   secure image and 0.023 s for the 7,488 B NS image (4.67 s / 0.09 s
 //!   before the clock switch). Porting the HASH peripheral would save
-//!   ~1.5 s of a 12.932 s boot for 1-2 KB in a WRP-frozen range — not a
-//!   good trade, especially as 10.0 s of that boot is the deliberate
-//!   fingerprint hold. See `crate::marker` for the full budget.
+//!   ~1.5 s of a boot that measured 12.932 s at the old 10 s fingerprint
+//!   hold; the hold is 4 s since 2026-09-24, so the expected boot is
+//!   ~6.93 s. Still 1-2 KB in a WRP-frozen range. See `crate::marker` for
+//!   the full budget.
 //! * **LCD error screen.** On catastrophic failure FSBL halts silently.
 //! * **Reviewed probation/rollback.** The legacy `TRIED` logic is not a
 //!   production safety net. Draft 1.1 proposes typed

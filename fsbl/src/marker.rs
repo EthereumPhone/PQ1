@@ -70,7 +70,8 @@ const ICACHE_SR_BUSYF: u32 = 1 << 0;
 // and is MEASURED at 39.4 s. Deciding whether to raise the FSBL clock or port
 // the HASH peripheral on estimates is backwards, so the boot measures itself.
 //
-// CURRENT (pq1, HSI16 16 MHz, MainEntered -> Branching = 12.932 s):
+// LAST MEASURED (pq1, HSI16 16 MHz, MainEntered -> Branching = 12.932 s),
+// when the hold was 10 s:
 //
 //   10.002 s  77%  the fingerprint hold   (delay_ms(10_000), owner-set to 10 s)
 //    1.188 s   9%  Lcd::init()            (~0.85 s vendor delays + ~0.34 s SPI)
@@ -81,6 +82,12 @@ const ICACHE_SR_BUSYF: u32 = 1 << 0;
 //
 // Actual WORK is 2.930 s; the rest is the deliberately-long trust window.
 // With the hold at its previous 3,000 ms the same boot measured 5.931 s.
+//
+// The hold became 4,000 ms on 2026-09-24 (owner decision; it now matches the
+// secure world's `measured_boot::WORDS_MS`, which has been 4 s since April).
+// EXPECTED total ~6.93 s = the 2.930 s of measured work + ~4.001 s of hold.
+// NOT YET RE-MEASURED — re-run this harness and replace the table above rather
+// than rescaling it.
 //
 // PRIOR, on the 4 MHz MSIS reset clock with the 8x-long delay loop = 39.367 s:
 // hold 24.003, Lcd::init 8.405, SHA 4.667, filter_valid 1.498, blit 0.697,

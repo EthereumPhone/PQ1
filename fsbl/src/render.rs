@@ -19,26 +19,34 @@ use crate::nv3007::{delay_ms, Lcd};
 /// How long the FSBL fingerprint stays on the LCD before branching into the
 /// slot — long enough for a human to glance at and recognise the words.
 ///
-/// **Set to 10 s by owner decision (2026-09-16), MEASURED at 10.002 s** — a
-/// +0.02% error, since `nv3007::delay_ms` derives its calibration from
-/// `clock::achieved_hz()` and the FSBL runs at HSI16.
+/// **Set to 4 s by owner decision (2026-09-24)**, down from 10 s
+/// (2026-09-16, which measured 10.002 s).
 ///
-/// It is deliberately the dominant term: 10.002 s of a **12.932 s** boot
-/// (77%), against 2.930 s of actual work. This is the user-visible boot-time
-/// trust window described in `docs/security/measured-boot.md` — the seconds in
-/// which the user reads the 8 fingerprint words before the slot can display
-/// anything — so a longer hold buys reading time at the cost of boot latency.
-/// That trade is an owner call, not a performance bug; do not "optimise" it.
+/// 4 s matches what the SECURE WORLD has shown for the same eight words since
+/// 2026-04-14: `measured_boot::WORDS_MS = 4_000`, "auto-dismiss after 4 s or
+/// any button". The two screens render the same digest through the same
+/// `firmware_fingerprint_lines`, so having them disagree on duration by six
+/// seconds was an accident of the two being set on different dates, not a
+/// policy. They now agree.
 ///
-/// History: 3,000 nominal delivered 24.0 s when the delay loop ran 8× long,
-/// then 3.001 s once the clock switch and calibration were fixed. Changing
-/// this constant is the only lever on boot time that costs no code.
+/// One deliberate difference remains: the secure world's screen is
+/// DISMISSIBLE (`input().wait_button`), this one is not. The FSBL never
+/// initialises the GPIO buttons (see the `delay_ms` call below), so 4 s here
+/// is a floor, not a maximum. A power-cycle is still the only abort path.
 ///
-/// Deliberately NOT retuned: this is the user-visible boot-time trust window
-/// that `docs/security/measured-boot.md` and invariant #10 describe, so
-/// shortening it is an owner decision rather than a comment fix. A longer
-/// window is at least the safe direction — more time to read the words.
-pub const FINGERPRINT_HOLD_MS: u32 = 10_000;
+/// This is the user-visible boot-time trust window described in
+/// `docs/security/measured-boot.md` — the seconds in which the user reads the
+/// 8 fingerprint words before the slot can display anything. Trading reading
+/// time for boot latency is an owner call; it is not a performance bug to be
+/// "optimised" further without one.
+///
+/// History: 3,000 nominal delivered 24.0 s when the delay loop ran 8x long,
+/// then 3.001 s once the clock switch and calibration were fixed; 10,000
+/// delivered 10.002 s. `nv3007::delay_ms` derives its calibration from
+/// `clock::achieved_hz()` and the FSBL runs at HSI16, so the error has been
+/// +0.02..0.03% across a 3.3x range. 4,000 is therefore EXPECTED to deliver
+/// ~4.001 s — but that has NOT been measured on silicon yet.
+pub const FINGERPRINT_HOLD_MS: u32 = 4_000;
 
 /// Drive the LCD end-to-end: init, render, flush, hold, return a VERDICT.
 ///
@@ -178,10 +186,11 @@ pub fn render_fingerprint(digest: &[u8; 32]) -> u32 {
         return 0;
     }
 
-    // Hold so the user can read the words — MEASURED 10.002 s against the
-    // 10,000 ms nominal now that the clock switch and the delay calibration
-    // agree (it was 24.0 s when the loop ran 8x long). No button-wait — FSBL
-    // doesn't init GPIO buttons; a power-cycle is the abort path.
+    // Hold so the user can read the words. 4,000 ms nominal, EXPECTED ~4.001 s
+    // from the calibration that delivered 10.002 s for 10,000 — not yet
+    // re-measured on silicon. No button-wait — FSBL doesn't init GPIO buttons,
+    // so unlike the secure world's dismissible screen this is a fixed floor;
+    // a power-cycle is the abort path.
     delay_ms(FINGERPRINT_HOLD_MS);
 
     // Recomputed through the FI gate rather than returning a plain bool: this

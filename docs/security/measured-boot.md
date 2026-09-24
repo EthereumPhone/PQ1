@@ -272,6 +272,28 @@ Three superseded estimates are recorded here deliberately — "~3 s", then
 "~12 s hold / ~800 ms per image" after a 4× rescale, then the measured 39.4 s.
 Do not rescale a figure on this page; measure it.
 
+**UPDATE 2026-09-24 — the hold is now 4 s, to match the secure world.** Owner
+decision. `FINGERPRINT_HOLD_MS` 10,000 → 4,000.
+
+The reason is consistency, not latency. The SECURE WORLD has shown the same
+eight words for 4 s since 2026-04-14 — `measured_boot::WORDS_MS = 4_000`,
+"auto-dismiss after 4 s or any button" — and both screens derive their grid
+from the same digest through the same `sphincs_tz_bip39::firmware_fingerprint_lines`.
+The two durations diverged by six seconds only because they were set on
+different dates by different decisions. They now agree.
+
+One asymmetry is deliberate and remains: the secure world's screen is
+DISMISSIBLE (`input().wait_button`), the FSBL's is not — the FSBL never
+initialises the GPIO buttons, so 4 s there is a floor. A power-cycle is still
+its only abort path.
+
+Expected boot: **~6.93 s** = the measured 2.930 s of work + ~4.001 s of hold,
+the latter extrapolated from the +0.02..0.03% calibration error measured at the
+3,000 and 10,000 ms nominals. **Neither the new hold nor the new total has been
+measured on silicon.** Per the rule directly above — do not rescale a figure on
+this page, measure it — the table above is left at its measured 10 s values and
+this note is an extrapolation until a `stage-marker` run replaces it.
+
 **pq1 backlight caveat.** On pq1 the panel may render correctly and still look
 dark: `LCM_EN` (PB15) only enables an AW99703 LED driver whose brightness is
 programmed over I2C2 at `0x36`, and the FSBL has no I2C stage. Absence of

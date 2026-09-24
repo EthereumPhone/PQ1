@@ -105,12 +105,14 @@
 //!   * a [`spi_wait`] timeout costs ~2.5 s at 16 MHz (was ~10 s) — still long
 //!     enough that a wrong pin map presents as a hang rather than as slowness.
 //!
-//! Whole boot: **12.932 s**, of which only 2.930 s is work — the rest is the
-//! fingerprint hold, deliberately set to 10 s so the user has time to read the
-//! 8 words. It was 39.367 s on the 4 MHz reset clock with the 8×-long loop,
-//! and 5.931 s at the interim 3 s hold. Compute terms scaled 4.0× (the clock);
-//! delay terms 8.0× (removing the calibration error). Boot time is now almost
-//! entirely a `FINGERPRINT_HOLD_MS` policy choice, not a code one.
+//! Whole boot was **12.932 s** at the 10 s hold, of which only 2.930 s is
+//! work — the rest is the fingerprint hold. The hold became 4 s on 2026-09-24
+//! (matching the secure world's long-standing `WORDS_MS`), so boot is EXPECTED
+//! to be ~6.93 s; the 2.930 s of work is measured, the new total is not. It
+//! was 39.367 s on the 4 MHz reset clock with the 8x-long loop, and 5.931 s at
+//! the interim 3 s hold. Compute terms scaled 4.0x (the clock); delay terms
+//! 8.0x (removing the calibration error). Boot time is still almost entirely a
+//! `FINGERPRINT_HOLD_MS` policy choice, not a code one.
 //!
 //! 1 MHz keeps a very large margin over the NV3007's 10 ns setup/hold spec,
 //! so the prescaler stays as-is; the panel is painted once at boot.
