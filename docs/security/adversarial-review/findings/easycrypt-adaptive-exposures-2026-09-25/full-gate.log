@@ -1,0 +1,2707 @@
+make: Entering directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-adaptive-exposures/contracts/verification'
+/usr/bin/python3 -E -S -B scripts/run_easycrypt_split.py
+OK EasyCrypt manual source binding: 394 inputs (not extraction)
+   Compiling sphincs-c10 v0.1.0 (/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-adaptive-exposures/sphincs-c10)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.85s
+     Running tests/easycrypt_transcript.rs (/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/host-target/x86_64-unknown-linux-gnu/debug/deps/easycrypt_transcript-dcf76e94d34527c4)
+
+running 4 tests
+test concrete_hash_domains_match_easycrypt_layouts ... ok
+test concrete_digits_match_easycrypt_bit_order_and_target ... ok
+test concrete_fors_and_hypertree_fields_match_lsb_model ... ok
+test concrete_digest_matches_easycrypt_byte_adapter ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+{"exit_code": 0, "seconds": 16.95, "keygen_cases": 5, "signature_cases": 20, "negative_cases": 160, "receipt": "/tmp/pq-easycrypt-fullsign-j8uwo_yk/evidence/result.json"}
+FULLSIGN_MODEL_RECEIPT={
+  "exit_code": 0,
+  "seconds": 16.95,
+  "rust_commit": "5e477d33a3f335c339dae8b27d5fab40a08874a5",
+  "rust_sources": {
+    "address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+    "fors.rs": "3b64e07bc9c3a6c0e1db1d63da90c32ad34b26857dfe5767997df360b7713ed2",
+    "hash.rs": "049a689c96ef9e14ce34030e71269292f3f6951b522cad88d56daa4466ade2c4",
+    "hypertree.rs": "0541fe8f4b6f284d060c620e9aa38f02a9384e551f47577e85cd7f648ab14b7b",
+    "lib.rs": "235b5db237d6133860fb7a9d36c2a89195700d8602806688aceb45b52fa0719f",
+    "merkle.rs": "f787428b15cea6fb353eb3e1830f9f737067ce70a74e4d6b79113b83a1f3aed0",
+    "near_miss.rs": "6fed92e4bbf9d13a43f0040335f3e7a4f3b3fd84fb49eba3db410f46a42512a3",
+    "params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+    "shuffle.rs": "2f3e0b12351084599294c9ccdfa01d18d7e2130a2fa84bae177ef26cfdb470ad",
+    "wots.rs": "e7ebe1d71591e68f6045383b041905ff17ad5822def35e77e11244ffdf49c56b"
+  },
+  "model_sources": {
+    "RawKeygen.ec": "9f983fbb237129b0600ee1462429a722c53f86a5a74e25a0e508f16c1238174e",
+    "RawFors.ec": "cea927f567b23443a0c0846493089f3651f1eb57a86daae508527b612741833e",
+    "RawShuffle.ec": "2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639",
+    "RawWots.ec": "b0510301eba5d387e3199d216bae2772f5e27480bdb3a23f037881c59138a558",
+    "RawForest.ec": "76b40a69989b36c88ecc4d9e9fae197da65fee865ea2572be94f50f297fb2f10",
+    "RawMerkle.ec": "c39af26b991ef2929dea669be1152fcb84dbcbf0f25dfb60c2d1290c183d1f6e",
+    "RawLayer.ec": "3ebf8be154f55b07d3d8f10a3dd5e541b7d47714fa2997703c93201dce30dc96",
+    "RawSigner.ec": "8b40da75596beb4a824890c8d5e3d58383f7f049c682815b476850a26c7b1650",
+    "RawSignerCost.ec": "f6afec786f09e10a694fad65e8e0c36bdc8fa0e2f87a8d299617bf056dffeedd",
+    "RawSignature.ec": "de0e9b611ea88e6aaa39e5b9d3931ff2cf611c20159eb69b42f53ae9b5bae03d",
+    "RawDecode.ec": "bc0102dd6f42c3d6b2187439e961507bda5372a4a7c5c9a4887ee518a1fe09b4",
+    "ByteSession.ec": "dc8e67b78f27c4412b34e636649de5cc162822ca9adc54f0a214a1229fa8e49b"
+  },
+  "harness_sources": {
+    "src/main.rs": "5a9ba5d9985c68dd60751f2543f3ced31df6afe94096b539373a95e2d6d4faa9",
+    "check.py": "fbc7bac09f2d7dd0026dde7741b8be70bd2966f59a875f1d51bec7507298b2b6",
+    "Cargo.toml": "4a7ab9c9e96b752b88a40c77507fce791818733ac059dc0cb6a2af1051826617",
+    "Cargo.lock": "841066878fb7673836172817b5b7d756fc98505adf976fdde7465eea4e8b2ea8"
+  },
+  "keygen_cases": 5,
+  "signatures": [
+    {
+      "case": 0,
+      "run": 0,
+      "signature_sha256": "2602ecec7c5a549e503aea9f79f255bbfc482a8c064d22d90e9604796332833d",
+      "hook_calls": 504865,
+      "software_shuffle_calls": 0,
+      "total_calls": 504865,
+      "r_calls": 37,
+      "hmsg_calls": 37,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "signature_sha256": "4910ada38e9c69241e083156e239fbc4c9b460f51fb2fe66a312b9def1d6ccda",
+      "hook_calls": 494414,
+      "software_shuffle_calls": 0,
+      "total_calls": 494414,
+      "r_calls": 3761,
+      "hmsg_calls": 3761,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "signature_sha256": "2602ecec7c5a549e503aea9f79f255bbfc482a8c064d22d90e9604796332833d",
+      "hook_calls": 504865,
+      "software_shuffle_calls": 15,
+      "total_calls": 504880,
+      "r_calls": 37,
+      "hmsg_calls": 37,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "signature_sha256": "4910ada38e9c69241e083156e239fbc4c9b460f51fb2fe66a312b9def1d6ccda",
+      "hook_calls": 494414,
+      "software_shuffle_calls": 15,
+      "total_calls": 494429,
+      "r_calls": 3761,
+      "hmsg_calls": 3761,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "signature_sha256": "b73dafc935bfb9cf6eacf605eec0f9b34e9765732b3186933df29a4eec7c3b4a",
+      "hook_calls": 502175,
+      "software_shuffle_calls": 0,
+      "total_calls": 502175,
+      "r_calls": 4324,
+      "hmsg_calls": 4324,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "signature_sha256": "2795a6500d01285cef1925df26ce61a78c7f91648d995a83b4df01fbae958d77",
+      "hook_calls": 491482,
+      "software_shuffle_calls": 0,
+      "total_calls": 491482,
+      "r_calls": 3821,
+      "hmsg_calls": 3821,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "signature_sha256": "b73dafc935bfb9cf6eacf605eec0f9b34e9765732b3186933df29a4eec7c3b4a",
+      "hook_calls": 502175,
+      "software_shuffle_calls": 15,
+      "total_calls": 502190,
+      "r_calls": 4324,
+      "hmsg_calls": 4324,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "signature_sha256": "2795a6500d01285cef1925df26ce61a78c7f91648d995a83b4df01fbae958d77",
+      "hook_calls": 491482,
+      "software_shuffle_calls": 15,
+      "total_calls": 491497,
+      "r_calls": 3821,
+      "hmsg_calls": 3821,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "signature_sha256": "3c05ae14f1f3f0607dca264cbc86c61cdfccaaf08657a25afa7d7baa22126424",
+      "hook_calls": 453988,
+      "software_shuffle_calls": 0,
+      "total_calls": 453988,
+      "r_calls": 605,
+      "hmsg_calls": 605,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "signature_sha256": "464933309528ac24e6bfa623d9e6d8836e09684c2d071276f6d4e99b56a00c67",
+      "hook_calls": 498094,
+      "software_shuffle_calls": 0,
+      "total_calls": 498094,
+      "r_calls": 649,
+      "hmsg_calls": 649,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "signature_sha256": "3c05ae14f1f3f0607dca264cbc86c61cdfccaaf08657a25afa7d7baa22126424",
+      "hook_calls": 453988,
+      "software_shuffle_calls": 15,
+      "total_calls": 454003,
+      "r_calls": 605,
+      "hmsg_calls": 605,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "signature_sha256": "464933309528ac24e6bfa623d9e6d8836e09684c2d071276f6d4e99b56a00c67",
+      "hook_calls": 498094,
+      "software_shuffle_calls": 15,
+      "total_calls": 498109,
+      "r_calls": 649,
+      "hmsg_calls": 649,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "signature_sha256": "2daa2fbb3fe840a1d468ee7f3c770e537a51a4adf59047114c71bdfe77aa89c3",
+      "hook_calls": 538014,
+      "software_shuffle_calls": 0,
+      "total_calls": 538014,
+      "r_calls": 3492,
+      "hmsg_calls": 3492,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "signature_sha256": "6b85806aff4468fa97be33d7fb6834695f9841b4e6ba2c405e6bce088c89063f",
+      "hook_calls": 476853,
+      "software_shuffle_calls": 0,
+      "total_calls": 476853,
+      "r_calls": 3564,
+      "hmsg_calls": 3564,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "signature_sha256": "2daa2fbb3fe840a1d468ee7f3c770e537a51a4adf59047114c71bdfe77aa89c3",
+      "hook_calls": 538014,
+      "software_shuffle_calls": 15,
+      "total_calls": 538029,
+      "r_calls": 3492,
+      "hmsg_calls": 3492,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "signature_sha256": "6b85806aff4468fa97be33d7fb6834695f9841b4e6ba2c405e6bce088c89063f",
+      "hook_calls": 476853,
+      "software_shuffle_calls": 15,
+      "total_calls": 476868,
+      "r_calls": 3564,
+      "hmsg_calls": 3564,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "signature_sha256": "cffc4e2b9ff7be0014c0a8d7b1ae1cd74d49e3de03cd46571dc8f2864cb113ea",
+      "hook_calls": 479192,
+      "software_shuffle_calls": 0,
+      "total_calls": 479192,
+      "r_calls": 2162,
+      "hmsg_calls": 2162,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "signature_sha256": "2f424f2ba20b7b5b2bbeaa0d0fa719ec5a2f0416348c42818035c5f545c61a10",
+      "hook_calls": 480852,
+      "software_shuffle_calls": 0,
+      "total_calls": 480852,
+      "r_calls": 359,
+      "hmsg_calls": 359,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "signature_sha256": "cffc4e2b9ff7be0014c0a8d7b1ae1cd74d49e3de03cd46571dc8f2864cb113ea",
+      "hook_calls": 479192,
+      "software_shuffle_calls": 15,
+      "total_calls": 479207,
+      "r_calls": 2162,
+      "hmsg_calls": 2162,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "signature_sha256": "2f424f2ba20b7b5b2bbeaa0d0fa719ec5a2f0416348c42818035c5f545c61a10",
+      "hook_calls": 480852,
+      "software_shuffle_calls": 15,
+      "total_calls": 480867,
+      "r_calls": 359,
+      "hmsg_calls": 359,
+      "verify_calls": 361
+    }
+  ],
+  "negative_verifications": [
+    {
+      "case": 0,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 0,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 1,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 2,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 3,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 0,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 1,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 2,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": -1,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 0,
+      "accepted": false,
+      "verify_calls": 1
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 16,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 224,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 2336,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 3024,
+      "accepted": false,
+      "verify_calls": 167
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 3028,
+      "accepted": false,
+      "verify_calls": 264
+    },
+    {
+      "case": 4,
+      "run": 3,
+      "position": 4007,
+      "accepted": false,
+      "verify_calls": 361
+    }
+  ],
+  "scope": "Manual byte/call correspondence for public fixtures; software shuffle SHA calls counted separately from Rust hooks. No extraction or probability/security theorem."
+}
+
+### INPUTS_SHA256 ea9deb7a9681913681f0bc4a1ee80df4
+OK   INPUTS_SHA256 matches the committed identity
+OK   coverage: all 2564 top-level statements across 430 CONE files are pinned (roots 173 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 112 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   scope-probe linkage: 104 headline files <-> 104 registered scope probes (exact bijection)
+OK unique statement pins: 2953
+OK split static contract: 430 files; proof execution not performed
+OK toolchain: r2026.02, 25 pinned prover configurations
+### IMAGE ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3
+OK proof controls: direct dependency failure / import acceptance / open-proof rejection / abstract require and EOF
+OK   no dual-extension theory names on the include path
+### ECO_PURGED=0
+### ECO_REMAINING=0
+### PHASE 1 — TARGETS
+OK   target base-c10-split/BinaryTrees.ec
+OK   target base-c10-split/MerkleTrees.ec
+OK   target base-c10-split/KeyedHashFunctions.eca
+OK   target base-c10-split/TweakableHashFunctions.eca
+OK   target base-c10-split/HashAddresses.eca
+OK   target base-c10-split/RadixEncoding.ec
+OK   target base-c10-split/WOTS_TW_ES.ec
+OK   target base-c10-split/FL_SL_XMSS_MT_ES.ec
+OK   target base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca
+OK   target base-c10-split/FORS_ES.ec
+OK   target base-c10-split/SPHINCS_PLUS.ec
+OK   target cdrafts-split/C10Counter.ec
+OK   target cdrafts-split/C10Randomizer.ec
+OK   target cdrafts-split/C10RawOracle.ec
+OK   target cdrafts-split/C10Bytes.ec
+OK   target cdrafts-split/Grind.ec
+OK   target cdrafts-split/STCR_C.ec
+OK   target cdrafts-split/WOTS_C_Real.ec
+OK   target cdrafts-split/WOTS_C_Scheme.ec
+OK   target cdrafts-split/WOTS_C_Reduction.ec
+OK   target cdrafts-split/WOTS_C_Interactive.ec
+OK   target cdrafts-split/XMSSMT_C_Scheme.ec
+OK   target cdrafts-split/XmssmtCC_All.ec
+OK   target cdrafts-split/RtopCSoundness.ec
+OK   target cdrafts-split/FxChain.ec
+OK   target cdrafts-split/BoundedIID.ec
+OK   target cdrafts-split/FORS_C10.ec
+OK   target cdrafts-split/FORS_C10_Multi.ec
+OK   target cdrafts-split/GprocFORSC10.ec
+OK   target cdrafts-split/SphincsC10CapstoneWired.ec
+OK   target cdrafts-split/SphincsC10Content.ec
+OK   target cdrafts-split/C10DeployedInstance.ec
+OK   target cdrafts-split/C10HashDomains.ec
+OK   target cdrafts-split/C10RawGrind.ec
+OK   target cdrafts-split/SecretPrefix.ec
+OK   target cdrafts-split/PrefixGuess.ec
+OK   target cdrafts-split/PrefixHybrid.ec
+OK   target cdrafts-split/RoleGrind.ec
+OK   target cdrafts-split/GrindReplay.ec
+OK   target cdrafts-split/GrindWitness.ec
+OK   target cdrafts-split/PersistentGrind.ec
+OK   target cdrafts-split/RTailFresh.ec
+OK   target cdrafts-split/IdealWitness.ec
+OK   target cdrafts-split/RawRHistory.ec
+OK   target cdrafts-split/RawTrial.ec
+OK   target cdrafts-split/RTailMessages.ec
+OK   target cdrafts-split/RTailContexts.ec
+OK   target cdrafts-split/FORSC10Digest.ec
+OK   target cdrafts-split/GrindTail.ec
+OK   target cdrafts-split/StreamBound.ec
+OK   target cdrafts-split/TrialExpectation.ec
+OK   target cdrafts-split/StreamExpectation.ec
+OK   target cdrafts-split/GrindExhaustion.ec
+OK   target cdrafts-split/ExhaustionCharges.ec
+OK   target cdrafts-split/ContextExhaustion.ec
+OK   target cdrafts-split/AcceptedContexts.ec
+OK   target cdrafts-split/DigestPrefix.ec
+OK   target cdrafts-split/FreshCoverage.ec
+OK   target cdrafts-split/AcceptedSampling.ec
+OK   target cdrafts-split/TrialAccepted.ec
+OK   target cdrafts-split/StreamAccepted.ec
+OK   target cdrafts-split/AcceptedCoverage.ec
+OK   target cdrafts-split/DigestWindow.ec
+OK   target cdrafts-split/AcceptedHypertree.ec
+OK   target cdrafts-split/KeygenPrefixes.ec
+OK   target cdrafts-split/RoleGrindCost.ec
+OK   target cdrafts-split/RawKeygen.ec
+OK   target cdrafts-split/RawKeygenCost.ec
+OK   target cdrafts-split/PreparedGrind.ec
+OK   target cdrafts-split/RawFors.ec
+OK   target cdrafts-split/PrefixGames.ec
+OK   target cdrafts-split/PrefixBound.ec
+OK   target cdrafts-split/PrefixIdeal.ec
+OK   target cdrafts-split/PreparedHistory.ec
+OK   target cdrafts-split/PreparedExhaustion.ec
+OK   target cdrafts-split/PreparedRaw.ec
+OK   target cdrafts-split/KeygenExhaustion.ec
+OK   target cdrafts-split/PhysicalKeygenCost.ec
+OK   target cdrafts-split/RawShuffle.ec
+OK   target cdrafts-split/RawForest.ec
+OK   target cdrafts-split/RawWots.ec
+OK   target cdrafts-split/RawMerkle.ec
+OK   target cdrafts-split/RawLayer.ec
+OK   target cdrafts-split/RawSigner.ec
+OK   target cdrafts-split/RawSignature.ec
+OK   target cdrafts-split/RawCodec.ec
+OK   target cdrafts-split/RawSlices.ec
+OK   target cdrafts-split/RawDecode.ec
+OK   target cdrafts-split/FullSession.ec
+OK   target cdrafts-split/ByteSession.ec
+OK   target cdrafts-split/BuilderTotality.ec
+OK   target cdrafts-split/PathReplay.ec
+OK   target cdrafts-split/PathOracle.ec
+OK   target cdrafts-split/RawPathReplay.ec
+OK   target cdrafts-split/DyadicStack.ec
+OK   target cdrafts-split/NodeGridIndex.ec
+OK   target cdrafts-split/NodeGridPath.ec
+OK   target cdrafts-split/NodeCatalog.ec
+OK   target cdrafts-split/StackAlignment.ec
+OK   target cdrafts-split/NodeCatalogDomain.ec
+OK   target cdrafts-split/StackPowers.ec
+OK   target cdrafts-split/LinearChain.ec
+OK   target cdrafts-split/LinearOracle.ec
+OK   target cdrafts-split/RawChainTrace.ec
+OK   target cdrafts-split/WotsReference.ec
+OK   target cdrafts-split/RawLeafChains.ec
+OK   target cdrafts-split/WotsReferenceOracle.ec
+OK   target cdrafts-split/WotsReferenceStep.ec
+OK   target cdrafts-split/WotsChainReference.ec
+OK   target cdrafts-split/WotsLeafReference.ec
+OK   target cdrafts-split/MonotoneHistory.ec
+OK   target cdrafts-split/RawCountRecorded.ec
+OK   target cdrafts-split/WotsReferenceRoot.ec
+OK   target cdrafts-split/WotsCatalog.ec
+OK   target cdrafts-split/CatalogDeterminism.ec
+OK   target cdrafts-split/WotsRootDeterminism.ec
+OK   target cdrafts-split/MerkleRootWitness.ec
+OK   target cdrafts-split/RawHistoryPreservation.ec
+OK   target cdrafts-split/GrindReturned.ec
+OK   target cdrafts-split/RawForsPathReplay.ec
+OK   target cdrafts-split/ForsOpening.ec
+OK   target cdrafts-split/ForestOpenings.ec
+OK   target cdrafts-split/ForestWitness.ec
+OK   target cdrafts-split/RecoveryHistory.ec
+OK   target cdrafts-split/ForsComponentHistory.ec
+OK   target cdrafts-split/ForestOracle.ec
+OK   target cdrafts-split/RawWidths.ec
+OK   target cdrafts-split/RawTreeWidths.ec
+OK   target cdrafts-split/ForsOneRecorded.ec
+OK   target cdrafts-split/ForestOneStep.ec
+OK   target cdrafts-split/ShuffleBytes.ec
+OK   target cdrafts-split/ShuffleSwap.ec
+OK   target cdrafts-split/RawShufflePermutation.ec
+OK   target cdrafts-split/ForestSignRecorded.ec
+OK   target cdrafts-split/PathCollision.ec
+OK   target cdrafts-split/PathInputs.ec
+OK   target cdrafts-split/ForsLeafInputs.ec
+OK   target cdrafts-split/RawForsComparison.ec
+OK   target cdrafts-split/ForsOpeningReplay.ec
+OK   target cdrafts-split/FixedHashReplay.ec
+OK   target cdrafts-split/ForestRecoveryReplay.ec
+OK   target cdrafts-split/ForestOpening.ec
+OK   target cdrafts-split/LinearSplit.ec
+OK   target cdrafts-split/WotsChainSplit.ec
+OK   target cdrafts-split/WotsSignatureValue.ec
+OK   target cdrafts-split/RawWotsFill.ec
+OK   target cdrafts-split/PreparationHistory.ec
+OK   target cdrafts-split/ChainHistory.ec
+OK   target cdrafts-split/RawChainReplay.ec
+OK   target cdrafts-split/FixedChainReplay.ec
+OK   target cdrafts-split/FixedWotsChains.ec
+OK   target cdrafts-split/WotsFillCorrect.ec
+OK   target cdrafts-split/WotsCountWitness.ec
+OK   target cdrafts-split/WotsSignWitness.ec
+OK   target cdrafts-split/LayerPath.ec
+OK   target cdrafts-split/LayerWitness.ec
+OK   target cdrafts-split/LayerWotsSign.ec
+OK   target cdrafts-split/RawWotsRecovery.ec
+OK   target cdrafts-split/WotsOpeningRecovery.ec
+OK   target cdrafts-split/RawPathComparison.ec
+OK   target cdrafts-split/LayerRecoveryCorrect.ec
+OK   target cdrafts-split/CatalogForest.ec
+OK   target cdrafts-split/AuthSlots.ec
+OK   target cdrafts-split/AuthCaptureSchedule.ec
+OK   target cdrafts-split/StackProjection.ec
+OK   target cdrafts-split/CatalogStack.ec
+OK   target cdrafts-split/AuthPhase.ec
+OK   target cdrafts-split/MerkleBuildWitness.ec
+OK   target cdrafts-split/MerkleCatalogObserver.ec
+OK   target cdrafts-split/ForsBuildWitness.ec
+OK   target cdrafts-split/ForsCatalogObserver.ec
+OK   target cdrafts-split/CatalogWidths.ec
+OK   target cdrafts-split/CatalogPath.ec
+OK   target cdrafts-split/BuilderPath.ec
+OK   target cdrafts-split/CatalogMerge.ec
+OK   target cdrafts-split/CatalogOracle.ec
+OK   target cdrafts-split/MerkleCatalogSound.ec
+OK   target cdrafts-split/CatalogForestMerge.ec
+OK   target cdrafts-split/AuthCaptureIndex.ec
+OK   target cdrafts-split/AuthCaptureValue.ec
+OK   target cdrafts-split/AuthSteps.ec
+OK   target cdrafts-split/AuthStepInvariant.ec
+OK   target cdrafts-split/AuthAdvance.ec
+OK   target cdrafts-split/MerkleCatalogAuth.ec
+OK   target cdrafts-split/MerkleBuilderPath.ec
+OK   target cdrafts-split/RawWotsReference.ec
+OK   target cdrafts-split/WotsCatalogOracle.ec
+OK   target cdrafts-split/MerkleWotsLeaves.ec
+OK   target cdrafts-split/MerkleBuilderWots.ec
+OK   target cdrafts-split/LayerSignWitness.ec
+OK   target cdrafts-split/LayerRecoveryHistory.ec
+OK   target cdrafts-split/LayerSignOpening.ec
+OK   target cdrafts-split/SignerCoordinates.ec
+OK   target cdrafts-split/LayerOpeningReplay.ec
+OK   target cdrafts-split/SignerLayerTrace.ec
+OK   target cdrafts-split/SignerFinishState.ec
+OK   target cdrafts-split/SignerComponentHistory.ec
+OK   target cdrafts-split/SignerRecoveryStep.ec
+OK   target cdrafts-split/SignerVerifierReplay.ec
+OK   target cdrafts-split/IndependentWidths.ec
+OK   target cdrafts-split/BuildRootProjection.ec
+OK   target cdrafts-split/RawMerkleRootWitness.ec
+OK   target cdrafts-split/SignerAccepted.ec
+OK   target cdrafts-split/SignerReturned.ec
+OK   target cdrafts-split/SignerGrindRoot.ec
+OK   target cdrafts-split/SignerForestStep.ec
+OK   target cdrafts-split/MerkleRootPersistence.ec
+OK   target cdrafts-split/LayerSignCorrect.ec
+OK   target cdrafts-split/LayerPriorRoot.ec
+OK   target cdrafts-split/SignerLayerStep.ec
+OK   target cdrafts-split/SignerFinishWitness.ec
+OK   target cdrafts-split/SignerFinishRecorded.ec
+OK   target cdrafts-split/SignerReturnedOpening.ec
+OK   target cdrafts-split/RawCompositeWidths.ec
+OK   target cdrafts-split/RawSignerWidths.ec
+OK   target cdrafts-split/IndependentSignerWidth.ec
+OK   target cdrafts-split/RawByteValues.ec
+OK   target cdrafts-split/RawWotsBytes.ec
+OK   target cdrafts-split/RawTreeBytes.ec
+OK   target cdrafts-split/RawCompositeBytes.ec
+OK   target cdrafts-split/RawSignerBytes.ec
+OK   target cdrafts-split/EncodedSlices.ec
+OK   target cdrafts-split/EncodedLayer.ec
+OK   target cdrafts-split/EncodedSignatureSlices.ec
+OK   target cdrafts-split/EncodedSignature.ec
+OK   target cdrafts-split/SignerEncodingCorrect.ec
+OK   target cdrafts-split/ActualByteSignerCorrect.ec
+OK   target cdrafts-split/ActualForestCorrect.ec
+OK   target cdrafts-split/ActualLayerCorrect.ec
+OK   target cdrafts-split/ActualSignerCorrect.ec
+OK   target cdrafts-split/WotsSignCorrect.ec
+OK   target cdrafts-split/ActualWotsCorrect.ec
+OK   target cdrafts-split/PrefixAudit.ec
+OK   target cdrafts-split/AuditPrefix.ec
+OK   target cdrafts-split/AuditComplete.ec
+OK   target cdrafts-split/BadEncCountermodel.ec
+OK   target cdrafts-split/TCollResEnum.ec
+OK   target cdrafts-split/BadEncSplit.ec
+OK   target cdrafts-split/BadEncToTColl.ec
+OK   target cdrafts-split/BadEncStep4.ec
+OK   target cdrafts-split/RawForsCost.ec
+OK   target cdrafts-split/RawForestCost.ec
+OK   target cdrafts-split/RawWotsCost.ec
+OK   target cdrafts-split/RawMerkleCost.ec
+OK   target cdrafts-split/RawLayerCost.ec
+OK   target cdrafts-split/RawSignerCost.ec
+OK   target cdrafts-split/FullSessionCost.ec
+OK   target cdrafts-split/PrefixState.ec
+OK   target cdrafts-split/FullPrefix.ec
+OK   target cdrafts-split/ByteBound.ec
+OK   target cdrafts-split/ByteAudit.ec
+OK   target cdrafts-split/NodeDistribution.ec
+OK   target cdrafts-split/ProjectedBirthday.ec
+OK   target cdrafts-split/MemoNodeCollision.ec
+OK   target cdrafts-split/ProjectedMemoOracle.ec
+OK   target cdrafts-split/PublicCollisionGame.ec
+OK   target cdrafts-split/PublicNodeZero.ec
+OK   target cdrafts-split/PublicCollisionState.ec
+OK   target cdrafts-split/BytePublicCollision.ec
+OK   target cdrafts-split/BytePublicNodeBad.ec
+OK   target cdrafts-split/GrindTrace.ec
+OK   target cdrafts-split/GrindTraceRecorded.ec
+OK   target cdrafts-split/GrindTraceReplay.ec
+OK   target cdrafts-split/SignerTrace.ec
+OK   target cdrafts-split/MessageHistory.ec
+OK   target cdrafts-split/VerifierHistory.ec
+OK   target cdrafts-split/RootSessionHistory.ec
+OK   target cdrafts-split/ForestRecoveryRecord.ec
+OK   target cdrafts-split/LinearCollision.ec
+OK   target cdrafts-split/WotsRecoveryTrace.ec
+OK   target cdrafts-split/RecoveryTraceOracle.ec
+OK   target cdrafts-split/RawRecoveryTrace.ec
+OK   target cdrafts-split/WotsRecoveryHistory.ec
+OK   target cdrafts-split/LayerRecoveryRecord.ec
+OK   target cdrafts-split/VerifierForestRecords.ec
+OK   target cdrafts-split/RecoveryCompression.ec
+OK   target cdrafts-split/WotsZeroSentinel.ec
+OK   target cdrafts-split/VerifierWotsOpening.ec
+OK   target cdrafts-split/RootCoverage.ec
+OK   target cdrafts-split/NodeCollisionEvents.ec
+OK   target cdrafts-split/LayerRecordExtraction.ec
+OK   target cdrafts-split/VerifierLayerRecords.ec
+OK   target cdrafts-split/SubtreeOpeningCases.ec
+OK   target cdrafts-split/SecretLeafOrigins.ec
+OK   target cdrafts-split/SecretLeafOracle.ec
+OK   target cdrafts-split/ForsPrivateLeaves.ec
+OK   target cdrafts-split/ForsRootWitness.ec
+OK   target cdrafts-split/ForestRootWitness.ec
+OK   target cdrafts-split/ForestCoordinates.ec
+OK   target cdrafts-split/ForsRecordExtraction.ec
+OK   target cdrafts-split/ForestRecordExtraction.ec
+OK   target cdrafts-split/ForestOpeningCases.ec
+OK   target cdrafts-split/SessionForestExtraction.ec
+OK   target cdrafts-split/TopVerifierOpening.ec
+OK   target cdrafts-split/RawWotsExtraction.ec
+OK   target cdrafts-split/LayerExtractionHistory.ec
+OK   target cdrafts-split/ForsCatalogSound.ec
+OK   target cdrafts-split/ForsCatalogAuth.ec
+OK   target cdrafts-split/ForsBuilderPath.ec
+OK   target cdrafts-split/RawBuilderReference.ec
+OK   target cdrafts-split/MerkleBuilderComparison.ec
+OK   target cdrafts-split/LayerWotsExtraction.ec
+OK   target cdrafts-split/RootLayerExtraction.ec
+OK   target cdrafts-split/RootExtractionHistory.ec
+OK   target cdrafts-split/VerifierTopExtraction.ec
+OK   target cdrafts-split/SessionTopExtraction.ec
+OK   target cdrafts-split/ByteGameTopExtraction.ec
+OK   target cdrafts-split/ByteGameForestExtraction.ec
+OK   target cdrafts-split/ByteForestOpeningHop.ec
+OK   target cdrafts-split/SessionSubtreeExtraction.ec
+OK   target cdrafts-split/ByteGameSubtreeExtraction.ec
+OK   target cdrafts-split/RHistoryOps.ec
+OK   target cdrafts-split/PreparedFinish.ec
+OK   target cdrafts-split/SignerMessages.ec
+OK   target cdrafts-split/FullMessageHistory.ec
+OK   target cdrafts-split/RSession.ec
+OK   target cdrafts-split/RSessionHistory.ec
+OK   target cdrafts-split/SignerRecorded.ec
+OK   target cdrafts-split/FullHistory.ec
+OK   target cdrafts-split/ByteHistory.ec
+OK   target cdrafts-split/DigestCoordinates.ec
+OK   target cdrafts-split/ByteReplay.ec
+OK   target cdrafts-split/ByteSubtreeOpeningHop.ec
+OK   target cdrafts-split/ByteTopOpeningHop.ec
+OK   target cdrafts-split/C10BoundedGrind.ec
+OK   target cdrafts-split/C10BoundedSigning.ec
+OK   target cdrafts-split/C10WOTSCorrect.ec
+OK   target cdrafts-split/C10BoundedHypertree.ec
+OK   target cdrafts-split/C10HypertreeCoverage.ec
+OK   target cdrafts-split/C10HypertreeCorrect.ec
+OK   target cdrafts-split/C10BoundedGame.ec
+OK   target cdrafts-split/GFailCharged.ec
+OK   target cdrafts-split/C10BoundedMA.ec
+OK   target cdrafts-split/C10CubeCorrect.ec
+OK   target cdrafts-split/C10CubeConstruction.ec
+OK   target cdrafts-split/C10ReductionChoose.ec
+OK   target cdrafts-split/C10ReductionForge.ec
+OK   target cdrafts-split/C10AcceptedReduction.ec
+OK   target cdrafts-split/VecDP.ec
+OK   target cdrafts-split/CountDS.ec
+OK   target cdrafts-split/C10DigitUniform.ec
+OK   target cdrafts-split/C10SurfaceKernel.ec
+OK   target cdrafts-split/C10Surface.ec
+OK   target cdrafts-split/C10Encoding.ec
+OK   target cdrafts-split/C10BoundedIID.ec
+OK   target cdrafts-split/C10BoundedLeaf.ec
+OK   target cdrafts-split/C10BoundedReduction.ec
+OK   target cdrafts-split/C10DeployedCapstone.ec
+OK   target cdrafts-split/C10DeployedGeometry.ec
+OK   target cdrafts-split/C10DeployedScope.ec
+OK   target cdrafts-split/C10HypertreeAccepted.ec
+OK   target cdrafts-split/XmssmtCCCharged.ec
+OK   target cdrafts-split/C10HypertreeCharged.ec
+OK   target cdrafts-split/SharedROBounded.ec
+OK   target cdrafts-split/C10SharedSearch.ec
+OK   target cdrafts-split/C10SearchBounds.ec
+OK   target cdrafts-split/C10SpecControls.ec
+OK   target cdrafts-split/C10StatefulSearch.ec
+OK   target cdrafts-split/SessionDigest.ec
+OK   target cdrafts-split/ClassifiedHistory.ec
+OK   target cdrafts-split/ClassifiedGrind.ec
+OK   target cdrafts-split/ClassifiedSigner.ec
+OK   target cdrafts-split/ClassifiedSession.ec
+OK   target cdrafts-split/ClassifiedBound.ec
+OK   target cdrafts-split/DarkSide.ec
+OK   target cdrafts-split/DarkSideC10.ec
+OK   target cdrafts-split/DigestPair.ec
+OK   target cdrafts-split/ExposureLog.ec
+OK   target cdrafts-split/ExposureAccounting.ec
+OK   target cdrafts-split/ExposureDriver.ec
+OK   target cdrafts-split/ForestReferenceHistory.ec
+OK   target cdrafts-split/ForsBuilderPrivate.ec
+OK   target cdrafts-split/ForsRootRecording.ec
+OK   target cdrafts-split/ForsPrivateEntry.ec
+OK   target cdrafts-split/ForsKnownSecret.ec
+OK   target cdrafts-split/ForsSignWitness.ec
+OK   target cdrafts-split/ForsReturnedRoot.ec
+OK   target cdrafts-split/ForestRootPrefix.ec
+OK   target cdrafts-split/ForestRootRecording.ec
+OK   target cdrafts-split/SignerForestReference.ec
+OK   target cdrafts-split/HonestForestMessages.ec
+OK   target cdrafts-split/LayerReturnedRoot.ec
+OK   target cdrafts-split/SignerSubtreeReference.ec
+OK   target cdrafts-split/HonestSubtreeMessages.ec
+OK   target cdrafts-split/ExposureSupport.ec
+OK   target cdrafts-split/ExposureHistory.ec
+OK   target cdrafts-split/ExposureSessionHistory.ec
+OK   target cdrafts-split/ExposureGameHistory.ec
+OK   target cdrafts-split/ExposureForge.ec
+OK   target cdrafts-split/ExposureReferences.ec
+OK   target cdrafts-split/FORS_C.ec
+OK   target cdrafts-split/FORS_C_TreePort.ec
+OK   target cdrafts-split/LeafOrigins.ec
+OK   target cdrafts-split/LeafOriginOracle.ec
+OK   target cdrafts-split/ForsLeafOrigins.ec
+OK   target cdrafts-split/ForsBuilderSecret.ec
+OK   target cdrafts-split/ForsBuilderComparison.ec
+OK   target cdrafts-split/ForsSignCorrect.ec
+OK   target cdrafts-split/ForsSignRecord.ec
+OK   target cdrafts-split/FullFailure.ec
+OK   target cdrafts-split/GprocVI.ec
+OK   target cdrafts-split/SphincsC10CapstoneCharged.ec
+OK   target cdrafts-split/GprocT1Opre.ec
+OK   target cdrafts-split/GprocT2Trh.ec
+OK   target cdrafts-split/GprocT3Trco.ec
+OK   target cdrafts-split/GprocQBound.ec
+OK   target cdrafts-split/GprocQWired.ec
+OK   target cdrafts-split/GprocChargedQWired.ec
+OK   target cdrafts-split/WotsLegCharged.ec
+OK   target cdrafts-split/GprocWotsNamed.ec
+OK   target cdrafts-split/GprocTCollNamed.ec
+OK   target cdrafts-split/GrindHypertree.ec
+OK   target cdrafts-split/GrindJointCoverage.ec
+OK   target cdrafts-split/HonestByteContext.ec
+OK   target cdrafts-split/HonestByteCost.ec
+OK   target cdrafts-split/HonestBytePhysical.ec
+OK   target cdrafts-split/LayerBuildExtraction.ec
+OK   target cdrafts-split/PublicCollisionBound.ec
+OK   target cdrafts-split/RSessionCost.ec
+OK   target cdrafts-split/RSessionBound.ec
+OK   target cdrafts-split/SessionKeygen.ec
+OK   target cdrafts-split/RawSession.ec
+OK   target cdrafts-split/SessionPhysical.ec
+OK   target cdrafts-split/RawSessionBound.ec
+OK   target cdrafts-split/RawSessionCost.ec
+OK   target cdrafts-split/SessionClosedForm.ec
+OK   target cdrafts-split/TotalBuilderReference.ec
+OK   target cdrafts-split/VerifierWotsReplay.ec
+OK   target cdrafts-split/WOTS_C_Multi.ec
+OK   target cdrafts-split/WotsKeyExtraction.ec
+### CONE_COMPILED=430 EXPECTED=430
+### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)
+OK   all closure files are requirable
+### PHASE 1e — BOTH DRIVERS (compile AND cli)
+OK   base-c10-split/BinaryTrees.ec (cli, 303 cmds)
+OK   base-c10-split/MerkleTrees.ec (cli, 105 cmds)
+OK   base-c10-split/KeyedHashFunctions.eca (cli, 156 cmds)
+OK   base-c10-split/TweakableHashFunctions.eca (cli, 84 cmds)
+OK   base-c10-split/HashAddresses.eca (cli, 63 cmds)
+OK   base-c10-split/RadixEncoding.ec (cli, 42 cmds)
+OK   base-c10-split/WOTS_TW_ES.ec (cli, 2193 cmds)
+OK   base-c10-split/FL_SL_XMSS_MT_ES.ec (cli, 679 cmds)
+OK   base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca (cli, 703 cmds)
+OK   base-c10-split/FORS_ES.ec (cli, 2191 cmds)
+OK   base-c10-split/SPHINCS_PLUS.ec (cli, 456 cmds)
+OK   cdrafts-split/C10Counter.ec (cli, 57 cmds)
+OK   cdrafts-split/C10Randomizer.ec (cli, 51 cmds)
+OK   cdrafts-split/C10RawOracle.ec (cli, 65 cmds)
+OK   cdrafts-split/C10Bytes.ec (cli, 67 cmds)
+OK   cdrafts-split/Grind.ec (cli, 59 cmds)
+OK   cdrafts-split/STCR_C.ec (cli, 37 cmds)
+OK   cdrafts-split/WOTS_C_Real.ec (cli, 120 cmds)
+OK   cdrafts-split/WOTS_C_Scheme.ec (cli, 41 cmds)
+OK   cdrafts-split/WOTS_C_Reduction.ec (cli, 204 cmds)
+OK   cdrafts-split/WOTS_C_Interactive.ec (cli, 744 cmds)
+OK   cdrafts-split/XMSSMT_C_Scheme.ec (cli, 58 cmds)
+OK   cdrafts-split/XmssmtCC_All.ec (cli, 2645 cmds)
+OK   cdrafts-split/RtopCSoundness.ec (cli, 673 cmds)
+OK   cdrafts-split/FxChain.ec (cli, 1219 cmds)
+OK   cdrafts-split/BoundedIID.ec (cli, 47 cmds)
+OK   cdrafts-split/FORS_C10.ec (cli, 81 cmds)
+OK   cdrafts-split/FORS_C10_Multi.ec (cli, 69 cmds)
+OK   cdrafts-split/GprocFORSC10.ec (cli, 400 cmds)
+OK   cdrafts-split/SphincsC10CapstoneWired.ec (cli, 102 cmds)
+OK   cdrafts-split/SphincsC10Content.ec (cli, 198 cmds)
+OK   cdrafts-split/C10DeployedInstance.ec (cli, 285 cmds)
+OK   cdrafts-split/C10HashDomains.ec (cli, 51 cmds)
+OK   cdrafts-split/C10RawGrind.ec (cli, 43 cmds)
+OK   cdrafts-split/SecretPrefix.ec (cli, 30 cmds)
+OK   cdrafts-split/PrefixGuess.ec (cli, 25 cmds)
+OK   cdrafts-split/PrefixHybrid.ec (cli, 78 cmds)
+OK   cdrafts-split/RoleGrind.ec (cli, 20 cmds)
+OK   cdrafts-split/GrindReplay.ec (cli, 19 cmds)
+OK   cdrafts-split/GrindWitness.ec (cli, 23 cmds)
+OK   cdrafts-split/PersistentGrind.ec (cli, 21 cmds)
+OK   cdrafts-split/RTailFresh.ec (cli, 47 cmds)
+OK   cdrafts-split/IdealWitness.ec (cli, 51 cmds)
+OK   cdrafts-split/RawRHistory.ec (cli, 29 cmds)
+OK   cdrafts-split/RawTrial.ec (cli, 27 cmds)
+OK   cdrafts-split/RTailMessages.ec (cli, 33 cmds)
+OK   cdrafts-split/RTailContexts.ec (cli, 41 cmds)
+OK   cdrafts-split/FORSC10Digest.ec (cli, 30 cmds)
+OK   cdrafts-split/GrindTail.ec (cli, 33 cmds)
+OK   cdrafts-split/StreamBound.ec (cli, 54 cmds)
+OK   cdrafts-split/TrialExpectation.ec (cli, 25 cmds)
+OK   cdrafts-split/StreamExpectation.ec (cli, 35 cmds)
+OK   cdrafts-split/GrindExhaustion.ec (cli, 24 cmds)
+OK   cdrafts-split/ExhaustionCharges.ec (cli, 11 cmds)
+OK   cdrafts-split/ContextExhaustion.ec (cli, 31 cmds)
+OK   cdrafts-split/AcceptedContexts.ec (cli, 39 cmds)
+OK   cdrafts-split/DigestPrefix.ec (cli, 27 cmds)
+OK   cdrafts-split/FreshCoverage.ec (cli, 100 cmds)
+OK   cdrafts-split/AcceptedSampling.ec (cli, 57 cmds)
+OK   cdrafts-split/TrialAccepted.ec (cli, 25 cmds)
+OK   cdrafts-split/StreamAccepted.ec (cli, 51 cmds)
+OK   cdrafts-split/AcceptedCoverage.ec (cli, 29 cmds)
+OK   cdrafts-split/DigestWindow.ec (cli, 24 cmds)
+OK   cdrafts-split/AcceptedHypertree.ec (cli, 35 cmds)
+OK   cdrafts-split/KeygenPrefixes.ec (cli, 39 cmds)
+OK   cdrafts-split/RoleGrindCost.ec (cli, 24 cmds)
+OK   cdrafts-split/RawKeygen.ec (cli, 34 cmds)
+OK   cdrafts-split/RawKeygenCost.ec (cli, 41 cmds)
+OK   cdrafts-split/PreparedGrind.ec (cli, 22 cmds)
+OK   cdrafts-split/RawFors.ec (cli, 21 cmds)
+OK   cdrafts-split/PrefixGames.ec (cli, 31 cmds)
+OK   cdrafts-split/PrefixBound.ec (cli, 16 cmds)
+OK   cdrafts-split/PrefixIdeal.ec (cli, 19 cmds)
+OK   cdrafts-split/PreparedHistory.ec (cli, 23 cmds)
+OK   cdrafts-split/PreparedExhaustion.ec (cli, 38 cmds)
+OK   cdrafts-split/PreparedRaw.ec (cli, 21 cmds)
+OK   cdrafts-split/KeygenExhaustion.ec (cli, 21 cmds)
+OK   cdrafts-split/PhysicalKeygenCost.ec (cli, 47 cmds)
+OK   cdrafts-split/RawShuffle.ec (cli, 47 cmds)
+OK   cdrafts-split/RawForest.ec (cli, 27 cmds)
+OK   cdrafts-split/RawWots.ec (cli, 42 cmds)
+OK   cdrafts-split/RawMerkle.ec (cli, 18 cmds)
+OK   cdrafts-split/RawLayer.ec (cli, 18 cmds)
+OK   cdrafts-split/RawSigner.ec (cli, 28 cmds)
+OK   cdrafts-split/RawSignature.ec (cli, 43 cmds)
+OK   cdrafts-split/RawCodec.ec (cli, 30 cmds)
+OK   cdrafts-split/RawSlices.ec (cli, 23 cmds)
+OK   cdrafts-split/RawDecode.ec (cli, 55 cmds)
+OK   cdrafts-split/FullSession.ec (cli, 31 cmds)
+OK   cdrafts-split/ByteSession.ec (cli, 38 cmds)
+OK   cdrafts-split/BuilderTotality.ec (cli, 27 cmds)
+OK   cdrafts-split/PathReplay.ec (cli, 42 cmds)
+OK   cdrafts-split/PathOracle.ec (cli, 20 cmds)
+OK   cdrafts-split/RawPathReplay.ec (cli, 13 cmds)
+OK   cdrafts-split/DyadicStack.ec (cli, 91 cmds)
+OK   cdrafts-split/NodeGridIndex.ec (cli, 47 cmds)
+OK   cdrafts-split/NodeGridPath.ec (cli, 43 cmds)
+OK   cdrafts-split/NodeCatalog.ec (cli, 47 cmds)
+OK   cdrafts-split/StackAlignment.ec (cli, 38 cmds)
+OK   cdrafts-split/NodeCatalogDomain.ec (cli, 89 cmds)
+OK   cdrafts-split/StackPowers.ec (cli, 10 cmds)
+OK   cdrafts-split/LinearChain.ec (cli, 50 cmds)
+OK   cdrafts-split/LinearOracle.ec (cli, 12 cmds)
+OK   cdrafts-split/RawChainTrace.ec (cli, 25 cmds)
+OK   cdrafts-split/WotsReference.ec (cli, 32 cmds)
+OK   cdrafts-split/RawLeafChains.ec (cli, 16 cmds)
+OK   cdrafts-split/WotsReferenceOracle.ec (cli, 17 cmds)
+OK   cdrafts-split/WotsReferenceStep.ec (cli, 13 cmds)
+OK   cdrafts-split/WotsChainReference.ec (cli, 16 cmds)
+OK   cdrafts-split/WotsLeafReference.ec (cli, 25 cmds)
+OK   cdrafts-split/MonotoneHistory.ec (cli, 21 cmds)
+OK   cdrafts-split/RawCountRecorded.ec (cli, 23 cmds)
+OK   cdrafts-split/WotsReferenceRoot.ec (cli, 22 cmds)
+OK   cdrafts-split/WotsCatalog.ec (cli, 24 cmds)
+OK   cdrafts-split/CatalogDeterminism.ec (cli, 18 cmds)
+OK   cdrafts-split/WotsRootDeterminism.ec (cli, 17 cmds)
+OK   cdrafts-split/MerkleRootWitness.ec (cli, 20 cmds)
+OK   cdrafts-split/RawHistoryPreservation.ec (cli, 17 cmds)
+OK   cdrafts-split/GrindReturned.ec (cli, 32 cmds)
+OK   cdrafts-split/RawForsPathReplay.ec (cli, 18 cmds)
+OK   cdrafts-split/ForsOpening.ec (cli, 11 cmds)
+OK   cdrafts-split/ForestOpenings.ec (cli, 27 cmds)
+OK   cdrafts-split/ForestWitness.ec (cli, 21 cmds)
+OK   cdrafts-split/RecoveryHistory.ec (cli, 16 cmds)
+OK   cdrafts-split/ForsComponentHistory.ec (cli, 34 cmds)
+OK   cdrafts-split/ForestOracle.ec (cli, 22 cmds)
+OK   cdrafts-split/RawWidths.ec (cli, 54 cmds)
+OK   cdrafts-split/RawTreeWidths.ec (cli, 54 cmds)
+OK   cdrafts-split/ForsOneRecorded.ec (cli, 17 cmds)
+OK   cdrafts-split/ForestOneStep.ec (cli, 8 cmds)
+OK   cdrafts-split/ShuffleBytes.ec (cli, 22 cmds)
+OK   cdrafts-split/ShuffleSwap.ec (cli, 18 cmds)
+OK   cdrafts-split/RawShufflePermutation.ec (cli, 19 cmds)
+OK   cdrafts-split/ForestSignRecorded.ec (cli, 25 cmds)
+OK   cdrafts-split/PathCollision.ec (cli, 31 cmds)
+OK   cdrafts-split/PathInputs.ec (cli, 41 cmds)
+OK   cdrafts-split/ForsLeafInputs.ec (cli, 17 cmds)
+OK   cdrafts-split/RawForsComparison.ec (cli, 12 cmds)
+OK   cdrafts-split/ForsOpeningReplay.ec (cli, 16 cmds)
+OK   cdrafts-split/FixedHashReplay.ec (cli, 7 cmds)
+OK   cdrafts-split/ForestRecoveryReplay.ec (cli, 21 cmds)
+OK   cdrafts-split/ForestOpening.ec (cli, 23 cmds)
+OK   cdrafts-split/LinearSplit.ec (cli, 8 cmds)
+OK   cdrafts-split/WotsChainSplit.ec (cli, 10 cmds)
+OK   cdrafts-split/WotsSignatureValue.ec (cli, 25 cmds)
+OK   cdrafts-split/RawWotsFill.ec (cli, 18 cmds)
+OK   cdrafts-split/PreparationHistory.ec (cli, 16 cmds)
+OK   cdrafts-split/ChainHistory.ec (cli, 16 cmds)
+OK   cdrafts-split/RawChainReplay.ec (cli, 8 cmds)
+OK   cdrafts-split/FixedChainReplay.ec (cli, 17 cmds)
+OK   cdrafts-split/FixedWotsChains.ec (cli, 23 cmds)
+OK   cdrafts-split/WotsFillCorrect.ec (cli, 14 cmds)
+OK   cdrafts-split/WotsCountWitness.ec (cli, 8 cmds)
+OK   cdrafts-split/WotsSignWitness.ec (cli, 22 cmds)
+OK   cdrafts-split/LayerPath.ec (cli, 26 cmds)
+OK   cdrafts-split/LayerWitness.ec (cli, 18 cmds)
+OK   cdrafts-split/LayerWotsSign.ec (cli, 10 cmds)
+OK   cdrafts-split/RawWotsRecovery.ec (cli, 26 cmds)
+OK   cdrafts-split/WotsOpeningRecovery.ec (cli, 12 cmds)
+OK   cdrafts-split/RawPathComparison.ec (cli, 12 cmds)
+OK   cdrafts-split/LayerRecoveryCorrect.ec (cli, 16 cmds)
+OK   cdrafts-split/CatalogForest.ec (cli, 39 cmds)
+OK   cdrafts-split/AuthSlots.ec (cli, 37 cmds)
+OK   cdrafts-split/AuthCaptureSchedule.ec (cli, 37 cmds)
+OK   cdrafts-split/StackProjection.ec (cli, 16 cmds)
+OK   cdrafts-split/CatalogStack.ec (cli, 37 cmds)
+OK   cdrafts-split/AuthPhase.ec (cli, 58 cmds)
+OK   cdrafts-split/MerkleBuildWitness.ec (cli, 30 cmds)
+OK   cdrafts-split/MerkleCatalogObserver.ec (cli, 35 cmds)
+OK   cdrafts-split/ForsBuildWitness.ec (cli, 33 cmds)
+OK   cdrafts-split/ForsCatalogObserver.ec (cli, 38 cmds)
+OK   cdrafts-split/CatalogWidths.ec (cli, 53 cmds)
+OK   cdrafts-split/CatalogPath.ec (cli, 21 cmds)
+OK   cdrafts-split/BuilderPath.ec (cli, 14 cmds)
+OK   cdrafts-split/CatalogMerge.ec (cli, 28 cmds)
+OK   cdrafts-split/CatalogOracle.ec (cli, 27 cmds)
+OK   cdrafts-split/MerkleCatalogSound.ec (cli, 43 cmds)
+OK   cdrafts-split/CatalogForestMerge.ec (cli, 16 cmds)
+OK   cdrafts-split/AuthCaptureIndex.ec (cli, 43 cmds)
+OK   cdrafts-split/AuthCaptureValue.ec (cli, 19 cmds)
+OK   cdrafts-split/AuthSteps.ec (cli, 32 cmds)
+OK   cdrafts-split/AuthStepInvariant.ec (cli, 37 cmds)
+OK   cdrafts-split/AuthAdvance.ec (cli, 37 cmds)
+OK   cdrafts-split/MerkleCatalogAuth.ec (cli, 57 cmds)
+OK   cdrafts-split/MerkleBuilderPath.ec (cli, 39 cmds)
+OK   cdrafts-split/RawWotsReference.ec (cli, 15 cmds)
+OK   cdrafts-split/WotsCatalogOracle.ec (cli, 31 cmds)
+OK   cdrafts-split/MerkleWotsLeaves.ec (cli, 16 cmds)
+OK   cdrafts-split/MerkleBuilderWots.ec (cli, 44 cmds)
+OK   cdrafts-split/LayerSignWitness.ec (cli, 15 cmds)
+OK   cdrafts-split/LayerRecoveryHistory.ec (cli, 18 cmds)
+OK   cdrafts-split/LayerSignOpening.ec (cli, 29 cmds)
+OK   cdrafts-split/SignerCoordinates.ec (cli, 27 cmds)
+OK   cdrafts-split/LayerOpeningReplay.ec (cli, 17 cmds)
+OK   cdrafts-split/SignerLayerTrace.ec (cli, 23 cmds)
+OK   cdrafts-split/SignerFinishState.ec (cli, 28 cmds)
+OK   cdrafts-split/SignerComponentHistory.ec (cli, 29 cmds)
+OK   cdrafts-split/SignerRecoveryStep.ec (cli, 12 cmds)
+OK   cdrafts-split/SignerVerifierReplay.ec (cli, 25 cmds)
+OK   cdrafts-split/IndependentWidths.ec (cli, 33 cmds)
+OK   cdrafts-split/BuildRootProjection.ec (cli, 15 cmds)
+OK   cdrafts-split/RawMerkleRootWitness.ec (cli, 35 cmds)
+OK   cdrafts-split/SignerAccepted.ec (cli, 41 cmds)
+OK   cdrafts-split/SignerReturned.ec (cli, 41 cmds)
+OK   cdrafts-split/SignerGrindRoot.ec (cli, 16 cmds)
+OK   cdrafts-split/SignerForestStep.ec (cli, 13 cmds)
+OK   cdrafts-split/MerkleRootPersistence.ec (cli, 21 cmds)
+OK   cdrafts-split/LayerSignCorrect.ec (cli, 34 cmds)
+OK   cdrafts-split/LayerPriorRoot.ec (cli, 26 cmds)
+OK   cdrafts-split/SignerLayerStep.ec (cli, 18 cmds)
+OK   cdrafts-split/SignerFinishWitness.ec (cli, 14 cmds)
+OK   cdrafts-split/SignerFinishRecorded.ec (cli, 21 cmds)
+OK   cdrafts-split/SignerReturnedOpening.ec (cli, 25 cmds)
+OK   cdrafts-split/RawCompositeWidths.ec (cli, 35 cmds)
+OK   cdrafts-split/RawSignerWidths.ec (cli, 33 cmds)
+OK   cdrafts-split/IndependentSignerWidth.ec (cli, 19 cmds)
+OK   cdrafts-split/RawByteValues.ec (cli, 42 cmds)
+OK   cdrafts-split/RawWotsBytes.ec (cli, 35 cmds)
+OK   cdrafts-split/RawTreeBytes.ec (cli, 50 cmds)
+OK   cdrafts-split/RawCompositeBytes.ec (cli, 35 cmds)
+OK   cdrafts-split/RawSignerBytes.ec (cli, 51 cmds)
+OK   cdrafts-split/EncodedSlices.ec (cli, 35 cmds)
+OK   cdrafts-split/EncodedLayer.ec (cli, 32 cmds)
+OK   cdrafts-split/EncodedSignatureSlices.ec (cli, 47 cmds)
+OK   cdrafts-split/EncodedSignature.ec (cli, 39 cmds)
+OK   cdrafts-split/SignerEncodingCorrect.ec (cli, 17 cmds)
+OK   cdrafts-split/ActualByteSignerCorrect.ec (cli, 33 cmds)
+OK   cdrafts-split/ActualForestCorrect.ec (cli, 24 cmds)
+OK   cdrafts-split/ActualLayerCorrect.ec (cli, 33 cmds)
+OK   cdrafts-split/ActualSignerCorrect.ec (cli, 31 cmds)
+OK   cdrafts-split/WotsSignCorrect.ec (cli, 17 cmds)
+OK   cdrafts-split/ActualWotsCorrect.ec (cli, 28 cmds)
+OK   cdrafts-split/PrefixAudit.ec (cli, 60 cmds)
+OK   cdrafts-split/AuditPrefix.ec (cli, 54 cmds)
+OK   cdrafts-split/AuditComplete.ec (cli, 35 cmds)
+OK   cdrafts-split/BadEncCountermodel.ec (cli, 164 cmds)
+OK   cdrafts-split/TCollResEnum.ec (cli, 135 cmds)
+OK   cdrafts-split/BadEncSplit.ec (cli, 52 cmds)
+OK   cdrafts-split/BadEncToTColl.ec (cli, 91 cmds)
+OK   cdrafts-split/BadEncStep4.ec (cli, 196 cmds)
+OK   cdrafts-split/RawForsCost.ec (cli, 69 cmds)
+OK   cdrafts-split/RawForestCost.ec (cli, 62 cmds)
+OK   cdrafts-split/RawWotsCost.ec (cli, 76 cmds)
+OK   cdrafts-split/RawMerkleCost.ec (cli, 40 cmds)
+OK   cdrafts-split/RawLayerCost.ec (cli, 38 cmds)
+OK   cdrafts-split/RawSignerCost.ec (cli, 68 cmds)
+OK   cdrafts-split/FullSessionCost.ec (cli, 45 cmds)
+OK   cdrafts-split/PrefixState.ec (cli, 29 cmds)
+OK   cdrafts-split/FullPrefix.ec (cli, 21 cmds)
+OK   cdrafts-split/ByteBound.ec (cli, 21 cmds)
+OK   cdrafts-split/ByteAudit.ec (cli, 50 cmds)
+OK   cdrafts-split/NodeDistribution.ec (cli, 33 cmds)
+OK   cdrafts-split/ProjectedBirthday.ec (cli, 22 cmds)
+OK   cdrafts-split/MemoNodeCollision.ec (cli, 18 cmds)
+OK   cdrafts-split/ProjectedMemoOracle.ec (cli, 42 cmds)
+OK   cdrafts-split/PublicCollisionGame.ec (cli, 22 cmds)
+OK   cdrafts-split/PublicNodeZero.ec (cli, 40 cmds)
+OK   cdrafts-split/PublicCollisionState.ec (cli, 24 cmds)
+OK   cdrafts-split/BytePublicCollision.ec (cli, 32 cmds)
+OK   cdrafts-split/BytePublicNodeBad.ec (cli, 30 cmds)
+OK   cdrafts-split/GrindTrace.ec (cli, 42 cmds)
+OK   cdrafts-split/GrindTraceRecorded.ec (cli, 35 cmds)
+OK   cdrafts-split/GrindTraceReplay.ec (cli, 50 cmds)
+OK   cdrafts-split/SignerTrace.ec (cli, 42 cmds)
+OK   cdrafts-split/MessageHistory.ec (cli, 69 cmds)
+OK   cdrafts-split/VerifierHistory.ec (cli, 22 cmds)
+OK   cdrafts-split/RootSessionHistory.ec (cli, 40 cmds)
+OK   cdrafts-split/ForestRecoveryRecord.ec (cli, 49 cmds)
+OK   cdrafts-split/LinearCollision.ec (cli, 25 cmds)
+OK   cdrafts-split/WotsRecoveryTrace.ec (cli, 42 cmds)
+OK   cdrafts-split/RecoveryTraceOracle.ec (cli, 23 cmds)
+OK   cdrafts-split/RawRecoveryTrace.ec (cli, 21 cmds)
+OK   cdrafts-split/WotsRecoveryHistory.ec (cli, 43 cmds)
+OK   cdrafts-split/LayerRecoveryRecord.ec (cli, 27 cmds)
+OK   cdrafts-split/VerifierForestRecords.ec (cli, 35 cmds)
+OK   cdrafts-split/RecoveryCompression.ec (cli, 37 cmds)
+OK   cdrafts-split/WotsZeroSentinel.ec (cli, 19 cmds)
+OK   cdrafts-split/VerifierWotsOpening.ec (cli, 21 cmds)
+OK   cdrafts-split/RootCoverage.ec (cli, 53 cmds)
+OK   cdrafts-split/NodeCollisionEvents.ec (cli, 22 cmds)
+OK   cdrafts-split/LayerRecordExtraction.ec (cli, 23 cmds)
+OK   cdrafts-split/VerifierLayerRecords.ec (cli, 29 cmds)
+OK   cdrafts-split/SubtreeOpeningCases.ec (cli, 27 cmds)
+OK   cdrafts-split/SecretLeafOrigins.ec (cli, 41 cmds)
+OK   cdrafts-split/SecretLeafOracle.ec (cli, 20 cmds)
+OK   cdrafts-split/ForsPrivateLeaves.ec (cli, 21 cmds)
+OK   cdrafts-split/ForsRootWitness.ec (cli, 35 cmds)
+OK   cdrafts-split/ForestRootWitness.ec (cli, 27 cmds)
+OK   cdrafts-split/ForestCoordinates.ec (cli, 13 cmds)
+OK   cdrafts-split/ForsRecordExtraction.ec (cli, 20 cmds)
+OK   cdrafts-split/ForestRecordExtraction.ec (cli, 66 cmds)
+OK   cdrafts-split/ForestOpeningCases.ec (cli, 33 cmds)
+OK   cdrafts-split/SessionForestExtraction.ec (cli, 19 cmds)
+OK   cdrafts-split/TopVerifierOpening.ec (cli, 6 cmds)
+OK   cdrafts-split/RawWotsExtraction.ec (cli, 13 cmds)
+OK   cdrafts-split/LayerExtractionHistory.ec (cli, 12 cmds)
+OK   cdrafts-split/ForsCatalogSound.ec (cli, 45 cmds)
+OK   cdrafts-split/ForsCatalogAuth.ec (cli, 57 cmds)
+OK   cdrafts-split/ForsBuilderPath.ec (cli, 39 cmds)
+OK   cdrafts-split/RawBuilderReference.ec (cli, 35 cmds)
+OK   cdrafts-split/MerkleBuilderComparison.ec (cli, 27 cmds)
+OK   cdrafts-split/LayerWotsExtraction.ec (cli, 19 cmds)
+OK   cdrafts-split/RootLayerExtraction.ec (cli, 16 cmds)
+OK   cdrafts-split/RootExtractionHistory.ec (cli, 9 cmds)
+OK   cdrafts-split/VerifierTopExtraction.ec (cli, 24 cmds)
+OK   cdrafts-split/SessionTopExtraction.ec (cli, 19 cmds)
+OK   cdrafts-split/ByteGameTopExtraction.ec (cli, 27 cmds)
+OK   cdrafts-split/ByteGameForestExtraction.ec (cli, 23 cmds)
+OK   cdrafts-split/ByteForestOpeningHop.ec (cli, 18 cmds)
+OK   cdrafts-split/SessionSubtreeExtraction.ec (cli, 19 cmds)
+OK   cdrafts-split/ByteGameSubtreeExtraction.ec (cli, 23 cmds)
+OK   cdrafts-split/RHistoryOps.ec (cli, 53 cmds)
+OK   cdrafts-split/PreparedFinish.ec (cli, 29 cmds)
+OK   cdrafts-split/SignerMessages.ec (cli, 30 cmds)
+OK   cdrafts-split/FullMessageHistory.ec (cli, 29 cmds)
+OK   cdrafts-split/RSession.ec (cli, 28 cmds)
+OK   cdrafts-split/RSessionHistory.ec (cli, 43 cmds)
+OK   cdrafts-split/SignerRecorded.ec (cli, 30 cmds)
+OK   cdrafts-split/FullHistory.ec (cli, 47 cmds)
+OK   cdrafts-split/ByteHistory.ec (cli, 32 cmds)
+OK   cdrafts-split/DigestCoordinates.ec (cli, 46 cmds)
+OK   cdrafts-split/ByteReplay.ec (cli, 31 cmds)
+OK   cdrafts-split/ByteSubtreeOpeningHop.ec (cli, 18 cmds)
+OK   cdrafts-split/ByteTopOpeningHop.ec (cli, 18 cmds)
+OK   cdrafts-split/C10BoundedGrind.ec (cli, 36 cmds)
+OK   cdrafts-split/C10BoundedSigning.ec (cli, 87 cmds)
+OK   cdrafts-split/C10WOTSCorrect.ec (cli, 65 cmds)
+OK   cdrafts-split/C10BoundedHypertree.ec (cli, 111 cmds)
+OK   cdrafts-split/C10HypertreeCoverage.ec (cli, 53 cmds)
+OK   cdrafts-split/C10HypertreeCorrect.ec (cli, 180 cmds)
+OK   cdrafts-split/C10BoundedGame.ec (cli, 66 cmds)
+OK   cdrafts-split/GFailCharged.ec (cli, 103 cmds)
+OK   cdrafts-split/C10BoundedMA.ec (cli, 87 cmds)
+OK   cdrafts-split/C10CubeCorrect.ec (cli, 111 cmds)
+OK   cdrafts-split/C10CubeConstruction.ec (cli, 247 cmds)
+OK   cdrafts-split/C10ReductionChoose.ec (cli, 65 cmds)
+OK   cdrafts-split/C10ReductionForge.ec (cli, 64 cmds)
+OK   cdrafts-split/C10AcceptedReduction.ec (cli, 45 cmds)
+OK   cdrafts-split/VecDP.ec (cli, 5 cmds)
+OK   cdrafts-split/CountDS.ec (cli, 132 cmds)
+OK   cdrafts-split/C10DigitUniform.ec (cli, 71 cmds)
+OK   cdrafts-split/C10SurfaceKernel.ec (cli, 23 cmds)
+OK   cdrafts-split/C10Surface.ec (cli, 67 cmds)
+OK   cdrafts-split/C10Encoding.ec (cli, 77 cmds)
+OK   cdrafts-split/C10BoundedIID.ec (cli, 39 cmds)
+OK   cdrafts-split/C10BoundedLeaf.ec (cli, 55 cmds)
+OK   cdrafts-split/C10BoundedReduction.ec (cli, 12 cmds)
+OK   cdrafts-split/C10DeployedCapstone.ec (cli, 64 cmds)
+OK   cdrafts-split/C10DeployedGeometry.ec (cli, 121 cmds)
+OK   cdrafts-split/C10DeployedScope.ec (cli, 91 cmds)
+OK   cdrafts-split/C10HypertreeAccepted.ec (cli, 59 cmds)
+OK   cdrafts-split/XmssmtCCCharged.ec (cli, 66 cmds)
+OK   cdrafts-split/C10HypertreeCharged.ec (cli, 12 cmds)
+OK   cdrafts-split/SharedROBounded.ec (cli, 52 cmds)
+OK   cdrafts-split/C10SharedSearch.ec (cli, 31 cmds)
+OK   cdrafts-split/C10SearchBounds.ec (cli, 53 cmds)
+OK   cdrafts-split/C10SpecControls.ec (cli, 11 cmds)
+OK   cdrafts-split/C10StatefulSearch.ec (cli, 19 cmds)
+OK   cdrafts-split/SessionDigest.ec (cli, 37 cmds)
+OK   cdrafts-split/ClassifiedHistory.ec (cli, 59 cmds)
+OK   cdrafts-split/ClassifiedGrind.ec (cli, 32 cmds)
+OK   cdrafts-split/ClassifiedSigner.ec (cli, 42 cmds)
+OK   cdrafts-split/ClassifiedSession.ec (cli, 73 cmds)
+OK   cdrafts-split/ClassifiedBound.ec (cli, 54 cmds)
+OK   cdrafts-split/DarkSide.ec (cli, 153 cmds)
+OK   cdrafts-split/DarkSideC10.ec (cli, 14 cmds)
+OK   cdrafts-split/DigestPair.ec (cli, 28 cmds)
+OK   cdrafts-split/ExposureLog.ec (cli, 21 cmds)
+OK   cdrafts-split/ExposureAccounting.ec (cli, 31 cmds)
+OK   cdrafts-split/ExposureDriver.ec (cli, 35 cmds)
+OK   cdrafts-split/ForestReferenceHistory.ec (cli, 36 cmds)
+OK   cdrafts-split/ForsBuilderPrivate.ec (cli, 42 cmds)
+OK   cdrafts-split/ForsRootRecording.ec (cli, 29 cmds)
+OK   cdrafts-split/ForsPrivateEntry.ec (cli, 22 cmds)
+OK   cdrafts-split/ForsKnownSecret.ec (cli, 12 cmds)
+OK   cdrafts-split/ForsSignWitness.ec (cli, 24 cmds)
+OK   cdrafts-split/ForsReturnedRoot.ec (cli, 30 cmds)
+OK   cdrafts-split/ForestRootPrefix.ec (cli, 32 cmds)
+OK   cdrafts-split/ForestRootRecording.ec (cli, 40 cmds)
+OK   cdrafts-split/SignerForestReference.ec (cli, 46 cmds)
+OK   cdrafts-split/HonestForestMessages.ec (cli, 32 cmds)
+OK   cdrafts-split/LayerReturnedRoot.ec (cli, 45 cmds)
+OK   cdrafts-split/SignerSubtreeReference.ec (cli, 31 cmds)
+OK   cdrafts-split/HonestSubtreeMessages.ec (cli, 32 cmds)
+OK   cdrafts-split/ExposureSupport.ec (cli, 36 cmds)
+OK   cdrafts-split/ExposureHistory.ec (cli, 27 cmds)
+OK   cdrafts-split/ExposureSessionHistory.ec (cli, 16 cmds)
+OK   cdrafts-split/ExposureGameHistory.ec (cli, 21 cmds)
+OK   cdrafts-split/ExposureForge.ec (cli, 20 cmds)
+OK   cdrafts-split/ExposureReferences.ec (cli, 37 cmds)
+OK   cdrafts-split/FORS_C.ec (cli, 95 cmds)
+OK   cdrafts-split/FORS_C_TreePort.ec (cli, 289 cmds)
+OK   cdrafts-split/LeafOrigins.ec (cli, 36 cmds)
+OK   cdrafts-split/LeafOriginOracle.ec (cli, 16 cmds)
+OK   cdrafts-split/ForsLeafOrigins.ec (cli, 20 cmds)
+OK   cdrafts-split/ForsBuilderSecret.ec (cli, 42 cmds)
+OK   cdrafts-split/ForsBuilderComparison.ec (cli, 27 cmds)
+OK   cdrafts-split/ForsSignCorrect.ec (cli, 27 cmds)
+OK   cdrafts-split/ForsSignRecord.ec (cli, 19 cmds)
+OK   cdrafts-split/FullFailure.ec (cli, 18 cmds)
+OK   cdrafts-split/GprocVI.ec (cli, 190 cmds)
+OK   cdrafts-split/SphincsC10CapstoneCharged.ec (cli, 48 cmds)
+OK   cdrafts-split/GprocT1Opre.ec (cli, 880 cmds)
+OK   cdrafts-split/GprocT2Trh.ec (cli, 1184 cmds)
+OK   cdrafts-split/GprocT3Trco.ec (cli, 385 cmds)
+OK   cdrafts-split/GprocQBound.ec (cli, 12 cmds)
+OK   cdrafts-split/GprocQWired.ec (cli, 46 cmds)
+OK   cdrafts-split/GprocChargedQWired.ec (cli, 53 cmds)
+OK   cdrafts-split/WotsLegCharged.ec (cli, 145 cmds)
+OK   cdrafts-split/GprocWotsNamed.ec (cli, 27 cmds)
+OK   cdrafts-split/GprocTCollNamed.ec (cli, 29 cmds)
+OK   cdrafts-split/GrindHypertree.ec (cli, 12 cmds)
+OK   cdrafts-split/GrindJointCoverage.ec (cli, 49 cmds)
+OK   cdrafts-split/HonestByteContext.ec (cli, 37 cmds)
+OK   cdrafts-split/HonestByteCost.ec (cli, 20 cmds)
+OK   cdrafts-split/HonestBytePhysical.ec (cli, 18 cmds)
+OK   cdrafts-split/LayerBuildExtraction.ec (cli, 23 cmds)
+OK   cdrafts-split/PublicCollisionBound.ec (cli, 14 cmds)
+OK   cdrafts-split/RSessionCost.ec (cli, 19 cmds)
+OK   cdrafts-split/RSessionBound.ec (cli, 43 cmds)
+OK   cdrafts-split/SessionKeygen.ec (cli, 43 cmds)
+OK   cdrafts-split/RawSession.ec (cli, 30 cmds)
+OK   cdrafts-split/SessionPhysical.ec (cli, 30 cmds)
+OK   cdrafts-split/RawSessionBound.ec (cli, 11 cmds)
+OK   cdrafts-split/RawSessionCost.ec (cli, 25 cmds)
+OK   cdrafts-split/SessionClosedForm.ec (cli, 22 cmds)
+OK   cdrafts-split/TotalBuilderReference.ec (cli, 13 cmds)
+OK   cdrafts-split/VerifierWotsReplay.ec (cli, 12 cmds)
+OK   cdrafts-split/WOTS_C_Multi.ec (cli, 172 cmds)
+OK   cdrafts-split/WotsKeyExtraction.ec (cli, 22 cmds)
+### CLI_FILES_RUN=430 CLI_DISAGREEMENTS=0
+### PHASE 1f — WATCHED FILES (T1/T2/T3 branch proofs; NOT certified)
+### WATCHED_FILES_RUN=0 WATCHED_FAILURES=0
+### PHASE 1b — NAMED RESULTS EXIST AS LEMMAS (not axioms)
+OK   EUFCMA_SPHINCS_PLUS_C10_GROUNDED is a lemma in cdrafts-split/SphincsC10CapstoneWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CONTENTFUL_AT_DEPLOYED_ENCODER is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CHARGED is a lemma in cdrafts-split/SphincsC10CapstoneCharged.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_QWIRED is a lemma in cdrafts-split/GprocQWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER_QWIRED is a lemma in cdrafts-split/GprocQWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED is a lemma in cdrafts-split/GprocChargedQWired.ec
+### PHASE 1c — STATEMENT DIGESTS (names are not enough)
+OK unique statement pins: 2953
+### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)
+OK   coverage: all 2564 top-level statements across 430 CONE files are pinned (roots 173 + transitively required)
+### PHASE 1g — POLICY-CAP QUARANTINE (cdrafts-split/C10DeployedScope.ec)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+### PHASE 2 — CONE CENSUS vs cert-baseline-split.tsv (ADDITIONS FATAL)
+cone: keys now=2063 baseline=2063 | ROWS now=2143 baseline=2143 | added=0 removed=0
+  ledger=248  parameters=217  bindings=371  meaning=555  definitions=752  total=2143
+### PHASE 2b — CENSUS REGRESSION CANARY (admitted.)
+OK   census detects 'admitted.' (canary caught)
+### PHASE 2c — DIGEST DISCRIMINATION CANARY
+OK   module-type digest discriminates (module-type:1ed74e3a5614 vs module-type:f9d6086d602e)
+OK   admit statement digest discriminates (admit:7c56af2d53b1 vs admit:4eeb8521bd94)
+OK   no live row carries a degenerate digest
+OK   no live admit row degraded to 'nostmt'
+### PHASE 3 — CONTROLS (polarity AND declared reason)
+OK   control scratch/vac_probe_full.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/probe_len46.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/c10_spec_vacuity_canary.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control cdrafts-split/C10SpecControls.ec (MUST-PASS)
+OK   control scratch/tier0_degenerate_encoder_excluded.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/encode_compat_derivable.ec (MUST-PASS)
+OK   control scratch/badenc_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/badenc_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/badenc_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/badenc_ctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/wlc_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/wlc_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/wlc_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gwn_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gwn_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlE.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/tcoll_ctlF.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlE.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlF.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlG.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bered_ctlZ.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlE.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlF.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/bes4_ctlG.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gtn_ctlA.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gtn_ctlB.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/gtn_ctlC.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GprocTCollNamed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_lemma.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_pos_op.ec (MUST-PASS)
+OK   control scratch/_scope_pos_lemma.ec (MUST-PASS)
+OK   control scratch/_scope_env_n_m.ec (MUST-PASS)
+OK   control scratch/_scope_neg_op_GprocChargedQWired.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SphincsC10CapstoneWired.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GprocQWired.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GprocQBound.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GprocWotsNamed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10CounterWrongCardinality.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BytesWrongPadding.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10GrindSkip.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control experiments/wots-badenc/count/controls/KctlC.ec (MUST-PASS)
+OK   control experiments/wots-badenc/count/controls/KctlE.ec (MUST-PASS)
+OK   control experiments/wots-badenc/count/controls/KctlD.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control experiments/wots-badenc/count/controls/CtlSum204.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control experiments/wots-badenc/count/controls/CtlLen42.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control experiments/wots-badenc/count/controls/CtlVal.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10EncoderPositive.ec (MUST-PASS)
+OK   control scratch/C10IIDPositive.ec (MUST-PASS)
+OK   control scratch/C10EncoderWrongOrder.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10EncoderWrongTarget.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10IIDErasedFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10IIDMissingSuccessFactor.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedGamePositive.ec (MUST-PASS)
+OK   control scratch/C10BoundedGameNoGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedGameResetFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedMAPositive.ec (MUST-PASS)
+OK   control scratch/C10BoundedMAEraseHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedMAAppendFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedHypertreePositive.ec (MUST-PASS)
+OK   control scratch/C10BoundedHypertreeNoGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedHypertreePartialRelease.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10BoundedLeafPositive.ec (MUST-PASS)
+OK   control scratch/C10BoundedLeafNoPKSeparation.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10HypertreeCoveragePositive.ec (MUST-PASS)
+OK   control scratch/SharedROBoundedPositive.ec (MUST-PASS)
+OK   control scratch/C10RandomizerPositive.ec (MUST-PASS)
+OK   control scratch/C10HashDomainsPositive.ec (MUST-PASS)
+OK   control scratch/C10SharedSearchPositive.ec (MUST-PASS)
+OK   control scratch/C10SearchBoundsPositive.ec (MUST-PASS)
+OK   control scratch/C10HypertreeChargedPositive.ec (MUST-PASS)
+OK   control scratch/SharedROKnownNotFresh.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/SharedRODuplicateNotFresh.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10HashWrongLength.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10CoverageSinglePath.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10FORSBoundedPositive.ec (MUST-PASS)
+OK   control scratch/C10FORSNoExhaustion.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10RandomizerWrongHalf.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10FORSBoundedSMT.ec (MUST-PASS)
+OK   control scratch/C10HypertreeAcceptedPositive.ec (MUST-PASS)
+OK   control scratch/C10HypertreeObserverPrivacy.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10AcceptedCubeNoHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10RawOraclePositive.ec (MUST-PASS)
+OK   control scratch/C10RawCachedAcceptance.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10RawReplayDraw.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10StatefulLostSuccess.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_C10HypertreeAccepted.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10ByteSessionPositive.ec (MUST-PASS)
+OK   control scratch/C10SessionAvailabilityPositive.ec (MUST-PASS)
+OK   control scratch/C10ByteNoLengthGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10ByteNoValueGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10FullPublicIsPhysical.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10ByteSecretPrivacy.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SessionClosedForm.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawSessionCost.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteBound.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawSignerWidths.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_FullPrefix.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawDecode.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10FullFailurePositive.ec (MUST-PASS)
+OK   control scratch/C10FullFailureResume.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_FullFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10QProbabilityPositive.ec (MUST-PASS)
+OK   control scratch/C10QWithoutFreshness.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10QWithoutRevisits.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10QAdaptiveOpeningsPositive.ec (MUST-PASS)
+OK   control scratch/C10QAdaptiveOpeningsFalse.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteReplay.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GrindJointCoverage.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SignerReturned.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_GrindHypertree.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q2FreshRepeatFalse.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q2HistoryPositive.ec (MUST-PASS)
+OK   control scratch/C10Q2NovelPositive.ec (MUST-PASS)
+OK   control scratch/C10Q2PrivateStateExposed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q2RepeatPositive.ec (MUST-PASS)
+OK   control scratch/C10Q2UnaccountedRepeat.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q2WithoutFailStop.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ClassifiedBound.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ClassifiedSession.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SignerTrace.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q3ForsRepeatPositive.ec (MUST-PASS)
+OK   control scratch/C10Q3MerkleRepeatPositive.ec (MUST-PASS)
+OK   control scratch/C10Q3PrivateRecovery.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q3WidthPositive.ec (MUST-PASS)
+OK   control scratch/C10Q3WithoutFORSLeaf.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q3WithoutReference.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q3WithoutWidths.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawForsComparison.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawForsPathReplay.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawPathComparison.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawPathReplay.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q4ForsPositive.ec (MUST-PASS)
+OK   control scratch/C10Q4ForsWithoutRange.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q4MerklePositive.ec (MUST-PASS)
+OK   control scratch/C10Q4MerkleWithoutRange.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q4WithoutCatalogWidths.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q4WrongRootProjection.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_BuildRootProjection.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_TotalBuilderReference.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q5ForsPositive.ec (MUST-PASS)
+OK   control scratch/C10Q5ForsWithoutCollision.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q5MerklePositive.ec (MUST-PASS)
+OK   control scratch/C10Q5MerkleWithoutCollision.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q5WithoutLeafOrigins.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForsBuilderComparison.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForsBuilderSecret.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_MerkleBuilderComparison.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q6FirstPositive.ec (MUST-PASS)
+OK   control scratch/C10Q6LastPositive.ec (MUST-PASS)
+OK   control scratch/C10Q6WithoutPrivateEntry.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q6WithoutRange.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q6WrongSignatureProjection.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForsBuilderPrivate.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForsSignCorrect.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForsSignRecord.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q7ForgetsCountFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q7IdentityPositive.ec (MUST-PASS)
+OK   control scratch/C10Q7ShuffledPositive.ec (MUST-PASS)
+OK   control scratch/C10Q7WithoutAcceptedCount.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q7WithoutPrivateHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q7WithoutReference.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q7WrongLeafProjection.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q7WrongSentinel.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ActualWotsCorrect.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawShufflePermutation.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawWotsRecovery.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawWotsReference.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q8IdentityPositive.ec (MUST-PASS)
+OK   control scratch/C10Q8ShuffledPositive.ec (MUST-PASS)
+OK   control scratch/C10Q8WithoutCompressionEntry.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q8WithoutSpecialEntry.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q8WithoutTreeOpenings.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q8WrongSpecialTree.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ActualForestCorrect.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForestRecoveryReplay.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForestSignRecorded.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q9FirstPositive.ec (MUST-PASS)
+OK   control scratch/C10Q9ForgetsCountFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q9LastPositive.ec (MUST-PASS)
+OK   control scratch/C10Q9WithoutPriorRoot.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q9WithoutRange.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q9WithoutSecondWitness.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q9WrongProjection.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ActualLayerCorrect.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_LayerSignCorrect.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_MerkleBuilderWots.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawMerkleRootWitness.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q10ForgetsFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q10IdentityPositive.ec (MUST-PASS)
+OK   control scratch/C10Q10ShufflePositive.ec (MUST-PASS)
+OK   control scratch/C10Q10WithoutAcceptedDigest.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q10WithoutDigestEntry.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q10WithoutPriorRoot.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q10WrongProjection.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q10WrongTopLayer.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ActualSignerCorrect.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SignerFinishRecorded.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SignerReturnedOpening.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SignerVerifierReplay.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q11CountBoundaryPositive.ec (MUST-PASS)
+OK   control scratch/C10Q11ForgetsFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q11IdentityPositive.ec (MUST-PASS)
+OK   control scratch/C10Q11ShufflePositive.ec (MUST-PASS)
+OK   control scratch/C10Q11WithoutCountRange.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q11WithoutHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q11WithoutWidth.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q11WrongFormatLength.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q11WrongRoot.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ActualByteSignerCorrect.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_EncodedSignature.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawSignerBytes.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SignerEncodingCorrect.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q12BoundPositive.ec (MUST-PASS)
+OK   control scratch/C10Q12DropsPrefixCharge.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q12UnderchargedCost.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q12WrongEvent.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_HonestByteContext.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_HonestByteCost.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_HonestBytePhysical.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q13BoundPositive.ec (MUST-PASS)
+OK   control scratch/C10Q13ClientsPositive.ec (MUST-PASS)
+OK   control scratch/C10Q13UnderchargedClient.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q13WithoutBudget.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q13WithoutRecording.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q13WrongEvent.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q13WrongProjection.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q13ZeroCharge.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_NodeCollisionEvents.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_NodeDistribution.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ProjectedBirthday.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_PublicCollisionBound.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q14BoundPositive.ec (MUST-PASS)
+OK   control scratch/C10Q14DropsCapBinding.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q14DropsCollision.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q14DropsPrefix.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q14DropsResidual.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q14Undercharged.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q14WrongEvent.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_BytePublicCollision.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_PublicCollisionState.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q15BoundPositive.ec (MUST-PASS)
+OK   control scratch/C10Q15DropsResidual.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q15DropsZeroCharge.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q15SentinelWithoutEvent.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q15WithoutBudget.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q15WrongProjection.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q15ZeroWitnessPositive.ec (MUST-PASS)
+OK   control scratch/_scope_neg_op_BytePublicNodeBad.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_PublicNodeZero.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_WotsZeroSentinel.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16WotsPositive.ec (MUST-PASS)
+OK   control scratch/C10Q16DropsCollision.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16DropsZero.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16WithoutRows.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16WithoutReference.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16WrongCounterDomain.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16LayerPositive.ec (MUST-PASS)
+OK   control scratch/C10Q16WithoutTargetBound.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16WithoutLayerWidth.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16WithoutRootMatch.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16TracePositive.ec (MUST-PASS)
+OK   control scratch/C10Q16ReplayPositive.ec (MUST-PASS)
+OK   control scratch/C10Q16WithoutHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q16DomainAndCollisionPositive.ec (MUST-PASS)
+OK   control scratch/_scope_neg_op_RawWotsExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_WotsKeyExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_LayerBuildExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_VerifierWotsReplay.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_LinearCollision.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RecoveryCompression.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RawRecoveryTrace.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_LayerWotsExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17ReferencePositive.ec (MUST-PASS)
+OK   control scratch/C10Q17WithoutIndexRange.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17WithoutRootWitness.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17SessionPositive.ec (MUST-PASS)
+OK   control scratch/C10Q17VerifierPositive.ec (MUST-PASS)
+OK   control scratch/C10Q17WithoutSignatureWidth.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17WithoutVerifierRoot.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17DropsCollision.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17DropsZero.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17ByteGamePositive.ec (MUST-PASS)
+OK   control scratch/C10Q17WrongInitialSeed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17HopPositive.ec (MUST-PASS)
+OK   control scratch/C10Q17DropsPrefixCharge.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q17IndexEdgesPositive.ec (MUST-PASS)
+OK   control scratch/_scope_neg_op_RootCoverage.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_RootSessionHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_VerifierTopExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteGameTopExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteTopOpeningHop.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18LayerPositive.ec (MUST-PASS)
+OK   control scratch/C10Q18WithoutRecordedRoot.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18WithoutCollisionGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18WithoutZeroGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18VerifierPositive.ec (MUST-PASS)
+OK   control scratch/C10Q18WithoutSignatureWidth.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18SignerPositive.ec (MUST-PASS)
+OK   control scratch/C10Q18ForgetsFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18CasesPositive.ec (MUST-PASS)
+OK   control scratch/C10Q18DropsUnrecordedCase.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18ByteGamePositive.ec (MUST-PASS)
+OK   control scratch/C10Q18WrongInitialSeed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18HopPositive.ec (MUST-PASS)
+OK   control scratch/C10Q18DropsPrefixCharge.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q18RecordedRootPersists.ec (MUST-PASS)
+OK   control scratch/_scope_neg_op_LayerRecordExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_VerifierLayerRecords.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_HonestSubtreeMessages.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_SubtreeOpeningCases.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteGameSubtreeExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteSubtreeOpeningHop.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19RecoveryPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19ReferencePositive.ec (MUST-PASS)
+OK   control scratch/C10Q19WithoutIndexBound.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19LeafPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19WithoutLeafWidth.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19ForestPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19WithoutForestReference.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19WithoutCollisionGuard.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19BuilderPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19VerifierPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19WithoutSignatureWidth.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19SignerPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19ForgetsFailure.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19PersistencePositive.ec (MUST-PASS)
+OK   control scratch/C10Q19CasesPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19DropsMissingReferences.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19ByteGamePositive.ec (MUST-PASS)
+OK   control scratch/C10Q19WrongInitialSeed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19HopPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19DropsPrefixCharge.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19SpecialRootPositive.ec (MUST-PASS)
+OK   control scratch/C10Q19SpecialWrongTree.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForestRecoveryRecord.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForsRootWitness.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForsRecordExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForestRecordExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForestRootRecording.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_VerifierForestRecords.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_HonestForestMessages.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForestReferenceHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ForestOpeningCases.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteGameForestExtraction.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ByteForestOpeningHop.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q19ForestWidthAlias.ec (MUST-PASS)
+OK   control scratch/C10Q20RecordsPositive.ec (MUST-PASS)
+OK   control scratch/C10Q20DropsFailureBranch.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q20ProbabilityPositive.ec (MUST-PASS)
+OK   control scratch/C10Q20ClaimsZero.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q20EntryPositive.ec (MUST-PASS)
+OK   control scratch/C10Q20AdaptivePositive.ec (MUST-PASS)
+OK   control scratch/C10Q20AccountingPositive.ec (MUST-PASS)
+OK   control scratch/C10Q20SessionPositive.ec (MUST-PASS)
+OK   control scratch/C10Q20NegativeCap.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q20ReferencesPositive.ec (MUST-PASS)
+OK   control scratch/C10Q20UnloggedReference.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q20WrongDigest.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q20ByteCountPositive.ec (MUST-PASS)
+OK   control scratch/C10Q20CountsAllAttempts.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q20ForgePositive.ec (MUST-PASS)
+OK   control scratch/C10Q20WrongInitialSeed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/C10Q20RepeatAndSpecialPositive.ec (MUST-PASS)
+OK   control scratch/C10Q20RefusalsPositive.ec (MUST-PASS)
+OK   control scratch/_scope_neg_op_ExposureLog.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ExposureDriver.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ExposureSupport.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ExposureHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ExposureAccounting.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ExposureSessionHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ExposureReferences.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ExposureGameHistory.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_op_ExposureForge.ec (MUST-FAIL, rejected for the DECLARED reason)
+controls executed (unique)=386 expected=386
+### PHASE 4 — FORS+C GRINDING MARGIN (heuristic figures, NOT a theorem)
+OK   margin guardrails 4/4 (happy path)
+OK   margin negative controls 3/3 (--self-test: the model inverts; guard blocks 1-3 NOT exercised)
+OK   margin figures match the committed manifest (7/7)
+### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundness proof)
+     OK   taint containment: closure = 2 lemmas, none of the 112 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+     OK   scope-probe linkage: 104 headline files <-> 104 registered scope probes (exact bijection)
+OK   taint controls: pass=15 unique=15 fail=0 expected=15
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run (ea9deb7a9681913681f0bc4a1ee80df4)
+### RESULT: GREEN
+make: Leaving directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-adaptive-exposures/contracts/verification'

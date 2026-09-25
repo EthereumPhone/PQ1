@@ -1,0 +1,18 @@
+{
+  "utc": "2026-09-25T06:53:12.452048+00:00",
+  "reason": "Native adapter and exact CLI versions unchanged from Q19; reuse passing no-network self-test. Concrete dry-run and read-only preflight remain required.",
+  "files": {
+    "native-review-runner/run_review_wave.py": "c416a13ad85e2a2beb3e709313214f4d403c87c6e2f5bad11fe168cfe104934a",
+    "native-review-runner/self_test.py": "2a2c6499ba35c926d4c2b0a2d25686a552b669fa284f129abad5f4a9a044c625",
+    "native-review-runner/self-test.log": "2c92b05f48f0951188444328e016c28becac21505ad0fd8ab9568c0f1f6d6717"
+  },
+  "fresh_self_test": {
+    "path": "q19-review-runner-self-test.log",
+    "sha256": "2c92b05f48f0951188444328e016c28becac21505ad0fd8ab9568c0f1f6d6717"
+  },
+  "versions": {
+    "codex": "codex-cli 0.156.1",
+    "claude": "2.1.282 (Claude Code)",
+    "bwrap": "bubblewrap 0.9.0"
+  }
+}

@@ -1,0 +1,25 @@
+Review PQSigner OS for merge of accumulated adaptive signing-response proofs. Do not launch agents or other models.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-adaptive-exposures
+Commit: 5e477d33a3f335c339dae8b27d5fab40a08874a5
+Tree: 0d6504167c8d8c80ea1f1e95de7770c507047909
+Compare: 09eaa56b9609b7d2031a575d361e25e22b51fbd2..5e477d33a3f335c339dae8b27d5fab40a08874a5
+
+Focus only on formal-verification correctness:
+1. The private observer must delegate to the actual FullSession interface and record exactly successful returned message/signature pairs, including repeats. It must not add oracle queries or change failure, refusal, counters or caps.
+2. The relational projections and probability equality must preserve the same adaptive byte client, original inputs, persistent oracle tables, session state and final res event; observer state must be inaccessible to the client.
+3. Every logged output must retain actual forest and subtree references through later hash/sign calls and final verification. Check common accepted-digest binding, no assumed references, and distinct intermediate roots.
+4. Message projection must equal the actual signed_messages list with multiplicity. Successful-response count is at most counted attempts and a nonnegative cap. Final new-message extraction must use that exact list.
+5. Ordinary FORS literal exposures cover trees 0..11; tree 12 remains a separate root-as-secret. The absent-reference contrapositive requires absence at every root for the coordinate; it cannot infer secrecy or exclude all public/intermediate disclosures.
+6. Enrollment must preserve old statements/assumptions, add no axiom/admit/clone assumption, and accurately distinguish rejected applications from semantic counterexamples. No unproved numerical improvement or full exposure closure.
+
+Evidence already green: nine selected modules passed 18 source-matched whole-file direct/default-CLI checks; enrolled source bytes match that checkpoint. All 27 controls match their declared outcomes (11 positives, 9 scope probes, 6 statement mismatches and one unfinished cap obligation). Eleven checker regression groups, static contract and 394-input source binding pass. Inventory: 430 targets, 173 roots, 2953 pins, 2564 statements, 2143 census rows and 386 controls. The full source-matched cold two-driver replay is running separately and remains required before landing.
+Non-goals: runtime/API/parameter changes, general information-exposure or WOTS-chain analysis, private/encoding numerical charges or closed EUF, signing-success guarantees, Rust extraction, concrete SHA-256/QROM, hardware/shipment, deferred playbook sweep or optional hardening.
+
+Inspect the exact diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 5e477d33a3f335c339dae8b27d5fab40a08874a5 / 0d6504167c8d8c80ea1f1e95de7770c507047909
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.
