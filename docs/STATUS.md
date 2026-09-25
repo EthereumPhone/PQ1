@@ -40,6 +40,10 @@ verification after adaptive calls, using the earlier key-generation history.
 The [subtree bridge](../contracts/verification/easycrypt/c10-port/RAW-SUBTREE-EXTRACTION.md)
 now links both actual verifier layers and separates unrecorded top messages
 from paired WOTS openings, without assigning either case a numerical charge.
+The [actual FORS bridge](../contracts/verification/easycrypt/c10-port/RAW-FOREST-EXTRACTION.md)
+now ties that forest to verification and actual retained construction
+references, yielding twelve private-leaf equalities and the special last
+root-as-secret case. Missing-reference cases remain explicit and uncharged.
 Adaptive accumulated opening coverage, the complete byte-game component
 reduction and numerical end-to-end forgery bounds remain open.
 See the

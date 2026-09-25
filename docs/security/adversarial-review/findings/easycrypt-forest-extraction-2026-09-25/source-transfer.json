@@ -1,0 +1,266 @@
+{
+  "utc": "2026-09-24T22:10:11.547513+00:00",
+  "sources": [
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ByteForestOpeningHop.ec",
+      "sha256": "48f7aa83ca993e3d7f1396ab976bb732a1ccc6dc220f5a1dc52609c7a2a54415",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ByteGameForestExtraction.ec",
+      "sha256": "4ed30b872bcc5e2993f6f259985b1745693b5eaf71fbbcd6c749652ab48517ae",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForestCoordinates.ec",
+      "sha256": "1ad02ab20c4ef39c3f4051317335e255784e2dbc75ba27052224ad24c034f43e",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForestOpeningCases.ec",
+      "sha256": "3a5ad95188a7a8cb41e1fe861bad80f5ca230457dbe1e0ed5dbb40facc1c233c",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForestRecordExtraction.ec",
+      "sha256": "1f135e999dcd961c5548a177249b81435000b65442dd86e91e538e1bf6980f17",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForestRecoveryRecord.ec",
+      "sha256": "3d16635f4f55a679f366922808e7ca7702e4fa06fdf584178f15821189212128",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForestReferenceHistory.ec",
+      "sha256": "c3ec9aae28199320bcb808255704290f1aa3b957fbed62ccb2dbbb18e88bb020",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForestRootPrefix.ec",
+      "sha256": "49001e2297772fa4e6ef243f180d63bb865f174226d2852e7a952594d2c84c88",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForestRootRecording.ec",
+      "sha256": "b4f53ff88fe84e0111da2a8ccaa0a80d1da84c964f2085090e9eeb3d948389e8",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForestRootWitness.ec",
+      "sha256": "cae330cb3bba12702ffb4602ca2ad9ca8b6af4b8d46544d7d6e0c5602a56d1de",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsRecordExtraction.ec",
+      "sha256": "8fb2613fd4cf4cb5784acaa3ca1d74a563a9f11ca66b34b27b409170e4e3f4f6",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsReturnedRoot.ec",
+      "sha256": "8ee675abfc21b8ee22f8a0ad3306ce9661cce5cb88c88e244bdd21019d31ccf5",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsRootRecording.ec",
+      "sha256": "5987b68e51cd1553a04ae9eee967f8b1b4f51ae2e6b5713967edd4fea20974a1",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsRootWitness.ec",
+      "sha256": "069578b8b21af2342fcf5bf6ec721db5d1ef4cfd820d239b1deafeca0b595623",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/HonestForestMessages.ec",
+      "sha256": "9b148d10ae680b56863d2456bd6070046dbdbb9ade35fe3ab71ee7005d602ddd",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/SessionForestExtraction.ec",
+      "sha256": "c9e47828668bb8d83ce01b6dcfd5f0b19cf7de405da9b0e9d0111a88583c2716",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/SignerForestReference.ec",
+      "sha256": "79c3248d5effa6308f7e6de24164b8c20a6b7fa6805b0f297e5c6404d3436627",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/cdrafts-split/VerifierForestRecords.ec",
+      "sha256": "523f7535a463660721a11c8ed48c60b90890f96a9e10d9b475077467366ca7aa",
+      "checkpoint_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19RecoveryPositive.ec",
+      "sha256": "80e5cc06bf43fffa2a8a3a1a9e343d15f7fcd46b94eb43d6a6d118716b4347d1",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ReferencePositive.ec",
+      "sha256": "0b7b81d222c608f85100b84a52eb82b89d5f722748efa198cffc3616069e7429",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutIndexBound.ec",
+      "sha256": "5e183c610679692122ea983508a885a1b69cb6eb605aeb110d4069ece0ea9517",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19LeafPositive.ec",
+      "sha256": "00717c9e2a70d9d00b35b45f9bc4317047d1bcb32c91c1bca1f96ac9e37e71d0",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutLeafWidth.ec",
+      "sha256": "18335762ee63dfc4c633948a12b627483ed0e5513e8223608eec3f993026f4ac",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ForestPositive.ec",
+      "sha256": "e1e1f4b2910df67a3272ec068691aa3068b0c9ece535a9dee7f78c2e80591fc4",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutForestReference.ec",
+      "sha256": "3fafc37638f70735ba159cbc19540a49dc40a4fcc8aa345aaa0d4fcd17710f78",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutCollisionGuard.ec",
+      "sha256": "ced36fb84af1ddab8aae192e9ce6fda4f8d3d355d82d0bdf501dce5a06194a02",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19BuilderPositive.ec",
+      "sha256": "9b43105129dc3717736bf0d13eacd9e2ffc0566ef794eeb838df2241ae919e49",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19VerifierPositive.ec",
+      "sha256": "60c09c2debafde3aeec129667f554f892c53f8e1e8e0b8580c08d9996876add2",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutSignatureWidth.ec",
+      "sha256": "477397a02360ad75ca8594632d02899b9a92f76842ef009501aab61836dd861c",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19SignerPositive.ec",
+      "sha256": "eb0147431fb6a30f87d361d631f1f962ea087f9d96965927c6ca84cfc0b4170d",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ForgetsFailure.ec",
+      "sha256": "284e546c71d23070b5d454139378c8d89877c36a831a9506bd36ea58074aa282",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19PersistencePositive.ec",
+      "sha256": "b329238c42ecc2c1d340c430fcad9da1bafa71fff01e503b909d8edd8867da3a",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19CasesPositive.ec",
+      "sha256": "341c3321289a266bac3517b905f68f9fe0a6bcf59588cb0af1840378b9efa63e",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19DropsMissingReferences.ec",
+      "sha256": "8ea5b57d0d5c2a72d553d7f3538f6d418b16cdd089063da9b042456f53200cc2",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ByteGamePositive.ec",
+      "sha256": "777f9892cc2858f0e63a862cf637a409f8abb2dc63aa9a8ddb355c99d95c712d",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WrongInitialSeed.ec",
+      "sha256": "8af8ef6001d2da4a506d4754af6f7c3c88478ac9f451ad5068644dd7d76eb127",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19HopPositive.ec",
+      "sha256": "d987e10c3ee985903816950401d90d4f1dd9e4a4418574bd1f115ee29ed47b85",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19DropsPrefixCharge.ec",
+      "sha256": "8c14ef2e6dfb207a2d99b40f05beec574e9e98dba725f570e665f1a3bee5d5a9",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19SpecialRootPositive.ec",
+      "sha256": "e526676890ed99d6db8b6ba835869af193809c58fd3bdc7be7889e480ad2e006",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19SpecialWrongTree.ec",
+      "sha256": "3c3c7eb809ca9eee84d56a335e2dc309c74cdf437fe1fc83efd27406d5f76e0c",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestRecoveryRecord.ec",
+      "sha256": "bda860edff43f067c9b8c27bf8bb50058146d1e775f6f185e1361cc8812acd77",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForsRootWitness.ec",
+      "sha256": "6e3286247c2c387b0e1e97cd44570479178a591d126e622c5745f92093fe207f",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForsRecordExtraction.ec",
+      "sha256": "0cfc841daf2bd5c45b85358476eec74843cc38d3535922c51911b85296d01400",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestRecordExtraction.ec",
+      "sha256": "e04207f40e91c69cb04e6b2b327920d731a3768c76d010da94c72c9d1157e637",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestRootRecording.ec",
+      "sha256": "0a11fd626d0f343575d84929d407ac42f255eae9d2ca47e97d73f04cbbfb0d12",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_VerifierForestRecords.ec",
+      "sha256": "64f6474f41e9e69ef39bedfbfc035b1ed774dcab6153246f707944502033b09d",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_HonestForestMessages.ec",
+      "sha256": "359575657164e6ba87414e61c5d86d80e792dafa5858970165a597bc18b60380",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestReferenceHistory.ec",
+      "sha256": "e705f88bca159bed895bfeac268e17d12a8601ede78d4815d48d4b4ccf850ea8",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestOpeningCases.ec",
+      "sha256": "33a503f122a605cb4637bcc23fc8e21c42b6e3a06a1ff8aac062518c102e74a7",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ByteGameForestExtraction.ec",
+      "sha256": "4c24b0cecfed3e11731e05df4ab285d3d0a92f8ffd454c5c06d14e73225a7f1f",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ByteForestOpeningHop.ec",
+      "sha256": "8c004d881ed1d946444c53602e33e1e63675a67144519da2f3e45f483864a39a",
+      "control_match": true
+    },
+    {
+      "path": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ForestWidthAlias.ec",
+      "sha256": "d5da6068dc5f591c36d3ef25e26eda577b645c9f25c1b37e3cb8320a5f2dbeed",
+      "control_match": true
+    }
+  ],
+  "meaning": "Byte equality from checked external source to enrolled repository source; not an additional proof replay."
+}

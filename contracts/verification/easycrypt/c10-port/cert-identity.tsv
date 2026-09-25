@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	7d32af4a46730ea4aa82d37d99387b52
+split	51b87d9274a86dbae3222f883482d61a
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1457,3 +1457,10 @@ fork	9c2d21280c84d52c30b22111151f1135
 # No new project axiom/admit/clone assumption. Unrecorded-top and paired-opening
 # residuals remain uncharged; FORS/adaptive/private/encoding obligations stay open.
 # Split identity dfffe3f932c98a5ae98c9ae0075d2868 -> 7d32af4a46730ea4aa82d37d99387b52.
+
+# Actual FORS extraction, 2026-09-25: 18 checked modules, 34 controls,
+# 421 targets, 164 roots, 2911 pins, 2528 statements, 2132 census rows, 359 controls.
+# Existing statements/assumptions preserved; no new axiom/admit/clone assumption.
+# Actual forest references and conditional leaf extraction; missing-reference
+# and adaptive exposure/forgery probability residuals remain uncharged.
+# Split identity 7d32af4a46730ea4aa82d37d99387b52 -> 51b87d9274a86dbae3222f883482d61a.

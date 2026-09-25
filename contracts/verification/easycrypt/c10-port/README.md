@@ -81,6 +81,13 @@ from linked WOTS openings in both layers. Actual successful signing establishes
 the matching lower-root reference. The same-game probability residual remains
 explicit; FORS and adaptive probability charges are still open.
 
+The [actual FORS bridge](RAW-FOREST-EXTRACTION.md) now binds the recovered
+forest to both verifier layers. With complete retained construction references,
+it identifies the twelve ordinary private leaves and the distinct last
+root-as-secret. Actual signing creates these references and later permitted
+calls preserve them. Missing-reference cases and the successful-forgery
+probability residual stay explicit; adaptive exposure charges remain open.
+
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every

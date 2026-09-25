@@ -135,6 +135,13 @@ SOURCES = (
         'LayerRecoveryRecord', 'LayerReturnedRoot', 'SessionSubtreeExtraction', 'SignerSubtreeReference',
         'SubtreeOpeningCases', 'VerifierLayerRecords',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'ByteForestOpeningHop', 'ByteGameForestExtraction', 'ForestCoordinates', 'ForestOpeningCases',
+        'ForestRecordExtraction', 'ForestRecoveryRecord', 'ForestReferenceHistory', 'ForestRootPrefix',
+        'ForestRootRecording', 'ForestRootWitness', 'ForsRecordExtraction', 'ForsReturnedRoot',
+        'ForsRootRecording', 'ForsRootWitness', 'HonestForestMessages', 'SessionForestExtraction',
+        'SignerForestReference', 'VerifierForestRecords',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

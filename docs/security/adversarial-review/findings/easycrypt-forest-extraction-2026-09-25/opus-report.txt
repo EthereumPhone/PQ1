@@ -1,0 +1,26 @@
+VERDICT: GO
+TARGET: 4d3cb40d39604c910fb9a3d01e30d68ebf224412 / 19cda620e56604ee0c656633ab89905ac542f664
+FINDINGS: none
+GAPS: I did not rerun EasyCrypt, and the source-matched cold two-driver replay you said is still running is still required before landing; this is a source-level read only.
+
+What I checked, source-first, against the requested points:
+
+1. **Recovery path.** `ForestRecoveryRecord.raw_forest_recovery_recorded` follows the actual `RawForest.recover` code: the 12-step loop, the special hash and the compression. `forest_special_input` is `fors_leaf_input seed ht 12 0`, which is exactly `seed ++ address 0 ht 3 12 0 0 0 ++ pad s` in `RawForest.ec:45`. `forest_compress_input` also matches `:47`.
+   - `VerifierForestRecords.verifier_records_forest` covers both `RawSigner.verify` layer iterations. It binds the recovered forest as the layer-0 WOTS message and `lower` as the layer-1 message.
+   - The claim holds only when `verify` returns true. It carries `accept_digest`, the `hmsg_input` history entry and `signature_width`, which includes the WOTS layer widths and counts. The final `pad current = pad root0` step is closed through `catIs`.
+2. **Extraction.** `recorded_fors_extracts` compares the supplied opening with the retained catalog reference from `fors_root_reference_at`, at the same index.
+   - It uses path-input collision plus leaf-input collision, and both reduce to `public_node_collision`.
+   - Index ranges come from `forest_index_range` (proved from `take 11`, so short digests are covered) and `hypertree_index_range`.
+   - `forest_compress_injective` requires `rows_width 13` on both lists. Both sides get it: `forest_witness_roots_width` for the supplied roots, and `forest_root_witness` for the reference. The width-alias positive control shows the requirement is needed.
+   - No oracle queries are added. References are taken from existing histories, and the missing-reference cases come from case analysis, not from an assumption.
+3. **Thirteenth component.** `forest_private_openings` gives private-leaf equalities only for trees 0–11 at `forest_index digest t`. Component 12 is `fors_root_witness … 12 secrets[12]`. That is derived by comparing the special-hash inputs and then applying `fors_leaf_input_injective`, not by treating it as a private leaf.
+4. **Signer side.**
+   - `raw_forest_sign_root` carries a permutation-indexed prefix invariant through the shuffled loop (`perm_eq order (range 0 12)`), then the last tree, the special hash and compression.
+   - `finish_records_forest` / `full_sign_forest_entry` bind the reference to the returned signature's `.`2`, `.`3` and layer-0 opening, and to the accepted `hmsg_input` digest.
+   - Failure stays explicit as `res<>None =>`.
+   - `ForestReferenceHistory` shows persistence through `extends`, one reference at a time, for later hash and sign calls, failed calls included. The docs explicitly say this is not accumulated exposure accounting.
+5. **Cases and hop.** Both `unrecorded_top_message` and `unrecorded_forest_message` are kept as separate cases. The docs say linked private openings can also come from honest or reused values.
+   - Apart from renaming and one comment word, `ByteForestOpeningHop` and `ByteGameForestExtraction` are identical to the accepted subtree versions. The initialized game, `pad (node public_seed)=seed0`, the root bound through `merkle_root_witness … 1 0`, the `!mem signed_messages` guard, the explicit `res` and all three probability terms are unchanged.
+6. **Enrollment.** The only deleted lines are the old identity hash, the old counts and one trailing-comma JSON line. The 76 new pins are 61 lemmas plus 15 ops, which matches the count increases (+76 pins, +61 statements, +34 controls). No axiom, admit or clone lines were added. `RAW-FOREST-EXTRACTION.md` correctly says the rejected theorem applications show only their declared diagnostics, and that the positive controls are not evidence that the full game is non-vacuous.
+
+The one non-blocking oddity I saw is at `SignerForestReference.ec:115`: `elim*` names six variables after a five-value `exists*`. EasyCrypt checks this, so it cannot affect soundness, and your green whole-file checks already cover it.

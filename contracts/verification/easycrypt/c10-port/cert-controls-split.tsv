@@ -464,3 +464,39 @@ scratch/_scope_neg_op_HonestSubtreeMessages.ec	MUST-FAIL	unknown variable or con
 scratch/_scope_neg_op_SubtreeOpeningCases.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_ByteGameSubtreeExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_ByteSubtreeOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Byte-game forest extraction: positives, scope probes and exact mismatches.
+scratch/C10Q19RecoveryPositive.ec	MUST-PASS	-
+scratch/C10Q19ReferencePositive.ec	MUST-PASS	-
+scratch/C10Q19WithoutIndexBound.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19LeafPositive.ec	MUST-PASS	-
+scratch/C10Q19WithoutLeafWidth.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q19ForestPositive.ec	MUST-PASS	-
+scratch/C10Q19WithoutForestReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19WithoutCollisionGuard.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19BuilderPositive.ec	MUST-PASS	-
+scratch/C10Q19VerifierPositive.ec	MUST-PASS	-
+scratch/C10Q19WithoutSignatureWidth.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19SignerPositive.ec	MUST-PASS	-
+scratch/C10Q19ForgetsFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19PersistencePositive.ec	MUST-PASS	-
+scratch/C10Q19CasesPositive.ec	MUST-PASS	-
+scratch/C10Q19DropsMissingReferences.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19ByteGamePositive.ec	MUST-PASS	-
+scratch/C10Q19WrongInitialSeed.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19HopPositive.ec	MUST-PASS	-
+scratch/C10Q19DropsPrefixCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19SpecialRootPositive.ec	MUST-PASS	-
+scratch/C10Q19SpecialWrongTree.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ForestRecoveryRecord.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsRootWitness.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsRecordExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestRecordExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestRootRecording.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_VerifierForestRecords.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HonestForestMessages.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestReferenceHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestOpeningCases.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteGameForestExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteForestOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q19ForestWidthAlias.ec	MUST-PASS	-

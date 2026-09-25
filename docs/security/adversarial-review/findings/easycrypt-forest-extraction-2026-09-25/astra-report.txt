@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 4d3cb40d39604c910fb9a3d01e30d68ebf224412 / 19cda620e56604ee0c656633ab89905ac542f664
+FINDINGS: none
+GAPS: Required source-matched full cold two-driver replay remains pending. No formal-verification correctness defect found in the reviewed diff and affected callers.

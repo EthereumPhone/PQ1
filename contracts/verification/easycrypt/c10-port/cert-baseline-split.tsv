@@ -2134,3 +2134,20 @@ cdrafts-split/SubtreeOpeningCases.ec	defined-op:ba18b1dcad8b	subtree_opening_cas
 cdrafts-split/SubtreeOpeningCases.ec	defined-op:ede2db67f132	verified_subtree_opening	# line 25
 cdrafts-split/VerifierLayerRecords.ec	defined-op:3d4b59b359d2	verifier_layer_records	# line 7
 cdrafts-split/VerifierLayerRecords.ec	defined-op:51e37db424da	verified_layer_records	# line 14
+
+# Linked byte-game forest extraction; existing census preserved.
+cdrafts-split/ForestOpeningCases.ec	defined-op:63b76f5b7543	linked_forest_layers	# line 8
+cdrafts-split/ForestOpeningCases.ec	defined-op:5d4d34e92efa	unrecorded_forest_message	# line 16
+cdrafts-split/ForestOpeningCases.ec	defined-op:f6068ada85d3	linked_private_openings	# line 21
+cdrafts-split/ForestOpeningCases.ec	defined-op:97955687e8f6	forest_opening_cases	# line 27
+cdrafts-split/ForestOpeningCases.ec	defined-op:0335940a7761	verified_forest_opening	# line 31
+cdrafts-split/ForestRecoveryRecord.ec	defined-op:c9372cc17414	forest_recovery_prefix	# line 7
+cdrafts-split/ForestRootPrefix.ec	defined-op:69d9e56fe424	forest_root_prefix	# line 6
+cdrafts-split/ForestRootWitness.ec	defined-op:e1718c22db5c	forest_root_witness	# line 6
+cdrafts-split/ForestRootWitness.ec	defined-op:4e2a8f8f37f2	forest_private_openings	# line 43
+cdrafts-split/ForsRootWitness.ec	defined-op:e01a357c3504	fors_root_witness	# line 7
+cdrafts-split/HonestForestMessages.ec	defined-op:db443016e798	returned_forest_reference	# line 6
+cdrafts-split/SessionForestExtraction.ec	defined-op:b047ce978457	new_message_forest_opening	# line 7
+cdrafts-split/SignerForestReference.ec	defined-op:a5ef04cf9531	signed_forest_reference	# line 7
+cdrafts-split/VerifierForestRecords.ec	defined-op:f12cb30f5405	verifier_forest_records	# line 8
+cdrafts-split/VerifierForestRecords.ec	defined-op:2fd4520c0e25	verified_forest_records	# line 16

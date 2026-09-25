@@ -1,0 +1,519 @@
+[
+  {
+    "file": "C10Q19RecoveryPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "80e5cc06bf43fffa2a8a3a1a9e343d15f7fcd46b94eb43d6a6d118716b4347d1",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19RecoveryPositive-compile-1790287442891689941.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19RecoveryPositive.ec",
+    "log_sha256": "a94383500d10b4298b2feb8b6baaa7703fb259108819993375d4eccce3c43e04"
+  },
+  {
+    "file": "C10Q19ReferencePositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "0b7b81d222c608f85100b84a52eb82b89d5f722748efa198cffc3616069e7429",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19ReferencePositive-compile-1790287450856412093.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ReferencePositive.ec",
+    "log_sha256": "4a196e6d8bcbb95f09c530b9be825bddcf11ef2331def98d22aec9793608cf66"
+  },
+  {
+    "file": "C10Q19WithoutIndexBound.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "5e183c610679692122ea983508a885a1b69cb6eb605aeb110d4069ece0ea9517",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19WithoutIndexBound.ec: line 13 (7-67)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19WithoutIndexBound-compile-1790287459124314079.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutIndexBound.ec",
+    "log_sha256": "29ead6cb6cd5a7167f94ee76b580793f44994ad6755dfec3bba9d553d7f79adc"
+  },
+  {
+    "file": "C10Q19LeafPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "00717c9e2a70d9d00b35b45f9bc4317047d1bcb32c91c1bca1f96ac9e37e71d0",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19LeafPositive-compile-1790287467443940942.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19LeafPositive.ec",
+    "log_sha256": "b0e631a79334e2687fd4dcd63724b8d6a6f0e2dae4476d075f60c4b63d1968c9"
+  },
+  {
+    "file": "C10Q19WithoutLeafWidth.ec",
+    "expected": 1,
+    "reason": "[by]: cannot close goals",
+    "kind": "unfinished-obligation",
+    "source_sha256": "18335762ee63dfc4c633948a12b627483ed0e5513e8223608eec3f993026f4ac",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19WithoutLeafWidth.ec: line 15 (7-78)] [by]: cannot close goals"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19WithoutLeafWidth-compile-1790287699542559972.log",
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutLeafWidth.ec",
+    "log_sha256": "6ae85bd665466c8ab8baf4d4fd90c229d4cecc161a491448d39bf9f7e81b6c59"
+  },
+  {
+    "file": "C10Q19ForestPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "e1e1f4b2910df67a3272ec068691aa3068b0c9ece535a9dee7f78c2e80591fc4",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19ForestPositive-compile-1790287483970967383.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ForestPositive.ec",
+    "log_sha256": "e1a5bfd6c9532b2e67a12c86af54db56865b198e10dd48912b86ae5ce54ec1f9"
+  },
+  {
+    "file": "C10Q19WithoutForestReference.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "3fafc37638f70735ba159cbc19540a49dc40a4fcc8aa345aaa0d4fcd17710f78",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19WithoutForestReference.ec: line 13 (7-78)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19WithoutForestReference-compile-1790287492085925080.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutForestReference.ec",
+    "log_sha256": "f2395db1a734d70a986d1f6497b729b13c6e12f8288645305b955d17e2e701f1"
+  },
+  {
+    "file": "C10Q19WithoutCollisionGuard.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "ced36fb84af1ddab8aae192e9ce6fda4f8d3d355d82d0bdf501dce5a06194a02",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19WithoutCollisionGuard.ec: line 13 (7-78)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19WithoutCollisionGuard-compile-1790287500256886609.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutCollisionGuard.ec",
+    "log_sha256": "a31586f0a6abedd9441013eb3d810cf248c031eec458967ca9a24f6562eeb681"
+  },
+  {
+    "file": "C10Q19BuilderPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "9b43105129dc3717736bf0d13eacd9e2ffc0566ef794eeb838df2241ae919e49",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19BuilderPositive-compile-1790287508426600462.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19BuilderPositive.ec",
+    "log_sha256": "a448fb2f662df78b5e3ed49fbff1579d944b54cae43ceb192330b03d000930cb"
+  },
+  {
+    "file": "C10Q19VerifierPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "60c09c2debafde3aeec129667f554f892c53f8e1e8e0b8580c08d9996876add2",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19VerifierPositive-compile-1790287516544432800.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19VerifierPositive.ec",
+    "log_sha256": "3174a1c02e22151ad90d57f6bec7b7bf0f4a5e2c10e7ed3ec9a374d6d94084b9"
+  },
+  {
+    "file": "C10Q19WithoutSignatureWidth.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "477397a02360ad75ca8594632d02899b9a92f76842ef009501aab61836dd861c",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19WithoutSignatureWidth.ec: line 13 (7-65)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19WithoutSignatureWidth-compile-1790287524764129440.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WithoutSignatureWidth.ec",
+    "log_sha256": "9d64c23ed99f4b54554d41a8c805e64f9b6f8b78a461d9c1ac6617e9c032009f"
+  },
+  {
+    "file": "C10Q19SignerPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "eb0147431fb6a30f87d361d631f1f962ea087f9d96965927c6ca84cfc0b4170d",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19SignerPositive-compile-1790287533029345637.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19SignerPositive.ec",
+    "log_sha256": "587155c606016093c10a7c4aba187b0f3589bf03af4c9258b2619095ce62aa3b"
+  },
+  {
+    "file": "C10Q19ForgetsFailure.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "284e546c71d23070b5d454139378c8d89877c36a831a9506bd36ea58074aa282",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19ForgetsFailure.ec: line 14 (7-59)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19ForgetsFailure-compile-1790287541045478962.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ForgetsFailure.ec",
+    "log_sha256": "2abbaa09d15cb9437926eeb6575321103449711ab40595a735042cf40cfcd9e6"
+  },
+  {
+    "file": "C10Q19PersistencePositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "b329238c42ecc2c1d340c430fcad9da1bafa71fff01e503b909d8edd8867da3a",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19PersistencePositive-compile-1790287549158407866.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19PersistencePositive.ec",
+    "log_sha256": "dc603a5e618ad43f557c36ef8d2c29a9da94cad7a9d157357c888dd6378c3875"
+  },
+  {
+    "file": "C10Q19CasesPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "341c3321289a266bac3517b905f68f9fe0a6bcf59588cb0af1840378b9efa63e",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19CasesPositive-compile-1790287557230623875.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19CasesPositive.ec",
+    "log_sha256": "895af94fa65bcb52406f4d445306ca7d2ad7d6ce1fc1144bb2ca7574bb9f011d"
+  },
+  {
+    "file": "C10Q19DropsMissingReferences.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "8ea5b57d0d5c2a72d553d7f3538f6d418b16cdd089063da9b042456f53200cc2",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19DropsMissingReferences.ec: line 14 (7-66)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19DropsMissingReferences-compile-1790287565248944334.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19DropsMissingReferences.ec",
+    "log_sha256": "a2c0ede3e89e9d32961decf98be2c0f011645034bbf5ecd325b2a4f551f43a59"
+  },
+  {
+    "file": "C10Q19ByteGamePositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "777f9892cc2858f0e63a862cf637a409f8abb2dc63aa9a8ddb355c99d95c712d",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19ByteGamePositive-compile-1790287573467391824.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ByteGamePositive.ec",
+    "log_sha256": "b5e1eccbd509ce3a82f1888529f00e838226a1dac49a28b93aa1d02bc772ab87"
+  },
+  {
+    "file": "C10Q19WrongInitialSeed.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "8af8ef6001d2da4a506d4754af6f7c3c88478ac9f451ad5068644dd7d76eb127",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19WrongInitialSeed.ec: line 15 (7-51)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19WrongInitialSeed-compile-1790287581485555483.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19WrongInitialSeed.ec",
+    "log_sha256": "c8729af3cb5457a10809ebe9648efd85afce51b37c7979741dfbac94e296c52a"
+  },
+  {
+    "file": "C10Q19HopPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "d987e10c3ee985903816950401d90d4f1dd9e4a4418574bd1f115ee29ed47b85",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19HopPositive-compile-1790287589594939809.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19HopPositive.ec",
+    "log_sha256": "e96baad949f31221e22964250976a69466abc3a846f5dcdf043b66e1aa6855e6"
+  },
+  {
+    "file": "C10Q19DropsPrefixCharge.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "8c14ef2e6dfb207a2d99b40f05beec574e9e98dba725f570e665f1a3bee5d5a9",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19DropsPrefixCharge.ec: line 23 (7-56)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19DropsPrefixCharge-compile-1790287597703872066.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19DropsPrefixCharge.ec",
+    "log_sha256": "ef67b807b0d15ffd5f6d500a209e5660fd70a17ec3309c3c592528a976a545f8"
+  },
+  {
+    "file": "C10Q19SpecialRootPositive.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive",
+    "source_sha256": "e526676890ed99d6db8b6ba835869af193809c58fd3bdc7be7889e480ad2e006",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19SpecialRootPositive-compile-1790287605919366872.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19SpecialRootPositive.ec",
+    "log_sha256": "8ebe94d88f1ecba88f97ab30503f49d65a3ecb5dc75ec31bd43bc90bfc73f075"
+  },
+  {
+    "file": "C10Q19SpecialWrongTree.ec",
+    "expected": 1,
+    "reason": "the given proof-term proves:",
+    "kind": "exact-mismatch",
+    "source_sha256": "3c3c7eb809ca9eee84d56a335e2dc309c74cdf437fe1fc83efd27406d5f76e0c",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/C10Q19SpecialWrongTree.ec: line 14 (7-67)] the given proof-term proves:"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19SpecialWrongTree-compile-1790287613934130112.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19SpecialWrongTree.ec",
+    "log_sha256": "c20c1e2d7ebb924c5763b3f63bec1b42e5c306fdc30912e1864e7b83c3c27102"
+  },
+  {
+    "file": "_scope_neg_op_ForestRecoveryRecord.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "bda860edff43f067c9b8c27bf8bb50058146d1e775f6f185e1361cc8812acd77",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ForestRecoveryRecord.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ForestRecoveryRecord-compile-1790287622050052933.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestRecoveryRecord.ec",
+    "log_sha256": "cabe55a08f0b8a2265d28ab4dedaab9020146236dbacb5d65c5fb49d3c5d404a"
+  },
+  {
+    "file": "_scope_neg_op_ForsRootWitness.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "6e3286247c2c387b0e1e97cd44570479178a591d126e622c5745f92093fe207f",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ForsRootWitness.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ForsRootWitness-compile-1790287626408227730.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForsRootWitness.ec",
+    "log_sha256": "09d9779d36ddae817e9ad40302f4e589066230181ab0282747bffdbcd850e34c"
+  },
+  {
+    "file": "_scope_neg_op_ForsRecordExtraction.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "0cfc841daf2bd5c45b85358476eec74843cc38d3535922c51911b85296d01400",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ForsRecordExtraction.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ForsRecordExtraction-compile-1790287631013187356.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForsRecordExtraction.ec",
+    "log_sha256": "a0d5b2fa3eb9574aea6dae1e90570a8c88f1dea5ef8b52ee6530149a5bc0d17f"
+  },
+  {
+    "file": "_scope_neg_op_ForestRecordExtraction.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "e04207f40e91c69cb04e6b2b327920d731a3768c76d010da94c72c9d1157e637",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ForestRecordExtraction.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ForestRecordExtraction-compile-1790287635865548247.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestRecordExtraction.ec",
+    "log_sha256": "1ecfe339d7895547f09b6e5d2d50b4ea6c1c1b0e20de71846d22ba3bc8ff3df0"
+  },
+  {
+    "file": "_scope_neg_op_ForestRootRecording.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "0a11fd626d0f343575d84929d407ac42f255eae9d2ca47e97d73f04cbbfb0d12",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ForestRootRecording.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ForestRootRecording-compile-1790287641078125714.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestRootRecording.ec",
+    "log_sha256": "574897ad6fcdb81a7a0c90167fb27c077731b85258ee0867ae3b0a2fe98604fc"
+  },
+  {
+    "file": "_scope_neg_op_VerifierForestRecords.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "64f6474f41e9e69ef39bedfbfc035b1ed774dcab6153246f707944502033b09d",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_VerifierForestRecords.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_VerifierForestRecords-compile-1790287646441415800.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_VerifierForestRecords.ec",
+    "log_sha256": "1d0d06c8ccdca40509d089a0c1ab1d4b5766b7ace99bbf331cd2ef7a4ce8c616"
+  },
+  {
+    "file": "_scope_neg_op_HonestForestMessages.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "359575657164e6ba87414e61c5d86d80e792dafa5858970165a597bc18b60380",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_HonestForestMessages.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_HonestForestMessages-compile-1790287651556776069.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_HonestForestMessages.ec",
+    "log_sha256": "fe6f0d13c16ba703a94d2b85e00736991511896b2883681fee76cca816eb2165"
+  },
+  {
+    "file": "_scope_neg_op_ForestReferenceHistory.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "e705f88bca159bed895bfeac268e17d12a8601ede78d4815d48d4b4ccf850ea8",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ForestReferenceHistory.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ForestReferenceHistory-compile-1790287657724445560.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestReferenceHistory.ec",
+    "log_sha256": "9c172f2f53530930dfa47991f36d60c49c40b251aa301211800aead954978d22"
+  },
+  {
+    "file": "_scope_neg_op_ForestOpeningCases.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "33a503f122a605cb4637bcc23fc8e21c42b6e3a06a1ff8aac062518c102e74a7",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ForestOpeningCases.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ForestOpeningCases-compile-1790287662134067670.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ForestOpeningCases.ec",
+    "log_sha256": "f46e1b480728f197b25851993e97451120a58b7ea76a9d770a2b4af22cc0f3bb"
+  },
+  {
+    "file": "_scope_neg_op_ByteGameForestExtraction.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "4c24b0cecfed3e11731e05df4ab285d3d0a92f8ffd454c5c06d14e73225a7f1f",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ByteGameForestExtraction.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ByteGameForestExtraction-compile-1790287667394376200.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ByteGameForestExtraction.ec",
+    "log_sha256": "80313d7f30a0a748d9f5fb9177b3ff2b20461a0d258f1706e6633fb41c073da0"
+  },
+  {
+    "file": "_scope_neg_op_ByteForestOpeningHop.ec",
+    "expected": 1,
+    "reason": "unknown variable or constant:",
+    "kind": "scope",
+    "source_sha256": "8c004d881ed1d946444c53602e33e1e63675a67144519da2f3e45f483864a39a",
+    "observed": 1,
+    "matched": true,
+    "diagnostics": [
+      "[critical] [/work/q19-controls/_scope_neg_op_ByteForestOpeningHop.ec: line 2 (30-64)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'"
+    ],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/_scope_neg_op_ByteForestOpeningHop-compile-1790287673765202636.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_ByteForestOpeningHop.ec",
+    "log_sha256": "52e342b3b3dbe54266dfff1b934459dc59bc15cd482c6ad6730f7d0f0de459f3"
+  },
+  {
+    "file": "C10Q19ForestWidthAlias.ec",
+    "expected": 0,
+    "reason": "-",
+    "kind": "positive-counterexample",
+    "source_sha256": "d5da6068dc5f591c36d3ef25e26eda577b645c9f25c1b37e3cb8320a5f2dbeed",
+    "observed": 0,
+    "matched": true,
+    "diagnostics": [],
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/C10Q19ForestWidthAlias-compile-1790287680426545473.log",
+    "reused_unchanged_receipt": true,
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/scratch/C10Q19ForestWidthAlias.ec",
+    "log_sha256": "0b4fd0228540a6857826d2d1d33285fdabeb70182a4fc945a9524e0e0e21f444"
+  }
+]
