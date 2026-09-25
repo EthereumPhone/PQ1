@@ -142,6 +142,11 @@ SOURCES = (
         'ForsRootRecording', 'ForsRootWitness', 'HonestForestMessages', 'SessionForestExtraction',
         'SignerForestReference', 'VerifierForestRecords',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'ExposureAccounting', 'ExposureDriver', 'ExposureForge', 'ExposureGameHistory',
+        'ExposureHistory', 'ExposureLog', 'ExposureReferences', 'ExposureSessionHistory',
+        'ExposureSupport',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

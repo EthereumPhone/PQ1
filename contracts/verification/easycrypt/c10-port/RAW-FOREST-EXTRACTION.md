@@ -77,3 +77,8 @@ that row count alone does not make this encoding injective. The special-root
 positive checks the distinct tree-12 semantics. Rejected applications
 show only their declared diagnostics, not falsity or premise necessity; the
 positives are not complete-game nonvacuity evidence.
+
+The later [adaptive response ledger](RAW-ADAPTIVE-EXPOSURES.md) accumulates
+these references for every successful returned output, with exact original-game
+projection, list multiplicity and cap accounting. It does not close general
+information exposure or assign private/encoding probability charges.

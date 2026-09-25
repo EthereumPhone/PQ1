@@ -500,3 +500,32 @@ scratch/_scope_neg_op_ForestOpeningCases.ec	MUST-FAIL	unknown variable or consta
 scratch/_scope_neg_op_ByteGameForestExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_ByteForestOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/C10Q19ForestWidthAlias.ec	MUST-PASS	-
+
+# Accumulated adaptive signing responses: positives, scope probes and exact mismatches.
+scratch/C10Q20RecordsPositive.ec	MUST-PASS	-
+scratch/C10Q20DropsFailureBranch.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20ProbabilityPositive.ec	MUST-PASS	-
+scratch/C10Q20ClaimsZero.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20EntryPositive.ec	MUST-PASS	-
+scratch/C10Q20AdaptivePositive.ec	MUST-PASS	-
+scratch/C10Q20AccountingPositive.ec	MUST-PASS	-
+scratch/C10Q20SessionPositive.ec	MUST-PASS	-
+scratch/C10Q20NegativeCap.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q20ReferencesPositive.ec	MUST-PASS	-
+scratch/C10Q20UnloggedReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20WrongDigest.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20ByteCountPositive.ec	MUST-PASS	-
+scratch/C10Q20CountsAllAttempts.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20ForgePositive.ec	MUST-PASS	-
+scratch/C10Q20WrongInitialSeed.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20RepeatAndSpecialPositive.ec	MUST-PASS	-
+scratch/C10Q20RefusalsPositive.ec	MUST-PASS	-
+scratch/_scope_neg_op_ExposureLog.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureDriver.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureSupport.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureAccounting.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureSessionHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureReferences.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureGameHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureForge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

@@ -196,3 +196,14 @@ ForestReferenceHistory
 ForestOpeningCases
 ByteGameForestExtraction
 ByteForestOpeningHop
+
+# Accumulated adaptive signing responses.
+ExposureLog
+ExposureDriver
+ExposureSupport
+ExposureHistory
+ExposureAccounting
+ExposureSessionHistory
+ExposureReferences
+ExposureGameHistory
+ExposureForge

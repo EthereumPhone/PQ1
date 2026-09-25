@@ -2151,3 +2151,16 @@ cdrafts-split/SessionForestExtraction.ec	defined-op:b047ce978457	new_message_for
 cdrafts-split/SignerForestReference.ec	defined-op:a5ef04cf9531	signed_forest_reference	# line 7
 cdrafts-split/VerifierForestRecords.ec	defined-op:f12cb30f5405	verifier_forest_records	# line 8
 cdrafts-split/VerifierForestRecords.ec	defined-op:2fd4520c0e25	verified_forest_records	# line 16
+
+# Accumulated adaptive signing responses; existing census preserved.
+cdrafts-split/ExposureAccounting.ec	defined-op:464503fb6ff1	exposure_messages	# line 5
+cdrafts-split/ExposureAccounting.ec	defined-op:6c0f65bb7cfc	exposure_accounting	# line 6
+cdrafts-split/ExposureDriver.ec	module:7b7b59682a0b	ExposureDriver	# line 6
+cdrafts-split/ExposureDriver.ec	module:33e5d266f3d9	ExposureContext	# line 20
+cdrafts-split/ExposureLog.ec	defined-type:f91a582fd744	signing_exposure	# line 5
+cdrafts-split/ExposureLog.ec	module:c0dd41b139ec	ExposureLog	# line 6
+cdrafts-split/ExposureLog.ec	module:2d0f9df65abb	ExposureSession	# line 7
+cdrafts-split/ExposureReferences.ec	defined-op:cff6a4e306dd	logged_fors_value	# line 37
+cdrafts-split/ExposureReferences.ec	defined-op:8768317f24b2	logged_special_root	# line 42
+cdrafts-split/ExposureSupport.ec	defined-op:c60f21aa19b4	exposure_supported	# line 7
+cdrafts-split/ExposureSupport.ec	defined-op:fc6445416bce	exposures_supported	# line 10
