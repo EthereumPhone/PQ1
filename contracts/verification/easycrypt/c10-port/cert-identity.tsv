@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	51b87d9274a86dbae3222f883482d61a
+split	ea9deb7a9681913681f0bc4a1ee80df4
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1464,3 +1464,6 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Actual forest references and conditional leaf extraction; missing-reference
 # and adaptive exposure/forgery probability residuals remain uncharged.
 # Split identity 7d32af4a46730ea4aa82d37d99387b52 -> 51b87d9274a86dbae3222f883482d61a.
+
+# 2026-09-25: accumulated adaptive returned-output accounting; 9 checked modules,
+# exact original-game projection, 27 controls; 430 targets, no new assumptions.

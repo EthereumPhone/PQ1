@@ -88,6 +88,12 @@ root-as-secret. Actual signing creates these references and later permitted
 calls preserve them. Missing-reference cases and the successful-forgery
 probability residual stay explicit; adaptive exposure charges remain open.
 
+The [adaptive response ledger](RAW-ADAPTIVE-EXPOSURES.md) now preserves every
+successful returned signature, including repeats. Exact projection preserves
+the original byte game's probability. All entries retain their construction
+references; the ledger matches the signed-message list and respects the cap.
+Full information-exposure and numerical private/encoding charges remain open.
+
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every

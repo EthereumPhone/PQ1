@@ -113,6 +113,15 @@ cdrafts-split/EncodedSignature.ec
 cdrafts-split/EncodedSignatureSlices.ec
 cdrafts-split/EncodedSlices.ec
 cdrafts-split/ExhaustionCharges.ec
+cdrafts-split/ExposureAccounting.ec
+cdrafts-split/ExposureDriver.ec
+cdrafts-split/ExposureForge.ec
+cdrafts-split/ExposureGameHistory.ec
+cdrafts-split/ExposureHistory.ec
+cdrafts-split/ExposureLog.ec
+cdrafts-split/ExposureReferences.ec
+cdrafts-split/ExposureSessionHistory.ec
+cdrafts-split/ExposureSupport.ec
 cdrafts-split/FORSC10Digest.ec
 cdrafts-split/FORS_C.ec
 cdrafts-split/FORS_C10.ec

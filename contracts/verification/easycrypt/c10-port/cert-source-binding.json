@@ -9,7 +9,7 @@
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",
-    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "7049df1f26b4dbd208a352298c2d96d4d0985d09f7c4b26271cf1ceb5ec0bb23",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "b7e958c541f1fbd318c0cb7eca0c540a82812c3f493a15e704a40f8e23c1ae4f",
     "contracts/verification/scripts/run_easycrypt_split.py": "4568d51ccd1e07082c816cb59432759a60fbe879b66fa72fefeb2a1e410f4487",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
@@ -386,6 +386,15 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/HonestForestMessages.ec": "9b148d10ae680b56863d2456bd6070046dbdbb9ade35fe3ab71ee7005d602ddd",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/SessionForestExtraction.ec": "c9e47828668bb8d83ce01b6dcfd5f0b19cf7de405da9b0e9d0111a88583c2716",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/SignerForestReference.ec": "79c3248d5effa6308f7e6de24164b8c20a6b7fa6805b0f297e5c6404d3436627",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/VerifierForestRecords.ec": "523f7535a463660721a11c8ed48c60b90890f96a9e10d9b475077467366ca7aa"
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/VerifierForestRecords.ec": "523f7535a463660721a11c8ed48c60b90890f96a9e10d9b475077467366ca7aa",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureAccounting.ec": "45c8fd181f5fce4cced2e582d2b9de8c69f227a66d0ca8befb92017936642db6",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureDriver.ec": "5476a78272f2067ad5a3fb667f5a97da870c80fecb136cee560d6d3942fac235",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureForge.ec": "8528fe18b0415805b5fc8f76688654137f084d25b80c7002a33c149449b0bb6e",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureGameHistory.ec": "9f678dd4310b6257c552097b051743be7fe112eb02c1eeee6842c91e706c2fff",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureHistory.ec": "8c269cccaa52fe1d12ac23f34a07ceeabce287f1548bc52a77f7cc0b551e12b5",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureLog.ec": "72507328655ed40ca6f57819c88bd6ec3809d84f8591ce5bf0cdcd311f91c879",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureReferences.ec": "4750111a1583a7cdcdf69c495da0756802a055c808c0b72e18acff7db5789478",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSessionHistory.ec": "c8a2f310515e4b9f7490645e00dbdb2d871f93aeb2906e2b6a5327cbac86239c",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSupport.ec": "dc5f7a4c218f3ba468f46f4e213c70ff76d544fabdae7d0540cfcbfe7839245f"
   }
 }

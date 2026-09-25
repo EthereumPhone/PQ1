@@ -44,6 +44,11 @@ The [actual FORS bridge](../contracts/verification/easycrypt/c10-port/RAW-FOREST
 now ties that forest to verification and actual retained construction
 references, yielding twelve private-leaf equalities and the special last
 root-as-secret case. Missing-reference cases remain explicit and uncharged.
+The [adaptive response ledger](../contracts/verification/easycrypt/c10-port/RAW-ADAPTIVE-EXPOSURES.md)
+now accumulates references for every successful response, preserves repeats,
+matches the signed-message list and respects the signing cap. Its private
+observer preserves the original byte-game probability. Other information
+exposures and the private/encoding numerical charges remain open.
 Adaptive accumulated opening coverage, the complete byte-game component
 reduction and numerical end-to-end forgery bounds remain open.
 See the
