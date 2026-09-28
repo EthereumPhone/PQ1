@@ -108,32 +108,22 @@ fn trimmed(row: &[u8; DISPLAY_COLS]) -> &[u8] {
     &row[s..n]
 }
 
-/// The ONE row index the body's chrome ever occupies, and the ONE string it
-/// ever is. MEASURED, not assumed: instrumenting the field loop below and
-/// running the whole golden corpus produced 45 drops, every one of them
-/// `"> next"` at row 3, and nothing else. The confirm-page vocabulary
-/// (`L=Cancel` / `R=Confirm`) never reaches this loop at all — it lives on the
-/// confirm page, which `emit` excludes from `body`.
-const NAV_ROW: usize = DISPLAY_ROWS - 1;
-const NAV_NEXT: &[u8] = b"> next";
-
-/// Instruction vocabulary the design replaces with its own chevrons and
-/// hold grammar.
+/// The RETIRED text-inference classifier. **Test-only.**
 ///
-/// # This is a classifier over CONTENT, so it cannot be trusted alone
+/// It decided whether a row was chrome by matching the text of the row it was
+/// looking at. That vocabulary is not reserved — a decoded field VALUE can
+/// equal any of it — and the guess produced three distinct WYSIWYS defects in
+/// one day (#751): a value dropped for starting `"> "`, two operands merged by
+/// whitespace normalisation, and a 16-character intent gluing the owner into
+/// the caption. Each fix closed one instance of the same root cause.
 ///
-/// It decides whether a row is chrome by matching the text of the row it is
-/// looking at. That vocabulary is not reserved: a decoded field VALUE can
-/// equal any of these strings. Until 2026-09-24 the field loop dropped every
-/// match, so `setName("> Alice")` rendered as `NAME` / `7 bytes` — the name
-/// absent from the trusted display while the signature still committed to it
-/// (#751).
-///
-/// It is still the right predicate for [`is_confirm_page`], which asks "is
-/// this page ENTIRELY chrome" about a page the renderer placed as the
-/// terminator. It is NOT sufficient on its own for a body row, which is why
-/// the field loop pairs it with [`NAV_ROW`]/[`NAV_NEXT`] and refuses on
-/// anything else.
+/// The signing path now reads [`Pages::is_nav`], which the renderer sets when
+/// it emits chrome. This function survives ONLY as the other half of the
+/// corpus differential in
+/// `erc7730_render_pure_tests::assert_nav_mask_matches_chrome`, which proves
+/// the mask agrees with it on every page the renderer produces. `#[cfg(test)]`
+/// so it cannot return to a signing path by accident.
+#[cfg(test)]
 pub(crate) fn is_nav_row(row: &[u8]) -> bool {
     row.starts_with(b"> ")
         || row.ends_with(b"> next")
@@ -146,6 +136,24 @@ pub(crate) fn is_nav_row(row: &[u8]) -> bool {
 
 /// The renderer's final confirm page (`append_confirm_page`): nothing but
 /// navigation.
+/// Is page `idx` the renderer's terminator — every row blank or CHROME?
+///
+/// Structural since the #751 chrome mask: it asks the renderer what it emitted
+/// rather than pattern-matching the text. Under the old text form, a field page
+/// whose every row happened to match the navigation vocabulary would have
+/// answered yes.
+pub(crate) fn is_confirm_page_at(pages: &Pages, idx: usize) -> bool {
+    let page = &pages.buf[idx];
+    page.iter()
+        .enumerate()
+        .all(|(r, row)| trimmed(row).is_empty() || pages.is_nav(idx, r))
+}
+
+/// Text-inference form, retained ONLY for the corpus differential in
+/// `erc7730_render_pure_tests::assert_nav_mask_matches_chrome`, which proves
+/// the mask and the old inference agree on every page the renderer produces.
+/// Not used on any signing path.
+#[cfg(test)]
 pub(crate) fn is_confirm_page(page: &Page) -> bool {
     page.iter().all(|r| {
         let t = trimmed(r);
@@ -273,7 +281,10 @@ fn hero_caption(intent: &Page) -> Text {
 
 /// The INTENT screen: the intent (joined like the caption, wrapped) in
 /// SemiBold, then the page's remaining rows (owner / contract name).
-fn emit_intent(e: &mut Emit<'_>, intent: &Page) -> Result<(), ()> {
+/// `pages`/`idx` rather than a bare `&Page`: the intent page's chrome is read
+/// from the renderer's mask, not inferred from the row text (#751).
+fn emit_intent(e: &mut Emit<'_>, pages: &Pages, idx: usize) -> Result<(), ()> {
+    let intent = &pages.buf[idx];
     let mut l: [(&[u8], Weight); 6] = [(&[], Weight::Regular); 6];
     let mut n = 0;
     let (text, len, used) = intent_text(intent).unwrap_or(([0u8; 2 * DISPLAY_COLS], 0, 0));
@@ -286,8 +297,8 @@ fn emit_intent(e: &mut Emit<'_>, intent: &Page) -> Result<(), ()> {
         }
     }
     for (r, row) in intent.iter().enumerate().skip(used) {
-        let t = trimmed(row);
-        if t.is_empty() || is_nav_row(t) {
+        let t = value_text(row);
+        if t.is_empty() || pages.is_nav(idx, r) {
             continue;
         }
         *l.get_mut(n).ok_or(())? = (t, if r == 0 { Weight::SemiBold } else { Weight::Regular });
@@ -305,7 +316,7 @@ fn page_id(i: usize) -> Text {
 /// page).
 pub(crate) fn emit(out: &mut Screens, pages: &Pages, start: usize, body_len: usize, chain_id: u64, fam: Family) -> Result<BodyReceipt, ()> {
     let end = start.checked_add(body_len).ok_or(())?;
-    if body_len < 2 || end > pages.len || !is_confirm_page(&pages.buf[end - 1]) {
+    if body_len < 2 || end > pages.len || !is_confirm_page_at(pages, end - 1) {
         return Err(());
     }
     let body = &pages.buf[start..end - 1];
@@ -379,38 +390,24 @@ pub(crate) fn emit(out: &mut Screens, pages: &Pages, start: usize, body_len: usi
         let mut n = 0;
         let mut row0_is_label = false;
         for (r, row) in page.iter().enumerate() {
-            // PROBE on the normalised form, DISPLAY the faithful one. A padded
-            // `" > next"` must still classify as chrome; a padded `" Alice"`
-            // must still reach the screen as `" Alice"`.
-            let probe = trimmed(row);
+            // STRUCTURAL, not textual (#751). The renderer marked which rows it
+            // emitted as chrome; this no longer guesses from the bytes it is
+            // about to display. Three distinct WYSIWYS defects came from that
+            // guess — the navigation vocabulary, whitespace normalisation, and
+            // a 16-character intent — and each patch only closed one of them.
+            //
+            // `start + i` is this page's index in `pages`; `body` is the
+            // borrowed sub-slice `pages.buf[start..end - 1]`.
             let t = value_text(row);
-            if probe.is_empty() {
+            if t.is_empty() {
                 continue;
             }
-            if is_nav_row(probe) {
+            if pages.is_nav(start + i, r) {
                 // The renderer's own chrome: drop it, the pixel design draws
-                // its own. Narrowed to the exact (row, text) the renderer
-                // actually emits — see NAV_ROW/NAV_NEXT for the measurement.
-                if r == NAV_ROW && t == NAV_NEXT {
-                    continue;
-                }
-                // Anything else matching the vocabulary is a field VALUE that
-                // collided with it. REFUSE (#751). Dropping it would leave the
-                // user signing bytes the display never showed, which is the one
-                // failure a trusted display must not have; and we cannot render
-                // it either, because the pixel design has no way to say "this
-                // row is data that looks like chrome". Refusing costs the user
-                // a pathological value and keeps WYSIWYS intact.
-                //
-                // RESIDUAL, stated because it is not closed: a value that
-                // renders to exactly `"> next"` at row 3 is indistinguishable
-                // from the chrome above and is still dropped silently. One
-                // exact string rather than a whole prefix class. Closing it
-                // needs the renderer to MARK the rows it emitted as
-                // navigation instead of the adapter recovering that by
-                // pattern match — 104 call sites across 21 files, tracked on
-                // #751.
-                return Err(());
+                // its own navigation. No text is consulted, so no field value
+                // can land here — which is what retires the whole #751 class
+                // rather than one instance of it.
+                continue;
             }
             if r == 0 {
                 row0_is_label = true;
@@ -429,7 +426,7 @@ pub(crate) fn emit(out: &mut Screens, pages: &Pages, start: usize, body_len: usi
             continue;
         }
         if i == intent_at {
-            emit_intent(&mut e, page)?;
+            emit_intent(&mut e, pages, start + i)?;
             continue;
         }
         // The renderer's `Network:` page is the design's NETWORK screen

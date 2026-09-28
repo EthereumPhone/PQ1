@@ -2153,6 +2153,7 @@ fn append_envelope_pages(pages: &mut Pages, tx: &Eip1559Tx) -> Result<(), Render
     let [_, r1, r2, foot] = pages.page_mut(p);
     write_chain(r1, r2, tx.chain_id);
     write_line(foot, "> next");
+    pages.mark_nav(p, 3);
 
     if known_native_ticker(tx.chain_id).is_some() {
         // The chain table authenticates an 18-decimal native unit. Keep the
@@ -2183,6 +2184,7 @@ fn append_envelope_pages(pages: &mut Pages, tx: &Eip1559Tx) -> Result<(), Render
         let [_, nonce_hi, nonce_lo, foot] = pages.page_mut(p);
         write_u64_decimal_two_rows_exact(nonce_hi, nonce_lo, tx.nonce)?;
         write_line(foot, "> next");
+        pages.mark_nav(p, 3);
     }
 
     Ok(())
@@ -2288,6 +2290,7 @@ fn append_userop_nonce_pages(pages: &mut Pages, nonce: &U256) -> Result<(), Rend
     let second = pages.push_blank().map_err(|_| RenderErr::PageBudget)?;
     write_hex_word_row(pages.row_mut(second, 0), &nonce.0[24..32]);
     write_line(pages.row_mut(second, 3), "> next");
+    pages.mark_nav(second, 3);
     Ok(())
 }
 
@@ -2415,13 +2418,16 @@ fn append_eip712_chain_page(pages: &mut Pages, chain_id: u64) -> Result<(), Rend
     let [_, r1, r2, foot] = pages.page_mut(p);
     write_chain(r1, r2, chain_id);
     write_line(foot, "> next");
+    pages.mark_nav(p, 3);
     Ok(())
 }
 
 fn append_confirm_page(pages: &mut Pages) -> Result<(), RenderErr> {
     let p = pages.push_blank().map_err(|_| RenderErr::PageBudget)?;
     write_line(pages.row_mut(p, 2), "L=Cancel");
+    pages.mark_nav(p, 2);
     write_line(pages.row_mut(p, 3), "R=Confirm");
+    pages.mark_nav(p, 3);
     Ok(())
 }
 

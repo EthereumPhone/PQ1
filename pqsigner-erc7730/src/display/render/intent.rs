@@ -53,10 +53,14 @@ pub(super) fn render_intent_banner(
         write_line(pages.row_mut(warn, 1), "Unattested");
         write_line(pages.row_mut(warn, 2), "descriptor");
         write_line(pages.row_mut(warn, 3), "> next");
+        pages.mark_nav(warn, 3);
     }
 
     let p = pages.push_blank().map_err(|_| RenderErr::PageBudget)?;
     pages.buf[p] = build_intent_page(ir, format, derived_intent);
+    // `build_intent_page` returns a bare `Page`, so the chrome it writes to
+    // row 3 has to be declared where the page joins `pages`.
+    pages.mark_nav(p, 3);
     Ok(p)
 }
 
@@ -77,6 +81,7 @@ pub(super) fn repaint_intent_banner(
         return Err(RenderErr::Reject("7730 missing intent page"));
     }
     pages.buf[intent_page] = build_intent_page(ir, format, Some(derived_intent));
+    pages.mark_nav(intent_page, 3);
     Ok(())
 }
 

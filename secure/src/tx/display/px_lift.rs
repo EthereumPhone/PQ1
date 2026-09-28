@@ -263,7 +263,7 @@ fn body_bound(body: &Body<'_>, pages: &Pages, start: usize, len: usize) -> bool 
             core::ptr::eq(*lifted, pages)
                 && *lifted_start == start
                 && *lifted_len == len
-                && super::erc7730_screens::is_confirm_page(&pages.buf[end - 1])
+                && super::erc7730_screens::is_confirm_page_at(pages, end - 1)
         }
         Body::Offchain(b) => prefix_matches(&super::offchain_screens::render_pages(b), pages, start, len),
         // The banner page, then the member's own body right after it.

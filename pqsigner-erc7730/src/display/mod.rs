@@ -96,6 +96,28 @@ pub struct Pages {
     /// The full `MAX_PAGES`-sized page buffer. Renderers write directly into
     /// their own slots; external callers must use [`Pages::as_slice`].
     pub buf: [Page; MAX_PAGES],
+    /// Per-page CHROME mask: bit `r` set means row `r` of that page is
+    /// renderer-emitted navigation, not content.
+    ///
+    /// WHY THIS EXISTS (#751). Consumers used to recover this by matching the
+    /// row's TEXT — anything beginning `"> "`, ending `"> next"`, or equal to
+    /// `"R=Confirm"` and friends. That vocabulary is not reserved, so a decoded
+    /// field VALUE could land in it and be dropped from the trusted display
+    /// while the signature still committed to it. Three separate instances of
+    /// that one root cause were found in a single day: the navigation
+    /// vocabulary, whitespace normalisation merging two operands, and a
+    /// 16-character intent gluing the owner into the caption.
+    ///
+    /// The renderer knows which rows it emitted as chrome. It says so here
+    /// instead of leaving the consumer to deduce it from the bytes it is
+    /// displaying.
+    ///
+    /// FAILURE DIRECTION, deliberately chosen: a row the renderer forgets to
+    /// mark reads as CONTENT, so the worst case is chrome appearing on screen —
+    /// visible and harmless. The dangerous direction (content silently treated
+    /// as chrome and dropped) cannot occur, because only the renderer's own
+    /// chrome writers ever call [`Pages::mark_nav`].
+    pub nav: [u8; MAX_PAGES],
     /// Number of currently-visible pages (`0..=MAX_PAGES`).
     pub len: usize,
 }
@@ -115,6 +137,7 @@ impl Pages {
         assert!(len <= MAX_PAGES, "Pages::empty_with_len: len > MAX_PAGES");
         Pages {
             buf: [[[b' '; DISPLAY_COLS]; DISPLAY_ROWS]; MAX_PAGES],
+            nav: [0; MAX_PAGES],
             len,
         }
     }
@@ -153,9 +176,35 @@ impl Pages {
         // Re-clear the slot so dynamic-push renderers don't inherit prior
         // content (older renderers overran past `len` and bumped it).
         self.buf[self.len] = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+        // A recycled slot must not inherit the previous render's chrome mask,
+        // or a content row could be dropped as chrome.
+        self.nav[self.len] = 0;
         let idx = self.len;
         self.len += 1;
         Ok(idx)
+    }
+
+    /// Mark row `row` of page `page` as renderer-emitted chrome.
+    ///
+    /// Called only by the renderer's own navigation writers. Panics on an
+    /// out-of-range index, matching [`Pages::row_mut`]: both indices come from
+    /// the same compile-time constants.
+    pub fn mark_nav(&mut self, page: usize, row: usize) {
+        assert!(page < MAX_PAGES);
+        assert!(row < DISPLAY_ROWS);
+        self.nav[page] |= 1 << row;
+    }
+
+    /// Is row `row` of page `page` renderer-emitted chrome?
+    ///
+    /// Out-of-range answers `false`: an unknown row is content, which is the
+    /// safe direction (see the [`Pages::nav`] field docs).
+    #[must_use]
+    pub fn is_nav(&self, page: usize, row: usize) -> bool {
+        if page >= MAX_PAGES || row >= DISPLAY_ROWS {
+            return false;
+        }
+        self.nav[page] & (1 << row) != 0
     }
 
     /// Volatile-poison the full fixed buffer and reset its visible length.

@@ -592,6 +592,52 @@ fn assert_all_pages_printable(pages: &Pages) {
             }
         }
     }
+    assert_nav_mask_matches_chrome(pages);
+}
+
+/// #751 conversion check: the renderer's CHROME MASK must agree with the text
+/// inference it replaces, on every page of every corpus descriptor.
+///
+/// Called from `assert_all_pages_printable`, which 66 corpus tests already
+/// run, so this is a corpus-wide differential rather than a spot check.
+///
+/// The two directions are NOT symmetric and the assertions say so:
+///
+///   * marked-but-not-chrome-text is a BUG and fails. It means the renderer
+///     claimed a content row is navigation, which is the direction that drops
+///     signed bytes from the display.
+///   * chrome-text-but-unmarked is a MISSED WRITE SITE and also fails here,
+///     because leaving one behind silently returns that row to text inference.
+///     In production it is merely cosmetic (the row renders instead of being
+///     dropped), which is why the mask is safe to land incrementally — but a
+///     test that tolerated it would not finish the job.
+fn assert_nav_mask_matches_chrome(pages: &Pages) {
+    for (p, page) in pages.as_slice().iter().enumerate() {
+        for (r, row) in page.iter().enumerate() {
+            let text = {
+                let mut n = row.len();
+                while n > 0 && row[n - 1] == b' ' {
+                    n -= 1;
+                }
+                let mut s = 0;
+                while s < n && row[s] == b' ' {
+                    s += 1;
+                }
+                &row[s..n]
+            };
+            let looks_like_chrome = !text.is_empty() && super::erc7730_screens::is_nav_row(text);
+            let marked = pages.is_nav(p, r);
+            assert_eq!(
+                marked,
+                looks_like_chrome,
+                "page {p} row {r} {:?}: nav mask says {marked}, text inference says \
+                 {looks_like_chrome}. Either a chrome writer did not call \
+                 `Pages::mark_nav`, or a content row was marked.\n{}",
+                core::str::from_utf8(text).unwrap_or("<non-utf8>"),
+                dump_pages(pages),
+            );
+        }
+    }
 }
 
 /// Find the first page whose row 0 trims to exactly `label`. Used to
@@ -15355,7 +15401,20 @@ fn production_1inch_v6_cancellation_controls_render_complete_neutral_transcripts
     assert_eq!(registry.known_calls_bloom.len(), BLOOM_BYTES);
     assert_eq!(
         std::mem::size_of::<Pages>(),
-        MAX_PAGES * 4 * DISPLAY_COLS + std::mem::size_of::<usize>(),
+        // buf + the #751 chrome mask + len, rounded to the struct's alignment.
+        //
+        // The mask is `[u8; MAX_PAGES]` — 31 bytes, 32 after padding — and it
+        // is the ONLY growth this object has taken. It buys the trusted display
+        // the ability to know which rows the renderer emitted as navigation
+        // instead of inferring it from the text it is showing, which produced
+        // three distinct WYSIWYS defects (#751: nav-vocabulary collision,
+        // whitespace normalisation, and the 16-character intent).
+        //
+        // Kept as an EXACT equality rather than a bound: this pin exists so
+        // that growth is a decision, not a drift, and widening it to `<=` would
+        // retire the only thing enforcing that.
+        (MAX_PAGES * 4 * DISPLAY_COLS + MAX_PAGES + std::mem::size_of::<usize>())
+            .next_multiple_of(std::mem::align_of::<Pages>()),
         "descriptor growth must not resize the fixed trusted-page stack object"
     );
     for entry in &entries {

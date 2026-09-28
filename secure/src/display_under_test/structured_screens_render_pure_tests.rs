@@ -571,6 +571,14 @@ fn row(p: &mut Pages, page: usize, r: usize, text: &[u8]) {
 /// Build the minimum legal ERC-7730 body — intent, one field page, confirm —
 /// whose field page carries `rows` at the given indices, and try to lift it.
 fn try_field_page(rows: &[(usize, &[u8])]) -> Result<alloc::string::String, ()> {
+    try_field_page_marked(rows, &[])
+}
+
+/// As [`try_field_page`], but `nav` names the rows of the field page the
+/// RENDERER would have marked as chrome. Hand-built pages carry no mask, so a
+/// test that wants chrome must say so — which is the point of the structural
+/// fix: chrome is declared, never inferred.
+fn try_field_page_marked(rows: &[(usize, &[u8])], nav: &[usize]) -> Result<alloc::string::String, ()> {
     const TARGET: [u8; 20] = [0x5a; 20];
     let t = tx(MAINNET, TARGET, 0, 68);
     let data = [0u8; 68];
@@ -583,6 +591,10 @@ fn try_field_page(rows: &[(usize, &[u8])]) -> Result<alloc::string::String, ()> 
         row(&mut pages, 1, r, text);
     }
     row(&mut pages, 2, 0, b"L=Cancel"); // confirm page: chrome only
+    pages.mark_nav(2, 0);
+    for &r in nav {
+        pages.mark_nav(1, r);
+    }
     let body_len = pages.len;
 
     let facts = f.trailer(&t, TrailerSet::Sign);
@@ -672,11 +684,28 @@ fn control_celo_set_name_lifts() {
 /// breaks. This is the other half of the fix and the reason it is a narrow
 /// (row, text) match rather than a blanket refusal.
 #[test]
-fn the_renderers_own_next_chrome_still_drops() {
-    let text = try_field_page(&[(1, b"Alice"), (3, b"> next")])
-        .expect("`> next` at row 3 is the renderer's own footer and must not refuse");
+fn the_renderers_own_marked_chrome_still_drops() {
+    // MARKED as chrome, the way the renderer marks its own footer.
+    let text = try_field_page_marked(&[(1, b"Alice"), (3, b"> next")], &[3])
+        .expect("marked chrome must not refuse");
     assert!(text.contains("Alice"), "{text}");
-    assert!(!text.contains("> next"), "the chrome must not reach the transcript:\n{text}");
+    assert!(!text.contains("> next"), "marked chrome must not reach the transcript:\n{text}");
+}
+
+/// The other half, and the whole point of the structural fix: the SAME bytes,
+/// UNMARKED, are content and must render.
+///
+/// Under text inference this was indistinguishable from the case above.
+#[test]
+fn the_same_bytes_unmarked_are_content_and_render() {
+    let text = try_field_page(&[(1, b"Alice"), (3, b"> next")])
+        .expect("unmarked rows are content and must lift");
+    assert!(text.contains("Alice"), "{text}");
+    assert!(
+        text.contains("> next"),
+        "an UNMARKED `> next` is a field value and must reach the screen — \
+         that is the difference the chrome mask exists to make:\n{text}"
+    );
 }
 
 /// A field VALUE colliding with the nav vocabulary must REFUSE, never drop.
@@ -685,7 +714,7 @@ fn the_renderers_own_next_chrome_still_drops() {
 /// failure a trusted display must not have. Refusing costs a pathological
 /// value and keeps WYSIWYS intact.
 #[test]
-fn a_value_that_collides_with_the_nav_vocabulary_is_refused() {
+fn a_value_that_looks_like_chrome_now_renders_faithfully() {
     // (value, where it sits on the field page)
     let cases: [(&[u8], usize); 6] = [
         (b"> Alice", 1),      // the original #751 report
@@ -695,17 +724,20 @@ fn a_value_that_collides_with_the_nav_vocabulary_is_refused() {
         (b"to confirm", 1),
         (b"> next", 1),       // the footer TEXT, but not at the footer ROW
     ];
-    let mut dropped = alloc::vec::Vec::new();
+    let mut missing = alloc::vec::Vec::new();
     for (value, r) in cases {
-        if try_field_page(&[(r, value)]).is_ok() {
-            dropped.push(core::str::from_utf8(value).unwrap());
+        let v = core::str::from_utf8(value).unwrap();
+        match try_field_page(&[(r, value)]) {
+            Ok(text) if text.contains(v) => {}
+            _ => missing.push(v),
         }
     }
     assert!(
-        dropped.is_empty(),
-        "these values lifted instead of refusing, so they were silently \
-         dropped from the display while the signature still commits to them: \
-         {dropped:?}"
+        missing.is_empty(),
+        "these field values did not reach the screen: {missing:?}. None is \
+         marked as chrome, so each is CONTENT and must render verbatim — \
+         neither dropped (the original #751 defect) nor refused (the interim \
+         fix, which turned a display bug into a signing denial)."
     );
 }
 
@@ -714,11 +746,14 @@ fn a_value_that_collides_with_the_nav_vocabulary_is_refused() {
 /// onto a row. Before the fix this rendered `NAME` / `7 bytes` with the name
 /// absent; now it refuses.
 #[test]
-fn celo_set_name_with_a_colliding_value_is_refused() {
+fn celo_set_name_with_a_colliding_value_renders_the_name() {
+    let text = try_celo_set_name(b"> Alice")
+        .expect("`setName(\"> Alice\")` is content, not chrome — it must lift");
     assert!(
-        try_celo_set_name(b"> Alice").is_err(),
-        "`setName(\"> Alice\")` must refuse — rendering it dropped the name \
-         while the signature still committed to it"
+        text.contains("> Alice"),
+        "the name must appear verbatim. It was DROPPED before 1f2a57e1 and \
+         REFUSED between then and the chrome mask; neither is what a trusted \
+         display owes the user:\n{text}"
     );
 }
 
