@@ -70,6 +70,32 @@ pub(crate) fn family(surface: Surface, contract: &[u8; 20]) -> Family {
     }
 }
 
+/// The row's VALUE text: trailing grid padding removed, **leading whitespace
+/// kept**.
+///
+/// [`trimmed`] strips both ends, which silently merges distinct signed
+/// operands. On the admitted Celo `setName(string)` leaf, `" Alice"` and
+/// `"Alice "` are both six bytes and both render `NAME` / `Alice` /
+/// `6 bytes` once the leading space is eaten — different bytes signed, one
+/// display. Same class as #751's navigation-vocabulary collision, reached
+/// through normalisation instead of vocabulary.
+///
+/// Trailing space inside a value is NOT recoverable here and is not attempted:
+/// the legacy painter left-aligns into a 16-column row and pads with spaces,
+/// so `"Alice "` and `"Alice"` produce identical rows. The byte-length row the
+/// renderer already emits ("6 bytes") is what separates those two.
+///
+/// CLASSIFICATION still uses [`trimmed`]. A padded `" > next"` must still be
+/// recognised as chrome, so the caller probes with the normalised form and
+/// displays with this one.
+fn value_text(row: &[u8; DISPLAY_COLS]) -> &[u8] {
+    let mut n = DISPLAY_COLS;
+    while n > 0 && row[n - 1] == b' ' {
+        n -= 1;
+    }
+    &row[..n]
+}
+
 fn trimmed(row: &[u8; DISPLAY_COLS]) -> &[u8] {
     let mut n = DISPLAY_COLS;
     while n > 0 && row[n - 1] == b' ' {
@@ -353,11 +379,15 @@ pub(crate) fn emit(out: &mut Screens, pages: &Pages, start: usize, body_len: usi
         let mut n = 0;
         let mut row0_is_label = false;
         for (r, row) in page.iter().enumerate() {
-            let t = trimmed(row);
-            if t.is_empty() {
+            // PROBE on the normalised form, DISPLAY the faithful one. A padded
+            // `" > next"` must still classify as chrome; a padded `" Alice"`
+            // must still reach the screen as `" Alice"`.
+            let probe = trimmed(row);
+            let t = value_text(row);
+            if probe.is_empty() {
                 continue;
             }
-            if is_nav_row(t) {
+            if is_nav_row(probe) {
                 // The renderer's own chrome: drop it, the pixel design draws
                 // its own. Narrowed to the exact (row, text) the renderer
                 // actually emits — see NAV_ROW/NAV_NEXT for the measurement.

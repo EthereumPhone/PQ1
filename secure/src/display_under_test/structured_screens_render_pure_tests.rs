@@ -721,3 +721,36 @@ fn celo_set_name_with_a_colliding_value_is_refused() {
          while the signature still committed to it"
     );
 }
+
+/// The SECOND collision class in #751, found by GPT-6 Astra reviewing the
+/// first fix: normalisation rather than vocabulary.
+///
+/// `setName(" Alice")` and `setName("Alice ")` are both six bytes on this
+/// admitted leaf. `trimmed()` stripped BOTH ends, so both rendered
+/// `NAME` / `Alice` / `6 bytes` — one clear-signed display, two different
+/// signatures. Only the opaque ERC-8213 calldata digest separated them, and
+/// that is the blind fallback this path exists to avoid.
+///
+/// `value_text()` keeps the leading space, so the two transcripts now differ
+/// in the LINE BYTES that drive the renderer rather than in a digest the user
+/// would have to recompute off-device.
+///
+/// NOT covered, deliberately: `"Alice "` versus `"Alice"`. The legacy painter
+/// left-aligns into a 16-column row and pads with spaces, so those two produce
+/// byte-identical rows; the renderer's own byte-length row ("6 bytes" vs
+/// "5 bytes") is what separates them.
+#[test]
+fn two_celo_names_differing_only_in_whitespace_render_differently() {
+    let lead = try_celo_set_name(b" Alice").expect("leading-space name must lift");
+    let trail = try_celo_set_name(b"Alice ").expect("trailing-space name must lift");
+
+    assert_ne!(
+        lead, trail,
+        "`setName(\" Alice\")` and `setName(\"Alice \")` are different signed \
+         operands and must not clear-sign identically.\n\n{lead}"
+    );
+    assert!(
+        lead.contains(" Alice"),
+        "the leading space must reach the screen, not be normalised away:\n{lead}"
+    );
+}
