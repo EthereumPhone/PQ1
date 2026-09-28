@@ -1401,7 +1401,16 @@ fn production_celo_validators_add_first_member_renders_all_signed_operands_mainn
         page_strs(&baseline.pages, intent_page_index(&baseline.pages)),
         [
             "Add First Member".to_string(),
-            "Celo".to_string(),
+            // Row 1 is EMPTY, not the owner "Celo", and that is deliberate.
+            // `Add First Member` is exactly DISPLAY_COLS, so the finished page
+            // cannot tell a consumer whether row 1 continues the intent or
+            // holds the owner. `erc7730_screens::intent_text` joined rows 0+1
+            // whenever row 0 was full and produced the caption
+            // `SIGN ADD FIRST MEMBERCELO?`. The renderer now treats "fills row
+            // 0 exactly" as the continuation case, so the layout follows the
+            // same predicate the consumer applies; the owner line is the price,
+            // the same trade the >16 branch already made.
+            String::new(),
             "Celo Validators".to_string(),
             "> next".to_string(),
         ]

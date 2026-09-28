@@ -108,7 +108,18 @@ pub(super) fn build_intent_page(
     let r0_take = intent.len().min(W);
     page[0][..r0_take].copy_from_slice(&intent[..r0_take]);
 
-    if intent.len() > W {
+    // `>= W`, not `> W`. At EXACTLY W the two layouts are indistinguishable to
+    // anything reading the finished page: row 0 is full either way, so a
+    // consumer cannot tell "the intent continues on row 1" from "row 1 is the
+    // owner". `erc7730_screens::intent_text` joins rows 0+1 whenever row 0 is
+    // full, which turned the 16-character `Set Account Name` plus owner `Celo`
+    // into the caption `SIGN SET ACCOUNT NAMECELO?`.
+    //
+    // Treating "fills row 0 exactly" as the continuation case makes the layout
+    // a function of the SAME predicate the consumer applies. Row 1 is then
+    // simply empty, and a 16-character intent drops the owner line — the same
+    // trade the `> W` branch already makes ("the intent earns the space").
+    if intent.len() >= W {
         let end = intent.len().min(2 * W);
         let take = end - W;
         page[1][..take].copy_from_slice(&intent[W..end]);
