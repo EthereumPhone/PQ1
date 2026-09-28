@@ -107,6 +107,12 @@ const REG: HashRegs = unsafe {
 /// HardFaults on real silicon, so the DHCSR probe is a correctness guard, not
 /// a tidiness one. The feature is separate because the FSBL links this driver
 /// with 2,048 B of headroom and does not want the semihosting machinery at all.
+// The `[S]` prefix is DELIBERATE even though this crate is now shared. Only
+// the secure world enables `debug-log`, so these lines only ever appear there —
+// and CLAUDE.md, plus several docs, instruct the operator to look for the exact
+// string "[S] hash: HW SHA-256 self-test PASS" when validating on silicon.
+// Renaming it during the extraction broke that marker; do not rename it again
+// without updating every consumer.
 macro_rules! hash_log {
     ($($t:tt)*) => {{
         #[cfg(feature = "debug-log")]
@@ -192,9 +198,9 @@ unsafe fn self_test() {
         0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
     ];
     if out == expected {
-        hash_log!("[hash] HW SHA-256 self-test PASS");
+        hash_log!("[S] hash: HW SHA-256 self-test PASS");
     } else {
-        hash_log!("[hash] HW SHA-256 self-test FAIL — HALT");
+        hash_log!("[S] hash: HW SHA-256 self-test FAIL — HALT");
         loop { cortex_m::asm::wfe(); }
     }
 }
@@ -251,7 +257,7 @@ fn wait_ready() {
         if t > 10_000_000 {
             let sr = REG.sr.read();
             let _ = sr;
-            hash_log!("[hash] wait_ready TIMEOUT, SR={:#x}", sr);
+            hash_log!("[S] hash: wait_ready TIMEOUT, SR={:#x}", sr);
             // H-1: the engine is wedged BUSY — do NOT continue (the next
             // hash would start on a stuck peripheral). Zeroize + reset.
             hash_engine_fault();
@@ -395,7 +401,7 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
             let str_v = REG.str_.read();
             let _ = (sr, cr, str_v);
             hash_log!(
-                "[hash] DCIS TIMEOUT, SR={:#x} CR={:#x} STR={:#x} remaining_bits={}",
+                "[S] hash: DCIS TIMEOUT, SR={:#x} CR={:#x} STR={:#x} remaining_bits={}",
                 sr, cr, str_v, remaining_bits
             );
             // H-1: the digest never completed. The OLD behaviour returned
