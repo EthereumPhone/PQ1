@@ -42,6 +42,50 @@ mod offchain_sync;
 pub(super) mod primitives;
 #[cfg(not(test))]
 mod safe_display;
+/// Pixel-UI screen emitter for the Safe flow (`ui-px`): the second painter
+/// over `safe_display::classify`.
+#[cfg(feature = "ui-px")]
+mod safe_screens;
+/// The legacy-pages → screens lift and its transcript proof (`ui-px`).
+#[cfg(feature = "ui-px")]
+pub mod px_lift;
+/// Shared building blocks of the pixel-UI screen emitters (`ui-px`).
+#[cfg(feature = "ui-px")]
+mod screen_kit;
+/// Pixel-UI emitters for the single-UserOp routes and the rotation consent
+/// (`ui-px`, port step 2), each the second painter over its page painter.
+#[cfg(feature = "ui-px")]
+pub(crate) mod userop_screens;
+#[cfg(feature = "ui-px")]
+mod value_transfer_screens;
+#[cfg(feature = "ui-px")]
+mod erc20_screens;
+#[cfg(feature = "ui-px")]
+mod blind_sign_screens;
+#[cfg(feature = "ui-px")]
+mod slot_rotation_screens;
+/// Pixel-UI emitters for the structured routes (`ui-px`, port step 3): the
+/// CoW order body (direct and Safe-wrapped), the ERC-7730 page lift, the
+/// off-chain (EIP-1271) bodies and the batch framing.
+#[cfg(feature = "ui-px")]
+mod cowswap_screens;
+#[cfg(feature = "ui-px")]
+pub(crate) mod erc7730_screens;
+#[cfg(feature = "ui-px")]
+pub(crate) mod offchain_screens;
+#[cfg(feature = "ui-px")]
+pub(crate) mod batch_screens;
+// The native pixel-UI twins of the handler-owned trailer pages. Always
+// compiled (pure, host-testable; dead-stripped without a `ui-px` caller) so
+// the sign handler's `TrailerFacts` exists on every configuration.
+#[cfg(not(test))]
+mod trailer_screens;
+#[cfg(not(test))]
+pub(crate) use trailer_screens::{TrailerFacts, TrailerSet};
+#[cfg(all(not(test), feature = "ui-px"))]
+pub(crate) use trailer_screens::expected_trailer_count;
+#[cfg(feature = "ui-px")]
+pub(crate) use dispatch::safe_route_meta;
 #[cfg(not(test))]
 mod safe_mgmt;
 mod slot_rotation;

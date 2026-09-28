@@ -133,7 +133,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             *b = 0;
         }
     }
-    let snap_full = &mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF);
+    // The pixel UI (`ui-px`) overlays its screen transcript on the tail of
+    // the shared buffer beyond this handler's snapshot maximum — disjoint
+    // bytes, split once here (the same shape as `cmd_sign_userop`).
+    #[cfg(feature = "ui-px")]
+    const _: () = assert!(
+        super::SIGN_SNAP_BUF_LEN - SIGN_OFFCHAIN_INPUT_MAX_LEN >= pqsigner_ui_px::SCREENS_BYTES
+    );
+    let (snap_full, px_scratch) =
+        (&mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF)).split_at_mut(SIGN_OFFCHAIN_INPUT_MAX_LEN);
+    #[cfg(not(feature = "ui-px"))]
+    let _ = &px_scratch;
     let snap = &mut snap_full[..total_len];
     for i in 0..total_len {
         snap[i] = core::ptr::read_volatile(in_ptr.add(i));
@@ -427,6 +437,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // dispatch chooses which trusted pages are shown, but it can never itself
     // authorize signing: the common §11 gate independently reconstructs and
     // proves the exact accepted kind/context before invoking C10.
+    // Whether the pixel UI owned the confirmation (and so plays the signing
+    // film and the ending).
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    let mut px_owns_ending = false;
     let mut offchain_confirm_receipt = crate::tx::display::OffchainConfirmReceipt::new();
     offchain_confirm_receipt.fail_initialize();
 
@@ -762,10 +776,40 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             crate::ui::show_status("Sign refused", "context changed");
             return NscStatus::InternalError as u32;
         }
-        let (cr, cr_verdict) = confirm_checked(pages.as_slice());
+        // Pixel trusted UI (`ui-px`): the proven ERC-7730 page range is laid
+        // out as design screens (`erc7730_screens`, `Surface::Typed`) and the
+        // fingerprint + context suffix as their trailer twins, bound by the
+        // same lift proof as the UserOp routes.
+        let px = px_route_typed(px_scratch, &pages, chain_id, &v.ir.contract, fingerprint_kind, &typed_confirm_context);
+        #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+        let px_route = px.is_some();
+        let (cr, cr_verdict) = match px {
+            Some(Ok(r)) => r,
+            Some(Err(reason)) => {
+                crate::ui::show_status("Sign refused", reason);
+                return NscStatus::InternalError as u32;
+            }
+            None => confirm_checked(pages.as_slice()),
+        };
         match cr {
-            ConfirmResult::Confirmed => {}
+            ConfirmResult::Confirmed => {
+                #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+                if px_route {
+                    crate::fi::scrub_sentinel_register();
+                    if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+                        super::zeroize_sensitive_state();
+                        crate::ui::show_status("Sign refused", "px atlas");
+                        return NscStatus::InternalError as u32;
+                    }
+                    crate::fi::scrub_sentinel_register();
+                }
+            }
             ConfirmResult::Cancelled => {
+                #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+                if px_route {
+                    crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Declined);
+                    return NscStatus::UserRejected as u32;
+                }
                 crate::ui::show_status("Cancelled", "");
                 return NscStatus::UserRejected as u32;
             }
@@ -773,6 +817,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 super::zeroize_sensitive_state();
                 return NscStatus::IdleWipe as u32;
             }
+        }
+        #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+        {
+            px_owns_ending = px_route;
         }
         // FI belt (UI1 / work-todo #12c): affirmative-sentinel gate; fail closed.
         if cr_verdict != crate::fi::OK_SENTINEL {
@@ -1062,10 +1110,62 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::InternalError as u32;
             }
         }
-        let (cr, cr_verdict) = confirm_checked(pages.as_slice());
+        // Pixel trusted UI (`ui-px`): the personal-sign / RAW32 body is
+        // re-emitted as design screens from the same facts
+        // (`offchain_screens`, bound by re-running its page painter) and the
+        // fingerprint(s) + context suffix as their trailer twins.
+        #[cfg(feature = "ui-px")]
+        let px = px_route_message(
+            px_scratch,
+            &pages,
+            kind,
+            crate::tx::display::offchain_screens::OffchainFacts {
+                chain_id,
+                account_index,
+                slot_index,
+                wallet: &wallet_addr,
+                local_after: new_count,
+                last_userop,
+                cap: MAX_SLOT_USES,
+                deployed: account_deployed,
+            },
+            payload,
+            &raw_h,
+            fingerprint_kind,
+            if kind == OFFCHAIN_KIND_RAW32 { Some(replay_safe_fingerprint_kind) } else { None },
+            if kind == OFFCHAIN_KIND_RAW32 { Some(&confirmed_context) } else { None },
+        );
+        #[cfg(not(feature = "ui-px"))]
+        let px: Option<Result<(ConfirmResult, u32), &'static str>> = None;
+        #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+        let px_route = px.is_some();
+        let (cr, cr_verdict) = match px {
+            Some(Ok(r)) => r,
+            Some(Err(reason)) => {
+                crate::ui::show_status("Sign refused", reason);
+                return NscStatus::InternalError as u32;
+            }
+            None => confirm_checked(pages.as_slice()),
+        };
         match cr {
-            ConfirmResult::Confirmed => {}
+            ConfirmResult::Confirmed => {
+                #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+                if px_route {
+                    crate::fi::scrub_sentinel_register();
+                    if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+                        super::zeroize_sensitive_state();
+                        crate::ui::show_status("Sign refused", "px atlas");
+                        return NscStatus::InternalError as u32;
+                    }
+                    crate::fi::scrub_sentinel_register();
+                }
+            }
             ConfirmResult::Cancelled => {
+                #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+                if px_route {
+                    crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Declined);
+                    return NscStatus::UserRejected as u32;
+                }
                 crate::ui::show_status("Cancelled", "");
                 return NscStatus::UserRejected as u32;
             }
@@ -1073,6 +1173,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 super::zeroize_sensitive_state();
                 return NscStatus::IdleWipe as u32;
             }
+        }
+        #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+        {
+            px_owns_ending = px_route;
         }
         // FI belt (UI1 / work-todo #12c): affirmative-sentinel gate; fail closed.
         if cr_verdict != crate::fi::OK_SENTINEL {
@@ -1187,6 +1291,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_owns_ending {
+        crate::ui::px::lcd::film_start();
+    } else {
+        crate::ui::show_progress("EIP-1271 sign", 0);
+    }
+    #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
     crate::ui::show_progress("EIP-1271 sign", 0);
     let sig = {
         // SAFETY: category 5 — read-only borrow of `static mut
@@ -1198,9 +1309,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Some(c) => &c.key,
             None => return NscStatus::InternalError as u32,
         };
-        match crate::crypto::c10_sign_verified_with_progress(slot_ref, &hash_to_sign, |p| {
-            crate::ui::show_progress("EIP-1271 sign", p)
-        }) {
+        match crate::crypto::c10_sign_verified_with_progress(slot_ref, &hash_to_sign, sign_progress) {
             Ok(s) => s,
             Err(_) => return NscStatus::CryptoError as u32,
         }
@@ -1403,6 +1512,14 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     crate::timeout::reset_activity();
+    // The pixel route lands the signing film (the check, then the design's
+    // result hold); every other route keeps the status text.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_owns_ending {
+        crate::ui::px::lcd::film_resolve(pqsigner_ui_px::scene::Ending::Signed);
+        crate::ui::show_status("PQSigner OS", "Ready");
+        return NscStatus::Ok as u32;
+    }
     crate::ui::show_status("Signed", "");
     for _ in 0..3_000_000u32 {
         cortex_m::asm::nop();
@@ -1410,3 +1527,134 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     crate::ui::show_status("PQSigner OS", "Ready");
     NscStatus::Ok as u32
 }
+
+/// The slot signer's progress hook: paces the pixel signing film when one is
+/// live, else the progress text.
+fn sign_progress(percent: u8) {
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if crate::ui::px::lcd::film_live() {
+        crate::ui::px::lcd::film_tick(percent);
+        return;
+    }
+    crate::ui::show_progress("EIP-1271 sign", percent);
+}
+
+/// The off-chain trailer facts: only the fingerprint(s) and the context
+/// suffix exist on this dialog (`TrailerSet::Offchain`); the UserOp fields
+/// are never read.
+#[cfg(feature = "ui-px")]
+fn px_offchain_confirm(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    body: crate::tx::display::px_lift::Body<'_>,
+    fingerprint: crate::tx::display::erc8213::Kind,
+    fingerprint2: Option<crate::tx::display::erc8213::Kind>,
+    context: Option<&crate::tx::display::OffchainConfirmContext>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let tx = crate::tx::eip1559::Eip1559Tx::default();
+    let zero32 = [0u8; 32];
+    let zero20 = [0u8; 20];
+    let facts = crate::tx::display::TrailerFacts {
+        tx: &tx,
+        legacy_fee_required: false,
+        paymaster_and_data_hash: &zero32,
+        account_index: 0,
+        sender: &zero20,
+        target: &zero20,
+        nonce: &zero32,
+        call_gas: &zero32,
+        verification_gas: &zero32,
+        pre_verification_gas: &zero32,
+        fingerprint,
+        deployment: None,
+        set: crate::tx::display::TrailerSet::Offchain,
+        fingerprint2,
+        offchain: context,
+    };
+    let body = match body {
+        // The typed body is the proven ERC-7730 range before the suffix.
+        crate::tx::display::px_lift::Body::Erc7730 { pages: p, start, chain_id, family, .. } => {
+            let tail = crate::tx::display::expected_trailer_count(&facts);
+            crate::tx::display::px_lift::Body::Erc7730 {
+                pages: p,
+                start,
+                body_len: p.len.checked_sub(tail).and_then(|n| n.checked_sub(start)).ok_or("px body")?,
+                chain_id,
+                family,
+            }
+        }
+        other => other,
+    };
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body,
+        trailers: &facts,
+    };
+    super::px_confirm(scratch, pages, &inputs)
+}
+
+/// Route the EIP-712 typed confirmation through the pixel UI when `ui-px`
+/// is on (`None` = the page dialog).
+#[cfg(feature = "ui-px")]
+fn px_route_typed(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    verifying_contract: &[u8; 20],
+    fingerprint: crate::tx::display::erc8213::Kind,
+    context: &crate::tx::display::OffchainConfirmContext,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    use crate::tx::display::erc7730_screens::{family, Surface};
+    let body = crate::tx::display::px_lift::Body::Erc7730 {
+        pages,
+        start: 0,
+        body_len: 0,
+        chain_id,
+        family: family(Surface::Typed, verifying_contract),
+    };
+    Some(px_offchain_confirm(scratch, pages, body, fingerprint, None, Some(context)))
+}
+
+#[cfg(not(feature = "ui-px"))]
+#[inline(always)]
+fn px_route_typed(
+    _scratch: &mut [u8],
+    _pages: &crate::tx::display::Pages,
+    _chain_id: u64,
+    _verifying_contract: &[u8; 20],
+    _fingerprint: crate::tx::display::erc8213::Kind,
+    _context: &crate::tx::display::OffchainConfirmContext,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    None
+}
+
+/// Route the `personal_sign` / RAW32 confirmation through the pixel UI when
+/// `ui-px` is on (`None` = the page dialog).
+#[cfg(feature = "ui-px")]
+#[allow(clippy::too_many_arguments)]
+fn px_route_message(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    kind: u8,
+    facts: crate::tx::display::offchain_screens::OffchainFacts<'_>,
+    msg: &[u8],
+    raw_h: &[u8; 32],
+    fingerprint: crate::tx::display::erc8213::Kind,
+    fingerprint2: Option<crate::tx::display::erc8213::Kind>,
+    context: Option<&crate::tx::display::OffchainConfirmContext>,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    use crate::tx::display::offchain_screens::OffchainBody;
+    let body = if kind == OFFCHAIN_KIND_RAW32 {
+        OffchainBody::Raw32 { facts, hash: raw_h }
+    } else {
+        OffchainBody::Personal { facts, msg }
+    };
+    Some(px_offchain_confirm(
+        scratch,
+        pages,
+        crate::tx::display::px_lift::Body::Offchain(body),
+        fingerprint,
+        fingerprint2,
+        context,
+    ))
+}
+

@@ -253,13 +253,31 @@ pub fn sign_near_miss(
         idx_tree >>= SUBTREE_H;
 
         let (auth_path, _subtree_root) =
-            merkle::build_subtree_with_auth(&seed, sk_seed, layer, idx_tree as u64, idx_leaf);
+            merkle::build_subtree_with_auth(
+                &seed,
+                sk_seed,
+                layer,
+                idx_tree as u64,
+                idx_leaf,
+                &crate::hypertree::progress_none(),
+                0,
+                0,
+            );
 
         // Pick the count for this layer.
         let count = if kind == Kind::WotsDigitSum && layer == 0 {
             find_offtarget_count(&seed, layer, idx_tree as u64, idx_leaf, &current_node)
         } else {
-            wots::find_count(&seed, layer, idx_tree as u64, idx_leaf, &pad16(&current_node)).0
+            wots::find_count(
+                &seed,
+                layer,
+                idx_tree as u64,
+                idx_leaf,
+                &pad16(&current_node),
+                &crate::hypertree::progress_none(),
+                0,
+            )
+            .0
         };
 
         let wots_sigma = wots_sign_at_count(

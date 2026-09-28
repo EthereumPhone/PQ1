@@ -4,15 +4,25 @@ use std::path::PathBuf;
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let stm32u585 = env::var_os("CARGO_FEATURE_STM32U585").is_some();
-    let mem_x = if stm32u585 {
-        "memory-stm32u585.x"
-    } else {
-        "memory.x"
+    let ui_px_atlas = env::var_os("CARGO_FEATURE_UI_PX_ATLAS").is_some();
+    // `ui-px-atlas` swaps in the script that parks the pixel-UI asset
+    // container at a fixed slot offset; every other build keeps the plain
+    // layout so its image does not grow by the reserved window.
+    let mem_x = match (stm32u585, ui_px_atlas) {
+        (true, true) => "memory-stm32u585-px.x",
+        (true, false) => "memory-stm32u585.x",
+        (false, true) => panic!("ui-px-atlas is a hardware (stm32u585) feature; QEMU builds carry no atlas"),
+        (false, false) => "memory.x",
     };
     std::fs::copy(mem_x, out_dir.join("memory.x")).unwrap();
     println!("cargo:rustc-link-search={}", out_dir.display());
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=memory-stm32u585.x");
+    println!("cargo:rerun-if-changed=memory-stm32u585-px.x");
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_UI_PX_ATLAS");
+    if ui_px_atlas {
+        check_ui_px_atlas();
+    }
 
     // Stale-blob protection. The ERC20 / Names databases live on
     // the HOST (companion app) under `tools/companion-stub/` — they are
@@ -286,4 +296,29 @@ fn check_db_magic(path: &str, expected: &[u8; 4]) {
             &bytes[..4]
         );
     }
+}
+
+
+/// `assets/ui-px/atlas.pq1a` must be the container `tools/ui_px_assets.py`
+/// baked (magic + the byte count recorded in the secure-side manifest); the
+/// secure world's `build.rs` separately pins its sha256. A stale or partial
+/// bake here would only make every pixel dialog refuse (hash mismatch), but
+/// catch it at build time rather than on the glass.
+fn check_ui_px_atlas() {
+    let path = "assets/ui-px/atlas.pq1a";
+    let manifest_path = "../secure/assets/ui-px/manifest.json";
+    println!("cargo:rerun-if-changed={path}");
+    println!("cargo:rerun-if-changed={manifest_path}");
+    let bytes = std::fs::read(path)
+        .unwrap_or_else(|e| panic!("UI_PX_ATLAS: {path} unreadable: {e} (run `make ui-px-assets`)"));
+    assert!(bytes.starts_with(b"PQ1A"), "UI_PX_ATLAS: {path} has a wrong magic header");
+    let manifest = std::fs::read_to_string(manifest_path)
+        .unwrap_or_else(|e| panic!("UI_PX_ATLAS: {manifest_path} unreadable: {e}"));
+    let key = "\"atlas.pq1a\"";
+    let entry = manifest.find(key).expect("UI_PX_ATLAS: atlas.pq1a missing from the manifest");
+    let tail = &manifest[entry..];
+    let b = tail.find("\"bytes\":").expect("bytes field") + 8;
+    let digits: String = tail[b..].chars().skip_while(|c| c.is_whitespace()).take_while(|c| c.is_ascii_digit()).collect();
+    let want: usize = digits.parse().expect("bytes value");
+    assert_eq!(bytes.len(), want, "UI_PX_ATLAS: {path} length differs from the manifest (stale bake?)");
 }

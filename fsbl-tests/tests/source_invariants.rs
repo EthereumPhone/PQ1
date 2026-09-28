@@ -851,3 +851,114 @@ fn negative_release_is_quarantined_or_final_artifacts_agree_on_vendor_key() {
     assert!(verifier.contains("verify_secure_flat_image"));
     assert!(verifier.contains("signing key does not match firmware artifacts/policy"));
 }
+
+/// Scroll-to-end consent on the pixel path: the sign gesture must not arm
+/// until the LAST screen has actually been painted.
+///
+/// Owner decision 2026-09-24 — "all screens should be viewed before the user
+/// can sign" — reversing the 2026-09-22 decision to follow the design's
+/// commit-arming and restoring the rule the legacy dialog has enforced since
+/// 2026-06-26 (`ccfa5f61`, `ui::confirm_core::NavigationCore`).
+///
+/// Why a source pin and not a `const _: () = assert!(..)`: the constant is a
+/// deliberate revert switch, so a compile-time assert would make reverting it
+/// impossible rather than merely visible. This pin makes flipping it a
+/// conscious act that turns CI red and has to be argued for in a commit.
+///
+/// The second half matters as much as the first. The flag only helps if BOTH
+/// arming sites consult it — `px::lcd::run_flow` (the hardware path) and
+/// `px::confirm_px::confirm_inner` (the text-presenter path). A flag honoured
+/// in one of two places is worse than no flag, because it reads as enforced.
+#[test]
+fn pixel_sign_gesture_requires_every_screen_to_have_been_displayed() {
+    let confirm_px = read_workspace_file("secure/src/ui/px/confirm_px.rs");
+    let cp = code_only(&confirm_px);
+
+    assert!(
+        cp.contains("pub const PX_COMMIT_REQUIRES_SEEN_LAST: bool = true;"),
+        "PX_COMMIT_REQUIRES_SEEN_LAST must stay `true` (owner decision \
+         2026-09-24). With it `false` the opening ask is commit-armed, so one \
+         chord click signs an ERC-20 transfer whose RECIPIENT (screen 3) and \
+         AMOUNT (screen 4) were never displayed — the exact class the \
+         2026-06-26 scroll-to-end fix closed for the legacy path. If you are \
+         deliberately reverting it, say why in the commit and update \
+         docs/security/HARDENING.md §2.4 + CLAUDE.md, as that section requires."
+    );
+
+    // Both arming sites must consult the policy.
+    let policy = "!super::PX_COMMIT_REQUIRES_SEEN_LAST || driver.seen_last()";
+    let policy_local = "!PX_COMMIT_REQUIRES_SEEN_LAST || driver.seen_last()";
+
+    let lcd = code_only(&read_workspace_file("secure/src/ui/px/lcd.rs"));
+    assert!(
+        lcd.contains(policy),
+        "px::lcd::run_flow (the NV3007 path) must gate arming on \
+         `{policy}` — this is the path a real device uses"
+    );
+    assert!(
+        cp.contains(policy_local),
+        "px::confirm_px::confirm_inner (the text-presenter path) must gate \
+         arming on `{policy_local}` — a flag honoured on only one of the two \
+         arming sites reads as enforced while leaving a hole"
+    );
+
+    // `seen_last` must be evidence of a PAINT, not of an index. The legacy
+    // core states the rule ("evidence of display, not merely an index
+    // assignment"); the pixel driver has to keep the same shape.
+    let driver = code_only(&read_workspace_file("pqsigner-ui-px/src/driver.rs"));
+    assert!(
+        driver.contains("pub fn mark_rendered(&mut self)")
+            && driver.contains("if self.cur + 1 == self.count {"),
+        "FlowDriver::mark_rendered must set seen_last only at the last screen, \
+         and callers must invoke it AFTER painting — otherwise the gate proves \
+         a counter reached the end, not that the user was shown anything"
+    );
+}
+
+/// The pixel atlas is located from the SAME constant the secure world boots
+/// the NS image from. If one moves and the other does not, every pixel dialog
+/// fails closed — or worse, hashes the wrong window and passes.
+///
+/// Not a defect today, and deliberately not "fixed": `ui::px::assets::ns_image_base`
+/// returns `crate::NS_FLASH_BASE` because the whole secure world is slot-A-only
+/// (there is no `running_slot()`, `boot_ns::boot` takes the same constant, and
+/// `secure/build.rs` accepts only `PQSIGNER_SECURE_SLOT=a`). Rewriting the
+/// atlas base to `slot_ns_addr(running_slot())` alone would imply a concept
+/// that does not exist anywhere else.
+///
+/// What CAN go wrong now is divergence: the #540 cutover moves the NS slots,
+/// someone updates the boot path, and the atlas keeps pointing at the old
+/// address. The atlas is a WYSIWYS input verified against a pinned hash, so a
+/// wrong window means "hash mismatch → every pixel dialog refuses" on a good
+/// unit. This pin makes the two move together or fail.
+#[test]
+fn the_px_atlas_base_tracks_the_ns_boot_base() {
+    let assets = code_only(&read_workspace_file("secure/src/ui/px/assets.rs"));
+    let main_rs = code_only(&read_workspace_file("secure/src/main.rs"));
+
+    assert!(
+        assets.contains("fn ns_image_base() -> u32 {") && assets.contains("crate::NS_FLASH_BASE"),
+        "the atlas must locate its window from NS_FLASH_BASE, not a literal"
+    );
+    assert!(
+        !assets.contains("0x0810_0000") && !assets.contains("0x08100000"),
+        "the atlas base must never hard-code the NS flash address — that is the \
+         divergence this pin exists to prevent"
+    );
+    assert!(
+        main_rs.contains("boot_ns::boot(NS_FLASH_BASE)"),
+        "the secure world must boot NS from the same constant the atlas is \
+         located from; if this moved to a slot-derived address, the atlas base \
+         must move in the SAME commit (#540)"
+    );
+    // The offset within the slot is the linker's, and must agree with it.
+    assert!(
+        assets.contains("pub const ATLAS_SLOT_OFFSET: u32 = 0x1000;"),
+        "atlas offset must stay the value nonsecure/memory-stm32u585-px.x reserves"
+    );
+    let ld = read_workspace_file("nonsecure/memory-stm32u585-px.x");
+    assert!(
+        ld.contains("_pq1a_start = ORIGIN(FLASH) + 0x1000;"),
+        "the NS linker script must place .pq1a at the offset assets.rs assumes"
+    );
+}

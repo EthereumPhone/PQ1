@@ -175,6 +175,16 @@ pub fn enter_pin() -> PinEntryResult {
 }
 
 fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
+    // Port step 4: the design's PIN row (eight rings, the active one dialing
+    // its digit, entered digits masked as the page masks them). The page
+    // below is the fallback when the pixel path declines.
+    #[cfg(feature = "ui-px")]
+    {
+        let row = super::px::status_map::pin_row(super::px::screens::pin_caption(), pin, pos);
+        if super::px::screens::show(&row) {
+            return;
+        }
+    }
     let d = display();
     d.clear();
     d.draw_line(0, "   Enter PIN");

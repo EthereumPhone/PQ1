@@ -317,7 +317,11 @@ fn c10_sign_verified_with_progress_inner(
     let sig_a = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_a, progress);
     cfi.bump(CFI_STEP_SIGN_A);
     crate::fi::wait_random();
-    let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_b, |_| {});
+    // The same opaque `fn(u8)` progress hook as `sign_a`: on the pixel route
+    // it paces the signing film through both computations. It returns unit,
+    // captures nothing and receives only a percentage, so it cannot touch the
+    // CFI chain, the compare, or the verify-before-release gates below.
+    let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_b, progress);
     cfi.bump(CFI_STEP_SIGN_B);
 
     // Constant-time comparison of the 4008-byte signatures.

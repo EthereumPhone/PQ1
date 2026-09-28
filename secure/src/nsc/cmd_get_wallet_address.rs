@@ -395,7 +395,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Some(page) => page,
             None => return NscStatus::InternalError as u32,
         };
-        let (cr, cr_verdict) = confirm_checked(core::slice::from_ref(&page));
+        // Port step 4: the same page facts on the design's screens (the
+        // address whole on the docked grid); the page dialog only when the
+        // pixel path cannot run.
+        #[cfg(feature = "ui-px")]
+        let px = super::px_confirm_plain(|t| crate::ui::px::status_map::wallet_address_screens(account_index, &page, t)).ok();
+        #[cfg(not(feature = "ui-px"))]
+        let px: Option<(ConfirmResult, u32)> = None;
+        let (cr, cr_verdict) = match px {
+            Some(out) => out,
+            None => confirm_checked(core::slice::from_ref(&page)),
+        };
         match cr {
             ConfirmResult::Confirmed => {}
             ConfirmResult::Cancelled => {

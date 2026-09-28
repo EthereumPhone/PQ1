@@ -167,6 +167,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // slice below (with `total_len <= SNAP_LEN`, checked at the header
     // length gate above) can never overrun.
     const _: () = assert!(SNAP_LEN <= super::SIGN_SNAP_BUF_LEN);
+    // `ui-px`: the screen transcript overlays the buffer beyond SNAP_LEN.
+    #[cfg(feature = "ui-px")]
+    const _: () = assert!(super::SIGN_SNAP_BUF_LEN - SNAP_LEN >= pqsigner_ui_px::SCREENS_BYTES);
     // M1 fix: wipe any leftover payload from the PREVIOUS sign before
     // we fill it with this request.
     {
@@ -175,7 +178,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             *b = 0;
         }
     }
-    let snap_full = &mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF);
+    // The pixel UI (`ui-px`) overlays its screen transcript on the tail of the
+    // shared buffer beyond this handler's own snapshot maximum — disjoint
+    // bytes, split once here so no two live borrows overlap.
+    let (snap_full, px_scratch) =
+        (&mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF)).split_at_mut(SNAP_LEN);
     let snap = &mut snap_full[..total_len];
     for i in 0..total_len {
         snap[i] = core::ptr::read_volatile(payload_ptr.add(i));
@@ -1441,10 +1448,58 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             ui::show_status("Sign refused", "gas conflict");
             return NscStatus::InternalError as u32;
         }
-        let (cr, cr_verdict) = confirm_checked(rotate_pages.as_slice());
+        // Pixel trusted UI (`ui-px`): the rotation consent is re-emitted as
+        // design screens (rotation body + the signer / lane / gas trailer
+        // twins), bound to the proven `rotate_pages` by the same lift proof.
+        let px_rotation_facts = crate::tx::display::TrailerFacts {
+            tx: &tx_for_display,
+            legacy_fee_required: false,
+            paymaster_and_data_hash: &paymaster_and_data_hash,
+            account_index,
+            sender: &sender,
+            target: &to_address,
+            nonce: &nonce,
+            call_gas: &call_gas_limit,
+            verification_gas: &verification_gas_limit,
+            pre_verification_gas: &pre_verification_gas,
+            fingerprint: crate::tx::display::erc8213::Kind::CalldataDigest(
+                pqsigner_tx_core::erc8213::calldata_digest(inner_data),
+            ),
+            deployment: None,
+            set: crate::tx::display::TrailerSet::Rotation,
+            fingerprint2: None,
+            offchain: None,
+        };
+        let px_rotation = px_route_rotation(px_scratch, &rotate_pages, chain_id, slot_index, &px_rotation_facts);
+        #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+        let px_rotation_route = px_rotation.is_some();
+        let (cr, cr_verdict) = match px_rotation {
+            Some(Ok(r)) => r,
+            Some(Err(reason)) => {
+                ui::show_status("Sign refused", reason);
+                return NscStatus::InternalError as u32;
+            }
+            None => confirm_checked(rotate_pages.as_slice()),
+        };
         match cr {
-            ConfirmResult::Confirmed => {}
+            ConfirmResult::Confirmed => {
+                #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+                if px_rotation_route {
+                    crate::fi::scrub_sentinel_register();
+                    if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+                        super::zeroize_sensitive_state();
+                        ui::show_status("Sign refused", "px atlas");
+                        return NscStatus::InternalError as u32;
+                    }
+                    crate::fi::scrub_sentinel_register();
+                }
+            }
             ConfirmResult::Cancelled => {
+                #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+                if px_rotation_route {
+                    crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Declined);
+                    return NscStatus::UserRejected as u32;
+                }
                 ui::show_status("Cancelled", "");
                 return NscStatus::UserRejected as u32;
             }
@@ -1825,10 +1880,81 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign refused", "deploy changed");
         return NscStatus::InternalError as u32;
     }
-    let (cr, cr_verdict) = confirm_checked(pages.as_slice());
+    // Pixel trusted UI (`ui-px`): the proven `pages` stay the proof
+    // substrate; the Safe route and every single-UserOp route are re-emitted
+    // as design screens, bound to them by `px_lift::transcript_proof`, and
+    // confirmed through the design's grammar. The structured routes still to
+    // be ported (direct CoW, ERC-7730) — and every build without `ui-px` —
+    // keep the page dialog.
+    // The facts every trailer page above was painted from, for the pixel
+    // route's native trailer twins (`tx::display::trailer_screens`): the
+    // same values, never the pages and never companion bytes.
+    let px_trailer_facts = crate::tx::display::TrailerFacts {
+        tx: &tx_for_display,
+        legacy_fee_required: legacy_fee_pages_required,
+        paymaster_and_data_hash: &paymaster_and_data_hash,
+        account_index,
+        sender: &sender,
+        target: &to_address,
+        nonce: &type2_nonce,
+        call_gas: &call_gas_limit,
+        verification_gas: &verification_gas_limit,
+        pre_verification_gas: &pre_verification_gas,
+        fingerprint: fingerprint_kind,
+        deployment: Some(&deployment_context),
+        set: crate::tx::display::TrailerSet::Sign,
+        fingerprint2: None,
+        offchain: None,
+    };
+    let px_decision = px_route_confirm(
+        px_scratch,
+        &pages,
+        chain_id,
+        safe_v1_verified.as_ref(),
+        safe_exec_verified.as_ref(),
+        cow_order_verified.as_ref(),
+        chain_verified_meta.as_ref(),
+        &resolver,
+        &px_trailer_facts,
+        &tx_for_display,
+        inner_data,
+        selector_verified.as_ref(),
+        erc7730_verified.is_some(),
+    );
+    // Whether the pixel UI owns this confirmation (and therefore its ending).
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    let px_route = px_decision.is_some();
+    let (cr, cr_verdict) = match px_decision {
+        Some(Ok(r)) => r,
+        Some(Err(reason)) => {
+            ui::show_status("Sign refused", reason);
+            return NscStatus::InternalError as u32;
+        }
+        None => confirm_checked(pages.as_slice()),
+    };
     match cr {
-        ConfirmResult::Confirmed => {}
+        ConfirmResult::Confirmed => {
+            // Second, spatially separate re-proof of the NS-resident glyph
+            // atlas the pixel dialog just painted with (the first sits in
+            // `px_confirm_safe`): the handler does not trust the returned
+            // tuple alone, same A/B shape as the dispatch final gates.
+            #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+            if px_route {
+                crate::fi::scrub_sentinel_register();
+                if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+                    super::zeroize_sensitive_state();
+                    ui::show_status("Sign refused", "px atlas");
+                    return NscStatus::InternalError as u32;
+                }
+                crate::fi::scrub_sentinel_register();
+            }
+        }
         ConfirmResult::Cancelled => {
+            #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+            if px_route {
+                crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Declined);
+                return NscStatus::UserRejected as u32;
+            }
             ui::show_status("Cancelled", "");
             return NscStatus::UserRejected as u32;
         }
@@ -2388,6 +2514,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     let t2_digest = compute_sphincs_digest_v06(&t2_params, &t2_call_digest);
 
+    // The pixel route plays the qubit loading film around the sign (started
+    // here, paced by the signer's opaque progress hook, landed at the
+    // post-release site below); every other route keeps the progress text.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_route {
+        crate::ui::px::lcd::film_start();
+    } else {
+        ui::show_progress("Slot C10 sign", 0);
+    }
+    #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
     ui::show_progress("Slot C10 sign", 0);
     let t2_sig = {
         // SAFETY: category 5 — read-only borrow of `static mut
@@ -2586,9 +2722,24 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     crate::timeout::reset_activity();
-    ui::show_status("Signed", "");
-    for _ in 0..3_000_000u32 {
-        cortex_m::asm::nop();
+    // The pixel route lands the film: the current orbit turn completes,
+    // the pair spirals in, the flash, the check, then the design's
+    // RESULT_HOLD_MS — the film's own hold replaces the legacy spin below.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_route {
+        crate::ui::px::lcd::film_resolve(pqsigner_ui_px::scene::Ending::Signed);
+    } else {
+        ui::show_status("Signed", "");
+        for _ in 0..3_000_000u32 {
+            cortex_m::asm::nop();
+        }
+    }
+    #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
+    {
+        ui::show_status("Signed", "");
+        for _ in 0..3_000_000u32 {
+            cortex_m::asm::nop();
+        }
     }
     ui::show_status("PQSigner OS", "Ready");
 
@@ -2640,10 +2791,23 @@ fn add_one_to_be_u256(v: &mut [u8; 32]) {
 }
 
 fn c10_sign_progress_bootstrap(percent: u8) {
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if crate::ui::px::lcd::film_live() {
+        crate::ui::px::lcd::film_tick(percent);
+        return;
+    }
     crate::ui::show_progress("C10 sign", percent);
 }
 
 fn c10_sign_progress_slot(percent: u8) {
+    // On the pixel route the signer's progress hook paces the film (one
+    // frame at most per period); the pose is a pure function of the S-only
+    // clock, never of `percent`.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if crate::ui::px::lcd::film_live() {
+        crate::ui::px::lcd::film_tick(percent);
+        return;
+    }
     crate::ui::show_progress("Slot C10 sign", percent);
 }
 
@@ -2657,4 +2821,101 @@ fn u128_saturating_from_u256(bytes: &[u8; 32]) -> u128 {
     let mut buf = [0u8; 16];
     buf.copy_from_slice(&bytes[16..32]);
     u128::from_be_bytes(buf)
+}
+
+/// Route a sign confirmation through the pixel UI when `ui-px` is on.
+/// `None` means "use the page dialog" (the feature is off);
+/// `Some(Err(reason))` is a refusal, never a fall-back.
+///
+/// The precedence is `dispatch::pick_sign_pages_inner`'s: a verified Safe
+/// context wins (the Safe surface, CoW-wrapped or not), then a direct CoW
+/// order (its page painter re-run binds the body), then an authenticated
+/// ERC-7730 render (laid out from the proven page range itself), and
+/// everything below them is a single-UserOp route whose body the lift binds
+/// by re-running its page painter.
+#[cfg(feature = "ui-px")]
+#[allow(clippy::too_many_arguments)]
+fn px_route_confirm(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    resolver: &crate::names::NameResolver<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+    tx: &crate::tx::eip1559::Eip1559Tx,
+    inner_data: &[u8],
+    selector: Option<&crate::selectors::SelectorMeta<'_>>,
+    erc7730_present: bool,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    if safe_v1.is_some() || safe_exec.is_some() {
+        return Some(super::px_confirm_safe(scratch, pages, chain_id, safe_v1, safe_exec, cow, erc20, resolver, facts));
+    }
+    if let Some(v3) = cow {
+        return Some(super::px_confirm_cow(scratch, pages, v3, facts));
+    }
+    if erc7730_present {
+        let target = tx.to.unwrap_or([0u8; 20]);
+        let family = crate::tx::display::erc7730_screens::family(
+            crate::tx::display::erc7730_screens::Surface::Contract,
+            &target,
+        );
+        return Some(super::px_confirm_erc7730(scratch, pages, chain_id, family, facts));
+    }
+    let body = crate::tx::display::userop_screens::UserOpInputs {
+        tx,
+        inner_data,
+        erc20,
+        selector,
+        resolver,
+    };
+    Some(super::px_confirm_userop(scratch, pages, body, facts))
+}
+
+/// Route the slot-rotation consent through the pixel UI when `ui-px` is on
+/// (`None` = the page dialog).
+#[cfg(feature = "ui-px")]
+fn px_route_rotation(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    slot_index: u32,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    Some(super::px_confirm_rotation(scratch, pages, chain_id, slot_index, facts))
+}
+
+#[cfg(not(feature = "ui-px"))]
+#[inline(always)]
+fn px_route_rotation(
+    _scratch: &mut [u8],
+    _pages: &crate::tx::display::Pages,
+    _chain_id: u64,
+    _slot_index: u32,
+    _facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    None
+}
+
+#[cfg(not(feature = "ui-px"))]
+#[inline(always)]
+#[allow(clippy::too_many_arguments)]
+fn px_route_confirm(
+    _scratch: &mut [u8],
+    _pages: &crate::tx::display::Pages,
+    _chain_id: u64,
+    _safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    _safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    _cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    _erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    _resolver: &crate::names::NameResolver<'_>,
+    _facts: &crate::tx::display::TrailerFacts<'_>,
+    _tx: &crate::tx::eip1559::Eip1559Tx,
+    _inner_data: &[u8],
+    _selector: Option<&crate::selectors::SelectorMeta<'_>>,
+    _erc7730_present: bool,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    None
 }

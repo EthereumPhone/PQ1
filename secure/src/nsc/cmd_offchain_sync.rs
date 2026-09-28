@@ -161,7 +161,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             current_count,
             target_count_for_display,
         );
-        let (cr, cr_verdict) = confirm_checked(pages.as_slice());
+        // Port step 4: every fact row of the proven pages as design screens;
+        // the page dialog only when the pixel path cannot run.
+        #[cfg(feature = "ui-px")]
+        let px = super::px_confirm_plain(|t| crate::ui::px::status_map::offchain_sync_screens(pages.as_slice(), t)).ok();
+        #[cfg(not(feature = "ui-px"))]
+        let px: Option<(ConfirmResult, u32)> = None;
+        let (cr, cr_verdict) = match px {
+            Some(out) => out,
+            None => confirm_checked(pages.as_slice()),
+        };
         match cr {
             ConfirmResult::Confirmed => {}
             ConfirmResult::Cancelled => {

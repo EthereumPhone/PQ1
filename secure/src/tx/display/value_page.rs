@@ -131,7 +131,7 @@ pub(crate) fn from_page_proof(
     })
 }
 
-fn build_signer_identity_page(account_index: u32, sender: &[u8; 20]) -> Option<SignerIdentityPage> {
+pub(crate) fn build_signer_identity_page(account_index: u32, sender: &[u8; 20]) -> Option<SignerIdentityPage> {
     // The wire field is exactly eight bits. Recheck at the display boundary so
     // a faulted flag decode cannot paint a truncated/aliased account number.
     if account_index > 255 {
@@ -200,7 +200,7 @@ pub(crate) fn target_page_proof(pages: &Pages, prior_len: usize, target: &[u8; 2
     })
 }
 
-fn build_target_identity_page(target: &[u8; 20]) -> TargetIdentityPage {
+pub(crate) fn build_target_identity_page(target: &[u8; 20]) -> TargetIdentityPage {
     let mut page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     page[0].copy_from_slice(b"Target contract:");
     let [_label, a, b, c] = &mut page;
@@ -275,7 +275,7 @@ pub(super) fn enforce_native_value_page(
     Ok(())
 }
 
-fn build_native_value_page(value: &U256, chain_id: u64) -> Option<NativeValuePage> {
+pub(crate) fn build_native_value_page(value: &U256, chain_id: u64) -> Option<NativeValuePage> {
     if !primitives::native_amount_is_exactly_renderable(value, chain_id) {
         return None;
     }
@@ -405,7 +405,7 @@ pub(super) fn enforce_gas_pages(
     Ok(())
 }
 
-fn build_legacy_fee_pages(tx: &Eip1559Tx) -> primitives::LegacyFeeRender {
+pub(crate) fn build_legacy_fee_pages(tx: &Eip1559Tx) -> primitives::LegacyFeeRender {
     primitives::build_legacy_fee_pages(
         &tx.max_fee_per_gas,
         &tx.max_priority_fee_per_gas,
@@ -536,7 +536,12 @@ pub(crate) fn enforce_paymaster_page(
     Ok(())
 }
 
-fn build_paymaster_page() -> PaymasterPage {
+/// The page painters' presence predicate for the paymaster warning.
+pub(crate) fn paymaster_present(paymaster_and_data_hash: &[u8; 32]) -> bool {
+    *paymaster_and_data_hash != SHA256_OF_EMPTY
+}
+
+pub(crate) fn build_paymaster_page() -> PaymasterPage {
     let mut page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     primitives::write_line(&mut page[0], "! PAYMASTER SET");
     primitives::write_line(&mut page[1], "Gas sponsored");

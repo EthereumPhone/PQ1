@@ -1,0 +1,1147 @@
+{
+ "defaults_per_kind": {
+  "confirm": {
+   "bottom": "Confirm?",
+   "chev": "up",
+   "commit": true,
+   "icon": "eth",
+   "id": "screen0",
+   "kind": "confirm"
+  },
+  "detail": {
+   "chev": "lr",
+   "icon": "eth",
+   "id": "screen0",
+   "kind": "detail",
+   "side": "left",
+   "size": 28
+  },
+  "hero": {
+   "chev": "lr",
+   "commit": true,
+   "icon": "eth",
+   "id": "screen0",
+   "kind": "hero"
+  },
+  "status": {
+   "busy": null,
+   "chev": null,
+   "icon": "eth",
+   "id": "screen0",
+   "kind": "status",
+   "result": "check",
+   "state": "done"
+  },
+  "value": {
+   "chev": "lr",
+   "icon": "eth",
+   "id": "screen0",
+   "kind": "value",
+   "size": 28
+  }
+ },
+ "enums": {
+  "anim": [
+   "arrive",
+   "batch_sign",
+   "duress_differ",
+   "explosion",
+   "factory_signing",
+   "firmware_verified",
+   "headshake",
+   "hold_to_confirm",
+   "last_attempt",
+   "padlock",
+   "pin_differ",
+   "pin_entering",
+   "pin_mismatch",
+   "qubit",
+   "resolve",
+   "rng_failed",
+   "shield",
+   "sig_error",
+   "tamper",
+   "unknown_token",
+   "wipe"
+  ],
+  "brand": [
+   "CHAIN:ARBITRUM",
+   "CHAIN:AVALANCHE",
+   "CHAIN:BASE",
+   "CHAIN:BNB",
+   "CHAIN:LINEA",
+   "CHAIN:MAINNET",
+   "CHAIN:MANTLE",
+   "CHAIN:OP",
+   "CHAIN:POLYGON",
+   "CHAIN:SCROLL",
+   "CHAIN:ZKSYNC",
+   "COWSWAP",
+   "DAI",
+   "ERC7730",
+   "FINGERPRINT",
+   "FIRMWARE",
+   "ROTATE",
+   "SAFE",
+   "USDC",
+   "USDT"
+  ],
+  "chev": [
+   "lr",
+   "up",
+   null
+  ],
+  "icon": [
+   "arbitrum",
+   "avalanche",
+   "base",
+   "blind",
+   "bnb",
+   "check",
+   "cowswap",
+   "dai",
+   "dev",
+   "download",
+   "eth",
+   "exclamation",
+   "fingerprint",
+   "linea",
+   "mainnet",
+   "mantle",
+   "minus",
+   "op",
+   "plus",
+   "polygon",
+   "rotate",
+   "safe",
+   "scroll",
+   "tether",
+   "usdc",
+   "x",
+   "zksync"
+  ],
+  "icon_namespaces": [
+   "letter:<CHAR>"
+  ],
+  "result": [
+   "check",
+   "x",
+   null
+  ],
+  "side": [
+   "left",
+   "right"
+  ],
+  "size": [
+   36,
+   32,
+   28,
+   22
+  ],
+  "state": [
+   "awaiting",
+   "done",
+   "failed",
+   "warning"
+  ]
+ },
+ "enums_enforced": {
+  "anim": {
+   "enforced": true,
+   "enforced_at": "draw",
+   "note": "normalize_screens ACCEPTS the bad value; it only fails when the screen is drawn, so a bad flow builds and then crashes",
+   "raises": "ValueError: unknown status anim 'nope'; expected one of arrive, batch_sign, duress_differ, explosion, factory_signing, firmware_veri"
+  },
+  "chev": {
+   "enforced": false,
+   "enforced_at": "never",
+   "note": "an unknown value is accepted AND renders — this enum documents intent, it does not validate"
+  },
+  "icon": {
+   "enforced": false,
+   "enforced_at": "never",
+   "note": "an unknown value is accepted AND renders — this enum documents intent, it does not validate"
+  },
+  "kind": {
+   "enforced": true,
+   "enforced_at": "draw",
+   "note": "normalize_screens ACCEPTS the bad value; it only fails when the screen is drawn, so a bad flow builds and then crashes",
+   "raises": "KeyError: 'side'"
+  },
+  "result": {
+   "enforced": true,
+   "enforced_at": "draw",
+   "note": "normalize_screens ACCEPTS the bad value; it only fails when the screen is drawn, so a bad flow builds and then crashes",
+   "raises": "ValueError: unknown status result 'tick'; expected one of check, x or None"
+  },
+  "side": {
+   "enforced": false,
+   "enforced_at": "never",
+   "note": "an unknown value is accepted AND renders — this enum documents intent, it does not validate"
+  },
+  "size": {
+   "enforced": false,
+   "enforced_at": "never",
+   "note": "an unknown value is accepted AND renders — this enum documents intent, it does not validate"
+  },
+  "state": {
+   "enforced": true,
+   "enforced_at": "draw",
+   "note": "normalize_screens ACCEPTS the bad value; it only fails when the screen is drawn, so a bad flow builds and then crashes",
+   "raises": "ValueError: unknown status state 'maybe'; expected one of awaiting, done, failed, warning"
+  }
+ },
+ "fields": {
+  "anim": {
+   "form": "\"qubit\"",
+   "note": "status animation (default by outcome — \"qubit\" for done endings, the film-less \"resolve\" for cancels; registry in status.py, the screens package registers more)",
+   "section": "status"
+  },
+  "band_chev": {
+   "form": "True",
+   "note": "the caption carries the confirm band's right- pointing chevron and the corner chevrons hide (chev defaults None) — the intro ahead of an ask (flows/erc7730); not an ask itself, so \"commit\": False",
+   "section": "hero"
+  },
+  "bottom": {
+   "form": "\"SEND 5.25 ETH?\"",
+   "note": "",
+   "section": "hero"
+  },
+  "busy": {
+   "form": "\"SIGNING…\" dwell defaults to the animation's duration (qubit 8650 ms, the cancel resolv…",
+   "note": "caption while loading (optional; film only — the cancel resolve has no loading window)",
+   "section": "status"
+  },
+  "chain": {
+   "form": "1 | 8453 | 42161 | ...",
+   "note": "numeric EIP-155 chain id on a chain screen; the mark, the disc colour, the trail ramp and the caption are DERIVED from it (pq1.chains), so the network can never disagree with the art naming it. Detail screens only — never a flow's DEFAULTS",
+   "section": "common"
+  },
+  "chain_name": {
+   "form": "\"Celo\"",
+   "note": "the chain's name when the id is not in pq1.chains.CHAINS: the disc shows its first letter instead of borrowing another network's mark",
+   "section": "common"
+  },
+  "chev": {
+   "form": "\"lr\" | \"up\" | None",
+   "note": "\"lr\" tap-nav available, \"up\" hold armed, None = no input",
+   "section": "common"
+  },
+  "circle_x": {
+   "form": "291",
+   "note": "optional nudge off the column",
+   "section": "detail"
+  },
+  "color": {
+   "form": "[r, g, b]",
+   "note": "explicit colour, wins over state (default: the resolve flash pulses in a branded ending's resting fill, else the state colour)",
+   "section": "status"
+  },
+  "commit": {
+   "form": "True | False",
+   "note": "hold-right sign/submit armed (optional; DESIGN.md § Input — reference driver: pq1/driver.py; device firmware implements the grammar natively; the demo loop performs the hold — the disc filling up — here before a done ending)",
+   "section": "common"
+  },
+  "common.chain": {
+   "form": "1 | 8453 | 42161 | ...",
+   "note": "numeric EIP-155 chain id on a chain screen; the mark, the disc colour, the trail ramp and the caption are DERIVED from it (pq1.chains), so the network can never disagree with the art naming it. Detail screens only — never a flow's DEFAULTS",
+   "section": "common"
+  },
+  "common.chain_name": {
+   "form": "\"Celo\"",
+   "note": "the chain's name when the id is not in pq1.chains.CHAINS: the disc shows its first letter instead of borrowing another network's mark",
+   "section": "common"
+  },
+  "common.chev": {
+   "form": "\"lr\" | \"up\" | None",
+   "note": "\"lr\" tap-nav available, \"up\" hold armed, None = no input",
+   "section": "common"
+  },
+  "common.commit": {
+   "form": "True | False",
+   "note": "hold-right sign/submit armed (optional; DESIGN.md § Input — reference driver: pq1/driver.py; device firmware implements the grammar natively; the demo loop performs the hold — the disc filling up — here before a done ending)",
+   "section": "common"
+  },
+  "common.dwell": {
+   "form": "ms held before auto-advancing",
+   "note": "(optional; demo loops only — the last HOLD_COMMIT_MS of a commit screen's dwell is the demo's own hold gesture)",
+   "section": "common"
+  },
+  "common.icon": {
+   "form": "\"eth\" | \"blind\" | \"rotate\" | \"dev\" | \"fingerprint\" | \"download\" | a chain mark (\"base\",…",
+   "note": "glyph inside the circle (components.GLYPHS; a popular token's logo art comes via components.token_defaults; \"letter:X\" draws that initial — an unknown chain, pq1.chains)",
+   "section": "common"
+  },
+  "common.icon_color": {
+   "form": "[r, g, b]",
+   "note": "vector-mark colour override (image logos keep their art; SAFE flows pin it black)",
+   "section": "common"
+  },
+  "common.id": {
+   "form": "name used on the command line",
+   "note": "",
+   "section": "common"
+  },
+  "common.kind": {
+   "form": "\"hero\" | \"detail\" | \"value\" | \"confirm\" | \"status\"",
+   "note": "",
+   "section": "common"
+  },
+  "common.next": {
+   "form": "7 | \"SIGNED\"",
+   "note": "where the demo loop advances after dwell (optional; default the following screen). Index, or a screen id resolved as the first match scanning forward. THE branch primitive: the confirm screen's early exit pins next to the ending (flows … (full text: the `pq1/layout.py` docstring)",
+   "section": "common"
+  },
+  "common.sweep": {
+   "form": "True | False",
+   "note": "idle side-to-side sweep (default: hero screens only)",
+   "section": "common"
+  },
+  "common.token": {
+   "form": "{\"variant\": \"solid\" | \"unknown\", \"fill\": [r, g, b], \"ring\": [r, g, b], \"palette\": 0-13 …",
+   "note": "(optional; default \"solid\") solid fill colour ring colour; an explicit ring strokes INSIDE the disc edge and draws over logo art placeholder ramp pin: fill + from colors.PLACEHOLDER_ GRADIENTS (13 = MONO_RAMP, the recognized-logo look: … (full text: the `pq1/layout.py` docstring)",
+   "section": "common"
+  },
+  "confirm.bottom": {
+   "form": "\"Confirm?\"",
+   "note": "(default) 36 px prompt",
+   "section": "confirm"
+  },
+  "confirm.commit": {
+   "form": "True",
+   "note": "(default) hold-right sign armed",
+   "section": "confirm"
+  },
+  "detail.circle_x": {
+   "form": "291",
+   "note": "optional nudge off the column",
+   "section": "detail"
+  },
+  "detail.label": {
+   "form": "\"MAX FEE\"",
+   "note": "16 px SEMIBOLD caps, baseline y 128",
+   "section": "detail"
+  },
+  "detail.lines": {
+   "form": "[\"45.5 gwei\", \"Tip: 2 gwei\"]",
+   "note": "detail value, 1-3 lines; a line is a str, or {\"str\": …, \"weight\": \"semibold\"} — a NAME inside the value (the resolved contract / recipient / spender identity) rides SemiBold over its Regular address lines (DESIGN.md § Text rules, … (full text: the `pq1/layout.py` docstring)",
+   "section": "detail"
+  },
+  "detail.pages": {
+   "form": "[[line, line], [line, line]]",
+   "note": "ONE value too long for its tier's three lines — a full 32-byte hash — shown in 2+ pages of 1-3 lines at the screen's one \"size\"; the pager \"n/m\" (12 px, 80 % white, top centre) shows only then. The demo turns a page per detail dwell … (full text: the `pq1/layout.py` docstring)",
+   "section": "detail"
+  },
+  "detail.pulse": {
+   "form": "True | [r, g, b]",
+   "note": "pulsating rings around the token (components.pulse; True = token fill colour)",
+   "section": "detail"
+  },
+  "detail.side": {
+   "form": "\"left\" | \"right\"",
+   "note": "",
+   "section": "detail"
+  },
+  "detail.size": {
+   "form": "36 | 32 | 28 | 22",
+   "note": "largest tier that fits",
+   "section": "detail"
+  },
+  "detail.text_x": {
+   "form": "175",
+   "note": "optional nudge",
+   "section": "detail"
+  },
+  "dwell": {
+   "form": "ms held before auto-advancing",
+   "note": "(optional; demo loops only — the last HOLD_COMMIT_MS of a commit screen's dwell is the demo's own hold gesture)",
+   "section": "common"
+  },
+  "hero.band_chev": {
+   "form": "True",
+   "note": "the caption carries the confirm band's right- pointing chevron and the corner chevrons hide (chev defaults None) — the intro ahead of an ask (flows/erc7730); not an ask itself, so \"commit\": False",
+   "section": "hero"
+  },
+  "hero.bottom": {
+   "form": "\"SEND 5.25 ETH?\"",
+   "note": "",
+   "section": "hero"
+  },
+  "hero.commit": {
+   "form": "True",
+   "note": "(default) hold-right signs on every ask — opening or returning",
+   "section": "hero"
+  },
+  "hero.hint": {
+   "form": "True",
+   "note": "chevrons bob up and back",
+   "section": "hero"
+  },
+  "hero.pager": {
+   "form": "[2, 3]",
+   "note": "this hero's position in a sequence of asks — the pager \"n/m\" in the same top-centre spot a paged detail uses (12 px, 80 % white). A batch's transactions (flows/batch). NOT text pages: nothing flips and the dwell is untouched",
+   "section": "hero"
+  },
+  "hint": {
+   "form": "True",
+   "note": "chevrons bob up and back",
+   "section": "hero"
+  },
+  "icon": {
+   "form": "\"eth\" | \"blind\" | \"rotate\" | \"dev\" | \"fingerprint\" | \"download\" | a chain mark (\"base\",…",
+   "note": "glyph inside the circle (components.GLYPHS; a popular token's logo art comes via components.token_defaults; \"letter:X\" draws that initial — an unknown chain, pq1.chains)",
+   "section": "common"
+  },
+  "icon_color": {
+   "form": "[r, g, b]",
+   "note": "vector-mark colour override (image logos keep their art; SAFE flows pin it black)",
+   "section": "common"
+  },
+  "id": {
+   "form": "name used on the command line",
+   "note": "",
+   "section": "common"
+  },
+  "kind": {
+   "form": "\"hero\" | \"detail\" | \"value\" | \"confirm\" | \"status\"",
+   "note": "",
+   "section": "common"
+  },
+  "label": {
+   "form": "\"MAX FEE\"",
+   "note": "16 px SEMIBOLD caps, baseline y 128",
+   "section": "detail"
+  },
+  "lines": {
+   "form": "[\"45.5 gwei\", \"Tip: 2 gwei\"]",
+   "note": "detail value, 1-3 lines; a line is a str, or {\"str\": …, \"weight\": \"semibold\"} — a NAME inside the value (the resolved contract / recipient / spender identity) rides SemiBold over its Regular address lines (DESIGN.md § Text rules, … (full text: the `pq1/layout.py` docstring)",
+   "section": "detail"
+  },
+  "next": {
+   "form": "7 | \"SIGNED\"",
+   "note": "where the demo loop advances after dwell (optional; default the following screen). Index, or a screen id resolved as the first match scanning forward. THE branch primitive: the confirm screen's early exit pins next to the ending (flows … (full text: the `pq1/layout.py` docstring)",
+   "section": "common"
+  },
+  "pager": {
+   "form": "[2, 3]",
+   "note": "this hero's position in a sequence of asks — the pager \"n/m\" in the same top-centre spot a paged detail uses (12 px, 80 % white). A batch's transactions (flows/batch). NOT text pages: nothing flips and the dwell is untouched",
+   "section": "hero"
+  },
+  "pages": {
+   "form": "[[line, line], [line, line]]",
+   "note": "ONE value too long for its tier's three lines — a full 32-byte hash — shown in 2+ pages of 1-3 lines at the screen's one \"size\"; the pager \"n/m\" (12 px, 80 % white, top centre) shows only then. The demo turns a page per detail dwell … (full text: the `pq1/layout.py` docstring)",
+   "section": "detail"
+  },
+  "pulse": {
+   "form": "True | [r, g, b]",
+   "note": "pulsating rings around the token (components.pulse; True = token fill colour)",
+   "section": "detail"
+  },
+  "resting": {
+   "form": "{\"fill\": [r,g,b], \"ring\": [r,g,b], \"glyph\": [r,g,b]}",
+   "note": "branded resting-look override: disc fill, ring and result- glyph colours (defaults: black disc, state ring/glyph); the override strokes its ring flush at the disc edge — status.branded_resting(fill, mark): SAFE SIGNED #13FF7F disc, … (full text: the `pq1/layout.py` docstring)",
+   "section": "status"
+  },
+  "result": {
+   "form": "\"check\" | \"x\" | None",
+   "note": "resolve glyph (default \"check\")",
+   "section": "status"
+  },
+  "side": {
+   "form": "\"left\" | \"right\"",
+   "note": "",
+   "section": "detail"
+  },
+  "size": {
+   "form": "36 | 32 | 28 | 22",
+   "note": "largest tier that fits",
+   "section": "detail"
+  },
+  "state": {
+   "form": "\"done\" | \"failed\" | \"warning\" | \"awaiting\"",
+   "note": "-> colors.STATE ring/glyph colour (default \"done\")",
+   "section": "status"
+  },
+  "status.anim": {
+   "form": "\"qubit\"",
+   "note": "status animation (default by outcome — \"qubit\" for done endings, the film-less \"resolve\" for cancels; registry in status.py, the screens package registers more)",
+   "section": "status"
+  },
+  "status.bottom": {
+   "form": "\"TRANSACTION CONFIRMED\"",
+   "note": "the resolved caption",
+   "section": "status"
+  },
+  "status.busy": {
+   "form": "\"SIGNING…\" dwell defaults to the animation's duration (qubit 8650 ms, the cancel resolv…",
+   "note": "caption while loading (optional; film only — the cancel resolve has no loading window)",
+   "section": "status"
+  },
+  "status.color": {
+   "form": "[r, g, b]",
+   "note": "explicit colour, wins over state (default: the resolve flash pulses in a branded ending's resting fill, else the state colour)",
+   "section": "status"
+  },
+  "status.resting": {
+   "form": "{\"fill\": [r,g,b], \"ring\": [r,g,b], \"glyph\": [r,g,b]}",
+   "note": "branded resting-look override: disc fill, ring and result- glyph colours (defaults: black disc, state ring/glyph); the override strokes its ring flush at the disc edge — status.branded_resting(fill, mark): SAFE SIGNED #13FF7F disc, … (full text: the `pq1/layout.py` docstring)",
+   "section": "status"
+  },
+  "status.result": {
+   "form": "\"check\" | \"x\" | None",
+   "note": "resolve glyph (default \"check\")",
+   "section": "status"
+  },
+  "status.state": {
+   "form": "\"done\" | \"failed\" | \"warning\" | \"awaiting\"",
+   "note": "-> colors.STATE ring/glyph colour (default \"done\")",
+   "section": "status"
+  },
+  "sweep": {
+   "form": "True | False",
+   "note": "idle side-to-side sweep (default: hero screens only)",
+   "section": "common"
+  },
+  "text_x": {
+   "form": "175",
+   "note": "optional nudge",
+   "section": "detail"
+  },
+  "token": {
+   "form": "{\"variant\": \"solid\" | \"unknown\", \"fill\": [r, g, b], \"ring\": [r, g, b], \"palette\": 0-13 …",
+   "note": "(optional; default \"solid\") solid fill colour ring colour; an explicit ring strokes INSIDE the disc edge and draws over logo art placeholder ramp pin: fill + from colors.PLACEHOLDER_ GRADIENTS (13 = MONO_RAMP, the recognized-logo look: … (full text: the `pq1/layout.py` docstring)",
+   "section": "common"
+  },
+  "value.label": {
+   "form": "\"KEY FINGERPRINT\"",
+   "note": "with words only (optional): a caps label centred on the bottom baseline",
+   "section": "value"
+  },
+  "value.lines": {
+   "form": "[\"0x…\", \"…\", \"…\"]",
+   "note": "1-3 lines, as a detail's",
+   "section": "value"
+  },
+  "value.pages": {
+   "form": "[[…], […]]",
+   "note": "as a detail's — the pager with them",
+   "section": "value"
+  },
+  "value.size": {
+   "form": "36 | 32 | 28 | 22",
+   "note": "largest tier that fits the full-width budgets",
+   "section": "value"
+  },
+  "value.words": {
+   "form": "[\"close\", \"agent\", …]",
+   "note": "a NUMBERED WORD GRID in place of lines: up to 8 short words on the seed- words grid — two columns of four (WORDS_COLS: the number right-aligned, the word left-aligned beside it), numbered 1-4 down the left, 5-8 down the right, rows on … (full text: the `pq1/layout.py` docstring)",
+   "section": "value"
+  },
+  "words": {
+   "form": "[\"close\", \"agent\", …]",
+   "note": "a NUMBERED WORD GRID in place of lines: up to 8 short words on the seed- words grid — two columns of four (WORDS_COLS: the number right-aligned, the word left-aligned beside it), numbered 1-4 down the left, 5-8 down the right, rows on … (full text: the `pq1/layout.py` docstring)",
+   "section": "value"
+  }
+ },
+ "flow_shape": {
+  "CONFIRM_INDEX": 5,
+  "CONFIRM_MIN_DETAILS": 7,
+  "rule": "a segment with CONFIRM_MIN_DETAILS or more detail/value screens takes a confirm screen at index CONFIRM_INDEX (the 6th screen)"
+ },
+ "keys_seen_in_live_flows": {
+  "confirm": [
+   "bottom",
+   "chev",
+   "commit",
+   "icon",
+   "icon_color",
+   "id",
+   "kind",
+   "token"
+  ],
+  "detail": [
+   "chain",
+   "chev",
+   "circle_x",
+   "icon",
+   "icon_color",
+   "id",
+   "kind",
+   "label",
+   "lines",
+   "pages",
+   "pulse",
+   "side",
+   "size",
+   "text_x",
+   "token"
+  ],
+  "hero": [
+   "band_chev",
+   "bottom",
+   "chev",
+   "commit",
+   "hint",
+   "icon",
+   "icon_color",
+   "id",
+   "kind",
+   "pager",
+   "token"
+  ],
+  "status": [
+   "anim",
+   "bottom",
+   "busy",
+   "chev",
+   "direction",
+   "done_labels",
+   "exit",
+   "handoff",
+   "icon",
+   "icon_color",
+   "id",
+   "kind",
+   "labels",
+   "lead",
+   "match",
+   "miss",
+   "pin",
+   "resting",
+   "result",
+   "state",
+   "token",
+   "total",
+   "tx",
+   "typed"
+  ],
+  "value": [
+   "chev",
+   "icon",
+   "icon_color",
+   "id",
+   "kind",
+   "label",
+   "lines",
+   "size",
+   "token",
+   "words"
+  ]
+ },
+ "kinds": [
+  "hero",
+  "detail",
+  "value",
+  "confirm",
+  "status"
+ ],
+ "layout_tokens": {
+  "BAND_BOTTOM": {
+   "comment": "",
+   "expr": "105, 129",
+   "reader_count": 1,
+   "readers": [
+    "pq1/layout.py:274"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:274",
+   "unit": "px",
+   "value": 129
+  },
+  "BAND_TOP": {
+   "comment": "",
+   "expr": "105, 129",
+   "reader_count": 1,
+   "readers": [
+    "pq1/layout.py:274"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:274",
+   "unit": "px",
+   "value": 105
+  },
+  "BASELINE_Y": {
+   "comment": "all bottom-band text baselines",
+   "reader_count": 10,
+   "readers": [
+    "pq1/components.py:23",
+    "pq1/components.py:509",
+    "pq1/components.py:542",
+    "pq1/layout.py:374",
+    "pq1/layout.py:396",
+    "pq1/layout.py:405",
+    "pq1/loading.py:21",
+    "pq1/loading.py:328"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:275",
+   "unit": "px",
+   "value": 128
+  },
+  "CENTER_X": {
+   "comment": "",
+   "reader_count": 63,
+   "readers": [
+    "pq1/components.py:23",
+    "pq1/components.py:509",
+    "pq1/components.py:525",
+    "pq1/components.py:592",
+    "pq1/layout.py:296",
+    "pq1/layout.py:370",
+    "pq1/layout.py:373",
+    "pq1/layout.py:374"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:261",
+   "unit": "px",
+   "value": 214
+  },
+  "CHAIN_GAP": {
+   "comment": "chain screen: the FIXED air between the caption's",
+   "reader_count": 4,
+   "readers": [
+    "pq1/layout.py:477",
+    "pq1/layout.py:479",
+    "pq1/layout.py:499",
+    "pq1/layout.py:507"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:289",
+   "unit": "px",
+   "value": 18
+  },
+  "CHEV_LEFT": {
+   "comment": "corner chevron slots",
+   "expr": "(23.5, 19.0)",
+   "reader_count": 7,
+   "readers": [
+    "pq1/components.py:23",
+    "pq1/components.py:503",
+    "screens/pin/pin_entering.py:67",
+    "screens/pin/pin_entering.py:113",
+    "screens/pin/pin_entering.py:422",
+    "screens/pin/pin_entering.py:424",
+    "screens/pin/pin_entering.py:430"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:277",
+   "value": [
+    23.5,
+    19.0
+   ]
+  },
+  "CHEV_RIGHT": {
+   "comment": "",
+   "expr": "(403.5, 19.0)",
+   "reader_count": 9,
+   "readers": [
+    "pq1/components.py:23",
+    "pq1/components.py:504",
+    "screens/idle/batch_sign.py:19",
+    "screens/idle/batch_sign.py:74",
+    "screens/idle/unknown_token.py:25",
+    "screens/idle/unknown_token.py:75",
+    "screens/pin/pin_entering.py:67",
+    "screens/pin/pin_entering.py:114"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:278",
+   "value": [
+    403.5,
+    19.0
+   ]
+  },
+  "CIRCLE_CY": {
+   "comment": "main circle vertical centre",
+   "reader_count": 64,
+   "readers": [
+    "pq1/layout.py:370",
+    "pq1/layout.py:373",
+    "pq1/layout.py:384",
+    "pq1/layout.py:398",
+    "pq1/layout.py:408",
+    "pq1/status.py:174",
+    "pq1/status.py:177",
+    "pq1/procedural/pin_pill.py:16"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:262",
+   "unit": "px",
+   "value": 72
+  },
+  "CIRCLE_R": {
+   "comment": "diameter 60, never resizes",
+   "reader_count": 26,
+   "readers": [
+    "pq1/layout.py:297",
+    "pq1/layout.py:370",
+    "pq1/layout.py:373",
+    "pq1/layout.py:384",
+    "pq1/layout.py:398",
+    "pq1/layout.py:408",
+    "pq1/layout.py:479",
+    "pq1/layout.py:507"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:263",
+   "unit": "px",
+   "value": 30
+  },
+  "COL_LEFT": {
+   "comment": "detail circle column, left",
+   "do_not_port": true,
+   "expr": "(24, 123)",
+   "reader_count": 0,
+   "readers": [],
+   "scope": "dead",
+   "scope_reason": "no reader found in pq1/, screens/ or flows/",
+   "source": "pq1/layout.py:268",
+   "value": [
+    24,
+    123
+   ]
+  },
+  "COL_LEFT_CX": {
+   "comment": "",
+   "reader_count": 3,
+   "readers": [
+    "pq1/layout.py:402",
+    "screens/verdict/sig_error.py:18",
+    "screens/verdict/sig_error.py:31"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:270",
+   "unit": "px",
+   "value": 74
+  },
+  "COL_RIGHT": {
+   "comment": "detail circle column, right",
+   "do_not_port": true,
+   "expr": "(303, 402)",
+   "reader_count": 0,
+   "readers": [],
+   "scope": "dead",
+   "scope_reason": "no reader found in pq1/, screens/ or flows/",
+   "source": "pq1/layout.py:269",
+   "value": [
+    303,
+    402
+   ]
+  },
+  "COL_RIGHT_CX": {
+   "comment": "",
+   "reader_count": 3,
+   "readers": [
+    "pq1/layout.py:402",
+    "screens/verdict/sig_error.py:18",
+    "screens/verdict/sig_error.py:31"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:271",
+   "unit": "px",
+   "value": 352
+  },
+  "CONFIRM_CIRCLE_X": {
+   "comment": "confirm circle right of centre ...",
+   "reader_count": 1,
+   "readers": [
+    "pq1/layout.py:384"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:287",
+   "unit": "px",
+   "value": 291
+  },
+  "CONFIRM_INDEX": {
+   "comment": "",
+   "reader_count": 3,
+   "readers": [
+    "pq1/layout.py:608",
+    "pq1/layout.py:631",
+    "pq1/layout.py:636"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:285",
+   "value": 5
+  },
+  "CONFIRM_MIN_DETAILS": {
+   "comment": "",
+   "reader_count": 3,
+   "readers": [
+    "pq1/layout.py:607",
+    "pq1/layout.py:628",
+    "pq1/layout.py:637"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:284",
+   "value": 7
+  },
+  "CONFIRM_TEXT_X": {
+   "comment": "... prompt centred to its left (the CHAIN nudges)",
+   "reader_count": 1,
+   "readers": [
+    "pq1/layout.py:386"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:288",
+   "unit": "px",
+   "value": 175
+  },
+  "DETAIL_TEXT_CX": {
+   "comment": "text centre opposite the circle",
+   "expr": "{\"left\": 263, \"right\": 163}",
+   "reader_count": 3,
+   "readers": [
+    "pq1/layout.py:407",
+    "screens/verdict/sig_error.py:19",
+    "screens/verdict/sig_error.py:67"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:272",
+   "value": {
+    "left": 263,
+    "right": 163
+   }
+  },
+  "H": {
+   "comment": "",
+   "expr": "428, 142",
+   "reader_count": 33,
+   "readers": [
+    "pq1/__init__.py:38",
+    "pq1/canvas.py:14",
+    "pq1/canvas.py:20",
+    "pq1/layout.py:256",
+    "pq1/procedural/__init__.py:12",
+    "pq1/procedural/blind.py:20",
+    "pq1/procedural/blind.py:34",
+    "pq1/procedural/blind.py:36"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:256",
+   "unit": "px",
+   "value": 142
+  },
+  "MARGIN": {
+   "comment": "",
+   "do_not_port": false,
+   "reader_count": 1,
+   "readers": [
+    "pq1/layout.py:492"
+   ],
+   "scope": "contract",
+   "scope_reason": "the static grid margin; the moving art is not clamped to it (audit X6-08)",
+   "source": "pq1/layout.py:258",
+   "unit": "px",
+   "value": 12
+  },
+  "SUP": {
+   "comment": "supersample factor; all APIs take UI pixels",
+   "reader_count": 96,
+   "readers": [
+    "pq1/__init__.py:38",
+    "pq1/canvas.py:14",
+    "pq1/canvas.py:22",
+    "pq1/canvas.py:26",
+    "pq1/canvas.py:30",
+    "pq1/canvas.py:41",
+    "pq1/canvas.py:49",
+    "pq1/canvas.py:50"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:257",
+   "unit": "factor",
+   "value": 3
+  },
+  "SWEEP_X_MAX": {
+   "comment": "",
+   "do_not_port": false,
+   "expr": "89, 339",
+   "reader_count": 1,
+   "readers": [
+    "pq1/layout.py:266"
+   ],
+   "scope": "contract",
+   "scope_reason": "a stated bound; nothing clamps to it (audit X6-02)",
+   "source": "pq1/layout.py:266",
+   "value": 339
+  },
+  "SWEEP_X_MIN": {
+   "comment": "",
+   "do_not_port": false,
+   "expr": "89, 339",
+   "reader_count": 1,
+   "readers": [
+    "pq1/layout.py:266"
+   ],
+   "scope": "contract",
+   "scope_reason": "a stated bound; nothing clamps to it (audit X6-02)",
+   "source": "pq1/layout.py:266",
+   "value": 89
+  },
+  "TEXT_CY": {
+   "comment": "vertical centre of detail text blocks",
+   "reader_count": 6,
+   "readers": [
+    "pq1/layout.py:334",
+    "pq1/layout.py:339",
+    "pq1/layout.py:386",
+    "screens/verdict/sig_error.py:19",
+    "screens/verdict/sig_error.py:85",
+    "screens/verdict/sig_error.py:89"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:264",
+   "unit": "px",
+   "value": 72.5
+  },
+  "VALUE_PARK_X": {
+   "comment": "... its token parked off the panel to the left",
+   "expr": "-2 * CIRCLE_R",
+   "reader_count": 5,
+   "readers": [
+    "pq1/layout.py:178",
+    "pq1/layout.py:391",
+    "pq1/procedural/burst.py:23",
+    "pq1/procedural/burst.py:167",
+    "pq1/procedural/burst.py:190"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:297",
+   "unit": "px",
+   "value": -60
+  },
+  "VALUE_TEXT_CX": {
+   "comment": "a value screen's text: the full region, centred ...",
+   "expr": "CENTER_X",
+   "reader_count": 1,
+   "readers": [
+    "pq1/layout.py:391"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:296",
+   "unit": "px",
+   "value": 214
+  },
+  "W": {
+   "comment": "",
+   "expr": "428, 142",
+   "reader_count": 25,
+   "readers": [
+    "pq1/__init__.py:38",
+    "pq1/canvas.py:14",
+    "pq1/canvas.py:20",
+    "pq1/layout.py:256",
+    "pq1/layout.py:492",
+    "pq1/procedural/blind.py:20",
+    "pq1/procedural/blind.py:36",
+    "pq1/procedural/blind.py:39"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:256",
+   "unit": "px",
+   "value": 428
+  },
+  "WORDS_COLS": {
+   "comment": "(number right edge, word left edge) per column",
+   "expr": "((88, 98), (272, 282))",
+   "reader_count": 3,
+   "readers": [
+    "pq1/layout.py:194",
+    "pq1/layout.py:308",
+    "pq1/layout.py:356"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:305",
+   "value": [
+    [
+     88,
+     98
+    ],
+    [
+     272,
+     282
+    ]
+   ]
+  },
+  "WORDS_MAX": {
+   "comment": "",
+   "expr": "len(WORDS_COLS) * len(WORDS_ROWS)",
+   "reader_count": 2,
+   "readers": [
+    "pq1/layout.py:547",
+    "pq1/layout.py:549"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:308",
+   "value": 8
+  },
+  "WORDS_NUM_ALPHA": {
+   "comment": "the numbers' grey (the design's ~50 % GRAY)",
+   "reader_count": 2,
+   "readers": [
+    "pq1/layout.py:201",
+    "pq1/layout.py:354"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:307",
+   "unit": "alpha",
+   "value": 0.5
+  },
+  "WORDS_ROWS": {
+   "comment": "row centre lines",
+   "expr": "(32, 58, 84, 110)",
+   "reader_count": 4,
+   "readers": [
+    "pq1/layout.py:199",
+    "pq1/layout.py:308",
+    "pq1/layout.py:353",
+    "pq1/layout.py:357"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:304",
+   "value": [
+    32,
+    58,
+    84,
+    110
+   ]
+  },
+  "WORDS_SIZE": {
+   "comment": "the words' and numbers' one size: the Default tier",
+   "reader_count": 6,
+   "readers": [
+    "pq1/layout.py:202",
+    "pq1/layout.py:358",
+    "pq1/layout.py:359",
+    "pq1/layout.py:360",
+    "pq1/layout.py:361",
+    "pq1/layout.py:552"
+   ],
+   "scope": "device",
+   "source": "pq1/layout.py:306",
+   "unit": "px",
+   "value": 22
+  }
+ },
+ "schema_version": 1,
+ "type_scale": {
+  "SIZE_BODY": 22,
+  "SIZE_L": 32,
+  "SIZE_LABEL": 16,
+  "SIZE_M": 28,
+  "SIZE_PAGING": 12,
+  "SIZE_QUESTION": 18,
+  "SIZE_XL": 36
+ },
+ "validation_errors": {
+  "single page": "ValueError: screen 'screen0': \"pages\" is two or more pages of 1-3 lines at one size (DESIGN.md § Text rules, Pages)",
+  "too many words": "ValueError: screen 'screen0': \"words\" holds 1-8 words (two columns of four); got 9",
+  "unknown anim": "ValueError: unknown status anim 'nope'; expected one of arrive, batch_sign, duress_differ, explosion, factory_signing, firmware_verified, headshake, hold_to_confirm, last_attempt, padlock, pin_differ, pin_enterin",
+  "unknown kind": "KeyError: 'side'",
+  "unknown result": "ValueError: unknown status result 'tick'; expected one of check, x or None",
+  "unknown size": "ACCEPTED (no error raised, even when drawn)",
+  "unknown state": "ValueError: unknown status state 'maybe'; expected one of awaiting, done, failed, warning",
+  "words beside lines": "ValueError: screen 'screen0': \"words\" is a VALUE screen's whole value — no lines, no pages beside it (pq1/layout.py, value)"
+ }
+}

@@ -67,6 +67,15 @@ EXPECTED = {
     "secure/src/nsc/prodtest.rs": Counter(
         {"if crate::rng::fill(&mut sample[..n]).is_err() {": 1}
     ),
+    # `se-lcd-diag` only: the LCD-only secure-element diagnostic reads the
+    # raw platform TRNG once and shows OK / E:all-zero / E:fill on the panel
+    # ("1. platform TRNG"). It is a liveness probe of the TRNG ITSELF, so
+    # routing it through `rng_strong` would defeat its purpose -- the point
+    # is to see the bare peripheral answer. The bytes are displayed as a
+    # verdict and never derive a key. `se-lcd-diag` is in PROD_FORBIDDEN and
+    # carries a mode-production compile fence, so it cannot reach a shipping
+    # image. Reviewed 2026-09-24 on the ui-px-evt merge.
+    "secure/src/main.rs": Counter({"let r = rng::fill(&mut b);": 1}),
 }
 
 REQUIRED_THREE_SOURCE = {

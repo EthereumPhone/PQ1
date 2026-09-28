@@ -268,7 +268,7 @@ fn explicit_hidden_material_descriptors_have_no_verified_runtime_leaf() {
 
 /// Locate a leaf by `(source filename, chain_id)` so a multi-chain
 /// descriptor (USDT on mainnet vs Polygon) is unambiguous.
-fn find_leaf<'a>(
+pub(super) fn find_leaf<'a>(
     res: &'a dbgen::erc7730::Erc7730BuildResult,
     source_name: &str,
     chain_id: u64,
@@ -346,7 +346,7 @@ fn u256_max() -> U256 {
 /// Plain receiver-tx envelope. ERC-7730 path expects `tx.to ==
 /// descriptor.contract`; the caller fills `to` with the real contract
 /// address per-test.
-fn envelope(chain_id: u64, contract: [u8; 20]) -> Eip1559Tx {
+pub(super) fn envelope(chain_id: u64, contract: [u8; 20]) -> Eip1559Tx {
     let mut tx = Eip1559Tx::default();
     tx.chain_id = chain_id;
     tx.nonce = 7;
@@ -11462,7 +11462,7 @@ fn erc2612_permit_with_hidden_owner_is_excluded() {
 // compiler-level collection-path backstop; the production tests below exercise
 // the real Merkle-bound Router02 leaf.
 // ───────────────────────────────────────────────────────────────────────
-const UNI_V3: [u8; 20] = [
+pub(super) const UNI_V3: [u8; 20] = [
     0x68, 0xb3, 0x46, 0x58, 0x33, 0xfb, 0x72, 0xa7, 0x0e, 0xcd, 0xf4, 0x85, 0xe0, 0xe4, 0xc7, 0xbd,
     0x86, 0x65, 0xfc, 0x45,
 ];
@@ -11508,7 +11508,7 @@ fn calldata_uniswap_single(
     )
 }
 
-fn calldata_uniswap_exact_input(recipient: [u8; 20]) -> Vec<u8> {
+pub(super) fn calldata_uniswap_exact_input(recipient: [u8; 20]) -> Vec<u8> {
     calldata_uniswap_single(UNI_EXACT_INPUT_SINGLE, recipient, 1_500_000, 1_000_000, 0)
 }
 

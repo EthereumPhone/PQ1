@@ -82,7 +82,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    fn hash(&self) -> &[u8; 32] {
+    pub(crate) fn hash(&self) -> &[u8; 32] {
         match self {
             Kind::CalldataDigest(h)
             | Kind::Eip712Final(h)
@@ -136,7 +136,7 @@ pub(crate) fn append_fingerprint_page(
     Ok(())
 }
 
-fn build_fingerprint_pair(kind: Kind) -> FingerprintPair {
+pub(crate) fn build_fingerprint_pair(kind: Kind) -> FingerprintPair {
     let mut pair = [[[b' '; DISPLAY_COLS]; crate::ui::DISPLAY_ROWS]; FINGERPRINT_PAGES];
 
     write_line(&mut pair[0][0], "8213 Fingerprint");

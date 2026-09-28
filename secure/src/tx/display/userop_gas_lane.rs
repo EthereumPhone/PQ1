@@ -256,7 +256,7 @@ fn gas_total_u64(call: &[u8; 32], verify: &[u8; 32], prever: &[u8; 32]) -> u64 {
         .min(u64::MAX as u128) as u64
 }
 
-fn build_gas_lane_page(
+pub(crate) fn build_gas_lane_page(
     call: &[u8; 32],
     verify: &[u8; 32],
     prever: &[u8; 32],
