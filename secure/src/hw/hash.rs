@@ -36,8 +36,17 @@ use crate::hw::mmio::{Reg32, RoReg32};
 // Base = PERIPH_BASE_S (0x5000_0000) + AHB2 offset (0x0202_0000) + HASH
 // offset (0xA_0400). Confirmed against STMicro cmsis-device-u5 header
 // (HASH_BASE_NS = 0x420C_0400 / HASH_BASE_S = 0x520C_0400).
-// TZSC default-secure blocks NS-alias access to HASH from any state, so
-// the secure world must use the S alias.
+// HASH is a SECURABLE peripheral (RM0456 Rev 7 Table 4, "Securable
+// peripherals by TZSC") and securable peripherals are **NONSECURE after
+// reset** (RM0456 §3.5 "Securable peripherals are nonsecure after reset";
+// GTZC1_TZSC_SECCFGR1 reset value 0x0000_0000). An earlier version of this
+// comment claimed the opposite ("TZSC default-secure"), which is wrong.
+//
+// Using the S alias here is nevertheless correct, because `sau.rs` sets
+// GTZC1_TZSC_SECCFGR3 bit 12 (HASHSEC) BEFORE anything hashes — that is what
+// makes HASH secure, not a reset default. Any OTHER consumer of this driver
+// that runs before `sau.rs` (the FSBL) must set that bit itself; it cannot
+// inherit it.
 // ---------------------------------------------------------------------------
 
 const HASH_BASE: u32 = 0x520C_0400;
