@@ -789,3 +789,66 @@ fn two_celo_names_differing_only_in_whitespace_render_differently() {
         "the leading space must reach the screen, not be normalised away:\n{lead}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The chrome mask must survive the batch banner copy
+// ---------------------------------------------------------------------------
+
+/// A batch member's pages are not the pages the ERC-7730 renderer wrote them
+/// into: `wrap_pages_with_batch_banner` copies them one page down, behind the
+/// "BATCH SIGN | Tx i of N" anchor. The chrome mask (#751) is positional, so
+/// it has to make that journey with the bytes.
+///
+/// It did not, for one commit. `erc7730_screens::is_confirm_page_at` reads the
+/// mask, found an all-zero one on the wrapped copy, stopped recognising the
+/// body's confirm page, and `emit` refused — which `px_lift` reported as
+/// `"px body"` and the handler turned into SIGN REFUSED. `make e2e-px` caught
+/// it (scenario 5e-7730, batch ERC-7730 sign); no host test did, because every
+/// one of them lifted an UNWRAPPED transcript.
+///
+/// Note the direction. The structural fix's stated failure mode was that a
+/// missed `mark_nav` merely leaves chrome visible — true for a *field* row,
+/// false here: `is_confirm_page_at` requires the bits, so a lost mask is a
+/// refusal to sign, not a cosmetic artifact.
+#[test]
+fn the_chrome_mask_survives_the_batch_banner_copy() {
+    let mut inner = Pages::with_len(3);
+    row(&mut inner, 0, 0, b"Set name");
+    row(&mut inner, 1, 0, b"NAME");
+    row(&mut inner, 1, 1, b"Alice");
+    row(&mut inner, 1, 3, b"> next");
+    inner.mark_nav(1, 3);
+    row(&mut inner, 2, 0, b"L=Cancel");
+    row(&mut inner, 2, 3, b"R=Confirm");
+    inner.mark_nav(2, 0);
+    inner.mark_nav(2, 3);
+
+    let mut wrapped = Pages::empty_with_len(0);
+    let mut cfi = crate::fi::CfiCounter::new();
+    super::batch::wrap_pages_with_batch_banner(&inner, 0, 2, &mut wrapped, &mut cfi)
+        .expect("banner wrap must succeed");
+
+    // The banner owns no chrome row of its own.
+    assert_eq!(wrapped.nav[0], 0, "the batch banner declares no navigation row");
+
+    // Every inner page's mask shifted with its bytes.
+    for i in 0..inner.len {
+        assert_eq!(
+            inner.nav[i],
+            wrapped.nav[i + 1],
+            "page {i} lost its chrome mask across the banner copy"
+        );
+        assert_eq!(
+            inner.buf[i], wrapped.buf[i + 1],
+            "page {i} lost its bytes across the banner copy"
+        );
+    }
+
+    // The consequence that actually broke: the wrapped body is still a
+    // recognisable ERC-7730 body, so it lifts instead of refusing.
+    assert!(
+        super::erc7730_screens::is_confirm_page_at(&wrapped, inner.len),
+        "the wrapped confirm page must still be recognised — this is the exact \
+         check whose failure refused the batch ERC-7730 sign"
+    );
+}
