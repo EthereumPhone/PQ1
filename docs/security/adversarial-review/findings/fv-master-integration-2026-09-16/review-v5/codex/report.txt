@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: c0cb9abcc0adab53b8769afba9c48659ac60e959 / c5e1c6969694c07643ee19f701c18ab0f676e798
+FINDINGS: none
+GAPS: Coordinator must confirm green full-replay completion for identity 623ad0710d73000a1c693049b8933813 before publication; no long proof run was started here.

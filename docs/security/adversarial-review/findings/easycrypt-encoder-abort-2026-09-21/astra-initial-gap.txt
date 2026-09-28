@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 47c9bb1edd4ee4386ac1f829f762a9d924df94fd / 553f3ff818a366a88a8b54fb5801c5205d08d852
+FINDINGS: none
+GAPS: Source review blocked: read-only commands failed before execution with “bwrap: No permissions to create new namespace”; target identity, diff and callers remain uninspected. The separately running mandatory full dual-driver gate also remains pending.

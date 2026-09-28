@@ -1,0 +1,43 @@
+VERDICT: GO
+TARGET: e405562e14fa3d656a3334b5c2959623ff5356ad / f26a20e6d71bc2e6254c7e649db0d278d8f691c2
+FINDINGS: none
+
+I found no falsifiable defect in the six areas you listed. I read the source only: no compile, no replay, no edits. This is what I checked:
+
+1. **WOTS** (`cdrafts-split/RawWots.ec:34-59`, `ActualWotsCorrect.ec`)
+   - Signing fills all 43 chains in the concrete `RawShuffle.permutation` order. The count loop is bounded by `signing_budget`.
+   - Recovery walks all 43 chains, from each digit up to 7.
+   - The headline says: no signature means no recovery, and a signature recovers exactly the root that `RawKeygen.leaf` produced earlier. It never assumes the root is nonzero.
+   - Count failure shows up as `None`. The zero sentinel (`nseq 16 0`) has its own lemma, and a control that changes it to `nseq 16 1` is expected to fail.
+
+2. **Forest** (`ActualForestCorrect.ec`)
+   - The proof ties the signature's third component to the recorded compression entry and to recovery.
+   - The layout keeps 13 secrets and 12 paths of 11 nodes each (`RawSignature.ec` `signature_width`).
+   - The forest root is computed inside the proof, not taken as an outside identity.
+
+3. **Layer** (`ActualLayerCorrect.ec`)
+   - Key generation of the root happens before signing, and recovery is a separate later call that must return that same root.
+   - The index range `0<=index<512` is a precondition here. In the full signer it is discharged through `signer_coordinate_step` and `hypertree_index_range`.
+   - A control that drops the range (`C10Q9WithoutRange`) is expected to fail.
+
+4. **Signer** (`ActualSignerCorrect.ec`, `SignerVerifierReplay.ec`)
+   - Verification is the real `RawSigner.verify`: it re-hashes the message digest (H_msg), checks `accept_digest`, recovers the forest, loops over both layers and compares `pad current = root`. It is not a stubbed success.
+   - The public key is `RawKeygen.root(seed,1,0)`. `signer_top_tree` gives `signer_tree ht 2 = 0`, and a control using the wrong top layer is expected to fail.
+   - The non-byte headline holds from any starting table state, because its precondition only fixes the seed and message.
+
+5. **Bytes** (`ActualByteSignerCorrect.ec`, `RawSignature.ec`, `ByteSession.ec:8`)
+   - `byte_signature` means size 4008 and valid byte values.
+   - The offsets add up: 16 + 208 + 2112 + 2 × 836 = 4008, with section starts at 16, 224 and 2336, and 688/692 inside each layer.
+   - The round-trip lemma depends on the width condition, and the count lemma depends on `0<=c<2^32`. Both are discharged through `IndependentWidths` after `Independent.init`.
+   - Verification runs on `decode_signature(encode_signature sig)`.
+   - The probability-one result is proved as termination plus the stated implication. Signing is allowed to fail with `None`; it is not claimed to always succeed.
+
+6. **Enrollment and fences**
+   - The two new quarantine exceptions each have exactly one `65536`: `RawShufflePermutation.ec:20` and `ShuffleBytes.ec:26`. Both files' SHA-256 matches the committed digests.
+   - The fence requires exactly one match and a matching file hash (`policy_cap_fence.py:195`).
+   - `test_split_contract.py` now runs all three shuffle files through six variants (unmodified, policy appended, arithmetic changed, copied to another file, alternate spelling, whole-file substitution) plus a separate-policy-file check. Nothing that was checked before is dropped.
+   - The expected pin, statement and control counts in `cert_gate_split.sh` (2672, 2329, 225) and the 356-target check are equality checks, and they match your inventory.
+   - For the controls I sampled, the declared failure reasons make sense. Where a hypothesis is dropped, the expected error is `[by]: cannot close goals`, which is what should happen when the missing hypothesis is left as a goal. Where the statement is changed, the expected error is "the given proof-term proves:". The scope-isolation controls only mention a symbol that should be out of scope.
+   - This commit adds no project axioms or admits, and no headline claims adaptive unforgeability.
+
+GAPS: none within scope. Landing still depends on the full cold two-driver replay receipt, which you said is running separately.

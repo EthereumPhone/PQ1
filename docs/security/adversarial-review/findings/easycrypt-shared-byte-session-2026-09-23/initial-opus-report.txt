@@ -1,0 +1,25 @@
+The late correspondence check found no model-versus-Rust mismatch, so the gap I reported earlier is closed. The report below replaces the earlier one.
+
+VERDICT: GO
+TARGET: cb3a7b16e759bffb449587995e2534501d9ba347 / 91469e87dc20b6931f3c302095d9545f355f24dc
+FINDINGS:
+- MEDIUM contracts/verification/easycrypt/c10-port/tools/check_source_binding.py:33 — `hypertree.rs` and `merkle.rs` are missing from the Rust source binding.
+  - Mechanism: the binding pins `address`, `fors`, `hash`, `lib`, `params`, `shuffle` and `wots` only. `RawSigner`, `RawLayer`, `RawMerkle`, `RawForest` and `RawDecode` transcribe `hypertree.rs` and `merkle.rs`: the 4008-byte layout, the verify parse, where the forced-zero check sits, the last-FORS-root address, and the shuffle labels.
+  - Evidence: `cert-source-binding.json` has no entry for either file, and `hypertree.rs:224-228,284-285,350-420` holds the code the model copies.
+  - Consequence: a Rust edit there still passes `verify-easycrypt-split-pins`, the only split check PR CI runs. Only the mandatory full profile catches it, because its `check.py` compares signature bytes and per-case hash-call counts.
+  - Smallest fix: add both files to `SOURCES` and re-pin their hashes.
+GAPS: none
+
+Checked against source and found consistent with Rust:
+- **Secret derivation:** only three Rust hashes take the secret seed, and each puts it first: `fors.rs:111`, `hash.rs:386`, `hash.rs:411`. The model's `derive = hash(key ++ tail)` matches that. The model's R/`wots`/`fors` tags cannot collide with each other.
+- **Grinding:**
+  - The R input and the H_msg input match Rust, including `pad`.
+  - The acceptance test is the same on both sides: bits 132..142 must be zero.
+  - Both sides stop after 10M attempts.
+  - A repeated context that was already accepted replays with zero failure probability.
+  - A cached H_msg is charged q·2^-128 per trial, and no IID assumption is used.
+- **FORS, WOTS+C and shuffle:** the index bits, the digit sum of 205, the count hash, and the zero public key used when the digit sum is wrong all match. The shuffle tag decodes to `sphincs-c10-shuffle-v1`, and the labels `wots-0\0`/`wots-1\0` match `hypertree.rs:284-285`.
+- **Layout:** R, then secrets, then auth paths, then 2×836 bytes of layers, 4008 bytes in total. The length check is enforced in `ByteSession.ec:8,42`.
+- **Game hop:** the key is one fresh uniform 256-bit secret, and the adversary cannot reach the private state. Losslessness and the query caps are explicit premises. The independent-game forgery probability stays unbounded.
+- **Failure handling:** a failed signing request marks the session failed for good, and a failed session cannot win. The docs disclose this and say WOTS exhaustion is uncharged.
+- **Gates:** `Makefile:2226` runs `check.py` with no arguments and `check=True`. It asserts the 5/20/160 counts and swallows no errors. `EXPECT_CTLS` goes from 98 to 113, matching the 15 new controls.

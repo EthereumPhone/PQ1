@@ -1,0 +1,37 @@
+VERDICT: GO
+TARGET: 6bc23f2223aa820595be3bd6b04391bd7e5b6121 / 4a5ec55d432c2f4d46a041c3d231c85502a7fca6
+FINDINGS: none
+GAPS: Within the 15-minute limit, I did not trace the internals of the Verity/Lean axiom-inventory census (`check_axiom_inventory.py`, `check_verity_inventory.py`) beyond their callers.
+
+I made no changes to the target, ran no proofs, and did not use the advisor or any other model. The only file I wrote is my own verdict note in `~/.claude/plans/`.
+
+**What I checked:**
+
+- **EasyCrypt: all 53 files are checked directly (brief item 3).**
+  - `split_contract.py` checks that the computed dependency cone exactly matches the pinned file list and returns it in dependency order, including the four `.eca` files.
+  - Both drivers now run every one of the 53 files: PHASE 1 (`compile`) and PHASE 1e (`cli -iterate`). Each phase fails if it ran fewer files than expected or if the list is empty.
+  - The PHASE 1d probe uses plain `require`, so the four `.eca` files are loaded too; `require import` would reject them.
+- **Unfinished proofs cannot pass as replay.** I confirmed this in the r2026 EasyCrypt source.
+  - `require` re-reads the source file and rejects a proof left open at the end of the file.
+  - Cached `.eco` files are only consulted when `compile` starts, and the gate deletes them before PHASE 1.
+  - The new controls do not rely on `assert`, so they still work under Python optimization, and the regression test covers that.
+- **Toolchain pin (item 6).**
+  - The new check expects a `git-hash:` line from `easycrypt config`, which matches `ec.ml:44`.
+  - The prover list must match all 25 pinned entries exactly, with no duplicates.
+  - The wrapper script runs a digest-pinned image with no network, on a throwaway copy of a read-only mount.
+- **Pins (item 4).** All pins are now checked in `split_contract.py --pins`. It rejects duplicate keys, a count different from `EXPECT_PINS=1166` (the only such line), paths outside the pinned cone (including `./` or `../` aliases), and any digest that is not 32 hex characters or does not match.
+- **Master's controls are untouched (item 5).** The changes to `cert_gate_split.sh` only touch the identity section and phases 1, 1c, 1d and 1e. The 49 controls, the scope-probe bijection, and the taint, taint-count and margin sections are unchanged byte for byte.
+- **Kani (item 2).**
+  - Mutation credit requires the unmodified harness to pass first, the file to be unchanged after that run, and exactly one harness named by its full path (run with `--exact`).
+  - The result only counts if the harness name, verdict and summary each appear once, with the matching exit code and no fatal tool errors.
+  - The source file is always restored and the restore is checked.
+  - The census folds multi-line `cfg` attributes onto one line and fails on any unsupported feature `cfg`. The manifest check requires the `kani-heavy` feature and the `heavy` tier to go together.
+  - `make kani-heavy` calls `verify-kani-mutation-heavy`, which runs `--tier heavy`: only the heavy entries plus the canary.
+- **CI wiring.**
+  - The fast split checks run on every PR through `lean-fv.yml`, which now also triggers on `easycrypt/**` changes.
+  - The full replay is a nightly job that installs the pinned elan first.
+  - Nightly now runs `check_protocol_models.py --self-test` before the model check.
+  - `verify-tla` runs `check_tlc.py --self-test`, which enforces the exact 17-config inventory and the exit-code rules (0 = holds, 12 = expected violation).
+  - The historical `verify-easycrypt-docker` target now fails instead of printing an old receipt when Docker or its external source tree is missing.
+
+**One older gap, not a finding:** EasyCrypt stops reading a file at `exit.` or `drop.` and still returns success. The gate does not scan for these, and this patch lowered the `cli` minimum command count from 5 to 1. I scanned all 53 cone files and none contains either keyword, so nothing is affected today.

@@ -1,0 +1,47 @@
+[
+  {
+    "file": "WeakerExactMismatch.ec",
+    "source_sha256": "ecd5d8801613784dbe9bc6337c4dd24c3a2a2cb4d1297a2324aed3e1e76818c5",
+    "mode": "compile",
+    "exit": 1,
+    "seconds": 7.63,
+    "log": "mismatch-run.log",
+    "diagnostics": [
+      "[critical] [/work/q1215-finding-reproduction/WeakerExactMismatch.ec: line 7 (7-54)] the given proof-term proves:"
+    ],
+    "log_sha256": "6f4aed2b6b5158291dd4703cc92e7101283f3985d8643abe971dcfd28feca3f8"
+  },
+  {
+    "file": "WeakerValid.ec",
+    "source_sha256": "eb4d79e9138b31121d41067dd3bb3c84321c1e1606f155c0624bb5d48892bcf8",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 7.68,
+    "log": "valid-run.log",
+    "diagnostics": [],
+    "log_sha256": "a69e5cb586b611d02686430353c3a57962d06e0061c36c2de055712e30586f9b"
+  },
+  {
+    "file": "WeakerExactMismatch.ec",
+    "source_sha256": "ecd5d8801613784dbe9bc6337c4dd24c3a2a2cb4d1297a2324aed3e1e76818c5",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 6.74,
+    "log": "mismatch-cli-run.log",
+    "diagnostics": [
+      "<tty>: line 7 (7-54): the given proof-term proves:",
+      "<tty>: line 7 (55-59): cannot save an incomplete proof"
+    ],
+    "log_sha256": "899320252eedc69221b72ea5f8bcfeb98e7caeaf8054e24d56ca5c29015f6d50"
+  },
+  {
+    "file": "WeakerValid.ec",
+    "source_sha256": "eb4d79e9138b31121d41067dd3bb3c84321c1e1606f155c0624bb5d48892bcf8",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 6.98,
+    "log": "valid-cli-run.log",
+    "diagnostics": [],
+    "log_sha256": "ea96c917cc1ced94c136f807e50d5800f047c25d6cb0fcf7a95248d065ef9e27"
+  }
+]

@@ -1,0 +1,193 @@
+{
+  "base": "09eaa56b9609b7d2031a575d361e25e22b51fbd2",
+  "created_at": "2026-09-25T07:03:33.830947+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "3afe8535c0cc33f0e24f7b25dab7a1727b8b592196f8496a8bc302ba2161eed3",
+      "version": "2.1.282 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "0b2e9301d6100dddda3b9d5c80ebaeaa3a2f1962388f2f36f6b96a9f08b1f33f",
+      "version": "codex-cli 0.156.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "codex_native_readonly": true,
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "native-codex-read-only-and-outer-bubblewrap-other-legs",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-adaptive-exposures",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Codex native read-only filesystem/socket isolation, approval never; other legs outer Bubblewrap candidate/Git mounts; Git drift check"
+  },
+  "launch_skew_seconds": 0.000479,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-prompt.txt",
+    "sha256": "845226425b20099a4d3f72d8311462af650bdcd09db5df529c51180b41677ae3"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 10337,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-adaptive-exposures",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-adaptive-exposures",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-adaptive-exposures",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 185.879,
+      "ended_at": "2026-09-25T07:03:12.784112+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "845226425b20099a4d3f72d8311462af650bdcd09db5df529c51180b41677ae3",
+        "report_sha256": "8dd8b5ad39eca998a601683d31126680e3a77b9b3d7fbc92528cb886812731b8",
+        "runtime_sha256": "07884e230d433f0cf475b4669321c9cff35729c5d777ea2929d894b609abfe81",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/claude",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/claude/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/claude/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/claude/stderr.txt"
+      },
+      "report_words": 547,
+      "started_at": "2026-09-25T07:00:06.905160+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 363562,
+      "command": [
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "-c",
+        "approval_policy=\"never\"",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-adaptive-exposures",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 206.706,
+      "ended_at": "2026-09-25T07:03:33.610814+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "845226425b20099a4d3f72d8311462af650bdcd09db5df529c51180b41677ae3",
+        "report_sha256": "d05944c86f09d2404b980f26b140f21f7de17d5beb0f4b0049310fdf8d838861",
+        "runtime_sha256": "422efb660f2282c515addabce2dd32ed568d49c56c7cf3a76c9ac888eb11e7ea",
+        "stderr_sha256": "868b8036194966d58e2f9522b8d13b270f01b3c8124c873d38667d2a713d853c"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q20-review-wave/codex/stderr.txt"
+      },
+      "report_words": 31,
+      "started_at": "2026-09-25T07:00:06.904685+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "EasyCrypt accumulated adaptive signing responses",
+  "target": {
+    "commit_after": "5e477d33a3f335c339dae8b27d5fab40a08874a5",
+    "commit_before": "5e477d33a3f335c339dae8b27d5fab40a08874a5",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-adaptive-exposures",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "0d6504167c8d8c80ea1f1e95de7770c507047909",
+    "tree_before": "0d6504167c8d8c80ea1f1e95de7770c507047909"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.282 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.156.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-25T07:00:06.904617+00:00"
+}

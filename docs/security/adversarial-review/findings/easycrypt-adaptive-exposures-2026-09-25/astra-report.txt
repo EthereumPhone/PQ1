@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 5e477d33a3f335c339dae8b27d5fab40a08874a5 / 0d6504167c8d8c80ea1f1e95de7770c507047909
+FINDINGS: none
+GAPS: The required full source-matched cold two-driver replay result was unavailable during this review; confirm it passes for this exact target before landing.

@@ -1,0 +1,8 @@
+{
+  "completed_shell_commands": 3,
+  "namespace_failures": 3,
+  "stopped_process_groups": [
+    1388788
+  ],
+  "reason": "all tools failed before execution; sole same-reviewer mechanical retry with outer read-only mounts"
+}

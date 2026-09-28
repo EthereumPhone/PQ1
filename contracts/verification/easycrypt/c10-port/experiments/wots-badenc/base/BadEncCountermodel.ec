@@ -1,3 +1,16 @@
+(* #########################################################################
+   PROMOTED 2026-08-31 -- THIS COPY IS NO LONGER THE LIVE ONE.
+   The live, gate-covered copy is `cdrafts-split/BadEncCountermodel.ec`, a
+   closure member of cert_gate_split.sh.  EDIT THAT FILE, NOT THIS ONE.
+   This copy is retained as the experiment's record (it is what
+   experiments/wots-badenc/RESULT.md grades against) and its header still
+   carries the EXPERIMENT-base line numbers.
+
+   NOTE FOR ANYONE READING THIS DIRECTORY: unlike `probe/WOTS_TW_ES.ec` in the
+   same experiment -- which contains a LIVE `admit` and must NEVER be promoted
+   or vendored -- this file was admit-free and WAS promoted.  The two are not
+   in the same category; check RESULT.md before copying anything from here.
+   ######################################################################### *)
 (* ==========================================================================
    COUNTERMODEL — the BadEnc term is 1, so it CANNOT be bounded at this layer.
 

@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 532c4b7a2b945566ce4e3b3247a9f50224883788 / 2a32fd7af778c80c551a42fb2c4fce844a6317e0
+FINDINGS: none
+GAPS: Source review blocked: every shell invocation fails before execution with “bwrap: No permissions to create new namespace”; no alternative filesystem reader is available. Target identity, diff, and proof obligations remain independently unverified. Restore read-only source access and rerun this review; the separate cold two-driver gate remains required before landing.

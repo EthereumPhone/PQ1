@@ -68,7 +68,7 @@ def computed_cone():
     import subprocess
     env = dict(os.environ, CERT_CONE_DIRS='base-c10-split,cdrafts-split')
     out = subprocess.run([sys.executable, 'tools/cert_cone.py'] + roots(),
-                         capture_output=True, text=True, env=env).stdout
+                         capture_output=True, text=True, env=env, check=True).stdout
     return sorted({l[4:].strip() for l in out.splitlines()
                    if l.startswith('#   ') and l[4:].strip()})
 

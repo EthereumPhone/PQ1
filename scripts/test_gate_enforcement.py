@@ -184,6 +184,24 @@ class GateControls(unittest.TestCase):
                 row['polices_paths'].remove(name)
                 self.assertIn('easycrypt-pins-reverse:', self.run_checker())
 
+    def test_current_split_paths_cannot_be_removed_from_either_lane(self):
+        for gate_id in ('verify-easycrypt-split-pins', 'verify-easycrypt-split'):
+            row = next(r for r in BASELINE['gates'] if r['id'] == gate_id)
+            for name in row['polices_paths']:
+                with self.subTest(gate=gate_id, path=name):
+                    self.manifest = copy.deepcopy(BASELINE)
+                    changed = next(r for r in self.manifest['gates'] if r['id'] == gate_id)
+                    changed['polices_paths'].remove(name)
+                    self.assertIn('easycrypt-split-reverse:', self.run_checker())
+
+    def test_split_job_requires_its_shared_makefile_prerequisite(self):
+        row = next(r for r in BLOCKING if r['id'] == 'verify-easycrypt-split')
+        def remove_setup(wf, job, step):
+            job['steps'] = [s for s in job['steps']
+                            if s.get('name') != 'install elan (toolchain pinned by lean-toolchain)']
+        self.change_workflow(row, remove_setup)
+        self.run_checker()
+
     def test_per_pr_denylists_are_rejected(self):
         row = next(r for r in BLOCKING if r['id'] == 'miri')
         for event in ['push', 'pull_request']:
@@ -237,6 +255,26 @@ class GateControls(unittest.TestCase):
                                  cwd=self.root, text=True, capture_output=True, timeout=20)
         self.assertEqual(command.returncode, 0, command.stderr)
         self.assertIn('PROTOCOL_MODELS=cryptoverif python3 scripts/check_protocol_models.py', command.stdout)
+
+    def test_protocol_negative_controls_are_required_in_nightly(self):
+        row = next(r for r in BLOCKING if r['id'] == 'verify-protocol-models')
+        def omit_control(wf, job, step):
+            step['run'] = step['run'].replace(
+                'python3 scripts/check_protocol_models.py --self-test\n', '')
+        self.change_workflow(row, omit_control)
+        self.assertIn('verify-protocol-models:', self.run_checker())
+
+    def test_heavy_mutation_entrypoints_are_local_and_executable(self):
+        row = next(r for r in self.manifest['gates'] if r['id'] == 'verify-kani-mutation-heavy')
+        self.assertEqual(row['enforcement'], 'local_documented')
+        self.assertNotIn('runs_in', row)
+        for target in ('verify-kani-mutation-heavy', 'kani-heavy'):
+            with self.subTest(target=target):
+                command = subprocess.run(['make', '-n', '--no-print-directory', target],
+                                         cwd=self.root, text=True, capture_output=True, timeout=20)
+                self.assertEqual(command.returncode, 0, command.stderr)
+                self.assertEqual(command.stdout.count(
+                    'python3 scripts/check_kani_mutations.py --tier heavy'), 1)
 
     def test_scheduled_tier_cadence_is_pinned(self):
         workflows = {row['runs_in']: row for row in BLOCKING if row['enforcement'] == 'nightly'}

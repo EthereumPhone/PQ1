@@ -1,0 +1,60 @@
+{
+  "source_bytes_identical": true,
+  "files": [
+    {
+      "file": "ExposureAccounting.ec",
+      "sha256": "45c8fd181f5fce4cced2e582d2b9de8c69f227a66d0ca8befb92017936642db6",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureAccounting.ec",
+      "unchanged": true
+    },
+    {
+      "file": "ExposureDriver.ec",
+      "sha256": "5476a78272f2067ad5a3fb667f5a97da870c80fecb136cee560d6d3942fac235",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureDriver.ec",
+      "unchanged": true
+    },
+    {
+      "file": "ExposureForge.ec",
+      "sha256": "8528fe18b0415805b5fc8f76688654137f084d25b80c7002a33c149449b0bb6e",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureForge.ec",
+      "unchanged": true
+    },
+    {
+      "file": "ExposureGameHistory.ec",
+      "sha256": "9f678dd4310b6257c552097b051743be7fe112eb02c1eeee6842c91e706c2fff",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureGameHistory.ec",
+      "unchanged": true
+    },
+    {
+      "file": "ExposureHistory.ec",
+      "sha256": "8c269cccaa52fe1d12ac23f34a07ceeabce287f1548bc52a77f7cc0b551e12b5",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureHistory.ec",
+      "unchanged": true
+    },
+    {
+      "file": "ExposureLog.ec",
+      "sha256": "72507328655ed40ca6f57819c88bd6ec3809d84f8591ce5bf0cdcd311f91c879",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureLog.ec",
+      "unchanged": true
+    },
+    {
+      "file": "ExposureReferences.ec",
+      "sha256": "4750111a1583a7cdcdf69c495da0756802a055c808c0b72e18acff7db5789478",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureReferences.ec",
+      "unchanged": true
+    },
+    {
+      "file": "ExposureSessionHistory.ec",
+      "sha256": "c8a2f310515e4b9f7490645e00dbdb2d871f93aeb2906e2b6a5327cbac86239c",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSessionHistory.ec",
+      "unchanged": true
+    },
+    {
+      "file": "ExposureSupport.ec",
+      "sha256": "dc5f7a4c218f3ba468f46f4e213c70ff76d544fabdae7d0540cfcbfe7839245f",
+      "enrolled": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSupport.ec",
+      "unchanged": true
+    }
+  ],
+  "note": "Byte identity with fully checked checkpoint, not a substitute for required cold replay."
+}

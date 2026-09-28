@@ -1,0 +1,24 @@
+You are one independent reviewer of owner-authorized formal-verification work. Do not launch agents or other models.
+Review PQSigner C10 EasyCrypt for Phase D source-merge correctness.
+Target: /tmp/pq-easycrypt-integration-20260921-apewcqf1/review-target
+Commit: 0bd9f94da7148049c53f2956e848096a257c930d
+Tree: 909763a65da134cb2659376409aa6ee742700db9
+Compare: 2d4ba31d3ff7a745dc338c5ec349ba943ce380b5..0bd9f94da7148049c53f2956e848096a257c930d
+Focus only on this bounded counter/serialization/search integration:
+1. The actual WOTS/STCRC consumer uses the full u32 domain and a proved enumeration; signing searches its 10,000,000-counter prefix.
+2. Compact bits, physical byte padding/order and the real Rust helper tests agree within their stated manual-model boundary.
+3. Bounded search preserves first-hit order, represents exhaustion, and agrees conditionally with actual grindC without assuming unconditional success.
+4. New proofs, statement pins, clone obligations and documentation describe the resulting assumptions honestly.
+5. The source binding, proof controls and both CI lanes reject relevant drift.
+
+Already green: focused counter, byte-adapter, bounded-search and top-level reduction compilation; Rust transcript test (210 cases); three semantic proof rejection controls; split static contract (56 files, 1222 pins, 1116 statements) and identity. Full split replay and final CI regression checks are running separately; their completion remains a landing condition.
+Non-goals: numerical forgery bounds, SHA-256 security, full Rust extraction/hash/predicate realization, abort-aware composition of the total signing game, unrelated formal tracks, board work, hardware and production authority. Existing open assumptions are not new findings unless this diff misstates or worsens them.
+
+Inspect the exact diff and affected callers source-first for concrete correctness blockers. Keep the target immutable. Read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs or follow-up model turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Use the configured maximum reasoning effort.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 0bd9f94da7148049c53f2956e848096a257c930d / 909763a65da134cb2659376409aa6ee742700db9
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+At most three findings. FIX requires a source anchor, mechanism, consequence and falsifiable evidence. With no findings, write FINDINGS: none.

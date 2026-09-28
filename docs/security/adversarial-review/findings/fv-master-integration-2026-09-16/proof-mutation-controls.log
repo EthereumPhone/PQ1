@@ -1,0 +1,1 @@
+check_proof_mutations --self-test PASS (headline deletion/substitution and partial dumps rejected; complete pinned dump and exact nonempty mutation corpus accepted)

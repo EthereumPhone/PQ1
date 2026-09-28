@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# gate-c10-capstone.sh — SOUND capstone gate. Run INSIDE fv-sphincsplus-ec:r2026.02
+# Historical external capstone; current split uses cert_gate_split.sh.
+# gate-c10-capstone.sh — capstone gate. Run INSIDE fv-sphincsplus-ec:r2026.02
 # (image ENTRYPOINT = `opam exec --`).  /work = c10-eufcma-port (mounted).
 #
 # SOUNDNESS: EasyCrypt `require` does NOT re-verify a dependency — it trusts the .eco
@@ -68,6 +69,15 @@ rcG=0
 for f in "${ORDER[@]}"; do
   b=$(basename "$f")
   if EC "$f" >"/tmp/g.$b.log" 2>&1; then echo "  ok    $b"; else echo "  FAIL  $b"; tail -4 "/tmp/g.$b.log"|sed 's/^/        /'; rcG=1; fi
+done
+# Direct compilation is necessary but does not reject an unfinished EOF proof.
+[ "${#ORDER[@]}" -gt 0 ] || rcG=1
+for f in "${ORDER[@]}"; do
+  b=$(basename "$f"); printf 'require %s.\n' "${b%.*}" > "$W/RequireProbe.ec"
+  if ! EC "$W/RequireProbe.ec" > /tmp/require-probe.log 2>&1; then
+    echo "FAIL cannot require $b"; tail -4 /tmp/require-probe.log; rcG=1
+  fi
+  rm -f "$W/RequireProbe.eco"
 done
 echo "== rcG=$rcG (expect 0) =="
 

@@ -1,0 +1,138 @@
+{
+  "base": "ab9e9049a5a8c8d088966d02b7ff9a5714ae678a",
+  "created_at": "2026-09-16T14:59:26.709813+00:00",
+  "executables": {
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/tmp/pq-fv-master-20260916-g4woz0z8/target",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.0,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": true,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-5.6-sol",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/tmp/pq-fv-master-20260916-g4woz0z8/review-prompt.txt",
+    "sha256": "a3e65e1540a7aa832696ae1a0abf4bb387dffc04c97e9086fd3d23a96a8e4275"
+  },
+  "reviewers": {
+    "codex": {
+      "artifact_bytes": 2787194,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--enable",
+        "use_legacy_landlock",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target",
+        "-o",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/review-codex-retry/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 438.603,
+      "ended_at": "2026-09-16T14:59:26.487578+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "a3e65e1540a7aa832696ae1a0abf4bb387dffc04c97e9086fd3d23a96a8e4275",
+        "report_sha256": "91e09e00e3051de06da6fccdbaa3b9bc6bc4adae067e72dc2405e9a7a8b6901a",
+        "runtime_sha256": "d8c83e4d03ef6773b63a87b000c07ea0219c059fbe058396f4a8fa7f865ccb66",
+        "stderr_sha256": "07e19237d5d50c34abb05fc59cb45660fd3957d8eab3ad478c0df8456b962631"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-master-20260916-g4woz0z8/review-codex-retry/codex",
+        "prompt": "/tmp/pq-fv-master-20260916-g4woz0z8/review-codex-retry/codex/prompt.txt",
+        "report": "/tmp/pq-fv-master-20260916-g4woz0z8/review-codex-retry/codex/report.txt",
+        "stderr": "/tmp/pq-fv-master-20260916-g4woz0z8/review-codex-retry/codex/stderr.txt"
+      },
+      "report_words": 124,
+      "started_at": "2026-09-16T14:52:07.884941+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge to master",
+  "surface": "FV evidence integration",
+  "target": {
+    "commit_after": "b143b10f06799f56608acc97802cd2bedaf2b1f7",
+    "commit_before": "b143b10f06799f56608acc97802cd2bedaf2b1f7",
+    "drift": false,
+    "path": "/tmp/pq-fv-master-20260916-g4woz0z8/target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "2c9399a504efa5ac178e818ae670e814ab95cbeb",
+    "tree_before": "2c9399a504efa5ac178e818ae670e814ab95cbeb"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-16T14:52:07.884863+00:00"
+}

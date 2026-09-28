@@ -1,0 +1,40 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+* In [lemmas or axioms]:
+
+(* RDraws.pr_collision *)
+lemma pr_collision:
+  forall (A(S : RDraws.ASampler) <: RDraws.Adv{-RDraws.Sample}),
+    (forall (S <: RDraws.ASampler{-A}), islossless S.s => islossless A(S).a) =>
+    hoare[ A(RDraws.Sample).a :
+            List.size RDraws.Sample.l = 0 ==>
+            List.size RDraws.Sample.l <= C10Counter.signing_budget] =>
+    forall &m,
+      Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m :
+         ! List.uniq RDraws.Sample.l] <=
+      (C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+      Distr.mu1 randomizer RDraws.maxu.
+
+[2|check]>
+* In [lemmas or axioms]:
+
+lemma adaptive_randomizer_collisions:
+  forall (A(S : RDraws.ASampler) <: RDraws.Adv{-RDraws.Sample}) &m,
+    (forall (S <: RDraws.ASampler{-A}), islossless S.s => islossless A(S).a) =>
+    hoare[ A(RDraws.Sample).a :
+            List.size RDraws.Sample.l = 0 ==>
+            List.size RDraws.Sample.l <= C10Counter.signing_budget] =>
+    Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m : ! List.uniq RDraws.Sample.l] <=
+    (C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+    (1%r / 2%r) ^ 128.
+
+[3|check]>

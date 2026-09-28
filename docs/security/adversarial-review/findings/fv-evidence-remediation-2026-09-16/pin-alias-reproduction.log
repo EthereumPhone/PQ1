@@ -1,0 +1,8 @@
+static exit 0
+OK   coverage: all 993 top-level statements across 45 CONE files are pinned (roots 38 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 7 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK unique statement pins: 1077
+OK split static contract: 45 files; proof execution not performed
+
+CONFIRMED alias substitutes deleted op pin; full input identity remains an independent backstop

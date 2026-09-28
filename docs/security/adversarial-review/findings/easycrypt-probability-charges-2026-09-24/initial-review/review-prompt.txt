@@ -1,0 +1,25 @@
+Review PQSigner OS for merge of EasyCrypt honest-error and public-node probability charges.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-probability-charges
+Commit: 8af846fc28832fc88f92bb392936b2d98fa9a17e
+Tree: 6f69a11e8079c4e09d8fa8f37d897a2058761b95
+Compare: e4687547e2b194c397b8a43f0ddaf15134bf7119..8af846fc28832fc88f92bb392936b2d98fa9a17e
+
+Focus only on formal-verification correctness:
+1. The physical honest-error event is an actual returned encoding with wrong byte length/value or failed verification against the earlier root. Signing None is explicitly outside that event; independent error is zero and the existing same-client prefix hop supplies the physical charge.
+2. Honest public cost includes keygen, grind, both bounded WOTS count searches and verification. The concrete bound is 30520798 times 2^-256; cached calls remain charged and private calls are not silently counted as public calls.
+3. The node projection of an ideal 256-bit digest is a 128-bit output. Its point/history masses and adaptive birthday accounting cover actual fresh public draws, with empty initialization, retained-map collision implication and exact memoized-oracle refinement.
+4. Generic and state-indexed public-query budgets, private module restrictions and the real byte-session cost are explicit. The byte-game collision/prefix hop uses the same client and keeps the successful collision-free forgery probability as a residual.
+5. Invalid-sum WOTS recovery can match a zero reference leaf. Its actual behavior implies the recorded zero-node event, charged separately by Q times 2^-128. No nonzero premise or guaranteed signing-success claim is introduced; a concrete supported zero-node digest is checked.
+6. Source/statement/census/control enrollment preserves earlier contracts and adds no project axiom/admit/clone assumption. Controls reject missing budget/charge/residual terms and stronger projections for declared semantic reasons. No adaptive opening or component forgery extraction is claimed.
+
+Evidence already green: all 15 enrolled modules passed 30 repository-only direct/default-CLI checks; all 38 new semantic/scope controls, 11 checker regression groups, static contract and 335-input source binding pass. Inventory: 371 files, 134 roots, 2727 pins, 2378 statements, 2096 census rows and 263 controls. Full cold two-driver replay is running separately and remains required for landing; the coordinator will confirm its unchanged-source receipt without another model turn.
+Non-goals: runtime/API/parameter changes, guaranteed signing success, complete adaptive forgery reduction or numerical EUF, Rust extraction, concrete SHA-256/QROM, hardware/shipment, deferred playbook sweep and optional hardening.
+
+Inspect the diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 8af846fc28832fc88f92bb392936b2d98fa9a17e / 6f69a11e8079c4e09d8fa8f37d897a2058761b95
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

@@ -1,0 +1,43 @@
+VERDICT: GO
+TARGET: 532c4b7a2b945566ce4e3b3247a9f50224883788 / 2a32fd7af778c80c551a42fb2c4fce844a6317e0
+FINDINGS: none
+GAPS: I did not see the result of the full cold two-driver split gate, which is still a landing requirement. I re-ran nothing and relied on the green compile, pin and control evidence you supplied. Checks 1–6 below are from reading the source only.
+
+1. **Transcript invariant, start state, failure, private state.**
+   - `bounded_query_good_transcript` (`C10BoundedMA.ec:17`) keeps `!gfail_of Default.ps Default.qs` true on every path.
+   - A new record is only added on the path where `r <> -1`. On that path, `search_result` gives `prefix_hit`, and `prefix_hit_no_grind_failure` gives `!grind_fails` for the address `WAddress.val wad` and the message `m`. Those are exactly the address and message `Default.query` writes into `qs` (`WOTS_C_Scheme.ec:162`).
+   - Once the failure flag `bad` is set, later queries add nothing (`C10BoundedGame.ec:30`). The invariant needs no statement about `bad`.
+   - At start, `O_Bounded.init` sets both seeds to the same value and empties `qs`, so `gfail_of []` is false (`total_bounded_main_good`, line 88).
+   - The adversary is barred from `O_Bounded`, `O_MEUFGCMA_WOTSC_Default` and `FC.O_THFC_Default`, so it cannot touch oracle state.
+
+2. **Coupling, termination premises, event direction.**
+   - `bounded_choose_good` combines the existing up-to-bad coupling (`bounded_choose`) with a one-sided invariant on the bounded side. The invariant does not depend on `bad`, so the adversary can adapt freely.
+   - Termination is required only of `choose` and `forge`; these premises are unchanged from `bounded_win_le_total`.
+   - Direction is correct. `BoundedGame` returns `win /\ !bad`, so a bounded win forces `!bad`, which gives `res{total} /\ !gfail{total}`. `forge` and `verify` cannot change `qs`, so the good-transcript condition still holds at the end.
+
+3. **Collision split and the two reductions.**
+   - In `interactive_hop1_MA_good`, `e0` and `e1` carry `!gfail_of` through G0_INT and GAME1_INT using equality of `glob O_MEUFGCMA_WOTSC_Default`.
+   - `e3` bounds the collision branch before calling the existing `interactive_hop1_reduce_MA`, whose premises match.
+   - The WOTS-TW branch uses the existing `interactive_hop2_charged`, which already needs no N2. The `!gfail` term it requires now comes from the proved transcript condition rather than from a charged summand.
+
+4. **Premises and assumptions.**
+   - The final theorem's premises are exactly those of `interactive_D1_MA_charged` (`GFailCharged.ec:303`) plus the two termination premises: the target cap, address separation, the encoder bridge and the member-aware `A_wf_MA`.
+   - Removed: N2 (compare `C10BoundedReduction.ec:23`) and the charged `Pr[GAME1_INT : res /\ gfail_of]` summand.
+   - No new probability premise was introduced.
+   - The retained premises are satisfiable:
+     - `c10_c_le_p_tgts_at_pin` gives `c <= p_tgts` at the deployed pin.
+     - `WOTS_C_Real.ec:429` proves the encoder bridge.
+     - `R_leaf_C_A_wf_MA` in `XMSSMT_C_Reduction.ec` shows the member-aware premise holds for the reduction adversary.
+   - The new file has no `axiom` or `admit`, and the baseline census is unchanged.
+
+5. **Controls and gate enrollment.**
+   - Both negative controls state lemmas that are actually false, so their failure is not just a weak closing tactic:
+     - Without the `!gfail` precondition, an arbitrary `qs` breaks the claim.
+     - `Unchecked` records `(WAddress.val wad0, m0)` with `grind_fails` on an empty `qs`, so `gfail_of` becomes true.
+   - The positive control applies the exact final theorem.
+   - Everything is enrolled consistently: closure root, cone list (69 files), source binding (including the rehashed `check_source_binding.py`), 8 statement pins, and `EXPECT_PINS`/`EXPECT_STMTS`/`EXPECT_CTLS` = 1347/1216/70.
+
+6. **Scope of the claims.**
+   - The README and feasibility doc limit the result to the bounded WOTS experiment.
+   - They say explicitly that there is no whole-scheme or hypertree result, no real-hash independence assumption, no useful resource bound and no numerical estimate, and that exhaustion is not claimed to be impossible.
+   - The fail-stop modelling (a failed search means the adversary loses) is stated in the `C10BoundedSigning.ec` header. It is a scoped modelling choice, not a hidden premise.

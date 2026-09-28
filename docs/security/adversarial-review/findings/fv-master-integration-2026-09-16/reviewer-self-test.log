@@ -1,0 +1,2 @@
+PASS: launcher concurrency, receipts, target/Git immutability,
+      scratch writes, Kimi max effort, timeout/output limits, and private /dev

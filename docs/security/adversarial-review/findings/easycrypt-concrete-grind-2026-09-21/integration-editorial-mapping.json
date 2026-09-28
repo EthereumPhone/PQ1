@@ -1,0 +1,249 @@
+{
+  "reviewed_and_replayed_commit": "7b7e64bb532719005bdac61833b02deca5d623b7",
+  "all60_formal_sources_equal_after_comment_removal": true,
+  "changes": "Four historical comment corrections; gate description and census header corrected to60files. Active census rows, proof statements and gate acceptance logic unchanged.",
+  "files": [
+    {
+      "file": "base-c10-split/BinaryTrees.ec",
+      "normalized_formal_sha256": "d0da6032fdd3d0b4e778626cc485845831c739c4d7467075cb3c3c9f6587b44d"
+    },
+    {
+      "file": "base-c10-split/FL_SL_XMSS_MT_ES.ec",
+      "normalized_formal_sha256": "63db210010ca90ea7c0dfbbf93c306890159db78bf6daa08f7d23f02d542d26f"
+    },
+    {
+      "file": "base-c10-split/FORS_ES.ec",
+      "normalized_formal_sha256": "00eb5de2f9bd4c651bd1c7f711ab9bd95d5e6cbb4068df44d5e47339919ac479"
+    },
+    {
+      "file": "base-c10-split/HashAddresses.eca",
+      "normalized_formal_sha256": "5815511155bbfaafe547d335ab77dde11401736518d89063418337379769ac1d"
+    },
+    {
+      "file": "base-c10-split/KeyedHashFunctions.eca",
+      "normalized_formal_sha256": "2e0ce2e4c4906a15dba72dba561c0fba7b9a06338b590f8e45e578ff4467d3eb"
+    },
+    {
+      "file": "base-c10-split/MerkleTrees.ec",
+      "normalized_formal_sha256": "3c49f9eab0a810eeabffdc96cd0f5df4396581cac513f624c52e8d8f001db51d"
+    },
+    {
+      "file": "base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca",
+      "normalized_formal_sha256": "6e8dca914d890d54b9ce9656e5aa8a4eae2261a6660ad0d620a465e49b917576"
+    },
+    {
+      "file": "base-c10-split/SPHINCS_PLUS.ec",
+      "normalized_formal_sha256": "56bbe5079fbf54f62c1ce3781af82b9c3b2545c72f3c72f7269395c7196a8509"
+    },
+    {
+      "file": "base-c10-split/TweakableHashFunctions.eca",
+      "normalized_formal_sha256": "abce80e6fd57242e8efc3efc3e6fcd83c5e2564f269af70409637d3523f839aa"
+    },
+    {
+      "file": "base-c10-split/WOTS_TW_ES.ec",
+      "normalized_formal_sha256": "108e2d4fa025bf2aa8af514e27cc0aca7bf8dfc518e2b048eb144c26b761cbd7"
+    },
+    {
+      "file": "cdrafts-split/BadEncCountermodel.ec",
+      "normalized_formal_sha256": "0ed3e8398e6d38214f3288fde1372fc1b43114939e9f049b70188a17b29a3e24"
+    },
+    {
+      "file": "cdrafts-split/BadEncSplit.ec",
+      "normalized_formal_sha256": "5c79036a2a5c2ab0e272287799ec838378bac09de6d9304abda017e8fdbe8dde"
+    },
+    {
+      "file": "cdrafts-split/BadEncStep4.ec",
+      "normalized_formal_sha256": "1f8bddd021d23c735c2ab5ce598076016230edba9937da1b8ddd7e38587e4972"
+    },
+    {
+      "file": "cdrafts-split/BadEncToTColl.ec",
+      "normalized_formal_sha256": "f9eea45f1a07de40f02001919d9d5236dae84fc3d462af7a6b03007d4abcd150"
+    },
+    {
+      "file": "cdrafts-split/C10BoundedGrind.ec",
+      "normalized_formal_sha256": "b530d5a7edc269df7e1a3ad0769877252b2ad24f998a741e1cc1214526ddcf0b"
+    },
+    {
+      "file": "cdrafts-split/C10Bytes.ec",
+      "normalized_formal_sha256": "f1c185e2932a3742345641916dbefda9ad508ee0b0c954815168f3e6fa5c4d29"
+    },
+    {
+      "file": "cdrafts-split/C10Counter.ec",
+      "normalized_formal_sha256": "d8433b1d561a47a1ebbeec96c751804d8201aa8e744137e010909ab4f17db5f1"
+    },
+    {
+      "file": "cdrafts-split/C10DeployedCapstone.ec",
+      "normalized_formal_sha256": "325950dc52830b8d0b1a1dd9bf3d17b2e5c079312155eea9d3e98f1eb35fa790"
+    },
+    {
+      "file": "cdrafts-split/C10DeployedGeometry.ec",
+      "normalized_formal_sha256": "13b9e69f6fae15075f73f41af05acadc0ae1a2bf85f8c0fd1a0a68ed1507b68c"
+    },
+    {
+      "file": "cdrafts-split/C10DeployedInstance.ec",
+      "normalized_formal_sha256": "8100162c02c407fb1d129b6c309cd2bbc8b8de1b375cfd678d7cff356598920e"
+    },
+    {
+      "file": "cdrafts-split/C10DeployedScope.ec",
+      "normalized_formal_sha256": "cc9f2dd94eb06a042f9ada4e28074f57f6cb666781bcd3aa8c140aeb12b3a6b6"
+    },
+    {
+      "file": "cdrafts-split/C10SpecControls.ec",
+      "normalized_formal_sha256": "ea57ff5dfa32c246f5006f7a0354ce4d5b70022b3c3bcc4fb22f60d6dd398269"
+    },
+    {
+      "file": "cdrafts-split/C10Surface.ec",
+      "normalized_formal_sha256": "0b717fc53b1c9c14b2fb2d5604b6e74cf59326b5249fb88cbf978a8cd76a3fc1"
+    },
+    {
+      "file": "cdrafts-split/C10SurfaceKernel.ec",
+      "normalized_formal_sha256": "d8fe5badf8b4c9953743e98352a6b39c5da2f48e7a8384242558ade05ea5ea17"
+    },
+    {
+      "file": "cdrafts-split/CountDS.ec",
+      "normalized_formal_sha256": "bb27b0200940ef950fa4d417fc7b7c38e39b75c4b3965b6f477d1a5e772c5a0c"
+    },
+    {
+      "file": "cdrafts-split/DarkSide.ec",
+      "normalized_formal_sha256": "7784f65c3c1464e8461c111234edbeb63bc7901fdcd053cccb1d338054a7ef89"
+    },
+    {
+      "file": "cdrafts-split/DarkSideC10.ec",
+      "normalized_formal_sha256": "b75d5e9feb741250005a0f700647309315ca692ad2a2d72e32eca40565b9052b"
+    },
+    {
+      "file": "cdrafts-split/FORS_C.ec",
+      "normalized_formal_sha256": "fc76ba0f1db0efb977c10eb9dabd04c7e16d5dd6127c21b05987e13c8396d175"
+    },
+    {
+      "file": "cdrafts-split/FORS_C10.ec",
+      "normalized_formal_sha256": "74e9c411cfcc1e12d9a80933f3555fa55bd8f9bbb501418d263940214e4df4a7"
+    },
+    {
+      "file": "cdrafts-split/FORS_C10_Multi.ec",
+      "normalized_formal_sha256": "26e81a94abc527fec95dfd8124e7b701112984b49096ff99775ea2f691c2bbda"
+    },
+    {
+      "file": "cdrafts-split/FORS_C_TreePort.ec",
+      "normalized_formal_sha256": "a508239ecf6cc8841831b75841b6ea8b212d0945c2a707cdae435de750a1e110"
+    },
+    {
+      "file": "cdrafts-split/FxChain.ec",
+      "normalized_formal_sha256": "40828d76502379a0309ee65308a524a23f63e0aca6429ff4c18eae41409a4c38"
+    },
+    {
+      "file": "cdrafts-split/GFailCharged.ec",
+      "normalized_formal_sha256": "62b00ac8547ee2dc251a6c29a04c9aada8cad35ecf6ced6f26f8470e4c266f7f"
+    },
+    {
+      "file": "cdrafts-split/GprocChargedQWired.ec",
+      "normalized_formal_sha256": "d1fefff68f93aac43713a9eba3d6541c54414d1b6dafba430cb625d95865f271"
+    },
+    {
+      "file": "cdrafts-split/GprocFORSC10.ec",
+      "normalized_formal_sha256": "a4d99fe1731126634a19e9544ce1b4bded1eeec3fef206480c96f8fe0e402639"
+    },
+    {
+      "file": "cdrafts-split/GprocQBound.ec",
+      "normalized_formal_sha256": "ec843d46aae283ad81ea709b6ad6733d1738e22dc0cc6a04607d3b096b54d29b"
+    },
+    {
+      "file": "cdrafts-split/GprocQWired.ec",
+      "normalized_formal_sha256": "248a7365347975b1e323889344f3dee2b8e7de595dc78a8627b0f0f7c4ccd8c8"
+    },
+    {
+      "file": "cdrafts-split/GprocT1Opre.ec",
+      "normalized_formal_sha256": "1616eeaed06d0443eccfe8b29b2f612b1f12c8567f2c430f20e790c7c8c131d2"
+    },
+    {
+      "file": "cdrafts-split/GprocT2Trh.ec",
+      "normalized_formal_sha256": "aafae73601d04854d3a756bd779a3d6accc75e26c858ecc17b16e5ddcdc9e571"
+    },
+    {
+      "file": "cdrafts-split/GprocT3Trco.ec",
+      "normalized_formal_sha256": "8562c42b6d4ceeb430c6ac6322c5f9163d0b95d1bea3b1b1f1b7b62b426f60dc"
+    },
+    {
+      "file": "cdrafts-split/GprocTCollNamed.ec",
+      "normalized_formal_sha256": "b4ca09f35b609150bd67c585a994e85c829b02c38ff5bad31f76e66ae212e70a"
+    },
+    {
+      "file": "cdrafts-split/GprocVI.ec",
+      "normalized_formal_sha256": "105fee1a64ea1d92958de4b0d6dfa540946839c6f9893b9cc7d74a384ad504e2"
+    },
+    {
+      "file": "cdrafts-split/GprocWotsNamed.ec",
+      "normalized_formal_sha256": "f75383e3e1794a63e8e6c76eee3389f34a3acda817ce77afc82c6d791eac9a24"
+    },
+    {
+      "file": "cdrafts-split/Grind.ec",
+      "normalized_formal_sha256": "f8d2af80d0443e7128fc6258e768a87e9cd7c8542a9a19f99f2dd1225191e4f9"
+    },
+    {
+      "file": "cdrafts-split/RtopCSoundness.ec",
+      "normalized_formal_sha256": "3184e3d5ebf2cfa4dbac682a7a4d8d0ee11d4da6c6081c594b19ec7c0a1b29cc"
+    },
+    {
+      "file": "cdrafts-split/STCR_C.ec",
+      "normalized_formal_sha256": "be985c61cad3b81180330df6bcf0cfff286c278997fabbc24e18f6d0bc958e84"
+    },
+    {
+      "file": "cdrafts-split/SphincsC10CapstoneCharged.ec",
+      "normalized_formal_sha256": "02823996cc51baa5a511a5b33704d1b33b867125abc9eb5dc537ff54e55c0bcc"
+    },
+    {
+      "file": "cdrafts-split/SphincsC10CapstoneWired.ec",
+      "normalized_formal_sha256": "391f1dfc64024fdee53620c18d4933830fe322477192eef28ad2f302b7c819a4"
+    },
+    {
+      "file": "cdrafts-split/SphincsC10Content.ec",
+      "normalized_formal_sha256": "433e41eba6a7b9041e9b4c88fc1cf062e513dccc192c621777adfce80459459e"
+    },
+    {
+      "file": "cdrafts-split/TCollResEnum.ec",
+      "normalized_formal_sha256": "12872bcf1ab6545012c3abb2a69eb7cd9fba5fbc3a419bd82ef62442d35043a6"
+    },
+    {
+      "file": "cdrafts-split/VecDP.ec",
+      "normalized_formal_sha256": "f54c60e6c40c2cfc069157395f242d08fcc0fa35e2d20142531da111bc739411"
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Interactive.ec",
+      "normalized_formal_sha256": "7e8fa955420156295e9960e105c103d86ae6b9b7a618b86ba36f49b10c6d6d90"
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Multi.ec",
+      "normalized_formal_sha256": "dd2d00bde69cb70314bbb65c591c1772b6390cb8ca9292ee3fb037c857c7f148"
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Real.ec",
+      "normalized_formal_sha256": "869215704208a4b82d35604aaa846af5333259c769712242714498dd8dc969f9"
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Reduction.ec",
+      "normalized_formal_sha256": "5ad70e4bdb816782e67ae0e288b70ab2806b013f35a51bffc2d1cbc28550adcf"
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Scheme.ec",
+      "normalized_formal_sha256": "9ebfa6dcfc27e237f11d360b52e2f9a4a551b987ce630ed21604bcad1dad3f63"
+    },
+    {
+      "file": "cdrafts-split/WotsLegCharged.ec",
+      "normalized_formal_sha256": "9c4a14e60ce91fd9d7075ce3c9da22ea3fcf40f02355cc84f012f5d7d72fa348"
+    },
+    {
+      "file": "cdrafts-split/XMSSMT_C_Scheme.ec",
+      "normalized_formal_sha256": "8ad9406e8ac89df99482cd03107638408a19f05b477c41123d633aebf0049535"
+    },
+    {
+      "file": "cdrafts-split/XmssmtCCCharged.ec",
+      "normalized_formal_sha256": "46e0640519ccc337c12e434a822b818da7cccfe72b2398809a07de8c8499dd03"
+    },
+    {
+      "file": "cdrafts-split/XmssmtCC_All.ec",
+      "normalized_formal_sha256": "82338353cc2158f72916c17bab925071021f51e6709b56b36dc642ba12e45a2d"
+    }
+  ],
+  "editorial_commit": "276d3c23374c5930136d2fb268d3f553cb79d465",
+  "editorial_input_identity": "2e65303618452c3b2117ec8dcdf0f877"
+}

@@ -19,6 +19,13 @@ is recorded separately because it has two mutually withheld first passes, two
 symmetric cross reports, and one coordinator synthesis rather than a single
 swarm row.
 
+### Executing receipts after the 2026-07-15 round
+
+| Round | Date | Surface reviewed | Depth | Findings | Verdict | Doc / commit |
+|---|---|---|---|---|---|---|
+| FV-KANI-ERC7730-PARAMS-2026-08-20 | 2026-08-20 | ERC-7730 Phase-D parameter harnesses in `pqsigner-erc7730/src/render/params.rs`: `params_native_currency_list_canonicality`, `params_interpolated_intent_executable_subset`, `params_nft_collection_path_current_slice` | `executing` | Evidence-hygiene re-run (issue #677): `cargo kani -p pqsigner-erc7730 --harness <name>` per harness, cargo-kani **0.67.0**, HEAD `666e3725` (erc7730 sources byte-identical to `0df6c928`; the tree additionally carries pre-existing uncommitted changes incl. `src/abi.rs`). All three **VERIFICATION:- SUCCESSFUL**. | No defect; the three Phase-D parameter proofs re-execute green at kani 0.67.0. | scripts/kani_mutations.json (the enrolled mutations pin these harnesses) + this row |
+| FV-KANI-MUTATION-REANCHOR-2026-08-20 | 2026-08-20 | Kani mutation-manifest rot remediation (issues #659/#662): `native_amount_exactness_helper_gate_dropped` re-anchored from the dac6fbd5-deleted helper to the shared predicate `amount_is_exact_at_fraction_digits` (`pqsigner-erc7730/src/display/primitives.rs`); `multisend_hidden_value` moved to a non-cumulative local-only `heavy` tier with `["--features", "kani-heavy"]` | `mutation-verified` | Scratch-worktree execution (HEAD `666e3725`, cargo-kani 0.67.0): the manifest's find/replace applied to `primitives.rs` -> `fmt_p0_native_amount_prepublication_decision_concrete` **VERIFICATION:- FAILED** (`assertion failed: !amount_is_exact_at_fraction_digits(&inexact, 18, 6)`); unmutated worktree baseline **SUCCESSFUL**; repo working tree **SUCCESSFUL**; mutation never landed in the repo. The static census (`verify-kani-census`) now fails a cfg-gated harness lacking matching z_flags (stripped-`z_flags` repro fires) and accepts cross-file mutation/harness pairs. `check_kani_mutations.py --list` shows the default and full tiers skip `multisend_hidden_value`; `--tier heavy` lists canary + that entry only. Heavy tier never CI-wired (13.05 GiB peak RSS vs 16 GB runners). | The re-anchored mutation is live (the harness is load-bearing for the exactness decision), the #662 cfg-gated class now dies statically, and the nightly default lane no longer meets the gated harness. | scripts/kani_mutations.json + scripts/kani_census.py + Makefile `verify-kani-mutation-heavy` |
+
 ### FV-FULL-STACK-2026-07-15
 
 | Artifact | Reviewer / depth | Frozen identity and result | Immutable report |

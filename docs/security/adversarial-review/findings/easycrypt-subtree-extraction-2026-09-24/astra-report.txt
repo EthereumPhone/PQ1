@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 7e099a632794c633ed14a9dc7a6e1bb0a3274f29 / ff6778bb8f7adb6b42ef78766b19c62640d735c5
+FINDINGS: none
+GAPS: No source-level correctness blocker found; the required unchanged-source full cold two-driver replay result remains outstanding before landing.

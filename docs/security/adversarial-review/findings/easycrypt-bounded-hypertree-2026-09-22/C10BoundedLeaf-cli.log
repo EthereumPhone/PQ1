@@ -1,0 +1,1793 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+------------------------------------------------------------------------
+(forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+   islossless OC.query => islossless A_ht(OC).choose) =>
+forall (O <: Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht})
+  (OC <: FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}),
+  islossless O.query =>
+  islossless OC.query =>
+  islossless R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht, O, OC).choose
+[5|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+------------------------------------------------------------------------
+(forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+   islossless OC.query => islossless A_ht(OC).choose) =>
+forall (O <: Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht})
+  (OC <: FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}),
+  islossless O.query =>
+  islossless OC.query =>
+  islossless R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht, O, OC).choose
+[6|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+------------------------------------------------------------------------
+pre = true
+
+    R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht, O, OC).choose 
+    [=] 1%r
+
+post = true
+[7|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre = true
+
+(1----------)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml <@ A_ht(OC).choose()                                    
+(2----------)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad <- adz                                                  
+(3----------)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd <- []                                             
+(4----------)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd <- []                                            
+(5----------)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd <- []                                             
+(6----------)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd <- []                                              
+(7----------)  while (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd < d) {                                
+(7. 1-------)    pkWOTSnt <- []                                                                       
+(7. 2-------)    sigcnt <- []                                                                         
+(7. 3-------)    leavesnt <- []                                                                       
+(7. 4-------)    rootsnt <- []                                                                        
+(7. 5-------)    rootsntp <-                                                                          
+(     ------)      last R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd            
+(7. 6-------)    while (size pkWOTSnt < nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd)) {       
+(7. 6. 1----)      pkWOTSlp <- []                                                                     
+(7. 6. 2----)      sigclp <- []                                                                       
+(7. 6. 3----)      leaveslp <- []                                                                     
+(7. 6. 4----)      while (size pkWOTSlp < l') {                                                       
+(7. 6. 4.1--)        root <- nth witness rootsntp (size pkWOTSnt * l' + size pkWOTSlp)                
+(7. 6. 4.2--)        (pkWOTS, sigc) <@                                                                
+(          -)          O.query(WAddress.insubd                                                        
+(          -)                    (set_kpidx                                                           
+(          -)                       (set_typeidx                                                      
+(          -)                          (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(          -)                             (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd)                 
+(          -)                             (size pkWOTSnt)) chtype) (size pkWOTSlp)), root)            
+(7. 6. 4.3--)        leaf <@                                                                          
+(          -)          OC.query(set_kpidx                                                             
+(          -)                     (set_typeidx                                                        
+(          -)                        (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                        
+(          -)                           (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))  
+(          -)                        pkcotype) (size pkWOTSlp),                                       
+(          -)            flatten (map DigestBlock.val (DBLL.val pkWOTS)))                             
+(7. 6. 4.4--)        pkWOTSlp <- rcons pkWOTSlp pkWOTS                                                
+(7. 6. 4.5--)        sigclp <- rcons sigclp sigc                                                      
+(7. 6. 4.6--)        leaveslp <- rcons leaveslp leaf                                                  
+(7. 6. 4----)      }                                                                                  
+(7. 6. 5----)      nodes <- []                                                                        
+(7. 6. 6----)      while (size nodes < h') {                                                          
+(7. 6. 6.1--)        nodespl <- last leaveslp nodes                                                   
+(7. 6. 6.2--)        nodescl <- []                                                                    
+(7. 6. 6.3--)        while (size nodescl < nr_nodesx (size nodes + 1)) {                              
+(7. 6. 6.3.1)          lnode <- nth witness nodespl (2 * size nodescl)                                
+(7. 6. 6.3.2)          rnode <- nth witness nodespl (2 * size nodescl + 1)                            
+(7. 6. 6.3.3)          node <@                                                                        
+(           )            OC.query(set_thtbidx                                                         
+(           )                       (set_typeidx                                                      
+(           )                          (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(           )                             (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))
+(           )                          trhxtype) (size nodes + 1) (size nodescl),                     
+(           )              DigestBlock.val lnode ++ DigestBlock.val rnode)                            
+(7. 6. 6.3.4)          nodescl <- rcons nodescl node                                                  
+(7. 6. 6.3--)        }                                                                                
+(7. 6. 6.4--)        nodes <- rcons nodes nodescl                                                     
+(7. 6. 6----)      }                                                                                  
+(7. 6. 7----)      pkWOTSnt <- rcons pkWOTSnt pkWOTSlp                                                
+(7. 6. 8----)      sigcnt <- rcons sigcnt sigclp                                                      
+(7. 6. 9----)      leavesnt <- rcons leavesnt leaveslp                                                
+(7. 6.10----)      rootsnt <- rcons rootsnt (nth witness (nth witness nodes (h' - 1)) 0)              
+(7. 6-------)    }                                                                                    
+(7. 7-------)    R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd <-                                              
+(     ------)      rcons R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd pkWOTSnt                                
+(7. 8-------)    R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd <-                                             
+(     ------)      rcons R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd sigcnt                                 
+(7. 9-------)    R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd <-                                              
+(     ------)      rcons R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd leavesnt                                
+(7.10-------)    R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd <-                                               
+(     ------)      rcons R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd rootsnt                                  
+(7----------)  }                                                                                      
+
+post = true
+[8|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+------------------------------------------------------------------------
+forall (z : int),
+  phoare[ pkWOTSnt <- []; ...; R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd <-
+             rcons R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd rootsnt :
+           size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd < d /\
+           d - size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd = z ==>
+           d - size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd < z] = 1%r
+[9|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre =
+  size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd < d /\
+  d - size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd = z
+
+(1-------)  pkWOTSnt <- []                                                                       
+(2-------)  sigcnt <- []                                                                         
+(3-------)  leavesnt <- []                                                                       
+(4-------)  rootsnt <- []                                                                        
+(5-------)  rootsntp <-                                                                          
+(  ------)    last R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd            
+(6-------)  while (size pkWOTSnt < nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd)) {       
+(6. 1----)    pkWOTSlp <- []                                                                     
+(6. 2----)    sigclp <- []                                                                       
+(6. 3----)    leaveslp <- []                                                                     
+(6. 4----)    while (size pkWOTSlp < l') {                                                       
+(6. 4.1--)      root <- nth witness rootsntp (size pkWOTSnt * l' + size pkWOTSlp)                
+(6. 4.2--)      (pkWOTS, sigc) <@                                                                
+(       -)        O.query(WAddress.insubd                                                        
+(       -)                  (set_kpidx                                                           
+(       -)                     (set_typeidx                                                      
+(       -)                        (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(       -)                           (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd)                 
+(       -)                           (size pkWOTSnt)) chtype) (size pkWOTSlp)), root)            
+(6. 4.3--)      leaf <@                                                                          
+(       -)        OC.query(set_kpidx                                                             
+(       -)                   (set_typeidx                                                        
+(       -)                      (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                        
+(       -)                         (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))  
+(       -)                      pkcotype) (size pkWOTSlp),                                       
+(       -)          flatten (map DigestBlock.val (DBLL.val pkWOTS)))                             
+(6. 4.4--)      pkWOTSlp <- rcons pkWOTSlp pkWOTS                                                
+(6. 4.5--)      sigclp <- rcons sigclp sigc                                                      
+(6. 4.6--)      leaveslp <- rcons leaveslp leaf                                                  
+(6. 4----)    }                                                                                  
+(6. 5----)    nodes <- []                                                                        
+(6. 6----)    while (size nodes < h') {                                                          
+(6. 6.1--)      nodespl <- last leaveslp nodes                                                   
+(6. 6.2--)      nodescl <- []                                                                    
+(6. 6.3--)      while (size nodescl < nr_nodesx (size nodes + 1)) {                              
+(6. 6.3.1)        lnode <- nth witness nodespl (2 * size nodescl)                                
+(6. 6.3.2)        rnode <- nth witness nodespl (2 * size nodescl + 1)                            
+(6. 6.3.3)        node <@                                                                        
+(        )          OC.query(set_thtbidx                                                         
+(        )                     (set_typeidx                                                      
+(        )                        (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(        )                           (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))
+(        )                        trhxtype) (size nodes + 1) (size nodescl),                     
+(        )            DigestBlock.val lnode ++ DigestBlock.val rnode)                            
+(6. 6.3.4)        nodescl <- rcons nodescl node                                                  
+(6. 6.3--)      }                                                                                
+(6. 6.4--)      nodes <- rcons nodes nodescl                                                     
+(6. 6----)    }                                                                                  
+(6. 7----)    pkWOTSnt <- rcons pkWOTSnt pkWOTSlp                                                
+(6. 8----)    sigcnt <- rcons sigcnt sigclp                                                      
+(6. 9----)    leavesnt <- rcons leavesnt leaveslp                                                
+(6.10----)    rootsnt <- rcons rootsnt (nth witness (nth witness nodes (h' - 1)) 0)              
+(6-------)  }                                                                                    
+
+post = d - size (rcons R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd pkWOTSnt) < z
+[10|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+------------------------------------------------------------------------
+forall (z0 : int),
+  phoare[ pkWOTSlp <- []; ...; rootsnt <-
+             rcons rootsnt (nth witness (nth witness nodes (h' - 1)) 0) :
+           size pkWOTSnt <
+           nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) /\
+           nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) -
+           size pkWOTSnt = z0 ==>
+           nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) -
+           size pkWOTSnt < z0] = 1%r
+[11|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre =
+  size pkWOTSnt < nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) /\
+  nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) - size pkWOTSnt = z1
+
+(1----)  pkWOTSlp <- []                                                                     
+(2----)  sigclp <- []                                                                       
+(3----)  leaveslp <- []                                                                     
+(4----)  while (size pkWOTSlp < l') {                                                       
+(4.1--)    root <- nth witness rootsntp (size pkWOTSnt * l' + size pkWOTSlp)                
+(4.2--)    (pkWOTS, sigc) <@                                                                
+(    -)      O.query(WAddress.insubd                                                        
+(    -)                (set_kpidx                                                           
+(    -)                   (set_typeidx                                                      
+(    -)                      (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(    -)                         (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd)                 
+(    -)                         (size pkWOTSnt)) chtype) (size pkWOTSlp)), root)            
+(4.3--)    leaf <@                                                                          
+(    -)      OC.query(set_kpidx                                                             
+(    -)                 (set_typeidx                                                        
+(    -)                    (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                        
+(    -)                       (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))  
+(    -)                    pkcotype) (size pkWOTSlp),                                       
+(    -)        flatten (map DigestBlock.val (DBLL.val pkWOTS)))                             
+(4.4--)    pkWOTSlp <- rcons pkWOTSlp pkWOTS                                                
+(4.5--)    sigclp <- rcons sigclp sigc                                                      
+(4.6--)    leaveslp <- rcons leaveslp leaf                                                  
+(4----)  }                                                                                  
+(5----)  nodes <- []                                                                        
+(6----)  while (size nodes < h') {                                                          
+(6.1--)    nodespl <- last leaveslp nodes                                                   
+(6.2--)    nodescl <- []                                                                    
+(6.3--)    while (size nodescl < nr_nodesx (size nodes + 1)) {                              
+(6.3.1)      lnode <- nth witness nodespl (2 * size nodescl)                                
+(6.3.2)      rnode <- nth witness nodespl (2 * size nodescl + 1)                            
+(6.3.3)      node <@                                                                        
+(     )        OC.query(set_thtbidx                                                         
+(     )                   (set_typeidx                                                      
+(     )                      (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(     )                         (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))
+(     )                      trhxtype) (size nodes + 1) (size nodescl),                     
+(     )          DigestBlock.val lnode ++ DigestBlock.val rnode)                            
+(6.3.4)      nodescl <- rcons nodescl node                                                  
+(6.3--)    }                                                                                
+(6.4--)    nodes <- rcons nodes nodescl                                                     
+(6----)  }                                                                                  
+
+post =
+  nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) -
+  size (rcons pkWOTSnt pkWOTSlp) < z1
+[12|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+------------------------------------------------------------------------
+forall (z0 : int),
+  phoare[ nodespl <- last leaveslp nodes; ...; nodes <- rcons nodes nodescl :
+           size nodes < h' /\ h' - size nodes = z0 ==> h' - size nodes < z0] = 1%r
+[13|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+z2: int
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre = size nodes < h' /\ h' - size nodes = z2
+
+(1--)  nodespl <- last leaveslp nodes                                                   
+(2--)  nodescl <- []                                                                    
+(3--)  while (size nodescl < nr_nodesx (size nodes + 1)) {                              
+(3.1)    lnode <- nth witness nodespl (2 * size nodescl)                                
+(3.2)    rnode <- nth witness nodespl (2 * size nodescl + 1)                            
+(3.3)    node <@                                                                        
+(   )      OC.query(set_thtbidx                                                         
+(   )                 (set_typeidx                                                      
+(   )                    (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(   )                       (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))
+(   )                    trhxtype) (size nodes + 1) (size nodescl),                     
+(   )        DigestBlock.val lnode ++ DigestBlock.val rnode)                            
+(3.4)    nodescl <- rcons nodescl node                                                  
+(3--)  }                                                                                
+
+post = h' - size (rcons nodes nodescl) < z2
+[14|check]>
+Current goal (remaining: 5)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+z2: int
+------------------------------------------------------------------------
+forall (z0 : int),
+  phoare[ lnode <- nth witness nodespl (2 * size nodescl); ...; nodescl <-
+             rcons nodescl node :
+           size nodescl < nr_nodesx (size nodes + 1) /\
+           nr_nodesx (size nodes + 1) - size nodescl = z0 ==>
+           nr_nodesx (size nodes + 1) - size nodescl < z0] = 1%r
+[15|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+z2: int
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre = size nodes < h' /\ h' - size nodes = z2
+
+(1)  nodespl <- last leaveslp nodes
+(2)  nodescl <- []                 
+
+post =
+  forall (nodescl0 : dgstblock list),
+    (nr_nodesx (size nodes + 1) - size nodescl0 <= 0 =>
+     ! size nodescl0 < nr_nodesx (size nodes + 1)) /\
+    (! size nodescl0 < nr_nodesx (size nodes + 1) =>
+     h' - size (rcons nodes nodescl0) < z2)
+[16|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre =
+  size pkWOTSnt < nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) /\
+  nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) - size pkWOTSnt = z1
+
+(1--)  pkWOTSlp <- []                                                                   
+(2--)  sigclp <- []                                                                     
+(3--)  leaveslp <- []                                                                   
+(4--)  while (size pkWOTSlp < l') {                                                     
+(4.1)    root <- nth witness rootsntp (size pkWOTSnt * l' + size pkWOTSlp)              
+(4.2)    (pkWOTS, sigc) <@                                                              
+(   )      O.query(WAddress.insubd                                                      
+(   )                (set_kpidx                                                         
+(   )                   (set_typeidx                                                    
+(   )                      (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                    
+(   )                         (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd)               
+(   )                         (size pkWOTSnt)) chtype) (size pkWOTSlp)), root)          
+(4.3)    leaf <@                                                                        
+(   )      OC.query(set_kpidx                                                           
+(   )                 (set_typeidx                                                      
+(   )                    (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(   )                       (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))
+(   )                    pkcotype) (size pkWOTSlp),                                     
+(   )        flatten (map DigestBlock.val (DBLL.val pkWOTS)))                           
+(4.4)    pkWOTSlp <- rcons pkWOTSlp pkWOTS                                              
+(4.5)    sigclp <- rcons sigclp sigc                                                    
+(4.6)    leaveslp <- rcons leaveslp leaf                                                
+(4--)  }                                                                                
+(5--)  nodes <- []                                                                      
+
+post =
+  forall (nodes0 : dgstblock list list),
+    (h' - size nodes0 <= 0 => ! size nodes0 < h') /\
+    (! size nodes0 < h' =>
+     nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) -
+     size (rcons pkWOTSnt pkWOTSlp) < z1)
+[17|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre =
+  size pkWOTSnt < nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) /\
+  nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) - size pkWOTSnt = z1
+
+(1--)  pkWOTSlp <- []                                                                   
+(2--)  sigclp <- []                                                                     
+(3--)  leaveslp <- []                                                                   
+(4--)  while (size pkWOTSlp < l') {                                                     
+(4.1)    root <- nth witness rootsntp (size pkWOTSnt * l' + size pkWOTSlp)              
+(4.2)    (pkWOTS, sigc) <@                                                              
+(   )      O.query(WAddress.insubd                                                      
+(   )                (set_kpidx                                                         
+(   )                   (set_typeidx                                                    
+(   )                      (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                    
+(   )                         (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd)               
+(   )                         (size pkWOTSnt)) chtype) (size pkWOTSlp)), root)          
+(4.3)    leaf <@                                                                        
+(   )      OC.query(set_kpidx                                                           
+(   )                 (set_typeidx                                                      
+(   )                    (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad                      
+(   )                       (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) (size pkWOTSnt))
+(   )                    pkcotype) (size pkWOTSlp),                                     
+(   )        flatten (map DigestBlock.val (DBLL.val pkWOTS)))                           
+(4.4)    pkWOTSlp <- rcons pkWOTSlp pkWOTS                                              
+(4.5)    sigclp <- rcons sigclp sigc                                                    
+(4.6)    leaveslp <- rcons leaveslp leaf                                                
+(4--)  }                                                                                
+
+post =
+  forall (nodes0 : dgstblock list list),
+    (h' - size nodes0 <= 0 => ! size nodes0 < h') /\
+    (! size nodes0 < h' =>
+     nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) -
+     size (rcons pkWOTSnt pkWOTSlp) < z1)
+[18|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+------------------------------------------------------------------------
+forall (z0 : int),
+  phoare[ root <- nth witness rootsntp (size pkWOTSnt * l' + size pkWOTSlp);
+           ...; leaveslp <- rcons leaveslp leaf :
+           size pkWOTSlp < l' /\ l' - size pkWOTSlp = z0 ==>
+           l' - size pkWOTSlp < z0] = 1%r
+[19|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+z1: int
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre =
+  size pkWOTSnt < nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) /\
+  nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) - size pkWOTSnt = z1
+
+(1)  pkWOTSlp <- []           
+(2)  sigclp <- []             
+(3)  leaveslp <- []           
+
+post =
+  forall (pkWOTSlp0 : pkWOTS list),
+    (l' - size pkWOTSlp0 <= 0 => ! size pkWOTSlp0 < l') /\
+    (! size pkWOTSlp0 < l' =>
+     forall (nodes0 : dgstblock list list),
+       (h' - size nodes0 <= 0 => ! size nodes0 < h') /\
+       (! size nodes0 < h' =>
+        nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) -
+        size (rcons pkWOTSnt pkWOTSlp0) < z1))
+[20|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+z: int
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre =
+  size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd < d /\
+  d - size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd = z
+
+(1)  pkWOTSnt <- []                                                           
+(2)  sigcnt <- []                                                             
+(3)  leavesnt <- []                                                           
+(4)  rootsnt <- []                                                            
+(5)  rootsntp <-                                                              
+( )    last R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd
+
+post =
+  forall (pkWOTSnt0 : pkWOTS list list),
+    (nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) - size pkWOTSnt0 <=
+     0 =>
+     ! size pkWOTSnt0 < nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd)) /\
+    (! size pkWOTSnt0 < nr_trees (size R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd) =>
+     d - size (rcons R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd pkWOTSnt0) < z)
+[21|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_choose_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+               islossless OC.query => islossless A_ht(OC).choose
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+Oll: islossless O.query
+OCll: islossless OC.query
+------------------------------------------------------------------------
+Context : hr: {leaf, root, lnode, rnode, node : dgstblock,
+              leaveslp, rootsnt, rootsntp, nodespl, nodescl : dgstblock list,
+              leavesnt, nodes : dgstblock list list, pkWOTS : pkWOTS,
+              sigc : sigWOTS * cntr, pkWOTSlp : pkWOTS list,
+              pkWOTSnt : pkWOTS list list, sigclp : (sigWOTS * cntr) list,
+              sigcnt : (sigWOTS * cntr) list list}
+Bound   : [=] 1%r
+
+pre = true
+
+(1)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml <@ A_ht(OC).choose()
+(2)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad <- adz              
+(3)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd <- []         
+(4)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd <- []        
+(5)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd <- []         
+(6)  R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd <- []          
+
+post =
+  forall (pkWOTStd : pkWOTS list list list),
+    (d - size pkWOTStd <= 0 => ! size pkWOTStd < d) /\ true
+[22|check]>
+No more goals
+[23|check]>
+[24|check]>
+added lemma: `bounded_leaf_choose_ll'
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+------------------------------------------------------------------------
+(forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge) =>
+forall (O <: Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht})
+  (OC <: FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}),
+  islossless R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht, O, OC).forge
+[25|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+------------------------------------------------------------------------
+(forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge) =>
+forall (O <: Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht})
+  (OC <: FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}),
+  islossless R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht, O, OC).forge
+[26|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+------------------------------------------------------------------------
+pre = true
+
+    R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht, O, OC).forge 
+    [=] 1%r
+
+post = true
+[27|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = true
+
+( 1-----)  sigl <- []                                                                        
+( 2-----)  while (size sigl < l) {                                                           
+( 2. 1--)    m <- nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (size sigl)                     
+( 2. 2--)    sapl <- []                                                                      
+( 2. 3--)    (tidx, kpidx) <- (size sigl, 0)                                                 
+( 2. 4--)    while (size sapl < d) {                                                         
+( 2. 4.1)      (tidx, kpidx) <- IntDiv.edivz tidx l'                                         
+( 2. 4.2)      sigc <-                                                                       
+(       )        nth witness                                                                 
+(       )          (nth witness                                                              
+(       )             (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd (size sapl)) tidx)  
+(       )          kpidx                                                                     
+( 2. 4.3)      leaves <-                                                                     
+(       )        nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd (size sapl))  
+(       )          tidx                                                                      
+( 2. 4.4)      ap <-                                                                         
+(       )        cons_ap_trh ps                                                              
+(       )          (set_typeidx (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size sapl) tidx)  
+(       )             trhxtype) (BinaryTrees.list2tree leaves) kpidx                         
+( 2. 4.5)      sapl <- rcons sapl (sigc, ap)                                                 
+( 2. 4--)    }                                                                               
+( 2. 5--)    sig <- sapl                                                                     
+( 2. 6--)    sigl <- rcons sigl sig                                                          
+( 2-----)  }                                                                                 
+( 3-----)  root <- nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd (d - 1)) 0   
+( 4-----)  (m', sig', idx') <@                                                               
+(   ----)    A_ht(OC).forge((root, ps, R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad), sigl)                
+( 5-----)  (tidx, kpidx) <- (Index.val idx', 0)                                              
+( 6-----)  root' <- m'                                                                       
+( 7-----)  tkpidxs <- []                                                                     
+( 8-----)  pkWOTSs <- []                                                                     
+( 9-----)  rootss <- []                                                                      
+(10-----)  pkWOTSs' <- []                                                                    
+(11-----)  rootss' <- []                                                                     
+(12-----)  while (size pkWOTSs' < d) {                                                       
+(12. 1--)    (tidx, kpidx) <- IntDiv.edivz tidx l'                                           
+(12. 2--)    (sigc', ap') <- nth witness sig' (size pkWOTSs')                                
+(12. 3--)    m0 <- root'                                                                     
+(12. 4--)    sigWOTS <- sigc'.`1                                                             
+(12. 5--)    counter <- sigc'.`2                                                             
+(12. 6--)    ps0 <- ps                                                                       
+(12. 7--)    ad <-                                                                           
+(      -)      set_kpidx                                                                     
+(      -)        (set_typeidx                                                                
+(      -)           (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx) chtype)  
+(      -)        kpidx                                                                       
+(12. 8--)    em <- encode_msgWOTS_C ps0 ad m0 counter                                        
+(12. 9--)    pkWOTS_l <- []                                                                  
+(12.10--)    while (size pkWOTS_l < len) {                                                   
+(12.10.1)      sig_ele <- nth witness (DBLL.val sigWOTS) (size pkWOTS_l)                     
+(12.10.2)      em_ele <- BaseW.val em.[size pkWOTS_l]                                        
+(12.10.3)      pkWOTS_ele <-                                                                 
+(       )        cf ps0 (set_chidx ad (size pkWOTS_l)) em_ele (w - 1 - em_ele)               
+(       )          (DigestBlock.val sig_ele)                                                 
+(12.10.4)      pkWOTS_l <- rcons pkWOTS_l pkWOTS_ele                                         
+(12.10--)    }                                                                               
+(12.11--)    okC0 <- predC (ThC ps0 ad m0 counter)                                           
+(12.12--)    (pkWOTS', okC) <- (DBLL.insubd pkWOTS_l, okC0)                                  
+(12.13--)    pkWOTS <-                                                                       
+(      -)      nth witness                                                                   
+(      -)        (nth witness                                                                
+(      -)           (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd (size pkWOTSs')) tidx) 
+(      -)        kpidx                                                                       
+(12.14--)    leaf' <-                                                                        
+(      -)      pkco ps                                                                       
+(      -)        (set_kpidx                                                                  
+(      -)           (set_typeidx                                                             
+(      -)              (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx)       
+(      -)              pkcotype) kpidx) (flatten (map DigestBlock.val (DBLL.val pkWOTS')))   
+(12.15--)    root' <-                                                                        
+(      -)      val_ap_trh ps                                                                 
+(      -)        (set_typeidx                                                                
+(      -)           (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx) trhxtype)
+(      -)        ap' kpidx leaf'                                                             
+(12.16--)    root <-                                                                         
+(      -)      nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd (size pkWOTSs')) 
+(      -)        tidx                                                                        
+(12.17--)    tkpidxs <- rcons tkpidxs (tidx, kpidx)                                          
+(12.18--)    pkWOTSs <- rcons pkWOTSs pkWOTS                                                 
+(12.19--)    rootss <- rcons rootss root                                                     
+(12.20--)    pkWOTSs' <- rcons pkWOTSs' pkWOTS'                                              
+(12.21--)    rootss' <- rcons rootss' root'                                                  
+(12-----)  }                                                                                 
+(13-----)  cidx <-                                                                           
+(   ----)    find                                                                            
+(   ----)      (fun (x : ((pkWOTS * pkWOTS) * msgFLSLXMSSMTTW) * msgFLSLXMSSMTTW) =>         
+(   ----)         x.`1.`1.`1 = x.`1.`1.`2 /\ x.`1.`2 <> x.`2)                                
+(   ----)      (zip (zip (zip pkWOTSs' pkWOTSs) (m' :: rootss'))                             
+(   ----)         (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (Index.val idx') :: rootss))   
+(14-----)  (tidx, kpidx) <- nth witness tkpidxs cidx                                         
+(15-----)  fidx <-                                                                           
+(   ----)    StdBigop.Bigint.BIA.bigi predT (fun (i : int) => nr_trees i) 0 cidx * l' +      
+(   ----)    tidx * l' + kpidx                                                               
+(16-----)  root' <- nth witness (m' :: rootss') cidx                                         
+(17-----)  sigc' <- (nth witness sig' cidx).`1                                               
+
+post = true
+[28|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = true
+
+( 1-----)  sigl <- []                                                                        
+( 2-----)  while (size sigl < l) {                                                           
+( 2. 1--)    m <- nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (size sigl)                     
+( 2. 2--)    sapl <- []                                                                      
+( 2. 3--)    (tidx, kpidx) <- (size sigl, 0)                                                 
+( 2. 4--)    while (size sapl < d) {                                                         
+( 2. 4.1)      (tidx, kpidx) <- IntDiv.edivz tidx l'                                         
+( 2. 4.2)      sigc <-                                                                       
+(       )        nth witness                                                                 
+(       )          (nth witness                                                              
+(       )             (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd (size sapl)) tidx)  
+(       )          kpidx                                                                     
+( 2. 4.3)      leaves <-                                                                     
+(       )        nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd (size sapl))  
+(       )          tidx                                                                      
+( 2. 4.4)      ap <-                                                                         
+(       )        cons_ap_trh ps                                                              
+(       )          (set_typeidx (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size sapl) tidx)  
+(       )             trhxtype) (BinaryTrees.list2tree leaves) kpidx                         
+( 2. 4.5)      sapl <- rcons sapl (sigc, ap)                                                 
+( 2. 4--)    }                                                                               
+( 2. 5--)    sig <- sapl                                                                     
+( 2. 6--)    sigl <- rcons sigl sig                                                          
+( 2-----)  }                                                                                 
+( 3-----)  root <- nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd (d - 1)) 0   
+( 4-----)  (m', sig', idx') <@                                                               
+(   ----)    A_ht(OC).forge((root, ps, R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad), sigl)                
+( 5-----)  (tidx, kpidx) <- (Index.val idx', 0)                                              
+( 6-----)  root' <- m'                                                                       
+( 7-----)  tkpidxs <- []                                                                     
+( 8-----)  pkWOTSs <- []                                                                     
+( 9-----)  rootss <- []                                                                      
+(10-----)  pkWOTSs' <- []                                                                    
+(11-----)  rootss' <- []                                                                     
+(12-----)  while (size pkWOTSs' < d) {                                                       
+(12. 1--)    (tidx, kpidx) <- IntDiv.edivz tidx l'                                           
+(12. 2--)    (sigc', ap') <- nth witness sig' (size pkWOTSs')                                
+(12. 3--)    m0 <- root'                                                                     
+(12. 4--)    sigWOTS <- sigc'.`1                                                             
+(12. 5--)    counter <- sigc'.`2                                                             
+(12. 6--)    ps0 <- ps                                                                       
+(12. 7--)    ad <-                                                                           
+(      -)      set_kpidx                                                                     
+(      -)        (set_typeidx                                                                
+(      -)           (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx) chtype)  
+(      -)        kpidx                                                                       
+(12. 8--)    em <- encode_msgWOTS_C ps0 ad m0 counter                                        
+(12. 9--)    pkWOTS_l <- []                                                                  
+(12.10--)    while (size pkWOTS_l < len) {                                                   
+(12.10.1)      sig_ele <- nth witness (DBLL.val sigWOTS) (size pkWOTS_l)                     
+(12.10.2)      em_ele <- BaseW.val em.[size pkWOTS_l]                                        
+(12.10.3)      pkWOTS_ele <-                                                                 
+(       )        cf ps0 (set_chidx ad (size pkWOTS_l)) em_ele (w - 1 - em_ele)               
+(       )          (DigestBlock.val sig_ele)                                                 
+(12.10.4)      pkWOTS_l <- rcons pkWOTS_l pkWOTS_ele                                         
+(12.10--)    }                                                                               
+(12.11--)    okC0 <- predC (ThC ps0 ad m0 counter)                                           
+(12.12--)    (pkWOTS', okC) <- (DBLL.insubd pkWOTS_l, okC0)                                  
+(12.13--)    pkWOTS <-                                                                       
+(      -)      nth witness                                                                   
+(      -)        (nth witness                                                                
+(      -)           (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd (size pkWOTSs')) tidx) 
+(      -)        kpidx                                                                       
+(12.14--)    leaf' <-                                                                        
+(      -)      pkco ps                                                                       
+(      -)        (set_kpidx                                                                  
+(      -)           (set_typeidx                                                             
+(      -)              (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx)       
+(      -)              pkcotype) kpidx) (flatten (map DigestBlock.val (DBLL.val pkWOTS')))   
+(12.15--)    root' <-                                                                        
+(      -)      val_ap_trh ps                                                                 
+(      -)        (set_typeidx                                                                
+(      -)           (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx) trhxtype)
+(      -)        ap' kpidx leaf'                                                             
+(12.16--)    root <-                                                                         
+(      -)      nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd (size pkWOTSs')) 
+(      -)        tidx                                                                        
+(12.17--)    tkpidxs <- rcons tkpidxs (tidx, kpidx)                                          
+(12.18--)    pkWOTSs <- rcons pkWOTSs pkWOTS                                                 
+(12.19--)    rootss <- rcons rootss root                                                     
+(12.20--)    pkWOTSs' <- rcons pkWOTSs' pkWOTS'                                              
+(12.21--)    rootss' <- rcons rootss' root'                                                  
+(12-----)  }                                                                                 
+(13-----)  cidx <-                                                                           
+(   ----)    find                                                                            
+(   ----)      (fun (x : ((pkWOTS * pkWOTS) * msgFLSLXMSSMTTW) * msgFLSLXMSSMTTW) =>         
+(   ----)         x.`1.`1.`1 = x.`1.`1.`2 /\ x.`1.`2 <> x.`2)                                
+(   ----)      (zip (zip (zip pkWOTSs' pkWOTSs) (m' :: rootss'))                             
+(   ----)         (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (Index.val idx') :: rootss))   
+(14-----)  (tidx, kpidx) <- nth witness tkpidxs cidx                                         
+(15-----)  fidx <-                                                                           
+(   ----)    StdBigop.Bigint.BIA.bigi predT (fun (i : int) => nr_trees i) 0 cidx * l' +      
+(   ----)    tidx * l' + kpidx                                                               
+(16-----)  root' <- nth witness (m' :: rootss') cidx                                         
+(17-----)  sigc' <- (nth witness sig' cidx).`1                                               
+
+post = true
+[29|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = true
+
+( 1-----)  sigl <- []                                                                        
+( 2-----)  while (size sigl < l) {                                                           
+( 2. 1--)    m <- nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (size sigl)                     
+( 2. 2--)    sapl <- []                                                                      
+( 2. 3--)    (tidx, kpidx) <- (size sigl, 0)                                                 
+( 2. 4--)    while (size sapl < d) {                                                         
+( 2. 4.1)      (tidx, kpidx) <- IntDiv.edivz tidx l'                                         
+( 2. 4.2)      sigc <-                                                                       
+(       )        nth witness                                                                 
+(       )          (nth witness                                                              
+(       )             (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd (size sapl)) tidx)  
+(       )          kpidx                                                                     
+( 2. 4.3)      leaves <-                                                                     
+(       )        nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd (size sapl))  
+(       )          tidx                                                                      
+( 2. 4.4)      ap <-                                                                         
+(       )        cons_ap_trh ps                                                              
+(       )          (set_typeidx (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size sapl) tidx)  
+(       )             trhxtype) (BinaryTrees.list2tree leaves) kpidx                         
+( 2. 4.5)      sapl <- rcons sapl (sigc, ap)                                                 
+( 2. 4--)    }                                                                               
+( 2. 5--)    sig <- sapl                                                                     
+( 2. 6--)    sigl <- rcons sigl sig                                                          
+( 2-----)  }                                                                                 
+( 3-----)  root <- nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd (d - 1)) 0   
+( 4-----)  (m', sig', idx') <@                                                               
+(   ----)    A_ht(OC).forge((root, ps, R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad), sigl)                
+( 5-----)  (tidx, kpidx) <- (Index.val idx', 0)                                              
+( 6-----)  root' <- m'                                                                       
+( 7-----)  tkpidxs <- []                                                                     
+( 8-----)  pkWOTSs <- []                                                                     
+( 9-----)  rootss <- []                                                                      
+(10-----)  pkWOTSs' <- []                                                                    
+(11-----)  rootss' <- []                                                                     
+(12-----)  while (size pkWOTSs' < d) {                                                       
+(12. 1--)    (tidx, kpidx) <- IntDiv.edivz tidx l'                                           
+(12. 2--)    (sigc', ap') <- nth witness sig' (size pkWOTSs')                                
+(12. 3--)    m0 <- root'                                                                     
+(12. 4--)    sigWOTS <- sigc'.`1                                                             
+(12. 5--)    counter <- sigc'.`2                                                             
+(12. 6--)    ps0 <- ps                                                                       
+(12. 7--)    ad <-                                                                           
+(      -)      set_kpidx                                                                     
+(      -)        (set_typeidx                                                                
+(      -)           (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx) chtype)  
+(      -)        kpidx                                                                       
+(12. 8--)    em <- encode_msgWOTS_C ps0 ad m0 counter                                        
+(12. 9--)    pkWOTS_l <- []                                                                  
+(12.10--)    while (size pkWOTS_l < len) {                                                   
+(12.10.1)      sig_ele <- nth witness (DBLL.val sigWOTS) (size pkWOTS_l)                     
+(12.10.2)      em_ele <- BaseW.val em.[size pkWOTS_l]                                        
+(12.10.3)      pkWOTS_ele <-                                                                 
+(       )        cf ps0 (set_chidx ad (size pkWOTS_l)) em_ele (w - 1 - em_ele)               
+(       )          (DigestBlock.val sig_ele)                                                 
+(12.10.4)      pkWOTS_l <- rcons pkWOTS_l pkWOTS_ele                                         
+(12.10--)    }                                                                               
+(12.11--)    okC0 <- predC (ThC ps0 ad m0 counter)                                           
+(12.12--)    (pkWOTS', okC) <- (DBLL.insubd pkWOTS_l, okC0)                                  
+(12.13--)    pkWOTS <-                                                                       
+(      -)      nth witness                                                                   
+(      -)        (nth witness                                                                
+(      -)           (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.pkWOTStd (size pkWOTSs')) tidx) 
+(      -)        kpidx                                                                       
+(12.14--)    leaf' <-                                                                        
+(      -)      pkco ps                                                                       
+(      -)        (set_kpidx                                                                  
+(      -)           (set_typeidx                                                             
+(      -)              (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx)       
+(      -)              pkcotype) kpidx) (flatten (map DigestBlock.val (DBLL.val pkWOTS')))   
+(12.15--)    root' <-                                                                        
+(      -)      val_ap_trh ps                                                                 
+(      -)        (set_typeidx                                                                
+(      -)           (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx) trhxtype)
+(      -)        ap' kpidx leaf'                                                             
+(12.16--)    root <-                                                                         
+(      -)      nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd (size pkWOTSs')) 
+(      -)        tidx                                                                        
+(12.17--)    tkpidxs <- rcons tkpidxs (tidx, kpidx)                                          
+(12.18--)    pkWOTSs <- rcons pkWOTSs pkWOTS                                                 
+(12.19--)    rootss <- rcons rootss root                                                     
+(12.20--)    pkWOTSs' <- rcons pkWOTSs' pkWOTS'                                              
+(12.21--)    rootss' <- rcons rootss' root'                                                  
+(12-----)  }                                                                                 
+
+post =
+  let cidx0 =
+    find
+      (fun (x : ((pkWOTS * pkWOTS) * msgFLSLXMSSMTTW) * msgFLSLXMSSMTTW) =>
+         x.`1.`1.`1 = x.`1.`1.`2 /\ x.`1.`2 <> x.`2)
+      (zip (zip (zip pkWOTSs' pkWOTSs) (m' :: rootss'))
+         (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (Index.val idx') :: rootss))
+  in let _ = nth witness tkpidxs cidx0 in true
+[30|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+------------------------------------------------------------------------
+forall (z : int),
+  phoare[ (tidx, kpidx) <- IntDiv.edivz tidx l'; ...; rootss' <-
+             rcons rootss' root' :
+           size pkWOTSs' < d /\ dd - size pkWOTSs' = z ==>
+           dd - size pkWOTSs' < z] = 1%r
+[31|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+z: int
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = size pkWOTSs' < d /\ dd - size pkWOTSs' = z
+
+( 1--)  (tidx, kpidx) <- IntDiv.edivz tidx l'                                         
+( 2--)  (sigc', ap') <- nth witness sig' (size pkWOTSs')                              
+( 3--)  m0 <- root'                                                                   
+( 4--)  sigWOTS <- sigc'.`1                                                           
+( 5--)  counter <- sigc'.`2                                                           
+( 6--)  ps0 <- ps                                                                     
+( 7--)  ad <-                                                                         
+(   -)    set_kpidx                                                                   
+(   -)      (set_typeidx                                                              
+(   -)         (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx) chtype)
+(   -)      kpidx                                                                     
+( 8--)  em <- encode_msgWOTS_C ps0 ad m0 counter                                      
+( 9--)  pkWOTS_l <- []                                                                
+(10--)  while (size pkWOTS_l < len) {                                                 
+(10.1)    sig_ele <- nth witness (DBLL.val sigWOTS) (size pkWOTS_l)                   
+(10.2)    em_ele <- BaseW.val em.[size pkWOTS_l]                                      
+(10.3)    pkWOTS_ele <-                                                               
+(    )      cf ps0 (set_chidx ad (size pkWOTS_l)) em_ele (w - 1 - em_ele)             
+(    )        (DigestBlock.val sig_ele)                                               
+(10.4)    pkWOTS_l <- rcons pkWOTS_l pkWOTS_ele                                       
+(10--)  }                                                                             
+
+post =
+  let pkWOTS'0 = DBLL.insubd pkWOTS_l in
+  dd - size (rcons pkWOTSs' pkWOTS'0) < z
+[32|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+z: int
+------------------------------------------------------------------------
+forall (z0 : int),
+  phoare[ sig_ele <- nth witness (DBLL.val sigWOTS) (size pkWOTS_l); ...;
+           pkWOTS_l <- rcons pkWOTS_l pkWOTS_ele :
+           size pkWOTS_l < len /\ len - size pkWOTS_l = z0 ==>
+           len - size pkWOTS_l < z0] = 1%r
+[33|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+z: int
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = size pkWOTSs' < d /\ dd - size pkWOTSs' = z
+
+(1)  (tidx, kpidx) <- IntDiv.edivz tidx l'                                         
+(2)  (sigc', ap') <- nth witness sig' (size pkWOTSs')                              
+(3)  m0 <- root'                                                                   
+(4)  sigWOTS <- sigc'.`1                                                           
+(5)  counter <- sigc'.`2                                                           
+(6)  ps0 <- ps                                                                     
+(7)  ad <-                                                                         
+( )    set_kpidx                                                                   
+( )      (set_typeidx                                                              
+( )         (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size pkWOTSs') tidx) chtype)
+( )      kpidx                                                                     
+(8)  em <- encode_msgWOTS_C ps0 ad m0 counter                                      
+(9)  pkWOTS_l <- []                                                                
+
+post =
+  forall (pkWOTS_l0 : dgstblock list),
+    (len - size pkWOTS_l0 <= 0 => ! size pkWOTS_l0 < len) /\
+    (! size pkWOTS_l0 < len =>
+     let pkWOTS'0 = DBLL.insubd pkWOTS_l0 in
+     dd - size (rcons pkWOTSs' pkWOTS'0) < z)
+[34|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = true
+
+( 1----)  sigl <- []                                                                      
+( 2----)  while (size sigl < l) {                                                         
+( 2.1--)    m <- nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (size sigl)                   
+( 2.2--)    sapl <- []                                                                    
+( 2.3--)    (tidx, kpidx) <- (size sigl, 0)                                               
+( 2.4--)    while (size sapl < d) {                                                       
+( 2.4.1)      (tidx, kpidx) <- IntDiv.edivz tidx l'                                       
+( 2.4.2)      sigc <-                                                                     
+(      )        nth witness                                                               
+(      )          (nth witness                                                            
+(      )             (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd (size sapl)) tidx)
+(      )          kpidx                                                                   
+( 2.4.3)      leaves <-                                                                   
+(      )        nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd (size sapl))
+(      )          tidx                                                                    
+( 2.4.4)      ap <-                                                                       
+(      )        cons_ap_trh ps                                                            
+(      )          (set_typeidx (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size sapl) tidx)
+(      )             trhxtype) (BinaryTrees.list2tree leaves) kpidx                       
+( 2.4.5)      sapl <- rcons sapl (sigc, ap)                                               
+( 2.4--)    }                                                                             
+( 2.5--)    sig <- sapl                                                                   
+( 2.6--)    sigl <- rcons sigl sig                                                        
+( 2----)  }                                                                               
+( 3----)  root <- nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.rootstd (d - 1)) 0 
+( 4----)  (m', sig', idx') <@                                                             
+(   ---)    A_ht(OC).forge((root, ps, R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad), sigl)              
+( 5----)  (tidx, kpidx) <- (Index.val idx', 0)                                            
+( 6----)  root' <- m'                                                                     
+( 7----)  tkpidxs <- []                                                                   
+( 8----)  pkWOTSs <- []                                                                   
+( 9----)  rootss <- []                                                                    
+(10----)  pkWOTSs' <- []                                                                  
+(11----)  rootss' <- []                                                                   
+
+post =
+  forall (pkWOTSs0 pkWOTSs'0 : pkWOTS list) (rootss0
+    rootss'0 : dgstblock list) (tkpidxs0 : (int * int) list),
+    (dd - size pkWOTSs'0 <= 0 => ! size pkWOTSs'0 < d) /\
+    (! size pkWOTSs'0 < d =>
+     let cidx0 =
+       find
+         (fun (x : ((pkWOTS * pkWOTS) * msgFLSLXMSSMTTW) *
+            msgFLSLXMSSMTTW) => x.`1.`1.`1 = x.`1.`1.`2 /\ x.`1.`2 <> x.`2)
+         (zip (zip (zip pkWOTSs'0 pkWOTSs0) (m' :: rootss'0))
+            (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (Index.val idx') :: rootss0))
+     in let _ = nth witness tkpidxs0 cidx0 in true)
+[35|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = true
+
+(1----)  sigl <- []                                                                      
+(2----)  while (size sigl < l) {                                                         
+(2.1--)    m <- nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (size sigl)                   
+(2.2--)    sapl <- []                                                                    
+(2.3--)    (tidx, kpidx) <- (size sigl, 0)                                               
+(2.4--)    while (size sapl < d) {                                                       
+(2.4.1)      (tidx, kpidx) <- IntDiv.edivz tidx l'                                       
+(2.4.2)      sigc <-                                                                     
+(     )        nth witness                                                               
+(     )          (nth witness                                                            
+(     )             (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd (size sapl)) tidx)
+(     )          kpidx                                                                   
+(2.4.3)      leaves <-                                                                   
+(     )        nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd (size sapl))
+(     )          tidx                                                                    
+(2.4.4)      ap <-                                                                       
+(     )        cons_ap_trh ps                                                            
+(     )          (set_typeidx (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size sapl) tidx)
+(     )             trhxtype) (BinaryTrees.list2tree leaves) kpidx                       
+(2.4.5)      sapl <- rcons sapl (sigc, ap)                                               
+(2.4--)    }                                                                             
+(2.5--)    sig <- sapl                                                                   
+(2.6--)    sigl <- rcons sigl sig                                                        
+(2----)  }                                                                               
+
+post =
+  forall (result : msgFLSLXMSSMTTW * XMSSMT_C_Scheme.sigFLSLXMSSMTTWC *
+    index) (pkWOTSs0 pkWOTSs'0 : pkWOTS list) (rootss0
+    rootss'0 : dgstblock list) (tkpidxs0 : (int * int) list),
+    (dd - size pkWOTSs'0 <= 0 => ! size pkWOTSs'0 < d) /\
+    (! size pkWOTSs'0 < d =>
+     let cidx0 =
+       find
+         (fun (x : ((pkWOTS * pkWOTS) * msgFLSLXMSSMTTW) *
+            msgFLSLXMSSMTTW) => x.`1.`1.`1 = x.`1.`1.`2 /\ x.`1.`2 <> x.`2)
+         (zip (zip (zip pkWOTSs'0 pkWOTSs0) (result.`1 :: rootss'0))
+            (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (Index.val result.`3) :: rootss0))
+     in let _ = nth witness tkpidxs0 cidx0 in true)
+[36|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+------------------------------------------------------------------------
+forall (z : int),
+  phoare[ m <- nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (size sigl); ...;
+           sigl <- rcons sigl sig :
+           size sigl < l /\ l - size sigl = z ==> l - size sigl < z] = 1%r
+[37|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+z: int
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = size sigl < l /\ l - size sigl = z
+
+(1--)  m <- nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (size sigl)                   
+(2--)  sapl <- []                                                                    
+(3--)  (tidx, kpidx) <- (size sigl, 0)                                               
+(4--)  while (size sapl < d) {                                                       
+(4.1)    (tidx, kpidx) <- IntDiv.edivz tidx l'                                       
+(4.2)    sigc <-                                                                     
+(   )      nth witness                                                               
+(   )        (nth witness                                                            
+(   )           (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.sigWOTStd (size sapl)) tidx)
+(   )        kpidx                                                                   
+(4.3)    leaves <-                                                                   
+(   )      nth witness (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.leavestd (size sapl))
+(   )        tidx                                                                    
+(4.4)    ap <-                                                                       
+(   )      cons_ap_trh ps                                                            
+(   )        (set_typeidx (set_ltidx R_MEUFGCMAWOTSC_EUFNAGCMA_C.ad (size sapl) tidx)
+(   )           trhxtype) (BinaryTrees.list2tree leaves) kpidx                       
+(4.5)    sapl <- rcons sapl (sigc, ap)                                               
+(4--)  }                                                                             
+
+post = l - size (rcons sigl sapl) < z
+[38|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+z: int
+------------------------------------------------------------------------
+forall (z0 : int),
+  phoare[ (tidx, kpidx) <- IntDiv.edivz tidx l'; ...; sapl <-
+             rcons sapl (sigc, ap) :
+           size sapl < d /\ dd - size sapl = z0 ==> dd - size sapl < z0] = 1%r
+[39|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+z: int
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = size sigl < l /\ l - size sigl = z
+
+(1)  m <- nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml (size sigl)
+(2)  sapl <- []                                                 
+(3)  (tidx, kpidx) <- (size sigl, 0)                            
+
+post =
+  forall (sapl0 : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC),
+    (dd - size sapl0 <= 0 => ! size sapl0 < d) /\
+    (! size sapl0 < d => l - size (rcons sigl sapl0) < z)
+[40|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+A_forge_ll: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+O : Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+OC : FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C, -A_ht}
+dd: int := d
+------------------------------------------------------------------------
+Context : hr: {okC, okC0 : bool, tidx, kpidx, cidx, fidx, em_ele : int,
+              root, root', leaf', m0, sig_ele, pkWOTS_ele : dgstblock,
+              leaves, rootss, rootss', pkWOTS_l : dgstblock list,
+              ps, ps0 : pseed, ad : adrs, idx' : index,
+              em : EmsgWOTS.emsgWOTS, sigWOTS : sigWOTS,
+              pkWOTS, pkWOTS' : pkWOTS, ap, ap' : apFLXMSSTW,
+              m, m' : msgFLSLXMSSMTTW, counter : cntr,
+              sigc, sigc' : sigWOTS * cntr,
+              sapl, sig, sig' : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC,
+              sigl : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list,
+              pkWOTSs, pkWOTSs' : pkWOTS list, tkpidxs : (int * int) list}
+Bound   : [=] 1%r
+
+pre = true
+
+(1)  sigl <- []               
+
+post =
+  forall (sigl0 : XMSSMT_C_Scheme.sigFLSLXMSSMTTWC list),
+    (l - size sigl0 <= 0 => ! size sigl0 < l) /\
+    (! size sigl0 < l =>
+     forall (result : msgFLSLXMSSMTTW * XMSSMT_C_Scheme.sigFLSLXMSSMTTWC *
+       index) (pkWOTSs0 pkWOTSs'0 : pkWOTS list) (rootss0
+       rootss'0 : dgstblock list) (tkpidxs0 : (int * int) list),
+       (dd - size pkWOTSs'0 <= 0 => ! size pkWOTSs'0 < d) /\
+       (! size pkWOTSs'0 < d =>
+        let cidx0 =
+          find
+            (fun (x : ((pkWOTS * pkWOTS) * msgFLSLXMSSMTTW) *
+               msgFLSLXMSSMTTW) => x.`1.`1.`1 = x.`1.`1.`2 /\ x.`1.`2 <> x.`2)
+            (zip (zip (zip pkWOTSs'0 pkWOTSs0) (result.`1 :: rootss'0))
+               (nth witness R_MEUFGCMAWOTSC_EUFNAGCMA_C.ml
+                  (Index.val result.`3) :: rootss0)) in
+        let _ = nth witness tkpidxs0 cidx0 in true))
+[41|check]>
+No more goals
+[42|check]>
+[43|check]>
+added lemma: `bounded_leaf_forge_ll'
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+------------------------------------------------------------------------
+(forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+   islossless OC.query => islossless A_ht(OC).choose) =>
+(forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge) =>
+c <= p_tgts =>
+(forall (a b : adrs),
+   valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)) =>
+(forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+dfC0 <> 8 * n =>
+dfC0 <> 8 * n * len =>
+dfC0 <> 8 * n * 2 =>
+hoare[ A_ht(O_THFC_MA).choose :
+        O_THFC_MA.tws_ma = [] ==>
+        all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma] =>
+Pr[BoundedGame(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+     O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)), STCRC_WC.
+     O_STCRC_Default).main() @ &m :
+   res]
+[44|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+------------------------------------------------------------------------
+(forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+   islossless OC.query => islossless A_ht(OC).choose) =>
+(forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge) =>
+c <= p_tgts =>
+(forall (a b : adrs),
+   valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)) =>
+(forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+dfC0 <> 8 * n =>
+dfC0 <> 8 * n * len =>
+dfC0 <> 8 * n * 2 =>
+hoare[ A_ht(O_THFC_MA).choose :
+        O_THFC_MA.tws_ma = [] ==>
+        all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma] =>
+Pr[BoundedGame(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+     O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)), STCRC_WC.
+     O_STCRC_Default).main() @ &m :
+   res]
+[45|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+hchoose: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+           islossless OC.query => islossless A_ht(OC).choose
+hforge: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hdf: dfC0 <> 8 * n
+hdflen: dfC0 <> 8 * n * len
+hdf2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+Pr[BoundedGame(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)),
+     O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)), STCRC_WC.
+     O_STCRC_Default).main() @ &m :
+   res]
+[46|check]>
+Current goal (remaining: 6)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+hchoose: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+           islossless OC.query => islossless A_ht(OC).choose
+hforge: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hdf: dfC0 <> 8 * n
+hdflen: dfC0 <> 8 * n * len
+hdf2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+forall (O <: Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)})
+  (OC <: FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)}),
+  islossless O.query =>
+  islossless OC.query =>
+  islossless R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht, O, OC).choose
+[47|check]>
+Current goal (remaining: 5)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+hchoose: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+           islossless OC.query => islossless A_ht(OC).choose
+hforge: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hdf: dfC0 <> 8 * n
+hdflen: dfC0 <> 8 * n * len
+hdf2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+forall (O <: Oracle_MEUFGCMA_WOTSC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)})
+  (OC <: FC.Oracle_THFC{-R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht)}),
+  islossless R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht, O, OC).forge
+[48|check]>
+Current goal (remaining: 4)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+hchoose: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+           islossless OC.query => islossless A_ht(OC).choose
+hforge: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hdf: dfC0 <> 8 * n
+hdflen: dfC0 <> 8 * n * len
+hdf2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+c <= p_tgts
+[49|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+hchoose: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+           islossless OC.query => islossless A_ht(OC).choose
+hforge: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hdf: dfC0 <> 8 * n
+hdflen: dfC0 <> 8 * n * len
+hdf2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+forall (a b : adrs), valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+[50|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+hchoose: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+           islossless OC.query => islossless A_ht(OC).choose
+hforge: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hdf: dfC0 <> 8 * n
+hdflen: dfC0 <> 8 * n * len
+hdf2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+  encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+[51|check]>
+Current goal
+
+Type variables: <none>
+
+A_ht(OC : TRHC.Oracle_THFC) : Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF{-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA, -R_MEUFGCMAWOTSC_EUFNAGCMA_C}
+&m: {}
+hchoose: forall (OC <: TRHC.Oracle_THFC{-A_ht}),
+           islossless OC.query => islossless A_ht(OC).choose
+hforge: forall (OC <: TRHC.Oracle_THFC{-A_ht}), islossless A_ht(OC).forge
+hc: c <= p_tgts
+hemb: forall (a b : adrs),
+        valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+henc: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+hdf: dfC0 <> 8 * n
+hdflen: dfC0 <> 8 * n * len
+hdf2: dfC0 <> 8 * n * 2
+hwf: hoare[ A_ht(O_THFC_MA).choose :
+             O_THFC_MA.tws_ma = [] ==>
+             all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+pre = O_THFC_MA.tws_ma = []
+
+    R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht), STCRC_WC.O_STCRC_Default,
+      O_THFC_MA).pick 
+
+post = all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma
+[52|check]>
+No more goals
+[53|check]>
+[54|check]>
+added lemma: `bounded_leaf_member_aware'

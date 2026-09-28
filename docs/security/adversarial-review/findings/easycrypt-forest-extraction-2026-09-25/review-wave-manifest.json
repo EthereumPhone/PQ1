@@ -1,0 +1,193 @@
+{
+  "base": "bb44efb9d0f15123b0ba9ab0b9251cff6037d293",
+  "created_at": "2026-09-24T22:16:40.262319+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "3afe8535c0cc33f0e24f7b25dab7a1727b8b592196f8496a8bc302ba2161eed3",
+      "version": "2.1.282 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "0b2e9301d6100dddda3b9d5c80ebaeaa3a2f1962388f2f36f6b96a9f08b1f33f",
+      "version": "codex-cli 0.156.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "codex_native_readonly": true,
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "native-codex-read-only-and-outer-bubblewrap-other-legs",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-forest-extraction",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Codex native read-only filesystem/socket isolation, approval never; other legs outer Bubblewrap candidate/Git mounts; Git drift check"
+  },
+  "launch_skew_seconds": 0.002697,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-prompt.txt",
+    "sha256": "9a6ccd26ffc688d693155050b4d7ea74e96b2a76c8474a42ff80085c251bdcd4"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 10272,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-forest-extraction",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-forest-extraction",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-forest-extraction",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 189.893,
+      "ended_at": "2026-09-24T22:14:56.095433+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9a6ccd26ffc688d693155050b4d7ea74e96b2a76c8474a42ff80085c251bdcd4",
+        "report_sha256": "0fac3df10a4ed2c636542c8b9e8ad1d897e794dc3527912aa9e660ec82ac46c9",
+        "runtime_sha256": "b4756d1f4e66fa2b91898db4446de5fcb26e0e81d2ef240baf8a5014a4b93519",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/claude",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/claude/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/claude/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/claude/stderr.txt"
+      },
+      "report_words": 564,
+      "started_at": "2026-09-24T22:11:46.202790+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 460956,
+      "command": [
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "-c",
+        "approval_policy=\"never\"",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-forest-extraction",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 293.839,
+      "ended_at": "2026-09-24T22:16:40.039199+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9a6ccd26ffc688d693155050b4d7ea74e96b2a76c8474a42ff80085c251bdcd4",
+        "report_sha256": "4a61ac1378bf84366e96278c5a7b61d36e59b7680a3c99ec606dba91c717b318",
+        "runtime_sha256": "e04b882b8e82e710734e500c88dc28327bc80bcee73c52e99ed32e215c70370f",
+        "stderr_sha256": "9959cd8a9e83f82f8bea260dbf53ad21d66dc1fc629820c675c62180c0672fd0"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q19-review-wave/codex/stderr.txt"
+      },
+      "report_words": 29,
+      "started_at": "2026-09-24T22:11:46.200098+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "EasyCrypt linked byte-game forest extraction",
+  "target": {
+    "commit_after": "4d3cb40d39604c910fb9a3d01e30d68ebf224412",
+    "commit_before": "4d3cb40d39604c910fb9a3d01e30d68ebf224412",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-forest-extraction",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "19cda620e56604ee0c656633ab89905ac542f664",
+    "tree_before": "19cda620e56604ee0c656633ab89905ac542f664"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.282 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.156.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-24T22:11:46.200047+00:00"
+}

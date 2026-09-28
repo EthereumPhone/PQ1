@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 47c9bb1edd4ee4386ac1f829f762a9d924df94fd / 553f3ff818a366a88a8b54fb5801c5205d08d852
+FINDINGS: none
+GAPS: The separately running full dual-driver 66-file replay/64-controls gate remains pending; landing requires its success.

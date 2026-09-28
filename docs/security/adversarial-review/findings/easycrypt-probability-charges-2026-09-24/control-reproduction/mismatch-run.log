@@ -1,0 +1,7 @@
+[-] [0002] 11.2% (-1.0B / [frag -1.0B])[\] [0003] 33.8% (-1.0B / [frag -1.0B])[|] [0004] 51.1% (-1.0B / [frag -1.0B])[/] [0005] 55.7% (-1.0B / [frag -1.0B])[-] [0007] 84.7% (-1.0B / [frag -1.0B])[\] [0007] 86.5% (-1.0B / [frag -1.0B])[|] [0007] 98.7% (-1.0B / [frag -1.0B])                                                                                                      [critical] [/work/q1215-finding-reproduction/WeakerExactMismatch.ec: line 7 (7-54)] the given proof-term proves:
+
+  Pr[RealGame(HonestByteError).run() @ &m : res] <=
+  30520798%r * (1%r / 2%r) ^ 256
+
+it does not apply to the goal
+[/] [0007] 98.7% (-1.0B / [frag -1.0B])[-] [0007] 98.7% (-1.0B / [frag -1.0B])

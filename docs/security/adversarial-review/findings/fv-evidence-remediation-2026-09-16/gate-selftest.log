@@ -1,0 +1,9 @@
+=== --self-test (negative controls) ===
+    [ok]   miri                       per-PR blocking, no-path-filter
+    [ok]   miri                       per-PR blocking, no-path-filter
+    [ok]   miri                       nightly, paths cover policed surface
+    [note] miri                       local-only (not CI-gated): deliberately local for now.
+    [note] miri                       local-only (not CI-gated): tracked in #663 (demoted 2026-08-20).
+    [note] miri                       local-only (not CI-gated): tracked in #663 (demoted 2026-08-20).
+    [note] miri                       local-only (not CI-gated): tracked in #663 (demoted 2026-08-20).
+  self-test OK: allowlist gap caught (2), duplicate YAML/JSON keys rejected, exact authoritative ledger runner/step/context suppression controls verified, branch/ordered-path/workflow-self trigger suppressions rejected, paths-ignore rejection controls verified (directly), kani-reverse gap caught (1), kani-mutation-reverse gap caught (2), extraction-reverse gap caught (1), #663 invocation-integrity/suppression controls caught (10 per-PR + 4 nightly), local-reason + stale-runs_in controls caught.

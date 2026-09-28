@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: cd43416cea0f0eb387ad8c47137f1a9c2dd6cdbe / 6e1b7906481a44d41d6daa2da84b9488bba38043
+FINDINGS: none
+GAPS: Full EasyCrypt replay for input identity d7baf671282ba725121f24d59962191c remains pending; its green completion is required before landing.

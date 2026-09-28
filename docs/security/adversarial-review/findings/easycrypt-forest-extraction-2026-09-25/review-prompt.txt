@@ -1,0 +1,25 @@
+Review PQSigner OS for merge of actual FORS extraction proofs. Do not launch agents or other models.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-forest-extraction
+Commit: 4d3cb40d39604c910fb9a3d01e30d68ebf224412
+Tree: 19cda620e56604ee0c656633ab89905ac542f664
+Compare: bb44efb9d0f15123b0ba9ab0b9251cff6037d293..4d3cb40d39604c910fb9a3d01e30d68ebf224412
+
+Focus only on formal-verification correctness:
+1. Recovery records must follow actual FORS paths, the special last hash, forest compression and both RawSigner.verify iterations. The recovered forest and lower root must be the actual WOTS messages, with accepted digest/address/width/full-u32-count bindings.
+2. Extraction must compare complete references from retained catalogs and actual private derivations, without extra queries or an assumed missing reference. Check target ranges, compression injectivity and public collision/zero guards.
+3. Preserve twelve ordinary private-leaf equalities and the exceptional thirteenth tree-root-as-secret; do not treat the last component as a private leaf.
+4. Actual successful shuffled signing and the adaptive signing interface must create complete forest references bound to their returned signature and message hash. Later permitted calls preserve each reference; failure is explicit. This must not be described as accumulated exposure accounting.
+5. Retain both missing-reference cases. Linked private openings alone need not be a forgery. The byte transfer/hop must preserve the same initialized client, original seed/root, final new-message guard, explicit successful-forgery residual and unchanged probability charges.
+6. Enrollment must preserve all old statements/assumptions and add no axiom/admit/clone assumption. Distinguish declared rejection diagnostics from semantic counterexamples and full-game nonvacuity.
+
+Evidence already green: eighteen selected modules passed 36 source-matched whole-file direct/default-interactive checks; the enrolled source bytes match that checkpoint. All 34 controls match their declared outcomes: 13 positives (including a compression width-alias counterexample), 11 scope probes and 10 rejected theorem applications. Eleven checker regression groups, static contract and 385-input source binding pass. Inventory: 421 targets, 164 roots, 2911 pins, 2528 statements, 2132 census rows and 359 controls. The source-matched full cold two-driver replay is running separately and remains required before landing.
+Non-goals: runtime/API/parameter changes, accumulated adaptive exposure/novelty probabilities, private/encoding-event charges or closed numerical EUF, guaranteed signing success, Rust extraction, concrete SHA-256/QROM, hardware/shipment, deferred playbook sweep, optional hardening.
+
+Inspect the exact diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 4d3cb40d39604c910fb9a3d01e30d68ebf224412 / 19cda620e56604ee0c656633ab89905ac542f664
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

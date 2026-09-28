@@ -1,0 +1,55 @@
+{
+  "candidate": "6e8994150edf2e45e7915d4056888e7e0e6fad2f",
+  "pull_request": 744,
+  "overall_ci": "red",
+  "known_failures": {
+    "660": "TRNG ledger anchor missing",
+    "711": "Existing proto receipt drift and locked fuzz Cargo.lock mismatch",
+    "717": "Foundry installer cannot execute binary file"
+  },
+  "logs": [
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q3-ci-logs/107352258970.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q3-ci-logs/107352259049.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q3-ci-logs/107352256939.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q3-ci-logs/107352259069.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q3-ci-logs/107352259159.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q3-ci-logs/107352259013.log",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q3-ci-logs/107352258931.log"
+  ],
+  "unchanged_baseline_inputs": [
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "proto",
+    "secure/data/erc7730/curations/manifest.json",
+    ".github/workflows"
+  ],
+  "source_scope": "Only EasyCrypt proof/enrollment/owner-status files changed.",
+  "checked_utc": "2026-09-23T20:06:22.460592+00:00",
+  "failure_evidence": {
+    "107352258970": [
+      "Contracts (forge test)\tRun foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d\t2026-09-23T19:46:25.1462250Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+      "Contracts (forge test)\tRun foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d\t/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file"
+    ],
+    "107352259049": [
+      "Line coverage (cargo llvm-cov \u2014 report-only baseline)\tcargo llvm-cov (host-test crate set, merged report)\t2026-09-23T19:48:37.0086963Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\""
+    ],
+    "107352256939": [
+      "PR\tBuild fuzzers\t2026-09-23T19:47:52.3869929Z error: cannot update the lock file /src/pqsigner/fuzz/Cargo.lock because --locked was passed to prevent this"
+    ],
+    "107352259069": [
+      "Host unit tests (pure-logic crates)\tcargo test (pure-logic crates)\t2026-09-23T19:48:26.2884009Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\""
+    ],
+    "107352259159": [
+      "2026-09-23T19:47:40.2073344Z     C3: HW-ASSUME-TRNG-ENTROPY: anchor not found in secure/src/hw/rng.rs: 'if sr & (SECS | CECS) != 0' \u2014 the code moved out from under this row; re-point it (do not delete the row)"
+    ],
+    "107352259013": [
+      "Slither (contracts static analysis)\tinstall foundry (slither drives `forge build` for this project)\t2026-09-23T19:46:23.3641871Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+      "Slither (contracts static analysis)\tinstall foundry (slither drives `forge build` for this project)\t/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file"
+    ],
+    "107352258931": [
+      "Production quarantine gates (rollback + ERC-7730 provenance OPEN)\tprove ERC-7730 production provenance is quarantined\t2026-09-23T19:48:38.2105183Z DRIFT: ERC-7730 curation overlay: curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977"
+    ]
+  }
+}

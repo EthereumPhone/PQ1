@@ -1,0 +1,29 @@
+You are one independent reviewer in an owner-authorized defensive formal-verification review. Do not launch agents or other models.
+
+Review PQSigner_OS for Phase D source merge.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-encoder-abort-20260921-g0lja304/review-target-v2
+Commit: 47c9bb1edd4ee4386ac1f829f762a9d924df94fd
+Tree: 553f3ff818a366a88a8b54fb5801c5205d08d852
+Compare: 19ddfc401ac3ba6c473f628d7552a4f8bc45ddef..47c9bb1edd4ee4386ac1f829f762a9d924df94fd
+Focus only on EasyCrypt C10 encoder/count and bounded-failure correspondence:
+1. Actual consumer digit order, widths, concrete witness and target 205.
+2. Uniform-bit distribution/count bridge and its premises.
+3. Bounded signer, first counter, no-signature exhaustion, oracle state and guarded game.
+4. Conditional/IID versus real shared-hash and adaptive-game boundaries.
+5. Assumption/pin/census/control changes; no concealed trust or unsupported claims.
+6. Rust/Lean correspondence evidence and the minimal sim-internals exposure.
+7. Multi-instance WOTS loop initialization/exit proof: preserve its theorem, premises and prover budgets; do not rely on a driver disagreement.
+
+Evidence already green: focused WOTS_C_Multi compile (exit 0) and CLI (172 commands, zero diagnostics) with its explicit list-length argument; focused direct compilations of WOTS_TW_ES and all six new theory files; two Rust correspondence tests (210 transcript cases, 259 digit inputs); positive controls and four intended false-claim proof rejections; 10 split regressions and fast 66-file/1332-pin/1201-statement integrity gate; 22 gate-enforcement regression groups; targeted Lean WotsDigits build and exact kernel-only axiom dump. The mandatory full dual-driver 66-file replay/64-controls gate is running separately; landing still requires its success. No cryptographic security probability is claimed for real SHA-256.
+Non-goals: firmware/parameter changes, numerical EUF-CMA closure, fresh-R/shared-oracle research, unrelated surfaces, process rewrites or broad assurance campaigns.
+
+Inspect the exact diff and affected callers source-first for concrete correctness or security blockers. Keep the target immutable. Read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs or follow-up model turns. Ignore style and optional hardening. You have 15 minutes and 800 words.
+
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 47c9bb1edd4ee4386ac1f829f762a9d924df94fd / 553f3ff818a366a88a8b54fb5801c5205d08d852
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+
+Use at most three findings. FIX requires a source anchor, mechanism, consequence and falsifiable evidence. If there are no findings, write FINDINGS: none.

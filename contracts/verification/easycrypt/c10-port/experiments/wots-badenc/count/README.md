@@ -1,3 +1,13 @@
+> **PROMOTED 2026-09-21 — the four proof files have MOVED.**
+> `VecDP.ec`, `CountDS.ec`, `C10SurfaceKernel.ec` and `C10Surface.ec` are now certified closure
+> members at `cdrafts-split/`, moved (not copied) per the 2026-08-19 PTgtsPin precedent, so there
+> is exactly one definition of these facts in the tree. The controls in `controls/` stay here and
+> bind to them via `require import` plus the gate's `-I cdrafts-split`; six of the eight are
+> registered in `cert-controls-split.tsv` (KctlA and KctlB are not — they fail by
+> `anomaly: Stack overflow` rather than by proof, so they do not discriminate; see that file).
+> `ScriptProbe.ec`, `run.sh` and `runall.sh` below refer to the pre-move layout and are kept as
+> the development record; they no longer run as written.
+
 # `count` — the C10 constant-sum surface size, machine-checked in EasyCrypt
 
 **Question asked.** `scratch/FINDING-tcollres-cannot-be-bounded.md` quotes

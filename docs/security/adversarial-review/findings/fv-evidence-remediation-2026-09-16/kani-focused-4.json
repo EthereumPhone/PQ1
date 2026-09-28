@@ -1,0 +1,1 @@
+{"command": ["cargo", "kani", "-p", "pqsigner-tx", "--harness", "cowswap_order::verification::decode_canonical_soundness", "--exact", "--output-format", "regular"], "returncode": 1}

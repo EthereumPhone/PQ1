@@ -1,0 +1,14 @@
+{
+  "protocol": {
+    "source_changed": true,
+    "formula_failures": [],
+    "prover_exit": 0,
+    "verdict_failures": []
+  },
+  "pins": {
+    "gate_output": "OK unique statement pins: 1166\n",
+    "unique_strings": 1166,
+    "unique_stripped_identities": 1165,
+    "coverage_missing": []
+  }
+}

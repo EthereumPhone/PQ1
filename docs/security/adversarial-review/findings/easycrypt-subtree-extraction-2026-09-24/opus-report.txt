@@ -1,0 +1,50 @@
+VERDICT: GO
+TARGET: 7e099a632794c633ed14a9dc7a6e1bb0a3274f29 / ff6778bb8f7adb6b42ef78766b19c62640d735c5
+FINDINGS: none
+GAPS: The unchanged-source full cold two-driver replay is still pending and must pass before landing. I did not re-run it or any other check.
+
+All checks below were read-only, against the source.
+
+1. **Recovery records follow the actual calls.**
+   - `VerifierLayerRecords.ec:7-12` matches both loop iterations of `RawSigner.ec:38-54`.
+     - Layer 0 records (tree `ht/512`, index `ht%%512`, message `forest`).
+     - Layer 1 records (tree `0`, index `ht/512`, message `lower`). That index equals the verifier's `(ht/512)%%512` because `ht < 2^18`.
+   - Layer 1 takes the same `lower` value that layer 0 returns, and the top root is bound through `pad current = pad root0`.
+   - The message-hash entry recorded at the start still holds in the final history because the history only extends.
+   - Widths are exact: 43 chain rows, a full-u32 count `0 ≤ c < 2^32`, and 9 auth-path rows. `layer_record_with_history` threads both histories forward.
+
+2. **Reference extraction needs nothing new.**
+   - `recorded_layer_extracts` (`LayerRecordExtraction.ec:8-30`) is a pure lemma over the final histories and makes no oracle calls.
+   - The reference leaf comes from `root_reference_at`, which requires a complete catalogue (`catalog_exact c 512`).
+   - Leaf equality comes from `path_leaf_or_input_collision` and `path_input_collision_is_public`. The collision and zero guards are explicit hypotheses.
+
+3. **Successful signing records the lower root.**
+   - `finish_records_subtree` uses the same coordinates as `RawSigner.finish:12-28`.
+   - When a signature is returned, `lower` has a root witness at (layer 0, tree `ht/512`), and the top layer's opening signs exactly that `lower`.
+   - `HonestSubtreeMessages` ties this to the returned layer signatures (`(oget res).4`), the recorded message-hash entry and the accepted digest.
+   - Failure stays explicit: every result is guarded by `res<>None`, and `C10Q18ForgetsFailure` must fail.
+   - `C10Q18RecordedRootPersists` shows only that a recorded root persists under history extension. The doc describes it as per-root persistence, not accumulated-exposure accounting.
+
+4. **The two-way split is intact.**
+   - The unrecorded branch keeps `!merkle_root_witness … lower` (`SubtreeOpeningCases.ec:8-12`).
+   - The forest value is only existential and no FORS extraction is claimed.
+   - Neither case gets a numerical charge, and nothing asserts that linked openings are forgeries.
+
+5. **The probability hop matches Q17.** Compared with `ByteTopOpeningHop.ec`, `ByteSubtreeOpeningHop.ec` keeps the same:
+   - game and client, and the seed binding in the precondition;
+   - explicit `res` (successful forgery);
+   - `exists root0` shape, inherited from Q17;
+   - final new-message guard;
+   - three unchanged charge terms.
+
+   The root is existentially quantified but it is not free: it must carry a recorded top-root witness.
+
+6. **Enrollment is consistent.**
+   - The ten modules contain no `admit`, `axiom`, `clone` or `declare`.
+   - Counts add up:
+     - 29 new lemmas plus 10 new operators give the 39 new pins (2796 → 2835).
+     - 15 Q18 controls plus 6 scope probes give the 21 new controls (304 → 325).
+     - 10 files are added to the cone (393 → 403), and 6 closure roots are added, each with its own scope negative.
+   - The doc states that rejected exact applications show only their declared diagnostics, and that the positives are not complete-game nonvacuity evidence.
+
+I did not consult other models or the advisor, as you asked. The target is unchanged (`git status` is clean). The only file I wrote is the plan file outside the target, which holds a copy of this report.

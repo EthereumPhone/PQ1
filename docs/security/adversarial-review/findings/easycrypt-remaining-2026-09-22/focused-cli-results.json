@@ -1,0 +1,65 @@
+[
+  {
+    "file": "cdrafts-split/C10HypertreeCoverage.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 2.08,
+    "prompts": 53
+  },
+  {
+    "file": "cdrafts-split/SharedROBounded.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 1.18,
+    "prompts": 52
+  },
+  {
+    "file": "cdrafts-split/C10Randomizer.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 1.19,
+    "prompts": 51
+  },
+  {
+    "file": "cdrafts-split/C10HashDomains.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 3.07,
+    "prompts": 51
+  },
+  {
+    "file": "cdrafts-split/C10SharedSearch.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 3.25,
+    "prompts": 31
+  },
+  {
+    "file": "cdrafts-split/C10SearchBounds.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 3.61,
+    "prompts": 53
+  },
+  {
+    "file": "cdrafts-split/C10HypertreeCharged.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 2.96,
+    "prompts": 12
+  },
+  {
+    "file": "cdrafts-split/FORS_C10.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 1.18,
+    "prompts": 81
+  },
+  {
+    "file": "cdrafts-split/BoundedIID.ec",
+    "exit": 0,
+    "diagnostics": [],
+    "seconds": 0.94,
+    "prompts": 47
+  }
+]

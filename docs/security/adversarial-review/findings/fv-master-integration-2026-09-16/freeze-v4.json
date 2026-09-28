@@ -1,0 +1,27 @@
+{
+  "recorded_at": "2026-09-17T14:46:04.836195+00:00",
+  "target": "/tmp/pq-fv-master-20260916-g4woz0z8/target-v4",
+  "commit": "557d7216f4e711ee95daba779bdc1a835951f14c",
+  "tree": "d7ab1b27e6f0fac25a0b64593036f51d68f15009",
+  "base": "ab9e9049a5a8c8d088966d02b7ff9a5714ae678a",
+  "input_identity": "623ad0710d73000a1c693049b8933813",
+  "prompt_sha256": "6f693c51d09d521ba033b082ee0604507883ebd4ed6fa3c7c7c77d1aa4709f82",
+  "reviewers": {
+    "codex": "gpt-6-astra ultra; owner selected replacement",
+    "claude": "opus xhigh",
+    "kimi": "kimi-code/k3 max"
+  },
+  "changes_from_v3": [
+    "scripts/check_protocol_models.py"
+  ],
+  "full_easycrypt_replay_source": "eb18115edb602fe8634d441249d13a11b0177043",
+  "easycrypt_inputs_and_gate_callers_byte_identical_to_v3": true,
+  "protocol_selftest_modes": [
+    "0",
+    "1",
+    "2"
+  ],
+  "optimization_negative_cases": 9,
+  "protocol_live_replay": "running separately; required green before publication",
+  "other_stage_gate_receipts": "unchanged inputs; prior v3 and integration gate receipts retained"
+}

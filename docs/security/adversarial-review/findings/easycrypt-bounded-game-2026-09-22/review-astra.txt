@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 2c9be6fc596f498946d2789f126f13190422baa9 / c21fc1fd7d5612bcc12152d2a2f6317794170a36
+FINDINGS: none
+GAPS: Mandatory cold full two-driver replay and 67-control results remain pending separately; landing requires success.

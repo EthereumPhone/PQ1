@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 557d7216f4e711ee95daba779bdc1a835951f14c / d7ab1b27e6f0fac25a0b64593036f51d68f15009
+FINDINGS: none
+GAPS: Coordinator must confirm the independent fresh EasyCrypt replay and live Tamarin checks are green before publication; their completion was not verified here.

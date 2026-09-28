@@ -1,0 +1,813 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+added operator ro_search ['x, 'y] :
+                           'y Distr.distr ->
+                           ('y -> bool) ->
+                           ('x * 'y) list -> 'x list -> 'y option Distr.distr.
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+inputs: 'x list
+------------------------------------------------------------------------
+uniq inputs =>
+forall (history : ('x * 'y) list),
+  (forall (x : 'x), x \in inputs => assoc history x = None) =>
+  ro_search d p history inputs =
+  bounded d p (map (fun (_ : 'x) => tt) inputs)
+[5|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+inputs: 'x list
+------------------------------------------------------------------------
+uniq inputs =>
+forall (history : ('x * 'y) list),
+  (forall (x : 'x), x \in inputs => assoc history x = None) =>
+  ro_search d p history inputs =
+  bounded d p (map (fun (_ : 'x) => tt) inputs)
+[6|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      (forall (x0 : 'x), x0 \in xs => assoc history x0 = None) =>
+      ro_search d p history xs = bounded d p (map (fun (_ : 'x) => tt) xs)
+------------------------------------------------------------------------
+! (x \in xs) /\ uniq xs =>
+forall (history : ('x * 'y) list),
+  (forall (x0 : 'x), x0 = x \/ (x0 \in xs) => assoc history x0 = None) =>
+  (if assoc history x <> None then
+     if p (oget (assoc history x)) then dunit (assoc history x)
+     else ro_search d p history xs
+   else
+     dlet d
+       (fun (y : 'y) =>
+          if p y then dunit (Some y)
+          else ro_search d p ((x, y) :: history) xs)) =
+  dlet d
+    (fun (x0 : 'y) =>
+       if p x0 then dunit (Some x0)
+       else bounded d p (map (fun (_ : 'x) => tt) xs))
+[7|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      (forall (x0 : 'x), x0 \in xs => assoc history x0 = None) =>
+      ro_search d p history xs = bounded d p (map (fun (_ : 'x) => tt) xs)
+hnot: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hf: forall (x0 : 'x), x0 = x \/ (x0 \in xs) => assoc history x0 = None
+------------------------------------------------------------------------
+(if assoc history x <> None then
+   if p (oget (assoc history x)) then dunit (assoc history x)
+   else ro_search d p history xs
+ else
+   dlet d
+     (fun (y : 'y) =>
+        if p y then dunit (Some y) else ro_search d p ((x, y) :: history) xs)) =
+dlet d
+  (fun (x0 : 'y) =>
+     if p x0 then dunit (Some x0)
+     else bounded d p (map (fun (_ : 'x) => tt) xs))
+[8|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      (forall (x0 : 'x), x0 \in xs => assoc history x0 = None) =>
+      ro_search d p history xs = bounded d p (map (fun (_ : 'x) => tt) xs)
+hnot: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hf: forall (x0 : 'x), x0 = x \/ (x0 \in xs) => assoc history x0 = None
+y: 'y
+------------------------------------------------------------------------
+(if p y then dunit (Some y) else ro_search d p ((x, y) :: history) xs) =
+if p y then dunit (Some y) else bounded d p (map (fun (_ : 'x) => tt) xs)
+[9|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      (forall (x0 : 'x), x0 \in xs => assoc history x0 = None) =>
+      ro_search d p history xs = bounded d p (map (fun (_ : 'x) => tt) xs)
+hnot: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hf: forall (x0 : 'x), x0 = x \/ (x0 \in xs) => assoc history x0 = None
+y: 'y
+hp: ! p y
+z: 'x
+hz: z \in xs
+------------------------------------------------------------------------
+assoc ((x, y) :: history) z = None
+[10|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      (forall (x0 : 'x), x0 \in xs => assoc history x0 = None) =>
+      ro_search d p history xs = bounded d p (map (fun (_ : 'x) => tt) xs)
+hnot: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hf: forall (x0 : 'x), x0 = x \/ (x0 \in xs) => assoc history x0 = None
+y: 'y
+hp: ! p y
+z: 'x
+hz: z \in xs
+hn: z <> x
+------------------------------------------------------------------------
+assoc ((x, y) :: history) z = None
+[11|check]>
+No more goals
+[12|check]>
+[13|check]>
+added lemma: `fresh_search_is_iid'
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+history: ('x * 'y) list
+inputs: 'x list
+------------------------------------------------------------------------
+is_lossless d =>
+uniq inputs =>
+(forall (x : 'x), x \in inputs => assoc history x = None) =>
+mu1 (ro_search d p history inputs) None = (1%r - mu d p) ^ size inputs
+[14|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+history: ('x * 'y) list
+inputs: 'x list
+------------------------------------------------------------------------
+is_lossless d =>
+uniq inputs =>
+(forall (x : 'x), x \in inputs => assoc history x = None) =>
+mu1 (ro_search d p history inputs) None = (1%r - mu d p) ^ size inputs
+[15|check]>
+No more goals
+[16|check]>
+[17|check]>
+added lemma: `fresh_search_exhaustion'
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+x: 'x
+y: 'y
+------------------------------------------------------------------------
+! p y => ro_search d p [(x, y)] [x] = dunit None
+[18|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+x: 'x
+y: 'y
+------------------------------------------------------------------------
+! p y => ro_search d p [(x, y)] [x] = dunit None
+[19|check]>
+No more goals
+[20|check]>
+[21|check]>
+added lemma: `replay_failed_answer'
+[22|check]>
+added operator fresh_count ['x, 'y] : ('x * 'y) list -> 'x list -> int.
+Current goal
+
+Type variables: 'x, 'y
+
+history: ('x * 'y) list
+inputs: 'x list
+x: 'x
+y: 'y
+------------------------------------------------------------------------
+! (x \in inputs) =>
+fresh_count ((x, y) :: history) inputs = fresh_count history inputs
+[23|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+history: ('x * 'y) list
+inputs: 'x list
+x: 'x
+y: 'y
+------------------------------------------------------------------------
+! (x \in inputs) =>
+fresh_count ((x, y) :: history) inputs = fresh_count history inputs
+[24|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+history: ('x * 'y) list
+inputs: 'x list
+x: 'x
+y: 'y
+hn: ! (x \in inputs)
+z: 'x
+hz: z \in inputs
+------------------------------------------------------------------------
+(fun (x0 : 'x) => assoc ((x, y) :: history) x0 = None) z <=>
+(fun (x0 : 'x) => assoc history x0 = None) z
+[25|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+history: ('x * 'y) list
+inputs: 'x list
+x: 'x
+y: 'y
+hn: ! (x \in inputs)
+z: 'x
+hz: z \in inputs
+hzx: z <> x
+------------------------------------------------------------------------
+(fun (x0 : 'x) => assoc ((x, y) :: history) x0 = None) z <=>
+(fun (x0 : 'x) => assoc history x0 = None) z
+[26|check]>
+No more goals
+[27|check]>
+added lemma: `fresh_count_insert'
+[28|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+inputs: 'x list
+------------------------------------------------------------------------
+is_lossless d =>
+uniq inputs =>
+forall (history : ('x * 'y) list),
+  mu1 (ro_search d p history inputs) None <=
+  (1%r - mu d p) ^ fresh_count history inputs
+[29|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+inputs: 'x list
+------------------------------------------------------------------------
+is_lossless d =>
+uniq inputs =>
+forall (history : ('x * 'y) list),
+  mu1 (ro_search d p history inputs) None <=
+  (1%r - mu d p) ^ fresh_count history inputs
+[30|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+------------------------------------------------------------------------
+forall (history : ('x * 'y) list),
+  mu1 (dunit None) None <= (1%r - mu d p) ^ fresh_count history []
+[31|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+------------------------------------------------------------------------
+! (x \in xs) /\ uniq xs =>
+forall (history : ('x * 'y) list),
+  mu1
+    (if assoc history x <> None then
+       if p (oget (assoc history x)) then dunit (assoc history x)
+       else ro_search d p history xs
+     else
+       dlet d
+         (fun (y : 'y) =>
+            if p y then dunit (Some y)
+            else ro_search d p ((x, y) :: history) xs)) None <=
+  (1%r - mu d p) ^ fresh_count history (x :: xs)
+[32|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+------------------------------------------------------------------------
+mu1
+  (if assoc history x <> None then
+     if p (oget (assoc history x)) then dunit (assoc history x)
+     else ro_search d p history xs
+   else
+     dlet d
+       (fun (y : 'y) =>
+          if p y then dunit (Some y)
+          else ro_search d p ((x, y) :: history) xs)) None <=
+(1%r - mu d p) ^ fresh_count history (x :: xs)
+[33|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+------------------------------------------------------------------------
+mu1
+  (if !true then
+     if p (oget (assoc history x)) then dunit (assoc history x)
+     else ro_search d p history xs
+   else
+     dlet d
+       (fun (y : 'y) =>
+          if p y then dunit (Some y)
+          else ro_search d p ((x, y) :: history) xs)) None <=
+(1%r - mu d p) ^ fresh_count history (x :: xs)
+[34|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+------------------------------------------------------------------------
+mu1
+  (dlet d
+     (fun (y : 'y) =>
+        if p y then dunit (Some y) else ro_search d p ((x, y) :: history) xs))
+  None <=
+(1%r - mu d p) ^
+(b2i true + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[35|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+nf: int := fresh_count history xs
+------------------------------------------------------------------------
+mu1
+  (dlet d
+     (fun (y : 'y) =>
+        if p y then dunit (Some y) else ro_search d p ((x, y) :: history) xs))
+  None <=
+(1%r - mu d p) ^
+(b2i true + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[36|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+nf: int := fresh_count history xs
+nf0: 0 <= nf
+------------------------------------------------------------------------
+mu1
+  (dlet d
+     (fun (y : 'y) =>
+        if p y then dunit (Some y) else ro_search d p ((x, y) :: history) xs))
+  None <=
+(1%r - mu d p) ^
+(b2i true + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[37|check]>
+Current goal (remaining: 3)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+nf: int := fresh_count history xs
+nf0: 0 <= nf
+------------------------------------------------------------------------
+mu1
+  (dlet d
+     (fun (y : 'y) =>
+        if p y then dunit (Some y) else ro_search d p ((x, y) :: history) xs))
+  None <=
+mu1 (bounded d p (tt :: nseq nf tt)) None
+[38|check]>
+Current goal (remaining: 3)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+nf: int := fresh_count history xs
+nf0: 0 <= nf
+y: 'y
+hy: y \in d
+------------------------------------------------------------------------
+mu1
+  ((fun (y0 : 'y) =>
+      if p y0 then dunit (Some y0) else ro_search d p ((x, y0) :: history) xs)
+     y) None <=
+mu1
+  ((fun (x0 : 'y) =>
+      if p x0 then dunit (Some x0) else bounded d p (nseq nf tt)) y) None
+[39|check]>
+Current goal (remaining: 3)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+nf: int := fresh_count history xs
+nf0: 0 <= nf
+y: 'y
+hy: y \in d
+hp: ! p y
+------------------------------------------------------------------------
+mu1 (ro_search d p ((x, y) :: history) xs) None <=
+mu1 (bounded d p (nseq nf tt)) None
+[40|check]>
+Current goal (remaining: 3)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+nf: int := fresh_count history xs
+nf0: 0 <= nf
+y: 'y
+hy: y \in d
+hp: ! p y
+hh: mu1 (ro_search d p ((x, y) :: history) xs) None <=
+    (1%r - mu d p) ^ fresh_count ((x, y) :: history) xs
+------------------------------------------------------------------------
+mu1 (ro_search d p ((x, y) :: history) xs) None <=
+mu1 (bounded d p (nseq nf tt)) None
+[41|check]>
+Current goal (remaining: 3)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+nf: int := fresh_count history xs
+nf0: 0 <= nf
+y: 'y
+hy: y \in d
+hp: ! p y
+hh: mu1 (ro_search d p ((x, y) :: history) xs) None <=
+    (1%r - mu d p) ^ fresh_count history xs
+------------------------------------------------------------------------
+mu1 (ro_search d p ((x, y) :: history) xs) None <=
+mu1 (bounded d p (nseq nf tt)) None
+[42|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x = None
+nf: int := fresh_count history xs
+nf0: 0 <= nf
+------------------------------------------------------------------------
+mu1 (bounded d p (tt :: nseq nf tt)) None <=
+(1%r - mu d p) ^
+(b2i true + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[43|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x <> None
+------------------------------------------------------------------------
+mu1
+  (if !false then
+     if p (oget (assoc history x)) then dunit (assoc history x)
+     else ro_search d p history xs
+   else
+     dlet d
+       (fun (y : 'y) =>
+          if p y then dunit (Some y)
+          else ro_search d p ((x, y) :: history) xs)) None <=
+(1%r - mu d p) ^ fresh_count history (x :: xs)
+[44|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x <> None
+------------------------------------------------------------------------
+mu1
+  (if p (oget (assoc history x)) then dunit (assoc history x)
+   else ro_search d p history xs) None <=
+(1%r - mu d p) ^
+(b2i false + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[45|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x <> None
+hp: p (oget (assoc history x))
+------------------------------------------------------------------------
+mu1 (dunit (assoc history x)) None <=
+(1%r - mu d p) ^
+(b2i false + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[46|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x <> None
+hp: p (oget (assoc history x))
+hsome: assoc history x <> None
+------------------------------------------------------------------------
+mu1 (dunit (assoc history x)) None <=
+(1%r - mu d p) ^
+(b2i false + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[47|check]>
+Current goal (remaining: 2)
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x <> None
+hp: p (oget (assoc history x))
+hsome: assoc history x <> None
+------------------------------------------------------------------------
+0%r <=
+(1%r - mu d p) ^
+(b2i false + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[48|check]>
+Current goal
+
+Type variables: 'x, 'y
+
+d: 'y Distr.distr
+p: 'y -> bool
+dll: is_lossless d
+x: 'x
+xs: 'x list
+ih: uniq xs =>
+    forall (history : ('x * 'y) list),
+      mu1 (ro_search d p history xs) None <=
+      (1%r - mu d p) ^ fresh_count history xs
+hn: ! (x \in xs)
+hu: uniq xs
+history: ('x * 'y) list
+hx: assoc history x <> None
+hp: ! p (oget (assoc history x))
+------------------------------------------------------------------------
+mu1 (ro_search d p history xs) None <=
+(1%r - mu d p) ^
+(b2i false + count (fun (x0 : 'x) => assoc history x0 = None) xs)
+[49|check]>
+No more goals
+[50|check]>
+[51|check]>
+added lemma: `history_search_exhaustion'

@@ -1,0 +1,1 @@
+{"command": ["cargo", "kani", "-p", "pqsigner-erc7730", "--harness", "display::render::formatters::kani_harness::fmt_p0_native_amount_prepublication_decision_concrete", "--exact", "--output-format", "regular"], "returncode": 0}

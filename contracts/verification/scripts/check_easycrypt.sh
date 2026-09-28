@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
+# Historical drafts only. Current split: make verify-easycrypt-split[-pins].
 # verify-easycrypt -- compile the SPHINCS+C EasyCrypt port and assert its ledger.
 #
 # WHY THIS EXISTS
@@ -244,6 +245,8 @@ echo "[compile] every .ec as a TARGET (require does NOT re-verify)"
 find "$DRAFTS" -name '*.eco' -delete 2>/dev/null
 skipped=0
 compiled=0
+require_tmp=$(mktemp -d) || exit 1
+trap 'rm -rf "$require_tmp"' EXIT
 for f in "$DRAFTS"/*.ec; do
   b="$(basename "$f")"
   bn="${b%.ec}"
@@ -258,7 +261,17 @@ for f in "$DRAFTS"/*.ec; do
     timeout 1800 easycrypt compile "${INC[@]}" "$f" >/dev/null 2>&1
   fi
   rc=$?
-  if [ "$rc" != 0 ]; then bad "$b does not compile (exit $rc)"; else note "ok  $b"; compiled=$(( compiled + 1 )); fi
+  if [ "$rc" != 0 ]; then
+    bad "$b does not compile (exit $rc)"
+  else
+    # compile alone accepts EOF inside an unfinished proof on r2026.02.
+    printf 'require import %s.\n' "$bn" > "$require_tmp/RequireProbe.ec"
+    if timeout 1800 bash "$EC_SH" compile -no-eco "${INC[@]}" "$require_tmp/RequireProbe.ec" >/dev/null 2>&1; then
+      note "ok  $b (compiled and required)"; compiled=$(( compiled + 1 ))
+    else
+      bad "$b cannot be required (possibly an unfinished proof at EOF)"
+    fi
+  fi
 done
 find "$DRAFTS" -name '*.eco' -delete 2>/dev/null
 [ "$skipped" != 0 ] && note "SKIPPED $skipped MM45-chain file(s) -- need z3 4.13.x / prebuilt SPHINCS_PLUS.eco (see header); NOT verified here"

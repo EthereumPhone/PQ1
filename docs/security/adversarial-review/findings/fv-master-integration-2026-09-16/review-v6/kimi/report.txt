@@ -1,0 +1,18 @@
+VERDICT: GO
+TARGET: 816db25c4d161544d2ba74b988efd50942167d0d / 050cafedbcb138388636551687710f67c69a9368
+FINDINGS: none
+GAPS: Publication still awaits the two declared pending runs (frozen Tamarin live run; pinned-image replay identity 623ad0710d73000a1c693049b8933813) — evidence-completion only, no source gap found.
+
+Source-first verification performed:
+
+1. Tamarin binding — `scripts/check_protocol_models.py:455-460` hashes complete UTF-8 source bytes and skips prover execution on drift (fail-closed `continue`); formula pins remain separate checks on the exact models (`check_tamarin_source`); no includes/preprocessing possible since any byte changes the pin. I recomputed all three `.spthy` SHA-256 values — exact match with `TAMARIN_SOURCE_SHA256`. Self-test covers quoted-constant, block/line/nested comment, `[reuse]`/`[sources]`/`hide_lemma` attribute, `#ifdef`/`#include`, and decoy-in-comment bypasses, and passes under `python3 -O` (no `assert` anywhere in the gate path; setup checks raise `HarnessError`).
+
+2. Kani — `scripts/check_kani_mutations.py:201` requires an unmodified passing baseline before mutation credit; `validate_manifest` enforces fully qualified `harness_path` ending in the harness name, `run_kani` passes `--harness … --exact`, and `classify_kani` demands exactly one harness banner, one verdict, one summary, matching exit code, and rejects fatal diagnostics; revert is verified byte-equal in `finally` plus atexit/signals. Heavy tier is non-cumulative + canary always prepended; heavy-feature/tier agreement enforced. Both Make entrypoints route to `--tier heavy` (`Makefile:4056`, `Makefile:4111`). Census normalizes multiline attributes before cfg parsing (`kani_census.py:150`); `test_kani_mutations.py` passes under `-O`.
+
+3. EasyCrypt cone — `cert-cone-files-split.tsv` holds exactly 53 unique files (4 `.eca`); `split_contract.py targets()` fails on empty/duplicate inventory, missing files, or computed-cone≠pinned-cone; the gate compiles every cone file as a target with both drivers (`cert_gate_split.sh` PHASE 1/1e, counts enforced) plus a generated require-probe for EOF-open proofs (PHASE 1d) — imports cannot substitute.
+
+4. Pins — `EXPECT_PINS=1166`, `EXPECT_STMTS=1082` in the gate; `check_pins` enforces unique keys, canonical cone-member paths, canonical identifier regex, per-identity dedup, and resolvable 32-hex digests.
+
+5. Master controls retained verbatim: `EXPECT_CTLS=49` (incl. per-headline-file scope negatives), `EXPECT_TAINT_CTLS=15`, `EXPECT_TAINT_COUNT_CTLS=4`, margins 4/3, `EXPECT_WATCHED=0`.
+
+6. Replay — `run_easycrypt_split.py` pins image by digest, `--network none`, `:ro` mount + disposable `/tmp/proofs` copy; `check_toolchain` binds compiler git-hash, unique 25-prover inventory, and the `PQ_EASYCRYPT_IMAGE` env (fail-closed outside the wrapper); `split_proof_controls.py` uses `require()` not `assert`; Makefile uses `python3 -E -S -B`. Nightly `easycrypt-split` job and per-PR `lean-fv.yml` pin gates wired; 68 gate registrations, `test_gate_enforcement.py` 22 tests pass.

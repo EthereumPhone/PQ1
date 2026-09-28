@@ -1,0 +1,27 @@
+test_allowlist_covers_whole_model_surface (__main__.GateControls.test_allowlist_covers_whole_model_surface) ... ok
+test_branch_filter_grammar_is_bounded (__main__.GateControls.test_branch_filter_grammar_is_bounded) ... ok
+test_checker_checks_its_own_ci_step (__main__.GateControls.test_checker_checks_its_own_ci_step) ... ok
+test_context_cannot_be_removed (__main__.GateControls.test_context_cannot_be_removed) ... ok
+test_current_split_paths_cannot_be_removed_from_either_lane (__main__.GateControls.test_current_split_paths_cannot_be_removed_from_either_lane) ... ok
+test_duplicate_registration_and_waiver (__main__.GateControls.test_duplicate_registration_and_waiver) ... ok
+test_easycrypt_helper_and_control_paths (__main__.GateControls.test_easycrypt_helper_and_control_paths) ... ok
+test_event_payload_shapes_fail_closed (__main__.GateControls.test_event_payload_shapes_fail_closed) ... ok
+test_every_blocking_level_is_pinned (__main__.GateControls.test_every_blocking_level_is_pinned) ... ok
+test_every_registration_is_required (__main__.GateControls.test_every_registration_is_required) ... ok
+test_heavy_mutation_entrypoints_are_local_and_executable (__main__.GateControls.test_heavy_mutation_entrypoints_are_local_and_executable) ... ok
+test_live_fixture_and_unrelated_step (__main__.GateControls.test_live_fixture_and_unrelated_step) ... ok
+test_local_workflow_metadata (__main__.GateControls.test_local_workflow_metadata) ... ok
+test_per_pr_denylists_are_rejected (__main__.GateControls.test_per_pr_denylists_are_rejected) ... ok
+test_printed_command_for_every_blocking_gate (__main__.GateControls.test_printed_command_for_every_blocking_gate) ... ok
+test_protocol_family_scope_and_local_wrapper (__main__.GateControls.test_protocol_family_scope_and_local_wrapper) ... ok
+test_protocol_negative_controls_are_required_in_nightly (__main__.GateControls.test_protocol_negative_controls_are_required_in_nightly) ... ok
+test_pull_request_trigger_and_activity_coverage (__main__.GateControls.test_pull_request_trigger_and_activity_coverage) ... ok
+test_scheduled_tier_cadence_is_pinned (__main__.GateControls.test_scheduled_tier_cadence_is_pinned) ... ok
+test_shell_forms_on_both_blocking_tiers (__main__.GateControls.test_shell_forms_on_both_blocking_tiers) ... ok
+test_split_job_requires_its_shared_makefile_prerequisite (__main__.GateControls.test_split_job_requires_its_shared_makefile_prerequisite) ... ok
+test_step_job_and_workflow_suppression (__main__.GateControls.test_step_job_and_workflow_suppression) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 91.519s
+
+OK

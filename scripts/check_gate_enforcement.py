@@ -112,6 +112,8 @@ ENFORCEMENT_POLICY = {
     "verify-easycrypt-docker": "local_documented",
     "verify-easycrypt-full": "local_documented",
     "verify-easycrypt-pins": "per_pr_blocking",
+    "verify-easycrypt-split-pins": "per_pr_blocking",
+    "verify-easycrypt-split": "nightly",
     "verify-exec-gate": "local_documented",
     "verify-extract-differential": "nightly",
     "verify-extracted": "per_pr_blocking",
@@ -127,6 +129,7 @@ ENFORCEMENT_POLICY = {
     "verify-interp": "local_documented",
     "verify-kani-census": "per_pr_blocking",
     "verify-kani-mutation": "nightly",
+    "verify-kani-mutation-heavy": "local_documented",
     "verify-kontrol": "local_documented",
     "verify-lean-proto-domain": "local_documented",
     "verify-lean4checker": "local_documented",
@@ -1349,6 +1352,17 @@ def main() -> int:
     all_fails += completeness(manifest)
     easycrypt_gate = next(g for g in gates if g["id"] == "verify-easycrypt-pins")
     all_fails += easycrypt_pin_coverage(easycrypt_gate.get("polices_paths", []))
+    for gate_id, workflow in [('verify-easycrypt-split-pins', 'lean-fv.yml'),
+                              ('verify-easycrypt-split', 'nightly.yml')]:
+        split_gate = next(g for g in gates if g['id'] == gate_id)
+        for path in ('contracts/verification/easycrypt/c10-port/**',
+                     'contracts/verification/scripts/run_easycrypt_split.py',
+                     'contracts/verification/Makefile', f'.github/workflows/{workflow}',
+                     'sphincs-c10/src/wots.rs', 'sphincs-c10/src/hash.rs',
+                     'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs',
+                     'sphincs-c10/tests/easycrypt_transcript.rs'):
+            if not _covers(split_gate.get('polices_paths', []), path):
+                all_fails.append(f'easycrypt-split-reverse: {gate_id} does not cover {path}')
     protocol_gate = next(g for g in gates if g["id"] == "verify-protocol-models")
     if _covers(protocol_gate.get("polices_paths", []),
                "contracts/verification/cryptoverif/seed_split_secrecy.cv"):

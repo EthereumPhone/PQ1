@@ -1,0 +1,10 @@
+=== verify-protocol-models (families: tamarin) ===
+    Assert each design-layer model's per-query/per-lemma verdict IDENTITY vs the
+    committed baseline; nonzero prover exit is a failure (F7, 2026-07-16).
+
+--> tamarin
+    [ok  ] pin_lockstep.spthy       verified=4/4 falsified=0/0 (identity: 4 lemmas + formulas pinned)
+    [ok  ] scp03_replay.spthy       verified=2/2 falsified=0/0 (identity: 2 lemmas + formulas pinned)
+    [ok  ] seed_split_xor.spthy     verified=2/2 falsified=0/0 (identity: 2 lemmas + formulas pinned)
+
+OK: all in-scope protocol models match their per-query/per-lemma identity baseline (for the families run).

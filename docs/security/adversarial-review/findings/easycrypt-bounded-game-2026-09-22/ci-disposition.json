@@ -1,0 +1,115 @@
+{
+  "source": "2c9be6fc596f498946d2789f126f13190422baa9",
+  "baseline": "d947c04780a156853160bef32882b158518c90b7",
+  "checked_paths": [
+    ".github/workflows",
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "secure/data/erc7730/curations/manifest.json",
+    "proto",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "xtask",
+    "scripts/check_erc7730_descriptors.py"
+  ],
+  "changed_paths": [],
+  "known_issues": [
+    660,
+    711,
+    717
+  ],
+  "additional_evidence": [
+    {
+      "job": 106673530206,
+      "exit": 0,
+      "evidence": [
+        "2026-09-22T08:37:52.1963157Z test negative_spi_mismatched_lengths_rejected ... ok",
+        "2026-09-22T08:37:52.2299273Z test selectors::bundle::tests::self_attest_keccak_mismatch_rejected ... ok",
+        "2026-09-22T08:37:52.2383666Z test negative_proof_length_mismatch_rejected ... ok",
+        "2026-09-22T08:37:52.2969834Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\"",
+        "2026-09-22T08:37:52.3010330Z error: process didn't exit successfully: `/home/runner/.rustup/toolchains/nightly-2026-04-06-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /home/runner/work/PQ1/PQ1/Cargo.toml --target-dir /home/runner/work/PQ1/PQ1/target/llvm-cov-target --locked --tests -p pqsigner-proto -p pqsigner-tx-core -p pqsigner-aa -p pqsigner-domain -p pqsigner-tx -p pqsigner-erc7730 -p sphincs-c10 -p pqsigner-fi -p sphincs-tz-bip39 -p fw-manifest -p sphincs-tz-shared -p pqsigner-hal -p pqsigner-pq-seal -p masked-sha2 -p pqsigner-xtask -p fwsign -p fwmeasure` (exit status: 101)",
+        "2026-09-22T08:37:52.3025448Z ##[error]Process completed with exit code 101."
+      ]
+    },
+    {
+      "job": 106673530352,
+      "exit": 0,
+      "evidence": [
+        "2026-09-22T08:34:50.9869933Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+        "2026-09-22T08:34:50.9884395Z ##[error]Error: Command failed: bash \"/home/runner/.foundry/bin/foundryup\" ",
+        "/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file"
+      ]
+    }
+  ],
+  "status": "broad CI remains red on unchanged baseline inputs; scoped proof and G1 gates are separate",
+  "primary_evidence": [
+    {
+      "job": 106673530083,
+      "exit": 0,
+      "bytes": 123075,
+      "evidence": [
+        "2026-09-22T08:36:44.5643762Z     (each mutant must PASS the statistical lint yet FAIL the structural check)",
+        "2026-09-22T08:36:44.6792013Z   ok: a dropped field (length mismatch) is CAUGHT",
+        "2026-09-22T08:36:44.9487676Z SELF-TEST ABORTED: the live ledger is already failing:",
+        "2026-09-22T08:36:44.9489259Z     C3: HW-ASSUME-TRNG-ENTROPY: anchor not found in secure/src/hw/rng.rs: 'if sr & (SECS | CECS) != 0' \u2014 the code moved out from under this row; re-point it (do not delete the row)",
+        "2026-09-22T08:36:44.9490095Z === self-test FAIL ===",
+        "2026-09-22T08:36:44.9529746Z make: *** [Makefile:449: verify-hw-assumptions] Error 1",
+        "2026-09-22T08:36:44.9541837Z ##[error]Process completed with exit code 2."
+      ],
+      "stderr": ""
+    },
+    {
+      "job": 106673529603,
+      "exit": 0,
+      "bytes": 235397,
+      "evidence": [
+        "2026-09-22T08:36:54.6582152Z test tests::vendor_install_second_move_failure_restores_both_prior_directories ... ok",
+        "2026-09-22T08:36:54.6748961Z failures:",
+        "2026-09-22T08:36:54.6750923Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\"",
+        "2026-09-22T08:36:54.6751361Z failures:",
+        "2026-09-22T08:36:54.6752154Z test result: FAILED. 65 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "2026-09-22T08:36:54.6752871Z \u001b[1m\u001b[91merror\u001b[0m: test failed, to rerun pass `-p pqsigner-xtask --bin pqsigner-xtask`",
+        "2026-09-22T08:36:54.6851944Z ##[error]Process completed with exit code 101."
+      ],
+      "stderr": ""
+    },
+    {
+      "job": 106673530027,
+      "exit": 0,
+      "bytes": 41308,
+      "evidence": [
+        "2026-09-22T08:36:30.3353103Z \u001b[36;1m  echo \"ERROR: ERC-7730 production provenance unexpectedly passed\"\u001b[0m",
+        "2026-09-22T08:36:30.3354243Z \u001b[36;1mgrep -Fq \"prod-erc7730-provenance-check: FAIL\" <<<\"$output\"\u001b[0m",
+        "2026-09-22T08:36:30.3394552Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}",
+        "2026-09-22T08:36:30.3395894Z   CACHE_ON_FAILURE: false",
+        "2026-09-22T08:37:04.3745413Z DRIFT: ERC-7730 curation overlay: curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977",
+        "2026-09-22T08:37:04.3747190Z make: *** [Makefile:1842: check-erc7730-descriptors] Error 1",
+        "2026-09-22T08:37:04.3772996Z ##[error]Process completed with exit code 1."
+      ],
+      "stderr": ""
+    },
+    {
+      "job": 106673529300,
+      "exit": 0,
+      "bytes": 56032,
+      "evidence": [
+        "2026-09-22T08:36:05.0576083Z CFLAGS=-O1   -fno-omit-frame-pointer   -gline-tables-only   -Wno-error=incompatible-function-pointer-types   -Wno-error=int-conversion   -Wno-error=deprecated-declarations   -Wno-error=implicit-function-declaration   -Wno-error=implicit-int   -Wno-error=unknown-warning-option   -Wno-error=vla-cxx-extension   -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=fuzzer-no-link",
+        "2026-09-22T08:36:05.0582164Z CXXFLAGS=-O1   -fno-omit-frame-pointer   -gline-tables-only   -Wno-error=incompatible-function-pointer-types   -Wno-error=int-conversion   -Wno-error=deprecated-declarations   -Wno-error=implicit-function-declaration   -Wno-error=implicit-int   -Wno-error=unknown-warning-option   -Wno-error=vla-cxx-extension   -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=fuzzer-no-link -stdlib=libc++",
+        "2026-09-22T08:36:13.8192742Z error: cannot update the lock file /src/pqsigner/fuzz/Cargo.lock because --locked was passed to prevent this",
+        "2026-09-22T08:36:15.0462687Z 2026-09-22 08:36:15,045 - root - ERROR - Building fuzzers failed.",
+        "2026-09-22T08:36:15.0463873Z 2026-09-22 08:36:15,045 - root - ERROR - Error building fuzzers for (commit: bc9010f7d532c7485aca340d4e9d5c33c505a87a, pr_ref: refs/pull/718/merge)."
+      ],
+      "stderr": ""
+    },
+    {
+      "job": 106673530394,
+      "exit": 0,
+      "bytes": 13776,
+      "evidence": [
+        "2026-09-22T08:34:52.1222902Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+        "2026-09-22T08:34:52.1232673Z ##[error]Error: Command failed: bash \"/home/runner/.foundry/bin/foundryup\" "
+      ],
+      "stderr": ""
+    }
+  ]
+}

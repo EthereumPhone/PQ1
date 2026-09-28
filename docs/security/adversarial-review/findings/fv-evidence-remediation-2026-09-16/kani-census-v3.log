@@ -1,0 +1,11 @@
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.008s
+
+OK
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+OK
+OK: Kani census matches the lock — 173 harnesses / 27 files; 164 in 22 mutation-enrolled files, 9 in 5 outside; 43 mutation groups {'quick': 10, 'default': 29, 'heavy': 1, 'full': 3}. Manifest consistent.

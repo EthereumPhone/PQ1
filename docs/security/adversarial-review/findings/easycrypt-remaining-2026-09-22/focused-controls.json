@@ -1,0 +1,107 @@
+[
+  {
+    "file": "scratch/C10HypertreeCoveragePositive.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  },
+  {
+    "file": "scratch/SharedROBoundedPositive.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10RandomizerPositive.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10HashDomainsPositive.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10SharedSearchPositive.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10SearchBoundsPositive.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10HypertreeChargedPositive.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  },
+  {
+    "file": "scratch/SharedROKnownNotFresh.ec",
+    "exit": 1,
+    "expect": "MUST-FAIL",
+    "reason": "[by]: cannot close goals",
+    "ok": true
+  },
+  {
+    "file": "scratch/SharedRODuplicateNotFresh.ec",
+    "exit": 1,
+    "expect": "MUST-FAIL",
+    "reason": "[by]: cannot close goals",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10HashWrongLength.ec",
+    "exit": 1,
+    "expect": "MUST-FAIL",
+    "reason": "[by]: cannot close goals",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10CoverageSinglePath.ec",
+    "exit": 1,
+    "expect": "MUST-FAIL",
+    "reason": "[by]: cannot close goals",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10FORSBoundedPositive.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10FORSNoExhaustion.ec",
+    "exit": 1,
+    "expect": "MUST-FAIL",
+    "reason": "[by]: cannot close goals",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10RandomizerWrongHalf.ec",
+    "exit": 1,
+    "expect": "MUST-FAIL",
+    "reason": "[by]: cannot close goals",
+    "ok": true
+  },
+  {
+    "file": "scratch/C10FORSBoundedSMT.ec",
+    "exit": 0,
+    "expect": "MUST-PASS",
+    "reason": "-",
+    "ok": true
+  }
+]

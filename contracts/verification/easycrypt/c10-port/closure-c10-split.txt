@@ -1,6 +1,7 @@
 Grind
 STCR_C
 WOTS_C_Real
+C10BoundedGrind
 WOTS_C_Scheme
 XMSSMT_C_Scheme
 WOTS_C_Reduction
@@ -32,3 +33,177 @@ GprocQWired
 DarkSide
 DarkSideC10
 GprocChargedQWired
+BadEncCountermodel
+WotsLegCharged
+GprocWotsNamed
+TCollResEnum
+BadEncSplit
+BadEncToTColl
+BadEncStep4
+GprocTCollNamed
+# 2026-09-21: the constant-sum surface count, PROMOTED from
+# experiments/wots-badenc/count/ (moved, not copied).  Cited by two cone members
+# -- C10DeployedScope.ec:344 and GprocTCollNamed.ec:56 -- while living in an
+# ungated directory.  Required by nothing, so they enter the cone only as roots.
+VecDP
+CountDS
+C10SurfaceKernel
+C10Surface
+
+# Concrete digit/predicate/count bridge and failure-aware signing experiments.
+C10Encoding
+C10BoundedSigning
+C10BoundedIID
+
+# Adaptive bounded-game comparison and conditional WOTS reduction.
+C10BoundedGame
+C10BoundedReduction
+
+# Failure-rejecting, N2-free member-aware WOTS bound.
+C10BoundedMA
+
+# Bounded hypertree and actual leaf-reduction interfaces.
+C10BoundedHypertree
+C10BoundedLeaf
+
+# Remaining C10 research: history, domains, randomizer and charged composition.
+C10HypertreeCoverage
+SharedROBounded
+C10Randomizer
+C10HashDomains
+C10SharedSearch
+C10SearchBounds
+C10HypertreeCharged
+
+# Accepted-history hypertree composition and persistent raw-oracle foundations.
+C10WOTSCorrect
+C10HypertreeCorrect
+C10CubeCorrect
+C10CubeConstruction
+C10ReductionChoose
+C10ReductionForge
+C10AcceptedReduction
+C10HypertreeAccepted
+C10StatefulSearch
+C10RawOracle
+C10RawGrind
+FORSC10Digest
+
+# Costed adaptive shared-oracle and byte-session research milestone.
+SessionClosedForm
+RawSessionCost
+ByteBound
+RawSignerWidths
+FullFailure
+
+# Quantitative foundations: exact replay and memoized accepted-output laws.
+ByteReplay
+GrindJointCoverage
+SignerReturned
+GrindHypertree
+
+# Complete live-session classification and repeat-aware accepted-output laws.
+ClassifiedBound
+ClassifiedSession
+ByteHistory
+SignerTrace
+
+# Actual Merkle/FORS recovery traces and reference-path comparison.
+RawPathComparison
+RawForsComparison
+RawPathReplay
+RawForsPathReplay
+
+# Actual raw builders, retained initial FORS leaf hashes and recovery comparison.
+BuildRootProjection
+TotalBuilderReference
+ForsBuilderSecret
+ForsBuilderComparison
+MerkleBuilderComparison
+ForsBuilderPrivate
+ForsSignCorrect
+ForsSignRecord
+
+# Actual layer and complete structured/byte keygen-sign-verify correctness.
+ActualWotsCorrect
+RawWotsReference
+RawShufflePermutation
+RawWotsRecovery
+ActualForestCorrect
+ForestSignRecorded
+ForestRecoveryReplay
+ActualLayerCorrect
+RawMerkleRootWitness
+MerkleBuilderWots
+LayerSignCorrect
+ActualSignerCorrect
+SignerReturnedOpening
+SignerVerifierReplay
+SignerFinishRecorded
+ActualByteSignerCorrect
+EncodedSignature
+SignerEncodingCorrect
+RawSignerBytes
+
+# Physical honest-byte correctness and public-node collision charges.
+HonestByteContext
+HonestByteCost
+HonestBytePhysical
+NodeDistribution
+ProjectedBirthday
+PublicCollisionBound
+NodeCollisionEvents
+PublicCollisionState
+BytePublicCollision
+PublicNodeZero
+BytePublicNodeBad
+WotsZeroSentinel
+
+# Actual reverse WOTS and Merkle-layer recovery.
+LinearCollision
+RecoveryCompression
+RawRecoveryTrace
+RawWotsExtraction
+WotsKeyExtraction
+LayerWotsExtraction
+LayerBuildExtraction
+VerifierWotsReplay
+
+# Complete byte-game top-layer extraction.
+RootCoverage
+RootSessionHistory
+VerifierTopExtraction
+ByteGameTopExtraction
+ByteTopOpeningHop
+
+# Linked byte-game subtree extraction.
+LayerRecordExtraction
+VerifierLayerRecords
+HonestSubtreeMessages
+SubtreeOpeningCases
+ByteGameSubtreeExtraction
+ByteSubtreeOpeningHop
+
+# Linked byte-game forest extraction.
+ForestRecoveryRecord
+ForsRootWitness
+ForsRecordExtraction
+ForestRecordExtraction
+ForestRootRecording
+VerifierForestRecords
+HonestForestMessages
+ForestReferenceHistory
+ForestOpeningCases
+ByteGameForestExtraction
+ByteForestOpeningHop
+
+# Accumulated adaptive signing responses.
+ExposureLog
+ExposureDriver
+ExposureSupport
+ExposureHistory
+ExposureAccounting
+ExposureSessionHistory
+ExposureReferences
+ExposureGameHistory
+ExposureForge

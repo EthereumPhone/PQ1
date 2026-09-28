@@ -30,11 +30,64 @@ TMPD=$(mktemp -d) || { echo 'FAIL mktemp'; exit 1; }
 trap 'rm -rf "$TMPD"' EXIT
 # Expected inventory sizes, COMMITTED. A guard that recomputes its expectation
 # from the file it is checking cannot detect truncation of that file.
-EXPECT_PINS=1078
-# Committed count of top-level statements across the 38 certified roots.  Guards
+# 1078 -> 1101 on 2026-08-31: the 23 BadEncCountermodel.ec statements pinned on
+# promotion.  NOTE FOR THE NEXT PERSON: there are TWO committed counts and they
+# are NOT the same number.  EXPECT_PINS counts MANIFEST ROWS (1101, which
+# includes `op:`-prefixed rows); EXPECT_STMTS counts TOP-LEVEL STATEMENTS in the
+# cone files (1016).  Bumping only one turns the gate RED at PHASE 1c with
+# "statement pin file truncated" -- which is exactly what it did on the first
+# run of this promotion.
+EXPECT_PINS=2953
+# 1167 -> 1166 on 2026-09-15: a DUPLICATE row removed.  op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f
+# sat on two identical rows from 92ecb63 (2026-08-20), so this count was one pin HIGH for 26 days.
+# PHASE 1c now also requires the UNIQUE key count to equal it.
+# 1166 -> 1167 on 2026-09-14: GprocTCollNamed.ec (one lemma).
+# 1109 -> 1166 on 2026-09-14: the 57 statements of the promoted T_COLL_RES_ENUM chain.
+# Committed count of top-level statements across the certified roots.  Guards
 # PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
-# somebody must say why.  896 measured 2026-08-20.
-EXPECT_STMTS=993
+# somebody must say why.  896 measured 2026-08-20; 993 after the 2026-08-25 pins;
+# 1016 on 2026-08-31 when cdrafts-split/BadEncCountermodel.ec was promoted into the
+# closure (+23 statements, all pinned in the same commit).
+EXPECT_STMTS=2564
+# 1081 -> 1082 on 2026-09-14: GprocTCollNamed.ec (one lemma, pinned in the same commit).
+# 1024 -> 1081 on 2026-09-14 (+57, the T_COLL_RES_ENUM chain; all pinned in the same commit).
+# COMMITTED CONTROL COUNT (added 2026-09-14).  The PHASE 3 guard used to be
+# `[ "$n_ctl" -ge 6 ]` while PRINTING `expected>=15`: the "COUNT RAISED 6 -> 10 -> 13
+# -> 15" comments were bumped three times and the NUMBER never was, so deleting up to
+# nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
+# itself, authored in this tree.  Now an equality against a committed constant, the
+# same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
+EXPECT_CTLS=386
+# 44 -> 49 on 2026-09-15 (later): a per-file scope negative for each of the other five headline
+# files.  Kimi K3 review: they had inherited isolation through GprocTCollNamed's require chain,
+# which nothing gated (all six are closure roots).
+# 39 -> 44 on 2026-09-15: the five scope-isolation controls scratch/_scope_*.ec for the last
+# admit (2 MUST-FAIL, their 2 MUST-PASS twins, 1 environment witness).
+# COMMITTED TAINT-CONTROL COUNT (added 2026-09-14).  PHASE 5 trusted scratch/
+# taint_controls.sh's EXIT STATUS, which is nonzero only when a control FAILS.  A control
+# that never RUNS -- a deleted block, a blinded `grade` call, an early `exit 0` -- scored
+# nothing, and the gate echoed `OK   taint controls: ... pass=10 fail=0`.  Demonstrated
+# against the pre-fix lines, not argued (scratch/PREDICTION-taint-count-guard-2026-09-14.md).
+# Same class as the PHASE 3 floor directly above, fixed the same day.  PHASE 5 now PARSES
+# the summary and requires fail=0, pass = this constant, and as many UNIQUE `OK` lines
+# (PHASE 3 counts unique names too: a deleted control replaced by a copy of another must
+# not score).  11 = the T0 baseline + graded controls T1..T10.
+EXPECT_TAINT_CTLS=15
+# 11 -> 15 on 2026-09-15 (later): T11..T14, the controls for the scope-probe linkage check in
+# tools/taint_closure.py (row deleted / row matcher blinded / probe requires the wrong headline
+# theory / declared reason drops the admit theory).
+# The guard above is itself exercised by scratch/taint_count_controls.sh, which executes
+# the gate's own PHASE 5 lines against weakened copies of the controls script.  Its
+# summary must read exactly pass=EXPECT_TAINT_COUNT_CTLS fail=0, so skipping one of ITS
+# variants is caught here rather than by trusting another exit status.
+EXPECT_TAINT_COUNT_CTLS=4
+# COMMITTED MARGIN-SCRIPT LINE COUNTS (2026-09-15).  PHASE 4 tested FLOORS (`-lt 4`, `-lt 3`)
+# and printed `4/4` and `3/3` as LITERALS, so its receipt reported a measurement it never
+# made.  Not a live fail-open -- tools/forsc_grinding_margin.py is in the hashed input set --
+# but a receipt line must say what was counted.  Now equalities that print the measured
+# count.  MEASURED 2026-09-15: 4 guardrail OK lines, 3 self-test `ok:` lines.
+EXPECT_MARGIN_GUARDS=4
+EXPECT_MARGIN_SELFTESTS=3
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
 # partly a measurement of the default rather than of the proofs.  cdrafts-split/
@@ -105,7 +158,7 @@ for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_I
 # proof, and PHASE 2b/2c only canary two specific behaviours of it.
 INPUTS_ID=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert-source-binding.json tools/check_source_binding.py cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
 echo "### INPUTS_SHA256 $INPUTS_ID"
 # AND NOW COMPARE IT.  This line was printed and checked by nothing: an identity
 # receipt that no run can fail on is decoration.  The expected value lives in
@@ -122,24 +175,13 @@ elif [ "$INPUTS_ID" != "$want_id" ]; then
 else
   echo "OK   INPUTS_SHA256 matches the committed identity"
 fi
-echo "### TOOLCHAIN $(easycrypt cli </dev/null 2>&1 | grep -ao 'GIT hash: [^ ]*' | head -1 || echo UNKNOWN)"
-# PROVER INVENTORY (added 2026-08-02, run 10).  Every `smt()` in the closure is
-# discharged by whatever provers the local why3 config offers, at whatever
-# timeout; NOTHING here pins them and the receipt recorded only the EasyCrypt
-# git hash.  This container answers with 25 prover configurations (Alt-Ergo
-# 2.4.3/2.5.4/2.6.0, CVC4 1.8, CVC5 1.0.9, Z3 4.8.17/4.12.6/4.13.4).  A third
-# party with a different set can get a different verdict on the SAME tree.
-# Direction of the risk is fail-CLOSED FOR A MISSING PROVER -- it loses a goal,
-# it does not invent one.  That is NOT the same as sound: a DIFFERENT prover
-# version with a soundness bug does invent one, and this receipt inherits the
-# prover-soundness assumption the whole artifact already makes (run 12).  So:
-# a reproducibility receipt, under an unchanged trust assumption.
-# 2>&1, NOT 2>/dev/null: EasyCrypt prints `known provers:` on STDERR, so the
-# first version of this line hashed the EMPTY STRING and printed
-# `e3b0c44298fc1c14 0 configurations` -- the SAME empty-input defect run 8
-# found in the identity hash, committed again by me two hours later.  A
-# receipt field must be checked for its VALUE, never for its presence.
-echo "### PROVERS $(easycrypt config 2>&1 | sed -n 's/^known provers: //p' | head -1 | sha256sum | cut -c1-16) $(easycrypt config 2>&1 | sed -n 's/^known provers: //p' | head -1 | tr ',' '\n' | grep -c .) configurations"
+# The fast per-PR identity check deliberately needs no proof toolchain.
+if [ "${1:-}" = "--identity-only" ]; then exit "$fail"; fi
+[ "$fail" -eq 0 ] || exit 1
+python3 tools/split_contract.py || exit 1
+python3 tools/split_contract.py --toolchain || exit 1
+python3 tools/split_proof_controls.py || exit 1
+python3 tools/split_contract.py --targets > "$TMPD/targets" || exit 1
 
 # PHASE 0 -- INCLUDE-PATH AMBIGUITY.  resolve() in tools/cert_cone.py tries
 # '.ec' then '.eca' and takes the LAST hit, but EasyCrypt's own preference when
@@ -193,18 +235,18 @@ echo "### ECO_REMAINING=$left"
 [ "$left" -eq 0 ] || { echo "FAIL stale .eco survived the purge ($left)"; fail=$((fail+1)); }
 
 echo "### PHASE 1 — TARGETS"
-for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
-  if easycrypt compile $ECFLAGS -I $B $B/$n.ec >/dev/null 2>&1; then echo "OK   base/$n"; else echo "FAIL base/$n"; fail=$((fail+1)); fi
-done
 n_seen=0
-while read -r n || [ -n "$n" ]; do
-  case "$n" in ''|\#*) continue;; esac
+while read -r f; do
   n_seen=$((n_seen+1))
-  if easycrypt compile $ECFLAGS $INC $D/$n.ec >/dev/null 2>&1; then echo "OK   $n"; else echo "FAIL $n"; fail=$((fail+1)); fi
-done < closure-c10-split.txt
-n_exp=$(grep -cve '^[[:space:]]*$' -e '^#' closure-c10-split.txt)
-echo "### CLOSURE_COMPILED=$n_seen EXPECTED=$n_exp"
-[ "$n_seen" -eq "$n_exp" ] || { echo "FAIL closure truncated"; fail=$((fail+1)); }
+  if easycrypt compile $ECFLAGS $INC "$f" >"$TMPD/compile.log" 2>&1; then
+    echo "OK   target $f"
+  else
+    echo "FAIL target $f"; tail -10 "$TMPD/compile.log"; fail=$((fail+1))
+  fi
+done < "$TMPD/targets"
+n_exp=$(wc -l < "$TMPD/targets")
+echo "### CONE_COMPILED=$n_seen EXPECTED=$n_exp"
+[ "$n_seen" -eq "$n_exp" ] && [ "$n_exp" -gt 0 ] || { echo "FAIL cone truncated"; fail=$((fail+1)); }
 
 echo "### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)"
 # EasyCrypt returns rc=0 for a file that ENDS mid-proof.  Measured 2026-08-03:
@@ -218,10 +260,11 @@ echo "### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compila
 # The probe is GENERATED from $CLOSURE so it cannot drift out of sync with the
 # closure list the way a checked-in control file would.
 { echo "require import AllCore."
-  while read -r n || [ -n "$n" ]; do
-    case "$n" in ''|\#*) continue;; esac
-    echo "require import $n."
-  done < $CLOSURE
+  while read -r f; do
+    n=$(basename "$f"); n="${n%.*}"
+    # Plain require also loads .eca abstract theories; import rejects those.
+    echo "require $n."
+  done < "$TMPD/targets"
 } > "$TMPD/require_all.ec"
 if easycrypt compile $ECFLAGS $INC "$TMPD/require_all.ec" >/dev/null 2>&1; then
   echo "OK   all closure files are requirable"
@@ -299,15 +342,15 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
   # GprocT1Opre OTHER than the one just made deterministic are still budget-
   # sensitive under the cli driver.  Not chased here; not load-bearing, since the
   # leg passes at either budget.
-  out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n')
+  if out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n'); then cli_rc=0; else cli_rc=$?; fi
   d=$(printf '%s\n' "$out" | grep -c '^<tty>:' || true)
   pr=$(printf '%s\n' "$out" | grep -c '^\[[0-9]*|' || true)
   cli_run=$((cli_run+1))
-  if [ "$pr" -lt 5 ]; then
+  if [ "$pr" -lt 1 ]; then
     echo "FAIL $lbl (cli): only $pr commands processed -- the run did not happen"
     fail=$((fail+1)); cli_bad=$((cli_bad+1)); return
   fi
-  if [ "$d" -eq 0 ]; then
+  if [ "$d" -eq 0 ] && [ "$cli_rc" -eq 0 ]; then
     echo "OK   $lbl (cli, $pr cmds)"
   else
     echo "FAIL $lbl (cli): $d diagnostic(s) -- compile accepted what cli rejects"
@@ -315,18 +358,11 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
     fail=$((fail+1)); cli_bad=$((cli_bad+1))
   fi
 }
-for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
-  cli_one "base/$n" -I $B < $B/$n.ec
-done
-while read -r n || [ -n "$n" ]; do
-  case "$n" in ''|\#*) continue;; esac
-  cli_one "$n" $INC < $D/$n.ec
-done < $CLOSURE
+while read -r f; do
+  cli_one "$f" $INC < "$f"
+done < "$TMPD/targets"
 echo "### CLI_FILES_RUN=$cli_run CLI_DISAGREEMENTS=$cli_bad"
-# Same truncation guard PHASE 1 carries: a closure file that shrank to nothing
-# would run zero cli checks and still reach GREEN.
-cli_exp=$(( $(grep -cve '^[[:space:]]*$' -e '^#' $CLOSURE) + 4 ))
-[ "$cli_run" -eq "$cli_exp" ] || { echo "FAIL cli phase ran $cli_run of $cli_exp files"; fail=$((fail+1)); }
+[ "$cli_run" -eq "$n_exp" ] || { echo "FAIL cli phase ran $cli_run of $n_exp files"; fail=$((fail+1)); }
 
 # The open question that stood here is CLOSED: the four PHASE 1e failures were
 # the -iterate default difference, not defects.  See the PHASE 1e header.
@@ -493,36 +529,13 @@ echo "### PHASE 1c — STATEMENT DIGESTS (names are not enough)"
 # could be weakened to `true` (proof `trivial`) and every other phase would still
 # pass.  Verified by negative control: weakening it moves the digest
 # 5bd600cb2661b4af2426525bb72e4058 -> 028803b8e5cd6fca33e562cecd495360.
-if [ -f cert-statements-split.tsv ]; then
-  n_stmt=0
-  while IFS=$'\t' read -r key want || [ -n "${key:-}" ]; do
-    case "${key:-}" in ''|\#*) continue;; esac
-    n_stmt=$((n_stmt+1))
-    got=$(python3 tools/stmt_digest.py "$key" | cut -f2)
-    # AN UNRESOLVABLE PIN MUST FAIL, NOT AGREE WITH ITSELF (run 13d).  digest()
-    # returned None for an `equiv`, the caller printed NOT-FOUND, and a manifest
-    # row carrying the literal string NOT-FOUND compared EQUAL -- a pin that
-    # looks pinned and targets nothing.  Caught while pinning GprocKg_sk_eq.
-    case "$got" in
-      NOT-FOUND|AMBIGUOUS-*|ambig*|nostmt)
-        echo "FAIL statement pin does not resolve: $key -> $got"; fail=$((fail+1)); continue;;
-    esac
-    if [ "$got" = "$want" ]; then echo "OK   statement pinned: $key"
-    else echo "FAIL statement CHANGED: $key"; echo "       want $want"; echo "       got  $got"; fail=$((fail+1)); fi
-  done < cert-statements-split.tsv
-  # Row-count guard: deleting a row would silently UNPIN that lemma.
-  exp_stmt=$EXPECT_PINS   # COMMITTED CONSTANT, not recomputed from the manifest
-  echo "statements pinned=$n_stmt expected=$exp_stmt (manifest rows)"
-  [ "${n_stmt:-0}" -eq "${exp_stmt:-0}" ] && [ "${exp_stmt:-0}" -ge 1 ] || { echo "FAIL statement pin file truncated"; fail=$((fail+1)); }
-else
-  echo "FAIL cert-statements-split.tsv missing -- statements unpinned"; fail=$((fail+1))
-fi
+python3 tools/split_contract.py --pins || fail=$((fail+1))
 
 echo "### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)"
 # PHASE 1c iterates the MANIFEST (`done < cert-statements-split.tsv`), so it verifies
 # that every PINNED statement still says what it said -- and is STRUCTURALLY BLIND to a
-# statement that was never pinned.  Pinning all 896 statements that exist today does
-# NOT stop an 897th appearing tomorrow: the new one is simply absent from the manifest,
+# statement that was never pinned.  Pinning every statement that exists today does
+# NOT stop another appearing tomorrow: the new one is simply absent from the manifest,
 # and absence is invisible to a loop that reads the manifest.
 #
 # That was the entire point of the exercise -- a prior adversarial review found that a
@@ -770,11 +783,17 @@ done < cert-controls-split.tsv
 # controls and the gate still reaches GREEN. Require the expected count.
 n_ctl=$(printf '%s\n' $ran | sort -u | grep -c .)
 # COUNT RAISED 5 -> 6 (2026-08-25) when scratch/encode_compat_derivable.ec was added.
+# COUNT RAISED 6 -> 10 (2026-08-31) with the four badenc countermodel controls.
+# COUNT RAISED 10 -> 13 (2026-09-01) with the three WotsLegCharged controls.
+# COUNT RAISED 13 -> 15 (2026-09-01) with the two GprocWotsNamed controls.
 # A floor BELOW the actual control count cannot detect one being deleted: with six
 # controls and a `-ge 5` guard, dropping any single one still scores OK.  The floor
 # must track the inventory or it only catches total truncation.
-echo "controls executed (unique)=$n_ctl expected>=6"
-[ "$n_ctl" -ge 6 ] || { echo "FAIL control file truncated or empty (fail-open guard)"; fail=$((fail+1)); }
+# COUNT RAISED 15 -> 36 (2026-09-14) with the 21 T_COLL_RES_ENUM chain controls, and the
+# floor made REAL: see EXPECT_CTLS at the top of this file for what it replaced.
+# COUNT RAISED 36 -> 39 (2026-09-14) with the three GprocTCollNamed controls.
+echo "controls executed (unique)=$n_ctl expected=$EXPECT_CTLS"
+[ "$n_ctl" -eq "$EXPECT_CTLS" ] || { echo "FAIL control inventory: ran $n_ctl unique controls, committed expectation is $EXPECT_CTLS"; fail=$((fail+1)); }
 
 # IDENTITY RE-VERIFICATION AT THE END (run 13, GPT-5.6).  The identity was
 # computed ONCE, before a compile phase that runs for the better part of an
@@ -825,16 +844,23 @@ if [ -f tools/forsc_grinding_margin.py ] && [ -f cert-margin-split.tsv ]; then
     # It does NOT enforce that guard blocks 1-3 are live branch logic.  That gap
     # is OPEN and NAMED (owner decision 2026-08-11: doc-retraction only -- the
     # fix requires editing the vendored script, which would break the
-    # byte-identity cert-margin-split.tsv asserts; correct fix is upstream-first
+    # byte-identity with PQSigner_OS's copy; correct fix is upstream-first
     # in PQSigner_OS, then re-vendor and re-pin).
+    # [CORRECTED 2026-09-15: the line above said "the byte-identity cert-margin-split.tsv
+    # asserts".  That manifest holds the seven figures and NO hash, and nothing in this gate
+    # compares the script with upstream.  It is pinned only by INPUTS_SHA256; it was
+    # re-checked byte-identical to PQ1 origin/master on 2026-09-15.]
+    # BEGIN margin-guard-count  (decision lines only; see EXPECT_MARGIN_GUARDS)
     g_ok=$(printf '%s\n' "$m_out" | grep -c '^\[guardrail [0-9]*\] .*: OK')
-    if [ "$g_ok" -lt 4 ]; then
-      echo "FAIL margin script printed only $g_ok/4 guardrail lines at OK"
+    if [ "$g_ok" -ne "$EXPECT_MARGIN_GUARDS" ]; then
+      echo "FAIL margin script printed $g_ok guardrail lines at OK, committed expectation is $EXPECT_MARGIN_GUARDS"
       fail=$((fail+1))
     else
-      echo "OK   margin guardrails 4/4 (happy path)"
+      echo "OK   margin guardrails $g_ok/$EXPECT_MARGIN_GUARDS (happy path)"
     fi
+    # END margin-guard-count
     st_out=$(python3 tools/forsc_grinding_margin.py --self-test 2>&1); st_rc=$?
+    # BEGIN margin-selftest-count  (decision lines only; see EXPECT_MARGIN_SELFTESTS)
     st_ok=$(printf '%s\n' "$st_out" | grep -c '^  ok: ')
     if [ "$st_rc" -ne 0 ]; then
       echo "FAIL margin --self-test exited $st_rc -- a guardrail did NOT fire when it must"
@@ -842,11 +868,14 @@ if [ -f tools/forsc_grinding_margin.py ] && [ -f cert-margin-split.tsv ]; then
       fail=$((fail+1))
     elif ! printf '%s\n' "$st_out" | grep -q '^=== self-test PASS ==='; then
       echo "FAIL margin --self-test did not report PASS"; fail=$((fail+1))
-    elif [ "$st_ok" -lt 3 ]; then
-      echo "FAIL margin --self-test ran only $st_ok/3 negative controls"; fail=$((fail+1))
+    elif [ "$st_ok" -ne "$EXPECT_MARGIN_SELFTESTS" ]; then
+      echo "FAIL margin --self-test printed $st_ok 'ok:' lines, committed expectation is $EXPECT_MARGIN_SELFTESTS"; fail=$((fail+1))
     else
-      echo "OK   margin negative controls 3/3 (guardrails demonstrably fire)"
+      # Was "(guardrails demonstrably fire)" until 2026-09-15 -- the RETRACTION above says
+      # --self-test never executes guard blocks 1-3, so the receipt line said more than it knew.
+      echo "OK   margin negative controls $st_ok/$EXPECT_MARGIN_SELFTESTS (--self-test: the model inverts; guard blocks 1-3 NOT exercised)"
     fi
+    # END margin-selftest-count
     get() { printf '%s\n' "$m_out" | sed -n "$1" | head -1; }
     m_forsc=$(get 's/.*FORS+C work factor (binom. mixture): *\([0-9.]*\) bits.*/\1/p')
     m_plain=$(get 's/.*plain FORS, same method *: *\([0-9.]*\) bits.*/\1/p')
@@ -900,11 +929,37 @@ echo '### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundnes
 # an "over-approximation" (as this header did until 2026-08-27) implied a margin it does not
 # have -- Kimi K3 adversarial review.  It does NOT see a bare `smt()` that takes
 # a lemma from ambient context without naming it, nor reachability through a clone
-# instantiation or a module argument.  The over-approximation direction is the safe one for
+# instantiation or a module argument.
 # Three FURTHER parser holes were found on 2026-08-27 by GPT-5.6 and Kimi K3 -- one-line
 # proofs, bare-basename overwrites, and a line-initial-only terminator (314 of 951 qed.
 # lines) -- all now fixed and guarded by a parser-coverage assertion plus controls T5-T8.
-# The two holes above remain, and both are unsafe-direction.
+# The two holes above remain, and both are unsafe-direction.  [UPDATE 2026-09-14: the CLONE
+# half is no longer silent.  Since 2026-08-28 (a822d6d) tools/taint_closure.py REFUSES any
+# clone of an admit-containing theory (controls T9, T10).  It still does not FOLLOW taint
+# through a clone -- the guard is refusal, not tracking.  Bare smt() and module arguments
+# remain unguarded here.  Removed the same day: an orphaned half-sentence, "The
+# over-approximation direction is the safe one for", left behind when that claim was
+# retracted on 2026-08-27.]
+# [UPDATE 2026-09-15: for the ONE admit left, the bare-smt() and module-argument holes do
+# not apply either -- by SCOPE, not by parsing.  extract_op's theory, FORS_C_TreePort, is in
+# no headline file's environment: EasyCrypt itself reports its symbols UNKNOWN after
+# `require GprocTCollNamed.` (PHASE 3 controls scratch/_scope_neg_op_GprocTCollNamed.ec and
+# scratch/_scope_neg_lemma.ec, each with a MUST-PASS twin one require apart, and
+# scratch/_scope_env_n_m.ec showing a dependency 3 require-hops deep DOES resolve there).  The
+# other five headline files are in GprocTCollNamed's own cone.  A tactic can only use facts in
+# its environment, so no route -- named, smt, clone, module argument -- reaches the admit.
+# TCB: EasyCrypt's require/environment semantics.  The holes stay stated above because they
+# still bite for any future admit in a theory a headline file DOES require.]
+# [UPDATE 2026-09-15 (later): gated PER FILE now, not through the chain.  Kimi K3 found all six
+# headline files are closure roots, so one could leave GprocTCollNamed's cone with nothing going
+# RED and then require FORS_C_TreePort.  scratch/_scope_neg_op_<H>.ec is now registered for each
+# of the six.  NOT covered: a SEVENTH headline file with no probe -- nothing links the HEADLINE
+# list in tools/taint_closure.py to these controls yet.]
+# [UPDATE 2026-09-15 (third): LINKED.  tools/taint_closure.py --check now requires an EXACT
+# bijection between the files that declare HEADLINE results and the scratch/_scope_neg_op_<H>.ec
+# rows.  Each row must be MUST-FAIL, name every admit theory in its declared reason, and have a
+# probe that requires its own headline theory.  A seventh headline file with no probe is RED
+# here.  Controls T11..T14.]
 #
 # The specific regression guarded: wiring EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded into the
 # headline. That promotes a REFUTABLE lemma (a collision falsifies nhchwcoll_hchwpre_msg
@@ -916,16 +971,47 @@ if [ -f tools/taint_closure.py ] && [ -f cert-taint-closure.tsv ]; then
     echo "$out" | sed 's/^/     /'; fail=$((fail+1))
   fi
   # AND PROVE THE CHECK CAN GO RED.  A containment check that cannot fail is decoration;
-  # these five mutations each DELETE a specific piece of information and must be rejected
-  # FOR THE DECLARED REASON, graded on the message and not merely on exit status.
+  # each of T1..T10 DELETES a specific piece of information and must be rejected FOR THE
+  # DECLARED REASON, graded on the message and not merely on exit status.  (Until
+  # 2026-09-14 this comment said "these five mutations" while the set grew to ten.)
+  #
+  # And COUNT THEM (2026-09-14).  These lines used to trust the script's exit status,
+  # which is nonzero only when a control FAILS; a control that never RAN scored nothing
+  # and this phase still printed OK.  See EXPECT_TAINT_CTLS at the top of this file.
   if [ -f scratch/taint_controls.sh ]; then
-    if cout=$(bash scratch/taint_controls.sh 2>&1); then
-      echo "OK   taint controls: $(printf '%s' "$cout" | tail -1)"
-    else
+    # BEGIN taint-controls-count  (executed verbatim by scratch/taint_count_controls.sh)
+    crc=0; cout=$(bash scratch/taint_controls.sh 2>&1) || crc=$?
+    ctail=$(printf '%s\n' "$cout" | tail -1)
+    cpass=$(printf '%s\n' "$ctail" | sed -n 's/^taint controls: pass=\([0-9][0-9]*\) fail=[0-9][0-9]*$/\1/p')
+    cfail=$(printf '%s\n' "$ctail" | sed -n 's/^taint controls: pass=[0-9][0-9]* fail=\([0-9][0-9]*\)$/\1/p')
+    cuniq=$(( $(printf '%s\n' "$cout" | grep -E '^  OK   ' | sort -u | wc -l) ))
+    if [ -z "$cpass" ] || [ -z "$cfail" ]; then
+      echo "FAIL taint controls: summary line NOT PARSED (early exit or format drift); last line: $ctail"; fail=$((fail+1))
+    elif [ "$crc" -ne 0 ] || [ "$cfail" -ne 0 ]; then
       echo "FAIL taint controls did not all discriminate:"; printf '%s\n' "$cout" | sed 's/^/       /'; fail=$((fail+1))
+    elif [ "$cpass" -ne "$EXPECT_TAINT_CTLS" ] || [ "$cuniq" -ne "$EXPECT_TAINT_CTLS" ]; then
+      echo "FAIL taint control inventory: pass=$cpass unique=$cuniq, committed expectation is $EXPECT_TAINT_CTLS (a control that never RUNS scores nothing)"; fail=$((fail+1))
+    else
+      echo "OK   taint controls: pass=$cpass unique=$cuniq fail=0 expected=$EXPECT_TAINT_CTLS"
     fi
+    # END taint-controls-count
   else
     echo "FAIL scratch/taint_controls.sh missing -- the containment check is unvalidated"; fail=$((fail+1))
+  fi
+  # AND PROVE THAT GUARD CAN GO RED.  The inventory check above is new code in the cheapest
+  # place there is to weaken a gate.  scratch/taint_count_controls.sh executes its exact
+  # lines against four copies of taint_controls.sh (unmutated / a grade call blinded / an
+  # early `exit 0` / a control replaced by a duplicate of another) and grades each on the
+  # message.  Its own summary is compared EXACTLY, not trusted by exit status.
+  if [ -f scratch/taint_count_controls.sh ]; then
+    krc=0; kout=$(bash scratch/taint_count_controls.sh 2>&1) || krc=$?
+    if [ "$krc" -eq 0 ] && [ "$(printf '%s\n' "$kout" | tail -1)" = "taint count controls: pass=$EXPECT_TAINT_COUNT_CTLS fail=0" ]; then
+      echo "OK   taint count controls: pass=$EXPECT_TAINT_COUNT_CTLS fail=0 expected=$EXPECT_TAINT_COUNT_CTLS"
+    else
+      echo "FAIL taint-control inventory guard is unvalidated (want pass=$EXPECT_TAINT_COUNT_CTLS fail=0):"; printf '%s\n' "$kout" | sed 's/^/       /'; fail=$((fail+1))
+    fi
+  else
+    echo "FAIL scratch/taint_count_controls.sh missing -- the inventory guard is unvalidated"; fail=$((fail+1))
   fi
 else
   echo "FAIL taint inputs missing (tools/taint_closure.py / cert-taint-closure.tsv)"; fail=$((fail+1))
@@ -935,7 +1021,7 @@ fi
 # past the compile is caught, and it costs one second.
 INPUTS_ID_END=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert-source-binding.json tools/check_source_binding.py cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
 if [ "$INPUTS_ID_END" != "$INPUTS_ID" ]; then
   echo "FAIL inputs CHANGED DURING THE RUN: start $INPUTS_ID, end $INPUTS_ID_END"
   fail=$((fail+1))

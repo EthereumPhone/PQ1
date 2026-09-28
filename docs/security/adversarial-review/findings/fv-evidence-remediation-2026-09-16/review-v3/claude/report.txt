@@ -1,0 +1,44 @@
+VERDICT: GO
+TARGET: 775133e8abd3452bca952336bc8e31e452a7f7f5 / 2766afb8829e5f38935718c01f8365e4758e9153
+FINDINGS: none
+GAPS: The nightly lanes' run times are unmeasured: each Kani mutation now runs Kani twice (original, then mutant) under a 300-minute limit, and the split proof replay has a 240-minute limit. Both fail safely on timeout. The full proof replay on df34cee6… still has to come back green before landing.
+
+**Criterion 1 (mutation credit).**
+- `scripts/check_kani_mutations.py:201-205`: the unmodified harness must pass before the source is mutated, and the source must be unchanged after that run.
+- `classify_kani` (`:126-151`) grants credit only when all of these hold: exactly one `Checking harness <fully qualified name>` line, one verdict line, a summary of `0/1/1` and exit code 1.
+- Fatal diagnostics anywhere in the output are rejected, after colour codes are stripped.
+- `--exact` is always passed. Manifest flags are restricted to one `--features` pair, so an entry cannot override the selection or output format.
+- The source is restored in a `finally` block and re-read to confirm; signal and exit handlers also restore it.
+
+**Criterion 2 (anchors, canary, tiers, features).**
+- The manifest must have exactly one canary and unique ids (`:104`).
+- The heavy tier and the `kani-heavy` feature must agree in both directions (`:120-123`).
+- In the tier order, heavy ranks above full, so the default and full tiers exclude it; the heavy tier itself is not cumulative. Nightly runs the plain `check_kani_mutations.py`, i.e. the default tier.
+- `kani_census.py:150` flattens multi-line attributes before checking them. `cfg` forms other than a plain single feature raise an error (`:164-165`).
+- No enrolled harness name appears in more than one file, so matching by bare name in the census cannot hit the wrong harness today.
+
+**Criterion 3 (direct replay of every file).** I checked the EasyCrypt r2026.02 source in the local opam switch.
+- `easycrypt compile` exits early only if an up-to-date `.eco` exists (`ec.ml:587-590`).
+- Only compiling a file directly writes its `.eco`; loading it through `require` does not (`ecCommands.ml:513-567`).
+- The gate purges `.eco` files first and compiles in dependency order (`split_contract.py:40-58`), so no file can hit that early exit.
+- The second driver (`cli`) reads each file from stdin, so the cache never applies to it.
+- The `require` check loads `.eca` files with a plain `require` instead of `require import`. The controls exercise both the concrete and abstract end-of-file cases.
+
+**Criterion 4 (declaration pins).**
+- `check_pins` rejects malformed rows and duplicate keys, requires the count to equal the committed `EXPECT_PINS`, and requires every path to be in the pinned file inventory.
+- An unresolved or ambiguous declaration yields a non-hex value, which cannot match a 32-hex pin.
+- The inventory, coverage, assumption-census and input-identity checks are all kept (`split_contract.py:120-129`; `cert_gate_split.sh:105-123, 895-902`).
+
+**Criterion 5 (pinned container).** `run_easycrypt_split.py`:
+- only accepts an image pinned by digest;
+- runs it with `--network none` and the source mounted read-only;
+- works on a copy in `/tmp/proofs`.
+
+The toolchain check then rejects a wrong EasyCrypt hash, a wrong solver list, or a run that bypassed the wrapper, before any proof runs.
+
+**Criterion 6 (CI enrolment).**
+- The split-pins step sits in the `lean-fv.yml` job. Its path filters cover `easycrypt/**`, `scripts/**` and the verification `Makefile`.
+- The split proof replay is its own job in `nightly.yml`, triggered by cron and manual dispatch.
+- Neither job has `continue-on-error`. `cert_gate_split.sh` ends with exit 1 on any failure, and the wrapper passes that through.
+
+**Criterion 7 (scope claims).** Rows 4 and 9 of `FV_SURFACE_MAP.md` and the relabelled historical targets keep the categories apart: current split evidence, historical drafts, conditional reductions, the remaining `extract_op` admit, and the unproved firmware-refinement boundary.

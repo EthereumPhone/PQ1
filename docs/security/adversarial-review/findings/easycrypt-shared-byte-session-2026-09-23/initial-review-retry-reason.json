@@ -1,0 +1,7 @@
+{
+  "reason": "Every attempted source command failed before execution in nested Bubblewrap; no source review ran. Sole same-reviewer mechanical retry selects legacy Landlock under unchanged outer read-only target/Git mounts.",
+  "original_deadline_epoch": 1790166026.7854218,
+  "remaining_seconds": 821,
+  "prompt_unchanged": true,
+  "doctor": "Codex doctor --enable use_legacy_landlock exited0; 0 fail"
+}

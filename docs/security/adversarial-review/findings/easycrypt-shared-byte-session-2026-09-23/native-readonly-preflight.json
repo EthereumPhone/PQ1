@@ -1,0 +1,18 @@
+{
+  "command": [
+    "codex",
+    "sandbox",
+    "-P",
+    ":read-only",
+    "-C",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-session-fix",
+    "--",
+    "python3",
+    "-c",
+    "import os,subprocess\nfrom pathlib import Path\npaths=[Path.cwd(),Path(subprocess.check_output(['git','rev-parse','--absolute-git-dir'],text=True).strip()),Path(subprocess.check_output(['git','rev-parse','--path-format=absolute','--git-common-dir'],text=True).strip())]\nfor p in paths:\n assert os.statvfs(p).f_flag & os.ST_RDONLY,p\n print('read-only mount:',p)\n"
+  ],
+  "exit_code": 0,
+  "stdout": "read-only mount: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-session-fix\nread-only mount: /home/nicola/repos/PQSigner_OS/.git/worktrees/review-target-session-fix\nread-only mount: /home/nicola/repos/PQSigner_OS/.git\n",
+  "stderr": "",
+  "scope": "Current CLI native read-only protects target and Git. No host policy changes, legacy backend or CLI downgrade. Approval never for the actual wave."
+}

@@ -1,0 +1,138 @@
+{
+  "base": "d947c04780a156853160bef32882b158518c90b7",
+  "created_at": "2026-09-22T10:14:56.878146+00:00",
+  "executables": {
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-target",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.0,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": true,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-prompt.txt",
+    "sha256": "bcf3a6f42cc36d6707628070a85902238836fb6268c687d39455e6a267f0d08c"
+  },
+  "reviewers": {
+    "codex": {
+      "artifact_bytes": 305541,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-target",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--enable",
+        "use_legacy_landlock",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-target",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-retry/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 263.783,
+      "ended_at": "2026-09-22T10:14:56.655230+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "bcf3a6f42cc36d6707628070a85902238836fb6268c687d39455e6a267f0d08c",
+        "report_sha256": "a40bb4601e05a904512c6cb68765c4eeedef8e60da2c8c05694804928ab6c88f",
+        "runtime_sha256": "aac073a3d0e10d77a31fdcab286de60342b5499601ed5ffcf68d0acfafd376f9",
+        "stderr_sha256": "74cd959baecde0a909b4d5205cbb15b941fbb27ebb2f7c1ce1342a8ac36d2190"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-retry/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-retry/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-retry/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-retry/codex/stderr.txt"
+      },
+      "report_words": 23,
+      "started_at": "2026-09-22T10:10:32.872260+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "Phase D source merge",
+  "surface": "EasyCrypt C10 bounded-signing game composition",
+  "target": {
+    "commit_after": "2c9be6fc596f498946d2789f126f13190422baa9",
+    "commit_before": "2c9be6fc596f498946d2789f126f13190422baa9",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/review-target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "c21fc1fd7d5612bcc12152d2a2f6317794170a36",
+    "tree_before": "c21fc1fd7d5612bcc12152d2a2f6317794170a36"
+  },
+  "timeout_seconds": 736,
+  "version_contract": {
+    "mismatches": {
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-22T10:10:32.872176+00:00"
+}

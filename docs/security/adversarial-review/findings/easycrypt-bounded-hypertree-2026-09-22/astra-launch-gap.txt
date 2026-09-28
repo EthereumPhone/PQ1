@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 5c1770105acb81700d99eea8e917b1156b96e0db / 0f0990e1f83a5f0133da3e8633b741a8a1db45ef
+FINDINGS: none
+GAPS: Source review blocked: read-only commands fail before execution because bwrap cannot create a namespace; identity, diff, proofs and controls remain uninspected. Full cold replay completion also remains required before landing.

@@ -1,0 +1,37 @@
+{
+  "target": "e405562e14fa3d656a3334b5c2959623ff5356ad",
+  "tree": "f26a20e6d71bc2e6254c7e649db0d278d8f691c2",
+  "reviewers": {
+    "codex": {
+      "duration_seconds": 228.548,
+      "report_words": 23,
+      "verdict": "GO",
+      "findings": []
+    },
+    "claude": {
+      "duration_seconds": 128.216,
+      "report_words": 610,
+      "verdict": "GO",
+      "findings": []
+    }
+  },
+  "drift": false,
+  "remaining_gate": "Resolved by unchanged-source full cold replay",
+  "coordinator_notes": [
+    "Both reports were read and name the frozen source/tree. No falsifiable blocker or finding was reported. Both retain the required full cold replay; source-only review is not proof-execution evidence.",
+    "Coordinator source check confirms explicit signing failure, separate prior root, actual verifier and codec, plus exact-source/single-occurrence shuffle quarantine exceptions with mutation regressions."
+  ],
+  "substitutions": "Astra ultra replaces SOL; Kimi omitted under standing owner instructions.",
+  "opus_runtime_model": [
+    "claude-opus-5-5"
+  ],
+  "astra_model_evidence": "gpt-6-astra ultra requested; CLI JSON stream does not independently expose remote model identity.",
+  "resolved_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-24T00:22:42.866334+00:00",
+    "finished_utc": "2026-09-24T02:48:18.850160+00:00",
+    "elapsed_seconds": 8735.98,
+    "commit": "e405562e14fa3d656a3334b5c2959623ff5356ad",
+    "tree": "f26a20e6d71bc2e6254c7e649db0d278d8f691c2"
+  }
+}

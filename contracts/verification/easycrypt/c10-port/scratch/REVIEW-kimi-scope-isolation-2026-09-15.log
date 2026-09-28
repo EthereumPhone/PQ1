@@ -1,0 +1,1056 @@
+kimi version 0.40.1
+• This is an adversarial review task. I need to read actual files. Let me plan: read cert_gate_split.sh (PHASE 3, PHASE 5), cert-controls-split.tsv, tools/cert_cone.py, tools/taint_closure.py, the probes in scratch/, the prediction files, FORS_C_TreePort.ec extract_op, and the headline files' requires.
+
+  This is substantial multi-file reading. I could delegate to subagents, but the task hinges on specific files and precise claims. I can do it directly — but it's a lot. Maybe delegate a couple of parallel explorations: one for the gate script/controls mechanics, one for the cone/require graph. But the adversarial reasoning (question 1 about EasyCrypt semantics) is my own knowledge. Let me read key files myself, possibly with explore agents for the cone check.
+
+  Let me start by reading the core files in parallel.
+
+• I'll work through the evidence files directly. Starting with the gate script, controls registry, and the cone/taint tools.
+
+• Let me now read the rest of cert_gate_split.sh, particularly PHASE 3 CONTROLS and PHASE 5 header. Let me grep for the relevant sections, and also read the probe files and predictions, FORS_C_TreePort.ec extract_op area, and the headline files' requires.
+
+• Now the probes, the prediction files, the FORS_C_TreePort admit site, and the relevant gate phases.51:# COMMITTED CONTROL COUNT (added 2026-09-14).  The PHASE 3 guard used to be
+58:# 39 -> 44 on 2026-09-15: the five scope-isolation controls scratch/_scope_*.ec for the last
+60:# COMMITTED TAINT-CONTROL COUNT (added 2026-09-14).  PHASE 5 trusted scratch/
+65:# Same class as the PHASE 3 floor directly above, fixed the same day.  PHASE 5 now PARSES
+67:# (PHASE 3 counts unique names too: a deleted control replaced by a copy of another must
+71:# the gate's own PHASE 5 lines against weakened copies of the controls script.  Its
+771:echo "### PHASE 3 — CONTROLS (polarity AND declared reason)"
+949:echo '### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundness proof)'
+974:# [UPDATE 2026-09-15: for the ONE admit left, the bare-smt() and module-argument holes do
+977:# `require GprocTCollNamed.` (PHASE 3 controls scratch/_scope_neg_op_GprocTCollNamed.ec and
+978:# scratch/_scope_neg_lemma.ec, each with a MUST-PASS twin one require apart, and
+979:# scratch/_scope_env_n_m.ec showing a dependency 3 require-hops deep DOES resolve there).  The
+
+
+• Now let me read the gate PHASE 3 and PHASE 5 sections, the prediction files, FORS_C_TreePort.ec around 1148/1485, and the headline file requires.Now let me check the prediction files, the FORS_C_TreePort admit, and the require graph. Let me check requires of the headline files and whether any cone file requires FORS_C_TreePort. Let me run cert_cone.py and grep for FORS_C_TreePort requires.cert-cone-files-split.tsv:36:cdrafts-split/FORS_C_TreePort.ec
+closure-c10-split.txt:15:FORS_C_TreePort
+---
+base-c10-split/WOTS_TW_ES.ec
+cdrafts-split/GprocT3Trco.ec
+cdrafts-split/GprocChargedQWired.ec
+cdrafts-split/FORS_C_TreePort.ec
+cdrafts-split/GprocT1Opre.ec
+Interesting — grep for 'FORS_C_TreePort' finds mentions in base-c10-split/WOTS_TW_ES.ec, cdrafts-split/GprocT3Trco.ec, cdrafts-split/GprocChargedQWired.ec, cdrafts-split/GprocT1Opre.ec, and FORS_C_TreePort.ec itself. Wait — GprocChargedQWired.ec is a HEADLINE file that mentions FORS_C_TreePort! Need to check whether it's a require or just a mention in a comment/identifier. If WOTS_TW_ES.ec or GprocChargedQWired.ec requires FORS_C_TreePort, the claim is dead — the negative probe for GprocTCollNamed should then compile... unless those mentions are in comments or are like `FORS_C_TreePort`-prefixed identifiers that aren't requires.
+
+  Wait, but the negative probes reportedly failed with "unknown" — and the gate passes GREEN. So those mentions must be in comments or non-require contexts. Let me check each occurrence.
+
+• Two of those files are headline-adjacent — `GprocChargedQWired.ec` is itself a headline file. Let me check the actual occurrences.base-c10-split/WOTS_TW_ES.ec:1545:   cdrafts-split/FORS_C_TreePort.ec).  PHASE 5 still guards the closure in both
+cdrafts-split/GprocChargedQWired.ec:54:       `extract_op` in FORS_C_TreePort.ec, and it is not activated here either.)
+cdrafts-split/GprocT3Trco.ec:1446:     * `extract_op` (cdrafts-split/FORS_C_TreePort.ec) IS blocked that way --
+cdrafts-split/GprocT1Opre.ec:26:       FORS_C_TreePort.ec:186 over abstract `f_lf` / `dop_in` / `t_op`.  That is
+
+
+• Good — all four occurrences are in comments, not requires. Let me verify they're all in `(* *)` comments (context). Line 1545 in WOTS_TW_ES.ec — likely inside a comment block. Let me check with some context. Also, I need to check requires more thoroughly: the REQ regex in cert_cone.py is `(?<![A-Za-z0-9_'])require\s+([^.]*)\.`. Note it requires the terminating `.` to be the first `.` in the body — `[^.]*` can't contain dots. But EasyCrypt require with module paths? EasyCrypt `require` takes theory names (no dots, since theory names are filenames). OK. What could the regex miss?
+
+  1. `require` inside comments — stripped by strip_comments. OK.
+  2. Multi-line requires — handled with DOTALL. But `[^.]*` — a require body spanning multiple lines with no dot. Handled.
+  3. `require` in the middle of a line: handled by negative lookbehind (not `^`).
+  4. What about `require` with `.` inside — e.g. qualified? Not valid EasyCrypt.
+  5. What about `Require`? EasyCrypt keywords are lowercase.
+  6. **`.eco` caching / precompiled**: `easycrypt compile` recompiles. Not relevant for cone.
+  7. `clone` of a theory that requires FORS_C_TreePort — clone doesn't load a theory into environment unless... clone requires the theory to be in environment. A clone `clone X as Y` — X must be loaded. So no bypass.
+  8. `import`/`export` — import/export are modifiers within require, or standalone `import X.`/`export X.`? In EasyCrypt, standalone `import`/`export` exist? Actually in EasyCrypt, `import` and `export` are used with `require import`/`require export`; standalone `import Top.X.` exists? Hmm. In recent EasyCrypt there is `import` as a separate directive? I believe `import` alone isn't a load directive — loading only happens via `require`. Actually, in EasyCrypt you can write `require import Foo.` and separately `import Foo.`? No — `import` alone is not a directive in EasyCrypt; import must be attached to require. Wait, actually there IS `include` for theories? `include` is used inside theory definitions (`theory T. include U. end.`)? Hmm, `include` exists in EasyCrypt as a directive? Let me think.
+
+  EasyCrypt directives: `require`, `require import`, `require export`, `import` (no), `export` (no)... Actually, I recall EasyCrypt has `import A.B.` as a standalone directive that imports an already-loaded theory into the namespace. Yes! EasyCrypt does have standalone `import` and `export` directives — e.g. `import Int.` Hmm, I'm not sure. Let me think about EasyCrypt grammar. In EasyCrypt, you commonly see:
+
+  ```
+  require import AllCore.
+  require import Int.
+  ```
+
+  I don't recall standalone `import`. There is `theory ... end` blocks with `include` inside? There's `clone import`, `clone include`. Hmm. Actually I believe EasyCrypt does support `import` standalone — no wait. Looking at EasyCrypt docs: directives are `require`, `require import`, `require export`, `import`, `export`, `include`, `clone`, `theory`, `abstract theory`, `section`, `realize`, `print`, `search`, `pragma`. Actually I do recall `import` standalone existing for namespacing after require. But loading (bringing into environment) only happens via `require` — `import` of an unloaded theory fails.
+
+  The key question for the claim: can a headline file's proofs use FORS_C_TreePort.extract_op without FORS_C_TreePort being in the transitive require closure of that file? Routes:
+
+  1. **-I auto-loading**: No — EasyCrypt does not auto-load theories from include paths. Theories enter the environment only via `require`. Confident. (Why3-style; EasyCrypt's `-I` only tells where to resolve required names.)
+
+  2. **Prelude**: The prelude (Core) contains only basic logic — not user theories. Confident prelude can't load user theories.
+
+  3. **Hint databases**: `hint simplify` / `hint solve` / `hint exact` can reference lemmas, but those lemmas must be in scope at declaration time. Hints don't load theories. However — subtle: hints are stored in the .eco? If theory A declares `hint simplify` with a lemma from theory B, requiring A requires B (since A needed B in its environment to state the hint). So still within require closure. But do hints persist across require? Yes, hints declared with `require export`... hmm, actually hints declared in a required theory do get imported into the requiring theory's hint database. But they were declared using that theory's environment, which is within its require closure. So no escape.
+
+  4. **.eco caching**: `easycrypt compile` compiles source; caching affects speed, not environment contents. There's `easycrypt -why3`... not relevant. Also `easycrypt compile` with `-check`? No.
+
+  5. **Top namespace**: Everything is under Top; qualification like `Top.FORS_C_TreePort.extract_op` still requires the theory to be loaded. No escape.
+
+  6. **Clone**: `clone FORS_C_TreePort as X` — needs FORS_C_TreePort loaded, i.e. required first. Actually, does `clone` accept a theory not yet required? I believe EasyCrypt resolves the clone target in the environment, so it must be loaded. But wait — is that true? In EasyCrypt, can you `clone` a theory that's on the include path without requiring it? I believe not; the checker looks up the theory in the current environment. Confident-ish (the clone-route guard in taint_closure.py assumes clones must name the theory, but the deeper question is whether clone triggers auto-loading). EasyCrypt's `clone` does NOT auto-require. I'm fairly confident.
+
+  7. **Module argument**: passing a module as an argument to a functor — the module type and module must be in scope. No loading.
+
+  8. **require inside nested theory/section**: `require` is only allowed at top level? Actually EasyCrypt requires must appear before any declarations? I believe `require` directives must be at the top of the file... Actually no — in EasyCrypt, `require` can appear anywhere at top level but not inside a theory/section? Hmm. I think require must occur at toplevel (not inside a section/theory), and typically at file head but not enforced. If require can appear mid-file, the regex handles it (zero-width anchor). Inside a section: I believe `require` is forbidden inside sections. Not fully sure, but even if allowed, the REQ regex scans the whole text, so it would catch it.
+
+  9. **pragma**: `pragma` options (e.g. `pragma Goals:printall`, `pragma Proofs:weak`) — no loading. Also `pragma +implicits` etc. No theory loading.
+
+  10. **`realize`**: realizes axioms of abstract theories — needs them in scope.
+
+  So the EasyCrypt-semantics claim is: environment = require closure (+ prelude). That is genuinely how EasyCrypt works; I'm confident. The probes empirically confirm it for these specific files.
+
+  Now question 2: is the negative probe's environment a superset of the environment GprocTCollNamed.ec's proofs run in? The probe does `require GprocTCollNamed.` — this loads GprocTCollNamed and its transitive closure. GprocTCollNamed.ec itself, when compiled, has exactly its own require closure as environment. When you `require GprocTCollNamed` from another file, the resulting environment is the union of the probe's own requires (AllCore) + GprocTCollNamed's transitive closure. Is that a superset of GprocTCollNamed.ec's environment during its own compilation? 
+
+  GprocTCollNamed.ec's environment during compilation = prelude + its requires' closure. The probe's environment after `require import AllCore. require GprocTCollNamed.` = prelude + AllCore + GprocTCollNamed's require closure (including GprocTCollNamed itself). Since GprocTCollNamed.ec's own requires are a subset of its transitive closure... yes, superset. The env witness (WOTS_TW_ES.n_m resolves 3 hops deep) confirms transitive dependencies are resolvable via qualified names after `require`.
+
+  One subtlety: does `require GprocTCollNamed.` (without import) make the transitive closure's contents *resolvable*? The env witness says yes (qualified names resolve). This matches EasyCrypt semantics: `require` loads theories into the environment; `import` only affects unqualified name resolution. Qualified names `T.x` resolve for any loaded T.
+
+  Another subtlety: internal `local` declarations and `section` hypotheses. GprocTCollNamed.ec's own proofs may use `local` lemmas or `declare axiom` in sections inside the file — those are in the file's internal environment but NOT exported when required. Could GprocTCollNamed's proofs use extract_op via some internal local thing? No — for extract_op to be usable, the theory FORS_C_TreePort must be loaded in the file's environment at compile time, and loading only happens via require in that file's own text (transitively). So the cone argument covers the file's own compilation directly: check FORS_C_TreePort not in GprocTCollNamed.ec's require closure. The probe is corroboration, not the core mechanism. The claim "the five headline files are in GprocTCollNamed's require cone, so one probe covers all" needs verification — if a headline file H is required by GprocTCollNamed, then H's own environment is a subset of GprocTCollNamed's closure... wait, careful: H's environment during its own compilation = H's require closure ⊆ GprocTCollNamed's closure (since GprocTCollNamed requires H). So if FORS_C_TreePort isn't in GprocTCollNamed's closure, it isn't in H's closure. Good. But the probe environment is GprocTCollNamed's closure — which is a SUPERSET of H's own environment. A negative probe in a superset environment is conservative (safe direction) for the exclusion claim: if the symbol is unknown even in the bigger environment, it's unknown in the smaller. And the probe failing proves FORS_C_TreePort not loadable... hmm, actually it proves FORS_C_TreePort not in GprocTCollNamed's closure. Combined with closure-superset, covers all six. Good logic.
+
+  But wait — is each of the five headline files really required by GprocTCollNamed (transitively)? Need to check. Also check NO file in the cone requires FORS_C_TreePort — grep showed mentions only in comments for WOTS_TW_ES, GprocChargedQWired, GprocT3Trco, GprocT1Opre. But wait — grep -l 'FORS_C_TreePort' listed GprocChargedQWired.ec (headline file!) with a comment mention at :54. Fine.
+
+  But hold on: what about the REQ regex missing require forms? Possible misses:
+  - `require` with `import`/`export` modifiers — handled.
+  - What about `require` where the body contains a `.`? Theory names can't contain dots.
+  - What about a `.` in a comment inside a multi-line require? `require (* c. *) Foo.` — strip_comments blanks comments first, so OK. But requires_of also re-strips comments within body — fine.
+  - What about uppercase `Require`? Not valid EasyCrypt.
+  - What about `from ... require`? Hmm — EasyCrypt/Why3 has `require` only. Actually newer EasyCrypt (2025+) might have `from X require Y`? I don't think EasyCrypt has that; that's a Jasmin/EasyCrypt? Actually EasyCrypt does NOT have `from`. Hmm, I'm not sure about r2026.02. This is a fictional-ish future version. Can't verify; note as unsure.
+  - `theory` files loaded via `include`? `include` is a theory-level directive (includes another theory inline). Does `include Foo.` auto-load Foo? In EasyCrypt, `include` requires the theory to be loaded (it's like clone but inline). I believe include needs the theory in the environment.
+
+  Actually, one more mechanism: **`clone ... with theory T <- U`** — instantiating an abstract theory parameter with a concrete theory U. U must be in scope. No loading.
+
+  Question 3: controls discrimination. Negative probes: reason check is grep -F on first [critical] line. For neg_op: declared `unknown variable or constant: `FORS_C_TreePort.fverify_structural'`. Could it fail for the wrong reason and still match? The reason names the exact symbol, so a pass for the wrong reason would need that exact message while the theory is actually loaded — unlikely. Could MUST-FAIL pass vacuously? The MUST-FAIL passing means compiled — the check is polarity + reason. The twins show the reference form is valid when theory is loaded. One hole: **the reason match is on the FIRST [critical] line only**; EasyCrypt might emit a [critical] for something else first (e.g., a warning-level?) — [critical] is error-level. If the file had two errors, only the first is checked. The probes are tiny, fine.
+
+  A subtler hole: **`grep -qF "$reason"` with `msg` empty**. If compile fails with no [critical] line (e.g., exception/backtrace), grep fails → "wrong reason" → gate RED. Fail-closed. Good.
+
+  Another: the negative probe could be failing because `GprocTCollNamed` itself doesn't compile? No — rc would be nonzero with first critical about GprocTCollNamed, and the reason wouldn't match. Fine.
+
+  Could the negative probes fail even if FORS_C_TreePort IS in the cone but extract_op isn't resolvable as a lemma due to name collision with op extract_op? The message "unknown lemma `FORS_C_TreePort.extract_op'" — hmm, interesting: if FORS_C_TreePort were loaded, would `have _ := FORS_C_TreePort.extract_op.` resolve to the lemma or be ambiguous with the op? The positive twin passes, so with the theory loaded it resolves. Good discrimination.
+
+  What about the op probe `_scope_neg_op`: reason `unknown variable or constant: `FORS_C_TreePort.fverify_structural'`. If FORS_C_TreePort were loaded but fverify_structural renamed/removed, the negative would still MUST-FAIL with the same message — meaning the control cannot distinguish "theory not in environment" from "theory loaded but symbol gone". But the census pins fverify_structural's declaration, so that's covered elsewhere. Also the tripwire purpose is: if cone requires TreePort, probe compiles → RED. If TreePort loaded and fverify_structural exists, the op compiles → detected. OK.
+
+  Question 4: check the cone. Run cert_cone.py to compute GprocTCollNamed's cone and check the five headline files are in it and FORS_C_TreePort isn't. Also check requires the REQ regex might miss — e.g. multi-line require with dots? Let me actually run the tool and also grep all requires in the cone files manually with a looser pattern.
+
+  Question 5: wording overstatement. PHASE 5 header line 980-981: "A tactic can only use facts in its environment, so no route -- named, smt, clone, module argument -- reaches the admit. TCB: EasyCrypt's require/environment semantics." This is honest about the TCB. Is anything overstated? "no route ... reaches the admit" — but what about **the admitted lemma's STATEMENT being restated**: a headline file could prove an equivalent statement from scratch — not "using the admit". Fine. What about `smt` using the *stdlib*? No.
+
+  One real gap: the probes test the *compile-time environment* claim at the time the gate runs; the claim "no tactic in any headline file can use that admit by ANY route" is about the current tree. Fine.
+
+  But here's a subtle overstatement candidate: the probe `_scope_env_n_m` witnesses that requiring GprocTCollNamed makes 3-hop dependencies resolvable — for GprocTCollNamed only. The other five headline files are claimed in its cone — need to verify chain. If e.g. GprocChargedQWired is NOT in GprocTCollNamed's cone (maybe the chain goes the other direction?), the single negative probe wouldn't cover it. Let me check requires.
+
+  Also check: does the cone check (cert-cone-files-split.tsv) include FORS_C_TreePort (line 36) — yes, TreePort is a closure root, meaning it's IN the certified cone overall (as a root). The tripwire comment says the census wouldn't notice if a cone file starts requiring TreePort — only the probes would. That's the value of the controls. OK.
+
+  Another consideration for question 1: **`.eco` files / precompiled libraries on the include path**. When you `require Foo`, EasyCrypt looks for Foo.eco first? Actually EasyCrypt compiles and checks .eco consistency; `easycrypt compile` recompiles. But `require` resolving to a stale .eco could load a different environment... not really relevant to the logical claim.
+
+  **`-I` auto-loading**: one more nuance — EasyCrypt also has `-I` dirs AND implicit loading of `prelude`. Also `--pragmas`? System pragmas. None load theories.
+
+  What about **`include`**? EasyCrypt has an `include` directive at top level: `include Foo.` includes the theory's contents. Does it require Foo to be loaded? Yes, include operates on loaded theories. I'm fairly confident include doesn't auto-load.
+
+  What about the **prologue/epilogue files**? EasyCrypt doesn't have user epilogues.
+
+  What about **`search`/`print`**? Read-only.
+
+  What about hints: `hint exact` — hmm, actually there's a subtle known EasyCrypt behavior: `smt` can use lemmas from the *hint database* and the ambient environment; hint databases are per-theory and get merged on import. But hints can only name lemmas in scope when declared. No escape from require closure.
+
+  **Module argument**: `module M(X : MT) = {...}` applied as `M(N)` — N must be declared. No loading.
+
+  So the main residual uncertainty: EasyCrypt semantics is trusted (TCB stated). The probes are empirical evidence, good. I should also verify the chain claim and run cert_cone.py.
+
+  Also check: are there other admits in the cone? Claim says "only admit in the certified closure is extract_op at :1485". Check FORS_C_TreePort.ec:1485 and grep for admit in cone files.
+
+  Also the CLAIM says "its theory FORS_C_TreePort is not in any headline file's environment". One more route: **the headline file itself could be compiled with extra `-I` and an injected prelude?** No.
+
+  Another route I should consider: **`require` of a theory whose .ec file's basename differs from theory name**? EasyCrypt theory name = file basename. Fine.
+
+  And: **symlinks/shadowing on the include path** — could a file named FORS_C_TreePort.ec be loaded under a different name? No: theory name = basename.
+
+  OK, let me now:
+  1. Run cert_cone.py with the split dirs, roots = the 6 headline files + check cone membership.
+  2. Grep FORS_C_TreePort.ec:1485 and 1148.
+  3. Check requires in headline files.
+  4. Check for other admits.
+
+• Now let me verify the cone claims computationally and look at the admit itself.44 /tmp/gtn_cone.txt
+IN CONE: GprocChargedQWired
+IN CONE: SphincsC10CapstoneWired
+IN CONE: GprocQWired
+IN CONE: GprocQBound
+IN CONE: GprocWotsNamed
+NOT IN CONE: FORS_C_TreePort
+
+
+• Good — cone verified: 44 files, all five other headline files in GprocTCollNamed's cone, FORS_C_TreePort not in it. The admit at :1485 is a lemma (module-quantified), with an op of the same name at :1148.
+
+  Now check:
+  1. Whether FORS_C_TreePort is actually admitted there (admit. later). Let me confirm the admit terminator.
+  2. Whether the REQ regex could miss require forms — scan all cone files for require forms the regex misses. Let me do a manual looser grep: search for `require` occurrences in the cone files and compare with what REQ captures. Quick check: grep -rn '\brequire\b' across cone files and check forms.
+  3. Verify the negative probes actually run/fail as declared — is easycrypt available here? Probably not (ec-grind container). Check `which easycrypt`.
+  4. Check for other admits in the cone (claim says only one).
+  5. Check whether headline files use `clone` of anything weird, `include`, standalone `import`/`export`, `pragma`... Actually more important: check the full cone (all 45 closure roots) — wait, the claim is only about the 6 headline files' environments. FORS_C_TreePort not in GprocTCollNamed's cone covers all six. But also check the require regex doesn't miss any require in cone files. Let me grep for `require` lines that the REQ regex might not capture — e.g. requires spanning dots? Also `clone ... with theory X <- FORS_C_TreePort`-style would need FORS_C_TreePort loaded; the cone only needs requires.
+
+  Also check whether any cone file has `require` hidden in ways regex misses: e.g. `require(*c*)` — REQ requires `require\s+` (at least one whitespace). `require(* comment *)Foo.` — after strip_comments, the comment is blanked to spaces, so `require  Foo.` — fine.
+
+  What about `require` inside a string literal? EasyCrypt has no strings except rename clauses. Fine.
+
+  Also check: `local clone`/`clone include` of a theory in a headline file whose target requires FORS_C_TreePort... clone targets must be loaded; only theories in the cone are loaded. Since cone excludes TreePort, no clone target resolves to it. Good.
+
+  Now, question: could a headline file's *proofs* use FORS_C_TreePort via `Top.` qualification without require? No — Top.FORS_C_TreePort must be loaded.
+
+  One more route from question 1: **hint databases**: `hint simplify`/`hint solve`/`hint exact` — declared in a theory, persist via require export? If GprocTCollNamed's cone contained a theory that declared a hint naming a lemma from a theory it requires — still within closure. No escape. Hints cannot name not-loaded theories.
+
+  **-I auto-loading**: I'm confident EasyCrypt does not auto-load; theories enter environment only via require. The prelude is fixed (Core). `.eco` caching: compile recomputes from source.
+
+  **require inside nested theory or section**: EasyCrypt — I believe require is only allowed at toplevel of a file, before... Actually I'm not certain whether require must precede other toplevel declarations. It doesn't matter for the cone: the regex scans the whole file text, so any require anywhere is captured. What matters is whether a require could occur in a form the regex misses. The regex: `(?<![A-Za-z0-9_'])require\s+([^.]*)\.` — captures `require X Y Z.` with modifiers. Missed forms: a require whose theory list contains a `.`? Theory names are identifiers without dots. What about `require import AllCore Int List.`? Fine. `require D` then newline `import X.`? Standalone `import` — does it exist in EasyCrypt? If `import X.` standalone doesn't load X (only brings into namespace), then no environment escape. I believe EasyCrypt has no standalone import that LOADS. Loading is only via require. I'm confident.
+
+  Now, one potential hole for question 2: is the probe's environment really a superset of GprocTCollNamed.ec's own compile environment? GprocTCollNamed.ec's own environment includes its requires PLUS anything it declares itself (locals, sections with declare axioms). The probe's environment includes GprocTCollNamed's require closure + exported declarations. For the exclusion claim about extract_op, what matters is whether FORS_C_TreePort could be in GprocTCollNamed's internal environment without being in its require closure — no, since loading only happens via require. So the probe environment ⊇ the set of *theories* in GprocTCollNamed's own environment. Internal `local`/`declare axiom` items are file-local, not theories; they can't conjure FORS_C_TreePort symbols. So yes, superset in the relevant sense. And the env witness confirms qualified resolution of deep deps.
+
+  Subtle wrinkle: `require GprocTCollNamed.` loads GprocTCollNamed's closure. But is it exactly equal to, or possibly LARGER than, GprocTCollNamed.ec's compile-time closure? When compiling GprocTCollNamed.ec itself, environment = prelude + transitive requires. When requiring it, the probe gets the same transitive requires (recompiled from source) + the theory itself. Equal as a theory set, plus AllCore. Superset. ✓. And the env witness shows a 3-hop symbol (WOTS_TW_ES.n_m) resolves. ✓.
+
+  But wait — one more check on the env witness: is WOTS_TW_ES really 3 require-hops from GprocTCollNamed, and is n_m actually exported (not local)? The probe passed per the prediction file. Fine.
+
+  Question 3 details: discrimination of the 5 controls.
+
+  - neg_op: declared reason `unknown variable or constant: `FORS_C_TreePort.fverify_structural'`. MUST-FAIL. Could it pass for the wrong reason? If FORS_C_TreePort were loaded, the op would compile (pos twin proves). Wrong-reason passes: if the probe failed with that same message while TreePort IS in the environment... impossible for the same symbol — if loaded, fverify_structural resolves (pos twin). If fverify_structural were REMOVED from TreePort while TreePort still required somewhere in cone, the negative fails with same message and gate stays GREEN while the admit theory IS in the environment! Then extract_op could still be used (lemma still there) and the neg_lemma control would... neg_lemma would compile → RED. So the pair together discriminate: op probe + lemma probe. If extract_op (lemma) were renamed but TreePort in cone, neg_lemma fails "unknown lemma" → still green, but neg_op would compile → RED. Good two-sided coverage.
+
+    Hmm, but one asymmetry: neg_op tests `fverify_structural` (not the admit), neg_lemma tests `extract_op`. If someone requires TreePort in the cone AND renames both fverify_structural and the extract_op lemma, both negatives fail "unknown ..." → GREEN, while the admit (renamed) is in environment. But renaming extract_op moves the census admit row (digest + name), so PHASE 2 goes RED. Covered elsewhere.
+
+  - Vacuous MUST-PASS? pos_op/pos_lemma: they reference TreePort symbols; compiling proves loading works. env_n_m: compiles, witnesses deep resolution. Not vacuous — they'd fail if the machinery broke.
+
+  - The declared-reason match: grep -F on first [critical] line. For neg_lemma, the message `unknown lemma `FORS_C_TreePort.extract_op'` — could EasyCrypt wrap that across lines? The controls TSV comment (wlc section) warns exactly about wrapping. The declared reasons are short; but "unknown lemma `FORS_C_TreePort.extract_op'" is ~45 chars — unlikely to wrap. The prediction file says the runner graded 5/5. OK.
+
+  Question 4: REQ regex misses? Let me enumerate require forms in the cone and diff. Run a script: for each cone file, extract requires via the regex and via a looser pattern, compare. Looser: any line/occurrence of the word `require` outside comments; check that each is followed by a theory list terminated by `.`. The regex could miss: `require` immediately followed by `(` comment (handled via strip_comments), or Unicode? Fine.
+
+  One genuine potential miss: the regex requires the body `[^.]*` — i.e., NO dot until terminator. If a require directive contains a comment with a dot BEFORE strip_comments... but strip_comments runs first in cone(). ✓.
+
+  Another: `require` at the very start of a file — negative lookbehind passes at start. ✓.
+
+  Also check `.eco`/pragma: `pragma` doesn't load.
+
+  Now — bigger question for the CLAIM wording: "no tactic in any headline file can use that admit by ANY route ... because its theory FORS_C_TreePort is not in any headline file's environment". Checks:
+
+  a) Headline files are compiled in the gate? The gate compiles closure roots (PHASE 1). The headline lemmas live in these files. The claim is about tactics in proofs within those files. For a tactic inside file H to use extract_op, FORS_C_TreePort must be in H's compile-time environment = H's require closure. The gate's PHASE 3 probes don't test H's file directly; they test a fresh file requiring GprocTCollNamed. The equivalence rests on: environment(H compiling itself) = require-closure(H) ∪ prelude; environment(probe) = require-closure(GprocTCollNamed) ∪ prelude ⊇ require-closure(H). And the probe shows TreePort symbols unknown in the superset → unknown in the subset. This is sound, GIVEN EasyCrypt semantics. ✓ logic holds.
+
+  b) But: could a tactic in H use the admit's CONTENT without the theory, via a **clone of a theory that re-exports**? No — anything cloning TreePort must require it.
+
+  c) What about **`axiom` declared in a headline file duplicating extract_op's statement**? That's not "using the admit" — that's a new axiom; the census catches axioms. Not the claim's concern.
+
+  d) One real gap in the wording: the claim is about the CURRENT tree. The probes are in the gate, so drift is caught going forward. Fine.
+
+  e) Overstatement candidate: PHASE 5 header line 980-981: "A tactic can only use facts in its environment, so no route — named, smt, clone, module argument — reaches the admit." That's correct modulo TCB stated. The prediction file states TCB honestly. I don't see overstatement; actually the headers are careful. Maybe slight overstatement in the CLAIM itself: "no tactic ... by ANY route". One route not covered: **the admit could be used via its STATEMENT being weakened/proved differently... no. What about `smt` using a lemma of the same statement restated in another theory (a duplicate)?** That's not using the admit. What about EasyCrypt's **`smt` with external solvers that could prove goals inconsistent with...** no, smt proves from env facts.
+
+  Actually, hmm, one more possible route I should think about for question 1: **`clone` with a theory FILE that is on the include path but not required** — does EasyCrypt's clone auto-locate theories on the include path? I need to be careful. In EasyCrypt, I believe the clone target must be in the current environment (loaded). There is no auto-loading at all in EasyCrypt (unlike Coq's `Require Import` being explicit too). EasyCrypt resolves all theory lookups against the environment. Confident.
+
+  **`include`**: same, needs loaded theory.
+
+  **`.eco` precompiled**: `easycrypt compile` re-verifies? When you `require Foo`, EasyCrypt checks for Foo.eco; if present and consistent (hash matches?), it may load the .eco instead of recompiling. There's a `-check` mode... Actually easycrypt has lazy compilation: `easycrypt compile file.ec` checks requires; it recompiles required files if sources changed. Could a crafted .eco smuggle an axiom? That's about cache poisoning — the gate hashes sources but a malicious .eco could differ from source. Does the gate delete/ignore .eco? EasyCrypt's behavior: it stores .eco alongside source; on require it validates the .eco against the source hash (I believe it recompiles if stale). If a forged .eco claimed FORS_C_TreePort inside GprocTCollNamed's interface... but .eco consistency is checked via hashes of the source. This is a supply-chain-ish concern beyond the claim's scope; also, the probe compiles fresh files requiring GprocTCollNamed — if a poisoned .eco injected TreePort, the negative probe would resolve and go RED. Actually would it? If GprocTCollNamed.eco's recorded requires were poisoned to include TreePort, requiring it would load TreePort → probe compiles → RED. So the probe catches .eco injection too. 
+
+  But wait — for the CLAIM about H's own compilation: if H.ec's compilation used a poisoned .eco of some dependency D that injected TreePort without D.ec requiring it textually... EasyCrypt .eco includes a digest of the dependency sources? EasyCrypt validates .eco freshness via source hash; a hand-crafted .eco could bypass. That's a TCB point: .eco integrity. Worth listing as a low-priority hole: gate doesn't clean .eco caches; a forged .eco could in principle lie. But PHASE 1 compiles all closure files from source; and probes would catch injected requires. Residual risk: forged .eco providing a *hint* or *lemma* under a different theory name that re-exports extract_op's statement — but that statement's symbols are TreePort's, so can't be restated. OK, low priority.
+
+  Now check remaining bits:
+  - Confirm extract_op lemma is actually terminated with admit (not qed). Read further around :1495-1520.
+  - Check for other admits in the closure (claim: only one). Grep admit across cone files quickly via the census baseline: cert-baseline-split.tsv should have one admit row. Check.
+  - Check whether easycrypt binary is available to re-run probes — probably not; note that.
+  - Check requires in the 6 headline files directly, and whether REQ might miss multi-line/dotted forms. Also check the 44-file cone list for any require of TreePort — already verified via cone computation (TreePort NOT IN CONE). But that used the REQ regex. Cross-check with a different method: grep -rn 'require' across cone files and look for TreePort manually. Already did grep -l 'FORS_C_TreePort' across both dirs: only comment mentions in 4 files. Let me verify those 4 mention-contexts are comments (check surrounding lines), and also check the OTHER files in cone for 'TreePort' mentions under different spellings? The theory name is fixed = basename. But require could use a different case? EasyCrypt identifiers are case-sensitive; theory names must match file basename. FORS_C_TreePort.ec. Case variants wouldn't load.
+
+  Also: check headline files for `clone include`/`clone import` of theories not obviously in cone — the cone computation handles requires only, but clone targets must be loaded, so no escape. Unless clone target is found by auto-load — confident not.
+
+  One more subtle thing: **`theory`/`abstract theory` blocks inside files**: a headline file could contain an internal `theory T ... end` whose... still same environment. No.
+
+  **Sections with `declare axiom`**: could a headline file declare an axiom equivalent to extract_op? That's a new assumption, caught by census; not "using the admit". But the CLAIM says "no tactic ... can use that admit" — using *that admit*, so restating isn't covered, correctly.
+
+  Now let me check the admit terminator and baseline admit rows, and requires of headline files, plus whether easycrypt exists.
+
+• Cone structure confirmed. Now the admit terminator, the require forms in the cone, and whether the probes are re-runnable here.proof.
+  (* ========================================================================
+     F-EXTRACT-OP (OPEN -- see the exact four-part obstruction above R_op).
+     ========================================================================
+     DISCHARGED as REAL pure lemmas (both empirically load-bearing -- dropping
+     `verifyC` fails op_preimage_core with `cannot close goals`, dropping `brk_op` fails
+     op_extract_wins with `unknown variable bop`):
+       * WITNESS       -- op_preimage_core: ebop + validity => genuine f_lf preimage
+                          f_lf(fleaf_in) = cleaf_out  (trco/trh_collision_core analogue).
+       * PURE-LIST INDEX -- op_extract_wins: extract_op names the leaf target in
+                           `leaf_targets` and proves range/budget/uniq/preimage there.
+
+     NOT discharged: R-KEY, R-SIM, actual-oracle R-INDEX, and R-OPEN.  In
+     particular, sim_sig_op_fidelity is conditional on R-KEY and is not an
+     independent signing coupling. *)
+  move=> struct nd bs los oreg simfid.
+  admit. (* F-EXTRACT-OP: requires exposed randomized leaf keygen + faithful simulator,
+            actual O.ts layout/index coupling, and history-selected !opened witness. *)
+qed.
+
+(* F-EXTRACT-TRH: tree-hash collision (guarded by !ebop).  break `ebtrh` ->
+   R_trh wins SM_DT_TCR_C_TRH. *)
+lemma extract_trh
+  (A <: Adv_EUFCMA_FORSC{-O_CMA_FORSC_I, -EUF_CMA_FORSC_I, -G_Tree, -R_trh,
+                         -O_TRH_Default, -O_TRH_THFC}) &m :
+    fverify_structural =>
+    enum_nondegen =>
+    brk_structural =>
+    trh_interior_structural =>
+    trh_registration =>
+    Pr[G_Tree(A).main() @ &m : ((res /\ !G_Tree.covered) /\ !G_Tree.ebop) /\ G_Tree.ebtrh]
+  <= Pr[SM_DT_TCR_C_TRH(R_trh(A), O_TRH_Default, O_TRH_THFC).main() @ &m : res].
+proof.
+  move=> struct nd bs tis treg.
+  (* SIMULATION INVARIANT (REAL, byequiv): R_trh signs A HONESTLY (Osign byte-identical
+     to O_CMA_FORSC_I.sign -- NO per-sign target loop now), registering the WHOLE honest
+     interior-node target set ONCE in find() before forge.  The `call` invariant PINS
+     O_TRH_Default.ts{2} to `honest_nodes ps ad pk` (Osign never touches ts, so it holds
+     throughout A.forge).  The WITNESS half is the real qed lemma trh_collision_at_div
+     (ebtrh => distinct-input trh collision at the NAMED level div_level), and
+     INDEX-FIDELITY is DERIVED from trh_registration: the collision node is a registered
+     honest target, so `index (..) (honest_nodes ..)` (returned by extract_trh) NAMES it
+     -- discharged in-proof, not assumed. *)
+  byequiv (_ : ={glob A} ==>
+     (((res{1} /\ !G_Tree.covered{1}) /\ !G_Tree.ebop{1}) /\ G_Tree.ebtrh{1})
+       => res{2}) => //.
+  proc.
+  inline{2} R_trh(A, O_TRH_Default, O_TRH_THFC).find.
+  inline{2} R_trh(A, O_TRH_Default, O_TRH_THFC).pick.
+  inline{2} O_TRH_Default.init O_TRH_Default.query O_TRH_Default.get O_TRH_Default.nr_targets
+            O_TRH_Default.dist_tweaks O_TRH_Default.get_tweaks.
+=== admit occurrences in cone ===
+5
+base-c10-split/FL_SL_XMSS_MT_ES.ec	axiom	dist_adrstypes	# line 92
+base-c10-split/FL_SL_XMSS_MT_ES.ec	axiom	valid_xidxvals_idxvals	# line 342
+base-c10-split/FORS_ES.ec	axiom	dist_adrstypes	# line 62
+base-c10-split/FORS_ES.ec	axiom	valid_fidxvals_idxvals	# line 289
+base-c10-split/FORS_ES.ec	declare-axiom	A_forge_ll	# line 2821
+base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca	declare-axiom	A_pick_ll	# line 284
+base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca	declare-axiom	A_find_ll	# line 287
+base-c10-split/SPHINCS_PLUS.ec	axiom	n_val	# line 44
+base-c10-split/SPHINCS_PLUS.ec	axiom	k_val	# line 53
+base-c10-split/SPHINCS_PLUS.ec	axiom	a_val	# line 60
+base-c10-split/SPHINCS_PLUS.ec	axiom	log2_w_val	# line 73
+base-c10-split/SPHINCS_PLUS.ec	axiom	len_val	# line 97
+base-c10-split/SPHINCS_PLUS.ec	axiom	hp_val	# line 106
+base-c10-split/SPHINCS_PLUS.ec	axiom	d_val	# line 116
+base-c10-split/SPHINCS_PLUS.ec	axiom	dist_adrstypes	# line 165
+base-c10-split/TweakableHashFunctions.eca	axiom	in_collection	# line 567
+base-c10-split/WOTS_TW_ES.ec	axiom	valid_widxvals_idxvals	# line 390
+base-c10-split/WOTS_TW_ES.ec	axiom	ch0	# line 559
+base-c10-split/WOTS_TW_ES.ec	axiom	chS	# line 566
+base-c10-split/WOTS_TW_ES.ec	declare-axiom	A_choose_ll	# line 3435
+/home/nicola/.opam/checkct/bin/easycrypt
+Error: easycrypt: unknown option '-version'.
+
+--- requires in headline files ---
+== GprocChargedQWired
+68:require import AllCore List Distr StdBigop StdOrder IntDiv.
+69:require import SPHINCS_PLUS XmssmtCC_All RtopCSoundness FxChain GprocFORSC10 GprocVI.
+70:require WOTS_C_Real WOTS_C_Scheme XMSSMT_C_Scheme WOTS_C_Interactive.
+71:require FORS_C10 FORS_C10_Multi DigitalSignatures.
+72:require import BitEncoding. import BS2Int BitChunking.
+== SphincsC10CapstoneWired
+8:         `require import`ed from FxChain (scheme + hop lemmas) and RtopCSoundness
+9:         (good_fors + V_C + R_top_C + LeqPr_VF_C).  FxChain itself requires
+59:     require-only) all remain.  This is a machine-checked REDUCTION to that ledger.
+98:   INHERITED from FxChain (via require import; the pre-wiring capstone inlined
+293:   transitive require set (13 .ec/.eca files: SPHINCS_PLUS + XmssmtCC_All +
+== GprocQWired
+48:require import AllCore List Distr StdBigop StdOrder IntDiv.
+49:require import SPHINCS_PLUS XmssmtCC_All RtopCSoundness FxChain GprocFORSC10 GprocVI.
+50:require WOTS_C_Real WOTS_C_Scheme XMSSMT_C_Scheme WOTS_C_Interactive.
+51:require FORS_C10 FORS_C10_Multi DigitalSignatures.
+52:require import BitEncoding. import BS2Int BitChunking.
+== GprocQBound
+58:require import AllCore List Distr StdBigop StdOrder IntDiv.
+59:require import SPHINCS_PLUS XmssmtCC_All RtopCSoundness FxChain GprocFORSC10 GprocVI.
+60:require import GprocT1Opre GprocT2Trh GprocT3Trco.
+== GprocWotsNamed
+42:require import AllCore List Distr StdBigop StdOrder IntDiv.
+43:require import SPHINCS_PLUS XmssmtCC_All RtopCSoundness FxChain GprocFORSC10 GprocVI.
+44:require WOTS_C_Real WOTS_C_Scheme XMSSMT_C_Scheme WOTS_C_Interactive.
+45:require FORS_C10 FORS_C10_Multi DigitalSignatures.
+46:require import BitEncoding. import BS2Int BitChunking.
+== GprocTCollNamed
+28:   hand-over.  That is an EVENT-level fact -- it says a win requires a collision, not
+85:require import AllCore List Distr StdBigop StdOrder IntDiv.
+86:require import SPHINCS_PLUS XmssmtCC_All RtopCSoundness FxChain GprocFORSC10 GprocVI.
+87:require WOTS_C_Real WOTS_C_Scheme XMSSMT_C_Scheme WOTS_C_Interactive.
+88:require FORS_C10 FORS_C10_Multi DigitalSignatures.
+
+
+• Interesting details:
+
+  1. GprocChargedQWired:68-72 — requires look ordinary, no TreePort.
+  2. SphincsC10CapstoneWired — grep matched comment lines; need actual require lines.
+  3. The baseline census has axioms in WOTS_TW_ES etc. (dist_adrstypes, ch0, chS...) — the claim is only about ADMITS, so check admit rows in baseline. `grep -c 'admit' cert-baseline-split.tsv` gave 5 — includes comment matches maybe. Let me check `admit:` rows.
+
+  Also: easycrypt IS available at /home/nicola/.opam/checkct/bin/easycrypt! So I can re-run the probes myself. Let me check version and run the 5 probes. That directly tests the evidence.
+
+  Let me also check the admit: rows in baseline, and get the real require lines of SphincsC10CapstoneWired.
+
+• EasyCrypt is available here — I can reproduce the probes directly instead of trusting the receipts.Error: easycrypt: unknown option '-v'.
+
+Usage: easycrypt [command] [options...] [args...]
+cdrafts-split/FORS_C_TreePort.ec	admit:3b102492d8ec	extract_op	# line 1511
+--- capstone requires ---
+8:         `require import`ed from FxChain (scheme + hop lemmas) and RtopCSoundness
+59:     require-only) all remain.  This is a machine-checked REDUCTION to that ledger.
+98:   INHERITED from FxChain (via require import; the pre-wiring capstone inlined
+293:   transitive require set (13 .ec/.eca files: SPHINCS_PLUS + XmssmtCC_All +
+350:require import AllCore List Distr StdBigop StdOrder IntDiv.
+351:require import SPHINCS_PLUS.
+352:require WOTS_C_Real WOTS_C_Scheme XMSSMT_C_Scheme.
+353:require WOTS_C_Interactive.
+354:require import XmssmtCC_All.
+355:(* WIRED SEAM (2026-07-24): require the two +C layers so the LHS scheme-game, the
+
+   ROLE = BUILD / ASSEMBLE.  States the top-level SPHINCS+C10 EUF-CMA bound in
+   MM45's `EUFCMA_SPHINCS_PLUS_FX` 4-term shape (SPHINCS_PLUS.ec:4287), with the
+   two paper-2022/778 Thm-5.2 +C substitutions, wired term-by-term to the PROVEN
+   base-A leg theorems where one exists and ADMITTED (with a precise in-file
+   residual) on each +C-transcription leg that is not yet built.
+
+       MM45 FX term                         +C substitution (this file)
+       -----------------------------------  -----------------------------------
+       |SKG-PRF adv|                        |SKG-PRF adv|  (GROUNDED to the concrete
+                                             R_SKGPRF_EUFCMA_C PRF term; hop2 DISCHARGED)
+       |MKG-PRF adv|                        mkg_adv  (PHANTOM in-chain summand; hop3 is
+                                             the identity, 0<=mkg_adv premise, NOT a hop)
+       Pr[EUF_CMA_MFORSTWESNPRF ...]   -->   FORS+C10 multi bound  (M.EUFCMA_MFORSC10,
+                                             FORS_C10_Multi.ec:472) EXPANDED to
+                                             Pr[ITSRC10 ...] + mtree_{openpre,trh,trco}
+       Pr[EUF_NAGCMA_FLSLXMSSMTTWESNPRF...] -> the +C COMPONENT THEOREM
+                                             (EUFNAGCMA_FLSLXMSSMTTWCESNPRF,
+                                             XmssmtCC_All.ec:8439) EXPANDED to
+                                             WOTS-TW+C multi + S-TCR(+C) + pkco-TCR
+                                             + trh-TCR, applied at A_ht := R_top_C(F)
+
+
+• Wait — sed showed lines 60-80 but the require lines are at 350-355, so the sed output shows comment text at :60-80. Fine.
+
+  Baseline has exactly ONE admit: row: cdrafts-split/FORS_C_TreePort.ec admit:3b102492d8ec extract_op # line 1511 (the `admit.` is at line 1511; the lemma starts at 1485). Good, matches claim ("only admit").
+
+  Note the capstone comment says "ADMITTED (with a precise in-file residual)" — interesting: SphincsC10CapstoneWired might have its own admits? Baseline shows only one admit row overall. But does the baseline cover all cone files? cert-baseline-split.tsv covers the certified cone. Capstone comment says "ADMITTED ... on each +C-transcription leg" — maybe those are `admit` in files not in the cone? But baseline only shows one admit. Let me double check: grep -P '\tadmit:' gave only one row. But wait, `grep -c 'admit'` gave 5 — four are in comments probably. Fine.
+
+  Hmm, but SphincsC10CapstoneWired says "ADMITTED ... with a precise in-file residual" — maybe those residuals are phrased as premises (explicit hypotheses), not admits. Whatever — not my claim to verify deeply; the CLAIM is about extract_op only.
+
+  Now reproduce the probes. Run the 5 controls with easycrypt compile -I base-c10-split -I cdrafts-split. Check rc and first [critical] line. Also try attack variants:
+
+  Attack probes I should try (as adversary, I can create NEW files — wait, "DO NOT MODIFY ANY FILE". Creating new scratch files? The instruction says do not modify any file. Creating new probe files in this disposable copy... risky interpretation. "DO NOT MODIFY ANY FILE" — to be safe I should avoid creating files too? It says modify. Creating new files in scratch could be considered acceptable for testing, but let me be conservative: I can test via stdin? `easycrypt compile` needs a file. I could use /tmp (outside working dir)? The instruction is about not modifying the tree's files; creating a temp probe in /tmp doesn't modify the tree. I'll use /tmp for attack probes. That's reasonable: read the tree, write scratch to /tmp.
+
+  First reproduce the five registered controls as-is.
+
+• Baseline confirms exactly one admit row. Now reproduce the five registered probes with the actual EasyCrypt binary.Usage: easycrypt [command] [options...] [args...]
+
+* Available commands: compile, llm, cli, config, runtest, why3config, docgen
+
+* Global options
+== _scope_neg_op_GprocTCollNamed rc=1
+   [critical] [scratch/_scope_neg_op_GprocTCollNamed.ec: line 7 (24-58)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+== _scope_neg_lemma rc=1
+   [critical] [scratch/_scope_neg_lemma.ec: line 6 (33-70)] unknown lemma `FORS_C_TreePort.extract_op'
+== _scope_pos_op rc=0
+   
+== _scope_pos_lemma rc=0
+   
+== _scope_env_n_m rc=0
+   
+
+
+• All five probes reproduce exactly as registered. Now let me attack. Ideas to test empirically in /tmp:
+
+  1. **Import without require**: does standalone `import FORS_C_TreePort.` load it? Test: file with `require GprocTCollNamed. import FORS_C_TreePort. op probe ...`. If import auto-loads from -I path, the claim dies.
+
+  2. **include**: `include FORS_C_TreePort.`?
+
+  3. **clone without require**: `clone FORS_C_TreePort as X.`
+
+  4. **Top namespace**: `Top.FORS_C_TreePort.extract_op`.
+
+  5. **hint databases**: can't test much — hints must reference in-scope lemmas.
+
+  6. **require inside a section/theory**: `section. require FORS_C_TreePort. ...` — does EasyCrypt allow require inside section? If yes and the REQ regex catches it anyway (whole-text scan), cone still covers it. But the probe logic: probes test only toplevel. For the CLAIM, what matters is whether FORS_C_TreePort can get into H's environment without a textual require in H's cone. require inside section is still a textual require in the file → regex catches. Fine, but test whether the regex form `require\s+([^.]*)\.` handles `section. require X.` — yes.
+
+  7. **pragma**: `pragma` doesn't load.
+
+  8. **-I auto-loading**: test a file with NO require of TreePort but just referencing it — covered by neg probes.
+
+  9. **`.eco` behavior**: after compiling FORS_C_TreePort.ec once, does requiring GprocTCollNamed in a new session pick up ambient state? Each `easycrypt compile` is a fresh process; environment built from requires only. But what about `.eco` files left in the tree directories — does compile auto-load .eco files present in -I dirs? No: EasyCrypt only loads what's required. But wait — there's a subtlety: EasyCrypt checks .eco consistency; if a stale .eco exists for a required file it errors or recompiles. Not an environment-expansion route.
+
+  Actually, one more important test for question 2's superset direction: does `require GprocTCollNamed.` really make ALL transitive deps resolvable, or does the env witness only show one? The witness showed WOTS_TW_ES.n_m. Fine.
+
+  Also test whether `import` standalone even exists in this EasyCrypt version.
+
+  Let me write attack probes in /tmp (not modifying the tree).
+
+  Attack A: 
+  ```
+  require import AllCore.
+  require GprocTCollNamed.
+  import FORS_C_TreePort.
+  op probe : bool = FORS_C_TreePort.fverify_structural.
+  ```
+
+  Attack B:
+  ```
+  require GprocTCollNamed.
+  clone FORS_C_TreePort as TP.
+  op probe : bool = FORS_C_TreePort.fverify_structural.
+  ```
+  Actually clone of a whole file theory... FORS_C_TreePort is a file-level theory; clone target must be a theory. Top-level file theories can be cloned? clone works on theories; a .ec file defines an anonymous top theory? In EasyCrypt each file is a theory named by basename. Cloning a file theory with modules... clone can clone theories with `with` clauses; modules can't be cloned though. FORS_C_TreePort contains modules, so cloning it wholesale would fail — but the question is whether it FAILS WITH "unknown theory" (not loaded) vs. something else. Test.
+
+  Attack C:
+  ```
+  require GprocTCollNamed.
+  lemma p : true. proof. have _ := Top.FORS_C_TreePort.extract_op. trivial. qed.
+  ```
+
+  Attack D: include.
+
+  Also attack E — the crucial one for question 2's superset concern: does the probe environment possibly MISS something GprocTCollNamed's own proofs have? Internal environment extras (locals, section hypotheses) don't add theories. Not testable/probablematic.
+
+  Attack F: `hint` — a file could declare `hint exact` with a lemma... needs in-scope lemma. Skip.
+
+  Also test: does requiring GprocTCollNamed bring FORS_C_TreePort through `.eco` of some middle file? Already covered: neg probes fail.
+
+  Another angle on question 4: check the REQ regex against actual require forms in the cone. Let me run a comparison: extract requires with cert_cone's regex and with an independent parser, look for discrepancies. Simpler: grep all `require` tokens in cone files and eyeball forms. Also look for `include`/`import`/`export` standalone in cone files.
+
+  Also test whether easycrypt allows `require` inside `section.` blocks — if allowed and regex catches, fine; but what about require inside `theory ... end`? Regex catches textually regardless. The only risk is a require the REGEX misses. Forms to grep: `require` followed by newline and something weird, or requires with `.` inside list — impossible. I think the regex is fine; but one case: `require import A B (* comment with . *) C.` — strip_comments first blanks comments, fine.
+
+  What about a require split as `require import A` (no terminating dot, continued next line with `B.`)? Handled by DOTALL.
+
+  Potential miss: `require export AllCore.` handled (import/export replaced). What about `require import AllCore. import Foo.` — standalone import: if standalone import EXISTS and LOADS, then REQ misses it! Let me test whether `import X.` standalone compiles for an unloaded X. If it loads from include path → hole. Test as Attack A without the require of TreePort:
+  ```
+  require import AllCore.
+  import FORS_C_TreePort.
+  op probe : bool = FORS_C_TreePort.fverify_structural.
+  ```
+  If this compiles, the claim is dead (import route loads TreePort, and REQ regex's `import` handling... actually REQ only matches `require`, standalone import would be missed by the cone census too).
+
+  Let me also check cone files for standalone import/include/pragma lines.
+
+  Let me run these attacks.
+
+• All five registered controls reproduce exactly. Now the adversarial part: probing EasyCrypt for environment-expansion routes that bypass `require`. I'll write attack probes to /tmp only (tree untouched).== a_import rc=1
+   [critical] [a_import.ec: line 2 (0-23)] cannot import the non-existent theory `FORS_C_TreePort'
+== b_clone rc=1
+   [critical] [b_clone.ec:3] cannot find theory to clone: `FORS_C_TreePort'
+== c_top rc=1
+   [critical] [c_top.ec: line 2 (27-68)] unknown lemma `Top.FORS_C_TreePort.extract_op'
+== d_include rc=1
+   [critical] [d_include.ec: line 2 (0-7)] parse error
+== e_export rc=1
+   [critical] [e_export.ec: line 2 (0-23)] cannot export the non-existent theory `FORS_C_TreePort'
+
+
+• Excellent — empirical results:
+  - standalone `import` exists as a directive but does NOT load: "cannot import the non-existent theory" — it only works on loaded theories. No auto-load from -I. ✓
+  - clone does not auto-load. ✓
+  - Top qualification doesn't help. ✓
+  - standalone `include` is a parse error at top level. ✓
+  - standalone `export` doesn't load. ✓
+
+  More attacks to test:
+  1. **hint databases**: can a hint reference a not-loaded lemma? No — needs in-scope at declaration. But what about hints *inherited* through require export chains carrying lemmas from required theories? Still within closure. Skip.
+
+  2. **pragma**: test `pragma` — no loading. Skip; confident.
+
+  3. **require inside a section**: does EasyCrypt allow `section.` then `require`? If allowed, REQ regex still catches it textually (whole-file scan). But there's a subtlety: the *probe* tests a toplevel require environment; if H contained `section. require FORS_C_TreePort.`, the textual require is in H → cone regex catches → GprocTCollNamed's cone would include TreePort → neg probe would compile → RED. Consistent. But let me verify the REQ regex catches require inside sections — it scans whole text, yes.
+
+  4. **-I order/shadowing**: two files same basename? The -I dirs are base-c10-split and cdrafts-split; check no duplicate basenames that could shadow. resolve() is last-wins per the comment. If there were a base-c10-split/FORS_C_TreePort.ec... no, only one.
+
+  5. **.eco poisoning**: beyond reasonable scope but worth mentioning as TCB. Actually let me test one thing: compile a forged .eco? That's heavy; skip, list as TCB note. Actually EasyCrypt stores .eco where? Let me check if .eco files exist in the tree dirs and whether compile reads them. Actually the probes just ran and presumably compiled dependencies from source (took time). A forged .eco for a DEPENDENCY (say FxChain) whose recorded interface adds `require FORS_C_TreePort` — would easycrypt trust the .eco's recorded requires without recompiling FxChain.ec? EasyCrypt validates .eco against source digest I believe. If it didn't, poisoning would be caught by the neg probe anyway (requiring GprocTCollNamed would then load TreePort → probe compiles → RED). So the probe actually covers .eco injection of requires. Good.
+
+  But here's a subtler .eco attack: a forged .eco of a dependency D that EXPORTS (re-exports) extract_op under D's namespace? Can't: the statement mentions TreePort modules; to state it, TreePort must be loaded when compiling D. A hand-crafted .eco (forged binary) could contain arbitrary axioms — but forging .eco binary format is an integrity attack outside the gate's model; the gate's INPUTS_SHA256 hashes .ec sources, not .eco files. Does the gate clean .eco before compiling? If EasyCrypt trusts stale .eco without checking source hash, a forged FxChain.eco could inject an axiom named like a lemma, used by smt... this is a genuine TCB item: .eco integrity. Let me check whether easycrypt recompiled or used .eco — check for .eco files in tree dirs, and test staleness behavior quickly. Actually easycrypt compile always recompiles the TARGET file but may load dependencies from .eco. EasyCrypt records in .eco a digest of the source? I believe EasyCrypt .eco contains marshaled environment with checksums of dependencies, and it checks consistency between .eco files of dependencies, but does it check the .eco against the .ec SOURCE? I don't think easycrypt re-verifies source hash of dependencies — that's why `easycrypt compile` recompiles... hmm, actually no: I believe EasyCrypt DOES recompile dependencies when the source is newer or always? The standard behavior: `easycrypt compile foo.ec` will load `Bar.eco` for `require Bar` if present and consistent, otherwise compile Bar.ec. Consistency check includes... I'm not sure. This is a real uncertainty to flag.
+
+  Let me test: compile GprocTCollNamed once (creates .eco files?), then tamper. That's heavy. Time is limited; I'll flag it as an uncertainty with a small test: check whether .eco files appear in the tree dirs and whether a second compile is faster (indicating caching). Actually let me just check for existing .eco files.
+
+  6. **The prelude**: fixed, no user theories. Confident.
+
+  7. **Auto-loading via `-I`**: definitively refuted by attack A (import of non-required theory fails even though on include path).
+
+  Now the remaining checks:
+  - REQ regex coverage of cone files: scan cone files for require statements the regex might miss. Also grep for standalone import/export/include/pragma/section-nested requires in cone files.
+  - Check the five headline files are compiled by the gate (PHASE 1) — not strictly needed for the claim.
+  - Wording (question 5): PHASE 5 header says "no route — named, smt, clone, module argument — reaches the admit. TCB: EasyCrypt's require/environment semantics." Fairly stated. The CLAIM as given to me: "no tactic in any headline file can use that admit by ANY route -- named application, bare smt(), clone, or module argument -- because its theory FORS_C_TreePort is not in any headline file's environment." This is well-supported. Residual overstatements:
+    a) The env witness covers only qualified-name resolution depth; the claim about probe environment ⊇ headline environment relies on EasyCrypt semantics (stated as TCB).
+    b) One subtle gap: the probes test the environment of a FILE REQUIRING GprocTCollNamed, which is a superset of GprocTCollNamed's own compile environment only if `require GprocTCollNamed` loads exactly GprocTCollNamed's transitive closure. Verified empirically (env witness + cone). OK.
+    c) The claim "one negative probe covers all six" rests on the CHAIN (all five in GprocTCollNamed's cone). Verified: all five IN CONE. But the tripwire protection: if the chain breaks (a headline file drops out of GprocTCollNamed's cone), the probe no longer covers it and NOTHING alarms — the header says "stops being true if the family stops being a chain" but there's no gate check that the five files ARE in the cone! Let me check: does the gate assert the cone contains the headline files? PHASE 1 compiles closure roots; cert-cone-files-split.tsv pins the cone file list — if GprocChargedQWired dropped out of GprocTCollNamed's cone, would the cone manifest change? The cone manifest is the union over all 45+ closure roots, so a de-chaining that keeps each file reachable from SOME root wouldn't change the manifest. The probes would still pass (they only test GprocTCollNamed's environment). The claim "one probe covers all six" would silently become false, and a dropped headline file could then require FORS_C_TreePort undetected by the scope probes! Would anything catch it? PHASE 2 census: FORS_C_TreePort is already in the manifest (closure root) so no new file row; admits count unchanged. The taint closure (PHASE 5) is NAME-level: if a headline file required TreePort and NAMED extract_op, taint closure catches it (headline tainted). But a bare smt() use wouldn't be named. So: de-chaining + require TreePort + smt-only use = the exact hole the probes were built to close, reopened silently. Priority hole #1: no gate assertion that the five headline files remain in GprocTCollNamed's require-cone. Let me verify: does anything in the gate check the chain? grep for cone assertions... cert-cone-files-split.tsv is the union manifest. Let me check the gate's PHASE 1h/1c and how the manifest is used. Also GprocChargedQWired.ec:54 comment mentions TreePort — so the headline file AUTHOR knows it's not required. If someone adds `require FORS_C_TreePort` to GprocChargedQWired and uses the admit via smt in a headline proof: gate catches? PHASE 1 compiles (fine). PHASE 2 census: TreePort already a root → cone unchanged. Statement pins: statement digest unchanged if proof text not pinned (pins digest statements, not proofs!). Taint closure: name-level; smt use invisible. Scope probes: only test GprocTCollNamed environment — does requiring GprocChargedQWired... wait, GprocTCollNamed requires GprocChargedQWired? Chain check: GprocTCollNamed's cone contains GprocChargedQWired — meaning GprocTCollNamed (transitively) requires it. So if GprocChargedQWired added `require FORS_C_TreePort`, then GprocTCollNamed's cone WOULD include TreePort → neg probes compile → RED. The chain saves us: since all five are DOWNSTREAM-required by GprocTCollNamed, any of them adding a TreePort require propagates into GprocTCollNamed's environment. Wait, direction: if H is in GprocTCollNamed's cone, that means GprocTCollNamed requires H (transitively), so H's requires are loaded when GprocTCollNamed is required. So H adding a TreePort require → TreePort enters GprocTCollNamed's environment → neg probe compiles → RED. 
+
+  So the tripwire DOES cover edits to the five files, AS LONG AS the chain holds. The failure mode is only: the chain breaks (H no longer required by GprocTCollNamed) AND THEN H adds the TreePort require. Between those two edits, nothing checks that the chain still holds! If someone refactors requires so that GprocTCollNamed no longer requires GprocChargedQWired (both still closure roots via closure-c10-split.txt), the scope probes silently stop covering GprocChargedQWired. Is there a gate check on the chain? Let me check how cert-cone-files-split.tsv is generated and checked: it's the union cone. De-chaining wouldn't change the union (both are roots). So no alarm. The headers HONESTLY say "stops being true if the family stops being a chain" — so it's disclosed, but it's a real unguarded precondition. Priority hole: recommend a gate assertion that the five headline theories appear in GprocTCollNamed's per-file cone (cert_cone.py on the one root, diff against committed list).
+
+  Let me check closure-c10-split.txt to see if all six headline files are closure roots (so union manifest doesn't detect de-chaining).
+
+  - Also check: does PHASE 1 compile headline files such that a headline proof COULD use smt with TreePort if TreePort were in its environment? Covered.
+
+  - Question 3 remaining: MUST-PASS vacuity — pos probes are genuine. But one more discrimination issue: the declared reason for neg_op is `unknown variable or constant: `FORS_C_TreePort.fverify_structural'`. grep -F fixed-string on first [critical]. Verified: actual message matches exactly (I reproduced). For neg_lemma: matches. ✓.
+
+  - Check the `import` note in headline files: `require import BitEncoding. import BS2Int BitChunking.` — standalone import used in headline files! And attack A shows standalone import cannot load new theories. ✓ no hole.
+
+  - Now check standalone `import`/`export`/`clone`/`include` occurrences in cone files that could matter — not needed given semantics.
+
+  - Check closure-c10-split.txt and cert-cone-files-split.tsv for the six headline files.
+
+  - Also verify the claim "theory FORS_C_TreePort is not in any headline file's environment" — the OTHER direction: GprocT3Trco.ec:1446 and GprocT1Opre.ec:26 mention TreePort in comments, and GprocT3Trco is in the cone (required by GprocQBound). Comments only. ✓.
+
+  - One more: FORS_C_TreePort.ec itself — what does IT require? It's a closure root; its own cone is separate. Not needed for claim.
+
+  - Check PHASE 1h statement coverage / pins cover headline files? Not needed for this claim.
+
+  Let me now check closure-c10-split.txt and the cone manifest generation in the gate, plus whether any gate step pins the per-root chain.
+
+• Empirical refutation of the main bypass routes: standalone `import`/`export`/`clone`/`Top.`-qualification all fail to load a non-required theory. Now checking the chain-precondition guarding and the closure roots.24:         cert-controls-split.tsv tools/cert_cone.py tools/stmt_digest.py; do
+146:# cone files plus the two manifests -- so tools/cert_cone.py, tools/stmt_digest.py,
+150:INPUTS_ID=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
+152:  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+188:# PHASE 0 -- INCLUDE-PATH AMBIGUITY.  resolve() in tools/cert_cone.py tries
+619:echo "### PHASE 2 — CONE CENSUS vs cert-baseline-split.tsv (ADDITIONS FATAL)"
+633:CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS 2>/dev/null \
+700:  cres=$(CERT_CONE_DIRS="scratch" python3 tools/cert_cone.py scratch/CANARY_gate_admitted.ec 2>/dev/null \
+715:  da=$(CERT_CONE_DIRS="scratch" python3 tools/cert_cone.py scratch/CANARY_modtype_A.ec 2>/dev/null \
+717:  db=$(CERT_CONE_DIRS="scratch" python3 tools/cert_cone.py scratch/CANARY_modtype_B.ec 2>/dev/null \
+731:  aa=$(CERT_CONE_DIRS="scratch" python3 tools/cert_cone.py scratch/CANARY_admit_A.ec 2>/dev/null \
+733:  ab=$(CERT_CONE_DIRS="scratch" python3 tools/cert_cone.py scratch/CANARY_admit_B.ec 2>/dev/null \
+1043:INPUTS_ID_END=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
+1045:  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+---
+64
+6:# (GprocTCollNamed.ec added 2026-09-14 -- the deployed headline with the encoding-collision term at +C.)
+9:# (GprocWotsNamed.ec added 2026-09-01 -- the deployed headline with the WOTS leg named.)
+39:cdrafts-split/GprocChargedQWired.ec
+40:cdrafts-split/GprocFORSC10.ec
+41:cdrafts-split/GprocQBound.ec
+42:cdrafts-split/GprocQWired.ec
+43:cdrafts-split/GprocT1Opre.ec
+44:cdrafts-split/GprocT2Trh.ec
+45:cdrafts-split/GprocT3Trco.ec
+46:cdrafts-split/GprocTCollNamed.ec
+47:cdrafts-split/GprocVI.ec
+48:cdrafts-split/GprocWotsNamed.ec
+
+
+• Confirmed: all six headline files are themselves closure roots in closure-c10-split.txt (lines 17, 30, 31, 34, 37, 42 — SphincsC10CapstoneWired:17, GprocQBound:30, GprocQWired:31, GprocChargedQWired:34, GprocWotsNamed:37, GprocTCollNamed:42). So the union cone manifest (cert-cone-files-split.tsv) contains them regardless of the chain. If the chain breaks — e.g. a require edit so GprocTCollNamed no longer requires GprocChargedQWired — the union manifest is unchanged (both are roots), the scope probes still pass (they only test GprocTCollNamed's environment), and nothing in the gate checks that the five remain in GprocTCollNamed's cone. The header discloses this ("stops being true if the family stops being a chain") but it's an unguarded precondition: a two-step attack (de-chain, then require TreePort in the dropped headline file and use the admit via bare smt) defeats the tripwire. Note: PHASE 5's taint closure would still catch NAMED use (name-level, across the whole cone manifest — wait, does the taint closure parse use the cone manifest which includes the headline file? Yes, cone_files() reads cert-cone-files-split.tsv, which includes all headline files. A named application of extract_op in GprocChargedQWired would be caught... but only if the name edge is detected: the lemma name is extract_op, and there's an op extract_op in the same file (FORS_C_TreePort). The edge() function: user file = GprocChargedQWired, tainted = (FORS_C_TreePort, extract_op). mentions() checks the body for 'extract_op'. uf != tf so positional rule doesn't drop it. opdecls check: (tf, tname) in opdecls and opdecls[(tf,tname)] < uln — the op decl line is in FORS_C_TreePort (1148), uln is a line in GprocChargedQWired — comparing line numbers ACROSS files! opdecls[(tf,tname)] < uln compares FORS_C_TreePort's line 1148 with the user's line number in a different file. If the user's lemma is at line < 1148, the edge is dropped (returns... wait no: if uf==tf and uln<tln return None; then `if (tf,tname) in opdecls and opdecls < uln: return 'ambig'` — else 'sure'. The opdecl line (1148 in TreePort) vs uln (line in GprocChargedQWired, say 300): 1148 < 300 is False → 'sure' edge. If uln = 2000: 1148 < 2000 → 'ambig' — kept anyway. So named use is caught either way. But smt-only use is not. And that was precisely the motivation for the probes.
+
+  So hole: de-chaining is undetected by any gate phase (union manifest invariant, probes test only GprocTCollNamed). Priority 1. Recommendation: pin GprocTCollNamed's per-root cone file list (the five headline files must be in it), e.g. a committed manifest checked in PHASE 3 or via cert_cone.py single-root diff.
+
+  Wait — but hold on: is that actually exploitable? To use the admit in GprocChargedQWired after de-chaining, attacker adds `require FORS_C_TreePort` to GprocChargedQWired. Then:
+  - PHASE 2 census: FORS_C_TreePort already in the union cone (it's a root), so file list unchanged; admits: extract_op already censused → no row added. Statement pins (PHASE 1c): pins digest statements of cone files; adding a require doesn't change statements. BUT: PHASE 1h coverage counts statements — unchanged. INPUTS_SHA256 changes (the file changed) → the identity line changes, but the gate is GREEN with a new identity — identity is a receipt, not a comparison against committed value? Let me check: INPUTS_ID computed fresh each run and compared start-vs-end only. So no committed identity. Hence: yes, silently green. Unless... GprocChargedQWired's OWN statements get new proofs using the admit via smt — proof text isn't pinned (deliberately: tactic edits shouldn't churn). So the exploit works: de-chain + require TreePort + edit a headline proof to close a gap via smt using extract_op. Gate stays GREEN. Two-edit attack, each edit individually benign-looking. This is a real hole in the enforcement, though the CLAIM as stated ("no tactic CAN use", present tense, current tree) remains TRUE today.
+
+  Also: the CLAIM is about the current tree; the probes make it falsifiable per-run. The de-chain scenario is future drift, which headers disclose. Severity: medium — disclose as a hole in the tripwire, recommend pinning the chain.
+
+  Now other checks:
+  - PHASE 0 include-path ambiguity (line 188): checks shadowing on -I dirs. Good — that covers duplicate basenames.
+  - Question 2 superset: verified logically + env witness + my attack probes. One more consideration: `require GprocTCollNamed.` (without import) — in the probe, symbols resolve qualified. But do *hints* from transitive requires load? Hint databases: hints declared with `hint` in required theories are active. If GprocTCollNamed's cone theories declare hints naming their lemmas, smt in the probe could use them — all within closure. Fine.
+
+  - Now, the reverse worry for question 2: could GprocTCollNamed.ec's OWN compile environment contain FORS_C_TreePort even though requiring it doesn't? E.g., GprocTCollNamed.ec could contain a textual `require FORS_C_TreePort` — no, then the probe would load it. Any require in the file is executed when compiling it and when required... wait, careful! When you `require GprocTCollNamed`, EasyCrypt compiles GprocTCollNamed.ec (or loads its .eco). If GprocTCollNamed.ec textually requires FORS_C_TreePort, that gets loaded transitively → probe resolves → RED. ✓. So the probe faithfully reconstructs the file's own require environment. The only extra env in the file's own compilation: its own declarations (locals, sections) — cannot introduce other theories. ✓ Sound.
+
+  - `.eco` staleness: does `easycrypt compile` trust existing .eco for dependencies? Let me check if .eco files exist in the tree dirs. If EasyCrypt loads a STALE .eco for a dependency whose source changed to add `require FORS_C_TreePort`... then the probe environment reflects the .eco, not the source. But PHASE 1 compiles closure files from source? `easycrypt compile` on a file recompiles that file; dependencies may come from .eco. If EasyCrypt checks source digests in .eco (it does — .eco records digest of source? I believe easycrypt stores a hash of the source in .eco and recompiles if mismatched — actually I'm genuinely unsure). Let me test quickly: check for .eco files, touch a dependency, see if dependent compile notices. Time cost: compiling GprocTCollNamed took how long? The probes took seconds each (deps presumably cached as .eco). Let me test the .eco invalidation behavior.
+
+  Actually the probes just now ran in 2-4s per prediction... my run took some time. Let me check for .eco files in tree.
+
+  Also for question 3: the first-[critical]-line match — verified actual messages match declared reasons exactly (I reproduced both). One more discrimination check: could a MUST-FAIL "pass" (compile) yet gate report OK wrongly? No: rc=0 + MUST-FAIL → FAIL. ✓.
+
+  Could the gate's control file parsing misread the _scope rows? Rows look well-formed TSV. The reason strings contain backticks and quotes — grep -F fixed string, fine. Note the reason in the TSV for neg_op contains a trailing `'` after the symbol — matches actual output. ✓ reproduced.
+
+  Also check EXPECT_CTLS=44 matches actual rows: count data rows in cert-controls-split.tsv. Rows: lines 9-15 (7), 24-27 (4), 42-44 (3), 50-51 (2), 68-88 (21), 97-99 (3), 111-115 (5) = 7+4+3+2+21+3+5 = 45? Let me count: section1: vac_probe_full, probe_len46, c10_spec_vacuity_canary, C10SpecControls, tier0, encode_compat = 6 rows (lines 9-14). badenc 4 (24-27) = 10. wlc 3 = 13. gwn 2 = 15. tcoll 6 + bered 8 + bes4 7 = 21 → 36. gtn 3 → 39. scope 5 → 44. ✓ EXPECT_CTLS=44 consistent.
+
+  Now .eco test and the `pragma`/hint check. Also verify question 1 item: "require inside a nested theory or section block" — test if EasyCrypt allows require inside section (curiosity; either way regex catches it). And test a `hint` route? Hint can't load.
+
+  Let me also verify there's no second `admit` hiding in FORS_C_TreePort or elsewhere that the census misses — claim says only admit in closure. The baseline census has one admit row; census is whitespace-tolerant. Let me grep raw for admit tokens in cone files as cross-check: strip comments mentally... `grep -rn 'admit' cone files` and eyeball.
+
+• All six headline files are themselves closure roots — important for the chain-precondition analysis. Let me check `.eco` caching behavior and cross-check the admit census.--- raw admit grep over cone files ---
+base-c10-split/WOTS_TW_ES.ec:1563:   instead of admitted.  Note this lemma is proved from the split above and NOT from
+base-c10-split/WOTS_TW_ES.ec:1579:   2026-08-12).  This lemma USED TO END `admit.` on the step `encode m <> encode m'` --
+base-c10-split/WOTS_TW_ES.ec:6566:   collision branch is paid for by an explicit probability instead of an admit. *)
+cdrafts-split/WOTS_C_EmbDischarge.ec:43:   * FLAG-1 (emb_thfc_ThC): DISCHARGED — `emb_thfc_ThC_holds` below, ZERO admit.
+cdrafts-split/GprocT3Trco.ec:657:                  goal that needs it is admitted.  The bindings are read off the
+cdrafts-split/WOTS_C_Interactive.ec:584:   honest ones — a faithful, pp-free simulation.  REAL module, zero admit.
+cdrafts-split/WOTS_C_Interactive.ec:1390:     is admitted.  THAT IS NO LONGER TRUE and has not been for some time: this
+cdrafts-split/WOTS_C_Interactive.ec:1746:   REAL module, zero admit.
+cdrafts-split/_seam_byequiv_wip.ec:435:   Isolated, 0-admit.  Ported from the gated dev scratch.  See okC_ghost (capstone).
+cdrafts-split/_seam_byequiv_wip.ec:591:   recovered from the folded hypertree gate.  Composes L3b + okC_select, 0-admit. *)
+cdrafts-split/_seam_byequiv_wip.ec:1010:   cleanly by pkco/trh/f-vs-dfC separation.  0-admit.
+cdrafts-split/_seam_byequiv_wip.ec:2074:       0-admit.  The okC discharge is a local proof-engineering assembly of these;
+cdrafts-split/Grind.ec:181:     `head_filter_ne` is the one-step filter/head fact.  Zero admit. *)
+cdrafts-split/_compose_wip.ec:435:   Isolated, 0-admit.  Ported from the gated dev scratch.  See okC_ghost (capstone).
+cdrafts-split/_compose_wip.ec:591:   recovered from the folded hypertree gate.  Composes L3b + okC_select, 0-admit. *)
+cdrafts-split/_compose_wip.ec:1010:   cleanly by pkco/trh/f-vs-dfC separation.  0-admit.
+cdrafts-split/_compose_wip.ec:2074:       0-admit.  The okC discharge is a local proof-engineering assembly of these;
+cdrafts-split/C10DeployedGeometry.ec:594:   every proof body gutted to `admit.` via base-c10-fork/gut.py (compile drops
+cdrafts-split/C10DeployedGeometry.ec:1111:   F1 (CRITICAL) -- and it is stronger than section 16 admitted.  Section 16
+cdrafts-split/sphincs_c10_capstone_wip.ec:401:  + admit.
+== f_section rc=1
+[critical] [f_section.ec: line 3 (0-24)] In external theory FORS_C_TreePort [<unknown> location]:
+== g_hint rc=1
+[critical] [g_hint.ec:3] unknown symbol: FORS_C_TreePort.extract_op
+
+
+• f_section: require inside section — rc=1, critical "In external theory FORS_C_TreePort [<unknown> location]:" — need more lines. It may be failing while compiling FORS_C_TreePort (because... it DOES try to load it?). Interesting: "In external theory FORS_C_TreePort" suggests require inside section DID attempt to load FORS_C_TreePort and failed somewhere — maybe because compiling FORS_C_TreePort in this context hit an error, or require is not allowed in sections and the error is odd. Let me get more of the error. If require inside a section DOES load, then the REQ regex still catches it (textual). But the important fact for the claim: loading happens only via textual require — which is in the cone scan. So fine either way. Let me see the full error to understand.
+
+  g_hint: `hint exact : FORS_C_TreePort.extract_op.` fails with unknown symbol — hints can't conjure theories. ✓
+
+  Also note the admit grep shows sphincs_c10_capstone_wip.ec:401 has `+ admit.` — a wip file, presumably not in the cone. And C10DeployedGeometry mentions admits in comments ("every proof body gutted to admit. via gut.py (compile drops..." — that's a comment describing history). _seam_byequiv_wip etc. are wip files not in the cone. Are _wip files in the cone manifest? cert-cone-files-split.tsv has 64 lines; the cone computation for GprocTCollNamed gave 44 files. The wip files shouldn't be required by closure roots. The census baseline is authoritative: one admit row. But let me double check sphincs_c10_capstone_wip.ec:401 `+ admit.` — `+` prefix means it's inside a goal selector... is that file in the cone? grep cert-cone-files-split.tsv for it.
+
+  Also f_section's error — get full output.[critical] [f_section.ec: line 3 (0-24)] In external theory FORS_C_TreePort [<unknown> location]:
+--- wip files in cone manifest? ---
+(exit 1)
+f_section full error is truncated — only one critical line. "In external theory FORS_C_TreePort [<unknown> location]:" suggests it tried to LOAD FORS_C_TreePort and something inside failed. Hmm — but FORS_C_TreePort compiles fine normally (the pos twins require it and pass). Why would it fail here? Maybe because require inside a section is processed but the section context causes issues, or the error message continues on following lines that don't start with [critical]. Let me get the full output.[-] [0002] 19.2% (-1.0B / [frag -1.0B])
+[\] [0003] 26.4% (-1.0B / [frag -1.0B])
+[|] [0004] 46.4% (-1.0B / [frag -1.0B])
+                                                   
+                                                   
+[critical] [f_section.ec: line 3 (0-24)] In external theory FORS_C_TreePort [<unknown> location]:
+cannot use `require' in sections
+[/] [0004] 46.4% (-1.0B / [frag -1.0B])
+[-] [0004] 46.4% (-1.0B / [frag -1.0B])
+
+"cannot use `require' in sections" — require is forbidden inside sections. Good: no nested-require escape. (And even if it were allowed, REQ would catch it textually.)
+
+  Remaining to check:
+  1. `.eco` caching — no .eco files in the tree dirs (ls found none — output showed nothing before the admit grep). Where does easycrypt put .eco? It didn't create any in the tree (good — maybe this build doesn't write .eco, or writes them elsewhere). Check /tmp/scope_attack for .eco after compiles. If no .eco caching in play, that route is moot in this setup. Check.
+
+  2. Verify REQ regex misses nothing in the cone: write a quick independent require scan over cone files comparing token sets. Also scan for require-like forms: `require` with weird whitespace, tabs; and check `pragma` usage.
+
+  3. Check PHASE 0 (include-path ambiguity) details — line 188ff.
+
+  4. Check PHASE 1 to confirm headline files are compiled from source each run (so .eco staleness doesn't matter): gate compiles closure roots with $INC. Also check $ROOTS definition.
+
+  5. taint_closure header wording (question 5): already read — line 34-39 UPDATE. It's honest. The PHASE 5 header (974-983) also honest with TCB. Overstatement check: the CLAIM's phrase "no tactic ... by ANY route". Given tests: named ✓, smt ✓ (smt uses env facts only — TCB), clone ✓ (empirically refused), module argument — modules must be declared in env; a module argument referencing TreePort modules needs TreePort loaded; empirically the op reference fails, so module types too. ✓.
+
+  One more route I haven't tested: **`theory` inheritance via `clone include` of a theory that EXPORTS something**... same thing. And **`realize`**: needs loaded theory. And **module application to a functor declared in TreePort**: needs TreePort loaded.
+
+  What about the **`Top.` recursive shadowing** — tested c_top ✓.
+
+  What about **`.eca` abstract theory with `require` inside `theory ... end`** blocks (not sections)? `theory T. require X. end.` — is require allowed inside a local theory block? Probably also forbidden ("cannot use require in sections" — theory blocks might differ). Test quickly. Even if allowed, REQ regex catches it.
+
+  Also the missing check: are there any requires in cone files that REQ regex misses? Let me do the independent scan: grep -o all 'require[^.]*\.' multiline via perl/python over comment-stripped text, compare with cert_cone's requires_of. Simpler: python snippet reusing both.
+
+  Also check PHASE 0 content briefly and PHASE 1 compile lines.(eco scan done)
+files scanned: 44
+FORS_C_TreePort in cone: False
+# PHASE 0 -- INCLUDE-PATH AMBIGUITY.  resolve() in tools/cert_cone.py tries
+# '.ec' then '.eca' and takes the LAST hit, but EasyCrypt's own preference when
+# BOTH exist for one theory name is unverified.  Today no name is dual-extension
+# (checked), so census and compiler cannot disagree; this guard fails the gate
+# the moment that stops being true, instead of silently censusing one file while
+# PHASE 1 compiles the other -- the run-7 shadowing defect in a new costume.
+dupes=0
+for d in $B $D; do
+  n=$(ls "$d" 2>/dev/null | grep -E '\.(ec|eca)$' | sed -E 's/\.(ec|eca)$//' | sort | uniq -d | grep -c . || true)
+  [ "${n:-0}" -eq 0 ] || { echo "FAIL $d has $n theory name(s) present as BOTH .ec and .eca"; dupes=$((dupes+n)); }
+done
+[ "$dupes" -eq 0 ] && echo "OK   no dual-extension theory names on the include path" || fail=$((fail+dupes))
+
+# Purge stale .eco. EasyCrypt does not invalidate DEPENDENT .eco files when a
+# required theory changes, so a stale cache can make a target "compile" against
+# an older version. cert_gate_fork.sh:38-40 documents this; the first version of
+# this script dropped the defence. Restored 2026-08-01 (adversarial review, run 3).
+# CONCURRENCY GUARD (run 10).  A gate that shares its directories with another
+# compile has no receipt: the other process writes .eco underneath it.  This
+# is not hypothetical -- stopping a gate task on the host killed the `docker
+# exec` client but NOT the in-container script, whose orphaned compile kept
+# writing for 13 minutes into the tree the next run was purging.  The purge
+# verification caught it (ECO_REMAINING=34); this stops it one step earlier.
+others=$(ps -eo cmd 2>/dev/null | grep -c "[e]asycrypt compile.*base-c10-split" || true)
+[ "${others:-0}" -eq 0 ] || { echo "FAIL another compile is running against base-c10-split ($others) -- refusing to produce a racy receipt"; exit 3; }
+# PURGE MUST BE VERIFIED, NOT ATTEMPTED (run 10).  `|| true` swallowed every
+# failure, and a surviving .eco is exactly the stale-cache green this purge
+# exists to prevent.  Also covers every directory named by the control
+# inventory, which is data-driven while this list used to be hardcoded.
+# PURGE AND CHECK MUST HAVE THE SAME SCOPE (fixed 2026-08-02, second defect
+# in this guard).  The purge was a GLOB (scratch/*.eco) and the check was a
+# recursive FIND, so 33 objects in scratch SUBDIRECTORIES (advprobe, dsn,
+# f1probe, f1probe/base3, incenc, audit0725) failed a gate that had never
+# tried to delete them.  Both are recursive now.
+# REPORT WHAT WAS PURGED, NOT ONLY WHAT SURVIVED (added 2026-08-04, run 22).
+# This gate deleted correctly but printed only ECO_REMAINING, while the fork
+# gate printed ECO_PURGED too.  ECO_REMAINING=0 is consistent with BOTH "there
+# was nothing stale" and "180 stale objects were removed" -- and run 22 began
+# with exactly the second case, after an orphaned compile from a killed run
+# wrote objects against a tree that had moved under it.  A reader auditing that
+# receipt could not tell the two apart from the gate output alone; I had to
+# reconstruct it from .eco mtimes after the fact.  The count is a receipt, not
+# a check: a nonzero ECO_PURGED is normal and is NOT a failure.  What would be
+# alarming is a large ECO_PURGED together with an unexplained short PHASE 1.
+ctl_dirs=$(awk -F'\t' '!/^#/ && NF{print $1}' cert-controls-split.tsv | xargs -r -n1 dirname | sort -u)
+purged=$(for d in $B $D scratch $ctl_dirs; do [ -d "$d" ] && find "$d" -name '*.eco' -print -delete 2>/dev/null; done | sort -u | grep -c . || true)
+left=$(for d in $B $D scratch $ctl_dirs; do [ -d "$d" ] && find "$d" -name '*.eco' 2>/dev/null; done | sort -u | grep -c . || true)
+echo "### ECO_PURGED=$purged"
+echo "### ECO_REMAINING=$left"
+[ "$left" -eq 0 ] || { echo "FAIL stale .eco survived the purge ($left)"; fail=$((fail+1)); }
+
+echo "### PHASE 1 — TARGETS"
+for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
+91:# silently been given 20x the budget.  PHASE 1 compiles SEQUENTIALLY, so there was
+193:# PHASE 1 compiles the other -- the run-7 shadowing defect in a new costume.
+239:echo "### PHASE 1 — TARGETS"
+315:# COST: roughly doubles the prover work of PHASE 1 (FORS_ES.ec alone is ~7 min).
+370:# Same truncation guard PHASE 1 carries: a closure file that shrank to nothing
+411:  if ! easycrypt compile $INC -I scratch "$wf" >/dev/null 2>&1; then
+468:  if easycrypt compile $INC -I scratch -I "$TMPD" "$TMPD/require_watched.ec" >/dev/null 2>&1; then
+472:    easycrypt compile $INC -I scratch -I "$TMPD" "$TMPD/require_watched.ec" 2>&1 | tr '\r' '\n' | grep -a '^\[critical\]' | head -2 | sed 's/^/       /'
+627:ROOTS=""
+630:  ROOTS="$ROOTS $D/$n.ec"
+The .eco concern is handled: PHASE 0 purges stale .eco before compiling, and verifies the purge. And "EasyCrypt does not invalidate DEPENDENT .eco files when a required theory changes" — documented and defended.
+
+  The independent require scan: 44 files, no token diffs, FORS_C_TreePort not in cone. REQ regex validated against a looser scan (though my "loose" scan is similar in structure — it allows up to 500 chars to the dot and doesn't require... actually similar. A stronger independent check: find all `require` word occurrences and confirm each is matched by REQ. My count check compared len(raw) vs REQ matches only when mismatch — printed nothing, so counts agree everywhere. Decent.)
+
+  One more require form to worry about: `require` with a dot inside an identifier? Not valid. `require import AllCore. import BS2Int.` — standalone import of LOADED theories — fine (headline files do this; import doesn't load).
+
+  What about `require` appearing with leading whitespace mid-file after `qed.` — REQ catches (zero-width lookbehind). ✓.
+
+  Now PHASE 1: compiles targets — line 239ff compiles WOTS_TW_ES etc. and presumably closure roots including headline files. The claim only needs the cone math + probes; fine.
+
+  Now remaining items:
+  - Question 3: discrimination of the five controls — verified reproduction: both negatives fail with exactly the declared first-[critical] strings; positives pass. Vacuity: env witness is meaningful (WOTS_TW_ES.n_m 3 hops). One residual: the witness is run for GprocTCollNamed only, disclosed.
+
+  - The one hole I found: chain precondition unguarded. Confirm by checking: if GprocTCollNamed stopped requiring e.g. GprocChargedQWired, would any phase fail? PHASE 2 union census unchanged (both roots). PHASE 1h statement count: statements counted across cone — same files, same count (still in union cone via roots). Pins same. Taint: name-level only. Probes: still green. INPUTS_ID: recomputed, not compared to committed. So yes, silent. Confirmed hole.
+
+  Actually wait — also check: does anything pin WHICH files each root requires? cert-watched-split.tsv? Let me check what cert-watched-split.tsv is, and PHASE at line 411/468 (require_watched). Let me look at lines 380-480 to see what "watched" means — maybe it pins requires of watched files! Line 468: `require_watched.ec` in TMPD — sounds like a check that requiring a watched file works/fails? Let me read that section.
+
+• The .eco purge is handled in PHASE 0. Now let me check the "watched" mechanism (lines ~380-480) — it might already pin require edges.# Same truncation guard PHASE 1 carries: a closure file that shrank to nothing
+# would run zero cli checks and still reach GREEN.
+cli_exp=$(( $(grep -cve '^[[:space:]]*$' -e '^#' $CLOSURE) + 4 ))
+[ "$cli_run" -eq "$cli_exp" ] || { echo "FAIL cli phase ran $cli_run of $cli_exp files"; fail=$((fail+1)); }
+
+# The open question that stood here is CLOSED: the four PHASE 1e failures were
+# the -iterate default difference, not defects.  See the PHASE 1e header.
+# Worth keeping as a lesson: the failures were deterministic, timeout-invariant
+# and parallelism-invariant, and every one sat on an smt call -- a signature
+# that reads as "fragile proofs" and was in fact "mis-specified gate".  Adding
+# a hint made the step pass under both drivers, which looked like confirmation
+# of the wrong diagnosis; it was really just supplying what the non-iterated
+# call could not find for itself.
+
+echo "### PHASE 1f — WATCHED FILES (T1/T2/T3 branch proofs; NOT certified)"
+# Added 2026-08-08.  Nothing gated these at all.  T2 and T3 have been at
+# admit=0 for weeks and T1 at 1, entirely on the strength of ad-hoc runs -- and
+# a result nothing enforces is not a receipt, which is the sentence this whole
+# script exists because of.  They import FxChain, RtopCSoundness, GprocFORSC10
+# and GprocVI, so a change to any certified file can break them with nothing
+# going red.  The cli defect that motivated PHASE 1e was in exactly these files.
+#
+# THEY ARE WATCHED, NOT CERTIFIED, and the distinction is load-bearing: they are
+# absent from $CLOSURE, required by nothing, and contribute no row to the cone
+# census.  T1 CARRIES AN ADMIT BY DESIGN.  This phase asserts only that each
+# file still holds what cert-watched-split.tsv records it as holding.
+#
+# THE MANIFEST IS IN THE IDENTITY HASH; THE WATCHED SOURCES ARE NOT.  The
+# expectation must not drift silently, but these files are work in progress and
+# hashing them would force an identity re-baseline on every edit -- which would
+# train the operator to re-baseline without reading, and that is worse than not
+# hashing them.  Their integrity is asserted by the counts and digests below.
+w_run=0; w_bad=0
+: > "$TMPD/require_watched.ec"
+while IFS=$'\t' read -r wf wa wx ws wres || [ -n "${wf:-}" ]; do
+  case "${wf:-}" in ''|\#*) continue;; esac
+  w_run=$((w_run+1))
+  if [ ! -f "$wf" ]; then
+    echo "FAIL watched $wf: missing"; fail=$((fail+1)); w_bad=$((w_bad+1)); continue
+  fi
+  # (1) compiles
+  if ! easycrypt compile $INC -I scratch "$wf" >/dev/null 2>&1; then
+    echo "FAIL watched $wf: does not compile"; fail=$((fail+1)); w_bad=$((w_bad+1)); continue
+  fi
+  # (2) BOTH drivers -- the reason PHASE 1e exists, applied where the defect was.
+  # Count via the delta in $fail: cli_one bumps cli_bad, and a first version of
+  # this phase therefore printed WATCHED_FAILURES=0 while $fail was 2.  A
+  # summary line that disagrees with the verdict is how a gate gets misread.
+  f_before=$fail
+  cli_one "watched $wf" $INC -I scratch < "$wf"
+  w_bad=$((w_bad + fail - f_before))
+  # (3) admit/axiom/sorry counts EXACTLY as recorded.  sweep.py strips comments
+  # and uses word boundaries; it exits nonzero on unbalanced comments, which is
+  # itself a corruption signal.
+  if ! sw=$(python3 scratch/sweep.py "$wf" 2>&1); then
+    echo "FAIL watched $wf: sweep refused ($sw)"; fail=$((fail+1)); w_bad=$((w_bad+1)); continue
+  fi
+  got_a=$(printf '%s' "$sw" | sed -n 's/.*admit=\([0-9]*\).*/\1/p')
+  got_x=$(printf '%s' "$sw" | sed -n 's/.*axiom=\([0-9]*\).*/\1/p')
+  got_s=$(printf '%s' "$sw" | sed -n 's/.*sorry=\([0-9]*\).*/\1/p')
+  if [ -z "${got_a:-}" ] || [ -z "${got_x:-}" ] || [ -z "${got_s:-}" ]; then
+    echo "FAIL watched $wf: could not parse sweep output ($sw)"; fail=$((fail+1)); w_bad=$((w_bad+1)); continue
+  fi
+  if [ "$got_a" = "$wa" ] && [ "$got_x" = "$wx" ] && [ "$got_s" = "$ws" ]; then
+    echo "OK   watched $wf counts admit=$got_a axiom=$got_x sorry=$got_s"
+  else
+    echo "FAIL watched $wf counts: got admit=$got_a axiom=$got_x sorry=$got_s, expected admit=$wa axiom=$wx sorry=$ws"
+    echo "     EXACT match by design --
+ fewer admits is progress and still fails;"
+    echo "     update cert-watched-split.tsv in the same commit as the proof"
+    fail=$((fail+1)); w_bad=$((w_bad+1))
+  fi
+  # (4) statement digests -- names alone are not enough, same argument as PHASE 1c
+  n_dig=0
+  IFS=',' read -ra wpairs <<< "$wres"
+  for pair in "${wpairs[@]}"; do
+    [ -n "$pair" ] || continue
+    nm=${pair%%=*}; want=${pair#*=}
+    n_dig=$((n_dig+1))
+    got=$(python3 tools/stmt_digest.py "$wf::$nm" 2>/dev/null | awk -F'\t' '{print $2}')
+    if [ -z "${got:-}" ]; then
+      echo "FAIL watched $wf::$nm: no digest -- the result is not there"; fail=$((fail+1)); w_bad=$((w_bad+1))
+    elif [ "$got" != "$want" ]; then
+      echo "FAIL watched $wf::$nm digest: committed $want, computed $got"; fail=$((fail+1)); w_bad=$((w_bad+1))
+    else
+      echo "OK   watched $wf::$nm digest"
+    fi
+  done
+  [ "$n_dig" -ge 1 ] || { echo "FAIL watched $wf: manifest row pins no result"; fail=$((fail+1)); w_bad=$((w_bad+1)); }
+  # Requirability probe.  A file ENDING in an open proof compiles SILENTLY and
+  # its lemma is not saved -- the defect PHASE 1d exists for, and neither the
+  # digest check nor cli catches it (cli only complains when `qed.` is present).
+  # Copied to a valid theory name because EasyCrypt derives the theory name from
+  # the filename and these begin with an underscore.
+  wbase=$(basename "$wf" .ec | tr -c 'A-Za-z0-9' '_')
+  cp "$wf" "$TMPD/W$wbase.ec"
+  echo "require import W$wbase." >> "$TMPD/require_watched.ec"
+done < cert-watched-split.tsv
+if [ "$w_run" -gt 0 ]; then
+  if easycrypt compile $INC -I scratch -I "$TMPD" "$TMPD/require_watched.ec" >/dev/null 2>&1; then
+    echo "OK   all watched files are requirable"
+  else
+    echo "FAIL a watched file cannot be REQUIRED -- a proof is probably left open at EOF"
+    easycrypt compile $INC -I scratch -I "$TMPD" "$TMPD/require_watched.ec" 2>&1 | tr '\r' '\n' | grep -a '^\[critical\]' | head -2 | sed 's/^/       /'
+    fail=$((fail+1))
+  fi
+fi
+echo "### WATCHED_FILES_RUN=$w_run WATCHED_FAILURES=$w_bad"
+# Same fail-open guard the controls and closure phases carry: a truncated
+# manifest runs zero checks and still reaches GREEN.
+w_exp=$(grep -cve '^[[:space:]]*$' -e '^#' cert-watched-split.tsv)
+[ "$w_run" -eq "$w_exp" ] || { echo "FAIL watched phase ran $w_run of $w_exp rows"; fail=$((fail+1)); }
+=== watched tsv ===
+# WATCHED, NOT CERTIFIED.  These files hold the Q = T1 + T2 + T3 branch proofs.
+# They are NOT in closure-c10-split.txt, are required by nothing, and are NOT
+# part of the certified artifact; PHASE 1f asserts only that they keep holding
+# what they are recorded here as holding.
+#
+# Added 2026-08-08.  Until now nothing gated them at all: T2 and T3 have been
+# at admit=0 for weeks with no mechanism to notice if an edit to FxChain,
+# RtopCSoundness or GprocVI broke them, and the defect that motivated the cli
+# phase (tws_uniq passing `compile` but failing `cli`) lived in exactly these
+# files.
+#
+# 2026-08-10 (second).  ALL THREE ROWS RETIRED -- T1/T2/T3 ARE NOW IN THE
+# CLOSURE.  scratch/_t1.ec, _t2.ec and _t3.ec were copied to
+# cdrafts-split/GprocT1Opre.ec, GprocT2Trh.ec and GprocT3Trco.ec (VERBATIM --
+# byte-identical, no proof edits), a fourth file GprocQBound.ec was added with
+# the composition `gproc_Q_bound`, and all four were added to
+# closure-c10-split.txt.  They are therefore no longer "watched, not certified":
+# PHASE 1/1d/1e now compile them as TARGETS, require them, and run them under
+# BOTH drivers, and PHASE 1b/1c pin their statements in
+# cert-statements-split.tsv -- strictly MORE coverage than this manifest gave.
+# Leaving a watched row for a file that is now in the closure would be a false
+# statement in a gate manifest, so the rows are gone rather than duplicated.
+# The `-ge 3` anti-truncation floor could not express "deliberately none left",
+# so it became the committed EXPECT_WATCHED=0 constant in cert_gate_split.sh --
+# strictly stronger (it also catches an unexpected addition).
+# THE SCRATCH ORIGINALS STAY, untracked-by-the-gate, as the development copies;
+# the closure copies are the authority.
+#
+# `admits` IS AN EXACT MATCH, not a ceiling.  1 -> 2 is a regression and must
+# fail; 1 -> 0 is progress and must ALSO fail, because the expectation is then
+
+
+• The watched manifest is now empty (all retired into the closure). So nothing pins per-file require edges. Confirmed: the chain precondition is unguarded.
+
+  Now let me double-check the de-chain exploit claim about PHASE 2: if GprocChargedQWired added `require FORS_C_TreePort` while still in the union cone (it's a root itself — closure-c10-split.txt:34), the union cone is unchanged. Census rows: FORS_C_TreePort's admit already censused → no row change. Statement pins: adding a require line doesn't change statements. BUT — one thing: adding the require to GprocChargedQWired while GprocTCollNamed still requires GprocChargedQWired → TreePort enters GprocTCollNamed's cone → neg probes compile → PHASE 3 RED. So the exploit needs BOTH: break the chain AND add the require. De-chaining alone: does anything catch it? GprocChargedQWired is a closure root, so union cone unchanged; statement counts unchanged; pins unchanged. Probes still pass. So de-chaining is silent, and then the TreePort require is also silent (probes only test GprocTCollNamed). Two-step silent exploit confirmed as a live structural hole — disclosed in the headers ("stops being true if the family stops being a chain") but NOT guarded.
+
+  Also, another subtle scenario within the current chain: what if a NON-headline file in the cone adds `require FORS_C_TreePort`? Then GprocTCollNamed's cone gains TreePort → neg probes compile → RED. ✓ covered. What about a file required by a headline file but not by GprocTCollNamed? Since all headline files are in GprocTCollNamed's cone, every file in any headline's cone is in GprocTCollNamed's cone. Covered by probes.
+
+  Now the CLAIM itself (present tense, current tree): solid. Empirically verified: neg probes fail exactly as declared (I reproduced), positives pass, env witness passes; cone computed independently (44 files, TreePort absent, all 5 others present); require regex cross-checked; bypass routes (import/export/clone/Top./hint/require-in-section) empirically refused by EasyCrypt r2026.02... wait, what version is the local easycrypt? The prediction says r2026.02 in ec-grind. My local binary is at ~/.opam/checkct/bin/easycrypt. Version check failed with -v/-version. The compile behavior matches the receipts exactly (same [critical] messages), so likely the same version. Note: I should be honest that I verified on the local binary, which produced byte-identical messages to the receipts.
+
+  Remaining question 5 wording: 
+  - PHASE 5 header:974-983 — "no route — named, smt, clone, module argument — reaches the admit. TCB: EasyCrypt's require/environment semantics." Accurate.
+  - taint_closure.py header:34-39 — accurate.
+  - cert-controls-split.tsv:100-110 — accurate, discloses chain dependence.
+  - The CLAIM sentence: "no tactic in any headline file can use that admit by ANY route ... because its theory FORS_C_TreePort is not in any headline file's environment." Slight overstatement: "any headline file's environment" is established via the probe on GprocTCollNamed's environment + the chain inclusion, which is a parser-computed fact (cert_cone.py) — corroborated but the chain membership of the five files is only verified by the repo's own regex parser, not by EasyCrypt. The env witness proves deep resolution but doesn't prove WHICH theories are in the cone. Actually — a stronger empirical cross-check exists: run neg_op probes against EACH of the six headline theories (the prediction file says this was done: _scope_neg_op_<H> x6, all rc=1). But only ONE was registered as a gate control (_scope_neg_op_GprocTCollNamed). The other five probes existed in the experiment but weren't registered — so the per-file evidence is one-off, and the gate relies on the chain. The claim could be strengthened at negligible cost by registering the five per-file negative probes (files may not exist anymore — scratch listing shows only _scope_neg_op_GprocTCollNamed.ec). So recommendation: either register per-file probes for all six, or add a gate assertion pinning the chain (e.g., committed per-root cone for GprocTCollNamed containing the five headline files).
+
+  Is that a wording overstatement? The claim says "is not in any headline file's environment" — for the five non-GprocTCollNamed files this is inferred via the cone parser, not EasyCrypt. It's well-supported (parser cross-checked by me, and the one-off six-probe run), but the gate only re-verifies one of six. I'd call it "holds, with a monitoring gap" — wording is OK because it's about the current tree; the overstatement risk is in presenting the gate control as covering all six on every run.
+
+  Another wording check: "The first five are claimed to be in GprocTCollNamed's require-cone, so one negative probe covers all six." Careful reading: probe environment = GprocTCollNamed's closure ⊇ each headline file's own environment. Symbol unknown in superset ⇒ unknown in subset. Logic sound. ✓.
+
+  One more possible hole for question 2: "Could the file's internal environment contain something that requiring it does not load?" — Yes, actually! Internal `local` declarations and section-scoped `declare axiom`s are not exported. Could GprocTCollNamed.ec's proofs use extract_op through a LOCAL route that the probe can't see? The only way extract_op (the lemma) enters scope is via require of its theory — locals can't reference an unloaded theory. So no. But there's an asymmetry in the OTHER direction worth noting: if GprocTCollNamed.ec contained a `local require`? Doesn't exist. What about `declare theory`? No. Fine.
+
+  Also: `import` inside the headline file of TreePort symbols — needs loaded theory. ✓.
+
+  One more route I haven't tested: **`clone` of a theory that is loaded and that has a `with theory T <- FORS_C_TreePort`-style instantiation**? The bound theory must be loaded. ✓ conceptually; clone target resolution tested.
+
+  What about `require` via **environment variable / config file** (`easycrypt config`, why3 config, ~/.easycrypt)? EasyCrypt has a config for provers; no theory autoload. Confident.
+
+  **` pragma `**: no loading.
+
+  OK. Also should I double check that the five other headline files' neg probes from the prediction were real? Files don't exist in scratch (only _scope_neg_op_GprocTCollNamed.ec). The prediction file records they ran rc=1. I can re-verify cheaply by generating the five probes in /tmp and running them. That directly tests "theory not in ANY headline file's environment" without relying on the chain/parser. Let me do that — it's the strongest evidence for the claim.
+
+• The watched manifest is retired/empty — nothing pins per-file require edges. One more decisive check: run the negative op-probe against each of the six headline theories individually, rather than trusting the chain argument.== GprocChargedQWired rc=1 :: [critical] [neg_GprocChargedQWired.ec: line 3 (24-58)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+== SphincsC10CapstoneWired rc=1 :: [critical] [neg_SphincsC10CapstoneWired.ec: line 3 (24-58)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+== GprocQWired rc=1 :: [critical] [neg_GprocQWired.ec: line 3 (24-58)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+== GprocQBound rc=1 :: [critical] [neg_GprocQBound.ec: line 3 (24-58)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+== GprocWotsNamed rc=1 :: [critical] [neg_GprocWotsNamed.ec: line 3 (24-58)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+== GprocTCollNamed rc=1 :: [critical] [neg_GprocTCollNamed.ec: line 3 (24-58)] unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+
+• All six headline environments independently reject the TreePort symbol. This is direct EasyCrypt evidence for every headline file, not just the chain inference.
+
+  I have enough. Let me also quickly sanity-check the claimed "3 require-hops" for the env witness and confirm WOTS_TW_ES is in GprocTCollNamed's cone (it is, via SPHINCS_PLUS chain presumably). Fine.
+
+  Also for question 3, one more check on discrimination: the negative probes' declared reasons — could a MUST-FAIL pass for the wrong reason? Reproduced messages match declared strings exactly. Could a MUST-PASS pass vacuously? pos_op defines an op equal to TreePort's symbol — genuine. env_n_m references WOTS_TW_ES.n_m — genuine. One subtle vacuity: `_scope_pos_lemma` uses `have _ := FORS_C_TreePort.extract_op` — this references the lemma; but does `have _ := L` for a module-quantified lemma actually force resolution of the lemma (vs. the op)? The error message in the negative ("unknown lemma") shows the checker resolved it AS a lemma, so yes, discriminating between the lemma and the op at :1148. Good — this matters because of the op/lemma name collision.
+
+  Another discrimination check: would the negative probes still fail for the DECLARED reason if FORS_C_TreePort were in the environment but the symbol renamed? Yes (unknown symbol either way) — but then PHASE 2 census would catch a renamed/removed fverify_structural (defined-op digest) and extract_op (admit row digest). Covered elsewhere; note it.
+
+  One more possible wording issue: the claim "no tactic ... can use that admit by ANY route -- named application, bare smt(), clone, or module argument". Bare smt(): smt can use lemmas in the ambient environment including hint databases. FORS_C_TreePort not in env ⇒ its lemmas unavailable to smt. One nuance: `smt` can also use facts via *instance* propagation... all env-bound. TCB stated. Fine.
+
+  Module argument: to pass TreePort's modules as functor arguments, the module/type names must resolve — impossible. ✓ (tested op resolution; module resolution is the same namespace machinery).
+
+  Now assemble the final report.
+
+  Holes, prioritized:
+
+  1. (Medium, guarded-by-disclosure-only) The chain precondition is unguarded. "One probe covers all six" holds today (verified: cert_cone.py cone of GprocTCollNamed = 44 files, includes the other five headline files, excludes FORS_C_TreePort; and I ran all six per-file neg probes directly — all rejected). But no gate phase asserts the five remain in GprocTCollNamed's cone. All six headline files are themselves closure roots (closure-c10-split.txt:17,30,31,34,37,42), so the union manifest (cert-cone-files-split.tsv) and PHASE 2 census are invariant under de-chaining. A two-step drift — (i) refactor requires so a headline file leaves GprocTCollNamed's cone (silent), (ii) add `require FORS_C_TreePort` there and use the admit via bare smt in a proof body (proof text is deliberately unpinned; taint closure is name-level and smt names nothing) — stays GREEN. The headers disclose this ("stops being true if the family stops being a chain", cert-controls-split.tsv:106-108; PREDICTION-scope-controls:22-24) but disclosure is not detection. cert_gate_split.sh has no check.
+
+  2. (Low) Single-point probe coverage: only GprocTCollNamed's negative probes are registered controls (cert-controls-split.tsv:111-112); the five per-file negatives from the probe experiment (PREDICTION-scope-isolation-probes:49-50) were not registered. Cheap fix: register all six.
+
+  3. (Low) Renaming evasion: the negatives key on symbol names. If TreePort entered the cone AND `fverify_structural`+`extract_op` were renamed, both negatives keep failing for the declared reason while the (renamed) admit sits in the headline environment. Mitigated elsewhere: census pins both digests (defined-op row; admit row with statement digest cert-baseline-split.tsv), so the rename itself goes RED in PHASE 2. Worth one sentence in the controls comment.
+
+  4. (Low/TCB, acknowledged) The whole claim rests on EasyCrypt's environment semantics — stated as TCB in PHASE 5 header:982 and the prediction file. I probed the plausible escapes empirically on the local binary: standalone import/export ("cannot import the non-existent theory"), clone ("cannot find theory to clone"), Top. qualification, hint exact, require-in-section ("cannot use `require' in sections") — all refused. No auto-loading from -I. This is as good as black-box evidence gets; the residual is the implementation itself.
+
+  5. (Nit) .eco staleness: defended by PHASE 0 purge+verify (cert_gate_split.sh:~205-235). Not a hole; noting it was checked.
+
+  Also mention: the probes' declared reasons match the observed first [critical] lines exactly (reproduced), polarity logic is fail-closed (empty msg → wrong reason → RED), EXPECT_CTLS=44 matches the 44 rows.
+
+  Question 2 answer: yes, superset in the relevant sense. `require GprocTCollNamed.` rebuilds the same transitive require closure the file compiles under, plus the theory itself and AllCore. File-internal extras (locals, section `declare axiom`) cannot introduce a theory that no require names, so they cannot smuggle FORS_C_TreePort. The env witness (WOTS_TW_ES.n_m, 3 hops) empirically confirms deep qualified resolution; and the six direct probes confirm the negative for each headline file's actual closure.
+
+  Question 4 answer: verified — cert_cone.py cone of cdrafts-split/GprocTCollNamed.ec = 44 files, includes the five, excludes FORS_C_TreePort. Cross-checked REQ regex against an independent looser scan over all 44 files: no token diffs. Raw grep for 'FORS_C_TreePort' across both dirs: only comments (WOTS_TW_ES.ec:1545, GprocChargedQWired.ec:54, GprocT3Trco.ec:1446, GprocT1Opre.ec:26) — all in (* *) comments, and comments are stripped before cone parsing anyway. Baseline has exactly one admit row (cert-baseline-split.tsv, FORS_C_TreePort.ec extract_op).
+
+  Question 5 wording: PHASE 5 header and taint_closure.py header are accurate and state the TCB; no overstatement found there. The one place the read is too optimistic is the CLAIM's implication that the gate enforces the claim for all six files on every run — it enforces it for GprocTCollNamed's environment and inherits the rest via an unguarded chain assumption. The claim as a statement about the current tree is true and now directly evidenced for all six.
+
+  Verdict: holds with wording fixes (small) — or "holds" with a recommended hardening. I'd say: holds (current tree, empirically reproduced), with one unguarded precondition worth fixing before publishing the "gate enforces this" framing.
+
+  Recommended action: register the five per-file negative probes (or a single committed per-root cone assertion: GprocTCollNamed's cone must contain the five headline theories and must not contain FORS_C_TreePort — computable with cert_cone.py in one line). That converts the disclosed assumption into a checked one.
+
+  Clean up /tmp files? They're in /tmp, harmless. Leave them, mention.
+
+  Write final answer.
+
+• All evidence is in. I reproduced every registered probe on the local EasyCrypt binary (byte-identical `[critical]` messages to the receipts), computed the cone independently, and ran the bypass-route attacks myself. Here is the review.
+
+  ## Verdict: **holds** — the claim is true of the current tree and is now directly evidenced for all six headline files. One precondition is disclosed but unguarded; fix it before publishing the "the gate enforces this" framing.
+
+  ## What I verified (not trusted)
+
+  - **The admit**: exactly one admit row in the census (`cert-baseline-split.tsv`, `cdrafts-split/FORS_C_TreePort.ec` `extract_op`, `admit.` at :1511, lemma at :1485). A raw whitespace-tolerant grep over both dirs finds no other live admit in cone files (only comments and non-cone `_wip` files).
+  - **The five registered controls** (`cert-controls-split.tsv:111-115`): all reproduce — both MUST-FAILs fail with *exactly* the declared first `[critical]` line, all three MUST-PASSes compile. `EXPECT_CTLS=44` matches the 44 data rows.
+  - **The cone** (question 4): `cert_cone.py` on `cdrafts-split/GprocTCollNamed.ec` alone gives 44 files; all five other headline files are in it, `FORS_C_TreePort` is not. I cross-checked the `REQ` regex (`tools/cert_cone.py:87`) against an independent looser scan over all 44 files: zero token diffs. Raw grep for `FORS_C_TreePort` across both dirs: only comments (`WOTS_TW_ES.ec:1545`, `GprocChargedQWired.ec:54`, `GprocT3Trco.ec:1446`, `GprocT1Opre.ec:26`) — and comments are stripped before parsing anyway.
+  - **Per-file, not just via the chain**: I generated and ran the negative op-probe against *each* of the six headline theories individually. All six reject `FORS_C_TreePort.fverify_structural` as unknown. So the claim "not in any headline file's environment" is EasyCrypt-confirmed per file, not merely inferred through GprocTCollNamed.
+  - **Bypass routes** (question 1), all empirically refused by EasyCrypt r2026.02-class binary:
+    - standalone `import FORS_C_TreePort.` → "cannot import the non-existent theory" (no `-I` auto-loading exists);
+    - standalone `export` → same; `Top.FORS_C_TreePort.extract_op` → unknown lemma;
+    - `clone FORS_C_TreePort as TP.` → "cannot find theory to clone";
+    - `hint exact : FORS_C_TreePort.extract_op.` → unknown symbol (hints can't conjure theories);
+    - `require` inside a `section` → "cannot use `require' in sections" (and even if allowed, the zero-width-anchored `REQ` regex scans whole text, so the census would see it).
+    - Prelude, pragma, and module-argument routes: no loading mechanism exists; module/functor arguments must resolve names from the environment, same namespace machinery as the op probe. Confident.
+    - `.eco` staleness is real in EasyCrypt ("does not invalidate DEPENDENT .eco") but defended: PHASE 0 purges and *verifies* the purge (`cert_gate_split.sh` ~:205-235).
+  - **Question 2**: yes, superset in the relevant sense. `require GprocTCollNamed.` rebuilds exactly the file's own transitive require closure plus the theory itself (and AllCore). File-internal extras (locals, section `declare axiom`s) cannot introduce a theory no `require` names. The env witness (`_scope_env_n_m.ec`, `WOTS_TW_ES.n_m` 3 hops deep) confirms deep qualified resolution. Logic check: probe env ⊇ each headline file's own env, and "unknown in the superset" ⇒ "unknown in the subset" — the safe direction.
+  - **Question 3**: the controls discriminate. The negatives key on exact symbol names in the first `[critical]` line (reproduced byte-identical); the twins prove the reference *form* is valid one require away; empty-message failures fall to "wrong reason" → RED (fail-closed). The op/lemma name collision (`op extract_op` :1148 vs `lemma extract_op` :1485) is handled: the lemma probe resolves as a *lemma* ("unknown lemma"), so it cannot be satisfied by the op.
+
+  ## Holes, prioritized
+
+  1. **The chain precondition is disclosed but unguarded** (medium). "One probe covers all six" rests on the five headline files being in GprocTCollNamed's cone. All six are themselves closure roots (`closure-c10-split.txt:17,30,31,34,37,42`), so de-chaining leaves the union manifest, the census, the statement counts, and all five probes untouched — and the taint closure is name-level, blind to a bare-`smt()` use. A two-step drift (de-chain, then `require FORS_C_TreePort` in the dropped file and use the admit via `smt` in an unpinned proof body) stays GREEN. The headers say so (`cert-controls-split.tsv:106-108`, `PREDICTION-scope-controls-2026-09-15.md:22-24`, PHASE 5 header `cert_gate_split.sh:974-983`), but disclosure is not detection.
+  2. **Only one of the six negative probes is gated** (low). The per-file negatives from the probe experiment (`PREDICTION-scope-isolation-probes-2026-09-15.md:49-50`) were never registered as controls; I re-ran them ad hoc and they hold *today*, but nothing re-checks them per gate run.
+  3. **Rename evasion of the negatives** (low, already covered elsewhere). If TreePort entered the cone *and* both `fverify_structural` and the `extract_op` lemma were renamed, both negatives keep failing for the declared reason while the renamed admit sits in the headline environment. PHASE 2 catches the renames (defined-op digest row; admit statement-digest row), so this is defense-in-depth, not a live gap — worth one sentence in the controls comment.
+  4. **TCB, acknowledged**: the whole claim rests on EasyCrypt's require/environment semantics. The headers state this honestly (`cert_gate_split.sh:982`, prediction file "What this relies on"). My black-box probes are consistent with it; they don't prove the implementation.
+
+  ## Wording (question 5)
+
+  The PHASE 5 header and `tools/taint_closure.py:34-39` are accurate — no overstatement there; both name the TCB and keep the general holes stated for future admits. The one place the read is too optimistic is the claim's *framing* that the gate enforces isolation for all six files on every run: it enforces GprocTCollNamed's environment and inherits the other five through an unguarded parser-computed chain. As a statement about the current tree, the claim is true and (after my runs) directly evidenced for all six.
+
+  ## Recommended action
+
+  Convert the disclosed assumption into a checked one, either way (both are a few lines, no tree semantics change):
+  - register the five per-file negative probes as controls (EXPECT_CTLS 44 → 49), **or**
+  - add a committed per-root assertion: `cert_cone.py cdrafts-split/GprocTCollNamed.ec` must list the five headline theories and must not list `FORS_C_TreePort`, graded like the other manifests.
+
+  Until one of those lands, publish the claim with the chain caveat in the sentence, not only in the header comments. (My attack probes live in `/tmp/scope_attack/`; no file in the tree was modified.)
+
+To resume this session: kimi -r session_122fe226-2634-4d68-afa4-0bd0ed843f58

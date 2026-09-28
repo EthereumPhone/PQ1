@@ -1,0 +1,41 @@
+{
+  "candidate": "4d3cb40d39604c910fb9a3d01e30d68ebf224412",
+  "tree": "19cda620e56604ee0c656633ab89905ac542f664",
+  "reviewers": {
+    "codex": {
+      "verdict": "GAP",
+      "findings": [],
+      "gap": "Required source-matched cold two-driver replay pending"
+    },
+    "claude": {
+      "verdict": "GO",
+      "findings": [],
+      "gap": "Source-only review; required cold replay pending"
+    }
+  },
+  "accepted_blockers": [],
+  "coordinator_review_complete": true,
+  "pending_gate_only": true,
+  "mandatory_gap": {
+    "kind": "required_cold_replay_pending",
+    "resolved": true
+  },
+  "remaining_gate": "none; source-matched full cold replay completed GREEN",
+  "notes": [
+    "Opus non-blocking intro-pattern observation: elim* also introduces the existential lower witness from the precondition, after the five snapshotted program values. The checked proof explicitly names that sixth variable; no statement or source change required.",
+    "Thirteen positive controls include one actual encoding-width alias; the ten rejected applications remain diagnostic-only.",
+    "No review restart, added reviewer, Kimi request or scope expansion."
+  ],
+  "receipt_summary": "Opus returned GO; Astra reported GAP solely for the then-pending required cold replay. Both reported no source-level findings. The coordinator resolves that exact gap using the matching completed replay, preserving the raw verdicts.",
+  "utc": "2026-09-24T22:17:44.316096+00:00",
+  "coordinator_verdict": "GO",
+  "resolved_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-24T22:11:45.719545+00:00",
+    "finished_utc": "2026-09-25T01:02:38.304382+00:00",
+    "elapsed_seconds": 10252.58,
+    "commit": "4d3cb40d39604c910fb9a3d01e30d68ebf224412",
+    "tree": "19cda620e56604ee0c656633ab89905ac542f664"
+  },
+  "mandatory_gap_resolution": "The same-source cold replay completed GREEN without changing the candidate or bounds; raw reviewer GAP preserved."
+}

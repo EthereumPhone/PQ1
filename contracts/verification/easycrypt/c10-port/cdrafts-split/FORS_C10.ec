@@ -44,8 +44,9 @@
 
    C10's `R` is RANDOMIZED per signing call: `secure/src/crypto.rs:130-142` draws a
    fresh `opt_rand` (`rng_strong::fill`) on EVERY signature and passes `Some(..)`,
-   and `grind_r` folds it into R.  Signing the same message twice therefore yields a
-   DIFFERENT R (regression: `positive_opt_rand_changes_sig_bytes`).  We model R as a
+   and `grind_r` folds it into R.  Signing the same message twice may yield different R values; truncation
+   permits repeats. `positive_opt_rand_changes_sig_bytes` checks selected vectors,
+   not universal distinctness.  We model R as a
    fresh draw from `dmkey` CONDITIONED on `predC_fors (mco R m)`, realised with the
    `dcond` combinator.  Three consequences, all deliberate:
 
@@ -130,7 +131,7 @@
        carries `Pr[MCO_ITSR.ITSR(...)]` as an UNREDUCED term, and no lemma anywhere
        in MM45 bounds it.  The concrete bound lives on paper, as it does for us.
 
-   STATUS: model + game + 7 proven lemmas.  NO admit.  Axioms: the benign `dmkey_ll`;
+   STATUS: model + game + proved bounded-R companion laws.  NO admit.  Axioms: the benign `dmkey_ll`;
    the structural `size_g`/`eqiks_g`/`neqisvs_g`/`rng_g`/`uniq_g` on the index
    extractor (the first four mirror MM45's; `uniq_g` is STRICTLY STRONGER and was
    added 2026-07-10b because MM45's own set admits `g y = nseq k z`, i.e. k copies of
@@ -139,6 +140,7 @@
    ========================================================================== *)
 
 require import AllCore List Distr.
+require import BoundedIID.
 
 abstract theory FORSC10.
 
@@ -218,6 +220,44 @@ op good (m : msg) (mk : mkey) : bool = predC_fors (mco mk m).
    it is always possible to find a good counter". *)
 axiom good_pos (m : msg) : 0%r < mu dmkey (good m).
 
+(* Finite IID-R companion of the SAME conditioned-key consumer. Repeated R
+   values are allowed: mco is fixed and replaying an R replays its answer.
+   These lemmas do not assert that the secret-keyed SHA-derived nonce stream is
+   IID, that distinct R values occur, or that the good-key mass is 1/2048.
+   Losslessness/exhaustion need dmkey_ll but do not use good_pos. *)
+op bounded_r (m : msg) (fuel : unit list) : mkey option distr =
+  bounded dmkey (good m) fuel.
+
+lemma bounded_r_ll (m : msg) (fuel : unit list) :
+  is_lossless (bounded_r m fuel).
+proof. by rewrite /bounded_r; apply bounded_ll; exact dmkey_ll. qed.
+
+lemma bounded_r_exhaustion (m : msg) (fuel : unit list) :
+  mu1 (bounded_r m fuel) None = (1%r - mu dmkey (good m)) ^ size fuel.
+proof. by rewrite /bounded_r bounded_exhaustion 1:dmkey_ll. qed.
+
+lemma bounded_r_conditioned_mixture (m : msg) (fuel : unit list)
+  (event : mkey option -> bool) :
+  mu (bounded_r m fuel) event =
+    (1%r - mu dmkey (good m)) ^ size fuel * b2r (event None) +
+    (1%r - (1%r - mu dmkey (good m)) ^ size fuel) *
+      mu (dcond dmkey (good m)) (fun r => event (Some r)).
+proof.
+  by rewrite /bounded_r bounded_as_conditioned_mixture 1:dmkey_ll 1:good_pos.
+qed.
+
+lemma bounded_r_success_le_conditioned (m : msg) (fuel : unit list)
+  (event : mkey -> bool) :
+  mu (bounded_r m fuel) (fun r => oapp event false r) <=
+    mu (dcond dmkey (good m)) event.
+proof.
+  rewrite /bounded_r bounded_success_mass 1:dmkey_ll 1:good_pos.
+  have hf := mu_bounded (bounded_r m fuel) (pred1 None).
+  rewrite bounded_r_exhaustion in hf.
+  have he := mu_bounded (dcond dmkey (good m)) event.
+  smt().
+qed.
+
 (* Coverage tuples of a (key, message) pair -- note: NO counter. *)
 op hC (mk : mkey) (m : msg) : (int * int * int) list = g (mco mk m).
 
@@ -243,8 +283,8 @@ module O_ITSRC10_Default : Oracle_ITSRC10 = {
      Production draws a fresh `opt_rand` on EVERY signing call
      (`secure/src/crypto.rs:130-142`: `rng_strong::fill(&mut opt_rand_buf)`, then
      `Some(&opt_rand_buf)`), and `grind_r` folds it into R
-     (`sphincs-c10/src/fors.rs`).  So signing the same message twice yields a
-     DIFFERENT R, a different digest, and different revealed FORS leaves.
+     (`sphincs-c10/src/fors.rs`).  Repeated signing may yield different R values, digests and revealed leaves;
+     it does not guarantee distinctness after truncation.
      Regression test: `positive_opt_rand_changes_sig_bytes`
      (sphincs-c10/tests/signing_suite.rs:131).
 

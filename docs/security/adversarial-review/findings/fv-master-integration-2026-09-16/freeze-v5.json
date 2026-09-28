@@ -1,0 +1,28 @@
+{
+  "recorded_at": "2026-09-17T15:00:26.052198+00:00",
+  "target": "/tmp/pq-fv-master-20260916-g4woz0z8/target-v5",
+  "commit": "c0cb9abcc0adab53b8769afba9c48659ac60e959",
+  "tree": "c5e1c6969694c07643ee19f701c18ab0f676e798",
+  "base": "ab9e9049a5a8c8d088966d02b7ff9a5714ae678a",
+  "input_identity": "623ad0710d73000a1c693049b8933813",
+  "prompt_sha256": "12074c837694b660e5f5ff585c61e85b2799710acd3a5a13f7b35920c1096a05",
+  "reviewers": {
+    "codex": "gpt-6-astra ultra; owner selected replacement",
+    "claude": "opus xhigh",
+    "kimi": "kimi-code/k3 max"
+  },
+  "full_easycrypt_replay_source": "eb18115edb602fe8634d441249d13a11b0177043",
+  "easycrypt_inputs_and_gate_callers_byte_identical_to_v3": true,
+  "protocol_selftest_modes": [
+    "0",
+    "1",
+    "2"
+  ],
+  "optimization_negative_cases": 9,
+  "protocol_live_replay": "exit 0; 3 models, 8 lemmas",
+  "other_stage_gate_receipts": "unchanged inputs; prior v3 and integration gate receipts retained",
+  "changes_from_v4": [
+    "scripts/check_protocol_models.py"
+  ],
+  "preprocessing_controls": "pass in optimization modes 0/1/2"
+}

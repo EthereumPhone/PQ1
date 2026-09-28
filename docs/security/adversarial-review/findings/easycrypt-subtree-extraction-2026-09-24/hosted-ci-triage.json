@@ -1,0 +1,78 @@
+{
+  "candidate": "7e099a632794c633ed14a9dc7a6e1bb0a3274f29",
+  "base": "451594d4dda89054cb38ab87e6c2d504c8bcefd2",
+  "overall_ci": "red",
+  "known_failures": {
+    "660": "TRNG ledger anchor missing",
+    "711": "Existing proto receipt drift and locked fuzz Cargo.lock mismatch",
+    "717": "Foundry installer cannot execute binary file"
+  },
+  "failure_evidence": [
+    {
+      "job": "107731197671",
+      "name": "Invariant gates (#5 /",
+      "existing_issue": 660,
+      "log": "q18-ci-logs/107731197671.log",
+      "sha256": "4cc7f83109132341fd98df09e08ea3a1cedec5cdc9cbcd69345bc562b7ce7a70"
+    },
+    {
+      "job": "107731197443",
+      "name": "Host unit tests (pure-logic crates)",
+      "existing_issue": 711,
+      "log": "q18-ci-logs/107731197443.log",
+      "sha256": "86dc67e36f5f2f2e0b5b9c7ffb0c88f4c9ad6207265b4da0d6c1fb495a4a5dfd"
+    },
+    {
+      "job": "107731197442",
+      "name": "Contracts (forge test)",
+      "existing_issue": 717,
+      "log": "q18-ci-logs/107731197442.log",
+      "sha256": "3d212a55b8c31aabe1a93bf461b3bc7490295d8a92f5dad548e12650fe2b9acb"
+    },
+    {
+      "job": "107731197279",
+      "name": "Slither (contracts static analysis)",
+      "existing_issue": 717,
+      "log": "q18-ci-logs/107731197279.log",
+      "sha256": "1b8022337992eaba62bba191fcc43fb2cf08a305deb46db508b6393c6de285db"
+    },
+    {
+      "job": "107731197272",
+      "name": "Production quarantine gates (rollback + ERC-7730 provenance OPEN)",
+      "existing_issue": 711,
+      "log": "q18-ci-logs/107731197272.log",
+      "sha256": "361dc3c8056fcb9d705647108b13242b3545469090e2bd29383a73606b131345"
+    },
+    {
+      "job": "107731196908",
+      "name": "Line coverage (cargo llvm-cov \u2014 report-only baseline)",
+      "existing_issue": 711,
+      "log": "q18-ci-logs/107731196908.log",
+      "sha256": "50c72095cec08ab2f726c9043a64d7a38e867030f10a8a9d6b81b192d175443b"
+    },
+    {
+      "job": "107731196636",
+      "name": "PR",
+      "existing_issue": 711,
+      "log": "q18-ci-logs/107731196636.log",
+      "sha256": "0dce75ddcbe44672f45c83630892dc5fd5628e9f15f81d81d6c4231f57f7d7b1"
+    }
+  ],
+  "unchanged_baseline_inputs": [
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "proto",
+    "secure/data/erc7730/curations/manifest.json",
+    ".github/workflows"
+  ],
+  "checked_utc": "2026-09-24T16:45:20.667796+00:00",
+  "coordinator_review_required": false,
+  "coordinator_confirmed": true,
+  "source_scope": "Only EasyCrypt proof/enrollment and owner-status files changed.",
+  "coordinator_notes": [
+    "Read the seven failing-job error excerpts and the invariant gate terminal anchor failure. They reproduce #660, #711 and #717 on unchanged inputs.",
+    "All fifteen jobs completed: eight successes and seven baseline failures. Overall CI remains red."
+  ]
+}

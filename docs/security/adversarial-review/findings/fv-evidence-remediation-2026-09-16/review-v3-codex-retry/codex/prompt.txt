@@ -1,0 +1,28 @@
+You are one independent reviewer in an owner-authorized review of formal-verification tooling. Do not launch agents or other models.
+
+Review PQSigner OS for implementation merge readiness.
+Target: /tmp/pq-fv-remediation-20260916-fl0q429t/target
+Commit: 775133e8abd3452bca952336bc8e31e452a7f7f5
+Tree: 2766afb8829e5f38935718c01f8365e4758e9153
+Compare: d52679ac76b8a1bbc373a1749b8185fea8bb372f..775133e8abd3452bca952336bc8e31e452a7f7f5
+Focus only on Kani mutation evidence and the vendored EasyCrypt split certification gates and their CI enrollment:
+1. A mutation earns credit only after the unmodified selected harness passes and exactly that fully qualified harness completes with a failing verification verdict. Tool errors, multiple harnesses and incomplete results are not mutation credit; source restoration must hold.
+2. Mutation anchors, canary presence, tier selection and per-harness feature checks must reject missing coverage, including multiline attributes; the heavy tier stays local.
+3. Every file in the pinned local dependency closure, including .eca theories, must be verified directly by both compiler drivers. Imports alone and unfinished EOF proofs cannot count as proof replay.
+4. Declaration pins must be unique and resolvable, with exact inventory, coverage, assumption-census and input-identity checks retained.
+5. Full certification must use the pinned container image and reject unexpected compiler/solver identities before proof execution; execution must use a disposable source copy.
+6. Per-PR split integrity and scheduled split proof gates must be enrolled with complete invocation/trigger/context contracts and failure propagation.
+7. Scope claims distinguish current split evidence, historical drafts, conditional reductions, admits and the unproved firmware-refinement boundary.
+
+Evidence already green: 11 census and eight Kani runner unit groups; real original/mutant checks for canary, CoW field offset and amount exactness; real exact-selection collision fixture; six split contract groups plus full static 45-file/1077-pin/993-statement checks; pinned-image broken-dependency/import and concrete/abstract require/EOF controls; 20 workflow regression groups, checker and Make-argv self-tests; the shared Make prerequisite bootstrap followed by the split fast gate in a clean disposable container. The full EasyCrypt proof replay is independently running on the identical split input identity df34cee6a883deafc1aef86c89d8c464; the coordinator must obtain its green result before landing. Review source correctness here, do not start another long proof run.
+Non-goals: new cryptographic theorems, the broader FV sweep, hardware, production authorization, unrelated dirty work or optional hardening.
+
+Inspect the diff and affected callers source-first for concrete correctness blockers. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, or follow-up model turns. Ignore style. You have 15 minutes and 800 words. At most three findings.
+
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 775133e8abd3452bca952336bc8e31e452a7f7f5 / 2766afb8829e5f38935718c01f8365e4758e9153
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+FIX requires a source anchor, mechanism, consequence and falsifiable evidence. If no findings, write FINDINGS: none.

@@ -1,0 +1,46 @@
+{
+  "target": "5e477d33a3f335c339dae8b27d5fab40a08874a5",
+  "tree": "0d6504167c8d8c80ea1f1e95de7770c507047909",
+  "reviewers": {
+    "codex": {
+      "verdict": "GAP",
+      "findings": [],
+      "gap": "Required matching full cold two-driver replay remains pending",
+      "duration_seconds": 206.706
+    },
+    "claude": {
+      "verdict": "GO",
+      "findings": [],
+      "gap": "Source-only review; relies on required cold replay before landing",
+      "duration_seconds": 185.879,
+      "runtime_model_keys": [
+        "claude-opus-5-5"
+      ]
+    }
+  },
+  "accepted_blockers": [],
+  "coordinator_review_complete": true,
+  "pending_gate_only": true,
+  "coordinator_verdict": "GO",
+  "mandatory_gap": {
+    "resolved": true,
+    "requirement": "Full cold 430 direct/430 CLI/386-control replay on source/input identity with exit 0 within original 18000-second bound"
+  },
+  "remaining_gate": "none; source-matched full cold replay completed GREEN",
+  "receipt_summary": "Opus returned GO; Astra reported GAP solely for the then-pending full cold replay, with no source-level finding. The coordinator resolved that exact evidence gap with the matching completed green replay while preserving both raw verdicts.",
+  "coordinator_notes": [
+    "Read both reports; no concrete source claim requires reproduction.",
+    "Both runtime/report bounds and target/prompt identities verified. No additional review wave or source change is warranted.",
+    "Only accumulated returned-output references/counts are covered; general knowledge and numerical charges remain open."
+  ],
+  "checked_utc": "2026-09-25T07:05:31.596683+00:00",
+  "resolved_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-25T07:00:05.234517+00:00",
+    "finished_utc": "2026-09-25T09:59:20.197621+00:00",
+    "elapsed_seconds": 10754.96,
+    "commit": "5e477d33a3f335c339dae8b27d5fab40a08874a5",
+    "tree": "0d6504167c8d8c80ea1f1e95de7770c507047909"
+  },
+  "mandatory_gap_resolution": "The same-source cold replay completed GREEN without changing the candidate or bounds; raw reviewer GAP preserved."
+}

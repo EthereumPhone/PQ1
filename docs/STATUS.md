@@ -1,5 +1,62 @@
 # PQSigner — STATUS (start here)
 
+**Kani/EasyCrypt evidence correction (2026-09-16):** current gate scope and
+research limits are owned by the [FV surface map](../contracts/verification/docs/FV_SURFACE_MAP.md),
+rows 4 and 9. Historical draft receipts below do not certify the vendored split.
+Implementation/review evidence: [remediation record](security/adversarial-review/findings/fv-evidence-remediation-2026-09-16.md).
+
+**EasyCrypt research update (2026-09-23):** accepted public histories now
+remove the grind-failure charge from the bounded nonadaptive hypertree theorem.
+A persistent raw-input oracle now covers the complete adaptive byte-session
+model and its costs. The
+[quantitative foundations](../contracts/verification/easycrypt/c10-port/QUANTITATIVE-FOUNDATIONS.md)
+add exact-coordinate replay accounting and accepted-output bounds for the
+memoized grinder and complete signer. The
+[complete-session history results](../contracts/verification/easycrypt/c10-port/COMPLETE-SESSION-HISTORY.md)
+establish new-message freshness and account for repeated signing contexts.
+The [raw authentication-path results](../contracts/verification/easycrypt/c10-port/RAW-PATH-CORRESPONDENCE.md)
+connect actual Merkle/FORS recovery to recorded reference paths and explicit
+node-collision events. The
+[actual construction results](../contracts/verification/easycrypt/c10-port/RAW-BUILDER-PATHS.md)
+supply the reference witnesses and actual FORS secret provenance, and prove
+signing/recovery equality to the tree root computed during signing.
+The [WOTS component](../contracts/verification/easycrypt/c10-port/RAW-WOTS-CORRECTNESS.md)
+and [complete FORS forest](../contracts/verification/easycrypt/c10-port/RAW-FOREST-CORRECTNESS.md)
+now have actual sign/recover correctness proofs, with bounded WOTS failure
+and the special last FORS tree explicit. The
+[full honest-correctness result](../contracts/verification/easycrypt/c10-port/RAW-BYTE-SIGNER-CORRECTNESS.md)
+now connects actual key generation, complete signing, the exact byte codec
+and verification against the earlier root, with bounded signing failure explicit.
+The [shared-oracle correctness transfer](../contracts/verification/easycrypt/c10-port/RAW-PHYSICAL-HONEST-CORRECTNESS.md)
+now bounds honest byte-error probability. The
+[public-node collision and zero-node charges](../contracts/verification/easycrypt/c10-port/RAW-ZERO-NODE-CHARGE.md)
+apply to the actual byte game while retaining its remaining forgery event.
+The [reverse WOTS recovery result](../contracts/verification/easycrypt/c10-port/RAW-WOTS-EXTRACTION.md)
+now derives reference chain openings from matching WOTS/layer recovery,
+including actual key-generation and Merkle-builder comparison harnesses.
+The [byte-game top-layer bridge](../contracts/verification/easycrypt/c10-port/RAW-BYTE-TOP-EXTRACTION.md)
+now derives a top reference opening from arbitrary successful complete
+verification after adaptive calls, using the earlier key-generation history.
+The [subtree bridge](../contracts/verification/easycrypt/c10-port/RAW-SUBTREE-EXTRACTION.md)
+now links both actual verifier layers and separates unrecorded top messages
+from paired WOTS openings, without assigning either case a numerical charge.
+The [actual FORS bridge](../contracts/verification/easycrypt/c10-port/RAW-FOREST-EXTRACTION.md)
+now ties that forest to verification and actual retained construction
+references, yielding twelve private-leaf equalities and the special last
+root-as-secret case. Missing-reference cases remain explicit and uncharged.
+The [adaptive response ledger](../contracts/verification/easycrypt/c10-port/RAW-ADAPTIVE-EXPOSURES.md)
+now accumulates references for every successful response, preserves repeats,
+matches the signed-message list and respects the signing cap. Its private
+observer preserves the original byte-game probability. Other information
+exposures and the private/encoding numerical charges remain open.
+Adaptive accumulated opening coverage, the complete byte-game component
+reduction and numerical end-to-end forgery bounds remain open.
+See the
+[current artifact boundary](../contracts/verification/easycrypt/c10-port/README.md)
+and [research obligations](verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-23-accepted-history-composition-and-persistent-raw-oracle).
+The [merge receipt](security/adversarial-review/findings/easycrypt-accepted-history-2026-09-23/README.md)
+binds the corrected cold replay and bounded Astra/Opus review to the source.
+
 > **The front door.** Read this first. It's a **router, not an encyclopedia**: §0 maps *where the truth
 > lives* (one owner per concern — everyone else links); §A–§D are the **security/verification frontier**,
 > the one slice this file owns directly. Detail lives in the linked docs, not here.

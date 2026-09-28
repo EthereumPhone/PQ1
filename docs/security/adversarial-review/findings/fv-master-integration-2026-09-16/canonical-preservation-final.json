@@ -1,0 +1,10 @@
+{
+  "baseline_head": "69995ae6f9e62ccc2c9cfd2c52b7f815d58dabc3",
+  "current_head": "b604b8bcedf98dba1a881dfedf85e2001f01c323",
+  "baseline_files": 318,
+  "changed_baseline_files": [
+    "tools/ob-configurator/Cargo.lock",
+    "secure/src/hw_platform_under_test/pure_tests.rs"
+  ],
+  "note": "This integration did not edit the canonical working tree; unrelated board work continued concurrently."
+}

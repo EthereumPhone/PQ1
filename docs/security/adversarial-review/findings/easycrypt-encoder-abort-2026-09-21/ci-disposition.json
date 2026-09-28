@@ -1,0 +1,72 @@
+{
+  "source_commit": "47c9bb1edd4ee4386ac1f829f762a9d924df94fd",
+  "base": "19ddfc401ac3ba6c473f628d7552a4f8bc45ddef",
+  "unchanged_paths": [
+    ".github/workflows",
+    "proto",
+    "xtask",
+    "fuzz",
+    "contracts/src",
+    "secure/src/hw/rng.rs",
+    "contracts/verification/extracted"
+  ],
+  "failures": [
+    {
+      "job": "contracts",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35660065440/job/106532927425",
+      "issue": 717,
+      "evidence": "2026-09-21T21:57:22.9175368Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+      "raw_log_sha256": "926b8e38f0dc3c405555a67a246ebcf21fb705f4a4f9e07472b4eb4abe81b13a"
+    },
+    {
+      "job": "slither",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35660065440/job/106532927230",
+      "issue": 717,
+      "evidence": "2026-09-21T21:57:21.5595649Z ##[error]/home/runner/.foundry/bin/foundryup: /home/runner/.foundry/bin/foundryup: cannot execute binary file",
+      "raw_log_sha256": "1cb61e038ffcea42359a28ef184d958a0bcbeb9ca035ef5ac353508b4f0f82c2"
+    },
+    {
+      "job": "host",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35660065440/job/106532927317",
+      "issue": 711,
+      "evidence": "2026-09-21T21:59:24.1736794Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\"",
+      "raw_log_sha256": "b1ce27fe2181fdeb434a033456a71137f99e058a83315abc1a4307d093d5dd73"
+    },
+    {
+      "job": "coverage",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35660065440/job/106532927270",
+      "issue": 711,
+      "evidence": "2026-09-21T22:00:18.3541372Z checked-in curation manifest and bound inputs: \"curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977\"",
+      "raw_log_sha256": "9b94dcd7f4a5e4cb4e8a0887b66802d2787a1fcb0a31ed504eb6fd46ff14ceb1"
+    },
+    {
+      "job": "quarantine",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35660065440/job/106532927361",
+      "issue": 711,
+      "evidence": "2026-09-21T21:59:35.6711958Z DRIFT: ERC-7730 curation overlay: curation tool input tree receipt mismatch for proto: expected files=9 bytes=179755 sha256=0c2bd43810ea3d4f5475c6ee720ec898a8bfb32120af691afe82bb4064c8a68e, got files=9 bytes=180562 sha256=5d65de329bec0b0232c4a50819fdff9996284416ba6e3b9951ae7d17ab116977",
+      "raw_log_sha256": "a29c6f6987b3c8166162e7b0291b1af81f6caea6949fcbcb871c17694de3d081"
+    },
+    {
+      "job": "invariants",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35660065440/job/106532927087",
+      "issue": 660,
+      "evidence": "2026-09-21T21:58:33.4379508Z     C3: HW-ASSUME-TRNG-ENTROPY: anchor not found in secure/src/hw/rng.rs: 'if sr & (SECS | CECS) != 0' \u2014 the code moved out from under this row; re-point it (do not delete the row)",
+      "raw_log_sha256": "521a3569f9c12d535085a5b6ac3fb84e218b677829c55ead6308b315f56d870f"
+    },
+    {
+      "job": "extracted",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35660065397/job/106532933481",
+      "issue": 661,
+      "evidence": "2026-09-21T21:58:26.5034351Z   - extract-pinstate: rust file proto/src/lib.rs CHANGED (sha256 drift) \u2014 the committed extraction is NO LONGER known-fresh. Re-run `make -C contracts/verification extract-pinstate` (needs the charon/aeneas toolchain), re-prove/re-build, then `check_extraction_freshness.py --update extract-pinstate` to re-pin.",
+      "raw_log_sha256": "39cd4936ffd364e6358a6183f8ecf63b4275ab356ba25b72c828a11bdd928d89"
+    },
+    {
+      "job": "fuzz",
+      "url": "https://github.com/EthereumPhone/PQ1/actions/runs/35660065418/job/106532936415",
+      "issue": 711,
+      "evidence": "2026-09-21T21:58:49.6559753Z error: cannot update the lock file /src/pqsigner/fuzz/Cargo.lock because --locked was passed to prevent this",
+      "raw_log_sha256": "767b9dbee11f6f8749ac882546d7c4e5631841c4ee52116a1fbbbf9faa8807aa"
+    }
+  ],
+  "broad_ci_green": false
+}

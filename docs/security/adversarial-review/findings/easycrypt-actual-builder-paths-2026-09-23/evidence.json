@@ -1,0 +1,27 @@
+{
+  "source_commit": "dd99b605c6f670e0cb7af3d25cd89c3b3409e3df",
+  "source_tree": "10e463060b9d75d041e4d5da121ff323dd428167",
+  "base": "78c6ad337a7109a4296d734cb2f971ec89392a35",
+  "input_identity": "0ffc0d10b386ad36420dc7f39df774dc",
+  "inventory": {
+    "files": 266,
+    "roots": 103,
+    "pins": 2393,
+    "statements": 2086,
+    "census": 2020,
+    "controls": 168,
+    "new_pins": 227,
+    "assumptions_unchanged": true,
+    "headlines_added": 10,
+    "source_bindings": 230
+  },
+  "full_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-23T21:57:34.873951+00:00",
+    "finished_utc": "2026-09-24T00:07:42.367170+00:00",
+    "elapsed_seconds": 7807.49,
+    "commit": "dd99b605c6f670e0cb7af3d25cd89c3b3409e3df",
+    "tree": "10e463060b9d75d041e4d5da121ff323dd428167"
+  },
+  "metadata_delta": "Receipt only; no proof or gate inputs change. Later component/signer research excluded."
+}

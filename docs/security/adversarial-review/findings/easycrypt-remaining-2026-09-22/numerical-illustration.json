@@ -1,0 +1,25 @@
+{
+  "scope": "Classical ideal experiments only. No numerical EUF-CMA or QROM claim.",
+  "B": 10000000,
+  "acceptance_fraction": [
+    5542348475921902976555022905297597,
+    170141183460469231731687303715884105728
+  ],
+  "acceptance_decimal": "0.00003257499661867355953374379242614397370449212268236336838265891312891051942108238759568394904420074454",
+  "fresh_trials_required": 9994240,
+  "known_inputs_allowed": 5760,
+  "proved_exhaustion_upper_bound": "2^-305",
+  "ideal_all_fresh_exhaustion_log2": "-469.9655153914469102035834059093273601485579626776480419229010059755141652048006560874300189052049328",
+  "R_collision_budget_scope": "At most B independent uniform 128-bit R samples in the WHOLE experiment; adaptive stopping is allowed under the explicit theorem premises.",
+  "R_birthday_fraction": [
+    781249921875,
+    5316911983139663491615228241121378304
+  ],
+  "R_birthday_log2": "-82.49300681584643843218755406634107280441504696541927363364400700337798855995935955965270817803848838",
+  "not_established": [
+    "actual shared-SHA simulation",
+    "zero-charge bounded hypertree composition",
+    "costed reductions",
+    "numerical ITSR/EUF-CMA bound"
+  ]
+}

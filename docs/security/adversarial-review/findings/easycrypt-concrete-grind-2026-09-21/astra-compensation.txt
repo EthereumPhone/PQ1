@@ -1,0 +1,7 @@
+VERDICT: GO
+
+TARGET: 273071164979f499171027c4f9735022324cba3d / 9cd2892330e2259e50f418297afccea9a0bfe112
+
+FINDINGS: none
+
+GAPS: Full second-driver replay remains pending in the supplied evidence; this verdict covers the bounded source review.

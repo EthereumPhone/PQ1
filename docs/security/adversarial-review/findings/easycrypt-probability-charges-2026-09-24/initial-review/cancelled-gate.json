@@ -1,0 +1,7 @@
+{
+  "utc": "2026-09-24T03:04:02.892149+00:00",
+  "reason": "Confirmed control-evidence overstatement. Stop the initial replay before correction, then run the mandatory gate on the corrected snapshot. Coordinator cancellation, not a proof failure.",
+  "container": "f5763aad455202f86d96e128f4fd2f62fbecaab071505b382b620f2696d26f9b",
+  "source": "8af846fc28832fc88f92bb392936b2d98fa9a17e",
+  "counts": "19 exact-statement mismatches, 1 unfinished obligation, 12 scope checks, 6 positives; reviewer count corrected."
+}

@@ -1,0 +1,109 @@
+{
+  "source_commit": "47c9bb1edd4ee4386ac1f829f762a9d924df94fd",
+  "source_tree": "553f3ff818a366a88a8b54fb5801c5205d08d852",
+  "base": "19ddfc401ac3ba6c473f628d7552a4f8bc45ddef",
+  "input_identity": "946053f3a3915a95a5556a0a08a93fb7",
+  "full_gate_command": "timeout -k 60 18000 make -C contracts/verification verify-easycrypt-split",
+  "full_gate_status": "passed",
+  "independent_review_policy": "Standing user decision: Astra substitutes SOL; Kimi excluded. One Astra/Opus wave, no extra reviewer.",
+  "mechanical_retry": "Astra initial command tools failed in nested Bubblewrap before source access. Single same-model retry uses legacy Landlock inside outer read-only candidate/Git mounts, limited to remaining aggregate review time.",
+  "lean_scope": "Targeted Extracted.WotsDigits build from isolated, revision-checked dependency copy; extract_digits_spec and extract_digits_lt axiom dumps show propext/Classical.choice/Quot.sound. Not extraction regeneration or a Lean-to-EasyCrypt proof bridge.",
+  "new_axioms_or_admits": 0,
+  "files": 66,
+  "roots": 54,
+  "declaration_pins": 1332,
+  "statements": 1201,
+  "controls": 64,
+  "previous_candidate": "031158745e5939885f2886fd6040747ce441557b",
+  "remediation": "Explicit WOTS_C_Multi list/loop proof after first full gate reported a CLI disagreement; statements, premises and budgets unchanged.",
+  "full_gate_started_utc": "2026-09-21T21:48:57.040003422Z",
+  "proof_container_image": "ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3",
+  "proof_container_network": "none",
+  "proof_source_mount_read_only": true,
+  "full_gate_exit_code": 0,
+  "full_gate_completed_utc": "2026-09-21T23:29:31.367869+00:00",
+  "reviews": {
+    "astra_initial": {
+      "status": "completed",
+      "duration_seconds": 32.455,
+      "started_at": "2026-09-21T21:49:15.526875+00:00",
+      "ended_at": "2026-09-21T21:49:47.981397+00:00",
+      "report_words": 42,
+      "sha256": "349e717fc44263495334f23c1b02dd05a583093e86ad1ab02732f547ee667bf2",
+      "target_drift": false,
+      "report": "astra-initial-gap.txt"
+    },
+    "astra": {
+      "status": "completed",
+      "duration_seconds": 272.808,
+      "started_at": "2026-09-21T21:50:47.594012+00:00",
+      "ended_at": "2026-09-21T21:55:20.401977+00:00",
+      "report_words": 23,
+      "sha256": "02870879d0a3da8cd238a76c26a0a44122e8aa618502313b7514033c5e332222",
+      "target_drift": false,
+      "report": "astra.txt"
+    },
+    "opus": {
+      "status": "completed",
+      "duration_seconds": 245.984,
+      "started_at": "2026-09-21T21:49:15.527566+00:00",
+      "ended_at": "2026-09-21T21:53:21.511127+00:00",
+      "report_words": 488,
+      "sha256": "e68bdd8000f599d5ed6ea9008e65b1d377503568b0fa3400e7fd354f7c47250b",
+      "target_drift": false,
+      "runtime_model_usage": [
+        "claude-haiku-4-5-20251001",
+        "claude-opus-5"
+      ],
+      "report": "opus.txt"
+    }
+  },
+  "review_prompt_sha256": "90da24a9fff6bfda6ba58d695f8a82921b0de9ccc680b718d682071d28bd9d11",
+  "review_bounds": {
+    "wave_seconds": 900,
+    "report_words": 800,
+    "mechanical_retry_seconds": 720,
+    "initial_launch_skew_seconds": 0.000699
+  },
+  "requested_models": {
+    "astra": "gpt-6-astra / ultra",
+    "opus": "opus / xhigh (runtime main model claude-opus-5)"
+  },
+  "tool_versions": {
+    "codex": "0.154.0",
+    "claude": "2.1.276",
+    "bubblewrap": "0.9.0"
+  },
+  "isolation": "Read-only candidate/Git mounts and before/after drift checks. The single mechanical Astra retry used inner legacy Landlock. Host secrets, network and mutual blindness are outside the OS isolation boundary.",
+  "artifacts_sha256": {
+    "README.md": "bb659c08b6d2a47b693412b9715837a6707be1954092a487990f7541dd144fda",
+    "astra-initial-gap.txt": "349e717fc44263495334f23c1b02dd05a583093e86ad1ab02732f547ee667bf2",
+    "astra.txt": "02870879d0a3da8cd238a76c26a0a44122e8aa618502313b7514033c5e332222",
+    "ci-disposition.json": "3c9803b4951c55847fb0407912934e5720ab3c38cab33e1f13be1596358dd253",
+    "fast-split.log": "ce66df3b0c2768f9cb8fa5ff21c438faec4d878338cd8d59ca4821645f5e7b0c",
+    "formal-source-mapping.json": "c41cb54f9e62982ff9664c963a7acbc0ec007b04ccb612864f664836ba5d6ec2",
+    "full-gate-v1-result.json": "922d64693b08088d89f159f4d48a6d08fc76d73c7cf4dc99ac7aaa8f3dc3c4cc",
+    "full-split-superseded-failed.log": "a68082ae90618d798db5d37dadb45407564393b4eb3a7f1f5ed6effe256e548e",
+    "full-split.log": "25f1c2527a70c174b0124047081d3bccb7da629eb9f8dae95c1055f666663fce",
+    "gate-enforcement-tests.log": "6cb62bb36307c0aad046c110e50f5e6f56d98fe5db9f2ad34e6db19e30be62c8",
+    "gate-enforcement.log": "a81691d46780b28b5291d808fa78c40749579686362cd81a38cf5ad9052ba2de",
+    "lean-wots-axioms.log": "2583895a6e083b1fd4406b7835278e234f0778eaa3fe40faa2e7b7f0e36cf4a9",
+    "lean-wots.log": "6b483a0ce8d354db2f8a3d9b97b2edc0aff135a5fbbf769cf283abd2f1fdff91",
+    "opus.txt": "e68bdd8000f599d5ed6ea9008e65b1d377503568b0fa3400e7fd354f7c47250b",
+    "review-prompt.txt": "90da24a9fff6bfda6ba58d695f8a82921b0de9ccc680b718d682071d28bd9d11",
+    "selected-extraction-pins.json": "53b3e4a57a8c5bdbe30dc076133996d775c2dd2f189388d156c0843e2cbef26b",
+    "wots-cli-corrected.txt": "4faa562ea6b87e7b01c1b1dfd5d1c46273c3330e3c4c950ad51ffade789a5b65",
+    "wots-compile-corrected.txt": "43b2d5c1f6da44e4661ff0798c6749a6b5844957427e57b481e09afe7d9a9b2a"
+  },
+  "hosted_ci": {
+    "pull_request": 716,
+    "base": "19ddfc401ac3ba6c473f628d7552a4f8bc45ddef",
+    "broad_ci_green": false,
+    "tracked_failures": {
+      "hardware_anchor": 660,
+      "pinstate_extraction": 661,
+      "curation_and_fuzz": 711,
+      "foundry_installation": 717
+    }
+  }
+}

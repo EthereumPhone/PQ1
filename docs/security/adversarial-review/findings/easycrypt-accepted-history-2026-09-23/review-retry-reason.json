@@ -1,0 +1,6 @@
+{
+  "reason": "Every initial source command failed before execution: inner Bubblewrap namespace unavailable. Sole same-model mechanical retry uses legacy Landlock inside unchanged outer read-only candidate/Git mounts.",
+  "failed_source_commands": 3,
+  "original_deadline_epoch": 1790151936.235704,
+  "retry_budget_seconds": 829
+}

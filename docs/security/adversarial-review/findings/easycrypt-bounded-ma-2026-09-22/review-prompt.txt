@@ -1,0 +1,25 @@
+You are one independent reviewer in an owner-authorized formal-verification review. Do not launch agents or other models.
+Review PQSigner OS for Phase D source merge.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-bounded-ma-20260922-jobrz8z5/review-target
+Commit: 532c4b7a2b945566ce4e3b3247a9f50224883788
+Tree: 2a32fd7af778c80c551a42fb2c4fce844a6317e0
+Compare: 8f739990d691a5b62b043b2fb6357e5500dabbae..532c4b7a2b945566ce4e3b3247a9f50224883788
+Surface: EasyCrypt C10 bounded member-aware WOTS probability reduction.
+Objective: review whether the new bounded-game bound removes universal counter reachability (N2) without replacing it by an unproved probability premise.
+Checks:
+1. Accepted-query transcript invariant, initialization, absorbing failure and private oracle globals.
+2. Adaptive same-adversary coupling, termination premises and event direction.
+3. Good-transcript event through collision split; exact member-aware S-TCR and restricted WOTS-TW reductions.
+4. Premise satisfiability and retained address/encoder/member/target assumptions; no axiom/admit introduced.
+5. Positive and negative proof controls, source binding, complete pin/census enrollment.
+6. Claims limited to this bounded WOTS experiment; no full-scheme, real-hash independence, useful complexity or numerical bound implied.
+Evidence already green: direct compile plus zero-diagnostic CLI iteration of the new root; final-theorem positive control passes, erased-history and failed-record controls reject at proof obligations; static split gate passes (69 files, 1347 pins, unchanged assumption census, 70 controls). Full cold two-driver gate is running separately and remains a landing requirement.
+Non-goals: whole hypertree composition, shared-hash/adaptive-history/FORS truncated-R probability estimates, firmware changes, hardware or shipment.
+Inspect the exact diff and affected sources. Keep target immutable: read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs or follow-up model turns. Ignore style and optional hardening. You have 15 minutes total and at most 800 words, reserving time for synthesis.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 532c4b7a2b945566ce4e3b3247a9f50224883788 / 2a32fd7af778c80c551a42fb2c4fce844a6317e0
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; falsifiable evidence; smallest fix
+GAPS: none | one line
+At most three findings; if none, write FINDINGS: none.

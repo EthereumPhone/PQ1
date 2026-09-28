@@ -1,0 +1,156 @@
+make: Entering directory '/tmp/pq-fv-remediation-20260916-fl0q429t/target/contracts/verification'
+/usr/bin/python3 -E -S -B scripts/run_easycrypt_split.py
+### INPUTS_SHA256 df34cee6a883deafc1aef86c89d8c464
+OK   INPUTS_SHA256 matches the committed identity
+OK   coverage: all 993 top-level statements across 45 CONE files are pinned (roots 38 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 7 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK unique statement pins: 1077
+OK split static contract: 45 files; proof execution not performed
+OK toolchain: r2026.02, 25 pinned prover configurations
+### IMAGE ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3
+OK proof controls: direct dependency failure / import acceptance / open-proof rejection / abstract require and EOF
+OK   no dual-extension theory names on the include path
+### ECO_PURGED=0
+### ECO_REMAINING=0
+### PHASE 1 — TARGETS
+OK   target base-c10-split/BinaryTrees.ec
+OK   target base-c10-split/MerkleTrees.ec
+OK   target base-c10-split/KeyedHashFunctions.eca
+OK   target base-c10-split/TweakableHashFunctions.eca
+OK   target base-c10-split/HashAddresses.eca
+OK   target base-c10-split/WOTS_TW_ES.ec
+OK   target base-c10-split/FL_SL_XMSS_MT_ES.ec
+OK   target base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca
+OK   target base-c10-split/FORS_ES.ec
+OK   target base-c10-split/SPHINCS_PLUS.ec
+OK   target cdrafts-split/Grind.ec
+OK   target cdrafts-split/STCR_C.ec
+OK   target cdrafts-split/WOTS_C_Real.ec
+OK   target cdrafts-split/WOTS_C_Scheme.ec
+OK   target cdrafts-split/XMSSMT_C_Scheme.ec
+OK   target cdrafts-split/WOTS_C_Reduction.ec
+OK   target cdrafts-split/WOTS_C_Interactive.ec
+OK   target cdrafts-split/XmssmtCC_All.ec
+OK   target cdrafts-split/RtopCSoundness.ec
+OK   target cdrafts-split/FxChain.ec
+OK   target cdrafts-split/FORS_C10.ec
+OK   target cdrafts-split/FORS_C10_Multi.ec
+OK   target cdrafts-split/GprocFORSC10.ec
+OK   target cdrafts-split/SphincsC10CapstoneWired.ec
+OK   target cdrafts-split/SphincsC10Content.ec
+OK   target cdrafts-split/C10DeployedInstance.ec
+OK   target cdrafts-split/C10DeployedCapstone.ec
+OK   target cdrafts-split/C10DeployedGeometry.ec
+OK   target cdrafts-split/C10DeployedScope.ec
+OK   target cdrafts-split/C10SpecControls.ec
+OK   target cdrafts-split/DarkSide.ec
+OK   target cdrafts-split/DarkSideC10.ec
+OK   target cdrafts-split/FORS_C.ec
+OK   target cdrafts-split/FORS_C_TreePort.ec
+OK   target cdrafts-split/GFailCharged.ec
+OK   target cdrafts-split/GprocVI.ec
+OK   target cdrafts-split/XmssmtCCCharged.ec
+OK   target cdrafts-split/SphincsC10CapstoneCharged.ec
+OK   target cdrafts-split/GprocT1Opre.ec
+OK   target cdrafts-split/GprocT2Trh.ec
+OK   target cdrafts-split/GprocT3Trco.ec
+OK   target cdrafts-split/GprocQBound.ec
+OK   target cdrafts-split/GprocQWired.ec
+OK   target cdrafts-split/GprocChargedQWired.ec
+OK   target cdrafts-split/WOTS_C_Multi.ec
+### CONE_COMPILED=45 EXPECTED=45
+### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)
+OK   all closure files are requirable
+### PHASE 1e — BOTH DRIVERS (compile AND cli)
+OK   base-c10-split/BinaryTrees.ec (cli, 303 cmds)
+OK   base-c10-split/MerkleTrees.ec (cli, 105 cmds)
+OK   base-c10-split/KeyedHashFunctions.eca (cli, 156 cmds)
+OK   base-c10-split/TweakableHashFunctions.eca (cli, 84 cmds)
+OK   base-c10-split/HashAddresses.eca (cli, 63 cmds)
+OK   base-c10-split/WOTS_TW_ES.ec (cli, 2185 cmds)
+OK   base-c10-split/FL_SL_XMSS_MT_ES.ec (cli, 679 cmds)
+OK   base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca (cli, 703 cmds)
+OK   base-c10-split/FORS_ES.ec (cli, 2191 cmds)
+OK   base-c10-split/SPHINCS_PLUS.ec (cli, 456 cmds)
+OK   cdrafts-split/Grind.ec (cli, 59 cmds)
+OK   cdrafts-split/STCR_C.ec (cli, 37 cmds)
+OK   cdrafts-split/WOTS_C_Real.ec (cli, 119 cmds)
+OK   cdrafts-split/WOTS_C_Scheme.ec (cli, 41 cmds)
+OK   cdrafts-split/XMSSMT_C_Scheme.ec (cli, 58 cmds)
+OK   cdrafts-split/WOTS_C_Reduction.ec (cli, 204 cmds)
+OK   cdrafts-split/WOTS_C_Interactive.ec (cli, 744 cmds)
+OK   cdrafts-split/XmssmtCC_All.ec (cli, 2624 cmds)
+OK   cdrafts-split/RtopCSoundness.ec (cli, 673 cmds)
+OK   cdrafts-split/FxChain.ec (cli, 1219 cmds)
+OK   cdrafts-split/FORS_C10.ec (cli, 59 cmds)
+OK   cdrafts-split/FORS_C10_Multi.ec (cli, 69 cmds)
+OK   cdrafts-split/GprocFORSC10.ec (cli, 400 cmds)
+OK   cdrafts-split/SphincsC10CapstoneWired.ec (cli, 102 cmds)
+OK   cdrafts-split/SphincsC10Content.ec (cli, 198 cmds)
+OK   cdrafts-split/C10DeployedInstance.ec (cli, 247 cmds)
+OK   cdrafts-split/C10DeployedCapstone.ec (cli, 64 cmds)
+OK   cdrafts-split/C10DeployedGeometry.ec (cli, 121 cmds)
+OK   cdrafts-split/C10DeployedScope.ec (cli, 91 cmds)
+OK   cdrafts-split/C10SpecControls.ec (cli, 11 cmds)
+OK   cdrafts-split/DarkSide.ec (cli, 153 cmds)
+OK   cdrafts-split/DarkSideC10.ec (cli, 14 cmds)
+OK   cdrafts-split/FORS_C.ec (cli, 95 cmds)
+OK   cdrafts-split/FORS_C_TreePort.ec (cli, 289 cmds)
+OK   cdrafts-split/GFailCharged.ec (cli, 103 cmds)
+OK   cdrafts-split/GprocVI.ec (cli, 190 cmds)
+OK   cdrafts-split/XmssmtCCCharged.ec (cli, 66 cmds)
+OK   cdrafts-split/SphincsC10CapstoneCharged.ec (cli, 48 cmds)
+OK   cdrafts-split/GprocT1Opre.ec (cli, 880 cmds)
+OK   cdrafts-split/GprocT2Trh.ec (cli, 1184 cmds)
+OK   cdrafts-split/GprocT3Trco.ec (cli, 385 cmds)
+OK   cdrafts-split/GprocQBound.ec (cli, 12 cmds)
+OK   cdrafts-split/GprocQWired.ec (cli, 46 cmds)
+OK   cdrafts-split/GprocChargedQWired.ec (cli, 53 cmds)
+OK   cdrafts-split/WOTS_C_Multi.ec (cli, 164 cmds)
+### CLI_FILES_RUN=45 CLI_DISAGREEMENTS=0
+### PHASE 1f — WATCHED FILES (T1/T2/T3 branch proofs; NOT certified)
+### WATCHED_FILES_RUN=0 WATCHED_FAILURES=0
+### PHASE 1b — NAMED RESULTS EXIST AS LEMMAS (not axioms)
+OK   EUFCMA_SPHINCS_PLUS_C10_GROUNDED is a lemma in cdrafts-split/SphincsC10CapstoneWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CONTENTFUL_AT_DEPLOYED_ENCODER is a lemma in cdrafts-split/C10DeployedCapstone.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CHARGED is a lemma in cdrafts-split/SphincsC10CapstoneCharged.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_QWIRED is a lemma in cdrafts-split/GprocQWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER_QWIRED is a lemma in cdrafts-split/GprocQWired.ec
+OK   EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED is a lemma in cdrafts-split/GprocChargedQWired.ec
+### PHASE 1c — STATEMENT DIGESTS (names are not enough)
+OK unique statement pins: 1077
+### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)
+OK   coverage: all 993 top-level statements across 45 CONE files are pinned (roots 38 + transitively required)
+### PHASE 1g — POLICY-CAP QUARANTINE (cdrafts-split/C10DeployedScope.ec)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+### PHASE 2 — CONE CENSUS vs cert-baseline-split.tsv (ADDITIONS FATAL)
+cone: keys now=1558 baseline=1558 | ROWS now=1637 baseline=1637 | added=0 removed=0
+  ledger=241  parameters=214  bindings=366  meaning=393  definitions=423  total=1637
+### PHASE 2b — CENSUS REGRESSION CANARY (admitted.)
+OK   census detects 'admitted.' (canary caught)
+### PHASE 2c — DIGEST DISCRIMINATION CANARY
+OK   module-type digest discriminates (module-type:1ed74e3a5614 vs module-type:f9d6086d602e)
+OK   admit statement digest discriminates (admit:7c56af2d53b1 vs admit:4eeb8521bd94)
+OK   no live row carries a degenerate digest
+OK   no live admit row degraded to 'nostmt'
+### PHASE 3 — CONTROLS (polarity AND declared reason)
+OK   control scratch/vac_probe_full.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/probe_len46.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/c10_spec_vacuity_canary.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control cdrafts-split/C10SpecControls.ec (MUST-PASS)
+OK   control scratch/tier0_degenerate_encoder_excluded.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/encode_compat_derivable.ec (MUST-PASS)
+controls executed (unique)=6 expected>=6
+### PHASE 4 — FORS+C GRINDING MARGIN (heuristic figures, NOT a theorem)
+OK   margin guardrails 4/4 (happy path)
+OK   margin negative controls 3/3 (guardrails demonstrably fire)
+OK   margin figures match the committed manifest (7/7)
+### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundness proof)
+     OK   taint containment: closure = 2 lemmas, none of the 7 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   taint controls: taint controls: pass=11 fail=0
+OK   inputs unchanged across the run (df34cee6a883deafc1aef86c89d8c464)
+### RESULT: GREEN
+make: Leaving directory '/tmp/pq-fv-remediation-20260916-fl0q429t/target/contracts/verification'

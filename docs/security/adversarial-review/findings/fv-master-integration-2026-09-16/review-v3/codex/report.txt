@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: eb18115edb602fe8634d441249d13a11b0177043 / c70e88ec551d4b8100f605fd548b3b0e8ddaa5f8
+FINDINGS: none
+GAPS: Coordinator must confirm the independently running fresh full replay is green before publication.

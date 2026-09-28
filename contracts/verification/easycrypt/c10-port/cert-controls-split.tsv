@@ -5,6 +5,9 @@
 # the sibling gate RED.  My run-2 remediation broke the fork gate; found by
 # adversarial review, run 3.
 #
+# MUST-FAIL checks the declared proof-driver rejection, not logical falsity of
+# the attempted statement. Exact-term mismatch can also reject a true weaker
+# statement. Evidence classes and limitations: CONTROL-EVIDENCE.md.
 # path	polarity	declared-reason
 scratch/vac_probe_full.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/probe_len46.ec	MUST-FAIL	cannot prove goal (strict)
@@ -12,3 +15,517 @@ scratch/c10_spec_vacuity_canary.ec	MUST-FAIL	cannot prove goal (strict)
 cdrafts-split/C10SpecControls.ec	MUST-PASS	-
 scratch/tier0_degenerate_encoder_excluded.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/encode_compat_derivable.ec	MUST-PASS	-
+# --- countermodel controls, promoted 2026-08-31 alongside
+# --- cdrafts-split/BadEncCountermodel.ec (regenerate: scratch/mkctl_badenc_split.sh).
+# A/B/C each delete exactly ONE hypothesis of badenc_game_hoare + badenc_is_one;
+# D mutates the CONCLUSION 1%r -> 0%r.  Reasons observed, not assumed.
+# NOTE ON C: `nothing to rewrite` is shape-adjacent, and the gate's own PHASE 3
+# comment warns about exactly that.  It is nonetheless a genuine deletion failure:
+# the site it breaks is `by rewrite /P -hcol; move: hP; rewrite /P`, i.e. the ONLY
+# place `P cm` is consumed to produce the game's `P m /\ P m'` conjunct.  Verified
+# by reading the failing line, not inferred from the message.
+scratch/badenc_ctlA.ec	MUST-FAIL	[by]: cannot close goals
+scratch/badenc_ctlB.ec	MUST-FAIL	the given proof-term proves:
+scratch/badenc_ctlC.ec	MUST-FAIL	nothing to rewrite
+scratch/badenc_ctlD.ec	MUST-FAIL	[by]: cannot close goals
+# --- WotsLegCharged controls, added 2026-09-01 (regenerate: scratch/mkctl_wlc.sh).
+# A drops the GRIND-REACHABILITY premise, B drops forger losslessness, C drops ONE
+# of the six WOTS-TW separations from F.  Reasons observed, not assumed.
+# HONEST LIMITATION: A and B fail with the SAME message ("this proof-term proves:"),
+# so the gate's reason check cannot tell them apart -- it only confirms each failed
+# at a PROOF-TERM mismatch rather than a parse error or a missing require.  What
+# distinguishes them is WHICH premise was deleted, which is fixed by the generator,
+# not by the message.  Recorded rather than papered over.
+# TRAP, paid for on the first run (RED, 1 failure): the gate matches the reason against
+# the FIRST `[critical]` line only (`grep -a '^\[critical\]' | head -1`), and EasyCrypt
+# WRAPS long module lists across lines.  C's declared reason was originally
+# "is not allowed to use the modules(s)" -- true of the diagnostic, but on its SECOND
+# line, so the gate scored it as failing for the wrong reason.  Declare a substring of
+# the FIRST line, and avoid line numbers in it (they drift when the file is edited).
+scratch/wlc_ctlA.ec	MUST-FAIL	this proof-term proves:
+scratch/wlc_ctlB.ec	MUST-FAIL	this proof-term proves:
+scratch/wlc_ctlC.ec	MUST-FAIL	the module Top.WOTS_C_Interactive.R_int_WOTSTW
+# --- GprocWotsNamed controls, added 2026-09-01 (regenerate: scratch/mkctl_gwn.sh).
+# A drops the CHARGED WOTS LEG from the composition; B drops the deployed statement.
+# A IS THE ONE THAT MATTERS: a green compile there would mean the substitution of four
+# named terms for the opaque game does nothing, i.e. the theorem is vacuous.
+# Reasons observed, not assumed.
+scratch/gwn_ctlA.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/gwn_ctlB.ec	MUST-FAIL	cannot prove goal (strict)
+# --- T_COLL_RES_ENUM chain controls, promoted 2026-09-14 with cdrafts-split/{TCollResEnum,
+# --- BadEncSplit,BadEncToTColl,BadEncStep4}.ec.  Regenerate: scratch/mkctl_{tcoll,bered,bes4}.sh.
+# The mutation specs are copied BY SCRIPT from the experiment generators, and
+# scratch/check_tcoll_ctls_match.py asserts each control equals the experiment control
+# with comments stripped (21/21).  All 21 were RE-RUN against the LIVE trees before
+# promotion (WOTS_C_Real.ec and WOTS_TW_ES.ec had changed since 2026-08-14): every
+# first [critical] line matched the experiment receipt exactly.  Reasons observed.
+# HONEST LIMITATION, same as the wlc controls: many share "this proof-term proves:" or
+# "cannot prove goal (strict)", so the reason check confirms the KIND of failure
+# (a proof-term mismatch / an unprovable goal, not a parse error or a missing require);
+# WHICH fact was deleted is fixed by the generator, not by the message.
+# tcoll_ctlF "not an equation to rewrite" is shape-adjacent, like badenc_ctlC: it breaks
+# `rewrite -h5` in tcoll_win_needs_coll, the only consumer of tcoll_wf's second conjunct.
+# bered_ctlZ is the anti-fail-open canary (`lemma NEGCTL : false` by `trivial`).
+# bes4_ctlG is a NECESSITY control on a proof step (s4_transfer removed from
+# badenc_le_tcoll's closing smt), not an information deletion -- see BadEncStep4.ec.
+scratch/tcoll_ctlA.ec	MUST-FAIL	this proof-term proves:
+scratch/tcoll_ctlB.ec	MUST-FAIL	this proof-term proves:
+scratch/tcoll_ctlC.ec	MUST-FAIL	this proof-term proves:
+scratch/tcoll_ctlD.ec	MUST-FAIL	the given proof-term proves:
+scratch/tcoll_ctlE.ec	MUST-FAIL	[by]: cannot close goals
+scratch/tcoll_ctlF.ec	MUST-FAIL	not an equation to rewrite
+scratch/bered_ctlA.ec	MUST-FAIL	this proof-term proves:
+scratch/bered_ctlB.ec	MUST-FAIL	[by]: cannot close goals
+scratch/bered_ctlC.ec	MUST-FAIL	[by]: cannot close goals
+scratch/bered_ctlD.ec	MUST-FAIL	[by]: cannot close goals
+scratch/bered_ctlE.ec	MUST-FAIL	this proof-term proves:
+scratch/bered_ctlF.ec	MUST-FAIL	this proof-term proves:
+scratch/bered_ctlG.ec	MUST-FAIL	this proof-term proves:
+scratch/bered_ctlZ.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/bes4_ctlA.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/bes4_ctlB.ec	MUST-FAIL	this proof-term proves:
+scratch/bes4_ctlC.ec	MUST-FAIL	this proof-term proves:
+scratch/bes4_ctlD.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/bes4_ctlE.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/bes4_ctlF.ec	MUST-FAIL	this proof-term proves:
+scratch/bes4_ctlG.ec	MUST-FAIL	cannot prove goal (strict)
+# --- GprocTCollNamed controls, added 2026-09-14 (regenerate: scratch/mkctl_gtn.sh).
+# A drops `badenc_le_tcoll` from the composition -- THE ONE THAT MATTERS: a green compile
+# would mean the T_COLL term replaces the BadEnc term without doing anything.  B drops the
+# WOTSNAMED statement.  C drops the ONE new separation, -O_TCollEnum_Default, from F.
+# C's first generator left a dangling comma and failed with `parse error` -- a SYNTAX failure
+# that proves nothing about the restriction.  Caught by reading the reason before
+# registering; regenerated, it fails at the restriction check.  Reasons observed; C's
+# declared substring is from the FIRST [critical] line, which EasyCrypt wraps.
+scratch/gtn_ctlA.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/gtn_ctlB.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/gtn_ctlC.ec	MUST-FAIL	the module Top.XmssmtCC_All.R_MEUFGCMAWOTSC_EUFNAGCMA_C
+# --- SCOPE-ISOLATION controls for the last admit, added 2026-09-15.
+# FORS_C_TreePort.ec holds extract_op, the only admit.  Each NEGATIVE requires a headline theory
+# and names a TreePort symbol; EasyCrypt must report it UNKNOWN -- the theory is not loaded in the
+# headline environment, so no tactic (bare smt() included) can use the admit.  Each has a MUST-PASS
+# twin differing by ONE require (FORS_C_TreePort added), so the negative fails for SCOPE and not
+# for syntax.  _scope_env_n_m shows `require GprocTCollNamed.` makes a dependency 3 require-hops
+# deep resolvable, so the negatives test the FULL environment, not a smaller one.  GprocTCollNamed
+# alone: the other five headline files are in its require-cone -- stops being true if the family
+# stops being a chain.  TRIPWIRE: if any file in that cone ever requires FORS_C_TreePort, the
+# negatives COMPILE and this phase goes RED.  The census would not notice that edit (TreePort is
+# already a closure root).  Reasons observed 2026-09-15 in ec-grind (r2026.02), not assumed.
+scratch/_scope_neg_op_GprocTCollNamed.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_lemma.ec	MUST-FAIL	unknown lemma `FORS_C_TreePort.extract_op'
+scratch/_scope_pos_op.ec	MUST-PASS	-
+scratch/_scope_pos_lemma.ec	MUST-PASS	-
+scratch/_scope_env_n_m.ec	MUST-PASS	-
+# --- PER-FILE scope negatives, added 2026-09-15 (later).  The block above relied on the other five
+# headline files sitting in GprocTCollNamed's require-cone.  Kimi K3 (adversarial review) found that
+# chain UNGUARDED: all six headline files are closure roots, so one could leave the cone with nothing
+# going RED and then require FORS_C_TreePort.  Each headline file now has its OWN negative.  They
+# share the op-form twin _scope_pos_op.ec: the body is byte-identical, and any failure OTHER than the
+# declared unknown-symbol one (a name clash, a syntax error, the headline theory failing to load) is
+# graded WRONG REASON, i.e. RED -- so per-file twins would add rows, not information.  Reasons
+# observed in ec-grind for all six theories in the 2026-09-15 feasibility run.
+# NOT COVERED: a SEVENTH headline file -- nothing yet links tools/taint_closure.py's HEADLINE list to
+# these rows.
+# [UPDATE 2026-09-15 (third): COVERED.  tools/taint_closure.py --check now requires an EXACT bijection
+# between the files declaring HEADLINE results and the scratch/_scope_neg_op_<H>.ec rows here: each
+# row MUST-FAIL, its reason naming every admit theory, its probe requiring its own headline theory.
+# A new headline file with no row, or a row for a file that declares none, is RED in PHASE 5.
+# Controls T11..T14 in scratch/taint_controls.sh.  Rows in this file are read by that check: keep the
+# path shape scratch/_scope_neg_op_<HeadlineTheory>.ec.]
+scratch/_scope_neg_op_GprocChargedQWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SphincsC10CapstoneWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GprocQWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GprocQBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GprocWotsNamed.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+# Concrete counter/serialization/bounded-search semantic controls.
+scratch/C10CounterWrongCardinality.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/C10BytesWrongPadding.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/C10GrindSkip.ec	MUST-FAIL	cannot prove goal (strict)
+# --- surface-count controls, promoted 2026-09-21 alongside cdrafts-split/{VecDP,CountDS,
+# --- C10SurfaceKernel,C10Surface}.ec.  Reasons OBSERVED under the pinned image, not assumed.
+# KctlC: complement symmetry d |-> 7-d maps sum 205 to itself.  KctlE: small-scale true value 0.
+# KctlD/CtlSum204/CtlLen42/CtlVal each perturb one input (steps, target sum, word length, value).
+#
+# KctlA and KctlB are DELIBERATELY NOT REGISTERED.  Both fail -- but with
+# `anomaly: Stack overflow`, not a proof failure, at full 43/205 scale (observed today AND in
+# the original 2026-08-14 receipt: WALL_MS 42763/41990).  A stack overflow does not
+# DISCRIMINATE: it would occur just the same if count_ds were broken into computing garbage,
+# so registering it would buy a control that fails for a reason unrelated to the property.
+# CtlVal perturbs the same value and fails cleanly, so the property is covered.
+experiments/wots-badenc/count/controls/KctlC.ec	MUST-PASS	-
+experiments/wots-badenc/count/controls/KctlE.ec	MUST-PASS	-
+experiments/wots-badenc/count/controls/KctlD.ec	MUST-FAIL	[by]: cannot close goals
+experiments/wots-badenc/count/controls/CtlSum204.ec	MUST-FAIL	[by]: cannot close goals
+experiments/wots-badenc/count/controls/CtlLen42.ec	MUST-FAIL	[by]: cannot close goals
+experiments/wots-badenc/count/controls/CtlVal.ec	MUST-FAIL	[by]: cannot close goals
+
+# Concrete digit consumer and explicit IID failure mass (observed proof failures).
+scratch/C10EncoderPositive.ec	MUST-PASS	-
+scratch/C10IIDPositive.ec	MUST-PASS	-
+scratch/C10EncoderWrongOrder.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10EncoderWrongTarget.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10IIDErasedFailure.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10IIDMissingSuccessFactor.ec	MUST-FAIL	[by]: cannot close goals
+
+# Absorbing failure and the indispensable guarded game relation.
+scratch/C10BoundedGamePositive.ec	MUST-PASS	-
+scratch/C10BoundedGameNoGuard.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10BoundedGameResetFailure.ec	MUST-FAIL	[by]: cannot close goals
+
+# Good accepted transcripts and the N2-free member-aware theorem.
+scratch/C10BoundedMAPositive.ec	MUST-PASS	-
+scratch/C10BoundedMAEraseHistory.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10BoundedMAAppendFailure.ec	MUST-FAIL	[by]: cannot close goals
+
+# Bounded hypertree success/failure and actual member-aware leaf wrapper.
+scratch/C10BoundedHypertreePositive.ec	MUST-PASS	-
+scratch/C10BoundedHypertreeNoGuard.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10BoundedHypertreePartialRelease.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10BoundedLeafPositive.ec	MUST-PASS	-
+scratch/C10BoundedLeafNoPKSeparation.ec	MUST-FAIL	[by]: cannot close goals
+
+# Remaining research: actual consumers and invalid freshness/coverage claims.
+scratch/C10HypertreeCoveragePositive.ec	MUST-PASS	-
+scratch/SharedROBoundedPositive.ec	MUST-PASS	-
+scratch/C10RandomizerPositive.ec	MUST-PASS	-
+scratch/C10HashDomainsPositive.ec	MUST-PASS	-
+scratch/C10SharedSearchPositive.ec	MUST-PASS	-
+scratch/C10SearchBoundsPositive.ec	MUST-PASS	-
+scratch/C10HypertreeChargedPositive.ec	MUST-PASS	-
+scratch/SharedROKnownNotFresh.ec	MUST-FAIL	[by]: cannot close goals
+scratch/SharedRODuplicateNotFresh.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10HashWrongLength.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10CoverageSinglePath.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10FORSBoundedPositive.ec	MUST-PASS	-
+scratch/C10FORSNoExhaustion.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10RandomizerWrongHalf.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10FORSBoundedSMT.ec	MUST-PASS	-
+
+# Accepted-history composition, observer privacy and persistent raw-oracle semantics.
+# Reasons observed under the pinned toolchain; positives consume the exact contracts.
+scratch/C10HypertreeAcceptedPositive.ec	MUST-PASS	-
+scratch/C10HypertreeObserverPrivacy.ec	MUST-FAIL	the module A_ht is not allowed
+scratch/C10AcceptedCubeNoHistory.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10RawOraclePositive.ec	MUST-PASS	-
+scratch/C10RawCachedAcceptance.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10RawReplayDraw.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10StatefulLostSuccess.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_C10HypertreeAccepted.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Adaptive shared-oracle/byte-session controls and headline isolation.
+scratch/C10ByteSessionPositive.ec	MUST-PASS	-
+scratch/C10SessionAvailabilityPositive.ec	MUST-PASS	-
+scratch/C10ByteNoLengthGuard.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10ByteNoValueGuard.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10FullPublicIsPhysical.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10ByteSecretPrivacy.ec	MUST-FAIL	the module A is not allowed
+scratch/_scope_neg_op_SessionClosedForm.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawSessionCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawSignerWidths.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_FullPrefix.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawDecode.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Whole-session fail-stop boundary.
+scratch/C10FullFailurePositive.ec	MUST-PASS	-
+scratch/C10FullFailureResume.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_FullFailure.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Quantitative foundation controls and headline isolation.
+scratch/C10QProbabilityPositive.ec	MUST-PASS	-
+scratch/C10QWithoutFreshness.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10QWithoutRevisits.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10QAdaptiveOpeningsPositive.ec	MUST-PASS	-
+scratch/C10QAdaptiveOpeningsFalse.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ByteReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GrindJointCoverage.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerReturned.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GrindHypertree.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Complete-session history, repeat-accounting and scope controls.
+scratch/C10Q2FreshRepeatFalse.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q2HistoryPositive.ec	MUST-PASS	-
+scratch/C10Q2NovelPositive.ec	MUST-PASS	-
+scratch/C10Q2PrivateStateExposed.ec	MUST-FAIL	the module A is not allowed to use
+scratch/C10Q2RepeatPositive.ec	MUST-PASS	-
+scratch/C10Q2UnaccountedRepeat.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q2WithoutFailStop.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ByteHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ClassifiedBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ClassifiedSession.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerTrace.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Raw authentication-path correspondence and scope controls.
+scratch/C10Q3ForsRepeatPositive.ec	MUST-PASS	-
+scratch/C10Q3MerkleRepeatPositive.ec	MUST-PASS	-
+scratch/C10Q3PrivateRecovery.ec	MUST-FAIL	not allowed to use
+scratch/C10Q3WidthPositive.ec	MUST-PASS	-
+scratch/C10Q3WithoutFORSLeaf.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q3WithoutReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q3WithoutWidths.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_RawForsComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawForsPathReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawPathComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawPathReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Actual raw tree construction, reference paths and scope controls.
+scratch/C10Q4ForsPositive.ec	MUST-PASS	-
+scratch/C10Q4ForsWithoutRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q4MerklePositive.ec	MUST-PASS	-
+scratch/C10Q4MerkleWithoutRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q4WithoutCatalogWidths.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q4WrongRootProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_BuildRootProjection.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TotalBuilderReference.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q5ForsPositive.ec	MUST-PASS	-
+scratch/C10Q5ForsWithoutCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q5MerklePositive.ec	MUST-PASS	-
+scratch/C10Q5MerkleWithoutCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q5WithoutLeafOrigins.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ForsBuilderComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsBuilderSecret.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_MerkleBuilderComparison.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q6FirstPositive.ec	MUST-PASS	-
+scratch/C10Q6LastPositive.ec	MUST-PASS	-
+scratch/C10Q6WithoutPrivateEntry.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q6WithoutRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q6WrongSignatureProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ForsBuilderPrivate.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsSignCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsSignRecord.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Actual WOTS, forest, layer, signer and byte correctness controls.
+scratch/C10Q7ForgetsCountFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7IdentityPositive.ec	MUST-PASS	-
+scratch/C10Q7ShuffledPositive.ec	MUST-PASS	-
+scratch/C10Q7WithoutAcceptedCount.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7WithoutPrivateHistory.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7WithoutReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7WrongLeafProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q7WrongSentinel.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualWotsCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawShufflePermutation.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawWotsRecovery.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawWotsReference.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q8IdentityPositive.ec	MUST-PASS	-
+scratch/C10Q8ShuffledPositive.ec	MUST-PASS	-
+scratch/C10Q8WithoutCompressionEntry.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q8WithoutSpecialEntry.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q8WithoutTreeOpenings.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q8WrongSpecialTree.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualForestCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestRecoveryReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestSignRecorded.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q9FirstPositive.ec	MUST-PASS	-
+scratch/C10Q9ForgetsCountFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q9LastPositive.ec	MUST-PASS	-
+scratch/C10Q9WithoutPriorRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q9WithoutRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q9WithoutSecondWitness.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q9WrongProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualLayerCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_LayerSignCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_MerkleBuilderWots.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawMerkleRootWitness.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q10ForgetsFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10IdentityPositive.ec	MUST-PASS	-
+scratch/C10Q10ShufflePositive.ec	MUST-PASS	-
+scratch/C10Q10WithoutAcceptedDigest.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10WithoutDigestEntry.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10WithoutPriorRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10WrongProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q10WrongTopLayer.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualSignerCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerFinishRecorded.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerReturnedOpening.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerVerifierReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q11CountBoundaryPositive.ec	MUST-PASS	-
+scratch/C10Q11ForgetsFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q11IdentityPositive.ec	MUST-PASS	-
+scratch/C10Q11ShufflePositive.ec	MUST-PASS	-
+scratch/C10Q11WithoutCountRange.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q11WithoutHistory.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q11WithoutWidth.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q11WrongFormatLength.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q11WrongRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ActualByteSignerCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_EncodedSignature.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawSignerBytes.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SignerEncodingCorrect.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Honest correctness transfer and public collision controls.
+# These 38 rows contain 6 positive proof checks, 12 scope rejections,
+# 19 exact-statement mismatches and 1 unfinished proof obligation. None of the
+# negative diagnostics alone proves a charge necessary or an alternative false.
+scratch/C10Q12BoundPositive.ec	MUST-PASS	-
+scratch/C10Q12DropsPrefixCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q12UnderchargedCost.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q12WrongEvent.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_HonestByteContext.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HonestByteCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HonestBytePhysical.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q13BoundPositive.ec	MUST-PASS	-
+scratch/C10Q13ClientsPositive.ec	MUST-PASS	-
+scratch/C10Q13UnderchargedClient.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q13WithoutBudget.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q13WithoutRecording.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q13WrongEvent.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q13WrongProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q13ZeroCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_NodeCollisionEvents.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_NodeDistribution.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ProjectedBirthday.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_PublicCollisionBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q14BoundPositive.ec	MUST-PASS	-
+scratch/C10Q14DropsCapBinding.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14DropsCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14DropsPrefix.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14DropsResidual.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14Undercharged.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q14WrongEvent.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_BytePublicCollision.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_PublicCollisionState.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q15BoundPositive.ec	MUST-PASS	-
+scratch/C10Q15DropsResidual.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15DropsZeroCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15SentinelWithoutEvent.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15WithoutBudget.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15WrongProjection.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q15ZeroWitnessPositive.ec	MUST-PASS	-
+scratch/_scope_neg_op_BytePublicNodeBad.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_PublicNodeZero.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_WotsZeroSentinel.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Reverse WOTS recovery controls: positives, scope probes and exact mismatches.
+scratch/C10Q16WotsPositive.ec	MUST-PASS	-
+scratch/C10Q16DropsCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16DropsZero.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WithoutRows.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WithoutReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WrongCounterDomain.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16LayerPositive.ec	MUST-PASS	-
+scratch/C10Q16WithoutTargetBound.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WithoutLayerWidth.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16WithoutRootMatch.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16TracePositive.ec	MUST-PASS	-
+scratch/C10Q16ReplayPositive.ec	MUST-PASS	-
+scratch/C10Q16WithoutHistory.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q16DomainAndCollisionPositive.ec	MUST-PASS	-
+scratch/_scope_neg_op_RawWotsExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_WotsKeyExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_LayerBuildExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_VerifierWotsReplay.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+scratch/_scope_neg_op_LinearCollision.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RecoveryCompression.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RawRecoveryTrace.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_LayerWotsExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Byte-game top extraction: positives, scope probes and exact mismatches.
+scratch/C10Q17ReferencePositive.ec	MUST-PASS	-
+scratch/C10Q17WithoutIndexRange.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17WithoutRootWitness.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q17SessionPositive.ec	MUST-PASS	-
+scratch/C10Q17VerifierPositive.ec	MUST-PASS	-
+scratch/C10Q17WithoutSignatureWidth.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17WithoutVerifierRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17DropsCollision.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17DropsZero.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17ByteGamePositive.ec	MUST-PASS	-
+scratch/C10Q17WrongInitialSeed.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17HopPositive.ec	MUST-PASS	-
+scratch/C10Q17DropsPrefixCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q17IndexEdgesPositive.ec	MUST-PASS	-
+scratch/_scope_neg_op_RootCoverage.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_RootSessionHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_VerifierTopExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteGameTopExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteTopOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Byte-game subtree extraction: positives, scope probes and exact mismatches.
+scratch/C10Q18LayerPositive.ec	MUST-PASS	-
+scratch/C10Q18WithoutRecordedRoot.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18WithoutCollisionGuard.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18WithoutZeroGuard.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18VerifierPositive.ec	MUST-PASS	-
+scratch/C10Q18WithoutSignatureWidth.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18SignerPositive.ec	MUST-PASS	-
+scratch/C10Q18ForgetsFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18CasesPositive.ec	MUST-PASS	-
+scratch/C10Q18DropsUnrecordedCase.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18ByteGamePositive.ec	MUST-PASS	-
+scratch/C10Q18WrongInitialSeed.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18HopPositive.ec	MUST-PASS	-
+scratch/C10Q18DropsPrefixCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q18RecordedRootPersists.ec	MUST-PASS	-
+scratch/_scope_neg_op_LayerRecordExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_VerifierLayerRecords.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HonestSubtreeMessages.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SubtreeOpeningCases.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteGameSubtreeExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteSubtreeOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Byte-game forest extraction: positives, scope probes and exact mismatches.
+scratch/C10Q19RecoveryPositive.ec	MUST-PASS	-
+scratch/C10Q19ReferencePositive.ec	MUST-PASS	-
+scratch/C10Q19WithoutIndexBound.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19LeafPositive.ec	MUST-PASS	-
+scratch/C10Q19WithoutLeafWidth.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q19ForestPositive.ec	MUST-PASS	-
+scratch/C10Q19WithoutForestReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19WithoutCollisionGuard.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19BuilderPositive.ec	MUST-PASS	-
+scratch/C10Q19VerifierPositive.ec	MUST-PASS	-
+scratch/C10Q19WithoutSignatureWidth.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19SignerPositive.ec	MUST-PASS	-
+scratch/C10Q19ForgetsFailure.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19PersistencePositive.ec	MUST-PASS	-
+scratch/C10Q19CasesPositive.ec	MUST-PASS	-
+scratch/C10Q19DropsMissingReferences.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19ByteGamePositive.ec	MUST-PASS	-
+scratch/C10Q19WrongInitialSeed.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19HopPositive.ec	MUST-PASS	-
+scratch/C10Q19DropsPrefixCharge.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q19SpecialRootPositive.ec	MUST-PASS	-
+scratch/C10Q19SpecialWrongTree.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ForestRecoveryRecord.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsRootWitness.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsRecordExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestRecordExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestRootRecording.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_VerifierForestRecords.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HonestForestMessages.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestReferenceHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForestOpeningCases.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteGameForestExtraction.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ByteForestOpeningHop.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/C10Q19ForestWidthAlias.ec	MUST-PASS	-
+
+# Accumulated adaptive signing responses: positives, scope probes and exact mismatches.
+scratch/C10Q20RecordsPositive.ec	MUST-PASS	-
+scratch/C10Q20DropsFailureBranch.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20ProbabilityPositive.ec	MUST-PASS	-
+scratch/C10Q20ClaimsZero.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20EntryPositive.ec	MUST-PASS	-
+scratch/C10Q20AdaptivePositive.ec	MUST-PASS	-
+scratch/C10Q20AccountingPositive.ec	MUST-PASS	-
+scratch/C10Q20SessionPositive.ec	MUST-PASS	-
+scratch/C10Q20NegativeCap.ec	MUST-FAIL	[by]: cannot close goals
+scratch/C10Q20ReferencesPositive.ec	MUST-PASS	-
+scratch/C10Q20UnloggedReference.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20WrongDigest.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20ByteCountPositive.ec	MUST-PASS	-
+scratch/C10Q20CountsAllAttempts.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20ForgePositive.ec	MUST-PASS	-
+scratch/C10Q20WrongInitialSeed.ec	MUST-FAIL	the given proof-term proves:
+scratch/C10Q20RepeatAndSpecialPositive.ec	MUST-PASS	-
+scratch/C10Q20RefusalsPositive.ec	MUST-PASS	-
+scratch/_scope_neg_op_ExposureLog.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureDriver.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureSupport.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureAccounting.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureSessionHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureReferences.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureGameHistory.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ExposureForge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

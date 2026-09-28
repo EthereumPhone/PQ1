@@ -31,12 +31,28 @@ mitigations, both implemented below:
 soundness proof of exclusion.  A name absent from the closure is absent from the true
 closure ONLY modulo the two holes above -- and both are unsafe-direction.
 
+[UPDATE 2026-09-15: for the ONE admit left (FORS_C_TreePort.ec::extract_op) neither hole
+applies, for a reason this tool does NOT compute: that theory is OUTSIDE every headline
+environment.  EasyCrypt reports its symbols unknown after `require GprocTCollNamed.` (whose
+cone holds the other five headline files), checked two-sided on every gate run by PHASE 3
+controls scratch/_scope_*.ec.  The holes stay stated because they bite for any future admit
+in a theory a headline file DOES require.]
+
+[UPDATE 2026-09-15 (later): --check also enforces SCOPE-PROBE LINKAGE.  The files that declare
+HEADLINE results must be in EXACT BIJECTION with the scratch/_scope_neg_op_<H>.ec rows of
+cert-controls-split.tsv; each row MUST-FAIL, its declared reason naming every admit theory, and
+its probe requiring its own headline theory.  A new headline file with no probe, or a probe left
+for a file that no longer declares one, is RED here.  Controls T11..T14 in taint_controls.sh.]
+
 Usage:  taint_closure.py            -> print the closure
         taint_closure.py --check    -> compare against cert-taint-closure.tsv, exit 1 on drift
 """
 import re, sys, os
 
 CONE_MANIFEST = 'cert-cone-files-split.tsv'
+# Read by scope_linkage() only (added 2026-09-15).
+CONTROLS_MANIFEST = 'cert-controls-split.tsv'
+SCOPE_PROBE = re.compile(r'^scratch/_scope_neg_op_([A-Za-z0-9_]+)\.ec$')
 MANIFEST      = 'cert-taint-closure.tsv'
 
 # COMMITTED CONSTANTS -- these live in the TOOL, not only in the manifest.  A guard that
@@ -58,6 +74,121 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'exposure_sign_records',
+    'byte_exposure_probability',
+    'full_sign_exposure_history',
+    'exposure_client_supported',
+    'exposure_client_accounting',
+    'exposure_driver_history',
+    'logged_digest_references',
+    'byte_exposure_count',
+    'byte_exposure_forgery_accounted',
+
+    'raw_forest_recovery_recorded',
+    'fors_root_reference_at',
+    'recorded_fors_extracts',
+    'recorded_forest_extracts',
+    'raw_forest_sign_root',
+    'verifier_records_forest',
+    'full_sign_forest_entry',
+    'full_client_forest_preserved',
+    'recorded_verifier_forest_cases',
+    'byte_game_forest_extraction',
+    'byte_forest_opening_hop',
+
+    'recorded_layer_extracts',
+    'verifier_records_layers',
+    'full_sign_subtree_entry',
+    'recorded_verifier_subtree_cases',
+    'byte_game_subtree_extraction',
+    'byte_subtree_opening_hop',
+
+    'root_reference_at',
+    'full_client_root_preserved',
+    'verifier_extracts_top_opening',
+    'byte_game_top_extraction',
+    'byte_top_opening_hop',
+
+    'raw_chain_start_unique',
+    'matching_wots_endpoints',
+    'raw_recovery_recorded',
+    'raw_wots_extracts_opening',
+    'total_actual_wots_key_extraction',
+    'raw_layer_extracts_wots_opening',
+    'total_actual_layer_builder_extraction',
+    'raw_wots_recovers_verifier_opening',
+
+    'independent_honest_byte_error_zero',
+    'honest_byte_public_cost',
+    'physical_honest_byte_error_concrete',
+    'node_draw_distribution',
+    'projected_birthday',
+    'public_node_birthday',
+    'path_pair_collision_is_public',
+    'fors_leaf_collision_is_public',
+    'public_node_birthday_at_state',
+    'byte_public_collision_hop',
+    'public_node_zero_at_state',
+    'byte_public_node_bad_hop',
+    'invalid_sum_matches_only_zero',
+
+    'total_actual_wots_correct',
+    'total_raw_leaf_recorded',
+    'raw_shuffle_permutation',
+    'raw_wots_recovers_reference',
+    'raw_wots_invalid_sum_sentinel',
+    'total_actual_forest_correct',
+    'forest_sign_recorded',
+    'forest_recover_witness',
+    'total_actual_layer_correct',
+    'total_keygen_root_recorded',
+    'total_merkle_build_wots_path',
+    'total_layer_sign_matches_builder',
+    'total_actual_signer_correct',
+    'raw_signer_complete_opening',
+    'raw_verify_opening',
+    'raw_finish_recorded',
+    'total_actual_byte_signer_correct',
+    'signature_encoding_roundtrip',
+    'actual_signed_encoding',
+    'raw_signer_bytes',
+
+    'merkle_build_root_projection',
+    'total_merkle_build_reference',
+    'total_fors_tree_reference',
+    'total_fors_tree_secret_path',
+    'total_actual_fors_builder_comparison',
+    'total_actual_merkle_builder_comparison',
+    'total_fors_tree_private_path',
+    'fors_sign_recover_projection',
+    'total_fors_observed_sign_correct',
+    'total_fors_sign_recorded',
+
+    'merkle_recover_leaf_or_collision',
+    'fors_recover_secret_or_collision',
+    'merkle_recover_recorded',
+    'fors_recover_recorded',
+
+    'session_novel_digest_bound',
+    'byte_game_classified',
+    'byte_game_history',
+    'signer_repeated_digest',
+
+    'byte_coordinate_replay_hop',
+    'role_grind_joint_coverage',
+    'signature_digest_bound',
+    'role_grind_ht_bound',
+
+    'full_win_has_no_failure',
+    'raw_session_exhaustion_explicit',
+    'raw_session_total_cost',
+    'byte_physical_to_independent',
+    'physical_signature_bytes',
+    'full_physical_game_cost',
+    'full_physical_to_independent',
+    'signature_bytes_roundtrip',
+
+    'bounded_hypertree_accepted',
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED',
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT',
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS',
@@ -68,6 +199,11 @@ HEADLINE = [
     'EUFCMA_SPHINCS_PLUS_C10_GROUNDED',
     'EUFCMA_SPHINCS_PLUS_C10_QWIRED',
     'gproc_Q_bound',
+    # Added 2026-09-14.  WOTSNAMED (GprocWotsNamed.ec, 2026-09-01) was landed WITHOUT this
+    # edit -- exactly the silent coverage hole the note above warns about; it went 13 days
+    # unchecked for taint.  TCOLLNAMED (GprocTCollNamed.ec) is added with the variant itself.
+    'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED',
+    'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_TCOLLNAMED',
 ]
 
 def strip_comments(s):
@@ -224,6 +360,57 @@ def closure():
                     tainted[nm] = e; changed = True; break
     return lemmas, admitted, tainted
 
+def scope_linkage(lemmas, admitted):
+    """SCOPE-PROBE LINKAGE (added 2026-09-15).  The PHASE 3 scope controls prove, per headline file,
+    that the admit's theory is UNKNOWN in that file's environment.  Nothing tied those rows to
+    HEADLINE, so a new headline file got no probe and PHASE 5 said nothing.  That is the same class
+    as WOTSNAMED going 13 days unregistered for taint.  Enforced here as an EXACT BIJECTION, not a
+    subset: a probe left for a file that no longer declares a headline is refused too.
+    Deliberately NOT checked, because PHASE 3 already makes it RED: a probe that references another
+    symbol, or requires the admit theory itself, COMPILES -- and a MUST-FAIL that compiles fails."""
+    probs = []
+    hbases = {os.path.splitext(os.path.basename(k[0]))[0] for k in lemmas if k[1] in HEADLINE}
+    theories = sorted({os.path.splitext(os.path.basename(f))[0] for (f, _n) in admitted})
+    if not os.path.exists(CONTROLS_MANIFEST):
+        return [f'{CONTROLS_MANIFEST} missing -- scope-probe linkage cannot be checked'], len(hbases), 0
+    rows, scanned = {}, 0
+    for l in open(CONTROLS_MANIFEST):
+        l = l.rstrip('\n')
+        if not l.strip() or l.startswith('#'): continue
+        scanned += 1
+        parts = l.split('\t')
+        m = SCOPE_PROBE.match(parts[0])
+        if m:
+            if m.group(1) in rows: probs.append(f'scope probe for {m.group(1)} registered twice')
+            rows[m.group(1)] = (parts[0], parts[1] if len(parts) > 1 else '', parts[2] if len(parts) > 2 else '')
+    if scanned == 0:
+        return [f'{CONTROLS_MANIFEST} has no rows -- scope-probe linkage would be vacuous'], len(hbases), 0
+    if not rows:
+        return ['scope-probe linkage is vacuous: no scratch/_scope_neg_op_<H>.ec rows matched in '
+                f'{CONTROLS_MANIFEST} -- the row matcher is broken or the probes were removed'], len(hbases), 0
+    for b in sorted(hbases - set(rows)):
+        probs.append(f'headline file {b} has no scope probe '
+                     f'(expected scratch/_scope_neg_op_{b}.ec as MUST-FAIL in {CONTROLS_MANIFEST})')
+    for b in sorted(set(rows) - hbases):
+        probs.append(f'scope probe {rows[b][0]} is registered for {b}, which declares no HEADLINE result')
+    for b in sorted(set(rows) & hbases):
+        path, kind, reason = rows[b]
+        if kind != 'MUST-FAIL':
+            probs.append(f'scope probe {path} is {kind!r}, not MUST-FAIL')
+        for t in theories:
+            if f'{t}.' not in reason:
+                probs.append(f'scope probe {path}: declared reason does not name admit theory {t}')
+        if not os.path.exists(path):
+            probs.append(f'scope probe file missing: {path}'); continue
+        src = strip_comments(open(path).read())
+        reqs = set()
+        for rm in re.finditer(r"(?<![A-Za-z0-9_'])require\s+([^.]*)\.", src, re.S):
+            body = rm.group(1).replace('import', ' ').replace('export', ' ')
+            reqs.update(re.findall(r"[A-Za-z][A-Za-z0-9_']*", body))
+        if b not in reqs:
+            probs.append(f'scope probe {path} does not require its headline theory {b}')
+    return probs, len(hbases), len(rows)
+
 def main():
     lemmas, admitted, tainted = closure()
     rows=sorted((lemmas[k][0], lemmas[k][1], k[1], tainted[k]) for k in tainted)
@@ -239,6 +426,8 @@ def main():
     for k in tainted:
         if k[1] in HEADLINE:
             problems.append(f'HEADLINE IS TAINTED: {k[1]} ({k[0]}) transitively applies an admitted lemma')
+    link_probs, n_hfiles, n_probes = scope_linkage(lemmas, admitted)
+    problems += link_probs
     if not os.path.exists(MANIFEST):
         problems.append(f'{MANIFEST} missing -- the closure is unpinned')
     else:
@@ -269,6 +458,8 @@ def main():
         return 1
     print(f'OK   taint containment: closure = {len(rows)} lemmas, none of the {len(HEADLINE)} '
           f'headline results is in it (name-level, NOT a soundness proof -- see the tool header)')
+    print(f'OK   scope-probe linkage: {n_hfiles} headline files <-> {n_probes} registered scope probes '
+          f'(exact bijection)')
     return 0
 
 sys.exit(main())

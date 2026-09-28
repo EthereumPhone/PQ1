@@ -1,0 +1,50 @@
+{
+  "target": "7e099a632794c633ed14a9dc7a6e1bb0a3274f29",
+  "tree": "ff6778bb8f7adb6b42ef78766b19c62640d735c5",
+  "reviewers": {
+    "claude": {
+      "verdict": "GO",
+      "findings": [],
+      "duration_seconds": 152.432,
+      "report_words": 540,
+      "gap": "Required unchanged-source cold replay still pending"
+    },
+    "codex": {
+      "verdict": "GAP",
+      "findings": [],
+      "duration_seconds": 263.775,
+      "report_words": 26,
+      "gap": "Required unchanged-source cold replay still pending"
+    }
+  },
+  "drift": false,
+  "remaining_gate": "Resolved by unchanged-source full cold replay",
+  "pending_gate_only": true,
+  "mandatory_gap": {
+    "reviewer": "codex",
+    "kind": "required_cold_replay_pending",
+    "resolved": true,
+    "resolution": "The already-required source-matched replay must pass; the coordinator verifies its receipt. No source change or further review turn is needed under workflow sections 8-10."
+  },
+  "coordinator_notes": [
+    "Read both complete reports; verified all prompt/report/stderr/raw-runtime hashes, identities, clean target and wall-clock/report bounds. Both report no source-level findings.",
+    "Preserve raw Astra GAP and Opus GO. Their only reported evidence gap is the pending full cold replay.",
+    "The paired WOTS openings and missing-reference branch are uncharged; forest remains existential, and per-root persistence is not accumulated-exposure accounting.",
+    "Opus reports writing an external plan-file copy of its report. The candidate and Git metadata remained unchanged; the launcher does not enforce read-only behavior across the entire host."
+  ],
+  "substitutions": "Astra ultra replaces SOL; Kimi omitted under standing owner instructions.",
+  "opus_runtime_model": [
+    "claude-opus-5-5"
+  ],
+  "astra_model_evidence": "gpt-6-astra ultra requested; CLI stream does not independently expose remote model identity.",
+  "coordinator_checked_utc": "2026-09-24T16:42:34.931642+00:00",
+  "resolved_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-24T16:37:01.344886+00:00",
+    "finished_utc": "2026-09-24T21:24:41.459200+00:00",
+    "elapsed_seconds": 17260.11,
+    "commit": "7e099a632794c633ed14a9dc7a6e1bb0a3274f29",
+    "tree": "ff6778bb8f7adb6b42ef78766b19c62640d735c5"
+  },
+  "coordinator_verdict": "GO"
+}

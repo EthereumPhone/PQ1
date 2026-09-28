@@ -1,0 +1,39 @@
+VERDICT: GO
+TARGET: 5e477d33a3f335c339dae8b27d5fab40a08874a5 / 0d6504167c8d8c80ea1f1e95de7770c507047909
+FINDINGS: none
+
+Checked against source, point by point:
+
+1. **Observer.** `ExposureLog.ec:7-15`: `hash` is the same procedure as `FullSession(O).hash`. `sign` makes exactly one call to `FullSession(O).sign(random,message,shuffle)`, in the same argument order as `FullSession.ec:32`. It appends `(message, oget result)` only when `result <> None`, using `rcons` with no deduplication, so repeats are kept. It makes no extra oracle queries and does not touch `failed`, `sign_calls`, `sign_limit` or the guard. `C10Q20RefusalsPositive` checks that a refused call leaves the log and counters unchanged.
+
+2. **Projections.**
+   - `ExposureDriver` matches `FullDriver` (`FullSession.ec:44-55`) except for the added `ExposureLog.entries <- []`. It has the same guard, the same `RawSigner(O).verify` and the same `signed_messages` new-message test.
+   - Each projection's postcondition includes `={res, glob A, glob O/Independent, glob FullSession}`.
+   - `byte_exposure_context_projection` goes through the existing `byte_context_equiv`, so the byte client and `ByteLift` are unchanged.
+   - `byte_exposure_probability` is a direct `byequiv` on the `res` event.
+   - Every client binder carries `-ExposureLog`, so the client cannot read the observer state. The abstract oracle is restricted `{-A,-FullSession,-ExposureLog}`.
+
+3. **References.**
+   - `exposure_supported` is the conjunction of the existing `returned_forest_reference` and `returned_subtree_reference`. It is set up empty at `init`. Each success extends it via the existing `full_sign_forest_entry`/`full_sign_subtree_entry`, so no reference is assumed.
+   - It survives every hash and sign call, including failed signs (`full_sign_histories`), and the final verification (`verifier_exposures_preserved`, instantiated with `RawSigner`).
+   - `exposure_shared_digest` and `logged_digest_references` tie both references to the single `h.[hmsg_input …]=Some d`.
+   - `lower` (the result of the forest's layer-0 opening) and `upper` (the `merkle_root_witness`) stay as separate existentials, and no equality between them is asserted.
+
+4. **Accounting.**
+   - `exposure_accounting` states `map fst entries = signed_messages`, `size entries <= sign_calls` and `0 <= sign_calls <= sign_limit`, with `0<=qs0` required at the driver.
+   - `C10Q20NegativeCap` confirms the cap-premise obligation stays open when that premise is removed.
+   - `byte_exposure_forgery_accounted` swaps the extraction's `FullSession.signed_messages` for `exposure_messages ExposureLog.entries` using the proved equality, and keeps `res`, collision and zero as explicit alternatives.
+
+5. **FORS coordinates.**
+   - `logged_fors_value` requires `0<=tree<12` and `forest_index d tree=index`.
+   - `logged_special_root` reads component 12 with no index. That matches `RawForest.sign`, where `secrets[12]` is `RawFors.root(…,12)` and `ForestWitness` hashes it as the special root. `special_is_not_ordinary` confirms tree 12 is excluded from the ordinary predicate.
+   - `absent_forest_excludes_logged_fors` requires `forall forest, !forest_root_witness … ht forest`. It concludes only that the value is not logged, and makes no secrecy claim.
+
+6. **Enrollment.** There is no `axiom`, `admit`, `declare` or `clone` in the nine new files. The only deleted lines are count and hash bumps; no baseline or statement row is removed.
+   - The statement count went up by 36, which matches the 36 new lemmas.
+   - The pin count went up by 42: those 36 lemmas plus 6 new operators.
+   - All 27 new controls are listed, and the 9 new theorems are added to the `taint_closure.py` HEADLINE list.
+   - All 6 rejection controls fail as `exact` applications with the message "the given proof-term proves:". `RAW-ADAPTIVE-EXPOSURES.md:65-67` correctly describes them as diagnostic, not as counterexamples or proofs that a premise is needed.
+   - The docs claim no numerical improvement and no full closure of exposure accounting (lines 55-57 and 70-75).
+
+GAPS: I didn't re-run EasyCrypt; this GO rests on the source review plus the green checks you reported, and landing still depends on the cold two-driver replay you have running.

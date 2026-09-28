@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 816db25c4d161544d2ba74b988efd50942167d0d / 050cafedbcb138388636551687710f67c69a9368
+FINDINGS: none
+GAPS: Fresh final-checker Tamarin and complete pinned-image EasyCrypt replay results remain pending; the coordinator must obtain both green results before publication.

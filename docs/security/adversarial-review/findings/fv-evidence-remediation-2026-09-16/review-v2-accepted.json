@@ -1,0 +1,41 @@
+[
+  {
+    "reviewer": "claude",
+    "wave": "review-v2",
+    "verdict": "VERDICT: GO",
+    "seconds": 530.287,
+    "words": 128,
+    "hashes": {
+      "prompt_sha256": "1a4c6bcf08a3d53932e4d4022d9887805fa56e113a55c321c5e8800e283f09df",
+      "report_sha256": "e5e5d97f1ed27b793a1f1d5593bb7741118796704c4828600e93c1c5c7f07ce8",
+      "runtime_sha256": "6211c8452c852a5a87471d36e41a774c316e12f1c11280f6cdf1f6075b56616a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  {
+    "reviewer": "kimi",
+    "wave": "review-v2",
+    "verdict": "VERDICT: GO",
+    "seconds": 560.332,
+    "words": 439,
+    "hashes": {
+      "prompt_sha256": "1a4c6bcf08a3d53932e4d4022d9887805fa56e113a55c321c5e8800e283f09df",
+      "report_sha256": "aa4784e46dee73d850c3af9400a1ff19d3a8417c1edbcb1a8fa632d95167ef20",
+      "runtime_sha256": "e5ab6ca34a55493b85790b09c992361b89d0bdc9d4ee97e56330085710b491e0",
+      "stderr_sha256": "f017d7a492cd5fc5d13877859706ec53f699d8817da7a8b91c01152cde059591"
+    }
+  },
+  {
+    "reviewer": "codex",
+    "wave": "review-v2-codex-retry",
+    "verdict": "VERDICT: FIX",
+    "seconds": 668.557,
+    "words": 114,
+    "hashes": {
+      "prompt_sha256": "1a4c6bcf08a3d53932e4d4022d9887805fa56e113a55c321c5e8800e283f09df",
+      "report_sha256": "97b0be9609ee29aa1947c78587d9a4c1c3d973894a04025dd3b1c43f714b6bb2",
+      "runtime_sha256": "991663250160084da47ce0f5942c19e10a7d521ca5a582c8b27ef9b730a328d7",
+      "stderr_sha256": "1e43ea810b9dd92d6147043678ff3637b7cd7e88019db4e7f493767426f769b8"
+    }
+  }
+]

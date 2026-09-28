@@ -1,0 +1,52 @@
+[
+  {
+    "name": "gate-controls",
+    "command": [
+      "make",
+      "verify-gate-enforcement"
+    ],
+    "exit_code": 0,
+    "seconds": 92.123
+  },
+  {
+    "name": "verity-ci",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "exit_code": 0,
+    "seconds": 250.432
+  },
+  {
+    "name": "protocol-controls",
+    "command": [
+      "python3",
+      "scripts/check_protocol_models.py",
+      "--self-test"
+    ],
+    "exit_code": 0,
+    "seconds": 0.035
+  },
+  {
+    "name": "tlc-controls",
+    "command": [
+      "python3",
+      "contracts/verification/tla/check_tlc.py",
+      "--self-test"
+    ],
+    "exit_code": 0,
+    "seconds": 0.057
+  },
+  {
+    "name": "proof-mutation-controls",
+    "command": [
+      "python3",
+      "contracts/verification/scripts/check_proof_mutations.py",
+      "--self-test"
+    ],
+    "exit_code": 0,
+    "seconds": 0.04
+  }
+]

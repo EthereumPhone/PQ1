@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: cb3a7b16e759bffb449587995e2534501d9ba347 / 91469e87dc20b6931f3c302095d9545f355f24dc
+FINDINGS: none
+GAPS: Source review could not start: read-only commands failed before execution with “filesystem-restricted execution requires bubblewrap to isolate app-server sockets”; no alternative source interface was available. Commit/tree identity, diff, proofs and C10 correspondence remain unverified by this reviewer. A functional read-only runner is required; the separately running mandatory replay also remains required for landing.

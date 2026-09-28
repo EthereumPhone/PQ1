@@ -1,0 +1,2 @@
+exit 0 seconds 8.8 log /home/nicola/.local/state/pqsigner-research/easycrypt-encoder-abort-20260921-g0lja304/WOTS_C_Multi-compile.log
+

@@ -1,0 +1,78 @@
+{
+  "candidate": "4d3cb40d39604c910fb9a3d01e30d68ebf224412",
+  "base": "bb44efb9d0f15123b0ba9ab0b9251cff6037d293",
+  "overall_ci": "red",
+  "known_failures": {
+    "660": "TRNG ledger anchor missing",
+    "711": "Existing proto receipt drift and locked fuzz Cargo.lock mismatch",
+    "717": "Foundry installer cannot execute binary file"
+  },
+  "failure_evidence": [
+    {
+      "job": "107855878665",
+      "name": "Invariant gates (#5 /",
+      "existing_issue": 660,
+      "log": "q19-ci-logs/107855878665.log",
+      "sha256": "426fe2af929f40bce3e6dddab69578e1197d8048ad3137a9a4ef623fcc82ac15"
+    },
+    {
+      "job": "107855877577",
+      "name": "PR",
+      "existing_issue": 711,
+      "log": "q19-ci-logs/107855877577.log",
+      "sha256": "f53473892e89aee018a367198a3406a8cb0b31293835485bbf52fc0ae06e3171"
+    },
+    {
+      "job": "107855878370",
+      "name": "Production quarantine gates (rollback + ERC-7730 provenance OPEN)",
+      "existing_issue": 711,
+      "log": "q19-ci-logs/107855878370.log",
+      "sha256": "d74603bea16ed0d157373541a17d54baacaf98202dd3d3060229b312e1509691"
+    },
+    {
+      "job": "107855878660",
+      "name": "Host unit tests (pure-logic crates)",
+      "existing_issue": 711,
+      "log": "q19-ci-logs/107855878660.log",
+      "sha256": "a1fa363720d552a9f23dcd1a16a0fc8204aedc4b5be8cc8a46969a955f05101a"
+    },
+    {
+      "job": "107855878570",
+      "name": "Line coverage (cargo llvm-cov \u2014 report-only baseline)",
+      "existing_issue": 711,
+      "log": "q19-ci-logs/107855878570.log",
+      "sha256": "0a8fe12455b1c17e8cca87c80ae535e2742fe49f729cbb6b6cd815c8210078cf"
+    },
+    {
+      "job": "107855878868",
+      "name": "Slither (contracts static analysis)",
+      "existing_issue": 717,
+      "log": "q19-ci-logs/107855878868.log",
+      "sha256": "13661dd85d5da9a1a7a8078208972bdac1a7adeff565de86bdd611bb4094145d"
+    },
+    {
+      "job": "107855878776",
+      "name": "Contracts (forge test)",
+      "existing_issue": 717,
+      "log": "q19-ci-logs/107855878776.log",
+      "sha256": "d84a6b56eeced40f3da230984fa8eee9921d4cc045efd89b9c02c3b03879c637"
+    }
+  ],
+  "unchanged_baseline_inputs": [
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "proto",
+    "secure/data/erc7730/curations/manifest.json",
+    ".github/workflows"
+  ],
+  "checked_utc": "2026-09-24T22:19:48.542276+00:00",
+  "coordinator_review_required": false,
+  "coordinator_confirmed": true,
+  "source_scope": "Only EasyCrypt proof/enrollment and owner-status files changed.",
+  "coordinator_notes": [
+    "Read all seven failing-job error excerpts: the same #660/#711/#717 failures on unchanged source/workflow inputs.",
+    "All fifteen jobs completed: eight successes and seven baseline failures. Overall CI remains red."
+  ]
+}

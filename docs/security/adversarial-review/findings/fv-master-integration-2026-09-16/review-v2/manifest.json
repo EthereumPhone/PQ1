@@ -1,0 +1,280 @@
+{
+  "base": "ab9e9049a5a8c8d088966d02b7ff9a5714ae678a",
+  "created_at": "2026-09-16T15:21:32.931628+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "6c752e2cc7c110c9df15f26d8d134d438c5ae95dbd610efc1a308bf7f9c5f6c1",
+      "version": "2.1.273 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    },
+    "kimi": {
+      "path": "/home/nicola/.kimi-code/bin/kimi",
+      "sha256": "e1d5003ae182200ecc3c0631aba7e7eaeba1601a0cf690770aa0184b59227bb7",
+      "version": "0.40.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.000743,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-5.6-sol",
+      "status": "passed"
+    },
+    "kimi": {
+      "authentication": "provider_configured",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "max",
+      "requested_model": "kimi-code/k3",
+      "resolved_model": "k3",
+      "resolved_provider": "managed:kimi-code",
+      "status": "passed",
+      "supported_efforts": [
+        "low",
+        "high",
+        "max"
+      ]
+    }
+  },
+  "prompt_source": {
+    "path": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2-prompt.txt",
+    "sha256": "9c77f39f0db084c2d6e41c1cf1a46b326251e8fd6a42acb1c19327cb96b481a1"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 10110,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 304.082,
+      "ended_at": "2026-09-16T15:13:50.647919+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9c77f39f0db084c2d6e41c1cf1a46b326251e8fd6a42acb1c19327cb96b481a1",
+        "report_sha256": "0acfaa3ba11c0f6da204146d62dbca4bacf712eab0dbe2df560e6bb366df762f",
+        "runtime_sha256": "7b86480185fc2919e4a5e7b1bef7400fc8a26e1f588d85cf9593de5447fc4925",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/claude",
+        "prompt": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/claude/prompt.txt",
+        "report": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/claude/report.txt",
+        "stderr": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/claude/stderr.txt"
+      },
+      "report_words": 632,
+      "started_at": "2026-09-16T15:08:46.565957+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 33503,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "-o",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 59.912,
+      "ended_at": "2026-09-16T15:09:46.477917+00:00",
+      "environment_overrides": {},
+      "exit_code": -15,
+      "extraction_error": "Codex did not create report.txt",
+      "hashes": {
+        "prompt_sha256": "9c77f39f0db084c2d6e41c1cf1a46b326251e8fd6a42acb1c19327cb96b481a1",
+        "report_sha256": null,
+        "runtime_sha256": "c292573078f9aad3cb73dfa49aadad1cf3d255e3df0ec57eb5f496b546e5df83",
+        "stderr_sha256": "11fd0c373adf233f98ca91dd06cb7eb4e8996de3a88ce5766b07a8412ec9ec2d"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/codex",
+        "prompt": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/codex/prompt.txt",
+        "report": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/codex/report.txt",
+        "stderr": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/codex/stderr.txt"
+      },
+      "report_words": null,
+      "started_at": "2026-09-16T15:08:46.565469+00:00",
+      "status": "failed"
+    },
+    "kimi": {
+      "artifact_bytes": 293935,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+        "--",
+        "/home/nicola/.kimi-code/bin/kimi",
+        "--model",
+        "kimi-code/k3",
+        "--output-format",
+        "stream-json",
+        "--prompt",
+        "<PROMPT_FROM_REVIEWER_DIR>"
+      ],
+      "duration_seconds": 766.142,
+      "ended_at": "2026-09-16T15:21:32.707730+00:00",
+      "environment_overrides": {
+        "KIMI_MODEL_THINKING_EFFORT": "max"
+      },
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9c77f39f0db084c2d6e41c1cf1a46b326251e8fd6a42acb1c19327cb96b481a1",
+        "report_sha256": "f41ba910324c5bbff4de3f43a04a331c657c7647d8e94c2931858cfd0b1e50d3",
+        "runtime_sha256": "ad0ea9a982f0229daa76f04b1117a8c026aeb94b63a9418f58192419cdd717c9",
+        "stderr_sha256": "18f120aa230ae653607d73fcfd0ecd6c89004f339d7498362c48428bffc655d0"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/kimi",
+        "prompt": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/kimi/prompt.txt",
+        "report": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/kimi/report.txt",
+        "stderr": "/tmp/pq-fv-master-20260916-g4woz0z8/review-v2/kimi/stderr.txt"
+      },
+      "report_words": 505,
+      "started_at": "2026-09-16T15:08:46.566214+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge to master",
+  "surface": "FV evidence integration",
+  "target": {
+    "commit_after": "6bc23f2223aa820595be3bd6b04391bd7e5b6121",
+    "commit_before": "6bc23f2223aa820595be3bd6b04391bd7e5b6121",
+    "drift": false,
+    "path": "/tmp/pq-fv-master-20260916-g4woz0z8/target-v2",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "4a5ec55d432c2f4d46a041c3d231c85502a7fca6",
+    "tree_before": "4a5ec55d432c2f4d46a041c3d231c85502a7fca6"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.273 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      },
+      "kimi": {
+        "expected": "0.31.1",
+        "observed": "0.40.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0",
+      "kimi": "0.31.1"
+    }
+  },
+  "wave_started_at": "2026-09-16T15:08:46.565388+00:00"
+}

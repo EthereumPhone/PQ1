@@ -1,0 +1,163 @@
+make: Entering directory '/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/candidate/contracts/verification'
+/usr/bin/python3 -E -S -B scripts/run_easycrypt_split.py
+OK EasyCrypt manual source binding: 22 inputs (not extraction)
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling version_check v0.9.5
+   Compiling quote v1.0.45
+   Compiling typenum v1.20.1
+   Compiling serde_core v1.0.228
+   Compiling zmij v1.0.21
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.149
+   Compiling cpufeatures v0.2.17
+   Compiling cfg-if v1.0.4
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.0
+   Compiling hex v0.4.3
+   Compiling static_assertions v1.1.0
+   Compiling generic-array v0.14.7
+   Compiling syn v2.0.117
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling zeroize_derive v1.4.3
+   Compiling serde_derive v1.0.228
+   Compiling zeroize v1.8.2
+   Compiling sphincs-c10 v0.1.0 (/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/candidate/sphincs-c10)
+    Finished `test` profile [optimized + debuginfo] target(s) in 4.70s
+     Running tests/easycrypt_transcript.rs (target/x86_64-unknown-linux-gnu/debug/deps/easycrypt_transcript-dcf76e94d34527c4)
+
+running 2 tests
+test concrete_digits_match_easycrypt_bit_order_and_target ... ok
+test concrete_digest_matches_easycrypt_byte_adapter ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+### INPUTS_SHA256 082bc8c6b54bd13642f7cb526e80d429
+OK   INPUTS_SHA256 matches the committed identity
+OK   coverage: all 1208 top-level statements across 68 CONE files are pinned (roots 56 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK unique statement pins: 1339
+OK split static contract: 68 files; proof execution not performed
+OK toolchain: r2026.02, 25 pinned prover configurations
+### IMAGE ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3
+OK proof controls: direct dependency failure / import acceptance / open-proof rejection / abstract require and EOF
+OK   no dual-extension theory names on the include path
+### ECO_PURGED=13
+### ECO_REMAINING=0
+### PHASE 1 — TARGETS
+OK   target base-c10-split/BinaryTrees.ec
+OK   target base-c10-split/MerkleTrees.ec
+OK   target base-c10-split/KeyedHashFunctions.eca
+OK   target base-c10-split/TweakableHashFunctions.eca
+OK   target base-c10-split/HashAddresses.eca
+OK   target base-c10-split/RadixEncoding.ec
+OK   target base-c10-split/WOTS_TW_ES.ec
+OK   target base-c10-split/FL_SL_XMSS_MT_ES.ec
+OK   target base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca
+OK   target base-c10-split/FORS_ES.ec
+OK   target base-c10-split/SPHINCS_PLUS.ec
+OK   target cdrafts-split/BadEncCountermodel.ec
+OK   target cdrafts-split/Grind.ec
+OK   target cdrafts-split/STCR_C.ec
+OK   target cdrafts-split/C10Counter.ec
+OK   target cdrafts-split/C10Bytes.ec
+OK   target cdrafts-split/WOTS_C_Real.ec
+OK   target cdrafts-split/TCollResEnum.ec
+OK   target cdrafts-split/BadEncSplit.ec
+OK   target cdrafts-split/WOTS_C_Scheme.ec
+OK   target cdrafts-split/WOTS_C_Reduction.ec
+OK   target cdrafts-split/WOTS_C_Interactive.ec
+OK   target cdrafts-split/BadEncToTColl.ec
+OK   target cdrafts-split/BadEncStep4.ec
+OK   target cdrafts-split/BoundedIID.ec
+OK   target cdrafts-split/C10BoundedGrind.ec
+OK   target cdrafts-split/C10BoundedSigning.ec
+OK   target cdrafts-split/C10BoundedGame.ec
+OK   target cdrafts-split/XMSSMT_C_Scheme.ec
+OK   target cdrafts-split/XmssmtCC_All.ec
+OK   target cdrafts-split/RtopCSoundness.ec
+OK   target cdrafts-split/FxChain.ec
+OK   target cdrafts-split/FORS_C10.ec
+OK   target cdrafts-split/FORS_C10_Multi.ec
+OK   target cdrafts-split/GprocFORSC10.ec
+OK   target cdrafts-split/SphincsC10CapstoneWired.ec
+OK   target cdrafts-split/SphincsC10Content.ec
+OK   target cdrafts-split/C10DeployedInstance.ec
+OK   target cdrafts-split/VecDP.ec
+OK   target cdrafts-split/CountDS.ec
+OK   target cdrafts-split/C10DigitUniform.ec
+OK   target cdrafts-split/C10SurfaceKernel.ec
+OK   target cdrafts-split/C10Surface.ec
+OK   target cdrafts-split/C10Encoding.ec
+OK   target cdrafts-split/C10BoundedIID.ec
+OK   target cdrafts-split/C10BoundedReduction.ec
+OK   target cdrafts-split/C10DeployedCapstone.ec
+OK   target cdrafts-split/C10DeployedGeometry.ec
+OK   target cdrafts-split/C10DeployedScope.ec
+OK   target cdrafts-split/C10SpecControls.ec
+OK   target cdrafts-split/DarkSide.ec
+OK   target cdrafts-split/DarkSideC10.ec
+OK   target cdrafts-split/FORS_C.ec
+OK   target cdrafts-split/FORS_C_TreePort.ec
+OK   target cdrafts-split/GFailCharged.ec
+OK   target cdrafts-split/GprocVI.ec
+OK   target cdrafts-split/XmssmtCCCharged.ec
+OK   target cdrafts-split/SphincsC10CapstoneCharged.ec
+OK   target cdrafts-split/GprocT1Opre.ec
+OK   target cdrafts-split/GprocT2Trh.ec
+OK   target cdrafts-split/GprocT3Trco.ec
+OK   target cdrafts-split/GprocQBound.ec
+OK   target cdrafts-split/GprocQWired.ec
+OK   target cdrafts-split/GprocChargedQWired.ec
+OK   target cdrafts-split/WotsLegCharged.ec
+OK   target cdrafts-split/GprocWotsNamed.ec
+OK   target cdrafts-split/GprocTCollNamed.ec
+OK   target cdrafts-split/WOTS_C_Multi.ec
+### CONE_COMPILED=68 EXPECTED=68
+### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)
+OK   all closure files are requirable
+### PHASE 1e — BOTH DRIVERS (compile AND cli)
+OK   base-c10-split/BinaryTrees.ec (cli, 303 cmds)
+OK   base-c10-split/MerkleTrees.ec (cli, 105 cmds)
+OK   base-c10-split/KeyedHashFunctions.eca (cli, 156 cmds)
+OK   base-c10-split/TweakableHashFunctions.eca (cli, 84 cmds)
+OK   base-c10-split/HashAddresses.eca (cli, 63 cmds)
+OK   base-c10-split/RadixEncoding.ec (cli, 42 cmds)
+OK   base-c10-split/WOTS_TW_ES.ec (cli, 2193 cmds)
+OK   base-c10-split/FL_SL_XMSS_MT_ES.ec (cli, 679 cmds)
+OK   base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca (cli, 703 cmds)
+OK   base-c10-split/FORS_ES.ec (cli, 2191 cmds)
+OK   base-c10-split/SPHINCS_PLUS.ec (cli, 456 cmds)
+OK   cdrafts-split/BadEncCountermodel.ec (cli, 164 cmds)
+OK   cdrafts-split/Grind.ec (cli, 59 cmds)
+OK   cdrafts-split/STCR_C.ec (cli, 37 cmds)
+OK   cdrafts-split/C10Counter.ec (cli, 57 cmds)
+OK   cdrafts-split/C10Bytes.ec (cli, 67 cmds)
+OK   cdrafts-split/WOTS_C_Real.ec (cli, 120 cmds)
+OK   cdrafts-split/TCollResEnum.ec (cli, 135 cmds)
+OK   cdrafts-split/BadEncSplit.ec (cli, 52 cmds)
+OK   cdrafts-split/WOTS_C_Scheme.ec (cli, 41 cmds)
+OK   cdrafts-split/WOTS_C_Reduction.ec (cli, 204 cmds)
+OK   cdrafts-split/WOTS_C_Interactive.ec (cli, 744 cmds)
+OK   cdrafts-split/BadEncToTColl.ec (cli, 91 cmds)
+OK   cdrafts-split/BadEncStep4.ec (cli, 196 cmds)
+OK   cdrafts-split/BoundedIID.ec (cli, 47 cmds)
+OK   cdrafts-split/C10BoundedGrind.ec (cli, 36 cmds)
+OK   cdrafts-split/C10BoundedSigning.ec (cli, 87 cmds)
+OK   cdrafts-split/C10BoundedGame.ec (cli, 66 cmds)
+OK   cdrafts-split/XMSSMT_C_Scheme.ec (cli, 58 cmds)
+OK   cdrafts-split/XmssmtCC_All.ec (cli, 2624 cmds)
+OK   cdrafts-split/RtopCSoundness.ec (cli, 673 cmds)
+Traceback (most recent call last):
+  File "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/candidate/contracts/verification/scripts/run_easycrypt_split.py", line 27, in <module>
+    subprocess.run(['docker', 'run', '--rm', '--init', '--network', 'none',
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['docker', 'run', '--rm', '--init', '--network', 'none', '--env', 'PQ_EASYCRYPT_IMAGE=ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3', '--volume', '/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/candidate/contracts/verification/easycrypt/c10-port:/source:ro', 'ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3', 'bash', '-lc', 'set -e; eval "$(opam env)"; cp -R /source /tmp/proofs; cd /tmp/proofs; bash cert_gate_split.sh']' returned non-zero exit status 143.
+make: *** [Makefile:2226: verify-easycrypt-split] Error 1
+make: Leaving directory '/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-game-20260922-904beta3/candidate/contracts/verification'

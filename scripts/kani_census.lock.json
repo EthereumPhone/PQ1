@@ -262,21 +262,21 @@
   "totals": {
     "total_files": 27,
     "total_harnesses": 173,
-    "mutation_enrolled_files": 21,
-    "harnesses_in_enrolled_files": 162,
-    "files_outside_mutation": 6,
-    "harnesses_outside_mutation": 11,
+    "mutation_enrolled_files": 22,
+    "harnesses_in_enrolled_files": 164,
+    "files_outside_mutation": 5,
+    "harnesses_outside_mutation": 9,
     "mutation_groups_total": 43,
     "mutation_groups_by_tier": {
       "quick": 10,
-      "default": 30,
+      "default": 29,
+      "heavy": 1,
       "full": 3
     },
     "distinct_enrolled_harnesses": 39
   },
   "files_outside_mutation": [
     "domain/src/lib.rs",
-    "pqsigner-erc7730/src/display/primitives.rs",
     "pqsigner-erc7730/src/ir.rs",
     "pqsigner-erc7730/src/render/calldata_topology.rs",
     "pqsigner-erc7730/src/render/nested.rs",

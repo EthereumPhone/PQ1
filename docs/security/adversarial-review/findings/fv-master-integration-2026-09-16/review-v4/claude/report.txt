@@ -1,0 +1,9 @@
+VERDICT: FIX
+TARGET: 557d7216f4e711ee95daba779bdc1a835951f14c / d7ab1b27e6f0fac25a0b64593036f51d68f15009
+FINDINGS:
+- MEDIUM scripts/check_protocol_models.py:283 (lemma scan at :330) — `_spthy_lemma_source` handles comments and quotes but ignores Tamarin's preprocessor directives, so the formula scan no longer matches what Tamarin reads.
+  - **Mechanism:** the scanner counts a lemma inside `#ifdef NEVER … #endif` as live, and never reads a lemma added by `#include`. Tamarin 1.12 does the opposite on both.
+  - **Consequence:** someone can wrap a pinned lemma in `#ifdef NEVER`, so its hash still matches, and use `#include "x.spthy"` to add a live `lemma <same name>: "T"`. The scanner sees one declaration with the right hash, Tamarin reports that name as verified, and the gate passes a gutted formula. That breaks the "pin or reject every live lemma" requirement.
+  - **Evidence:** I ran tamarin-prover 1.12.0 on stdin, with no files written. The input had `#ifdef NEVER lemma visible_only_to_scanner … #endif` and `#include "/proc/self/fd/3"`, where fd 3 held `lemma hidden_gut: "T"`. Tamarin printed `lemma hidden_gut:`, and `visible_only_to_scanner` never appeared. `grep '^#'` finds no directives in the three pinned `.spthy` models, so rejecting directives breaks nothing today.
+  - **Smallest fix:** after removing comments, raise `HarnessError` on any line matching `^\s*#\s*(ifdef|ifndef|else|endif|define|include)\b`. Add self-test controls for an `#include` and for an `#ifdef`-wrapped declaration.
+GAPS: I did no live Kani, EasyCrypt or Tamarin gate runs; I checked Kani `harness_path` values only by syntax and module layout, and did not read the Lean/Verity inventory or TLC checker source in depth.

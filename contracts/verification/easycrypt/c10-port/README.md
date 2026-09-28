@@ -24,6 +24,81 @@ earlier stage of the same work and is retained only as history.
 
 Read this section before quoting anything from this directory.
 
+The [shared byte-session milestone](SHARED-BYTE-SESSION.md) adds adaptive
+whole-signer query budgets, exact byte parsing/re-encoding, fail-stop behavior
+and a same-client secret-prefix game hop. Its independent-game forgery term
+remains unbounded; it is separate from the conditional reduction family below.
+
+The [quantitative foundations](QUANTITATIVE-FOUNDATIONS.md) add an
+exact-coordinate replay hop and accepted-output bounds for the actual
+memoized grinder and complete signer. Fixed prior-opening sets and cached
+query charges remain explicit; adaptive accumulated coverage and the final
+component reduction are still open.
+
+The [complete-session history results](COMPLETE-SESSION-HISTORY.md) establish
+new-message freshness and classify live signing contexts as fresh or previously
+completed. Repeated contexts retain their accepted digest; the novel-event
+bound accounts for those repeats explicitly. The accumulated-opening and
+complete byte-model component reductions remain open.
+
+The [raw authentication-path results](RAW-PATH-CORRESPONDENCE.md) connect
+actual Merkle/FORS recovery to retained oracle entries and compare it with
+a recorded reference path. Matching roots imply matching leaves/secrets or
+a recorded node collision, under explicit width and reference premises.
+The [actual construction results](RAW-BUILDER-PATHS.md) now supply those
+reference witnesses from the real stack, authentication capture and leaf-hash
+calls. Actual FORS signing/recovery agrees with its internally computed root.
+The [actual WOTS](RAW-WOTS-CORRECTNESS.md) and
+[complete FORS forest](RAW-FOREST-CORRECTNESS.md) results supply component
+sign/recover correctness, including count failure and the special last tree.
+The [hypertree layer](RAW-LAYER-CORRECTNESS.md),
+[complete structured signer](RAW-SIGNER-CORRECTNESS.md) and
+[serialized signer](RAW-BYTE-SIGNER-CORRECTNESS.md) now have honest correctness
+theorems against the earlier actual key-generation root. Bounded signing
+failure remains explicit. The [shared-oracle honest-error transfer](RAW-PHYSICAL-HONEST-CORRECTNESS.md),
+[public-node collision bound](RAW-PUBLIC-NODE-COLLISIONS.md),
+[complete byte-game application](RAW-BYTE-PUBLIC-COLLISIONS.md) and
+[zero-sentinel charge](RAW-ZERO-NODE-CHARGE.md) supply explicit probability
+terms. Adaptive opening coverage, component forgery extraction and the
+numerical end-to-end forgery bound remain open.
+
+The [reverse WOTS recovery result](RAW-WOTS-EXTRACTION.md) derives reference
+chain openings from matching actual WOTS and Merkle-layer recovery, outside
+the charged collision/zero events. Actual key-generation and Merkle-builder
+comparison harnesses supply the references. The complete adaptive byte-game
+component reduction and its probability charges remain open.
+
+The [actual byte-game top-layer extraction](RAW-BYTE-TOP-EXTRACTION.md) now
+selects the reference from the earlier key-generation history after arbitrary
+adaptive calls. Successful complete verification yields a top opening tied to
+the message hash and supplied top signature. The remaining forgery event stays
+explicit; lower-layer/FORS extraction and adaptive probability charges remain
+open, and this bridge alone gives no smaller numerical bound.
+
+The [linked subtree bridge](RAW-SUBTREE-EXTRACTION.md) now records both actual
+verifier layers and separates a top message without a recorded lower root
+from linked WOTS openings in both layers. Actual successful signing establishes
+the matching lower-root reference. The same-game probability residual remains
+explicit; FORS and adaptive probability charges are still open.
+
+The [actual FORS bridge](RAW-FOREST-EXTRACTION.md) now binds the recovered
+forest to both verifier layers. With complete retained construction references,
+it identifies the twelve ordinary private leaves and the distinct last
+root-as-secret. Actual signing creates these references and later permitted
+calls preserve them. Missing-reference cases and the successful-forgery
+probability residual stay explicit; adaptive exposure charges remain open.
+
+The [adaptive response ledger](RAW-ADAPTIVE-EXPOSURES.md) now preserves every
+successful returned signature, including repeats. Exact projection preserves
+the original byte game's probability. All entries retain their construction
+references; the ledger matches the signed-message list and respects the cap.
+Full information-exposure and numerical private/encoding charges remain open.
+
+The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
+scope checks and expected proof-driver rejections. An exact theorem-statement
+mismatch does not establish that the altered statement is false or that every
+term in a bound is necessary.
+
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a
@@ -40,7 +115,7 @@ binders**, not off lines ending in `=>`:
 | `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED` | 6 | `c <= p_tgts`, `0%r <= mkg_adv`, four `dfC0` width disequalities |
 | `..._TIGHT` | 5 | the same at `mkg_adv := 0` — strictly tighter, **no free real** |
 | `..._TIGHT_AT_DEPLOYED_PARAMS` | **2** | `c <= p_tgts`, `size (emb_in witness) = 8*n + c10_r` |
-| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` (a **non-constant rank encoding of the right width** — *not* injective here, and *not* the firmware's u32) |
+| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` (the fixed full-u32 rank encoding; equality is now proved) |
 
 **Quote `..._TIGHT_AT_DEPLOYED_PARAMS`.** It **logically subsumes**
 `..._TIGHT_AT_PINNED_ENCODER`: since `emb_in = c10_embg` implies the width fact (via
@@ -53,16 +128,186 @@ only when that is the point being made, and say so.
 said "neither supersedes the other". The pinned proof at `GprocChargedQWired.ec` is the
 disproof.)
 
-**And the pinned encoder is NOT injective in that theorem.**
-`C10DeployedInstance.ec:336` proves `c10_embg_inj` only under
-`STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`, and the pinned headline carries **no such premise** —
-its hypotheses are `c <= p_tgts` and `emb_in = c10_embg`, nothing else. With `cntr` an
-abstract FinType of unbounded cardinality, a 32-bit rank encoding **need not be injective at
-all**. What is available premise-free is **non-constancy**. Calling it an "injective rank
-encoder" was itself a *correction*, made 2026-08-29, and was still too strong — the second
-overstatement in this spot.
+**Concrete C10 correspondence (2026-09-21 encoder/abort batch).** The actual
+`WOTS_C_Real` consumer uses the full ascending u32 counter domain and fixed
+compact input encoder. `C10Bytes` proves the physical-byte adapter; signing
+search examines counters 0 through 9,999,999, while verification keeps all u32.
+The standard library Subtype axioms and generic clone obligations remain
+explicitly inventoried. No new project axiom or admit is introduced here.
 
-**Both remaining premises are substantive, and they differ in kind.**
+`WOTS_TW_ES.encode_msgWOTS` is now a definition, using low-order radix digits
+of the wide digest. Its designated witness is concrete. `C10Encoding` proves
+that the SPHINCS_PLUS consumer takes digit i from integer bits 3i through 3i+2,
+in increasing significance order, and that its actual target is 205. It connects
+that consumer predicate to the checked CountDS census: for an independently
+uniform 256-bit digest, acceptance is exactly
+`22169393903687611906220091621190388 / 2^129`. `C10DigitUniform` proves the
+uniform digit law with all 127 unused bits retained in the input distribution.
+This is uniform-input arithmetic, not a claim about SHA-256 output independence.
+
+`C10BoundedSigning` adds an option-valued signer: exhaustion produces `None`.
+Successful output, including the signature chains and counter, agrees with the
+existing total signer. Its bounded oracle records failure, produces no further
+signatures after failure, and forwards successful queries with the original
+reply and state. The new forgery game retains the existing winning conditions
+and rejects runs whose failure flag is set. Oracle globals must be excluded
+from admissible adversaries, as in the existing game reductions. Dummy replies
+after failure are an experiment device; the Rust implementation panics. These
+models do not claim a recoverable firmware error API or physical fault behavior.
+
+`C10BoundedGame.bounded_win_le_total` proves that the guarded bounded WOTS
+game's winning probability is at most the existing total game's, for the **same
+adversary**. The oracle and adaptive `choose` executions agree until failure;
+`bounded_failed_query_stops` proves that subsequent requests preserve failure,
+return only the dummy reply, and append no signature record. The comparison
+requires explicit adversary termination for lossless oracle implementations and
+excludes direct access to private signing/hash-oracle globals. It has no
+prefix-hit, IID, or real-hash probability premise and does not condition away
+failed runs.
+
+`C10BoundedReduction.bounded_interactive_D1` composes this inequality with the
+existing interactive WOTS reduction. It retains every premise of
+`interactive_D1`, including universal counter reachability and collection-tweak
+well-formedness. Those premises are **not discharged** by the comparison. The
+collection-tweak condition is the original WOTS-level restriction, not the
+member-aware condition needed by the hypertree reduction. This corollary does
+not close the failure-aware whole-scheme SPHINCS+C reduction.
+
+`C10BoundedMA.bounded_interactive_D1_MA` now gives the bounded game a
+member-aware two-challenge bound **without universal counter reachability (N2)
+or a charged grind-failure term**. Only successful searches append records;
+their counters witness reachability. An up-to-bad coupling carries this good
+transcript into the total game, and the collision split preserves it on the
+WOTS-TW branch. The collision branch uses the existing member-aware S-TCR
+reduction. This is an unconditional-in-N2 probability inequality for one
+admissible terminating adversary; target cap, address separation, encoder bridge,
+and member-aware collection separation remain explicit premises. The existing
+challenge reductions can still enumerate the full counter domain: no useful
+running-time bound, challenge-probability estimate, or hypertree composition
+is established by this theorem.
+
+`C10BoundedHypertree` now supplies an option-valued signer over the existing
+independently sampled key cube. It proves termination, exactly `d` layers on
+success, agreement with the total signer on successful outputs, and no output
+when the first layer exhausts. After any layer failure the model performs no
+further cryptographic calls and returns `None`. Its nonadaptive game withholds
+the forgery call after failure; its win probability is bounded by the existing
+total hypertree game for the same adversary. The source uses a separate loop
+index so failure cannot prevent termination. These are mathematical termination
+claims, not useful wall-clock bounds or a recoverable Rust error API.
+
+`C10BoundedLeaf.bounded_leaf_member_aware` instantiates the N2-free WOTS
+bound with the actual `R_MEUFGCMAWOTSC_EUFNAGCMA_C` reduction.
+`C10HypertreeAccepted.bounded_hypertree_accepted` now gives the bounded
+hypertree a **four-term bound with neither N2 nor a grind-failure charge**:
+WOTS-TW, member-aware S-TCR, PK-compression collision and tree collision.
+The older five-term `C10HypertreeCharged` theorem remains available.
+
+The proof observes the same adversary's public signing transcript. Its bounded
+win implies acceptance of every supplied path. Strengthened original/C/V and
+leaf game hops retain this observation; proofs of the actual reduction's
+`choose` and `forge` establish cube consistency, transcript shape and exact leaf
+query accounting. `C10HypertreeCoverage` supplies the all-path coverage step:
+262,144 paths cover all 262,656 cells. Hence the accepted transcript excludes
+`gfail_of` on the actual leaf records. A single path cannot support this argument.
+
+The RHS reductions explicitly use `Observe(A)`. The observer records public
+inputs and delegates to the same `A`; its private globals are excluded from
+`A`'s access. The original collision-oracle type premises are transferred by
+proved equivalences. Target cap, address separation, encoder bridge,
+member/type separation and forge termination remain explicit premises. This
+is the existing nonadaptive, independently sampled key-cube model. It is not
+an adaptive full-SPHINCS+C theorem, a numerical challenge bound, or a
+query-efficient reduction.
+
+`SharedROBounded` models a classical lazy random oracle with memoized answers.
+For a unique input list, exhaustion is at most `(1-p)^fresh`, counting inputs
+absent from the entry history. The history and chosen list may be arbitrary;
+cached successes only help, and cached failures are replayed. The exact IID
+law additionally requires every input to be fresh. `C10SharedSearch` instantiates
+these results with the actual C10 predicate and the distinct physical inputs
+for counters 0 through 9,999,999. `C10SearchBounds` proves exhaustion at most
+`2^-305` if at least 9,994,240 are fresh (at most 5,760 already known).
+This is a **search-failure bound in that classical model, not a scheme security
+level**. The search has no interleaved external oracle calls, and does not
+return an updated history for a multi-procedure simulation.
+`C10StatefulSearch` adds a final-history result, including successful fresh
+answers, and proves its result projection equals the existing search.
+
+`C10RawOracle` supplies a procedural classical raw-input oracle with one private
+persistent table. Instrumentation preserves arbitrary adaptive contexts' results
+and complete histories. Cached calls increment total calls without consuming
+another random draw. Its R-length partition coupling preserves raw access to
+both partitions; it does not assume the adversary cannot guess a secret input.
+`C10RawGrind` runs the actual secret-prefixed R layout and padded high-128-bit R
+through that same oracle before H_msg. It proves termination, accepted-output
+and width properties, and at most **20 million calls** per 10-million-trial
+search. The explicit secret input represents the same `sk_seed` used by the
+implementation, not a newly independent R key. No secret-input freshness or
+key-guess bound is assumed or established.
+
+`FORSC10Digest` proves exact `2^-11` forced-zero acceptance for a fresh full
+256-bit query, conditional on its absence from the entry history. This is not
+the conditional law of an arbitrary cached query or the full signing stream.
+
+`C10HashDomains` checks manual physical layouts: H_msg is 160 bytes, R derivation
+is 103 or 119, and WOTS digest/pair hashing are 128. Equal-width WOTS/tree inputs
+need their distinct address-type tags. For fixed seed/root/message, repeated R
+means repeated H_msg input. These lemmas do not identify all abstract collection
+members with the real shared SHA-256 oracle.
+
+`C10Randomizer` proves that truncating a uniform 256-bit draw to its high 128 bits
+is uniform, retains repeats, and instantiates the standard-library birthday
+bound for at most 10 million draws **in the whole experiment**, including adaptive
+stopping with explicit losslessness and call-budget premises. It does not prove
+that the actual secret-keyed nonce stream is IID. `FORSC10.bounded_r` is a finite
+IID-R companion of the existing conditioned-key consumer: it uses the same
+`dmkey`, `good` and fixed `mco`, and proves exhaustion and the exact success/failure
+mixture. Repeated R values are allowed; no birthday loss is needed merely to
+express that fixed-function rejection law. Its success law still uses the
+existing `good_pos` axiom, and does not set the good-key mass to `1/2048`.
+
+`BoundedIID` and `C10BoundedIID` retain the separate independent-digest laws.
+None of these results establishes real SHA-256 independence, a quantum-oracle
+bound, or a numerical forgery bound. The existing reductions use uncosted pure
+hash operators and may enumerate the full u32 domain. Closing resource accounting
+requires a costed oracle experiment and corresponding reductions, not replacing
+the structural target cap `c` with a hash-query budget. The remaining common
+experiment/coupling and quantitative ITSR obligations stay under #100/#295;
+#509 remains the deferred owner-triggered combined playbook pass.
+
+The source boundary is pinned in `cert-source-binding.json`. The full split
+wrapper checks it and runs `easycrypt_transcript` against the real Rust helpers:
+210 WOTS transcript cases, 259 digit inputs, H_msg/pair layouts, and 258
+FORS/hypertree field inputs, including every individual bit and the WOTS target
+witness. These finite checks and the manual EasyCrypt model are
+separate from Aeneas/Lean's `extract_digits_spec`; no cross-assistant theorem or
+Rust extraction is implied. Both abstract digest members must be projections
+of the **same** SHA-256 result: dfC0 is the low half (bytes 16–31 in physical
+big-endian order), dfC1 the high half. The collection is still abstract.
+
+The current perimeter contains 90 proof files, 78 roots, 1,561 unique declaration
+pins, 1,374 statements and 98 controls. The new controls preserve the guarded
+comparison and absorbing-failure contract, and reject dropping the guard or
+clearing the failure flag. The member-aware controls also reject erasing the
+good-history premise and appending a failed-query record; a positive control
+applies the exact new final theorem. The hypertree/leaf controls also reject
+erasing successful-output conditioning, releasing an empty signature after
+exhaustion, and omitting the leaf wrapper's PK-compression member separation.
+The new history/domain/randomizer controls also reject independent resampling
+of cached or duplicate inputs, single-path cube coverage, the wrong H_msg width,
+truncating the low half, and erased FORS exhaustion. The accepted-history/raw-oracle
+controls additionally reject removed history or
+observer privacy, treating cached queries as fresh, drawing again on replay,
+and dropping a successful answer from the returned history. The raw census
+contains 1,813 rows; this batch adds definitions and module interfaces, with
+no new axioms, admits or clone assumptions. The earlier fully instantiated
+Birthday clone retains its explicit losslessness/call-budget premises; existing axioms/admits are unchanged.
+The earlier encoder/abort replay and review remain
+recorded in the [September 21 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-encoder-abort-2026-09-21/README.md).
+The bounded-game batch passes its full replay and bounded Astra/Opus source
+review; the [September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-game-2026-09-22/README.md)
+records the exact source, interrupted run, completed evidence and remaining boundaries.
 
 * **`c <= p_tgts` is a reduction-side TARGET CAP — not a bound on how many messages a key
   may sign.** This is worth spelling out because the tree records mistaking it for a query
@@ -74,9 +319,7 @@ overstatement in this spot.
   many targets as there are instances: `C10DeployedGeometry.ec:468` classifies it as "NOT A
   THEOREM AND NOT MEANT TO BE … satisfiable by construction and not derivable from the
   closure".
-* **The `emb_in` condition constrains a FREE op** — nothing in the closure pins `emb_in` —
-  and is a *fidelity* claim about the deployed serialisation, argued but **not
-  machine-checked against `sphincs-c10`**.
+
 
 **The theorem is ROLE-AGNOSTIC, and that is deliberate.** `EUFCMA_C10`
 (`FxChain.ec:255`) is the textbook **single-key stateless EUF-CMA game**: one keypair, one
@@ -108,15 +351,53 @@ conclusion is now the BadEnc disjunction, and MM45's admitted injectivity is rep
 explicit named probability `Pr[Game4_WOTSTWES_BadEnc(…) : res /\ BadEncFlag.badenc]` in
 `MEUFGCMA_WOTSTWESNPRF_Charged` — carried **unreduced**, exactly as this artifact carries
 `ITSRC10`. **LEDGER 242 → 241**, the first assumption *removed* rather than relocated in
-this arc; taint closure **6 → 2**. `extract_op` remains.
+this arc; taint closure **6 → 2**. The deployed WOTS leg is now **charged** too —
+`WotsLegCharged.ec::wots_leg_charged_at_deployed` (2026-09-01) replaces `GprocQWired`'s
+opaque WOTS summand with the four named UD/TCR/PRE/encoding-collision terms at the
+deployed adversary, at the price of six extra separations on `F` and an explicit
+**grind-reachability** premise. `GprocWotsNamed.ec` then composes it into the deployed
+headline itself, so a fifth family member exists whose WOTS leg is **named rather than
+opaque** — at 4 premises instead of 2. Quote the 2-premise statement unless you want that.
+**Since 2026-09-14 a sixth,** `GprocTCollNamed.ec`, carries that encoding-collision term one
+layer up as `Pr[T_COLL_RES_ENUM(…)]` (via `badenc_le_tcoll`), at one more separation and no new
+premise. It is **strictly weaker as an inequality** — a corollary of the fifth — and buys *which*
+term is carried, not a number. See `UPDATE 2026-09-14`. `extract_op` remains — and **closing it is explicitly NOT
+the next unit**: it targets a *local mirror* game, not the headline's term, which the fully
+proven Gproc route already reaches. See `UPDATE 2026-09-01` and `scratch/scope_fextractop_VERDICT.md`.
+
+**That charged term is NOT a bound, and since 2026-08-31 a gate says so.** It is provably
+**1** for an explicit replay adversary given one `P`-satisfying encoding collision —
+`cdrafts-split/BadEncCountermodel.ec::badenc_is_one`, proved 2026-08-12 and promoted into
+the certified closure on 2026-08-31 (it had been sitting in `experiments/`, which the cone
+census does not cover). A bound must live one layer up, at +C, where the WOTS message is
+`ThC ps ad x c`: the adversary picks the *preimage*, not the digest, so a collision must be
+found rather than handed over. That layer's game, `T_COLL_RES_ENUM`, has been a closure member
+since 2026-09-14 and is **also unbounded** — no derivation connects its surface count to an
+advantage. Read that theorem's hypotheses: it is
+an **implication**, and that collisions exist at deployed geometry rests on the target-sum
+antichain bound (2^123.76 < 2^128) which this tree states in prose and does not mechanize.
 
 **The remaining admit.** PHASE 5 checks that **no named application path**
 reaches a headline result, and none does. That is *not* the same as proved containment:
 this artifact measured (2026-08-28) that a bare `smt()` reaches the admitted lemma without
 naming it, at **921 candidate sites** — and the headline proof itself contains bare `smt()`
 calls. No escaping path is exhibited, but the categorical phrasing "contained, neither
-reaching any headline" overstates what is checked. The admit-free replacement for the WOTS one is landed
-(`WOTS_TW_ES.ec::admit_free_caller_split`) but **deliberately not wired**.
+reaching any headline" overstates what is checked. The admit-free replacement for the WOTS
+one (`WOTS_TW_ES.ec::admit_free_caller_split`) **is wired** — `nhchwcoll_hchwpre_msg` is
+proved from it — and this sentence said "deliberately not wired" for a day after the
+promotion commit had wired it (corrected 2026-08-31).
+
+> **UPDATE 2026-09-15 — the paragraph above describes an admit that no longer exists.** Its reach
+> demonstration used `nhchwcoll_hchwpre_msg`, the WOTS admit removed on 2026-08-30; the 921 figure
+> counts bare `smt()` sites cone-wide. For **`extract_op`, the admit that remains**, containment is
+> **scope-level**, not name-level. Its theory `FORS_C_TreePort` is not loaded in any headline
+> environment, so no tactic there can use it: not named, not a bare `smt()`, not a clone, not a module
+> argument. EasyCrypt itself reports its symbols unknown in each of the six headline environments
+> (measured). The gate re-checks this on every run through `GprocTCollNamed`, whose require-cone holds
+> the other five; that chain is **not yet gated itself**. It all rests on EasyCrypt building a file's
+> environment from its `require` closure. See `UPDATE 2026-09-15`.
+> **[Later the same day:** the chain caveat is closed. Each of the six headline files now has its own
+> negative scope control, so the gate no longer relies on the chain. See `UPDATE 2026-09-15 (later)`.**]**
 
 #### How the headline got here — dated history, kept deliberately
 
@@ -239,9 +520,9 @@ headline swap:
   numerically meaningful bound* — stands even for the Q-wired ones. Correcting
   the `Q` sentence does not make the headline numeric; it moves the honest
   residual onto the term that genuinely cannot be reduced.
-* Each cone contains **two admits**, every one pinned by statement digest:
-  * split — `nhchwcoll_hchwpre_msg` (`base-c10-split/WOTS_TW_ES.ec`), inherited
-    from MM45; and `extract_op` (`cdrafts-split/FORS_C_TreePort.ec`), the
+* The split cone contains **ONE admit**; the fork cone still contains two. Every
+  one is pinned by statement digest:
+  * split — `extract_op` (`cdrafts-split/FORS_C_TreePort.ec`), the
     OpenPRE branch of the FORS bad-event cascade. `extract_op`'s own comment
     names four un-discharged parts (R-KEY, R-SIM, R-INDEX, R-OPEN) and records
     that closing it needs **exposed randomized leaf keygen** — an upstream
@@ -276,16 +557,38 @@ closure files). A container recipe is in `../docker/`.
 # $PATH, so a bare `bash cert_gate_split.sh` from a host shell silently uses whatever
 # EasyCrypt is installed there and produces a PLAUSIBLE BUT WRONG receipt.
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
-  cd /work && bash cert_gate_split.sh'"   # 38 targets, 1078 pins, 1637 census rows
+  cd /work && bash cert_gate_split.sh'"   # SUPERSEDED 2026-09-17 -- read the note below before running this
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
   cd /work && bash cert_gate_fork.sh'"    # 19 targets,  9 pins, 1089 census rows
 ```
+
+> **:warning: THE SPLIT RECIPE ABOVE NO LONGER WORKS (2026-09-17).** The gate now checks its own
+> toolchain: `tools/split_contract.py --toolchain` compares the observed EasyCrypt `git-hash:` and
+> the sorted prover inventory against `cert-toolchain-split.json`, **and requires the environment
+> variable `PQ_EASYCRYPT_IMAGE` to equal the pinned image digest**. A bare `bash cert_gate_split.sh`
+> — including the `docker exec ec-grind` form above — raises there and exits at
+> `cert_gate_split.sh:182`, *before any phase runs and before any `### RESULT` line is printed*.
+> Run it through the wrapper instead, from the repo root:
+>
+> ```sh
+> python3 contracts/verification/scripts/run_easycrypt_split.py              # full gate
+> python3 contracts/verification/scripts/run_easycrypt_split.py --controls   # toolchain + proof controls only
+> ```
+>
+> The wrapper does `docker run --rm --init --network none` on the digest-pinned image, mounts this
+> directory read-only, copies it to a disposable path and runs there. The fork recipe is untouched.
+> `bash cert_gate_split.sh --identity-only` remains available as a fast per-PR identity check that
+> deliberately needs no proof toolchain.
+
 
 `LC_ALL=C` is REQUIRED: identity hashing is collation-sensitive.
 
 **Check the header lines before believing any receipt.** A valid run prints
 `### TOOLCHAIN GIT hash: r2026.02` and `### PROVERS <hash> 25 configurations`.
 If it says `r2026.06` / `6 configurations`, it ran on the host — discard it.
+If it says `TOOLCHAIN UNKNOWN` / `0 configurations`, the login shell was skipped and
+opam never put `easycrypt` on `PATH` (every target FAILs within seconds): the
+`bash -lc 'eval $(opam env); …'` above is load-bearing, not decoration (2026-09-14).
 This paragraph exists because the block above previously showed a bare
 `bash cert_gate_split.sh`, which contradicted the r2026.02 requirement stated
 one line earlier and duly produced a host-toolchain run on 2026-08-25.
@@ -308,6 +611,11 @@ phase is what catches that), that named results are `lemma` and not `axiom`,
 statement digests, a require-cone census compared as a multiset against a
 committed baseline with additions *and* removals fatal, two census-regression
 canaries, and controls checked for polarity **and declared failure reason**.
+Later phases, each described in its dated UPDATE below, add both drivers (`compile`
+and `cli`), statement coverage, the policy-cap quarantine, the FORS+C grinding margin,
+and taint containment. Control inventories are equalities against committed constants
+(`EXPECT_CTLS`, `EXPECT_TAINT_CTLS`, `EXPECT_TAINT_COUNT_CTLS`), not floors and not a
+trusted exit status (2026-09-14).
 
 ## Layout
 
@@ -380,17 +688,30 @@ this snapshot specifically so this finding travels with the artifact.
   verified **non-load-bearing** for the headline: `FORS_C_TreePort.ec:1511`
   (a leaf nothing requires) and `base-c10-split/WOTS_TW_ES.ec:1513` (feeds a
   theorem the capstone never applies).
-  **RE-VERIFIED 2026-08-24 against the NEW headline.** This claim is
-  capstone-relative, so changing the headline could have invalidated it — the
-  `:1513` admit becomes load-bearing for anything that *reduces*
-  `M_EUF_GCMA_WOTSTWESNPRF` by applying the existing WOTS theorem. Measured on
-  both statements: `GROUNDED` **and** `CHARGED_QWIRED` each carry
-  `M_EUF_GCMA_WOTSTWESNPRF` **unreduced on the RHS**, so neither applies that
-  theorem and both admits stay non-load-bearing. Checked rather than carried
-  over.
-* `Pr[M.F.ITSRC10 ..]` and `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` are carried
-  unreduced. Reducing the latter must NOT be done by applying the existing WOTS
-  theorem — that consumes the `:1513` admit and would make it load-bearing.
+  **SUPERSEDED 2026-09-02 — and by my own work, which is why it is worth
+  spelling out.** This bullet carried a `RE-VERIFIED 2026-08-24` measurement:
+  *"the `:1513` admit becomes load-bearing for anything that reduces
+  `M_EUF_GCMA_WOTSTWESNPRF` by applying the existing WOTS theorem … `GROUNDED`
+  and `CHARGED_QWIRED` each carry it unreduced on the RHS, so neither applies
+  that theorem and both admits stay non-load-bearing."* Two of its three claims
+  have since expired: **the `:1513` admit no longer exists** (removed
+  2026-08-30), and **a statement now does reduce that term** —
+  `GprocWotsNamed.ec` (2026-09-01) applies the **charged** theorem, which is
+  admit-free. The conclusion nevertheless still holds, for a better reason: the
+  remaining admit is not activated by any of it.
+* `Pr[M.F.ITSRC10 ..]` is carried unreduced and remains the honest headline
+  blocker. `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` is carried unreduced **in this
+  family**, and is **named** in the parallel
+  `GprocWotsNamed.ec::…_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED` at the price of two
+  extra premises.
+  **The prohibition that used to close this bullet is RETRACTED (2026-09-02).**
+  It read: *"Reducing the latter must NOT be done by applying the existing WOTS
+  theorem — that consumes the `:1513` admit and would make it load-bearing."*
+  Sound when written; no addressee since 2026-08-30. Note this is the **same**
+  prohibition as `GprocChargedQWired.ec:39-42`, which was retracted in the `.ec`
+  file on 2026-09-01 **without noticing it was also stated here** — found the
+  next day by a deliberate sweep. A stale prohibition never fails a gate; it
+  only forecloses work, silently.
 * Residual Q2b (pinning `encode_msgWOTS` to the deployed digit map) is open;
   see `scratch/scope_q2b_VERDICT.md`. It is fidelity, not a security term.
 
@@ -928,6 +1249,8 @@ previous version made exactly this conflation*.
 **And the term is not in the certified statement at all.** VERIFIED: `grep -rn
 T_COLL_RES_ENUM cdrafts-split/ base-c10-split/` returns nothing; the certified
 capstone RHS (`SphincsC10CapstoneWired.ec:595-604`) carries four other terms.
+*[Superseded 2026-09-14: `T_COLL_RES_ENUM` is now a closure member and appears on the right-hand
+side of `GprocTCollNamed.ec`'s headline — see `UPDATE 2026-09-14`.]*
 
 **The query count fails independently.** VERIFIED on the live closure member
 (`XmssmtCC_All.ec:752`): `R_MEUFGCMAWOTSC_EUFNAGCMA_C.choose` computes and stores
@@ -2935,3 +3258,1279 @@ statements pinned = 1076/1076 | coverage 991/991 | added=0 removed=0 | ledger=24
 OK  taint containment: closure = 6 lemmas, none of the 7 headline results is in it
 OK  taint controls: pass=11 fail=0
 ```
+
+### UPDATE 2026-08-31 — the countermodel ENTERS the closure, and I audit the claims my own promotion commit left stale
+
+Two units, two gate runs (the second because of a trap recorded at the end). Neither
+unit proves anything new; both close gaps between what this artifact *says* and what
+its gates *check*.
+
+**Unit 1 — `BadEncCountermodel.ec` is now a certified closure member (34 → 35 roots).**
+
+The 2026-08-30 promotion replaced MM45's admitted encoder injectivity with an explicit
+charged term. The obvious next question — *how small is it?* — was already answered on
+2026-08-12, mechanised on 2026-08-13, and written up in the `UPDATE 2026-08-13 (later)`
+section above: **it is 1**, for an explicit replay adversary, given one `P`-satisfying
+encoding collision.
+
+That answer was sitting in `experiments/wots-badenc/base/`. **`cert_gate_split.sh`'s cone
+census does not cover `experiments/`.** So the single fact that stops a reader taking the
+charged summand for a *bound* was invisible to every gate, free to rot against the tree
+it describes, and — as it turned out — already carrying three citations to line numbers
+that exist only in the experiment's base. It is now `cdrafts-split/BadEncCountermodel.ec`.
+
+It compiled against `base-c10-split` **unchanged**; the promoted body is byte-identical to
+the experiment's copy (verified by `diff`), with only a banner and three corrected
+citations added. Four must-fail controls came with it
+(`scratch/badenc_ctl{A,B,C,D}.ec`, regenerated for the split tree by
+`scratch/mkctl_badenc_split.sh`), and they are registered in `cert-controls-split.tsv`
+with the reasons **observed**, not assumed. The control floor moved 6 → 10.
+
+**The pre-set criterion was LEDGER UNCHANGED AT 241, and it held.** The countermodel has
+0 admits and 0 axioms, so the only census movement is:
+
+| row | class | delta |
+|---|---|---|
+| `abstract-op cm` / `cm'` / `wad0` | **parameters** | 214 → 217 |
+| `defined-op pkfs_fun` | definitions | 423 → 424 |
+| `module A_coll` | meaning | 393 → 394 |
+
+Nothing removed. The three free ops landing in **parameters** is the point, not a
+formality: the colliding pair is a **hypothesis**, and the census is where that has to be
+visible. Statement coverage went 993 → 1016, all 23 new statements pinned in the same
+commit.
+
+**What this does and does not change.** Nothing about the headline. The artifact's
+position is unchanged and was already stated: there is no bound on the BadEnc term at the
+WOTS-TW layer *because it is 1*, and the bound has to live at +C where the message is
+`ThC ps ad x c` and the adversary cannot choose it. What changed is that a gate now
+enforces that this statement still exists and still says what it says.
+
+**Read the conditional.** `badenc_is_one` is an **implication**. That collisions exist at
+deployed geometry rests on the target-sum antichain bound (2^123.76 < 2^128), which this
+tree states in **prose** at `WOTS_TW_ES.ec:711-725` and does **not** mechanize. Exhibiting
+a deployed-geometry pair is still residual **Q2b**.
+
+**Unit 2 — three claims that my own 2026-08-30 commit falsified and left standing.**
+
+I checked what `7f3d747` actually did to each site rather than assuming it had simply
+missed them, and the truth is worse than "missed":
+
+| site | what the promotion commit did | what it left saying |
+|---|---|---|
+| `WOTS_TW_ES.ec:1492-1531` | **edited this exact block** — its only change here was `:6542` → `:6598`, a line-number refresh **inside** the sentence "NOTHING IS WIRED HERE, DELIBERATELY" | that sentence, plus "leaving the single missing obligation OPEN as exactly ONE admit" and "The open goal is precisely the T-COLL-RES obligation (Def 11)" |
+| `cert-taint-closure.tsv` | **deleted the four data rows** for chain A | every sentence describing those rows: "the cone's **two** admits", "THE TWO CHAINS" with chain A as an ADMIT, and "WIRING `_Unfolded` … IS THE NAMED REGRESSION this file guards against" |
+| `README.md:118` | untouched | the admit-free replacement "is landed … but **deliberately not wired**" — it *is* wired; `nhchwcoll_hchwpre_msg` is proved from it |
+
+The first row is the one worth keeping. **A citation was carefully maintained inside a
+claim the same commit was making false** — the diff is a *correction* to a sentence that
+should have been deleted. A line-number refresh reads as diligence and is exactly what
+makes the surrounding prose look freshly checked. The second row is the same shape at file
+scope: the data moved, the prose describing the data did not.
+
+All three replaced **at the sentence**, not annotated underneath — the failure this file
+recorded at `GprocChargedQWired.ec:436` was a retracted claim left standing with a
+correction below it. The `Def 11` label is dropped rather than re-cited: it was never
+checked against the definition it names.
+
+**Two things I got wrong, both caught by review rather than by me.**
+
+1. **I re-derived `badenc_is_one` from scratch before discovering it already existed.**
+   Independently, against the current split tree, with a different adversary
+   (module globals rather than free ops) — and it compiled GREEN, converging on the same
+   helper shape, the same losslessness + hoare split, and the same statement. **GPT-5.6
+   found the existing file**; I had not looked in `experiments/wots-badenc/base/` because
+   I was reading the charge as new. This is the fourth recorded instance of publishing
+   into a gap this tree had already filled. The reproduction is kept at
+   `scratch/badenc_replay.ec` as a receipt and is deliberately **not** a closure member:
+   one statement of this fact belongs in the cone, not two.
+2. **I wrote a forward reference to a lemma that did not exist.** While correcting the
+   stale block in `WOTS_TW_ES.ec` I cited ``badenc_replay_pr1 (:3390 ff.)`` — my own
+   in-progress name — as though it were landed. GPT-5.6 flagged it; it now cites
+   `cdrafts-split/BadEncCountermodel.ec::badenc_is_one`.
+
+Kimi K3 independently confirmed the claim and its buildability, and corrected the
+direction of one of my framings; GPT-5.6 additionally corrected "the term is provably 1"
+to its honest existential form — it is 1 **for that adversary under that interpretation**,
+not identically.
+
+**A gate trap worth recording: this gate commits TWO inventory counts and they are
+different numbers.** Run 1 came back RED on one line — `FAIL statement pin file
+truncated` — with everything substantive already green. The cause is that
+`EXPECT_PINS` counts **manifest rows** (1078 → 1101, `op:`-prefixed rows included)
+while `EXPECT_STMTS` counts **top-level statements in the cone files** (993 → 1016).
+I had bumped the second and not the first, and the failure message ("truncated")
+describes a completely different fault from the one that occurred. Both constants now
+carry a comment saying the other exists. Fixing `EXPECT_PINS` edits
+`cert_gate_split.sh`, which is itself inside the hashed set, so the identity moved a
+second time within the hour — both values are in the `cert-identity.tsv` log.
+
+#### Receipt — run 2, GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02
+### PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (c666bc51...)
+statements pinned = 1101/1101 (manifest rows) | coverage 1016/1016 across 46 CONE files
+cone: keys 1563 = 1563 | ROWS 1642 = 1642 | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls executed (unique)=10  expected>=10        (4 of them new, all MUST-FAIL)
+OK   taint containment: closure = 2 lemmas, none of the 7 headline results is in it
+OK   taint controls: pass=11 fail=0
+OK   inputs unchanged across the run (c666bc514cf43c4dc195ebf0ac5f8b43)
+```
+
+**Read `ledger=241` as the point of the run.** A promotion that added a closure member,
+23 pinned statements, four controls and five census rows moved the assumption count by
+**zero**. That is what a countermodel entering the cone should look like: it adds
+*parameters* and *content*, never an assumption.
+
+### UPDATE 2026-09-01 — the last admit is the WRONG target, and the right one turns out to be six module separations away
+
+No new theorem. Two measurements and a correction, and the first measurement is worth
+more than a theorem would have been.
+
+#### I was about to attack the wrong thing
+
+`extract_op` (`FORS_C_TreePort.ec:1485`) is the sole remaining admit. Removing it would
+read as the natural sequel to 2026-08-30 — LEDGER 241 → 240, the cone admit-free. Before
+deriving anything I applied the discipline recorded the previous day (list
+`experiments/*/` and read by **name**, rather than grepping for a statement) and found
+`scratch/scope_fextractop_VERDICT.md`: two independent reviewers, 2026-08-12, every
+citation re-verified at source.
+
+**Its answer is: do not close it.** `FORS_C_TreePort.ec:186` defines its **own local
+mirror** `module SM_DT_OpenPRE`. The headline carries the *real*
+`FTWES.F_OpenPRE.SM_DT_OpenPRE` (`GprocQWired.ec:123`), which the **fully proven** Gproc
+route already reaches (`GprocT1Opre.ec:2168`). So `extract_op` targets a *different game
+object* than the theorem's term, and closing it would move nothing — costed there at
+8–15 engineer-days for zero headline movement. Its stated disposition is retire/archive.
+
+That disposition is still unexecuted, and it is **not** a drive-by: removal is fatal to
+the gate by design and would shrink the certified surface by ~100 statements. Owner call.
+
+#### The unit that verdict recommended is now unblocked, and it was never costed correctly
+
+The verdict's recommended next unit had five steps. **Steps 1–4 landed on 2026-08-30** —
+the BadEnc disjunction, the Game4 split, the codeword-level lemma confined to the unequal
+branch, and the B-free `MEUFGCMA_WOTSTWESNPRF_Charged`. Step 5 — propagate to a parallel
+deployed theorem — was explicitly disqualified, in these words:
+
+> Merely wiring `_Unfolded` (4-7 days): **promotes B into the headline** — it would make a
+> live admit load-bearing. A regression, not progress.
+
+Admit B was *removed* on 2026-08-30. `_Unfolded` is admit-free and left the taint closure
+the same day. **The stated regression has no addressee.**
+
+So: why is `EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded` applied by nothing? The tree records
+that fact in several places and nowhere says why. It is six lines of its own restriction
+set, which the unfold adds over the plain lemma:
+
+```
+-FC_UD.O_SMDTUD_Default, -FC_TCR.O_SMDTTCR_Default, -FC_PRE.O_SMDTPRE_Default,
+-R_SMDTUDC_Game23WOTSTWES, -R_SMDTTCRC_Game34WOTSTWES, -R_SMDTPREC_Game4WOTSTWES
+```
+
+Those six are absent from the deployed forger `F` (`GprocQWired.ec:67`), so `R_top_C(F)`
+cannot be shown disjoint from them. **This is a compile, not an argument**
+(`scratch/probe_unfold_deployed.ec`):
+
+```
+_Unfolded at R_top_C(F), deployed F verbatim
+    [critical] the module Top.RtopCSoundness.R_top_C(F) is not allowed
+               to use the modules(s)   F                      __EC_RC=1
+
++ exactly those six added to F, nothing else changed          __EC_RC=0
+```
+
+**And a cheaper route also typechecks there.** The deployed theorem carries the WOTS game
+as a **summand of its statement**, not as an applied lemma — so
+`MEUFGCMA_WOTSTWESNPRF_Charged` can be applied *directly* at
+`R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))` and transitivity alone yields a
+charged deployed capstone. The hypertree scaffold does not need re-porting at all, which
+is what the 4–7 day figure assumed.
+
+Adding six separations to `F` is a **narrowing** — the theorem would apply to fewer
+adversaries. `GprocQWired.ec` already does exactly this twice and prices it in its own
+words: *"formally a NARROWING of the hypothesis … the price of replacing an unreduced Q
+with three named hardness advantages."* Same trade, one leg over.
+
+#### What is NOT established, stated because the temptation runs the other way
+
+* **Nothing is bounded.** A charged deployed theorem would name four terms where one
+  opaque game stands. Assumption-surface progress, not a number.
+* **`badenc_is_one` does NOT apply to this instantiation.** That theorem is about
+  `A_coll`. The deployed BadEnc term sits at
+  `R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))` — a *different object*. Whether
+  it is 1, small, or anything else there is **open**, and is exactly the +C-layer question
+  the tree records as unresolved. Writing "this makes the deployed bound's vacuity
+  visible" would be the `c10_embg_inj`-vs-`encode_msgWOTS` error one level up, which the
+  2026-08-12 verdict already scores against me.
+* **A probe typechecking is not a proof.** Both `have :=` forms pass the restriction and
+  arity checks. The **losslessness obligations are not discharged by them**, and the
+  deployed theorem carries *no losslessness premises at all* — `XmssmtCC_All.ec:8913+`
+  proves them for the abstract `A_ht` only. That gap is the real remaining cost and is
+  named rather than estimated. Full write-up:
+  `scratch/FINDING-unfold-is-unblocked-at-the-deployed-adversary.md`.
+
+#### Correction — a stale axiom citation in two closure files
+
+`C10DeployedCapstone.ec:381` and `SphincsC10Content.ec:827` each carried an honesty note
+saying CONCLUSION 6 is *"already derivable from MM45's own **unconditional**
+`two_encodings` **AXIOM** (`WOTS_TW_ES.ec:571`)"*. Three things wrong against the
+certified tree:
+
+| claim | fact |
+|---|---|
+| `two_encodings` is an **axiom** | it is a **lemma**, `base-c10-split/WOTS_TW_ES.ec:726` — demoted when the split base proved it from the concrete `P`, retiring encoding axiom 1 |
+| it is **unconditional** | it carries `P m => P m'` |
+| at **`:571`** | `:571` lands inside `chS`; that line number is from the OLD unsplit `base-c10`, where the axiom did live at `:579` |
+
+**The verdict survives — conclusion 6 is still contentless — but for a simpler reason,
+verified at source rather than inherited:** `predC` is *defined* as `P`
+(`cdrafts-split/WOTS_C_Real.ec:279`, `op predC (d : msgWOTS) : bool = P d`), so that
+conjunct **is** the current `two_encodings` lemma restated, not a corollary of an ambient
+axiom. Both notes now say so, replaced at the sentence.
+
+#### A gate property worth knowing: comments are not free
+
+I assumed a comment-only edit could not move `INPUTS_SHA256`, and acted on it before
+measuring. Wrong: the census came back **byte-identical** (`added=0 removed=0`, and the
+fresh cone output diffs zero lines against the committed baseline, `# line N` annotations
+included) and **the identity still moved**. `cert_gate_split.sh:116` sha256s the
+*contents* of every cone file — deliberately, per the comment above it, because an earlier
+version omitted six library files and an edit inside them that kept census rows intact
+would have passed unnoticed. Recorded in `cert-identity.tsv`.
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (8578b604...)
+pins 1101/1101 | coverage 1016/1016 across 46 CONE files | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls 10/10 | taint closure 2 | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+Every number is identical to the 2026-08-31 run except `INPUTS_SHA256`. That is the
+point of this entry: the census could not see the change, and the identity could.
+
+### UPDATE 2026-09-01 (later) — the deployed WOTS leg is CHARGED, and it cost the census nothing
+
+`WotsLegCharged.ec` is a closure member. It is step 5 of
+`scratch/scope_fextractop_VERDICT.md` — the unit that verdict recommended in 2026-08 and
+then disqualified, for a reason that expired on 2026-08-30.
+
+#### What it says
+
+`GprocQWired.ec` carries the WOTS-TW game as an **opaque summand of its statement**. The
+new theorem replaces it with the four **named** terms of `MEUFGCMA_WOTSTWESNPRF_Charged`,
+at the deployed adversary:
+
+```
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))), …) : res]
+  ≤  (w−2)·|UD(false) − UD(true)|  +  TCR  +  ( PRE + Pr[Game4_WOTSTWES_BadEnc … : res /\ badenc] )
+```
+
+Composing with the deployed capstone is then transitivity. **0 admits, 0 axioms**, seven
+lemmas.
+
+#### The census did not move. At all.
+
+| | before | after |
+|---|---|---|
+| closure roots | 35 | **36** |
+| cone files | 46 | **47** |
+| statements | 1016 | **1023** (all 7 pinned) |
+| census `added` / `removed` | — | **0 / 0** |
+| `ledger` / `total` | 241 / 1642 | **241 / 1642** |
+
+The baseline **body is byte-identical**. The file declares no op, no axiom and no module —
+only lemmas, and lemmas are not census rows. A certified member that costs zero
+assumptions is what a proof-side unit should look like.
+
+#### The cost is in the THEOREM, which is where it belongs
+
+Three premises the deployed capstone does not carry:
+
+1. **Six extra module separations on `F`** — the WOTS-TW internals the charged bound
+   needs. Formally a **narrowing**: the theorem applies to fewer adversaries.
+   `GprocQWired.ec` already takes this exact trade twice and prices it in its own words,
+   *"the price of replacing an unreduced Q with three named hardness advantages."*
+2. **Grind reachability**: `forall m, is_lossless (dcond dmkey (good_fors m))`.
+   `R_top_C`'s CMA oracle draws `mk <$ dcond dmkey (good_fors m)`, and a **conditional**
+   distribution is lossless only if its condition is reachable. Nothing in the closure
+   supplies that. **This is the "+C" grind assumption made visible.** It was always
+   implicitly required by the deployed instantiation — it simply had nowhere to appear,
+   because nothing had ever tried to instantiate the charged bound there. It is a
+   hypothesis and is deliberately **not** axiomatised.
+3. Ordinary **forger losslessness**, which the deployed capstone also lacks.
+
+#### What it does not do
+
+**It bounds nothing.** Four named terms in place of one opaque game is assumption-surface
+progress, not a number. And `BadEncCountermodel.ec::badenc_is_one` still does **not**
+apply here: that theorem is about `A_coll`; this term sits at a different composed
+adversary whose value is **open**. That is precisely the +C-layer question the tree
+records as unresolved.
+
+#### Two structural facts worth keeping
+
+* **`R_top_C.choose` needs no adversary premise.** It never calls the forger — it is a
+  four-deep loop nest over `ddgstblock` and `OC.query`. Only `forge` reaches the
+  adversary, and only there does the grind premise bite. That is why the two obligations
+  decomposed so unevenly.
+* **The borrowed obligation proofs only work with `A_ht` abstract.**
+  `XmssmtCC_All.ec:8915-8979` opens with `proc; inline *`, which leaves the `A_ht` call
+  standing for a `call` step. Instantiated at the *concrete* `R_top_C(F)`, `inline *`
+  inlines the adversary too and the expected call is not there — my first assembly failed
+  exactly so. Keeping them generic (`composed_choose_ll` / `composed_forge_ll`) and
+  instantiating afterwards let the borrowed scripts stay **byte-identical** rather than
+  re-derived.
+
+#### Controls, with a limitation stated rather than papered over
+
+`scratch/wlc_ctl{A,B,C}.ec` (regenerate: `scratch/mkctl_wlc.sh`) drop the grind premise,
+forger losslessness, and one of the six separations. All three must fail; the floor moved
+10 → 13. **A and B fail with the same message** (`this proof-term proves:`), so the gate's
+reason check can only confirm each hit a proof-term mismatch rather than a parse error or
+a missing require. What distinguishes them is which premise the generator deleted, not the
+diagnostic. Recorded in `cert-controls-split.tsv` next to the rows.
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (cfb502be...)
+pins 1108/1108 | coverage 1023/1023 across 47 CONE files | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls 13/13 | taint closure 2 | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+**A gate trap, paid for on the first run.** It came back RED on one line —
+`FAIL control scratch/wlc_ctlC.ec: failed for the WRONG reason`. The gate matches a
+control's declared reason against the **first** `[critical]` line only, and EasyCrypt
+**wraps long module lists across lines**. C's declared reason
+(`is not allowed to use the modules(s)`) is genuinely in the diagnostic — on its *second*
+line. I had observed the message through `cut -c1-150` and read the wrap point as its end.
+Declare a substring of the first line, and keep line numbers out of it: they drift.
+
+### UPDATE 2026-09-01 (third) — the deployed headline's WOTS game is NAMED, and a prohibition against doing it is retracted
+
+`GprocWotsNamed.ec` is a closure member. It is
+`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS` — this artifact's
+recommended quotation surface — with its **one opaque** `Pr[M_EUF_GCMA_WOTSTWESNPRF …]`
+replaced by the four **named** terms of `WotsLegCharged.ec::wots_leg_charged_at_deployed`:
+UD / TCR / PRE / encoding-collision. The proof is transitivity against that lemma and
+nothing else.
+
+#### The prohibition this supersedes
+
+`GprocChargedQWired.ec:39-42` forbade exactly this move, in these words:
+
+> Reducing it … **must NOT be done by applying the existing WOTS theorem, which consumes
+> the admit at `base-c10-split/WOTS_TW_ES.ec:1513`** and would make a presently
+> non-load-bearing admit LOAD-BEARING.
+
+That was **correct when written** and has had **no addressee since 2026-08-30**, when the
+admit at `:1513` was *removed* rather than contained. What the new member applies is the
+**charged** theorem, which is admit-free. The bullet is corrected at the sentence, with
+the retraction stated rather than the old text quietly deleted.
+
+This is the **third** correctly-reasoned constraint in a week found outliving its premise
+(after the `_Unfolded` regression warning and the `two_encodings` "unconditional axiom"
+citations). The pattern is consistent enough to be a workflow item, not a hindsight
+observation: **when a commit removes something, re-check every constraint whose stated
+reason names it.**
+
+#### Cost, and why it is a parallel member
+
+| | before | after |
+|---|---|---|
+| closure roots | 36 | **37** |
+| cone files | 47 | **48** |
+| statements | 1023 | **1024** |
+| census `added` / `removed` | — | **0 / 0** |
+| `ledger` / `total` | 241 / 1642 | **241 / 1642** |
+| **premises** | 2 | **4** |
+
+**The census did not move, for the second promotion running.** Both `WotsLegCharged.ec`
+and `GprocWotsNamed.ec` are pure lemma files, and lemmas are not census rows. The entire
+price is premises, and premises live in the theorem where a reader can see them: six extra
+module separations on `F`, grind reachability, and forger losslessness — all inherited
+verbatim from `WotsLegCharged.ec`.
+
+Because premises went 2 → 4, this is a **parallel** member, not an edit.
+`GprocChargedQWired.ec`'s own PLACEMENT note takes exactly that route, and the 2-premise
+statement stays quotable. **Quote the older one unless you specifically want the WOTS leg
+named.**
+
+#### What it does not do
+
+**It bounds nothing.** Four named terms in place of one opaque game is assumption-surface
+progress, not a number. `Pr[M.F.ITSRC10 …]` is still carried unreduced and is still the
+honest headline blocker; the new encoding-collision term is **also** unreduced, and
+`badenc_is_one` does **not** bound it at this composed adversary.
+
+#### Controls, and one I nearly banked wrongly
+
+`scratch/gwn_ctl{A,B}.ec` drop the charged WOTS leg and the deployed statement from the
+composition. Both must fail; floor 13 → 15. **A is the one that matters**: if the
+composition still went through without the charged leg, the substitution would be doing
+nothing and the theorem would be vacuous. It fails with `cannot prove goal (strict)`.
+
+During development the same pair of controls produced a **false negative I nearly
+accepted**: one of them returned a nonzero exit code because *the file had never been
+written* — a generation loop was killed by a timeout partway through. A nonzero code from
+a missing file is exactly the "passed for the wrong reason" failure the gate's PHASE 3
+exists to catch, and I read it as a result. Re-run properly, it fails for the right
+reason. **Read why a control failed; an exit code is not a receipt.**
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (463f365e...)
+pins 1109/1109 | coverage 1024/1024 across 48 CONE files | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls 15/15 | taint closure 2 | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+### UPDATE 2026-09-02 — a deliberate sweep for EXPIRED PROHIBITIONS, and it caught one of mine
+
+No new theorem. An audit, run because the same defect had turned up three times by accident
+in a week and accident is not a method.
+
+#### The defect class
+
+Three constraints, each **sound when written**, each still being obeyed after the thing its
+reason named had been removed:
+
+| | constraint | why it expired |
+|---|---|---|
+| `cert-taint-closure.tsv` | wiring `_Unfolded` "promotes a REFUTABLE lemma into the headline" | the WOTS admit was removed 2026-08-30; the chain left the closure |
+| `C10DeployedCapstone.ec` / `SphincsC10Content.ec` | conclusion 6 follows from "MM45's **unconditional** `two_encodings` **AXIOM** (`:571`)" | it is a lemma, it is not unconditional, and `:571` is an old-base line number |
+| `GprocChargedQWired.ec:39-42` | reducing the WOTS game "must NOT be done by applying the existing WOTS theorem, which consumes the admit at `:1513`" | that admit was removed; the charged theorem is admit-free |
+
+**A stale prohibition never fails a gate.** It only forecloses work, silently. The third one
+had blocked the deployed headline for two days after it stopped applying — `GprocWotsNamed.ec`
+was writable that whole time.
+
+#### The sweep
+
+Targeted question rather than a keyword hunt: *what else did the 2026-08-30 admit removal
+invalidate?*, across all 37 closure roots. It found **one** stale line in the closure —
+`GprocChargedQWired.ec:51`, "It activates NEITHER of the closure's **two** admits"; there is
+one — and **three stale current claims on this README**:
+
+1. "Each cone contains **two admits**" — the split cone has one.
+2. A `RE-VERIFIED 2026-08-24` measurement concluding that no capstone applies the WOTS
+   theorem, "so … both admits stay non-load-bearing". **Two of its three claims expired**:
+   the `:1513` admit is gone, and `GprocWotsNamed.ec` now *does* reduce that term. Its
+   conclusion still holds, for a better reason.
+3. **The same prohibition as `GprocChargedQWired.ec:39-42`, restated here** — retracted in
+   the `.ec` file on 2026-09-01 **without noticing it was also on the front page**, and found
+   the next day only by the sweep.
+
+That third one is the honest sting: I corrected a claim in one place, left an identical copy
+standing on the artifact's front page, and had just written a memory about exactly this.
+
+#### Two non-leads, recorded so they are not re-attempted
+
+* `WOTS_C_Interactive.ec:164`'s "+C S-TCR term is BLOCKED" **already retracts itself in
+  place** (`RECONCILIATION UPDATE 2026-07-09`) — correct practice, not drift.
+* `stcr_reduction_wip.ec:234` records that `Pr[S_TCR_C_Int_MA(A)] <= Pr[SM_DT_TCR_C(R'(A))]`
+  **does not hold**. The S-TCR leg is *not* a sibling win to the WOTS one.
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (7ec2a554...)
+pins 1109/1109 | coverage 1024/1024 across 48 CONE files | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls 15/15 | taint closure 2 | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+Comment-only in one closure file, so the census is byte-identical and only the identity
+moves — `cert_gate_split.sh:116` hashes cone-file contents by design.
+
+### UPDATE 2026-09-14 — the encoding-collision term is carried at +C; a proved chain that sat in `experiments/` for a month is promoted; two gate holes closed
+
+`GprocTCollNamed.ec` is a closure member.
+`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_TCOLLNAMED` is the WOTSNAMED
+statement with `Pr[Game4_WOTSTWES_BadEnc(R_int_WOTSTW(…)) : res /\ badenc]` replaced by
+`Pr[T_COLL_RES_ENUM(R_TCOLL(…), O_TCollEnum_Default, FC.O_THFC_Default) : res]`. The proof is
+transitivity against `BadEncStep4.ec::badenc_le_tcoll`. It discharges a debt this tree recorded
+on 2026-08-13: *"the named-assumption term must eventually REPLACE the raw
+`Game4_WOTSTWES_BadEnc` term at the headline."*
+
+#### Read this before quoting it
+
+* **Strictly weaker as an inequality.** `badenc_le_tcoll` is *old ≤ new*, so this right-hand side
+  is pointwise larger than WOTSNAMED's, and `F` is narrower by one separation. It is a corollary
+  of WOTSNAMED. **Quote WOTSNAMED for the tighter statement.** This one buys *which* term is
+  carried: a standalone, named +C game with a proved win characterisation, instead of an
+  internal game probability of the WOTS-TW proof.
+* **It bounds nothing.** `T_COLL_RES_ENUM` is an unbounded assumption; `CONCLUSION 2026-08-18`
+  stands unchanged. The surface count `2^114.0941` is machine-checked in
+  `experiments/wots-badenc/count/`, which is **not** a closure member.
+* **Event-level, not hardness.** `tcoll_win_needs_coll` proves that every win exhibits two
+  distinct `ThC` images at a common `(ps, ad)` with equal codewords — no bookkeeping win. It
+  does not say such collisions are absent or hard. `find` receives `ps` and `thfc` is an ambient
+  op, so, like every hardness term here, it is meaningful only for resource-bounded adversaries.
+* **Strictly stronger than a THF assumption.** `T_COLL_RES_ENUM` has no disjointness conjunct.
+
+#### The proof already existed — for a month
+
+`badenc_le_tcoll` was proved admit-free on **2026-08-14** in `experiments/wots-badenc/red/`, with
+`TCollResEnum.ec`, `BadEncSplit.ec` and `BadEncToTColl.ec`, and **never promoted** — the cone
+census does not cover `experiments/`, so nothing noticed. On 2026-09-14 all four compiled,
+unchanged, against the live trees. They were promoted in a **separate gate run** so that a RED
+census would be attributable to the promotion alone; the composition followed in a second.
+Code is identical to the experiment copies (asserted by `scratch/promote_tcoll_chain.py`);
+comments only — five moved citations updated, three expired claims corrected at the sentence.
+
+| | before | Run 1 (promotion) | Run 2 (composition) |
+|---|---|---|---|
+| closure roots | 37 | 41 | **42** |
+| cone files | 48 | 52 | **53** |
+| statements / pins | 1024 / 1109 | 1081 / 1166 | **1082 / 1167** |
+| controls | 15 | 36 | **39** |
+| **ledger** | 241 | 241 | **241** |
+| parameters | 217 | 221 | **221** |
+| meaning / definitions | 394 / 424 | 406 / 443 | **406 / 443** |
+| census added / removed | — | 35 / 0 (re-baselined) | **0 / 0** |
+
+Both runs were **predicted before the census was computed**
+(`scratch/PREDICTION-tcoll-promotion-2026-09-14.md`, `scratch/PREDICTION-tcollnamed-2026-09-14.md`)
+and graded in `cert-baseline-split.tsv`'s header. Everything held; `meaning` landed at the edge of
+its stated range because section `declare module`s turned out to be census rows — the one
+uncertainty the prediction named. The four new parameters are `TCollResEnum`'s witness data
+(`wad`, `wm`, `wm'`, `wctr'`): a hypothesised collision pair, visible in the census as it should be.
+
+#### The price in the hypotheses: one separation, zero premises
+
+`badenc_le_tcoll` needs `c <= p_tgts`, which the headline already carries. It lists two module
+separations; only `-O_TCollEnum_Default` is load-bearing (`scratch/gtn_ctlC.ec` fails at the
+restriction check without it). `-R_TCOLL` is **implied**: `R_TCOLL.O_wrap` declares no `var` of its
+own, and `include var` shares the included module's globals — the base tree relies on exactly that
+(`O_Game34_WOTSTWES_AltX` appends to `O_MEUFGCMA_WOTSTWESNPRF.qs`). Adding it would have been a
+separation that excludes nothing.
+
+#### Two gate holes, both of my making
+
+1. **The PHASE 3 control floor was decoration.** It printed `expected>=15` and tested
+   `[ "$n_ctl" -ge 6 ]`. The "COUNT RAISED 6 → 10 → 13 → 15" comments were bumped three times;
+   the number never was, so up to nine control rows could be deleted under a GREEN receipt. It is
+   now an equality against a committed `EXPECT_CTLS`.
+2. **`GprocWotsNamed.ec` was never registered with the taint checker.** `tools/taint_closure.py`
+   says in so many words that a headline missing from `HEADLINE` "is NOT checked for taint … the
+   two edits belong in the same commit". I landed WOTSNAMED on 2026-09-01 without that edit; it
+   went 13 days unchecked. Both named headlines are registered now (7 → 9); neither is tainted.
+
+#### A retracted claim was sitting in the certified closure
+
+*"C10's WOTS layer never encodes an adversary-chosen value"* was **retracted on 2026-08-14**
+(`CORRECTION 2026-08-14 (final)`): it holds for the honest signer and is **false at the verifier**,
+which builds the layer-0 WOTS message from FORS secrets and auth paths read out of the signature
+(`sphincs-c10/src/hypertree.rs:386-419`, re-verified). That correction **named
+`BadEncCountermodel.ec`'s header** as carrying the sentence — and I promoted that file into the
+closure on 2026-08-31 without fixing it. `TCollResEnum.ec` repeated it. Both are corrected at the
+sentence.
+
+How it surfaced is the part worth keeping: drafting this unit's header, I quoted *"~2^71.95, there
+is no bound to find"* and the key-determined claim from `scratch/FINDING-tcollres-cannot-be-bounded.md`
+— a file whose claims were retracted **the day it was written** and which carried no banner. Caught
+only because I read this README's section list before writing a vendor entry. Both stale FINDINGs
+now carry SUPERSEDED banners. Also corrected: `GprocWotsNamed.ec:49` described a `WitnessF`
+anti-vacuity check the file does not have (a comment copied from a sibling).
+
+#### Controls
+
+* **21 promoted controls** — generated *by script* from the experiment generators, checked equal to
+  the experiment's own controls with comments stripped (21/21), and re-run against the live trees:
+  every first `[critical]` line identical to the experiment receipt. Two latent generator defects
+  were fixed on the way: an anti-mutation guard comparing `tail -n +8` against a six-line banner
+  (so it could never fire), and a comment saying "five" for seven controls.
+* **3 new controls** `scratch/gtn_ctl{A,B,C}.ec`. **A drops `badenc_le_tcoll`** — the one that
+  matters; it fails, so the substitution does work. C's first version failed with `parse error`
+  because the generator left a dangling comma: a syntax failure proving nothing. Caught by reading
+  the reason before registering it.
+
+#### Review
+
+Kimi K3, adversarial statement review (the GPT-5.6 MCP was unavailable this session — **one leg,
+not two**, so there is no convergence check). It confirmed the instantiation and the `-R_TCOLL`
+argument, and found: retracted content in the draft header, the undisclosed looser inequality, an
+overstated "the adversary does not choose" and the stale `WitnessF` comment. All adopted.
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (e848ec55...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+controls 39/39 | taint closure 2, 9 headline results checked | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+Run 1 (the promotion alone), for the record: `RESULT: GREEN`, identity `6aeac741…`, pins 1166/1166,
+coverage 1081/1081 across 52 cone files, added=0 removed=0 against the re-baseline, ledger 241,
+controls 36/36, taint closure 2, taint controls 11/11.
+
+### UPDATE 2026-09-14 (later) — PHASE 5 now COUNTS its taint controls; a control that never ran scored OK
+
+**A gate-only unit.** No `.ec` file moved, so the census, the ledger and the closure could not
+have changed, and did not.
+
+#### The hole — the same shape as gate hole 1 above, one phase later
+
+PHASE 5 ran `scratch/taint_controls.sh` and trusted its **exit status**. That script exits nonzero
+only when a control runs and **fails**. A control that never **runs** — a deleted block, a blinded
+`grade` call, an early `exit 0` — scored nothing, and the gate printed `OK`. This was **executed,
+not argued**: the pre-fix lines, run against a copy with `: ` prefixed to T9's `grade` call, printed
+
+    OK   taint controls: taint controls: pass=10 fail=0
+
+and left the gate's fail counter at 0.
+
+#### The fix
+
+* `EXPECT_TAINT_CTLS=11` (the T0 baseline + T1..T10), committed **in the gate** rather than in the
+  controls script, so one edit to that script cannot shrink its own expectation.
+* PHASE 5 parses the summary line and requires `fail=0`, `pass=11` **and 11 unique `OK` lines**.
+  PHASE 3 counts unique names for the same reason: a deleted control replaced by a copy of another
+  must not score. An unparseable summary is its own FAIL.
+* **The guard is itself controlled.** `scratch/taint_count_controls.sh`, run by the gate, extracts
+  the gate's own lines between `BEGIN/END taint-controls-count` markers and `eval`s them, under the
+  gate's shell options, against four real copies of `taint_controls.sh`:
+
+  | variant | what it deletes | gate verdict (graded on the message) |
+  |---|---|---|
+  | V0 | nothing | `OK … pass=11 unique=11` |
+  | V1 | T9's `grade` call | `FAIL taint control inventory: pass=10 unique=10` |
+  | V2 | everything after T0 (`exit 0`) | `FAIL … summary line NOT PARSED` |
+  | V3 | T10, replaced by a copy of T9 | `FAIL taint control inventory: pass=11 unique=10` |
+
+  Its own summary is compared **exactly** against `EXPECT_TAINT_COUNT_CTLS=4`, so the regress stops
+  at the hashed gate instead of at another trusted exit status.
+* **Not driven by any variant:** the branch for a control that runs and genuinely *fails*. Named,
+  not closed; a V4 that breaks the taint tool under one control would close it.
+
+Two stale PHASE 5 header claims were corrected on the way. *"These five mutations"*: there are ten.
+*"The two holes above remain"*: the clone half has been **refused** since `a822d6d` (2026-08-28;
+controls T9, T10), though taint is still not *followed* through a clone. An orphaned half-sentence
+left by the 2026-08-27 retraction of the "safe direction" claim was removed.
+
+#### The same shape, looked for elsewhere in this gate
+
+Among the sub-scripts whose output the gate captures, the only other control runner is PHASE 4's
+`forsc_grinding_margin.py --self-test`; the rest (`sweep.py`, `stmt_coverage.py`,
+`policy_cap_fence.py`, `taint_closure.py --check`) are checks, and `policy_cap_fence.py` carries an
+exact `EXPECT_DECLS`. PHASE 4 counts its lines **inline**, but as floors (`-lt 4`, `-lt 3`), and it
+prints `4/4` and `3/3` as literals rather than the measured counts. That is not a live fail-open for
+accidental drift: the script is in the hashed input set, and it is still byte-identical to
+`contracts/verification/scripts/forsc_grinding_margin.py` here (re-checked). But the gate comment
+*"the byte-identity cert-margin-split.tsv asserts"* overstates: that manifest holds the seven figures
+and no hash, so the byte-identity is enforced only indirectly, by `INPUTS_SHA256`. **Open, small.**
+
+#### Prediction and receipt
+
+Predicted before computing (`scratch/PREDICTION-taint-count-guard-2026-09-14.md`); every figure held.
+One operator error is disclosed there: the first launch skipped the login shell, so opam never put
+`easycrypt` on `PATH` — `TOOLCHAIN UNKNOWN`, `0 configurations`, every target FAIL within seconds.
+It was killed and discarded, then relaunched as in *Reproducing the GREEN*. It is not a receipt.
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (6a06e771...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+controls 39/39 | taint closure 2, 9 headline results checked
+OK   taint controls: pass=11 unique=11 fail=0 expected=11
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run
+```
+
+Full log: `scratch/gate_20260914_run3.log`.
+
+### UPDATE 2026-09-15 — the last admit is OUT OF SCOPE for every headline result; the gate checks it two-sided through the headline chain; PHASE 4 now reports what it counted
+
+**No closure `.ec` file moved.** The census, the ledger and the closure are unchanged.
+
+#### What was established — by EasyCrypt, not by this repo's parser
+
+`extract_op` (`cdrafts-split/FORS_C_TreePort.ec:1485`) is the only admit left. Its theory is
+**not loaded in any headline environment**, so no tactic in a headline file can use it: not a named
+application, not a bare `smt()`, not a clone, not a module argument. Each of those routes needs the
+theory in the environment, and only `require` puts it there.
+
+This was **probed before anything was built**, with all ten predictions written first
+(`scratch/PREDICTION-scope-isolation-probes-2026-09-15.md`). All held:
+
+| probe | requires | body | result |
+|---|---|---|---|
+| negative, ×6 (one per headline file) | the headline theory | `op probe_scope : bool = FORS_C_TreePort.fverify_structural.` | ``unknown variable or constant: `FORS_C_TreePort.fverify_structural'`` |
+| negative, lemma | `GprocTCollNamed` | `have _ := FORS_C_TreePort.extract_op.` | ``unknown lemma `FORS_C_TreePort.extract_op'`` |
+| positive twins ×2 | the same **plus `FORS_C_TreePort`** | the same bodies | compile |
+| environment witnesses ×2 | `GprocTCollNamed` | a symbol of `WOTS_TW_ES`, 3 require-hops away | compile |
+
+The environment witnesses are what make the negatives mean something. Requiring a headline theory
+makes even its indirect dependencies resolvable by qualified name. So if `FORS_C_TreePort` sat anywhere
+in a headline's dependency set, its name would resolve too, as the twins show it does once required.
+Without the witnesses, a negative probe could be failing in an environment *smaller* than the headline
+file's own.
+
+**Why a name-resolution probe, and not the 2026-08-28 smt reach test.** `extract_op`'s statement is
+built from `G_Tree`, `R_op`, `O_OP_Default` and `fverify_structural`, all defined in `FORS_C_TreePort.ec`,
+so it cannot even be written outside that theory. The 2026-08-28 probes both began with
+`require import SPHINCS_PLUS`. They reached the admit they measured through exactly the channel these
+probes show to be closed for this one.
+
+**What it rests on.** EasyCrypt builds a file's environment from its `require` closure plus the prelude,
+with no ambient loading from the include path, and a tactic can only use facts in that environment. The
+probes are consistent with that. They do not prove EasyCrypt implements it.
+
+#### What is now gated — five PHASE 3 controls, `EXPECT_CTLS` 39 → 44
+
+| control | polarity | role |
+|---|---|---|
+| `scratch/_scope_neg_op_GprocTCollNamed.ec` | MUST-FAIL | a `FORS_C_TreePort` operator is unknown in the headline environment |
+| `scratch/_scope_neg_lemma.ec` | MUST-FAIL | the admitted lemma itself is unknown there |
+| `scratch/_scope_pos_op.ec` | MUST-PASS | twin, one `require` apart: the negative fails for scope, not syntax |
+| `scratch/_scope_pos_lemma.ec` | MUST-PASS | twin for the lemma form |
+| `scratch/_scope_env_n_m.ec` | MUST-PASS | environment witness |
+
+**One negative, not six:** the other five headline files are all in `GprocTCollNamed`'s own require-cone,
+so its environment contains theirs. That stops being true if the headline family stops being a chain.
+
+**This control set is the tripwire.** If any file in that cone ever requires `FORS_C_TreePort`, the
+negatives compile and the gate goes RED. The census would *not* catch that edit on its own:
+`FORS_C_TreePort` is already a closure root, so neither the cone file list nor statement coverage would
+move, only the input identity.
+
+**What it does not guard: the chain.** All six headline files are closure roots
+(`closure-c10-split.txt`). If one of them dropped out of `GprocTCollNamed`'s cone, nothing would go RED,
+and that file could then require `FORS_C_TreePort` unobserved. So the gated statement today is narrower
+than the measured one:
+
+* *measured, per file:* the admit's theory is unknown in each of the six headline environments;
+* *gated on every run:* it is unknown in `GprocTCollNamed`'s environment, and the other five inherit
+  that only through a require chain the gate does not check.
+
+Per-file negatives close the gap; they are the next unit. **[Closed the same day — see
+`UPDATE 2026-09-15 (later)`.]**
+
+The negatives key on two symbol names. Renaming both would keep them failing for the declared reason
+even if the theory entered the cone, but the renames would move PHASE 2's census rows (a defined
+predicate and the admit's enclosing lemma), and census changes are fatal. That is defence in depth,
+not a gap.
+
+#### What this changes, and what it does not
+
+* **Changes:** for `extract_op`, PHASE 5's two holes still named "unguarded" (bare `smt()`, module
+  arguments) do not apply. That is measured for all six files; the gate enforces it through the chain
+  above. The clone route has been refused since 2026-08-28. Both headers now say so.
+* **Does not:** bound anything; retire the admit (that remains an owner decision, see `UPDATE 2026-09-01`);
+  or cover a *future* admit placed in a theory a headline file does require. The general holes stay
+  stated in the PHASE 5 and `tools/taint_closure.py` headers for that reason.
+
+#### PHASE 4 — the small item named in the previous update is closed
+
+The margin phase tested floors (`-lt 4`, `-lt 3`) and printed `4/4` and `3/3` as literals. It now
+compares exactly against `EXPECT_MARGIN_GUARDS=4` and `EXPECT_MARGIN_SELFTESTS=3` and prints the measured
+count. Two texts that said more than was known are corrected:
+* the comment *"the byte-identity cert-margin-split.tsv asserts"* — that manifest holds no hash;
+* the receipt's *"(guardrails demonstrably fire)"* — the phase's own 2026-08-11 retraction says
+  `--self-test` never executes guard blocks 1–3.
+
+The new decision lines were checked in isolation against doctored output: 3 and 5 guardrail lines FAIL,
+2 and 4 self-test lines FAIL, and 4 and 3 pass. That is an isolated check of those lines, the same kind
+`EXPECT_WATCHED` records, and it is not wired into the gate.
+
+#### Review
+
+Kimi K3 reviewed this claim adversarially, run against a disposable copy of the tree so that a
+running gate's hashed inputs could not be touched. The copy's only changes afterwards were build
+artifacts (`.eco`, `__pycache__`), and a checksum comparison against the tree found no source
+difference. GPT-5.6's MCP was unavailable, so this is **one leg**. Its probes ran on the host
+EasyCrypt, not the pinned container: they **corroborate, they do not certify**. It:
+* reproduced all five controls' `[critical]` lines byte-for-byte;
+* re-ran the negative probe against each of the six headline theories (all reject);
+* recomputed the cone with an independent, looser require scan (zero differences);
+* tried the bypass routes directly. `import` or `export` of an unrequired theory, a `Top.`-qualified
+  name, `clone`, `hint exact`, and `require` inside a section are all refused.
+
+Verdict: **holds**, with one hole, the unguarded chain above. Adopted: the caveat is in the claim
+itself, not only in header comments, and per-file negatives are the next unit.
+
+#### Prediction and receipt
+
+Predicted before the run (`scratch/PREDICTION-scope-controls-2026-09-15.md`).
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (0ee26aa9...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+OK   control scratch/_scope_neg_op_GprocTCollNamed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_lemma.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_pos_op.ec / _scope_pos_lemma.ec / _scope_env_n_m.ec (MUST-PASS)
+controls executed (unique)=44 expected=44
+OK   margin guardrails 4/4 (happy path)
+OK   margin negative controls 3/3 (--self-test: the model inverts; guard blocks 1-3 NOT exercised)
+taint closure 2, 9 headline results checked | taint controls pass=11 unique=11 | count controls pass=4
+OK   inputs unchanged across the run
+```
+
+Full log: `scratch/gate_20260915_run4.log`. Kimi's review: `scratch/REVIEW-kimi-scope-isolation-2026-09-15.log`.
+
+### UPDATE 2026-09-15 (later) — scope isolation is gated PER HEADLINE FILE; the chain caveat is closed
+
+**No closure `.ec` file moved.**
+
+The previous update gated `extract_op`'s scope isolation through `GprocTCollNamed` alone, and said
+why that was narrower than what had been measured. All six headline files are closure roots, so one
+could leave `GprocTCollNamed`'s cone with nothing going RED, then require `FORS_C_TreePort`. Kimi K3
+found that gap. It is now closed: `scratch/_scope_neg_op_<H>.ec` is registered for **each** of the six
+headline theories (`EXPECT_CTLS` 44 → 49), with the same declared reason as before,
+``unknown variable or constant: `FORS_C_TreePort.fverify_structural'``.
+
+**No new positive twins, and why.** The five new negatives share `_scope_pos_op.ec`: their body is
+byte-identical to it. PHASE 3 grades any failure *other* than the declared unknown-symbol one as WRONG
+REASON, which is RED: a `probe_scope` name clash, a syntax error, or the headline theory failing to load.
+A per-file twin would add rows, not information.
+
+**The tripwire, restated.** If any headline file, or any file in its require-cone, ever requires
+`FORS_C_TreePort`, that file's negative compiles and the gate goes RED — no chain involved.
+
+**Still not covered, named:** a *seventh* headline file. Nothing links the `HEADLINE` list in
+`tools/taint_closure.py` to these control rows. **[Closed the same day — see `UPDATE 2026-09-15 (third)`.]** A new headline file without a probe would be checked for
+named taint by PHASE 5, but not for scope. That has happened once already, in a different form:
+WOTSNAMED went 13 days unregistered for taint.
+
+Predicted before computing (`scratch/PREDICTION-scope-perfile-2026-09-15.md`). The ten scope controls
+were graded 10/10 in ec-grind before the gate run.
+
+```
+### RESULT: GREEN                       (0 FAIL lines, __GATE_EXIT=0)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (37dab7b0...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+OK   control scratch/_scope_neg_op_{GprocTCollNamed,GprocChargedQWired,SphincsC10CapstoneWired,
+                                    GprocQWired,GprocQBound,GprocWotsNamed}.ec
+                                    (MUST-FAIL, rejected for the DECLARED reason) x6
+controls executed (unique)=49 expected=49
+margin 4/4 and 3/3 | taint closure 2, 9 headline results | taint controls 11/11 | count controls 4
+OK   inputs unchanged across the run
+```
+
+**Run history, disclosed.** The first launch of this run was a host-side `docker exec` with its log
+redirected on the host. The harness stopped it under memory pressure. Only the host client died: the
+in-container gate kept compiling into a dead pipe and could never have produced a receipt. It was killed
+inside the container and its partial log deleted. The receipt above is from a relaunch *detached* inside
+the container (`docker exec -d`, log written inside the container, an exit marker appended).
+
+Full log: `scratch/gate_20260915_run5.log`.
+
+### UPDATE 2026-09-15 (third) — the headline list and the scope probes are LINKED, as an exact bijection
+
+**No closure `.ec` file moved.**
+
+The previous update left one thing named but unchecked: nothing tied the per-file scope probes to the
+list of headline results. So a new headline file would get no probe, and PHASE 5 would say nothing.
+That class has happened here before: WOTSNAMED went 13 days unregistered for taint. `tools/taint_closure.py
+--check` now enforces the link:
+
+* **Exact bijection, not a subset.** The files that declare `HEADLINE` results must equal the files named
+  by `scratch/_scope_neg_op_<H>.ec` rows in `cert-controls-split.tsv`. A missing probe is RED, and so is a
+  probe left registered for a file that no longer declares a headline.
+* Each such row is `MUST-FAIL`, and its declared reason names every admit theory the tool finds.
+* Each probe `require`s **its own** headline theory. A copy-pasted probe pointed at the wrong file would
+  still pass PHASE 3 while testing nothing about its own file.
+* An empty manifest, or zero matching rows, is a vacuity FAIL.
+
+Deliberately **not** checked here, because PHASE 3 already turns it RED: a probe that references some
+other symbol, or requires the admit's theory itself, compiles, and a `MUST-FAIL` that compiles fails.
+
+Four new controls, each deleting one piece of information and graded on the message
+(`EXPECT_TAINT_CTLS` 11 → 15):
+
+| control | deletes | RED because |
+|---|---|---|
+| T11 | the `GprocQBound` probe row | `headline file GprocQBound has no scope probe` |
+| T12 | the row matcher (blinded) | `scope-probe linkage is vacuous` |
+| T13 | `GprocWotsNamed`'s probe now requires `GprocQBound` | `does not require its headline theory GprocWotsNamed` |
+| T14 | `GprocQWired`'s row reason drops the theory | `declared reason does not name admit theory FORS_C_TreePort` |
+
+**A prediction miss, recorded.** Built and tested in a sandbox before the tree was touched
+(`scratch/PREDICTION-scope-linkage-2026-09-15.md`). The prediction said `taint_count_controls.sh` would
+not need to change. It did. Its own farm carried only `taint_controls.sh` into `scratch/`, so the new
+probe files were missing there. The unmutated baseline went RED for the wrong reason, and three of its
+four variants failed. Fix: link all of `scratch/` except the copy under test.
+
+```
+### RESULT: GREEN                       (0 FAIL lines, __GATE_EXIT=0)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (1bfdb2c4...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+controls executed (unique)=49 expected=49 | margin 4/4 and 3/3
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK   taint controls: pass=15 unique=15 fail=0 expected=15
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run
+```
+
+Full log: `scratch/gate_20260915_run6.log`.
+
+### UPDATE 2026-09-15 (fourth) — a duplicate pin row, and the fail-open behind it
+
+**No closure `.ec` file moved.** Every earlier receipt's `pins 1167/1167` counted one pin twice.
+
+`op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f` sat on **two identical rows** of
+`cert-statements-split.tsv` from `92ecb63` (2026-08-20), so `EXPECT_PINS` was one pin high for 26 days. The
+generator that wrote those rows was not committed. Neither checker produces the duplicate: `stmt_coverage.py`
+enumerates no `op` statements, and `digest_op` skips `<-` clone bindings.
+
+**The duplicate itself was harmless; what it exposed was not.** PHASE 1c counted *rows*. And 84 of the 1166
+unique keys are `op:` definition pins that PHASE 1h never enumerates. So deleting one of those rows and
+duplicating any other left the count intact, resolved every row, and passed both phases. This was
+**demonstrated on the pre-fix lines**, not argued. With `op:BinaryTrees.ec::height` deleted and another row
+duplicated:
+* PHASE 1c printed `statements pinned=1167 expected=1167` with 0 failures;
+* `stmt_coverage.py` printed `OK   coverage: all 1082 top-level statements … are pinned`;
+* so a definition was unpinned under a GREEN 1c **and** a GREEN 1h.
+
+This is the same class as PHASE 3's control inventory, which already counts unique names for this reason.
+
+**Fix.**
+* The duplicate row is replaced by a dated comment, and `EXPECT_PINS` goes 1167 → 1166.
+* A `pin-key-uniqueness` block before the PHASE 1c loop fails on any key that appears on more than one
+  row, and requires the unique key count to equal `EXPECT_PINS`.
+* The block was checked in isolation against three manifests. The same kind of check backs PHASE 4's and
+  `EXPECT_WATCHED`'s decision lines; it is not wired into the gate.
+
+| manifest | result |
+|---|---|
+| live, fixed | `OK   statement pin keys unique: 1166/1166` |
+| pre-fix, doctored | FAIL naming both duplicated keys; FAIL `1165 unique, committed expectation is 1166` |
+| pre-fix, as committed | FAIL naming `op:…OpenPRE_From_TCR_DSPR_THF.eca::f` |
+
+Predicted before computing (`scratch/PREDICTION-pin-dup-2026-09-15.md`).
+
+```
+### RESULT: GREEN                       (0 FAIL lines, __GATE_EXIT=0)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (d8bf474f...)
+OK   statement pin keys unique: 1166/1166
+statements pinned=1166 expected=1166 (manifest rows)
+closure 42/42 | cli 46 files, 0 disagreements
+coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+controls executed (unique)=49 expected=49 | margin 4/4 and 3/3
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK   taint controls: pass=15 unique=15 fail=0 expected=15
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run
+```
+
+Full log: `scratch/gate_20260915_run7.log`.
+
+### UPDATE 2026-09-21 — a full read of the artifact, and the gate it now has
+
+This is a review, not a change to the proof. **No `.ec` source, manifest or tool was edited**, and
+no gate run accompanies it: `README.md` is not in the hashed input set (`cert_gate_split.sh:161`),
+so the identity does not move. Two corrections named below *are* in hashed files and are
+deliberately **not** made here — each would require a full pinned-image replay, and neither is
+worth a replay on its own.
+
+Read against master `16279ead`, i.e. **after** the 2026-09-17 integration (PR #689), which changed
+the gate but no proof source.
+
+#### What the body proves
+
+A complete, machine-checked **reduction** of single-key stateless EUF-CMA for SPHINCS+C10 to named
+hardness games at deployed parameters. The surface to quote remains
+`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS`
+(`cdrafts-split/GprocChargedQWired.ec:351`). Its premise count was re-verified **at source** rather
+than from the table above: the proof intro at `:429` is `move=> hc hsz` — exactly **two** binders,
+`c <= p_tgts` and `size (emb_in witness) = 8*n + c10_r`. No free real, no N2, no unreduced `Q`.
+
+It is **not a numerically meaningful bound**, and that is settled rather than outstanding:
+`Pr[M.F.ITSRC10 …]` is carried unreduced and `scratch/_countermodel.ec::countermodel_pr1` exhibits a
+legal clone where it equals 1.
+
+Two things here that MM45 does not have: the **FORS+C leg**, which the paper never proves, and the
+removal of MM45's encoder-injectivity admit — shown not merely unproven but **refutable**, and
+replaced by an explicit charged term.
+
+`..._TCOLLNAMED` is **strictly weaker as an inequality** than `..._WOTSNAMED` — a corollary of it
+(`GprocTCollNamed.ec:32-38`). It buys *which* term is carried, not a number. Quote WOTSNAMED when
+the tighter statement is wanted.
+
+#### The assumption surface, decomposed
+
+"Ledger 241" reads as 241 things to believe; it is not. Measured from `cert-baseline-split.tsv`:
+
+| kind | count | what it is |
+|---|---|---|
+| clone-discharge | 84 | instantiation bookkeeping |
+| op-annotation | 68 | " |
+| refined-const | 47 | " |
+| clone-obligation | 12 | " |
+| **axiom** | **24** | the believable surface |
+| **declare-axiom** | **5** | " |
+| **admit** | **1** | `extract_op` |
+
+Of the 24 axioms, seven are C10 parameter pins (`n=16, k=13, a=11, log2_w=3, len=43, h'=9, d=2`) and
+are definitional. The substantive ones are the `g` structural axioms in `FORS_C10.ec` — which exist
+because an external review exhibited a legal clone `g y = nseq k (0,0,0)` satisfying the weaker set
+while representing a single tree — plus `dmkey_ll`, `good_pos` (the p_nu assumption), and
+`ch0`/`chS`.
+
+**One admit in the perimeter**, confirmed by a comment-stripping sweep of all 53 cone files:
+`cdrafts-split/FORS_C_TreePort.ec:1511`. Note that `admit.` also appears in `R6probe.ec`,
+`Zprobe.ec` and `sphincs_c10_capstone_*_wip.ec`, which sit in `cdrafts-split/` but are **not cone
+members** — the directory holds 89 files; the perimeter is 53. Directory membership is not
+perimeter membership.
+
+#### The gate, as it now stands
+
+The 2026-09-17 integration changed it materially, and the sections above this one describe the
+older shape:
+
+* **Targets 46 → 53.** `tools/split_contract.py::targets()` recomputes the cone from the roots,
+  requires `set(files) == set(pinned)` against the 53-row `cert-cone-files-split.tsv`, rejects
+  empty, duplicate, missing and cyclic, and emits the files dependency-ordered. All 53 are compiled
+  **and** CLI-replayed. The previous split compiled 42 closure entries plus 4 base files.
+* **The toolchain is now checked, not merely printed.** This closes a real hole: the old
+  `### TOOLCHAIN` / `### PROVERS` lines were `echo` substitutions whose values were never captured
+  or compared, and `|| echo UNKNOWN` meant a broken `easycrypt` yielded the literal string `UNKNOWN`
+  with nothing failing — the `cert-identity.tsv` rows pinned only `INPUTS_SHA256`. The pin is now
+  the container image **by sha256 digest**, `r2026.02`, and all 25 prover configurations.
+* **Two self-referential guards are gone.** The old `:258` and `:381` compared a loop count against
+  a `grep -c` of *the same file*, so deleting a row moved both sides together; `:381`'s own comment
+  claimed it caught "a closure file that shrank to nothing", which was the one thing it could not
+  catch. Both were backstopped by `INPUTS_SHA256`, PHASE 1h and PHASE 2, so neither was a live
+  fail-open — but the messages misdescribed what they enforced. The expectation is now anchored to
+  the verified pinned inventory.
+* **The 2026-09-15 pin-key guard survived and was extended.** `check_pins()` keeps duplicate-key
+  rejection, the exact `EXPECT_PINS` comparison and unresolvable-pin rejection, and adds canonical
+  path and identifier checks so a lexical alias (`./A.ec` vs `A.ec`) cannot stand in for a deleted
+  `op:` pin. `tools/test_split_contract.py::test_duplicate_replacing_deleted_pin_is_rejected` is the
+  2026-09-15 scenario as a unit test.
+
+New identity `623ad0710d73000a1c693049b8933813`; `cert-identity.tsv` records that prior 45-file
+receipts do not certify it.
+
+#### Findings from this review
+
+1. **Eight failure exits, one `### RESULT` line.** `cert_gate_split.sh` exits on failure at `:25`,
+   `:29`, `:180`, `:181`, `:182`, `:183`, `:184` and `:210`, against a single verdict line at
+   `:1031`. Five of them (`:180`-`:184`) are new in the 2026-09-17 integration and sit *ahead of
+   every phase*, so a toolchain mismatch or a split-contract failure produces **no `### RESULT` at
+   all**. A consumer grepping for `### RESULT:` sees nothing and must not read that as absence of
+   failure; capturing the exit status (`__GATE_EXIT=$?`) is what distinguishes the cases.
+   (**Corrected 2026-09-21, same day:** the first version of this bullet said "nine exit paths" and
+   counted `:179` among them. `:179` is the `--identity-only` fast path — `exit "$fail"`, a
+   *designed* early return that is meant to produce no verdict line. It is an exit, but it is not a
+   missing-verdict defect, and including it overstated the finding by one.)
+2. **A certified file overstates by a decimal.** `cdrafts-split/GprocTCollNamed.ec:56` says the
+   constant-sum surface count "`|C_T| = 2^114.0941` is machine-checked". What is machine-checked is
+   the exact integer (`C10SurfaceKernel.ec:25`) and the bracket `2^114 < |C_T| < 2^115`
+   (`C10Surface.ec:62`). The figure `114.0941` appears only in a **comment** at `C10Surface.ec:61`.
+   The arithmetic is right; "machine-checked" attaches to the wrong object. **Hashed file — not
+   corrected here.**
+3. **A stale count in a hashed manifest.** `cert-cone-files-split.tsv:1` says "every file the **38**
+   gate roots transitively require". That was right when written on 2026-08-20 (34 closure + 4 base)
+   and is now wrong twice over. Line 5's "53 files = the 46 roots + 7 transitively required" is
+   **correct** and was nearly filed as a defect here: "roots" there means the 46 compiled targets of
+   the old split (42 closure + 4 base), and 53 − 46 = 7 is `cdrafts-split/FORS_C.ec` plus the 6 base
+   cone files that were not targets. **Hashed file — not corrected here.**
+4. **PHASE 1f is entirely vacuous today.** `cert-watched-split.tsv` has 0 rows and
+   `EXPECT_WATCHED=0`, so the loop body never executes and the check is `0 -eq 0`. Correct by
+   construction, informative about nothing.
+5. **A cross-perimeter `require`.** `cdrafts-split/LeafWiring.ec:74` does `require import
+   EncoderBridge`, whose only copy is `experiments/tcollres-leg/EncoderBridge.ec`. `LeafWiring` is
+   in neither the closure nor the cone, so nothing is wrong today; it is a hazard only if that file
+   is ever promoted, and `LeafWiring.ec:10-17` independently argues the naive wiring is poisoned.
+6. **The reproduction recipe was broken** by the toolchain check; corrected in place above.
+
+#### What can still be done — and two thirds of it is not proof work
+
+**Theorem-terminated or recorded dead. Do not re-attempt.** `Pr[ITSRC10]` (countermodel).
+Bounding BadEnc at the WOTS-TW layer — provably 1 there. The S-TCR sibling reduction
+(`stcr_reduction_wip.ec:234` records that it does not hold). Closing `extract_op` — the two-reviewer
+verdict is *do not close it*: it targets a local mirror game, not the headline's term. Gating
+`WOTS_C_Multi` — `scratch/FINDING-c-le-ptgts-justification-is-ungated.md` **retracts its own central
+inference**; its title reads like a live gap and is not one.
+
+**Owner decisions, not proof work.** `extract_op` retire/archive, which would remove ~100
+statements from the certified surface. Whether the EUF-CMA statement is meant to cover
+bootstrap-signed Type-1 authorisations. The `(len, w, target_sum)` parameter conversation is
+**already closed** — those are frozen.
+
+**Genuinely live, in order.**
+1. **Promote the surface count.** `cdrafts-split/C10DeployedScope.ec:344` — a *cone* file — cites
+   `experiments/wots-badenc/count/C10SurfaceKernel.ec` for a constant it leans on, and no
+   `experiments/` file is in the perimeter. Zero admits, zero axioms, eight controls. This is the
+   pattern that justified the PTgtsPin promotion.
+2. **`experiments/ptgts-pin/PTgtsPinCapstone.ec`** — 0 admits, 0 axioms, discharges `c <= p_tgts`
+   against a pinned value. Its own dependency was promoted on 2026-08-19 and this file was left
+   behind: `AT_PINNED_PTGTS` appears in no `cdrafts-split/` file and has 0 manifest rows. It targets
+   the 2026-08 capstone, not the current quotation surface.
+3. **`emb_in` ↔ Rust fidelity** — this README already calls it "the obvious next unit and is **not**
+   done".
+4. **The losslessness obligations** that WOTSNAMED and TCOLLNAMED carry as premises rather than
+   discharge — `scratch/FINDING-unfold-is-unblocked-at-the-deployed-adversary.md` calls this "the
+   real remaining cost".
+
+What Runs 1–7 and the 2026-09-17 integration bought is **auditability, not strength**: that the
+files contain what this README says, and that a deletion cannot pass unnoticed. No theorem became
+stronger. That distinction is worth keeping in front of any reader who arrives at the counts first.
+
+### UPDATE 2026-09-21 (later) — the constant-sum surface count is IN the perimeter
+
+The review earlier today ranked this first among the live candidates, and it is now done. Four
+files move from `experiments/wots-badenc/count/` into `cdrafts-split/` and become gated closure
+members: `VecDP.ec`, `CountDS.ec`, `C10SurfaceKernel.ec`, `C10Surface.ec`.
+
+**Why.** Two *cone members* — `C10DeployedScope.ec:344` and `GprocTCollNamed.ec:56` — lean on the
+constant `|C_T|`, and the object they leaned on lived in a directory the cone census does not
+cover. That is the same question the PTgtsPin promotion answered on 2026-08-19 ("where is this
+written down?" → "in an UNGATED experiment"), and the same answer is taken here. **Moved, not
+copied**, per that precedent: the tree holds exactly one definition, so the two cannot drift apart.
+
+**What is now gated.** `c10_surface_count` — the exact cardinality
+`count_ds 43 8 205 = 22169393903687611906220091621190388`, *computed* inside EasyCrypt rather than
+asserted — together with `c10_surface_is_a_cardinality` (a duplicate-free list whose members are
+exactly the length-43 vectors over `[0,8)` summing to 205) and the bracket
+`c10_surface_bits : 2^114 < |C_T| < 2^115`.
+
+**What it does NOT buy, stated before the run rather than after.** No chain result, no bound, and
+no number attached to `T_COLL_RES_ENUM`. The surface count is a cardinality, and
+`scratch/FINDING-do-not-import-the-policy-cap.md` §1 records that **no derivation connects it to an
+advantage**. This is a deliberately **gated-not-wired leaf** — `C10DeployedScope.ec:28-30` records
+the same property of its own content. The leaves two reviews criticised
+(`experiments/tcollres-leg/`) were failed attempts at a *chain* result; here the leaf is the
+deliverable. What changes is that a constant two cone members cite is compiled and digest-pinned on
+every run instead of rotting in an untracked directory.
+
+#### Cost, predicted before computing and matched except in one place
+
+`scratch/PREDICTION-surface-count-promotion-2026-09-21.md`.
+
+| quantity | before | after |
+|---|---|---|
+| closure roots | 42 | **46** (+4; 50 counting the base roots) |
+| cone files | 53 | **57** |
+| `EXPECT_STMTS` | 1082 | **1120** (+38) |
+| `EXPECT_PINS` | 1166 | **1220** (+38 statements, +16 `op:` definitions) |
+| census rows | 1677 | **1693** (`added=16`, `removed=0`, every one `defined-op`) |
+| **ledger** | 241 | **241 — unchanged** |
+| `EXPECT_CTLS` | 49 | **55** (predicted 57 — see below) |
+
+**The ledger does not move.** This promotion adds no axiom, no admit and no clone obligation; all
+sixteen census additions are `defined-op`. That is the whole point of checking it rather than
+asserting it.
+
+#### The prediction miss, which is the part worth reading
+
+I predicted `EXPECT_CTLS` 49 → 57, registering all eight of the experiment's controls. The actual
+number is **55**, because two of them are not worth registering, and I only found that out by
+running them and reading the message instead of trusting the polarity.
+
+`KctlA` and `KctlB` do fail — with **`anomaly: Stack overflow`**, not with a proof failure. At full
+43/205 scale they ask the evaluator to reduce the whole DP against a deliberately wrong literal,
+and it blows the stack before reaching a verdict. This is not new and not an artifact of the move:
+the original 2026-08-14 receipt records exactly the same two anomalies (`WALL_MS` 42763 and 41990).
+
+**A stack overflow does not discriminate.** It would happen just the same if `count_ds` were broken
+into computing garbage, so the control's failure carries no information about the property it
+claims to test. Registering it would have bought a control that fails for an unrelated reason —
+the same defect class as the T4 control that rotted in 2026-08-29 and passed while testing nothing.
+So they are left out, with the reason recorded in `cert-controls-split.tsv` rather than silently
+dropped.
+
+The property is still covered, by a control that *does* discriminate. `CtlVal` perturbs the
+identical value by +1 but reaches it differently: it first proves `kernelT` — the true value, which
+reduces in ~41 s — then rewrites through `count_ds_kernel`, so the failing step is a small
+arithmetic disequality and the diagnostic is `[by]: cannot close goals`. Six controls are
+registered: `KctlC` and `KctlE` MUST-PASS, and `KctlD`, `CtlSum204`, `CtlLen42`, `CtlVal` MUST-FAIL,
+each graded on its **observed** `[critical]` message.
+
+#### Two corrections folded in, since a replay was required anyway
+
+Both were named in the review earlier today and left undone because each lives in a hashed file:
+
+* `GprocTCollNamed.ec:56` no longer says "`|C_T| = 2^114.0941` is machine-checked". What is
+  machine-checked is the exact integer and the `2^114 < |C_T| < 2^115` bracket; the decimal is that
+  integer's base-2 logarithm, computed outside EasyCrypt, and it appears only in a comment
+  (`C10Surface.ec:61`). The comment now cites the two closure members instead.
+* `cert-cone-files-split.tsv:1` said "every file the **38** gate roots transitively require" —
+  correct when written on 2026-08-20 (34 closure + 4 base), stale since. It now says 50, and the
+  "`53 files = the 46 roots + 7`" line — which was *correct*, and which this review nearly filed as
+  a defect before working out that "roots" there counts the four base roots too — reads 57 = 50 + 7.
+
+#### Receipt
+
+Full pinned-image replay through `contracts/verification/scripts/run_easycrypt_split.py`; identity
+`623ad0710d73000a1c693049b8933813` → `a814f744b21ecee6c5ecf32d2c58efc2`, computed by the gate's own
+`--identity-only` path rather than by hand.
+
+```
+### RESULT: GREEN                       (0 FAIL lines, __GATE_EXIT=0)
+OK toolchain: r2026.02, 25 pinned prover configurations
+### IMAGE ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3
+OK   INPUTS_SHA256 matches the committed identity  (a814f744...)
+### CONE_COMPILED=57 EXPECTED=57 | CLI_FILES_RUN=57 CLI_DISAGREEMENTS=0
+OK unique statement pins: 1220
+OK   coverage: all 1120 top-level statements across 57 CONE files are pinned (roots 50 + transitively required)
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=459  total=1693
+controls executed (unique)=55 expected=55 | margin 4/4 and 3/3 | figures 7/7
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK   taint controls: pass=15 unique=15 fail=0 expected=15
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run (a814f744...)
+```
+
+Full log: `scratch/gate_20260921_surface_count.log`.
+
+The bounded member-aware batch passes both proof drivers and all 70 controls;
+its Astra/Opus review and exact source are recorded in the
+[member-aware September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-ma-2026-09-22/README.md).
+
+The bounded hypertree/leaf interface batch passes the full 71-file two-driver
+replay and all 75 controls. Opus returned GO; the sole Astra pending-replay gap
+is now discharged by unchanged-source evidence. Its exact proof scope
+and remaining cube/collision join are recorded in the
+[hypertree September 22 receipt](../../../../docs/security/adversarial-review/findings/easycrypt-bounded-hypertree-2026-09-22/README.md).
+
+The remaining-research batch passes the cold 78-file two-driver replay and all
+90 controls. Its bounded Astra/Opus review, exact source identity and unresolved
+statements are recorded in the
+[remaining-research receipt](../../../../docs/security/adversarial-review/findings/easycrypt-remaining-2026-09-22/README.md).

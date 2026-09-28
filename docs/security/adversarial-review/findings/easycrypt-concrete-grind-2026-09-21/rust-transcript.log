@@ -1,0 +1,9 @@
+   Compiling sphincs-c10 v0.1.0 (/tmp/pq-easycrypt-integration-20260921-apewcqf1/candidate/sphincs-c10)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.40s
+     Running tests/easycrypt_transcript.rs (target/x86_64-unknown-linux-gnu/debug/deps/easycrypt_transcript-dcf76e94d34527c4)
+
+running 1 test
+test concrete_digest_matches_easycrypt_byte_adapter ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

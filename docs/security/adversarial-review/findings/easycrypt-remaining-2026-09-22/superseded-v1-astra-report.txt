@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 928a7480667ddc9f15ae48d509ae4664ecde510e / bc40636030a631cde6dcd2c8bb3cd5708931e129
+FINDINGS: none
+GAPS: Separate full cold two-driver 78-file/89-control gate result was not assessed here and must pass before landing.

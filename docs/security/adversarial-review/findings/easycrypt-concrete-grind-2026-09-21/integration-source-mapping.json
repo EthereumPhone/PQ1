@@ -1,0 +1,481 @@
+{
+  "integrated_commit": "7b7e64bb532719005bdac61833b02deca5d623b7",
+  "integrated_tree": "57b2ffdb41d9e276febaf4441771e14a4b817f60",
+  "parents": [
+    "273071164979f499171027c4f9735022324cba3d",
+    "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+  ],
+  "all_60_proof_files_byte_identical_to_a_parent": true,
+  "boundary": "Integration reconciles gate inventories/counts and their regression expectation; it does not edit any formal proof source. Full exact combined replay remains separately required.",
+  "files": [
+    {
+      "file": "base-c10-split/BinaryTrees.ec",
+      "sha256": "84df7238002a0971e6bcd9375574977404493d751c082ac6a342f353a5f5f4ab",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/FL_SL_XMSS_MT_ES.ec",
+      "sha256": "cacbebd005ac166938d208af2b431e9dd7a753e78ec0a58018078589d2676dd5",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/FORS_ES.ec",
+      "sha256": "ac5e354b298bbb8760c483e0bd214c2f6bd78597fde5756f6428ef2bab043f7f",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/HashAddresses.eca",
+      "sha256": "a843f686146208c55a8c4438096ac405a8fe67b70aee5d073f43f2d5a06ce35e",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/KeyedHashFunctions.eca",
+      "sha256": "67b0031db0fbd8c335b8008fe3c00fb5bc109d4902591fabfdbaf99c60a130d1",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/MerkleTrees.ec",
+      "sha256": "109d5261920540db6b5e96e26b890f2b942c0a619bcadb1c7f845c3402f92d4c",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca",
+      "sha256": "28e0065e66c0c006c0ec63bc1d22ea8bfd78783d4d2273ea98906e2fe2609d21",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/SPHINCS_PLUS.ec",
+      "sha256": "eaca72bb53f808067707fea3362af7db0dd79ac7a44a8dbd803a788b14f1c713",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/TweakableHashFunctions.eca",
+      "sha256": "1e1f5c82fa6dcfd9a8b83004ea8df408fda8c7f87f03ae65d565dcd2ad904c92",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "base-c10-split/WOTS_TW_ES.ec",
+      "sha256": "941df9b2ee35e53b128c46ce40bb7da1497fd5c017ce15b9c933b7d3d134d521",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/BadEncCountermodel.ec",
+      "sha256": "426693f0ebaeac4b09d957ae6b5e343ba8bf43fd485348cb6a4e229c70cc90c0",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/BadEncSplit.ec",
+      "sha256": "ba94939869d173713d690320470660697d044ef62bddf84510de4d55cd4445fd",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/BadEncStep4.ec",
+      "sha256": "8d49fd5a9f0f36b338fd9586eba7baa852a625d6dec4350804c3a3cc63816445",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/BadEncToTColl.ec",
+      "sha256": "ede3098f160569050677a4e16f37ccd968b25ec33505637b708ed874236b9a6f",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10BoundedGrind.ec",
+      "sha256": "27e8f6a469bfab0a58b73acfa398155a217f901bd03980a6595006b48ff5c733",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10Bytes.ec",
+      "sha256": "3d6924904713347fabf77deca15c56d04094c95be8c7130575c02e671e6a563b",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10Counter.ec",
+      "sha256": "1c93aa173db90139e6d113311b23a78da77d6cbf67e7fc56fbccc9e5a7445d34",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10DeployedCapstone.ec",
+      "sha256": "b2885eccf02f69790913e4fe4ee36f8c569368696114b451859322aaaf4e5f6d",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10DeployedGeometry.ec",
+      "sha256": "efbb0d81aa36df7ae1848ac379a855582deaea529a7b91219a7ebf91f8c4cde5",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10DeployedInstance.ec",
+      "sha256": "853b4143ae86e4a5b44ca062f29358f9a28f9c2793cfa357969de9e710e007be",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10DeployedScope.ec",
+      "sha256": "27b9016ee1f5aba775108e52af4b4ad2539805f08a6f8e668e1191cf06e1a48f",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10SpecControls.ec",
+      "sha256": "8f826d78409f47bd8ae8820940a8ad09b8f22b66da6a104d98974fb2eef0ead4",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10Surface.ec",
+      "sha256": "8ce461a39da97ce224fd2562c89aa2747141a7caeba6fb0922455e7d61d9ef42",
+      "identical_to_parent": [
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/C10SurfaceKernel.ec",
+      "sha256": "c245fdc4de01c1dd933787a1bcce630fcec6a04a9fca2f02f038d5f075116e8d",
+      "identical_to_parent": [
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/CountDS.ec",
+      "sha256": "ef0de00d63225dd088e888d51bae250f812b5cfebf364783617df881cc7e8fbe",
+      "identical_to_parent": [
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/DarkSide.ec",
+      "sha256": "b083bea65f657cc31f5c017732a9ce4b8ab851a10ec947a80fd03ad086ed4d99",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/DarkSideC10.ec",
+      "sha256": "0f80c56b482888f9cd9060b73ed3ea49ab0142276a59ab98304e19cf5060c22c",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/FORS_C.ec",
+      "sha256": "01cbe3d6a2d8df36afa4e7beb9c52e9d0a0c61662a83dd948468fa7168580ff2",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/FORS_C10.ec",
+      "sha256": "4d8b0b146f41c4e876eb166082f0401df4995dfc6989193ccd20cb63ebbacc2a",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/FORS_C10_Multi.ec",
+      "sha256": "2144631a00c224709b46c2fcf8c10ed7e37c67a8a8d03dc19de874572b853784",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/FORS_C_TreePort.ec",
+      "sha256": "bcc4d2cfa18c7e2ae164444500a32814d9ede39f4931df970e4bba36f4d632af",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/FxChain.ec",
+      "sha256": "34d46969f9d3d79fe10b3b7299c7071134cd8f5bb9ca4c399bd2ae4114afff2b",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GFailCharged.ec",
+      "sha256": "e5979842df000398c16ab555873aeca86a5507fbd064bbddb181c92ca37aaeb4",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocChargedQWired.ec",
+      "sha256": "2f34f6cc711ec15c0a76a7f3b65ac2d56694c92e6d664a25b8ea3fb82a3e6a4e",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocFORSC10.ec",
+      "sha256": "9f050e5a792583cb5ea77ed2c3d78c99f29b9319eddc7cd168c5abdad43108cf",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocQBound.ec",
+      "sha256": "f9ce00359097cb5366b01d4902b62839f9fc4fc8c8c6977134f717dd05c898ae",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocQWired.ec",
+      "sha256": "d0485156513c72f21eb717e38a3e9d8b4513c6cca6987c037e5844a91d328a2f",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocT1Opre.ec",
+      "sha256": "b427ebe88e523b1e36fb603b15bd4c8e4c465657f0368dfdc5fa4e7f00d1e6a9",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocT2Trh.ec",
+      "sha256": "3a56507a20b0ccc7783f0bdbe9b73f8ecfe90cb26904000bcc823c99809031b6",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocT3Trco.ec",
+      "sha256": "9c2c94479bfe0b8d9764af82e506a6a1024bec6a023cd2ebd3d172e4d0d73a95",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocTCollNamed.ec",
+      "sha256": "ba29b203b32bd1815390e22be7678291fcfc0373ca335c14d1b10bc299165471",
+      "identical_to_parent": [
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocVI.ec",
+      "sha256": "80da341be5204fd847b84a14ee435cc0f9e7babee21d2cc9fe0b5e56e953d58f",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/GprocWotsNamed.ec",
+      "sha256": "82f98e78083fd58de78eaf5711d2aaba8d1dc0ebe73e55405f7b9fceff43061f",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/Grind.ec",
+      "sha256": "34250abc1bed381694ac82d83730bd3c9db48a439018c2aef40ba7f17cc6f36f",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/RtopCSoundness.ec",
+      "sha256": "893eb060d3411a4a756accbe5fd11814eafef90f566dcbbfb094bfd6bdc69c37",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/STCR_C.ec",
+      "sha256": "8f7c1f91d14f596bac412c40991ec47f6dd8d044cd5d130024b127cadf2cbb20",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/SphincsC10CapstoneCharged.ec",
+      "sha256": "15a274da1d01790a7d8eb1489491df1fd8daa2699f52a6902d1f978b5b0fd7e6",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/SphincsC10CapstoneWired.ec",
+      "sha256": "8ac2f7dd32ae8cc562f28d143ca3676cbcb1a097c340ae2901aa3c3fe1398e56",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/SphincsC10Content.ec",
+      "sha256": "639585c52d7916a0190db47c7ec2ff72a1cdc32a24d197fa6f533461f12cacae",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/TCollResEnum.ec",
+      "sha256": "cb87e06d9ff94f5a4b77eb347da860acfbc9ecbdc54e0418e3025c15211aa1a8",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/VecDP.ec",
+      "sha256": "a91f8554f4cc28733cc2137fe1dfae1321925cba73ab53173e79cfaa90017789",
+      "identical_to_parent": [
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Interactive.ec",
+      "sha256": "597c80774702b88f112d9747a569a02bbec1f8e7004b7ef5ada5cbb1c9586ae3",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Multi.ec",
+      "sha256": "b9cb5982208f4f28c92bad6c9773dfb55018492f46f80cc775990714e7fc1ba2",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Real.ec",
+      "sha256": "0d7b1d82c47ae62e590039dbc2ad0488dfd987bc932454d4c108193a5e8d65de",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d"
+      ]
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Reduction.ec",
+      "sha256": "af566dcace9ae73c9aeafec4e32e36d82f53f831a017c3c00ecc8157def2f9c7",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/WOTS_C_Scheme.ec",
+      "sha256": "0ba6902a6db69deda1d0e117335c320a56403db128d37815631f6f0c97296ebb",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/WotsLegCharged.ec",
+      "sha256": "882adac21e6768c43856742a4658372792e3673f0370e9e34aa1386ffe89b6ca",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/XMSSMT_C_Scheme.ec",
+      "sha256": "682c44c2d5a2b648669bdf04582d0738855a9874e8ff9e896054811b728e9323",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/XmssmtCCCharged.ec",
+      "sha256": "a1ebffea5fd6ff547fa3735a81fd54a4ad54d00865060af37b15a2e38af422ff",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    },
+    {
+      "file": "cdrafts-split/XmssmtCC_All.ec",
+      "sha256": "f8608e09ecd91983258394ed1815fec363527e7d311bc2aba1ca30b3805c1909",
+      "identical_to_parent": [
+        "273071164979f499171027c4f9735022324cba3d",
+        "e6ac316e2ee05495d16f2770e46a62d950beab2a"
+      ]
+    }
+  ]
+}

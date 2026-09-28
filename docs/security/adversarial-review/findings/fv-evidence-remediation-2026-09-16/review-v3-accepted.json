@@ -1,0 +1,41 @@
+[
+  {
+    "reviewer": "claude",
+    "wave": "review-v3",
+    "verdict": "VERDICT: GO",
+    "seconds": 299.143,
+    "words": 599,
+    "hashes": {
+      "prompt_sha256": "c748256a5f146f5e5559888f88fbb3d1472c801c84a543e97269594044be1e97",
+      "report_sha256": "50ce89154388bfbff355c723fdd52347eda98bcca3323a34cd84980c3f7a1461",
+      "runtime_sha256": "c7fc0702ce0f97c66233f7b26ee41db686d284d3ef450cf3c33347f8820b36a6",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  {
+    "reviewer": "kimi",
+    "wave": "review-v3",
+    "verdict": "VERDICT: GO",
+    "seconds": 561.52,
+    "words": 504,
+    "hashes": {
+      "prompt_sha256": "c748256a5f146f5e5559888f88fbb3d1472c801c84a543e97269594044be1e97",
+      "report_sha256": "608db8208360a82857655c80d3cefcd8aca31e6fef67c2b8a19fd85a59ede0de",
+      "runtime_sha256": "3c5f5fe18d545bd86ca9f99ccf6512a0fdfd3dda49f0152cd08b72bcddf9247c",
+      "stderr_sha256": "212c64cf4938df18fd91fef38d731705715c2fd19c22127e480f02ced65ab78d"
+    }
+  },
+  {
+    "reviewer": "codex",
+    "wave": "review-v3-codex-retry",
+    "verdict": "VERDICT: GAP",
+    "seconds": 518.558,
+    "words": 25,
+    "hashes": {
+      "prompt_sha256": "c748256a5f146f5e5559888f88fbb3d1472c801c84a543e97269594044be1e97",
+      "report_sha256": "5ae03eba54fb62569180c3836bf9af52e1a7aa2fde7bb5d17660c312999e5a7f",
+      "runtime_sha256": "4967e916a79384ea50e24806268e9ab44a0d972b0bfdaaa8183822ca85a79b55",
+      "stderr_sha256": "18ff6047d7a39fee3c7604bf71a1a82857b04575cdd6dccfaa6d8e007d0fb28a"
+    }
+  }
+]

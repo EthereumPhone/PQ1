@@ -808,7 +808,15 @@ seq 1 1 : (={glob A} /\ ps{1} = ps{2} /\ STCRC_WC.Col.O_THFC_Default.pp{1} = ps{
     call (signC_TW psv adv mv encb).
     call (keygenC_TW_s psv adv).
     skip => /> *; smt(nth_rcons size_rcons take_nth map_rcons nth_map size_map).
-  skip => /> *; smt(take_size size_ge0 size_map).
+  skip => />.
+  move=> &2; rewrite take0 /= !size_map.
+  split.
+  + smt(size_ge0).
+  move=> ksL ksR hstopL hstopR hnonneg hbound hsizes hinv.
+  have hdone : size ksL = size R_multi_WOTSTW.qs{2} by smt().
+  rewrite hdone take_size /= hsizes hdone /=.
+  move=> idx h0 hlt; apply hinv; rewrite hdone.
+  by split.
 (* Block E-pre: side-2-only wcks reconstruction, wcks{2} = ks{1} *)
 seq 0 5 : (={glob A} /\ ps{1} = ps{2} /\ STCRC_WC.Col.O_THFC_Default.pp{1} = ps{1}
            /\ qs{1} = R_multi_WOTSTW.qs{2}
@@ -966,4 +974,3 @@ proof.
   have h2 := D1_hop2 A &m encb.
   smt().
 qed.
-

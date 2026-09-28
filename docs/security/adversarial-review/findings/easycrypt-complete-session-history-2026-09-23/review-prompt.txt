@@ -1,0 +1,26 @@
+Review PQSigner OS for merge of its EasyCrypt complete-session history and repeat-accounting milestone.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-context-history
+Commit: d0c2999c92932d46806322af96a637e186d9b170
+Tree: e7fd222a409acf077c2a44914d230b064982caf3
+Compare: 38976ea50b0f79e083759feb33f43876504d2738..d0c2999c92932d46806322af96a637e186d9b170
+
+Focus on formal-verification correctness:
+1. The actual live FullSession signed-message list accounts for private R derivations, making unsigned 32-byte messages fresh over the bounded grind window. Refusals and sticky failure must be handled correctly.
+2. The actual grinder records all rejected trials preceding its first acceptance. Memoized extensions preserve that trace; repeated complete signing retains its accepted randomizer and H_msg digest.
+3. Every 32-byte context at a live session boundary is fresh or completed. This classification must hold through actual key generation, arbitrary permitted structured/byte clients and final verification, without exposing private histories to the client.
+4. PreparationFinisher and PublicVerifier interface restrictions really instantiate the actual raw signer/verifier; equivalences preserve results and oracle state, with the necessary module privacy restrictions.
+5. session_novel_digest_bound covers the actual guarded signing call, preserves width/history/cache-charge premises, and explicitly requires its entry-fixed predicate to reject a repeated context's retained output. No fresh independence for repeats or future enlarged opening sets.
+6. Statement, source, census and control enrollment preserves old contracts and adds no project axiom, admit or clone assumption. Negative controls must reject for their declared reason, not parse failures.
+7. These are independent-table intermediate-game history statements. They do not transfer private history predicates literally to physical Rust via the whole-game hop, or bound the remaining accumulated-opening/component-reduction forgery term.
+
+Evidence: all 19 enrolled modules pass source-matched direct compilation and default CLI with repository-only includes; all 11 new controls, 11 checker regression groups, static contract and 167 source bindings pass. Inventory: 203 files, 91 roots, 2128 pins, 1863 statements, 26 headlines and 22 scope probes. Full cold replay of 203 targets under both drivers plus 133 controls is running separately and remains required before landing; the coordinator will confirm that unchanged-source receipt without another model turn.
+Non-goals: runtime/API/parameter changes, hardware or shipment, optional hardening, deferred playbook sweep, Rust extraction, concrete SHA-256, QROM or a numerical end-to-end EUF claim.
+
+Inspect the diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: d0c2999c92932d46806322af96a637e186d9b170 / e7fd222a409acf077c2a44914d230b064982caf3
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

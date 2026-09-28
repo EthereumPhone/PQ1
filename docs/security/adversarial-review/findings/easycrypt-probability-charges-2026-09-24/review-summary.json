@@ -1,0 +1,39 @@
+{
+  "target": "a25c9122ac294bea966ac9ac7b909dc3dfb39514",
+  "tree": "d6b72bea2152c135c0de37e9d78c2e0b535c7e77",
+  "reviewers": {
+    "codex": {
+      "duration_seconds": 204.116,
+      "report_words": 24,
+      "verdict": "GO",
+      "findings": []
+    },
+    "claude": {
+      "duration_seconds": 136.623,
+      "report_words": 545,
+      "verdict": "GO",
+      "findings": []
+    }
+  },
+  "drift": false,
+  "remaining_gate": "Resolved by unchanged-source full cold replay",
+  "coordinator_notes": [
+    "Both fresh reports read and source/tree identities checked. Both return GO without findings; the required cold replay remains pending.",
+    "Initial control-evidence overstatement was reproduced and corrected; no proof or control body changed. The final receipt retains initial reports, cancellation and both-driver weaker-bound reproduction.",
+    "New controls are six positive checks, twelve scope rejections, nineteen exact mismatches and one unfinished obligation; rejection does not establish falsity, necessity or tightness."
+  ],
+  "substitutions": "Astra ultra replaces SOL; Kimi omitted under standing owner instructions.",
+  "opus_runtime_model": [
+    "claude-opus-5-5"
+  ],
+  "astra_model_evidence": "gpt-6-astra ultra requested; CLI JSON stream does not independently expose remote model identity.",
+  "coordinator_checked_utc": "2026-09-24T03:20:49.578385+00:00",
+  "resolved_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-24T03:15:59.055838+00:00",
+    "finished_utc": "2026-09-24T05:45:55.645864+00:00",
+    "elapsed_seconds": 8996.59,
+    "commit": "a25c9122ac294bea966ac9ac7b909dc3dfb39514",
+    "tree": "d6b72bea2152c135c0de37e9d78c2e0b535c7e77"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "target": "6bc23f2223aa820595be3bd6b04391bd7e5b6121",
+  "tree": "4a5ec55d432c2f4d46a041c3d231c85502a7fca6",
+  "reviewers": [
+    {
+      "reviewer": "claude",
+      "status": "completed",
+      "duration_seconds": 304.082,
+      "report_words": 632,
+      "hashes": {
+        "prompt_sha256": "9c77f39f0db084c2d6e41c1cf1a46b326251e8fd6a42acb1c19327cb96b481a1",
+        "report_sha256": "0acfaa3ba11c0f6da204146d62dbca4bacf712eab0dbe2df560e6bb366df762f",
+        "runtime_sha256": "7b86480185fc2919e4a5e7b1bef7400fc8a26e1f588d85cf9593de5447fc4925",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "reviewer": "kimi",
+      "status": "completed",
+      "duration_seconds": 766.142,
+      "report_words": 505,
+      "hashes": {
+        "prompt_sha256": "9c77f39f0db084c2d6e41c1cf1a46b326251e8fd6a42acb1c19327cb96b481a1",
+        "report_sha256": "f41ba910324c5bbff4de3f43a04a331c657c7647d8e94c2931858cfd0b1e50d3",
+        "runtime_sha256": "ad0ea9a982f0229daa76f04b1117a8c026aeb94b63a9418f58192419cdd717c9",
+        "stderr_sha256": "18f120aa230ae653607d73fcfd0ecd6c89004f339d7498362c48428bffc655d0"
+      }
+    },
+    {
+      "reviewer": "codex",
+      "status": "timed_out",
+      "duration_seconds": 900.14,
+      "report_words": null,
+      "hashes": {
+        "prompt_sha256": "9c77f39f0db084c2d6e41c1cf1a46b326251e8fd6a42acb1c19327cb96b481a1",
+        "report_sha256": null,
+        "runtime_sha256": "f0f29022b28aeeb5e3627439fc4c882e56ff8a62cc403cfbd41e25c037946f01",
+        "stderr_sha256": "ff364f40273d37bc6ef9f0574e40412b3b87e70f26121620a24bd262b3501c08"
+      }
+    }
+  ],
+  "mandatory_gap": "SOL retry timed out without report; no further retry authorized by workflow"
+}

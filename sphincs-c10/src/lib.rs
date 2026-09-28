@@ -79,6 +79,7 @@ pub use hash::counters;
 #[doc(hidden)]
 pub mod sim_internals {
     pub use crate::address::make_adrs;
+    pub use crate::wots::extract_digits;
     pub use crate::fors::{
         compute_fors_pk, compute_fors_root, extract_fors_indices, extract_ht_index, sign_fors_tree,
     };

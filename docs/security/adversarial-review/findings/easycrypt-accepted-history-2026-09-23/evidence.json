@@ -1,0 +1,62 @@
+{
+  "source_commit": "e45e977a76867b2e72bf5e2e143be6baba04d537",
+  "source_tree": "af7f51132c5459b8480782dcfbadb75409e4872f",
+  "base": "d3e6dd0303888010ef1425355031b1e4c06fd058",
+  "input_identity": "d1d88a7319995db0b21c47869c79fa8d",
+  "inventory": {
+    "files": 90,
+    "roots": 78,
+    "unique_pins": 1561,
+    "statements": 1374,
+    "controls": 98,
+    "raw_census_rows": 1813,
+    "manual_source_bindings": 47
+  },
+  "full_gate": {
+    "exit_code": 0,
+    "started_utc": "2026-09-23T08:09:46.297261+00:00",
+    "finished_utc": "2026-09-23T10:23:48.087171+00:00",
+    "elapsed_seconds": 8041.79,
+    "commit": "e45e977a76867b2e72bf5e2e143be6baba04d537",
+    "tree": "af7f51132c5459b8480782dcfbadb75409e4872f"
+  },
+  "review": {
+    "commit": "e45e977a76867b2e72bf5e2e143be6baba04d537",
+    "tree": "af7f51132c5459b8480782dcfbadb75409e4872f",
+    "reports": [
+      {
+        "model": "claude",
+        "verdict": "VERDICT: GO",
+        "duration_seconds": 152.415,
+        "words": 578,
+        "report_sha256": "175bbe9edece366304aa7c4a758bd80822e60a953879e3b9327c535f9cf3ed80",
+        "prompt_sha256": "f0b038476f03e1903b88cdeae0c974d504d57884c56a2e798858355f59b9b055"
+      },
+      {
+        "model": "codex",
+        "verdict": "VERDICT: GAP",
+        "duration_seconds": 275.57,
+        "words": 39,
+        "report_sha256": "025fb1040cae7268e2a49a3799dd232701139816db263f3f3f855306ffd7e6b7",
+        "prompt_sha256": "f0b038476f03e1903b88cdeae0c974d504d57884c56a2e798858355f59b9b055"
+      }
+    ],
+    "blockers": [],
+    "coordinator_scope": "Source merge only; no hardware, QROM or quantitative forgery claim.",
+    "substitutions": "Astra ultra replaces SOL; Kimi omitted by standing owner direction.",
+    "previous_snapshot": "c2faabfa failed cold CLI in nodes_input; explicit index-bound correction preserves all declaration contracts and gate limits.",
+    "initial_astra_mechanical_gap": "Nested Bubblewrap prevented every shell command; sole retry with legacy Landlock under unchanged outer read-only mounts within original deadline.",
+    "coordinator_disposition": "GO for source merge after unchanged-source full cold replay; raw Astra GAP retained. Its sole pending replay gap is resolved by full-gate-result.json. No new model wave.",
+    "resolved_gate": {
+      "exit_code": 0,
+      "started_utc": "2026-09-23T08:09:46.297261+00:00",
+      "finished_utc": "2026-09-23T10:23:48.087171+00:00",
+      "elapsed_seconds": 8041.79,
+      "commit": "e45e977a76867b2e72bf5e2e143be6baba04d537",
+      "tree": "af7f51132c5459b8480782dcfbadb75409e4872f"
+    }
+  },
+  "focused_receipts": 26,
+  "scope": "Accepted-history bounded nonadaptive hypertree composition and persistent raw-oracle foundations. No full common-oracle scheme/reduction simulation or quantitative forgery bound. Later external prefix/hybrid experiments are not part of this candidate or review.",
+  "metadata_delta": "This receipt contains no proof/gate inputs; source above is the reviewed and replayed snapshot."
+}

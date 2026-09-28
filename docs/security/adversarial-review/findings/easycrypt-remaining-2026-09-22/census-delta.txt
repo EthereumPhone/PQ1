@@ -1,0 +1,22 @@
+REMOVED
+
+ADDED
+cdrafts-split/BoundedIID.ec	op-annotation:smt_opaque	bounded
+cdrafts-split/C10HashDomains.ec	defined-op:38b43995db83	hmsg_input
+cdrafts-split/C10HashDomains.ec	defined-op:d2bf806ad770	r_input
+cdrafts-split/C10HashDomains.ec	defined-op:a95e7a40d000	pair_input
+cdrafts-split/C10HashDomains.ec	defined-op:6d1c6f50578c	address_tag
+cdrafts-split/C10HypertreeCoverage.ec	defined-op:4f80bbdb0c37	path_cell
+cdrafts-split/C10HypertreeCoverage.ec	defined-op:92375605b6b0	covering_index
+cdrafts-split/C10Randomizer.ec	operand:de0552d1281d	RDraws.T
+cdrafts-split/C10Randomizer.ec	operand:e06816a03d8a	RDraws.uT
+cdrafts-split/C10Randomizer.ec	operand:dc196b061f91	RDraws.q
+cdrafts-split/C10Randomizer.ec	clone-discharge:star|realize:ge0_q	RDraws
+cdrafts-split/C10Randomizer.ec	defined-op:a71a4df03d88	full_digest
+cdrafts-split/C10Randomizer.ec	defined-op:ca7d8f8c740d	randomizer
+cdrafts-split/C10Randomizer.ec	defined-op:5230fc81ee69	truncate_r
+cdrafts-split/C10SharedSearch.ec	defined-op:ea92ebaa65f9	counter_inputs
+cdrafts-split/C10SharedSearch.ec	defined-op:42417df150bd	shared_search
+cdrafts-split/FORS_C10.ec	defined-op:515305da84d2	bounded_r
+cdrafts-split/SharedROBounded.ec	defined-op:c426a5c50c82	ro_search
+cdrafts-split/SharedROBounded.ec	defined-op:3b34a65f870a	fresh_count

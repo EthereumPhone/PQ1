@@ -1,0 +1,79 @@
+{
+  "candidate": "e405562e14fa3d656a3334b5c2959623ff5356ad",
+  "base": "2bc048a29315ef2a72300a0717f7305511e9caae",
+  "overall_ci": "red",
+  "known_failures": {
+    "660": "TRNG ledger anchor missing",
+    "711": "Existing proto receipt drift and locked fuzz Cargo.lock mismatch",
+    "717": "Foundry installer cannot execute binary file"
+  },
+  "failure_evidence": [
+    {
+      "job": "107439791741",
+      "name": "Contracts (forge test)",
+      "existing_issue": 717,
+      "log": "qh-ci-logs/107439791741.log",
+      "sha256": "8e181bc189dae4ee20df316ed6360ca60d6aa1bf927f59ce7a03397edce99073"
+    },
+    {
+      "job": "107439791330",
+      "name": "Line coverage (cargo llvm-cov \u2014 report-only baseline)",
+      "existing_issue": 711,
+      "log": "qh-ci-logs/107439791330.log",
+      "sha256": "2b07080624dfab988aef4a2672cf0507b9614586eccaba3cb949ae4c9d2c474c"
+    },
+    {
+      "job": "107439791311",
+      "name": "Slither (contracts static analysis)",
+      "existing_issue": 717,
+      "log": "qh-ci-logs/107439791311.log",
+      "sha256": "005692c3eb885179d08c587dbbb50699037b1f4f3db26a64a4283c45b11f4d95"
+    },
+    {
+      "job": "107439791286",
+      "name": "Invariant gates (#5 /",
+      "existing_issue": 660,
+      "log": "qh-ci-logs/107439791286.log",
+      "sha256": "4b9ae7cd8cd7645f96e15bfc2b13f6ad50f5b476587cfed59b231d53eece5d55"
+    },
+    {
+      "job": "107439791284",
+      "name": "Host unit tests (pure-logic crates)",
+      "existing_issue": 711,
+      "log": "qh-ci-logs/107439791284.log",
+      "sha256": "5948113942b0aa5ab461fe5e6419bb3b4232bcbfd9aa1f665108e039a3ef4e10"
+    },
+    {
+      "job": "107439791229",
+      "name": "Production quarantine gates (rollback + ERC-7730 provenance OPEN)",
+      "existing_issue": 711,
+      "log": "qh-ci-logs/107439791229.log",
+      "sha256": "48113c14388c27ffb2dc2bdbf833de3aaaff3dacbd9c742a77a67131d74f1d93"
+    },
+    {
+      "job": "107439791134",
+      "name": "PR",
+      "existing_issue": 711,
+      "log": "qh-ci-logs/107439791134.log",
+      "sha256": "403276d4776c852677e07f1b2b4f242d4f1730ee6a9e91bb941b5d8717a7d331"
+    }
+  ],
+  "unchanged_baseline_inputs": [
+    "secure/src/hw/rng.rs",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "fuzz/Cargo.lock",
+    "fuzz/Cargo.toml",
+    "proto",
+    "secure/data/erc7730/curations/manifest.json",
+    ".github/workflows"
+  ],
+  "checked_utc": "2026-09-24T00:30:59.450117+00:00",
+  "coordinator_review_required": false,
+  "source_scope": "Only EasyCrypt proof/enrollment/owner-status files changed.",
+  "coordinator_confirmed": true,
+  "coordinator_notes": [
+    "All 15 hosted jobs completed; Miri succeeded. Seven failed jobs retain the exact recorded IDs.",
+    "Coordinator read the seven failure logs: TRNG ledger source anchor, curation proto receipt mismatch (179755 versus 180562 bytes), locked fuzz manifest, and foundryup binary execution failure match existing #660/#711/#717.",
+    "Candidate changes only EasyCrypt proof/enrollment/owner-status paths; the recorded baseline inputs are unchanged. Hosted CI is red, not overall green."
+  ]
+}

@@ -1,0 +1,24 @@
+make: Entering directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-component-extraction/contracts/verification'
+/usr/bin/python3 -E -S -B easycrypt/c10-port/tools/check_source_binding.py
+OK EasyCrypt manual source binding: 348 inputs (not extraction)
+cd easycrypt/c10-port && /usr/bin/python3 -E -S -B -W ignore::ResourceWarning tools/test_split_contract.py
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 3.129s
+
+OK
+OK EasyCrypt manual source binding: 348 inputs (not extraction)
+cd easycrypt/c10-port && /usr/bin/python3 -E -S -B tools/split_contract.py
+OK   coverage: all 2417 top-level statements across 384 CONE files are pinned (roots 142 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 81 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   scope-probe linkage: 73 headline files <-> 73 registered scope probes (exact bijection)
+OK unique statement pins: 2772
+OK split static contract: 384 files; proof execution not performed
+cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
+### INPUTS_SHA256 6df326d66261b1b266bbc2688b2ec799
+FAIL INPUTS_SHA256 DRIFT: committed 45a497ff6ac7dfb7869ed3b84a51469f, computed 6df326d66261b1b266bbc2688b2ec799
+     a certified input or the certification machinery changed;
+     re-baseline deliberately and update cert-identity.tsv in the same commit
+make: *** [Makefile:2223: verify-easycrypt-split-pins] Error 1
+make: Leaving directory '/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-component-extraction/contracts/verification'

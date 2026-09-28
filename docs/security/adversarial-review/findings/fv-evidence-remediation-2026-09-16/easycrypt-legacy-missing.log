@@ -1,0 +1,4 @@
+make: Entering directory '/tmp/pq-fv-remediation-20260916-fl0q429t/target/contracts/verification'
+ERROR: docker unavailable; historical receipt is not a new verification
+make: *** [Makefile:605: verify-easycrypt-docker] Error 1
+make: Leaving directory '/tmp/pq-fv-remediation-20260916-fl0q429t/target/contracts/verification'

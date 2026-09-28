@@ -36,12 +36,22 @@
      * Nothing numeric improves.  `Pr[M.F.ITSRC10 ..]` is still carried UNREDUCED
        and remains the honest headline term; scratch/_countermodel.ec proves no
        parameter-independent bound on it is provable as that game is axiomatized.
-     * The WOTS-TW game `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` is still carried as an
-       unreduced GAME probability.  Reducing it is the separate collision
-       campaign, and it must NOT be done by applying the existing WOTS theorem,
-       which consumes the admit at base-c10-split/WOTS_TW_ES.ec:1513 and would
-       make a presently non-load-bearing admit LOAD-BEARING.
-     * It activates NEITHER of the closure's two admits.
+     * The WOTS-TW game `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` is still carried HERE as
+       an unreduced GAME probability.  It is NAMED in the parallel statement
+       `GprocWotsNamed.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED`
+       (2026-09-01), at the price of two extra premises; quote THIS one unless
+       you want the leg named.
+       CORRECTED 2026-09-01.  This bullet used to end: "it must NOT be done by
+       applying the existing WOTS theorem, which consumes the admit at
+       base-c10-split/WOTS_TW_ES.ec:1513 and would make a presently
+       non-load-bearing admit LOAD-BEARING."  That was correct when written and
+       has had NO ADDRESSEE since 2026-08-30: the admit at :1513 was REMOVED, not
+       contained, and what the parallel statement applies is the CHARGED theorem,
+       which is admit-free.  Replaced at the sentence rather than annotated.
+     * It activates the closure's remaining admit NOT AT ALL.
+       (Corrected 2026-09-02: this read "NEITHER of the closure's two admits".  The
+       WOTS one was REMOVED on 2026-08-30 -- see WotsLegCharged.ec -- so there is one,
+       `extract_op` in FORS_C_TreePort.ec, and it is not activated here either.)
      * The grind-failure summand is an AVAILABILITY charge, not a security loss;
        see experiments/tcollres-leg/FINDING-n2-is-independent.md section 5.  It is
        carried here because CHARGED carries it, and carrying it is what buys the
@@ -461,6 +471,14 @@ qed.
    constant-encoder degeneracy is excluded.  That is a statement about the premise set,
    not about the bound.  Quote _AT_DEPLOYED_PARAMS for strength; quote this one only when
    the point being made is about non-degeneracy, and say so.
+
+   UPDATE 2026-09-21: the counter/rank/injectivity warnings in the following
+   historical paragraphs describe the former abstract model. The actual WOTS
+   consumer now uses the full u32 domain in numeric order. C10DeployedInstance
+   proves c10_counter_cardinality, c10_counter_rank, c10_emb_in_pinned and
+   c10_emb_in_injective without extra premises; C10Bytes supplies the physical
+   byte adapter. The headline's encoder binder remains for compatibility. This
+   does not establish the full Rust/hash/predicate refinement or a numeric bound.
 
    AND WHAT IT DOES *NOT* BUY -- CORRECTED 2026-08-29, and the correction is this tree's
    own, from 2026-08-03.  An earlier draft said the pin moves the assumption to "THIS

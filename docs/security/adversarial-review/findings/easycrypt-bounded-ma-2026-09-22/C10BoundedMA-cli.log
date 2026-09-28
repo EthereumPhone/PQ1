@@ -1,0 +1,2529 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+[4|check]>
+[5|check]>
+Current goal
+
+Type variables: <none>
+
+ps: pseed
+ad: adrs
+m: dgstblock
+------------------------------------------------------------------------
+prefix_hit ps ad m => ! STCRC_WC.G.grind_fails ps ad m
+[6|check]>
+Current goal
+
+Type variables: <none>
+
+ps: pseed
+ad: adrs
+m: dgstblock
+------------------------------------------------------------------------
+prefix_hit ps ad m => ! STCRC_WC.G.grind_fails ps ad m
+[7|check]>
+No more goals
+[8|check]>
+[9|check]>
+added lemma: `prefix_hit_no_grind_failure'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+
+    O_Bounded.query 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[10|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+pre =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+
+    O_Bounded.query 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[11|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+Context : hr: {r : int, m : dgstblock, wad : wadrs,
+              answer : pkWOTS * (sigWOTS * cntr)}
+
+pre =
+  (answer = witness /\
+   O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+  !O_Bounded.bad
+
+(1--)  r <@ Search.run(O_Bounded.ps, WAddress.val wad, m)
+(2--)  if (r = -1) {                                     
+(2.1)    O_Bounded.bad <- true                           
+(2--)  } else {                                          
+(2?1)    answer <@ O_MEUFGCMA_WOTSC_Default.query(wad, m)
+(2--)  }                                                 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[12|check]>
+Current goal
+
+Type variables: <none>
+
+ps0: pseed
+wad0: wadrs
+m0: dgstblock
+------------------------------------------------------------------------
+Context : hr: {r : int, m : dgstblock, wad : wadrs,
+              answer : pkWOTS * (sigWOTS * cntr)}
+
+pre =
+  (ps0 = O_Bounded.ps /\ wad0 = wad /\ m0 = m) /\
+  (answer = witness /\
+   O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+  !O_Bounded.bad
+
+(1--)  r <@ Search.run(O_Bounded.ps, WAddress.val wad, m)
+(2--)  if (r = -1) {                                     
+(2.1)    O_Bounded.bad <- true                           
+(2--)  } else {                                          
+(2?1)    answer <@ O_MEUFGCMA_WOTSC_Default.query(wad, m)
+(2--)  }                                                 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[13|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+ps0: pseed
+wad0: wadrs
+m0: dgstblock
+------------------------------------------------------------------------
+Context : hr: {r : int, m : dgstblock, wad : wadrs,
+              answer : pkWOTS * (sigWOTS * cntr)}
+
+pre =
+  (ps0 = O_Bounded.ps /\ wad0 = wad /\ m0 = m) /\
+  (answer = witness /\
+   O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+  !O_Bounded.bad
+
+(1)  r <@ Search.run(O_Bounded.ps, WAddress.val wad, m)
+
+post =
+  O_Bounded.ps = ps0 /\
+  wad = wad0 /\
+  m = m0 /\
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs /\
+  search_result ps0 (WAddress.val wad0) m0 r
+[14|check]>
+Current goal
+
+Type variables: <none>
+
+ps0: pseed
+wad0: wadrs
+m0: dgstblock
+------------------------------------------------------------------------
+Context : hr: {r : int, m : dgstblock, wad : wadrs,
+              answer : pkWOTS * (sigWOTS * cntr)}
+
+pre =
+  O_Bounded.ps = ps0 /\
+  wad = wad0 /\
+  m = m0 /\
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs /\
+  search_result ps0 (WAddress.val wad0) m0 r
+
+(1--)  if (r = -1) {                                     
+(1.1)    O_Bounded.bad <- true                           
+(1--)  } else {                                          
+(1?1)    answer <@ O_MEUFGCMA_WOTSC_Default.query(wad, m)
+(1--)  }                                                 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[15|check]>
+Current goal
+
+Type variables: <none>
+
+ps0: pseed
+wad0: wadrs
+m0: dgstblock
+------------------------------------------------------------------------
+Context : hr: {r : int, m : dgstblock, wad : wadrs,
+              answer : pkWOTS * (sigWOTS * cntr)}
+
+pre =
+  (O_Bounded.ps = ps0 /\
+   wad = wad0 /\
+   m = m0 /\
+   O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs /\
+   search_result ps0 (WAddress.val wad0) m0 r) /\
+  r <> -1
+
+(1)  answer <@ O_MEUFGCMA_WOTSC_Default.query(wad, m)
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[16|check]>
+Current goal
+
+Type variables: <none>
+
+ps0: pseed
+wad0: wadrs
+m0: dgstblock
+------------------------------------------------------------------------
+Context : hr: {r : int, m, m0 : dgstblock, sk : skWOTS * pseed * adrs,
+              pk : pkWOTSTW, wad, wad0 : wadrs, sigc : sigWOTS * cntr,
+              answer : pkWOTS * (sigWOTS * cntr)}
+
+pre =
+  (O_Bounded.ps = ps0 /\
+   wad = wad0 /\
+   m = m0 /\
+   O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs /\
+   search_result ps0 (WAddress.val wad0) m0 r) /\
+  r <> -1
+
+(1)  wad0 <- wad                                                            
+(2)  m0 <- m                                                                
+(3)  (pk, sk) <@                                                            
+( )    WOTS_C_ES.keygen(O_MEUFGCMA_WOTSC_Default.ps, WAddress.val wad0{!hr})
+(4)  sigc <@ WOTS_C_ES.sign(sk, m0{!hr})                                    
+(5)  O_MEUFGCMA_WOTSC_Default.qs <-                                         
+( )    rcons O_MEUFGCMA_WOTSC_Default.qs                                    
+( )      (WAddress.val wad0{!hr}, m0{!hr}, pk.`1, sigc)                     
+(6)  answer <- (pk.`1, sigc)                                                
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[17|check]>
+Current goal
+
+Type variables: <none>
+
+ps0: pseed
+wad0: wadrs
+m0: dgstblock
+------------------------------------------------------------------------
+Context : hr: {r : int, m, m0 : dgstblock, sk : skWOTS * pseed * adrs,
+              pk : pkWOTSTW, wad, wad0 : wadrs, sigc : sigWOTS * cntr,
+              answer : pkWOTS * (sigWOTS * cntr)}
+
+pre =
+  (O_Bounded.ps = ps0 /\
+   wad = wad0 /\
+   m = m0 /\
+   O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs /\
+   search_result ps0 (WAddress.val wad0) m0 r) /\
+  r <> -1
+
+(1)  wad0 <- wad                                                            
+(2)  m0 <- m                                                                
+(3)  (pk, sk) <@                                                            
+( )    WOTS_C_ES.keygen(O_MEUFGCMA_WOTSC_Default.ps, WAddress.val wad0{!hr})
+
+post =
+  forall (result : sigWOTS * cntr),
+    O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps
+        (rcons O_MEUFGCMA_WOTSC_Default.qs
+           (WAddress.val wad0{!hr}, m0{!hr}, pk.`1, result))
+[18|check]>
+Current goal
+
+Type variables: <none>
+
+ps0: pseed
+wad0: wadrs
+m0: dgstblock
+------------------------------------------------------------------------
+Context : hr: {r : int, m, m0 : dgstblock, sk : skWOTS * pseed * adrs,
+              pk : pkWOTSTW, wad, wad0 : wadrs, sigc : sigWOTS * cntr,
+              answer : pkWOTS * (sigWOTS * cntr)}
+
+pre =
+  (O_Bounded.ps = ps0 /\
+   wad = wad0 /\
+   m = m0 /\
+   O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs /\
+   search_result ps0 (WAddress.val wad0) m0 r) /\
+  r <> -1
+
+(1)  wad0 <- wad              
+(2)  m0 <- m                  
+
+post =
+  forall (result : pkWOTSTW * (skWOTS * pseed * adrs)) (result0 : sigWOTS *
+    cntr),
+    O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps
+        (rcons O_MEUFGCMA_WOTSC_Default.qs
+           (WAddress.val wad0{!hr}, m0{!hr}, result.`1.`1, result0))
+[19|check]>
+added lemma: `bounded_query_good_transcript'
+No more goals
+[20|check]>
+[21|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+------------------------------------------------------------------------
+pre =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+
+    A(O_Bounded, FC.O_THFC_Default).choose 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[22|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+------------------------------------------------------------------------
+pre =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+
+    A(O_Bounded, FC.O_THFC_Default).choose 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[23|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+------------------------------------------------------------------------
+pre =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+
+    O_Bounded.query 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[24|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+------------------------------------------------------------------------
+pre =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+
+    FC.
+O_THFC_Default.query 
+
+post =
+  O_Bounded.ps = O_MEUFGCMA_WOTSC_Default.ps /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs
+[25|check]>
+No more goals
+[26|check]>
+[27|check]>
+added lemma: `bounded_choose_good_transcript'
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+------------------------------------------------------------------------
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless O.query => islossless OC.query => islossless A(O, OC).choose) =>
+equiv[ A(O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).choose  ~
+        A(O_Bounded, FC.O_THFC_Default).choose :
+        ((glob A){1} = (glob A){2} /\
+         (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+         (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+         (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+         (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+        !O_Bounded.bad{2} /\
+        O_Bounded.ps{2} = O_MEUFGCMA_WOTSC_Default.ps{1} /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.
+            qs{2} ==>
+        !O_Bounded.bad{2} =>
+        ((glob A){1} = (glob A){2} /\
+         (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+         (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+         (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+         (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+        O_Bounded.ps{2} = O_MEUFGCMA_WOTSC_Default.ps{1} /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.
+            qs{2}]
+[28|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+------------------------------------------------------------------------
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless O.query => islossless OC.query => islossless A(O, OC).choose) =>
+equiv[ A(O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).choose  ~
+        A(O_Bounded, FC.O_THFC_Default).choose :
+        ((glob A){1} = (glob A){2} /\
+         (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+         (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+         (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+         (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+        !O_Bounded.bad{2} /\
+        O_Bounded.ps{2} = O_MEUFGCMA_WOTSC_Default.ps{1} /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.
+            qs{2} ==>
+        !O_Bounded.bad{2} =>
+        ((glob A){1} = (glob A){2} /\
+         (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+         (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+         (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+         (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+        O_Bounded.ps{2} = O_MEUFGCMA_WOTSC_Default.ps{1} /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.
+            qs{2}]
+[29|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+------------------------------------------------------------------------
+pre =
+  ((glob A){1} = (glob A){2} /\
+   (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+   (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  !O_Bounded.bad{2} /\
+  O_Bounded.ps{2} = O_MEUFGCMA_WOTSC_Default.ps{1} /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2}
+
+    A(O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).choose ~ A(O_Bounded, FC.
+                                                              O_THFC_Default).choose 
+
+post =
+  !O_Bounded.bad{2} =>
+  ((glob A){1} = (glob A){2} /\
+   (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+   (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+   (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+   (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+  O_Bounded.ps{2} = O_MEUFGCMA_WOTSC_Default.ps{1} /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2}
+[30|check]>
+No more goals
+[31|check]>
+[32|check]>
+added lemma: `bounded_choose_good'
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+------------------------------------------------------------------------
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless O.query => islossless OC.query => islossless A(O, OC).choose) =>
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless A(O, OC).forge) =>
+equiv[
+        M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main  ~
+        M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded, FC.O_THFC_Default).main :
+        (glob A){1} = (glob A){2} ==>
+        !O_Bounded.bad{2} =>
+        res{1} = res{2} /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.
+            qs{1}]
+[33|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+------------------------------------------------------------------------
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless O.query => islossless OC.query => islossless A(O, OC).choose) =>
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless A(O, OC).forge) =>
+equiv[
+        M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main  ~
+        M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded, FC.O_THFC_Default).main :
+        (glob A){1} = (glob A){2} ==>
+        !O_Bounded.bad{2} =>
+        res{1} = res{2} /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.
+            qs{1}]
+[34|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+pre = (glob A){1} = (glob A){2}
+
+    M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main ~ 
+M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded, FC.O_THFC_Default).main 
+
+post =
+  !O_Bounded.bad{2} =>
+  res{1} = res{2} /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[35|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre = (glob A){1} = (glob A){2}
+
+ps <$ dpseed                                 ( 1)  ps <$ dpseed                           
+O_MEUFGCMA_WOTSC_Default.init(ps)            ( 2)  O_Bounded.init(ps)                     
+FC.O_THFC_Default.init(ps)                   ( 3)  FC.O_THFC_Default.init(ps)             
+M_EUF_GCMA_WOTSC_NPRF(A,                     ( 4)  M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded, FC.
+  O_MEUFGCMA_WOTSC_Default, FC.              (  )    O_THFC_Default).A.choose()           
+  O_THFC_Default).A.choose()                 (  )                                         
+(i, m', sigc') <@                            ( 5)  (i, m', sigc') <@                      
+  M_EUF_GCMA_WOTSC_NPRF(A,                   (  )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,  
+    O_MEUFGCMA_WOTSC_Default, FC.            (  )      FC.O_THFC_Default).A.forge(ps)     
+    O_THFC_Default).A.forge(ps)              (  )                                         
+(ad, m, pkWOTS, sigc) <@                     ( 6)  (ad, m, pkWOTS, sigc) <@               
+  O_MEUFGCMA_WOTSC_Default.get(i)            (  )    O_Bounded.get(i)                     
+is_valid <@                                  ( 7)  is_valid <@                            
+  WOTS_C_ES.verify((pkWOTS, ps, ad),         (  )    WOTS_C_ES.verify((pkWOTS, ps, ad),   
+    m', sigc')                               (  )      m', sigc')                         
+is_fresh <- m' <> m                          ( 8)  is_fresh <- m' <> m                    
+nrqs <@                                      ( 9)  nrqs <@ O_Bounded.nr_queries()         
+  O_MEUFGCMA_WOTSC_Default.nr_queries()      (  )                                         
+dist_wgpidxs <@                              (10)  dist_wgpidxs <@                        
+  O_MEUFGCMA_WOTSC_Default.dist_addresses()  (  )    O_Bounded.dist_addresses()           
+adlO <@                                      (11)  adlO <@ O_Bounded.get_addresses()      
+  O_MEUFGCMA_WOTSC_Default.get_addresses()   (  )                                         
+adlOC <@ FC.O_THFC_Default.get_tweaks()      (12)  adlOC <@ FC.O_THFC_Default.get_tweaks()
+
+post =
+  !O_Bounded.bad{2} =>
+  (0 <= nrqs{1} <= c /\
+   0 <= i{1} < nrqs{1} /\
+   is_valid{1} /\
+   is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) =
+  (0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\ dist_wgpidxs{2} /\ disj_wgpidxs adlO{2} adlOC{2}) /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[36|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre = (glob A){1} = (glob A){2}
+
+ps <$ dpseed                       (1)  ps <$ dpseed                           
+O_MEUFGCMA_WOTSC_Default.init(ps)  (2)  O_Bounded.init(ps)                     
+FC.O_THFC_Default.init(ps)         (3)  FC.O_THFC_Default.init(ps)             
+M_EUF_GCMA_WOTSC_NPRF(A,           (4)  M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded, FC.
+  O_MEUFGCMA_WOTSC_Default, FC.    ( )    O_THFC_Default).A.choose()           
+  O_THFC_Default).A.choose()       ( )                                         
+
+post =
+  ps{1} = ps{2} /\
+  (!O_Bounded.bad{2} =>
+   ((glob A){1} = (glob A){2} /\
+    (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+    (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})
+[37|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre = (glob A){1} = (glob A){2}
+
+ps <$ dpseed                       (1)  ps <$ dpseed              
+O_MEUFGCMA_WOTSC_Default.init(ps)  (2)  O_Bounded.init(ps)        
+FC.O_THFC_Default.init(ps)         (3)  FC.O_THFC_Default.init(ps)
+
+post =
+  (((glob A){1} = (glob A){2} /\
+    (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+    (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   !O_Bounded.bad{2} /\
+   O_Bounded.ps{2} = O_MEUFGCMA_WOTSC_Default.ps{1} /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2}) &&
+  forall (A_L : (glob A)) (qs_L : (adrs * dgstblock * pkWOTS * (sigWOTS *
+    cntr)) list) (tws_L : adrs list) (A_R : (glob A)) (bad_R : bool)
+    (qs_R : (adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) list)
+    (tws_R : adrs list),
+    (!bad_R =>
+     (A_L = A_R /\
+      (O_MEUFGCMA_WOTSC_Default.ps{1}, qs_L) =
+      (O_MEUFGCMA_WOTSC_Default.ps{2}, qs_R) /\
+      (FC.O_THFC_Default.pp{1}, tws_L) = (FC.O_THFC_Default.pp{2}, tws_R)) /\
+     O_Bounded.ps{2} = O_MEUFGCMA_WOTSC_Default.ps{1} /\
+     ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} qs_R) =>
+    ps{1} = ps{2} /\
+    (!bad_R =>
+     (A_L = A_R /\
+      (O_MEUFGCMA_WOTSC_Default.ps{1}, qs_L) =
+      (O_MEUFGCMA_WOTSC_Default.ps{2}, qs_R) /\
+      (FC.O_THFC_Default.pp{1}, tws_L) = (FC.O_THFC_Default.pp{2}, tws_R)) /\
+     ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} qs_R)
+[38|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  ps{1} = ps{2} /\
+  (!O_Bounded.bad{2} =>
+   ((glob A){1} = (glob A){2} /\
+    (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+    (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+    (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+    (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+   ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})
+
+(i, m', sigc') <@                            (1)  (i, m', sigc') <@                      
+  M_EUF_GCMA_WOTSC_NPRF(A,                   ( )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,  
+    O_MEUFGCMA_WOTSC_Default, FC.            ( )      FC.O_THFC_Default).A.forge(ps)     
+    O_THFC_Default).A.forge(ps)              ( )                                         
+(ad, m, pkWOTS, sigc) <@                     (2)  (ad, m, pkWOTS, sigc) <@               
+  O_MEUFGCMA_WOTSC_Default.get(i)            ( )    O_Bounded.get(i)                     
+is_valid <@                                  (3)  is_valid <@                            
+  WOTS_C_ES.verify((pkWOTS, ps, ad),         ( )    WOTS_C_ES.verify((pkWOTS, ps, ad),   
+    m', sigc')                               ( )      m', sigc')                         
+is_fresh <- m' <> m                          (4)  is_fresh <- m' <> m                    
+nrqs <@                                      (5)  nrqs <@ O_Bounded.nr_queries()         
+  O_MEUFGCMA_WOTSC_Default.nr_queries()      ( )                                         
+dist_wgpidxs <@                              (6)  dist_wgpidxs <@                        
+  O_MEUFGCMA_WOTSC_Default.dist_addresses()  ( )    O_Bounded.dist_addresses()           
+adlO <@                                      (7)  adlO <@ O_Bounded.get_addresses()      
+  O_MEUFGCMA_WOTSC_Default.get_addresses()   ( )                                         
+adlOC <@ FC.O_THFC_Default.get_tweaks()      (8)  adlOC <@ FC.O_THFC_Default.get_tweaks()
+
+post =
+  !O_Bounded.bad{2} =>
+  (0 <= nrqs{1} <= c /\
+   0 <= i{1} < nrqs{1} /\
+   is_valid{1} /\
+   is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) =
+  (0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\ dist_wgpidxs{2} /\ disj_wgpidxs adlO{2} adlOC{2}) /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[39|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  O_Bounded.bad{2}
+
+(i, m', sigc') <@                            (1)  (i, m', sigc') <@                      
+  M_EUF_GCMA_WOTSC_NPRF(A,                   ( )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,  
+    O_MEUFGCMA_WOTSC_Default, FC.            ( )      FC.O_THFC_Default).A.forge(ps)     
+    O_THFC_Default).A.forge(ps)              ( )                                         
+(ad, m, pkWOTS, sigc) <@                     (2)  (ad, m, pkWOTS, sigc) <@               
+  O_MEUFGCMA_WOTSC_Default.get(i)            ( )    O_Bounded.get(i)                     
+is_valid <@                                  (3)  is_valid <@                            
+  WOTS_C_ES.verify((pkWOTS, ps, ad),         ( )    WOTS_C_ES.verify((pkWOTS, ps, ad),   
+    m', sigc')                               ( )      m', sigc')                         
+is_fresh <- m' <> m                          (4)  is_fresh <- m' <> m                    
+nrqs <@                                      (5)  nrqs <@ O_Bounded.nr_queries()         
+  O_MEUFGCMA_WOTSC_Default.nr_queries()      ( )                                         
+dist_wgpidxs <@                              (6)  dist_wgpidxs <@                        
+  O_MEUFGCMA_WOTSC_Default.dist_addresses()  ( )    O_Bounded.dist_addresses()           
+adlO <@                                      (7)  adlO <@ O_Bounded.get_addresses()      
+  O_MEUFGCMA_WOTSC_Default.get_addresses()   ( )                                         
+adlOC <@ FC.O_THFC_Default.get_tweaks()      (8)  adlOC <@ FC.O_THFC_Default.get_tweaks()
+
+post =
+  !O_Bounded.bad{2} =>
+  (0 <= nrqs{1} <= c /\
+   0 <= i{1} < nrqs{1} /\
+   is_valid{1} /\
+   is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) =
+  (0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\ dist_wgpidxs{2} /\ disj_wgpidxs adlO{2} adlOC{2}) /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[40|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  O_Bounded.bad{2}
+
+(i, m', sigc') <@                        (1)  (i, m', sigc') <@                      
+  M_EUF_GCMA_WOTSC_NPRF(A,               ( )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,  
+    O_MEUFGCMA_WOTSC_Default, FC.        ( )      FC.O_THFC_Default).A.forge(ps)     
+    O_THFC_Default).A.forge(ps)          ( )                                         
+i0 <- i                                  (2)  i0 <- i                                
+(ad, m, pkWOTS, sigc) <-                 (3)  (ad, m, pkWOTS, sigc) <-               
+  nth witness O_MEUFGCMA_WOTSC_Default.  ( )    nth witness O_MEUFGCMA_WOTSC_Default.
+    qs i0                                ( )      qs i0                              
+is_valid <@                              (4)  is_valid <@                            
+  WOTS_C_ES.verify((pkWOTS, ps, ad),     ( )    WOTS_C_ES.verify((pkWOTS, ps, ad),   
+    m', sigc')                           ( )      m', sigc')                         
+is_fresh <- m' <> m                      (5)  is_fresh <- m' <> m                    
+nrqs <-                                  (6)  nrqs <-                                
+  size O_MEUFGCMA_WOTSC_Default.qs       ( )    size O_MEUFGCMA_WOTSC_Default.qs     
+dist_wgpidxs <-                          (7)  dist_wgpidxs <-                        
+  uniq_wgpidxs                           ( )    uniq_wgpidxs                         
+    (map                                 ( )      (map                               
+       (fun (q : adrs * dgstblock *      ( )         (fun (q : adrs * dgstblock *    
+          pkWOTS * (sigWOTS * cntr)) =>  ( )            pkWOTS * (sigWOTS * cntr)) =>
+          q.`1)                          ( )            q.`1)                        
+       O_MEUFGCMA_WOTSC_Default.qs)      ( )         O_MEUFGCMA_WOTSC_Default.qs)    
+adlO <-                                  (8)  adlO <-                                
+  map                                    ( )    map                                  
+    (fun (q : adrs * dgstblock *         ( )      (fun (q : adrs * dgstblock *       
+       pkWOTS * (sigWOTS * cntr)) =>     ( )         pkWOTS * (sigWOTS * cntr)) =>   
+       q.`1) O_MEUFGCMA_WOTSC_Default.   ( )         q.`1) O_MEUFGCMA_WOTSC_Default. 
+    qs                                   ( )      qs                                 
+adlOC <- FC.O_THFC_Default.tws           (9)  adlOC <- FC.O_THFC_Default.tws         
+
+post =
+  !O_Bounded.bad{2} =>
+  (0 <= nrqs{1} <= c /\
+   0 <= i{1} < nrqs{1} /\
+   is_valid{1} /\
+   is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) =
+  (0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\ dist_wgpidxs{2} /\ disj_wgpidxs adlO{2} adlOC{2}) /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[41|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  O_Bounded.bad{2}
+
+(i, m', sigc') <@                        (1)  (i, m', sigc') <@                      
+  M_EUF_GCMA_WOTSC_NPRF(A,               ( )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,  
+    O_MEUFGCMA_WOTSC_Default, FC.        ( )      FC.O_THFC_Default).A.forge(ps)     
+    O_THFC_Default).A.forge(ps)          ( )                                         
+i0 <- i                                  (2)  i0 <- i                                
+(ad, m, pkWOTS, sigc) <-                 (3)  (ad, m, pkWOTS, sigc) <-               
+  nth witness O_MEUFGCMA_WOTSC_Default.  ( )    nth witness O_MEUFGCMA_WOTSC_Default.
+    qs i0                                ( )      qs i0                              
+
+post =
+  forall (result result0 : bool),
+    let nrqs_R = size O_MEUFGCMA_WOTSC_Default.qs{2} in
+    let nrqs_L = size O_MEUFGCMA_WOTSC_Default.qs{1} in
+    !O_Bounded.bad{2} =>
+    (0 <= nrqs_L <= c /\
+     0 <= i{1} < nrqs_L /\
+     result0 /\
+     m'{1} <> m{1} /\
+     uniq_wgpidxs
+       (map (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+          O_MEUFGCMA_WOTSC_Default.qs{1}) /\
+     disj_wgpidxs
+       (map (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+          O_MEUFGCMA_WOTSC_Default.qs{1}) FC.O_THFC_Default.tws{1}) =
+    (0 <= nrqs_R <= c /\
+     0 <= i{2} < nrqs_R /\
+     result /\
+     m'{2} <> m{2} /\
+     uniq_wgpidxs
+       (map (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+          O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     disj_wgpidxs
+       (map (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+          O_MEUFGCMA_WOTSC_Default.qs{2}) FC.O_THFC_Default.tws{2}) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[42|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  O_Bounded.bad{2}
+
+                           (1)  (i, m', sigc') <@                    
+                           ( )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,
+                           ( )      FC.O_THFC_Default).A.forge(ps)   
+
+post =
+  forall (result : int * dgstblock * (sigWOTS * cntr)),
+    let i_L = result.`1 in
+    forall (result0 result1 : bool),
+      let nrqs_R = size O_MEUFGCMA_WOTSC_Default.qs{2} in
+      let nrqs_L = size O_MEUFGCMA_WOTSC_Default.qs{1} in
+      !O_Bounded.bad{2} =>
+      (0 <= nrqs_L <= c /\
+       0 <= i_L < nrqs_L /\
+       result1 /\
+       result.`2 <> (nth witness O_MEUFGCMA_WOTSC_Default.qs{1} i_L).`2 /\
+       uniq_wgpidxs
+         (map
+            (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+            O_MEUFGCMA_WOTSC_Default.qs{1}) /\
+       disj_wgpidxs
+         (map
+            (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+            O_MEUFGCMA_WOTSC_Default.qs{1}) FC.O_THFC_Default.tws{1}) =
+      (0 <= nrqs_R <= c /\
+       0 <= i{2} < nrqs_R /\
+       result0 /\
+       m'{2} <> (nth witness O_MEUFGCMA_WOTSC_Default.qs{2} i{2}).`2 /\
+       uniq_wgpidxs
+         (map
+            (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+            O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+       disj_wgpidxs
+         (map
+            (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+            O_MEUFGCMA_WOTSC_Default.qs{2}) FC.O_THFC_Default.tws{2}) /\
+      ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.
+          qs{1}
+[43|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr} [programs are in sync]
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  O_Bounded.bad{2}
+
+
+post =
+  forall (result : int * dgstblock * (sigWOTS * cntr)),
+    let i_R = result.`1 in
+    forall (result0 : int * dgstblock * (sigWOTS * cntr)),
+      let i_L = result0.`1 in
+      forall (result1 result2 : bool),
+        let nrqs_R = size O_MEUFGCMA_WOTSC_Default.qs{2} in
+        let nrqs_L = size O_MEUFGCMA_WOTSC_Default.qs{1} in
+        !O_Bounded.bad{2} =>
+        (0 <= nrqs_L <= c /\
+         0 <= i_L < nrqs_L /\
+         result2 /\
+         result0.`2 <> (nth witness O_MEUFGCMA_WOTSC_Default.qs{1} i_L).`2 /\
+         uniq_wgpidxs
+           (map
+              (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+              O_MEUFGCMA_WOTSC_Default.qs{1}) /\
+         disj_wgpidxs
+           (map
+              (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+              O_MEUFGCMA_WOTSC_Default.qs{1}) FC.O_THFC_Default.tws{1}) =
+        (0 <= nrqs_R <= c /\
+         0 <= i_R < nrqs_R /\
+         result1 /\
+         result.`2 <> (nth witness O_MEUFGCMA_WOTSC_Default.qs{2} i_R).`2 /\
+         uniq_wgpidxs
+           (map
+              (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+              O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+         disj_wgpidxs
+           (map
+              (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+              O_MEUFGCMA_WOTSC_Default.qs{2}) FC.O_THFC_Default.tws{2}) /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.
+            qs{1}
+[44|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  !O_Bounded.bad{2}
+
+(i, m', sigc') <@                            (1)  (i, m', sigc') <@                      
+  M_EUF_GCMA_WOTSC_NPRF(A,                   ( )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,  
+    O_MEUFGCMA_WOTSC_Default, FC.            ( )      FC.O_THFC_Default).A.forge(ps)     
+    O_THFC_Default).A.forge(ps)              ( )                                         
+(ad, m, pkWOTS, sigc) <@                     (2)  (ad, m, pkWOTS, sigc) <@               
+  O_MEUFGCMA_WOTSC_Default.get(i)            ( )    O_Bounded.get(i)                     
+is_valid <@                                  (3)  is_valid <@                            
+  WOTS_C_ES.verify((pkWOTS, ps, ad),         ( )    WOTS_C_ES.verify((pkWOTS, ps, ad),   
+    m', sigc')                               ( )      m', sigc')                         
+is_fresh <- m' <> m                          (4)  is_fresh <- m' <> m                    
+nrqs <@                                      (5)  nrqs <@ O_Bounded.nr_queries()         
+  O_MEUFGCMA_WOTSC_Default.nr_queries()      ( )                                         
+dist_wgpidxs <@                              (6)  dist_wgpidxs <@                        
+  O_MEUFGCMA_WOTSC_Default.dist_addresses()  ( )    O_Bounded.dist_addresses()           
+adlO <@                                      (7)  adlO <@ O_Bounded.get_addresses()      
+  O_MEUFGCMA_WOTSC_Default.get_addresses()   ( )                                         
+adlOC <@ FC.O_THFC_Default.get_tweaks()      (8)  adlOC <@ FC.O_THFC_Default.get_tweaks()
+
+post =
+  !O_Bounded.bad{2} =>
+  (0 <= nrqs{1} <= c /\
+   0 <= i{1} < nrqs{1} /\
+   is_valid{1} /\
+   is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) =
+  (0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\ dist_wgpidxs{2} /\ disj_wgpidxs adlO{2} adlOC{2}) /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[45|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  !O_Bounded.bad{2}
+
+(i, m', sigc') <@                        (1)  (i, m', sigc') <@                      
+  M_EUF_GCMA_WOTSC_NPRF(A,               ( )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,  
+    O_MEUFGCMA_WOTSC_Default, FC.        ( )      FC.O_THFC_Default).A.forge(ps)     
+    O_THFC_Default).A.forge(ps)          ( )                                         
+i0 <- i                                  (2)  i0 <- i                                
+(ad, m, pkWOTS, sigc) <-                 (3)  (ad, m, pkWOTS, sigc) <-               
+  nth witness O_MEUFGCMA_WOTSC_Default.  ( )    nth witness O_MEUFGCMA_WOTSC_Default.
+    qs i0                                ( )      qs i0                              
+is_valid <@                              (4)  is_valid <@                            
+  WOTS_C_ES.verify((pkWOTS, ps, ad),     ( )    WOTS_C_ES.verify((pkWOTS, ps, ad),   
+    m', sigc')                           ( )      m', sigc')                         
+is_fresh <- m' <> m                      (5)  is_fresh <- m' <> m                    
+nrqs <-                                  (6)  nrqs <-                                
+  size O_MEUFGCMA_WOTSC_Default.qs       ( )    size O_MEUFGCMA_WOTSC_Default.qs     
+dist_wgpidxs <-                          (7)  dist_wgpidxs <-                        
+  uniq_wgpidxs                           ( )    uniq_wgpidxs                         
+    (map                                 ( )      (map                               
+       (fun (q : adrs * dgstblock *      ( )         (fun (q : adrs * dgstblock *    
+          pkWOTS * (sigWOTS * cntr)) =>  ( )            pkWOTS * (sigWOTS * cntr)) =>
+          q.`1)                          ( )            q.`1)                        
+       O_MEUFGCMA_WOTSC_Default.qs)      ( )         O_MEUFGCMA_WOTSC_Default.qs)    
+adlO <-                                  (8)  adlO <-                                
+  map                                    ( )    map                                  
+    (fun (q : adrs * dgstblock *         ( )      (fun (q : adrs * dgstblock *       
+       pkWOTS * (sigWOTS * cntr)) =>     ( )         pkWOTS * (sigWOTS * cntr)) =>   
+       q.`1) O_MEUFGCMA_WOTSC_Default.   ( )         q.`1) O_MEUFGCMA_WOTSC_Default. 
+    qs                                   ( )      qs                                 
+adlOC <- FC.O_THFC_Default.tws           (9)  adlOC <- FC.O_THFC_Default.tws         
+
+post =
+  !O_Bounded.bad{2} =>
+  (0 <= nrqs{1} <= c /\
+   0 <= i{1} < nrqs{1} /\
+   is_valid{1} /\
+   is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) =
+  (0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\ dist_wgpidxs{2} /\ disj_wgpidxs adlO{2} adlOC{2}) /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[46|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  !O_Bounded.bad{2}
+
+(i, m', sigc') <@                        (1)  (i, m', sigc') <@                      
+  M_EUF_GCMA_WOTSC_NPRF(A,               ( )    M_EUF_GCMA_WOTSC_NPRF(A, O_Bounded,  
+    O_MEUFGCMA_WOTSC_Default, FC.        ( )      FC.O_THFC_Default).A.forge(ps)     
+    O_THFC_Default).A.forge(ps)          ( )                                         
+i0 <- i                                  (2)  i0 <- i                                
+(ad, m, pkWOTS, sigc) <-                 (3)  (ad, m, pkWOTS, sigc) <-               
+  nth witness O_MEUFGCMA_WOTSC_Default.  ( )    nth witness O_MEUFGCMA_WOTSC_Default.
+    qs i0                                ( )      qs i0                              
+
+post =
+  ((pkWOTS{1}, ps{1}, ad{1}), m'{1}, sigc'{1}) =
+  ((pkWOTS{2}, ps{2}, ad{2}), m'{2}, sigc'{2}) &&
+  forall (result_L result_R : bool),
+    result_L = result_R =>
+    let nrqs_R = size O_MEUFGCMA_WOTSC_Default.qs{2} in
+    let nrqs_L = size O_MEUFGCMA_WOTSC_Default.qs{1} in
+    !O_Bounded.bad{2} =>
+    (0 <= nrqs_L <= c /\
+     0 <= i{1} < nrqs_L /\
+     result_L /\
+     m'{1} <> m{1} /\
+     uniq_wgpidxs
+       (map (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+          O_MEUFGCMA_WOTSC_Default.qs{1}) /\
+     disj_wgpidxs
+       (map (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+          O_MEUFGCMA_WOTSC_Default.qs{1}) FC.O_THFC_Default.tws{1}) =
+    (0 <= nrqs_R <= c /\
+     0 <= i{2} < nrqs_R /\
+     result_R /\
+     m'{2} <> m{2} /\
+     uniq_wgpidxs
+       (map (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+          O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     disj_wgpidxs
+       (map (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+          O_MEUFGCMA_WOTSC_Default.qs{2}) FC.O_THFC_Default.tws{2}) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[47|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr} [programs are in sync]
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs, i0 : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   (!O_Bounded.bad{2} =>
+    ((glob A){1} = (glob A){2} /\
+     (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+     (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+     (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+     (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})) /\
+    ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{2} O_MEUFGCMA_WOTSC_Default.qs{2})) /\
+  !O_Bounded.bad{2}
+
+
+post =
+  (ps{1} = ps{2} /\ (glob A){1} = (glob A){2} /\ true) &&
+  forall (result_L result_R : int * dgstblock * (sigWOTS * cntr)) (A_L
+    A_R : (glob A)),
+    result_L = result_R /\ A_L = A_R /\ true =>
+    let i_R = result_R.`1 in
+    let m'_R = result_R.`2 in
+    let i_L = result_L.`1 in
+    let m'_L = result_L.`2 in
+    let tpl = nth witness O_MEUFGCMA_WOTSC_Default.qs{2} i_R in
+    let tpl0 = nth witness O_MEUFGCMA_WOTSC_Default.qs{1} i_L in
+    ((tpl0.`3, ps{1}, tpl0.`1), m'_L, result_L.`3) =
+    ((tpl.`3, ps{2}, tpl.`1), m'_R, result_R.`3) &&
+    forall (result_L0 result_R0 : bool),
+      result_L0 = result_R0 =>
+      let nrqs_R = size O_MEUFGCMA_WOTSC_Default.qs{2} in
+      let nrqs_L = size O_MEUFGCMA_WOTSC_Default.qs{1} in
+      !O_Bounded.bad{2} =>
+      (0 <= nrqs_L <= c /\
+       0 <= i_L < nrqs_L /\
+       result_L0 /\
+       m'_L <> tpl0.`2 /\
+       uniq_wgpidxs
+         (map
+            (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+            O_MEUFGCMA_WOTSC_Default.qs{1}) /\
+       disj_wgpidxs
+         (map
+            (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+            O_MEUFGCMA_WOTSC_Default.qs{1}) FC.O_THFC_Default.tws{1}) =
+      (0 <= nrqs_R <= c /\
+       0 <= i_R < nrqs_R /\
+       result_R0 /\
+       m'_R <> tpl.`2 /\
+       uniq_wgpidxs
+         (map
+            (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+            O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+       disj_wgpidxs
+         (map
+            (fun (q : adrs * dgstblock * pkWOTS * (sigWOTS * cntr)) => q.`1)
+            O_MEUFGCMA_WOTSC_Default.qs{2}) FC.O_THFC_Default.tws{2}) /\
+      ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.
+          qs{1}
+[48|check]>
+No more goals
+[49|check]>
+[50|check]>
+added lemma: `total_bounded_main_good'
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+&m: {}
+------------------------------------------------------------------------
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless O.query => islossless OC.query => islossless A(O, OC).choose) =>
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless A(O, OC).forge) =>
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+   () @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[51|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+&m: {}
+------------------------------------------------------------------------
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless O.query => islossless OC.query => islossless A(O, OC).choose) =>
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless A(O, OC).forge) =>
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+   () @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[52|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+&m: {}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+   () @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[53|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+&m: {}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+pre = (glob A){2} = (glob A){1}
+
+    M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main ~ 
+BoundedGame(A).main 
+
+post =
+  res{2} =>
+  res{1} /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[54|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+&m: {}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {r : bool}
+&2 (right) : {r, win : bool}
+
+pre = (glob A){2} = (glob A){1}
+
+r <@                               (1)  win <@ BoundedGame(A).G.main()
+  M_EUF_GCMA_WOTSC_NPRF(A,         ( )                                
+    O_MEUFGCMA_WOTSC_Default, FC.  ( )                                
+    O_THFC_Default).main()         ( )                                
+
+post =
+  win{2} /\ !O_Bounded.bad{2} =>
+  r{1} /\
+  ! gfail_of O_MEUFGCMA_WOTSC_Default.ps{1} O_MEUFGCMA_WOTSC_Default.qs{1}
+[55|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded}
+&m: {}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+------------------------------------------------------------------------
+&1 (left ) : {r : bool}
+&2 (right) : {r, win : bool}
+
+pre = (glob A){2} = (glob A){1}
+
+
+post =
+  (glob A){1} = (glob A){2} &&
+  forall (result_L result_R : bool) (ps_L : pseed) (qs_L : (adrs *
+    dgstblock * pkWOTS * (sigWOTS * cntr)) list) (bad_R : bool),
+    (!bad_R => result_L = result_R /\ ! gfail_of ps_L qs_L) =>
+    result_R /\ !bad_R => result_L /\ ! gfail_of ps_L qs_L
+[56|check]>
+No more goals
+[57|check]>
+[58|check]>
+added lemma: `bounded_win_le_total_good'
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+------------------------------------------------------------------------
+c <= p_tgts =>
+(forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+        O_THFC_MA.tws_ma = [] ==>
+        all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma] =>
+Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+   () @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[59|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+------------------------------------------------------------------------
+c <= p_tgts =>
+(forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+        O_THFC_MA.tws_ma = [] ==>
+        all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma] =>
+Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+   () @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[60|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+   () @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[61|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+   () @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[62|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre = (glob A){1} = (glob A){2}
+
+ps <$ dpseed                                 ( 1)  ps <$ dpseed                               
+O_MEUFGCMA_WOTSC_Default.init(ps)            ( 2)  O_MEUFGCMA_WOTSC_Default.init(ps)          
+FC.O_THFC_Default.init(ps)                   ( 3)  FC.O_THFC_Default.init(ps)                 
+M_EUF_GCMA_WOTSC_NPRF(A,                     ( 4)  G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.    
+  O_MEUFGCMA_WOTSC_Default, FC.              (  )    O_THFC_Default).A.choose()               
+  O_THFC_Default).A.choose()                 (  )                                             
+(i, m', sigc') <@                            ( 5)  (i, m', sigc') <@                          
+  M_EUF_GCMA_WOTSC_NPRF(A,                   (  )    G0_INT(A, O_MEUFGCMA_WOTSC_Default,      
+    O_MEUFGCMA_WOTSC_Default, FC.            (  )      FC.O_THFC_Default).A.forge(ps)         
+    O_THFC_Default).A.forge(ps)              (  )                                             
+(ad, m, pkWOTS, sigc) <@                     ( 6)  (ad, m, pkWOTS, sigc) <@                   
+  O_MEUFGCMA_WOTSC_Default.get(i)            (  )    O_MEUFGCMA_WOTSC_Default.get(i)          
+is_valid <@                                  ( 7)  is_valid <@                                
+  WOTS_C_ES.verify((pkWOTS, ps, ad),         (  )    WOTS_C_ES.verify((pkWOTS, ps, ad),       
+    m', sigc')                               (  )      m', sigc')                             
+is_fresh <- m' <> m                          ( 8)  is_fresh <- m' <> m                        
+nrqs <@                                      ( 9)  nrqs <@                                    
+  O_MEUFGCMA_WOTSC_Default.nr_queries()      (  )    O_MEUFGCMA_WOTSC_Default.nr_queries()    
+dist_wgpidxs <@                              (10)  dist_wgpidxs <@                            
+  O_MEUFGCMA_WOTSC_Default.dist_addresses()  (  )    O_MEUFGCMA_WOTSC_Default.dist_addresses()
+adlO <@                                      (11)  adlO <@                                    
+  O_MEUFGCMA_WOTSC_Default.get_addresses()   (  )    O_MEUFGCMA_WOTSC_Default.get_addresses() 
+adlOC <@ FC.O_THFC_Default.get_tweaks()      (12)  adlOC <@ FC.O_THFC_Default.get_tweaks()    
+                                             (13)  G0_INT.coll <-                             
+                                             (  )    ThC ps ad m sigc.`2 =                    
+                                             (  )    ThC ps ad m' sigc'.`2                    
+
+post =
+  (0 <= nrqs{1} <= c /\
+   0 <= i{1} < nrqs{1} /\
+   is_valid{1} /\
+   is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) =
+  (0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\ dist_wgpidxs{2} /\ disj_wgpidxs adlO{2} adlOC{2}) /\
+  (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+  (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2})
+[63|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre = (glob A){1} = (glob A){2}
+
+ps <$ dpseed                                 ( 1)  ps <$ dpseed                               
+O_MEUFGCMA_WOTSC_Default.init(ps)            ( 2)  O_MEUFGCMA_WOTSC_Default.init(ps)          
+FC.O_THFC_Default.init(ps)                   ( 3)  FC.O_THFC_Default.init(ps)                 
+M_EUF_GCMA_WOTSC_NPRF(A,                     ( 4)  G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.    
+  O_MEUFGCMA_WOTSC_Default, FC.              (  )    O_THFC_Default).A.choose()               
+  O_THFC_Default).A.choose()                 (  )                                             
+(i, m', sigc') <@                            ( 5)  (i, m', sigc') <@                          
+  M_EUF_GCMA_WOTSC_NPRF(A,                   (  )    G0_INT(A, O_MEUFGCMA_WOTSC_Default,      
+    O_MEUFGCMA_WOTSC_Default, FC.            (  )      FC.O_THFC_Default).A.forge(ps)         
+    O_THFC_Default).A.forge(ps)              (  )                                             
+(ad, m, pkWOTS, sigc) <@                     ( 6)  (ad, m, pkWOTS, sigc) <@                   
+  O_MEUFGCMA_WOTSC_Default.get(i)            (  )    O_MEUFGCMA_WOTSC_Default.get(i)          
+is_valid <@                                  ( 7)  is_valid <@                                
+  WOTS_C_ES.verify((pkWOTS, ps, ad),         (  )    WOTS_C_ES.verify((pkWOTS, ps, ad),       
+    m', sigc')                               (  )      m', sigc')                             
+is_fresh <- m' <> m                          ( 8)  is_fresh <- m' <> m                        
+nrqs <@                                      ( 9)  nrqs <@                                    
+  O_MEUFGCMA_WOTSC_Default.nr_queries()      (  )    O_MEUFGCMA_WOTSC_Default.nr_queries()    
+dist_wgpidxs <@                              (10)  dist_wgpidxs <@                            
+  O_MEUFGCMA_WOTSC_Default.dist_addresses()  (  )    O_MEUFGCMA_WOTSC_Default.dist_addresses()
+adlO <@                                      (11)  adlO <@                                    
+  O_MEUFGCMA_WOTSC_Default.get_addresses()   (  )    O_MEUFGCMA_WOTSC_Default.get_addresses() 
+adlOC <@ FC.O_THFC_Default.get_tweaks()      (12)  adlOC <@ FC.O_THFC_Default.get_tweaks()    
+
+post =
+  (ps{1} = ps{2} /\
+   i{1} = i{2} /\
+   m{1} = m{2} /\
+   m'{1} = m'{2} /\
+   sigc{1} = sigc{2} /\
+   sigc'{1} = sigc'{2} /\
+   ad{1} = ad{2} /\
+   pkWOTS{1} = pkWOTS{2} /\
+   is_valid{1} = is_valid{2} /\
+   is_fresh{1} = is_fresh{2} /\
+   dist_wgpidxs{1} = dist_wgpidxs{2} /\
+   nrqs{1} = nrqs{2} /\ adlO{1} = adlO{2} /\ adlOC{1} = adlOC{2}) /\
+  (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+  (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+  (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+  (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})
+[64|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   i{1} = i{2} /\
+   m{1} = m{2} /\
+   m'{1} = m'{2} /\
+   sigc{1} = sigc{2} /\
+   sigc'{1} = sigc'{2} /\
+   ad{1} = ad{2} /\
+   pkWOTS{1} = pkWOTS{2} /\
+   is_valid{1} = is_valid{2} /\
+   is_fresh{1} = is_fresh{2} /\
+   dist_wgpidxs{1} = dist_wgpidxs{2} /\
+   nrqs{1} = nrqs{2} /\ adlO{1} = adlO{2} /\ adlOC{1} = adlOC{2}) /\
+  (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+  (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+  (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+  (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})
+
+                           (1)  G0_INT.coll <-           
+                           ( )    ThC ps ad m sigc.`2 =  
+                           ( )    ThC ps ad m' sigc'.`2  
+
+post =
+  (0 <= nrqs{1} <= c /\
+   0 <= i{1} < nrqs{1} /\
+   is_valid{1} /\
+   is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) =
+  (0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\ dist_wgpidxs{2} /\ disj_wgpidxs adlO{2} adlOC{2}) /\
+  (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+  (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2})
+[65|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+   () @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[66|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   G0_INT.coll] +
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   !G0_INT.coll] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[67|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   !G0_INT.coll] =
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+[68|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre = (glob A){1} = (glob A){2}
+
+ps <$ dpseed                                 ( 1)  ps <$ dpseed                               
+O_MEUFGCMA_WOTSC_Default.init(ps)            ( 2)  O_MEUFGCMA_WOTSC_Default.init(ps)          
+FC.O_THFC_Default.init(ps)                   ( 3)  FC.O_THFC_Default.init(ps)                 
+G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.      ( 4)  GAME1_INT(A, O_MEUFGCMA_WOTSC_Default,     
+  O_THFC_Default).A.choose()                 (  )    FC.O_THFC_Default).A.choose()            
+(i, m', sigc') <@                            ( 5)  (i, m', sigc') <@                          
+  G0_INT(A, O_MEUFGCMA_WOTSC_Default,        (  )    GAME1_INT(A,                             
+    FC.O_THFC_Default).A.forge(ps)           (  )      O_MEUFGCMA_WOTSC_Default, FC.          
+                                             (  )      O_THFC_Default).A.forge(ps)            
+(ad, m, pkWOTS, sigc) <@                     ( 6)  (ad, m, pkWOTS, sigc) <@                   
+  O_MEUFGCMA_WOTSC_Default.get(i)            (  )    O_MEUFGCMA_WOTSC_Default.get(i)          
+is_valid <@                                  ( 7)  is_valid <@                                
+  WOTS_C_ES.verify((pkWOTS, ps, ad),         (  )    WOTS_C_ES.verify((pkWOTS, ps, ad),       
+    m', sigc')                               (  )      m', sigc')                             
+is_fresh <- m' <> m                          ( 8)  is_fresh <- m' <> m                        
+nrqs <@                                      ( 9)  nrqs <@                                    
+  O_MEUFGCMA_WOTSC_Default.nr_queries()      (  )    O_MEUFGCMA_WOTSC_Default.nr_queries()    
+dist_wgpidxs <@                              (10)  dist_wgpidxs <@                            
+  O_MEUFGCMA_WOTSC_Default.dist_addresses()  (  )    O_MEUFGCMA_WOTSC_Default.dist_addresses()
+adlO <@                                      (11)  adlO <@                                    
+  O_MEUFGCMA_WOTSC_Default.get_addresses()   (  )    O_MEUFGCMA_WOTSC_Default.get_addresses() 
+adlOC <@ FC.O_THFC_Default.get_tweaks()      (12)  adlOC <@ FC.O_THFC_Default.get_tweaks()    
+G0_INT.coll <-                               (13)                                             
+  ThC ps ad m sigc.`2 =                      (  )                                             
+  ThC ps ad m' sigc'.`2                      (  )                                             
+
+post =
+  ((0 <= nrqs{1} <= c /\
+    0 <= i{1} < nrqs{1} /\
+    is_valid{1} /\
+    is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) /\
+   !G0_INT.coll{1} <=>
+   0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\
+   dist_wgpidxs{2} /\
+   disj_wgpidxs adlO{2} adlOC{2} /\
+   ThC ps{2} ad{2} m{2} sigc{2}.`2 <> ThC ps{2} ad{2} m'{2} sigc'{2}.`2) /\
+  (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+  (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2})
+[69|check]>
+Current goal (remaining: 3)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre = (glob A){1} = (glob A){2}
+
+ps <$ dpseed                                 ( 1)  ps <$ dpseed                               
+O_MEUFGCMA_WOTSC_Default.init(ps)            ( 2)  O_MEUFGCMA_WOTSC_Default.init(ps)          
+FC.O_THFC_Default.init(ps)                   ( 3)  FC.O_THFC_Default.init(ps)                 
+G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.      ( 4)  GAME1_INT(A, O_MEUFGCMA_WOTSC_Default,     
+  O_THFC_Default).A.choose()                 (  )    FC.O_THFC_Default).A.choose()            
+(i, m', sigc') <@                            ( 5)  (i, m', sigc') <@                          
+  G0_INT(A, O_MEUFGCMA_WOTSC_Default,        (  )    GAME1_INT(A,                             
+    FC.O_THFC_Default).A.forge(ps)           (  )      O_MEUFGCMA_WOTSC_Default, FC.          
+                                             (  )      O_THFC_Default).A.forge(ps)            
+(ad, m, pkWOTS, sigc) <@                     ( 6)  (ad, m, pkWOTS, sigc) <@                   
+  O_MEUFGCMA_WOTSC_Default.get(i)            (  )    O_MEUFGCMA_WOTSC_Default.get(i)          
+is_valid <@                                  ( 7)  is_valid <@                                
+  WOTS_C_ES.verify((pkWOTS, ps, ad),         (  )    WOTS_C_ES.verify((pkWOTS, ps, ad),       
+    m', sigc')                               (  )      m', sigc')                             
+is_fresh <- m' <> m                          ( 8)  is_fresh <- m' <> m                        
+nrqs <@                                      ( 9)  nrqs <@                                    
+  O_MEUFGCMA_WOTSC_Default.nr_queries()      (  )    O_MEUFGCMA_WOTSC_Default.nr_queries()    
+dist_wgpidxs <@                              (10)  dist_wgpidxs <@                            
+  O_MEUFGCMA_WOTSC_Default.dist_addresses()  (  )    O_MEUFGCMA_WOTSC_Default.dist_addresses()
+adlO <@                                      (11)  adlO <@                                    
+  O_MEUFGCMA_WOTSC_Default.get_addresses()   (  )    O_MEUFGCMA_WOTSC_Default.get_addresses() 
+adlOC <@ FC.O_THFC_Default.get_tweaks()      (12)  adlOC <@ FC.O_THFC_Default.get_tweaks()    
+
+post =
+  (ps{1} = ps{2} /\
+   i{1} = i{2} /\
+   m{1} = m{2} /\
+   m'{1} = m'{2} /\
+   sigc{1} = sigc{2} /\
+   sigc'{1} = sigc'{2} /\
+   ad{1} = ad{2} /\
+   pkWOTS{1} = pkWOTS{2} /\
+   is_valid{1} = is_valid{2} /\
+   is_fresh{1} = is_fresh{2} /\
+   dist_wgpidxs{1} = dist_wgpidxs{2} /\
+   nrqs{1} = nrqs{2} /\ adlO{1} = adlO{2} /\ adlOC{1} = adlOC{2}) /\
+  (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+  (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+  (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+  (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})
+[70|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+&1 (left ) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+&2 (right) : {is_valid, is_fresh, dist_wgpidxs : bool, i, nrqs : int,
+             m, m' : dgstblock, ps : pseed, ad : adrs,
+             adlO, adlOC : adrs list, pkWOTS : pkWOTS,
+             sigc, sigc' : sigWOTS * cntr}
+
+pre =
+  (ps{1} = ps{2} /\
+   i{1} = i{2} /\
+   m{1} = m{2} /\
+   m'{1} = m'{2} /\
+   sigc{1} = sigc{2} /\
+   sigc'{1} = sigc'{2} /\
+   ad{1} = ad{2} /\
+   pkWOTS{1} = pkWOTS{2} /\
+   is_valid{1} = is_valid{2} /\
+   is_fresh{1} = is_fresh{2} /\
+   dist_wgpidxs{1} = dist_wgpidxs{2} /\
+   nrqs{1} = nrqs{2} /\ adlO{1} = adlO{2} /\ adlOC{1} = adlOC{2}) /\
+  (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+  (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2}) /\
+  (FC.O_THFC_Default.pp{1}, FC.O_THFC_Default.tws{1}) =
+  (FC.O_THFC_Default.pp{2}, FC.O_THFC_Default.tws{2})
+
+G0_INT.coll <-             (1)                           
+  ThC ps ad m sigc.`2 =    ( )                           
+  ThC ps ad m' sigc'.`2    ( )                           
+
+post =
+  ((0 <= nrqs{1} <= c /\
+    0 <= i{1} < nrqs{1} /\
+    is_valid{1} /\
+    is_fresh{1} /\ dist_wgpidxs{1} /\ disj_wgpidxs adlO{1} adlOC{1}) /\
+   !G0_INT.coll{1} <=>
+   0 <= nrqs{2} <= c /\
+   0 <= i{2} < nrqs{2} /\
+   is_valid{2} /\
+   is_fresh{2} /\
+   dist_wgpidxs{2} /\
+   disj_wgpidxs adlO{2} adlOC{2} /\
+   ThC ps{2} ad{2} m{2} sigc{2}.`2 <> ThC ps{2} ad{2} m'{2} sigc'{2}.`2) /\
+  (O_MEUFGCMA_WOTSC_Default.ps{1}, O_MEUFGCMA_WOTSC_Default.qs{1}) =
+  (O_MEUFGCMA_WOTSC_Default.ps{2}, O_MEUFGCMA_WOTSC_Default.qs{2})
+[71|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+e1: Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       (res /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+       !G0_INT.coll] =
+    Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   G0_INT.coll] +
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   !G0_INT.coll] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[72|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+e1: Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       (res /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+       !G0_INT.coll] =
+    Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   G0_INT.coll] +
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[73|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+e1: Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       (res /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+       !G0_INT.coll] =
+    Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   G0_INT.coll] <=
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ G0_INT.coll]
+[74|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+e1: Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       (res /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+       !G0_INT.coll] =
+    Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+e3: Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       (res /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+       G0_INT.coll] <=
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\ G0_INT.coll]
+------------------------------------------------------------------------
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   G0_INT.coll] +
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[75|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -R_int_STCRC, -G0_INT, -O_THFC_MA}
+&m: {}
+le_c_ptgts: c <= p_tgts
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+e0: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] =
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+e1: Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       (res /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+       !G0_INT.coll] =
+    Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+e3: Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       (res /\
+        ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+       G0_INT.coll] <=
+    Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\ G0_INT.coll]
+e2: Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+       res /\ G0_INT.coll] <=
+    Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m :
+       res]
+------------------------------------------------------------------------
+Pr[G0_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   (res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs) /\
+   G0_INT.coll] +
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+   res /\ ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[76|check]>
+No more goals
+[77|check]>
+[78|check]>
+added lemma: `interactive_hop1_MA_good'
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA}
+&m: {}
+------------------------------------------------------------------------
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless O.query => islossless OC.query => islossless A(O, OC).choose) =>
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless A(O, OC).forge) =>
+c <= p_tgts =>
+(forall (a b : adrs),
+   valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)) =>
+(forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+        O_THFC_MA.tws_ma = [] ==>
+        all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma] =>
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(A), O_MEUFGCMA_WOTSTWESNPRF, FC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[79|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA}
+&m: {}
+------------------------------------------------------------------------
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless O.query => islossless OC.query => islossless A(O, OC).choose) =>
+(forall (O <: Oracle_MEUFGCMA_WOTSC{-A}) (OC <: FC.Oracle_THFC{-A}),
+   islossless A(O, OC).forge) =>
+c <= p_tgts =>
+(forall (a b : adrs),
+   valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)) =>
+(forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+   encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
+hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+        O_THFC_MA.tws_ma = [] ==>
+        all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma] =>
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(A), O_MEUFGCMA_WOTSTWESNPRF, FC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[80|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA}
+&m: {}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+le_c_ptgts: c <= p_tgts
+embdisj: forall (a b : adrs),
+           valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+------------------------------------------------------------------------
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(A), O_MEUFGCMA_WOTSTWESNPRF, FC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[81|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA}
+&m: {}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+le_c_ptgts: c <= p_tgts
+embdisj: forall (a b : adrs),
+           valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+hb: Pr[BoundedGame(A).main() @ &m : res] <=
+    Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+------------------------------------------------------------------------
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(A), O_MEUFGCMA_WOTSTWESNPRF, FC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[82|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA}
+&m: {}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+le_c_ptgts: c <= p_tgts
+embdisj: forall (a b : adrs),
+           valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+hb: Pr[BoundedGame(A).main() @ &m : res] <=
+    Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+h1: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+    Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+    Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m :
+       res]
+------------------------------------------------------------------------
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(A), O_MEUFGCMA_WOTSTWESNPRF, FC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[83|check]>
+Current goal
+
+Type variables: <none>
+
+A(O : Oracle_MEUFGCMA_WOTSC, OC : FC.Oracle_THFC) : Adv_MEUFGCMA_WOTSC
+                                                      {-FC.O_THFC_Default, -O_MEUFGCMA_WOTSTWESNPRF, -STCRC_WC.O_STCRC_Default, -O_MEUFGCMA_WOTSC_Default, -O_Bounded, -R_int_STCRC, -G0_INT, -R_int_WOTSTW, -O_THFC_MA}
+&m: {}
+A_choose_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+               (OC <: FC.Oracle_THFC{-A}),
+               islossless O.query =>
+               islossless OC.query => islossless A(O, OC).choose
+A_forge_ll: forall (O <: Oracle_MEUFGCMA_WOTSC{-A})
+              (OC <: FC.Oracle_THFC{-A}), islossless A(O, OC).forge
+le_c_ptgts: c <= p_tgts
+embdisj: forall (a b : adrs),
+           valid_wadrs a => get_wgpidxs a <> get_wgpidxs (emb_tw b)
+encb: forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
+        encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+A_wf_MA: hoare[ R_int_STCRC(A, STCRC_WC.O_STCRC_Default, O_THFC_MA).pick :
+                 O_THFC_MA.tws_ma = [] ==>
+                 all (fun (p : int * adrs) => p.`1 <> dfC0) O_THFC_MA.tws_ma]
+hb: Pr[BoundedGame(A).main() @ &m : res] <=
+    Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs]
+h1: Pr[M_EUF_GCMA_WOTSC_NPRF(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+    Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] +
+    Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m :
+       res]
+h2: Pr[GAME1_INT(A, O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main
+       () @ &m :
+       res /\
+       ! gfail_of O_MEUFGCMA_WOTSC_Default.ps O_MEUFGCMA_WOTSC_Default.qs] <=
+    Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(A), O_MEUFGCMA_WOTSTWESNPRF, FC.
+         O_THFC_Default).main() @ &m :
+       res]
+------------------------------------------------------------------------
+Pr[BoundedGame(A).main() @ &m : res] <=
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(A), O_MEUFGCMA_WOTSTWESNPRF, FC.
+     O_THFC_Default).main() @ &m :
+   res] +
+Pr[S_TCR_C_Int_MA(R_int_STCRC(A), STCRC_WC.O_STCRC_Default).main() @ &m : res]
+[84|check]>
+No more goals
+[85|check]>
+[86|check]>
+added lemma: `bounded_interactive_D1_MA'

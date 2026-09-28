@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: b969690e628407635673db11b2ba376cd1cfd838 / 1bd2e4f194282bce10c73826b9c9c0c39608d151
+FINDINGS: none
+GAPS: The split can land only after the separate full proof replay (df34cee6…) comes back green. The nightly Kani mutation job now runs about 78 Kani checks (an unmodified baseline plus a mutant for each of 39 groups) under a 300-minute timeout, and I found no timing data for that. If it runs out of time, the job fails visibly rather than passing. `PQ_EASYCRYPT_IMAGE` is set by the wrapper script itself, so the real toolchain binding is the check of the observed EasyCrypt git hash and prover list. One command I ran created a stray scratch file, `/tmp/.cone_names_ro`, through an output redirect. It is outside the target, and the target tree is still clean at the same commit and tree.

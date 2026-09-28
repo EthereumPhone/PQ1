@@ -4508,7 +4508,7 @@ sbom-firmware:
 # MMIO, and NS-pointer deref are thumbv8m/hardware-cfg'd OUT of the host
 # build, so these do NOT cover those — see work-todo §34.
 # ---------------------------------------------------------------------------
-.PHONY: kani miri ui-golden
+.PHONY: kani kani-heavy miri ui-golden
 kani-heavy: ## Kani harnesses excluded from `make kani` (peak RSS near the 16 GB runner ceiling)
 	@command -v cargo-kani >/dev/null 2>&1 || { echo "ERROR: cargo-kani not found. Install: cargo install --locked kani-verifier && cargo kani setup"; exit 1; }
 	@echo "==> Kani (HEAVY): harnesses whose peak RSS sits near the hosted-runner"
@@ -4535,7 +4535,7 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@echo "==> Kani: domain recovery parser (deserialize_pin_state)"
 	cargo kani -p pqsigner-domain --harness deserialize_pin_state_panic_free
 	@echo "==> Kani: ERC-20 calldata decoder (panic-free + transfer no-misdecode)"
-	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + page-budget classification: per-record page bound + no-hidden-value WYSIWYS + CoW-first precedence [records_pages_total panic-freedom compositional] + accept/reject controls)"
+	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + classification accept/reject controls; three kani-heavy proofs run separately via make kani-heavy)"
 	@echo "         + CoW GPv2Order canonical decode (decode-soundness: accept<=>enum-in-range, verbatim field offsets + accept/reject controls)"
 	@echo "         + typed-call ABI walker (no-read-past-end soundness + accept/reject controls)"
 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
@@ -4605,6 +4605,7 @@ verify-kani-mutation-heavy: ## anti-vacuity for the cfg(kani-heavy)-gated harnes
 .PHONY: verify-kani-census
 verify-kani-census: ## source-generated Kani harness census vs kani_census.lock.json (fast, no Kani toolchain)
 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_census.py
+	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_mutations.py
 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/kani_census.py --check
 
 miri: ## Miri UB check on host crates

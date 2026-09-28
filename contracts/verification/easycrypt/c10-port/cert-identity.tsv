@@ -1101,5 +1101,369 @@
 #   Updated to the live 242/217/345/389/1193 with a dated note; the superseded
 #   value stays recoverable in git and in the dated entries below it.
 # tree	hash
-split	534572bd7147c4f0cc1227d5c2ccaa6b
+# 2026-08-31.  split 534572bd7147c4f0cc1227d5c2ccaa6b -> c666bc514cf43c4dc195ebf0ac5f8b43.
+#   PROMOTION OF cdrafts-split/BadEncCountermodel.ec INTO THE CLOSURE, plus the
+#   stale-claim repairs the 2026-08-30 promotion commit left behind.
+#   The countermodel was proved 2026-08-12 and left under experiments/, which the
+#   cone census DOES NOT COVER -- so the one fact that stops the charged BadEnc term
+#   being read as a BOUND was invisible to every gate.  Inputs that moved:
+#     + cdrafts-split/BadEncCountermodel.ec        (new closure member, 0 admits)
+#     + scratch/badenc_ctl{A,B,C,D}.ec             (4 MUST-FAIL controls, in $CTL_SRC)
+#     ~ closure-c10-split.txt                      (34 -> 35 roots)
+#     ~ cert-cone-files-split.tsv                  (45 -> 46 files)
+#     ~ cert-controls-split.tsv                    (6 -> 10 controls)
+#     ~ cert-statements-split.tsv                  (+23 pins)
+#     ~ cert-baseline-split.tsv                    (re-baselined; see its header)
+#     ~ cert-taint-closure.tsv                     (header described TWO chains; one left
+#                                                   on 2026-08-30 and the prose did not)
+#     ~ cert_gate_split.sh                         (EXPECT_STMTS 993 -> 1016, controls >=10)
+#   LEDGER UNCHANGED AT 241 -- the pre-set criterion.  The countermodel adds three
+#   abstract-op PARAMETER rows (cm, cm', wad0 -- the collision is a HYPOTHESIS and the
+#   census is where that belongs), one definition and one module.  Nothing removed.
+#   Value taken from the gate's own `### INPUTS_SHA256` line, not recomputed by hand:
+#   that hand-recomputation failed three times on 2026-08-25 (collation + stale file list).
+#
+#   SECOND-PASS NOTE.  The first value recorded here (a536067d...) was superseded
+#   within the hour: run 1 came back RED on the single line
+#   `FAIL statement pin file truncated`, because this gate commits TWO counts and
+#   they are different numbers -- EXPECT_PINS counts MANIFEST ROWS (1078 -> 1101)
+#   and EXPECT_STMTS counts TOP-LEVEL STATEMENTS (993 -> 1016).  I had bumped only
+#   the second.  Fixing EXPECT_PINS edits cert_gate_split.sh, which is itself in the
+#   hashed set, so the identity moved again.  Everything else in run 1 was already
+#   green: ledger=241, cone added=0 removed=0, coverage 1016/1016, controls 10/10
+#   (all four new countermodel controls discriminated), taint closure 2.
+#
+# 2026-09-01.  split c666bc514cf43c4dc195ebf0ac5f8b43 -> 8578b60483c251febe4da794895e22a3.
+#   COMMENT-ONLY, in two closure files, and the census is BYTE-IDENTICAL across it
+#   (added=0 removed=0, and the fresh cone output diffs ZERO lines against the
+#   committed baseline, `# line N` annotations included).  The identity still moves,
+#   and that is BY DESIGN: cert_gate_split.sh:116 sha256sums the CONTENTS of every
+#   cone file, precisely so an edit that keeps census rows intact cannot pass
+#   unnoticed.  Worth stating because the natural assumption -- "comments are free"
+#   -- is wrong here, and I acted on it before measuring.
+#   WHAT CHANGED.  C10DeployedCapstone.ec:381 and SphincsC10Content.ec:827 carried an
+#   honesty note claiming CONCLUSION 6 is "already derivable from MM45's own
+#   UNCONDITIONAL `two_encodings` AXIOM (WOTS_TW_ES.ec:571)".  Three falsehoods against
+#   the certified tree: `two_encodings` is a LEMMA (base-c10-split/WOTS_TW_ES.ec:726),
+#   it is NOT unconditional (`P m => P m'`), and :571 lands inside `chS` -- that line
+#   number is from the OLD unsplit base-c10, where the axiom did live at :579.
+#   The VERDICT is unchanged (conclusion 6 is still contentless) and now carries the
+#   real reason: `predC` is DEFINED as `P` (cdrafts-split/WOTS_C_Real.ec:279), so the
+#   conjunct IS the current `two_encodings` lemma restated, not a corollary of an
+#   ambient axiom.  Verified at source before writing, not inherited.
+#
+# 2026-09-01 (second).  split 8578b60483c251febe4da794895e22a3 -> cfb502beee345f7198eb995477781230.
+#   cdrafts-split/WotsLegCharged.ec ENTERS THE CLOSURE -- the deployed WOTS leg, charged.
+#   It replaces GprocQWired's OPAQUE WOTS summand with the four NAMED terms of
+#   MEUFGCMA_WOTSTWESNPRF_Charged at the deployed adversary.  Step 5 of
+#   scratch/scope_fextractop_VERDICT.md, unblocked when admit B was removed 2026-08-30.
+#   Inputs that moved:
+#     + cdrafts-split/WotsLegCharged.ec      (new closure member; 0 admits, 0 axioms)
+#     + scratch/wlc_ctl{A,B,C}.ec            (3 MUST-FAIL controls, in $CTL_SRC)
+#     ~ closure-c10-split.txt                (35 -> 36 roots)
+#     ~ cert-cone-files-split.tsv            (46 -> 47 files)
+#     ~ cert-controls-split.tsv              (10 -> 13 controls)
+#     ~ cert-statements-split.tsv            (+7 pins)
+#     ~ cert_gate_split.sh                   (EXPECT_STMTS 1016->1023, EXPECT_PINS 1101->1108,
+#                                             controls floor >=13)
+#     ~ cert-baseline-split.tsv              (HEADER ONLY -- see below)
+#   THE CENSUS DID NOT MOVE AT ALL.  added=0 removed=0, ledger=241, total=1642, and the
+#   baseline BODY is byte-identical: the new member declares no op, no axiom and no
+#   module, only seven lemmas, and lemmas are not census rows.  A certified member that
+#   costs ZERO assumptions is the point.  Its real cost is elsewhere and is visible in the
+#   THEOREM rather than the census: six extra module separations on F (a NARROWING that
+#   GprocQWired.ec already takes twice), GRIND REACHABILITY
+#   (`forall m, is_lossless (dcond dmkey (good_fors m))` -- the "+C" grind assumption made
+#   explicit, supplied by nothing in the closure), and ordinary forger losslessness, which
+#   the deployed capstone also lacks.
+#
+#   SECOND-PASS NOTE.  The first value recorded here (4b56c96f...) was superseded within
+#   the hour: run 1 came back RED on ONE line -- `FAIL control scratch/wlc_ctlC.ec: failed
+#   for the WRONG reason`.  Cause: the gate matches a control's declared reason against the
+#   FIRST `[critical]` line only, and EasyCrypt WRAPS long module lists across lines.  C's
+#   declared reason ("is not allowed to use the modules(s)") is genuinely in the diagnostic
+#   -- on its SECOND line.  I had truncated the message with `cut -c1-150` when observing
+#   it and read the wrap point as the end.  Declared reason is now a substring of the FIRST
+#   line and carries no line number (those drift).  Everything else in run 1 was green:
+#   census added=0 removed=0, ledger=241, coverage 1023/1023, pins 1108/1108, controls
+#   13/13 executed with A and B both discriminating.
+#
+# 2026-09-01 (third).  split cfb502beee345f7198eb995477781230 -> 463f365eb9bf6644b0c922ca79a53ad4.
+#   cdrafts-split/GprocWotsNamed.ec ENTERS THE CLOSURE -- the deployed headline with the
+#   WOTS-TW GAME NAMED.  It is EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
+#   with its one OPAQUE `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` replaced by the four named terms of
+#   WotsLegCharged.ec::wots_leg_charged_at_deployed.  Proof: transitivity.
+#   Inputs that moved:
+#     + cdrafts-split/GprocWotsNamed.ec      (new closure member)
+#     + scratch/gwn_ctl{A,B}.ec              (2 MUST-FAIL controls, in $CTL_SRC)
+#     ~ closure-c10-split.txt                (36 -> 37 roots)
+#     ~ cert-cone-files-split.tsv            (47 -> 48 files)
+#     ~ cert-controls-split.tsv              (13 -> 15 controls)
+#     ~ cert-statements-split.tsv            (+1 pin)
+#     ~ cert_gate_split.sh                   (EXPECT_STMTS 1023->1024, EXPECT_PINS 1108->1109,
+#                                             controls floor >=15)
+#     ~ cdrafts-split/GprocChargedQWired.ec  (COMMENT ONLY -- see below)
+#   THE CENSUS DID NOT MOVE, for the second promotion running: added=0 removed=0,
+#   ledger=241, total=1642, baseline body byte-identical.  Both new members are pure
+#   lemma files; lemmas are not census rows.  The price is premises (2 -> 4) and is
+#   visible in the THEOREM.
+#   THE COMMENT CHANGE IS A RETRACTION, not decoration.  GprocChargedQWired.ec:39-42 said
+#   reducing the WOTS game "must NOT be done by applying the existing WOTS theorem, which
+#   consumes the admit at base-c10-split/WOTS_TW_ES.ec:1513 and would make a presently
+#   non-load-bearing admit LOAD-BEARING".  Correct when written; NO ADDRESSEE since
+#   2026-08-30, when that admit was REMOVED rather than contained.  What the new member
+#   applies is the CHARGED theorem, which is admit-free.  Replaced at the sentence.
+#
+# 2026-09-02.  split 463f365eb9bf6644b0c922ca79a53ad4 -> 7ec2a554e69e87ddf867c31312d1ee2b.
+#   COMMENT-ONLY in ONE closure file (GprocChargedQWired.ec:51), found by a DELIBERATE
+#   SWEEP rather than by accident.  It read "It activates NEITHER of the closure's two
+#   admits."  There is ONE: the WOTS admit was REMOVED 2026-08-30 and `extract_op` is the
+#   remainder.  Census byte-identical, as it must be for a comment; the identity moves
+#   because cert_gate_split.sh:116 hashes cone-file CONTENTS (see the 2026-09-01 entry).
+#
+#   WHY A SWEEP.  Three expired PROHIBITIONS turned up by accident inside one week -- the
+#   `_Unfolded` regression warning, the `two_encodings` "unconditional axiom" citations,
+#   and GprocChargedQWired.ec:39-42's ban on reducing the WOTS game.  All were sound when
+#   written and all had the same trigger: the 2026-08-30 admit removal.  A stale
+#   prohibition NEVER fails a gate -- it just quietly forecloses work -- so the third one
+#   had blocked the deployed headline for two days after it stopped applying.
+#   The sweep asked the targeted question ("what else did that removal invalidate?")
+#   across all 37 closure roots.  RESULT: this ONE line, plus three stale current claims
+#   on the vendored README (admit count; the RE-VERIFIED 2026-08-24 "neither applies that
+#   theorem" measurement, which GprocWotsNamed.ec falsified YESTERDAY; and the same
+#   expired prohibition restated on the front page, which I retracted in the .ec file the
+#   same day without noticing it was also there).  The cluster is now closed.
+#
+# 2026-09-14.  split 7ec2a554e69e87ddf867c31312d1ee2b -> 6aeac74105b8ebd64aa81768d8b6f256.
+#   PROMOTION OF THE T_COLL_RES_ENUM CHAIN (4 files) INTO THE CLOSURE, plus a fix to the
+#   gate's own control-count guard.  Inputs that moved:
+#     + cdrafts-split/{TCollResEnum,BadEncSplit,BadEncToTColl,BadEncStep4}.ec  (0 admits, 0 axioms)
+#     + scratch/{tcoll,bered,bes4}_ctl*.ec          (21 MUST-FAIL controls, in $CTL_SRC)
+#     ~ closure-c10-split.txt                        (37 -> 41 roots)
+#     ~ cert-cone-files-split.tsv                    (48 -> 52 files)
+#     ~ cert-controls-split.tsv                      (15 -> 36 controls)
+#     ~ cert-statements-split.tsv                    (+57 pins)
+#     ~ cert-baseline-split.tsv                      (re-baselined; LEDGER 241 UNCHANGED)
+#     ~ cert_gate_split.sh                           (EXPECT_PINS 1109 -> 1166, EXPECT_STMTS
+#                                                    1024 -> 1081, EXPECT_CTLS = 36 NEW)
+#   THE GUARD FIX.  PHASE 3 printed `expected>=15` and tested `-ge 6`: the count comments
+#   were raised three times and the number never was, so up to nine control ROWS could be
+#   deleted under a GREEN receipt.  Now an equality against a committed EXPECT_CTLS.
+#   Value computed by executing the gate's own CTL_SRC..INPUTS_SHA256 lines verbatim inside
+#   ec-grind with LC_ALL=C (scratch/calc_inputs_id.sh); the gate run compares it itself.
+#
+# 2026-09-14 (Run 2).  split 6aeac74105b8ebd64aa81768d8b6f256 -> e848ec55b7d178f5565fdc09d60d11af.
+#   GprocTCollNamed.ec ENTERS THE CLOSURE: the deployed headline with the WOTS encoding-
+#   collision term carried as Pr[T_COLL_RES_ENUM(..)] instead of the raw BadEnc game.  Run 1
+#   (6aeac741..., the promotion alone) was GREEN; this run adds its consumer.  Inputs that moved:
+#     + cdrafts-split/GprocTCollNamed.ec     (1 lemma, 0 admits, 0 axioms)
+#     + scratch/gtn_ctl{A,B,C}.ec             (3 MUST-FAIL controls)
+#     ~ closure 41 -> 42; cone files 52 -> 53; controls 36 -> 39; pins +1
+#     ~ cert-baseline-split.tsv              (census UNCHANGED; line annotations and the
+#                                             CONE_FILES block regenerated)
+#     ~ tools/taint_closure.py               (HEADLINE 7 -> 9: WOTSNAMED was never registered)
+#     ~ cert_gate_split.sh                   (EXPECT_PINS 1167, EXPECT_STMTS 1082, EXPECT_CTLS 39)
+#     ~ BadEncCountermodel.ec, TCollResEnum.ec, GprocWotsNamed.ec   (COMMENT-ONLY)
+#   THE CORRECTIONS.  "C10's WOTS layer never encodes an adversary-chosen value" was RETRACTED
+#   on 2026-08-14 -- false at the verifier (sphincs-c10/src/hypertree.rs:386-419) -- and the
+#   retraction NAMED BadEncCountermodel.ec's header as carrying it.  That file was promoted on
+#   2026-08-31 without the fix, and TCollResEnum.ec repeated the sentence.  Both corrected at the
+#   sentence.  GprocWotsNamed.ec:49 described a WitnessF anti-vacuity check the file does not have.
+#   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
+#   the gate run compares it itself.
+#
+# 2026-09-14 (Run 3).  split e848ec55b7d178f5565fdc09d60d11af -> 6a06e77153057c7c54f3ab060c200e6f.
+#   GATE-ONLY UNIT: no .ec file moved, so the census, ledger and closure cannot have.
+#   THE HOLE.  PHASE 5 trusted scratch/taint_controls.sh's exit status, which is nonzero only
+#   when a control FAILS.  A control that never RUNS scored nothing: with T9's grade call
+#   blinded, the pre-fix lines printed `OK   taint controls: taint controls: pass=10 fail=0`
+#   and left fail=0 -- executed, not argued.  Same class as Run 1's PHASE 3 floor.
+#   Inputs that moved:
+#     ~ cert_gate_split.sh           (EXPECT_TAINT_CTLS = 11 NEW, EXPECT_TAINT_COUNT_CTLS = 4 NEW;
+#                                     PHASE 5 parses pass/fail and counts UNIQUE OK lines;
+#                                     two stale PHASE 5 header claims corrected)
+#     + scratch/taint_count_controls.sh  (runs the gate's own PHASE 5 lines against 4 copies:
+#                                         unmutated / grade blinded / early exit 0 / duplicate)
+#     ~ scratch/taint_controls.sh    (COMMENT-ONLY: the summary line's format contract)
+#   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
+#   the gate run compares it itself.
+#
+# 2026-09-15 (Run 4).  split 6a06e77153057c7c54f3ab060c200e6f -> 0ee26aa9eec7f63450c2956abd77a7cc.
+#   NO CLOSURE .ec FILE MOVED.  Two gate-local changes, run together.
+#   A. THE LAST ADMIT IS OUT OF SCOPE, and that is now a gated, two-sided fact.  extract_op's
+#      theory FORS_C_TreePort is in no headline environment: EasyCrypt reports its symbols
+#      UNKNOWN after `require GprocTCollNamed.`, whose cone holds the other five headline files.
+#      Probed first (scratch/PREDICTION-scope-isolation-probes-2026-09-15.md, 10/10 as
+#      predicted), then registered.  This is what upgrades PHASE 5 for this admit from
+#      name-level to scope-level: bare smt(), clone and module-argument routes all need the
+#      theory loaded.  TCB: EasyCrypt's require/environment semantics.
+#   B. PHASE 4 floors -> equalities.  `-lt 4` / `-lt 3` printed literal `4/4` / `3/3`; now `-ne`
+#      against EXPECT_MARGIN_GUARDS=4 / EXPECT_MARGIN_SELFTESTS=3, printing the measured count.
+#      Two false texts corrected: "the byte-identity cert-margin-split.tsv asserts" (no hash
+#      there) and the receipt's "(guardrails demonstrably fire)", which the phase's own
+#      2026-08-11 retraction says --self-test cannot show.
+#   Inputs that moved:
+#     + scratch/_scope_{neg_op_GprocTCollNamed,neg_lemma,pos_op,pos_lemma,env_n_m}.ec  (in $CTL_SRC)
+#     ~ cert-controls-split.tsv      (39 -> 44 controls)
+#     ~ cert_gate_split.sh           (EXPECT_CTLS 44; EXPECT_MARGIN_GUARDS/SELFTESTS NEW; PHASE 4
+#                                     equalities; PHASE 5 header scope note)
+#     ~ tools/taint_closure.py       (COMMENT-ONLY: the scope note in its header)
+#   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
+#   the gate run compares it itself.
+#
+# 2026-09-15 (Run 5).  split 0ee26aa9eec7f63450c2956abd77a7cc -> 37dab7b0d09385a39036c0a82c7e0f82.
+#   NO CLOSURE .ec FILE MOVED.  Scope isolation of extract_op is now gated PER HEADLINE FILE.
+#   Run 4 gated it through GprocTCollNamed alone, on the grounds that the other five headline
+#   files sit in its require-cone.  Kimi K3's review found that chain UNGUARDED: all six are
+#   closure roots, so one could leave the cone with nothing going RED and then require
+#   FORS_C_TreePort.  Each headline file now has its own negative, sharing the op-form twin (a
+#   byte-identical body; any other failure is graded WRONG REASON, i.e. RED).  NOT covered: a
+#   seventh headline file -- nothing links taint_closure.py's HEADLINE list to these rows.
+#   Inputs that moved:
+#     + scratch/_scope_neg_op_{GprocChargedQWired,SphincsC10CapstoneWired,GprocQWired,
+#                              GprocQBound,GprocWotsNamed}.ec   (in $CTL_SRC)
+#     ~ cert-controls-split.tsv      (44 -> 49 controls)
+#     ~ cert_gate_split.sh           (EXPECT_CTLS 49; PHASE 5 header per-file note)
+#   Pre-run: scratch/_run_scope_ctls.sh graded 10/10 in ec-grind.  Value computed by executing
+#   the gate's own lines in ec-grind (scratch/calc_inputs_id.sh); the gate run compares it itself.
+#
+# 2026-09-15 (Run 6).  split 37dab7b0d09385a39036c0a82c7e0f82 -> 1bfdb2c42b39b297522fc856285be11a.
+#   NO CLOSURE .ec FILE MOVED.  The HEADLINE list and the scope probes are LINKED.  Run 5 left a
+#   seventh headline file uncovered: nothing tied the per-file scope negatives to
+#   tools/taint_closure.py's HEADLINE list.  --check now requires an EXACT bijection between the
+#   files declaring HEADLINE results and the scratch/_scope_neg_op_<H>.ec rows; each row MUST-FAIL,
+#   its reason naming every admit theory, its probe requiring its own headline theory; a missing or
+#   row-less manifest is a vacuity FAIL.  Built and tested in a scratchpad sandbox first
+#   (scratch/PREDICTION-scope-linkage-2026-09-15.md), including one recorded miss: the prediction
+#   said taint_count_controls.sh would not change, and it had to.
+#   Inputs that moved:
+#     ~ tools/taint_closure.py       (scope_linkage(); header note)
+#     ~ scratch/taint_controls.sh    (farm carries the controls manifest + probes; T11..T14)
+#     ~ scratch/taint_count_controls.sh  (its farm links all of scratch/ except the copy under test)
+#     ~ cert_gate_split.sh           (EXPECT_TAINT_CTLS 11 -> 15; PHASE 5 header note)
+#     ~ cert-controls-split.tsv      (COMMENT-ONLY: dated closing note; still 49 rows)
+#   Pre-run, live tree: taint_closure --check `6 headline files <-> 6 registered scope probes`,
+#   taint controls pass=15 fail=0, taint count controls pass=4 fail=0.  Value computed by executing
+#   the gate's own lines in ec-grind (scratch/calc_inputs_id.sh); the gate run compares it itself.
+#
+# 2026-09-15 (Run 7).  split 1bfdb2c42b39b297522fc856285be11a -> d8bf474fcbeb8a29f8a83fea86382b92.
+#   NO CLOSURE .ec FILE MOVED.  A DUPLICATE PIN ROW, and the fail-open it exposed.
+#   op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f sat on two identical rows from 92ecb63
+#   (2026-08-20), so EXPECT_PINS was one pin high.  PHASE 1c counted ROWS, and 84 of the 1166 unique
+#   keys are op: definition pins that PHASE 1h never enumerates.  DEMONSTRATED on the pre-fix lines:
+#   op:BinaryTrees.ec::height deleted and another row duplicated gave 1c `pinned=1167 expected=1167`,
+#   0 FAIL, and 1h OK -- a definition unpinned under a GREEN gate.  Same class as PHASE 3's unique
+#   count.  Fix: the duplicate row removed; EXPECT_PINS 1167 -> 1166; a pin-key-uniqueness block
+#   before the PHASE 1c loop (duplicate keys FAIL, and unique keys must equal EXPECT_PINS), checked
+#   in isolation against the live, doctored and HEAD manifests (scratch/PREDICTION-pin-dup-2026-09-15.md).
+#   Inputs that moved:
+#     ~ cert-statements-split.tsv    (1167 -> 1166 rows; the duplicate replaced by a dated comment)
+#     ~ cert_gate_split.sh           (EXPECT_PINS 1166; the pin-key-uniqueness block)
+#   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
+#   the gate run compares it itself.
+#
+# 2026-09-16: integrate reviewed FV evidence fixes on master’s 53-file cone.
+# Preserve all 1166 pins, 1082 statements, 49 controls, per-headline scope
+# isolation/linkage and exact taint/margin counts. Add full dependency replay,
+# checked immutable toolchain and pin-alias/EOF controls. Fresh full replay
+# required for this identity; prior 45-file receipts do not certify it.
+# 2026-09-21: PROMOTE the constant-sum surface count into the perimeter.
+# experiments/wots-badenc/count/{VecDP,CountDS,C10SurfaceKernel,C10Surface}.ec MOVED (not
+# copied) into cdrafts-split/, per the 2026-08-19 PTgtsPin precedent, because two cone
+# members -- C10DeployedScope.ec:344 and GprocTCollNamed.ec:56 -- lean on a constant that
+# lived in an ungated directory.  Required by nothing, so they enter the cone as roots.
+#   roots 46 -> 50 | cone 53 -> 57 | EXPECT_STMTS 1082 -> 1120 | EXPECT_PINS 1166 -> 1220
+#   census 1677 -> 1693, all 16 additions defined-op, LEDGER UNCHANGED AT 241 -- this
+#   promotion adds no assumption of any kind.
+#   EXPECT_CTLS 49 -> 55: six of the experiment's eight controls registered.  KctlA/KctlB
+#   are deliberately NOT registered -- they fail by `anomaly: Stack overflow`, not by proof
+#   (observed today AND in the original 2026-08-14 receipt), so their failure does not
+#   discriminate: it would occur just the same if count_ds computed garbage.  CtlVal covers
+#   the same perturbation and fails cleanly via count_ds_kernel.
+# Also folded in: GprocTCollNamed.ec:56 no longer calls 2^114.0941 machine-checked (the
+# integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
+# cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
+#
+split	ea9deb7a9681913681f0bc4a1ee80df4
 fork	9c2d21280c84d52c30b22111151f1135
+
+# 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
+# Explicit proof-control failures replace optimization-removable assertions;
+# regressions reject an always-success driver under PYTHONOPTIMIZE=0/1/2.
+# The 53 proof files, pins, statement counts and cryptographic assumptions are unchanged.
+
+# 2026-09-17 owner-authorized Astra correction: ec0cec4a59a4eef2b6862c56f8475f09 -> 623ad0710d73000a1c693049b8933813.
+# Reject declaration-name aliases and duplicate parsed declaration identities,
+# with regression controls for missing operator pins hidden by aliases.
+# Proof sources, statements, pins and cryptographic assumptions are unchanged.
+# A complete fresh pinned-image replay is required for this input identity.
+
+# 2026-09-21 combined integration: preserve master e6ac316e surface-count promotion
+# and concrete counter/byte/search work from 27307116. Cone60, roots51, pins1276,
+# statements1154, controls58. A fresh full replay is required on this union.
+
+# 2026-09-23 shared byte-session milestone: d1d88a7319995db0b21c47869c79fa8d -> 9db16c6ef0cad6ff05eb0a5130dca375.
+# Adds73 checked research modules, explicit fail-stop/codec/cost/prefix contracts,
+# 15 semantic/scope controls and full-signature Rust/model fixture correspondence.
+# Project axioms, admits and clone assumptions unchanged; no numeric forgery bound.
+
+# 2026-09-23 shared byte-session gate correction: 9db16c6ef0cad6ff05eb0a5130dca375 -> 820fb7e3a8d386a01b58981604b327e0.
+# Bind hypertree.rs and merkle.rs. Permit only the exact RawShuffle source
+# for its 16-bit scaling constant; regression cases reject changed sources
+# and deployment-policy constants. Proof statements and assumptions unchanged.
+
+# 2026-09-23 quantitative foundations: 820fb7e3a8d386a01b58981604b327e0 -> a7a6c66a5d9630e834ef2de251877aa4.
+# Adds21 proof modules for exact-coordinate replay and actual memoized signing
+# probabilities, with fixed-prior-opening boundaries and nine semantic/scope
+# controls. Cone184, roots87, pins2003, statements1750, controls122; project
+# axioms, admits and clone assumptions unchanged. Full forgery remains open.
+
+# 2026-09-23 raw authentication-path correspondence: fa1c76ddce3555c0565a9dfdbbe429ac -> f91c239ef8a20e3e58a40b7478d333a3.
+# Adds10 proof modules and11 controls; cone213, roots95, pins2166, statements1890,
+# controls144. Reference-history and16-byte width premises remain explicit.
+# Project axioms, admits and clone assumptions unchanged; component reduction open.
+
+# 2026-09-23 actual tree construction: f91c239ef8a20e3e58a40b7478d333a3 -> 0ffc0d10b386ad36420dc7f39df774dc.
+# Adds53 proof modules and24 controls; cone266, roots103, pins2393, statements2086,
+# controls168. Actual stack/capture/leaf provenance supplies reference paths;
+# FORS signing/recovery matches its internally computed root. No new project
+# axiom, admit or clone assumption; complete component reduction remains open.
+
+# 2026-09-24 Complete actual honest signing correctness: 0ffc0d10b386ad36420dc7f39df774dc -> 8094018baa5245a04bd5ab8bbc9fcc16.
+# Adds 90 proof modules and 57 controls; cone 356, roots 122,
+# pins 2672, statements 2329, controls 225.
+# No new project axiom, admit or clone assumption. Adaptive EUF remains open.
+
+# 2026-09-24 Physical honest-error transfer and actual public-node collision charges: 8094018baa5245a04bd5ab8bbc9fcc16 -> c9df582cf29fce12ff9c7d1a31a33c18.
+# Adds 15 proof modules and 38 controls; cone 371, roots 134,
+# pins 2727, statements 2378, controls 263.
+# No new project axiom, admit or clone assumption. Adaptive EUF remains open.
+
+# 2026-09-24 Control evidence clarification: c9df582cf29fce12ff9c7d1a31a33c18 -> 45a497ff6ac7dfb7869ed3b84a51469f.
+# Manifest comments now distinguish proof rejection from semantic falsity.
+# All proof/control bodies and enrollment inventories are unchanged.
+
+# 2026-09-24 Actual reverse WOTS and Merkle-layer recovery: 45a497ff6ac7dfb7869ed3b84a51469f -> 6df326d66261b1b266bbc2688b2ec799.
+# Adds 13 proof modules and 22 controls; cone 384, roots 142,
+# pins 2772, statements 2417, controls 285. No new project axiom, admit
+# or clone assumption. Verifier counts use full u32; adaptive EUF remains open.
+
+# 2026-09-24 Q17: actual byte-game top-layer extraction. Nine added modules,
+# 19 controls, 24 statement/operator pins; existing assumptions unchanged.
+# Split identity 6df326d66261b1b266bbc2688b2ec799 -> dfffe3f932c98a5ae98c9ae0075d2868.
+
+# Linked subtree extraction, 2026-09-24: 10 checked modules, 21 controls,
+# 403 targets, 153 roots, 2835 pins, 2467 statements, 2117 census rows, 325 controls.
+# No new project axiom/admit/clone assumption. Unrecorded-top and paired-opening
+# residuals remain uncharged; FORS/adaptive/private/encoding obligations stay open.
+# Split identity dfffe3f932c98a5ae98c9ae0075d2868 -> 7d32af4a46730ea4aa82d37d99387b52.
+
+# Actual FORS extraction, 2026-09-25: 18 checked modules, 34 controls,
+# 421 targets, 164 roots, 2911 pins, 2528 statements, 2132 census rows, 359 controls.
+# Existing statements/assumptions preserved; no new axiom/admit/clone assumption.
+# Actual forest references and conditional leaf extraction; missing-reference
+# and adaptive exposure/forgery probability residuals remain uncharged.
+# Split identity 7d32af4a46730ea4aa82d37d99387b52 -> 51b87d9274a86dbae3222f883482d61a.
+
+# 2026-09-25: accumulated adaptive returned-output accounting; 9 checked modules,
+# exact original-game projection, 27 controls; 430 targets, no new assumptions.

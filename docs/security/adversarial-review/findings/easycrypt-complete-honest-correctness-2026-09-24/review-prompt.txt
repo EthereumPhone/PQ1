@@ -1,0 +1,25 @@
+Review PQSigner OS for merge of complete EasyCrypt honest-signature correctness.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-honest-components
+Commit: e405562e14fa3d656a3334b5c2959623ff5356ad
+Tree: f26a20e6d71bc2e6254c7e649db0d278d8f691c2
+Compare: 2bc048a29315ef2a72300a0717f7305511e9caae..e405562e14fa3d656a3334b5c2959623ff5356ad
+
+Focus only on formal-verification correctness:
+1. Actual WOTS keygen/sign/recover uses all 43 chains, concrete permutation shuffle and the actual accepted bounded-count hash; returned signatures match the earlier leaf. Count failure and the invalid-sum zero sentinel remain explicit.
+2. Actual FORS forest sign/recover retains twelve paths, the thirteenth root-as-secret and exact compression. Zero nodes are permitted; no external forest-root identity is assumed.
+3. Actual Merkle leaves come from recorded WOTS keygen. Catalog/root identity connects layer signing and later recovery to a separately generated earlier root, with valid indices and widths discharged.
+4. The actual signer retains its accepting H_msg entry, complete forest/layer trace and exact two-layer coordinates. Actual verification reaches the earlier top root; observers preserve returned values and all oracle effects.
+5. Actual successful signatures supply codec widths, count range and byte values. Encode/decode yields 4008 valid bytes and verification succeeds. Probability-one honest correctness includes termination and explicit None failure, not guaranteed signing success.
+6. The combined source/statement/census/control enrollment preserves earlier contracts, adds no project axiom/admit/clone assumption, and controls fail for their declared semantic reasons. The two new shuffle-arithmetic quarantine exceptions remain exact-source and mutation-tested. Independent-table manual-model correctness does not claim adaptive unforgeability.
+
+Evidence already green: all 90 new enrolled modules passed 180 source-matched direct/default-CLI checks with repository-only imports; 57 new controls, 11 checker regression groups, static contract and 320-input source binding pass. Inventory: 356 files, 122 roots, 2672 pins, 2329 statements, 2079 census rows and 225 controls. Full cold two-driver replay is running separately and remains required for landing; the coordinator will confirm its unchanged-source receipt without another model turn.
+Non-goals: runtime/API/parameter changes, physical-prefix transfer, probability-charge follow-ups, adaptive FORS opening coverage, component forgery extraction, numerical EUF, Rust extraction, concrete SHA-256/QROM, hardware/shipment, deferred playbook sweep and optional hardening.
+
+Inspect the diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: e405562e14fa3d656a3334b5c2959623ff5356ad / f26a20e6d71bc2e6254c7e649db0d278d8f691c2
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

@@ -1,0 +1,20 @@
+All seven focus areas check out; local re-execution of the fast gates is green and the recomputed input identity matches the committed `df34cee6…`.
+
+What I verified source-first:
+
+- **Mutation credit binding** (`scripts/check_kani_mutations.py:126-216`): `classify_kani` requires exactly one `Checking harness <FQ>` line, exactly one verdict, an exact `Complete - …` tally, and a matching exit code, else `HarnessError` (exit 2). Baseline must pass unmodified, source is re-read after baseline, and the `finally` revert is verified. `validate_manifest` enforces one canary, unique ids, FQ `harness_path` consistency, `expect=kani_fails`, and restricted `z_flags`.
+- **Tier/feature gates**: `heavy` is non-cumulative (`main()` line 235-243), excluded from quick/default/full, absent from all workflows, and `heavy⇔kani-heavy feature` agreement is enforced both in `validate_manifest` and statically in `kani_census.py:manifest_rot` via `_harness_cfg_features`, which normalizes multiline attributes before walking up from each `fn`; unparseable cfgs raise and fail the census. Failures in all missed-gate paths fail closed (no verdict → HarnessError).
+- **Complete closure, both drivers**: `tools/split_contract.py::targets()` recomputes the 45-file cone, requires exact equality with the pinned inventory, and emits topological order (deps first, cycle-rejecting); `cert_gate_split.sh` PHASE 1 compiles every target directly and PHASE 1e feeds every file (including the four `.eca` theories) to `cli -iterate`, with `pipefail` making the new `cli_rc` check real. PHASE 1d uses plain `require` (handles abstract theories); `tools/split_proof_controls.py` executably pins broken-dependency/import-acceptance/EOF-open-proof/abstract-require semantics. No cross-directory basename collisions exist (verified), and PHASE 0 guards dual-extension names.
+- **Pins/inventory**: duplicate keys, count≠`EXPECT_PINS`, noncanonical/out-of-cone paths, and unresolved or changed digests all raise in `check_pins`; the deleted duplicate `OpenPRE…::f` row matches the 1078→1077 constant move. Census vs baseline, `stmt_coverage` (incl. `EXPECT_STMTS=993` total), quarantine, and taint all propagate nonzero exits (`sys.exit(main())` confirmed). I recomputed `INPUTS_SHA256` locally: `df34cee6a883deafc1aef86c89d8c464` = committed `cert-identity.tsv`.
+- **Full certification**: `run_easycrypt_split.py` fullmatch-pins the image digest, mounts the tree `:ro`, executes on `cp -R` disposable copy with `--network none`; toolchain identity (git-hash + 25 prover configs + image env) is checked in the gate before any proof execution. Identity-format assumptions fail closed.
+- **CI enrollment**: `verify-easycrypt-split-pins` per-PR in lean-fv.yml (paths filter covers `easycrypt/**`); `verify-easycrypt-split` scheduled in nightly.yml (schedule+dispatch, no `if`/`continue-on-error`); `check_gate_enforcement.py` reverse-coverage checks plus negative tests pass locally (67 gates OK).
+- **Scope claims**: FV_SURFACE_MAP rows 4/9 and STATUS.md distinguish current split vs historical drafts, name the remaining `FORS_C_TreePort.extract_op` admit, conditional reductions, and exclude firmware refinement/numerical bounds.
+
+Re-ran green: `test_split_contract.py` (6), `split_contract.py` static contract, `cert_gate_split.sh --identity-only`, `test_kani_mutations.py` (7), `test_kani_census.py` (11), `kani_census.py --check`, `check_gate_enforcement.py`.
+
+Minor non-blocking: PHASE 1e's comment still says "fewer than 5" prompts while the code now enforces ≥1 (threshold change is fail-closed via rc/diagnostics checks).
+
+VERDICT: GO
+TARGET: b969690e628407635673db11b2ba376cd1cfd838 / 1bd2e4f194282bce10c73826b9c9c0c39608d151
+FINDINGS: none
+GAPS: full EasyCrypt replay on identity df34cee6a883deafc1aef86c89d8c464 still pending with the coordinator; landing must wait for its green result.

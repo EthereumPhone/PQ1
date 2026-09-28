@@ -1,0 +1,138 @@
+{
+  "base": "044b3d200194687cb61b6d59984739169d451f67",
+  "created_at": "2026-09-22T14:55:32.157204+00:00",
+  "executables": {
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "0753dfe1d8b87a52436deb13eb1c549661ef4c84fee2c5aa688385eebeccb761",
+      "version": "codex-cli 0.155.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.0,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": true,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-6-astra",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-prompt.txt",
+    "sha256": "9ae6c3991058572806b76bfbf79e7eec21c844d8bedb9d50eae71f7848183b7e"
+  },
+  "reviewers": {
+    "codex": {
+      "artifact_bytes": 409157,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-6-astra",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--enable",
+        "use_legacy_landlock",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+        "-o",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-retry/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 307.822,
+      "ended_at": "2026-09-22T14:55:31.933878+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "9ae6c3991058572806b76bfbf79e7eec21c844d8bedb9d50eae71f7848183b7e",
+        "report_sha256": "6b3d1480156e68596e21cef7a5f632296cc51910f9cc0cff4874284d0a962f4d",
+        "runtime_sha256": "1e7a46b94d27c1e4b21904f1dcfe7e56dd949fbc63ee1f5d61fc4960b1bf3bab",
+        "stderr_sha256": "6fa4df974ace5174669bf89a1c0fd21129017b09db674e1389fc545747a3b4eb"
+      },
+      "paths": {
+        "directory": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-retry/codex",
+        "prompt": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-retry/codex/prompt.txt",
+        "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-retry/codex/report.txt",
+        "stderr": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-retry/codex/stderr.txt"
+      },
+      "report_words": 30,
+      "started_at": "2026-09-22T14:50:24.112031+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "EasyCrypt bounded hypertree and leaf interfaces",
+  "target": {
+    "commit_after": "5c1770105acb81700d99eea8e917b1156b96e0db",
+    "commit_before": "5c1770105acb81700d99eea8e917b1156b96e0db",
+    "drift": false,
+    "path": "/home/nicola/.local/state/pqsigner-research/easycrypt-bounded-hypertree-20260922-3ip7saed/review-target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "0f0990e1f83a5f0133da3e8633b741a8a1db45ef",
+    "tree_before": "0f0990e1f83a5f0133da3e8633b741a8a1db45ef"
+  },
+  "timeout_seconds": 746,
+  "version_contract": {
+    "mismatches": {
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.155.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-22T14:50:24.111954+00:00"
+}

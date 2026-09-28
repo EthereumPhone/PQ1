@@ -1,5 +1,6 @@
 {
-  "_comment": "verify-kani-mutation manifest — the Kani-side analogue of the Lean verify-proof-mutation gate (anti-vacuity for the firmware bounded-verification harnesses). For each entry, mutate a decoder/gate function in a way a specific Kani harness MUST catch, run ONLY that harness, and assert it flips to `VERIFICATION:- FAILED`. A green-when-it-should-be-red = a vacuous / under-constrained harness (the exact failure class the per-slice manual mutation checks caught by hand; this makes them a standing gate — work-todo §34/§35). Paths are relative to the repo root. Every entry uses `expect: kani_fails` (the load-bearing mutation must be caught); the `canary` doubles as the machinery-health check (if it survives, ALL results are void).",
+  "_comment": "verify-kani-mutation manifest \u2014 the Kani-side analogue of the Lean verify-proof-mutation gate (anti-vacuity for the firmware bounded-verification harnesses). For each entry, mutate a decoder/gate function in a way a specific Kani harness MUST catch, run ONLY that harness, and assert it flips to `VERIFICATION:- FAILED`. A green-when-it-should-be-red = a vacuous / under-constrained harness (the exact failure class the per-slice manual mutation checks caught by hand; this makes them a standing gate \u2014 work-todo \u00a734/\u00a735). Paths are relative to the repo root. Every entry uses `expect: kani_fails` (the load-bearing mutation must be caught); the `canary` doubles as the machinery-health check (if it survives, ALL results are void).",
+  "notes": "TIERS (2026-08-20, issue #662): quick \u2286 default \u2286 full are CUMULATIVE (`--tier default` runs quick+default; the nightly lane runs default). `heavy` is NON-cumulative and LOCAL-ONLY: `--tier heavy` runs ONLY the heavy entries plus the always-on canary, and every other tier SKIPS heavy entries. Heavy entries pin #[cfg(feature = \"kani-heavy\")]-gated harnesses whose peak RSS (no_hidden_value 13.05 GiB / 7m55s, per_record_page_bound 12.71 GiB, cow_presign_precedence 11.50 GiB \u2014 measured 2026-07-31) can OOM a 16 GB hosted runner and suppress the rest of the job's evidence, so they must NEVER be wired into CI; run them via `make verify-kani-mutation-heavy` or `make kani-heavy`. An entry whose harness is cfg-gated MUST carry matching z_flags (e.g. [\"--features\", \"kani-heavy\"]): the static census (`make verify-kani-census`, scripts/kani_census.py manifest_rot) fails the manifest otherwise, so the #662 class (gated harness compiled out \u2192 no VERIFICATION verdict \u2192 nightly HarnessError) dies statically. An entry's `file` may differ from the file holding its `harness` when the mutation anchors a shared pure helper the harness pins (see native_amount_exactness_helper_gate_dropped, issue #659).",
   "mutations": [
     {
       "id": "canary",
@@ -10,7 +11,8 @@
       "find": "self.fw_version() > rollback_floor",
       "replace": "true",
       "expect": "kani_fails",
-      "note": "verify_rollback always-accepts -> the rollback_boundary biconditional (is_ok() <=> version > floor) MUST break. If this SURVIVES, the harness machinery is broken (kani not running / output not parsed) and every result is void."
+      "note": "verify_rollback always-accepts -> the rollback_boundary biconditional (is_ok() <=> version > floor) MUST break. If this SURVIVES, the harness machinery is broken (kani not running / output not parsed) and every result is void.",
+      "harness_path": "verification::rollback_boundary"
     },
     {
       "id": "rollback_off_by_one",
@@ -21,7 +23,8 @@
       "find": "self.fw_version() > rollback_floor",
       "replace": "self.fw_version() >= rollback_floor",
       "expect": "kani_fails",
-      "note": "the real anti-rollback off-by-one: `>=` would let a version==floor reinstall slip past the OTP rollback floor."
+      "note": "the real anti-rollback off-by-one: `>=` would let a version==floor reinstall slip past the OTP rollback floor.",
+      "harness_path": "verification::rollback_boundary"
     },
     {
       "id": "aa_execute_abi_offset",
@@ -32,7 +35,8 @@
       "find": "out.buf[p + WORD - 1] = 0xa0;",
       "replace": "out.buf[p + WORD - 1] = 0xc0;",
       "expect": "kani_fails",
-      "note": "the execute(...) head->tail ABI offset byte; a wrong value = calldata the on-chain wallet mis-decodes into a different call."
+      "note": "the execute(...) head->tail ABI offset byte; a wrong value = calldata the on-chain wallet mis-decodes into a different call.",
+      "harness_path": "userop::kani_harnesses::reconstruct_execute_layout"
     },
     {
       "id": "multisend_record_walk_tiling",
@@ -43,18 +47,24 @@
       "find": "self.cursor += data_end;",
       "replace": "self.cursor += data_end + 1;",
       "expect": "kani_fails",
-      "note": "perturb the multiSend record-walk cursor advance -> the exact-tiling partition proof MUST break (a hidden byte would ride between records)."
+      "note": "perturb the multiSend record-walk cursor advance -> the exact-tiling partition proof MUST break (a hidden byte would ride between records).",
+      "harness_path": "multisend::verification::record_walk_exact_tiling"
     },
     {
       "id": "multisend_hidden_value",
-      "tier": "default",
+      "tier": "heavy",
       "crate": "pqsigner-tx",
       "harness": "no_hidden_value",
       "file": "tx/src/multisend.rs",
       "find": "!value_is_zero && !matches!(kind, MsRecordKind::PlainEth | MsRecordKind::EmptyCall)",
       "replace": "!value_is_zero && !matches!(kind, MsRecordKind::PlainEth | MsRecordKind::EmptyCall | MsRecordKind::Blind)",
       "expect": "kani_fails",
-      "note": "excluding Blind from the value-page rule would silently drop a Blind record's non-zero native value -> the no-hidden-value WYSIWYS proof MUST break."
+      "z_flags": [
+        "--features",
+        "kani-heavy"
+      ],
+      "note": "excluding Blind from the value-page rule would silently drop a Blind record's non-zero native value -> the no-hidden-value WYSIWYS proof MUST break. MOVED TO THE heavy TIER 2026-08-20 (issue #662): the no_hidden_value harness has been #[cfg(feature = \"kani-heavy\")]-gated since 80937852 (13.05 GiB / 7m55s peak, measured 2026-07-31 \u2014 see the Makefile kani-heavy target), so the default-tier nightly lane compiled it OUT and died with a HarnessError (no VERIFICATION verdict). The z_flags re-enable the harness for the local heavy tier; the static census (verify-kani-census) now fails any cfg-gated harness whose entry lacks matching z_flags, so this class dies statically next time. NEVER wire the heavy tier into a 16 GB CI runner \u2014 an OOM kills the job and suppresses the rest of its evidence; run `make verify-kani-mutation-heavy` / `make kani-heavy` locally.",
+      "harness_path": "multisend::verification::no_hidden_value"
     },
     {
       "id": "cowswap_field_offset",
@@ -65,7 +75,8 @@
       "find": "sell_token.copy_from_slice(&canonical[8..28]);",
       "replace": "sell_token.copy_from_slice(&canonical[9..29]);",
       "expect": "kani_fails",
-      "note": "shift a GPv2Order field read by one byte -> the verbatim-offset decode-soundness biconditional MUST break."
+      "note": "shift a GPv2Order field read by one byte -> the verbatim-offset decode-soundness biconditional MUST break.",
+      "harness_path": "cowswap_order::verification::decode_canonical_soundness"
     },
     {
       "id": "multisend_op0_delegatecall",
@@ -76,7 +87,8 @@
       "find": "rec.operation != 0",
       "replace": "false",
       "expect": "kani_fails",
-      "note": "disable the per-record op==0 DELEGATECALL-refusal in summarize_packed -> a payload carrying an op!=0 record is now accepted, so summarize_accept_implies_all_call's `Ok => forall record: operation==0` re-walk assertion MUST break. Verified 2026-07-01 by hand: mutation -> VERIFICATION:- FAILED via assert_failed_inner (the assert_eq!(rec.operation, 0) firing), unmutated -> SUCCESSFUL. Closes finding 3b-1's anti-vacuity guard (ADVERSARIAL_REVIEW_KANI_2026-07-01.md); the only kani_mutations entry outside the original 4-file curated set."
+      "note": "disable the per-record op==0 DELEGATECALL-refusal in summarize_packed -> a payload carrying an op!=0 record is now accepted, so summarize_accept_implies_all_call's `Ok => forall record: operation==0` re-walk assertion MUST break. Verified 2026-07-01 by hand: mutation -> VERIFICATION:- FAILED via assert_failed_inner (the assert_eq!(rec.operation, 0) firing), unmutated -> SUCCESSFUL. Closes finding 3b-1's anti-vacuity guard (ADVERSARIAL_REVIEW_KANI_2026-07-01.md); the only kani_mutations entry outside the original 4-file curated set.",
+      "harness_path": "multisend::verification::summarize_accept_implies_all_call"
     },
     {
       "id": "safe_exec_noncanonical_address",
@@ -87,7 +99,8 @@
       "find": "word[..12].iter().any(|&b| b != 0)",
       "replace": "false",
       "expect": "kani_fails",
-      "note": "disable read_address_word_off's top-12-zero address-canonicity reject -> a dirty-padding address word (to/gas_token/refund_receiver) is accepted, so decode_exec_rejects_noncanonical_address (expects NonCanonicalAddress) MUST break. Verified 2026-07-02 by hand: mutation -> BOTH decode_exec_rejects_noncanonical_address AND decode_exec_soundness (accept-direction top-12==0 assert) -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding 3b/#4 (exec address canonicity had NO harness; deleting the reject kept all 12 safe_tx harnesses green)."
+      "note": "disable read_address_word_off's top-12-zero address-canonicity reject -> a dirty-padding address word (to/gas_token/refund_receiver) is accepted, so decode_exec_rejects_noncanonical_address (expects NonCanonicalAddress) MUST break. Verified 2026-07-02 by hand: mutation -> BOTH decode_exec_rejects_noncanonical_address AND decode_exec_soundness (accept-direction top-12==0 assert) -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding 3b/#4 (exec address canonicity had NO harness; deleting the reject kept all 12 safe_tx harnesses green).",
+      "harness_path": "safe_tx::verification::decode_exec_rejects_noncanonical_address"
     },
     {
       "id": "array_element_cap",
@@ -98,7 +111,8 @@
       "find": "if count > MAX_ARRAY_RENDER {",
       "replace": "if false {",
       "expect": "kani_fails",
-      "note": "disable the dynamic-array element cap (step 7) -> a 9-element sole-tail body is accepted, so resolve_array_rejects_over_cap (expects Reject) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #2 (the cap was UNREACHABLE in the symbolic panic-free harnesses at N=160/224 which admit only count<=2/4, so `count<=MAX_ARRAY_RENDER` there was vacuous; the concrete control at 384 B exercises it)."
+      "note": "disable the dynamic-array element cap (step 7) -> a 9-element sole-tail body is accepted, so resolve_array_rejects_over_cap (expects Reject) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #2 (the cap was UNREACHABLE in the symbolic panic-free harnesses at N=160/224 which admit only count<=2/4, so `count<=MAX_ARRAY_RENDER` there was vacuous; the concrete control at 384 B exercises it).",
+      "harness_path": "render::array::kani_harnesses::resolve_array_rejects_over_cap"
     },
     {
       "id": "enum_label_key_match",
@@ -109,7 +123,8 @@
       "find": "if key == k {",
       "replace": "if true {",
       "expect": "kani_fails",
-      "note": "make lookup_enum_label's per-entry key comparison always-true -> the first entry matches any (high-zero) value, so the returned label is entry 0's regardless of which key the value actually matches. enum_two_entry_value_sound (a value matching key1, not key0, must return label1) MUST break. Verified 2026-07-02 by hand: mutation -> enum_two_entry_value_sound (and enum_single_entry_value_sound) VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #3 (the single-entry harness only proved the match where first==correct; the multi-entry return-the-matching-entry property was unverified)."
+      "note": "make lookup_enum_label's per-entry key comparison always-true -> the first entry matches any (high-zero) value, so the returned label is entry 0's regardless of which key the value actually matches. enum_two_entry_value_sound (a value matching key1, not key0, must return label1) MUST break. Verified 2026-07-02 by hand: mutation -> enum_two_entry_value_sound (and enum_single_entry_value_sound) VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #3 (the single-entry harness only proved the match where first==correct; the multi-entry return-the-matching-entry property was unverified).",
+      "harness_path": "render::enums::kani_harnesses::enum_two_entry_value_sound"
     },
     {
       "id": "rlp_used_underreport",
@@ -120,7 +135,8 @@
       "find": "Ok((Item::Bytes(&input[..1]), 1))",
       "replace": "Ok((Item::Bytes(&input[..1]), 0))",
       "expect": "kani_fails",
-      "note": "under-report the single-byte item's consumed count (used 1 -> 0) -> ListIter's `&self.rest[used..]` would re-read the same byte (a parse desync). The strengthened `assert_eq!(used, header_len + payload.len())` (header_len derived independently from the RLP prefix byte) MUST break; the old `used <= len` assert would have PASSED with used=0. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #10."
+      "note": "under-report the single-byte item's consumed count (used 1 -> 0) -> ListIter's `&self.rest[used..]` would re-read the same byte (a parse desync). The strengthened `assert_eq!(used, header_len + payload.len())` (header_len derived independently from the RLP prefix byte) MUST break; the old `used <= len` assert would have PASSED with used=0. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #10.",
+      "harness_path": "rlp::kani_harnesses::decode_item_panic_free_and_used_in_bounds"
     },
     {
       "id": "erc20_transferfrom_to_offset",
@@ -131,7 +147,8 @@
       "find": "let to = decode_address_word(&body[32..64])",
       "replace": "let to = decode_address_word(&body[0..32])",
       "expect": "kani_fails",
-      "note": "read transferFrom's `to` from word 0 (the `from` word) instead of word 1 -> the display would show the WRONG recipient for the approval-drain arm. parse_erc20_transfer_from_no_misdecode (decoded to == encoded to, forall) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #9 (only `transfer` had a forall no-misdecode harness; approve/transferFrom rested on point-tests)."
+      "note": "read transferFrom's `to` from word 0 (the `from` word) instead of word 1 -> the display would show the WRONG recipient for the approval-drain arm. parse_erc20_transfer_from_no_misdecode (decoded to == encoded to, forall) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #9 (only `transfer` had a forall no-misdecode harness; approve/transferFrom rested on point-tests).",
+      "harness_path": "erc20::calldata::kani_harnesses::parse_erc20_transfer_from_no_misdecode"
     },
     {
       "id": "safe_mgmt_addr_word_offset",
@@ -142,7 +159,8 @@
       "find": "    addr.copy_from_slice(&word[12..32]);",
       "replace": "    addr.copy_from_slice(&word[11..31]);",
       "expect": "kani_fails",
-      "note": "[§2 #1: Safe-mgmt owner/module address decode] Breaks decode_addr_word: reads the 20-byte address one byte too low (word[11..31] instead of the canonical word[12..32]), so the decoded owner is shifted off the ABI-encoded word. The concrete non-vacuity harness asserts new_owner[0]==0xaa and new_owner[19]==0xbb at their exact canonical offsets, which the shifted decode violates. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
+      "note": "[\u00a72 #1: Safe-mgmt owner/module address decode] Breaks decode_addr_word: reads the 20-byte address one byte too low (word[11..31] instead of the canonical word[12..32]), so the decoded owner is shifted off the ABI-encoded word. The concrete non-vacuity harness asserts new_owner[0]==0xaa and new_owner[19]==0xbb at their exact canonical offsets, which the shifted decode violates. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
+      "harness_path": "safe_mgmt::verification::classify_safe_mgmt_accepts_canonical_add_owner"
     },
     {
       "id": "abi_dyn_payload_len",
@@ -153,7 +171,8 @@
       "find": "                    ArgClass::DynBytes | ArgClass::DynString => length as u64,",
       "replace": "                    ArgClass::DynBytes | ArgClass::DynString => 0,",
       "expect": "kani_fails",
-      "note": "[§2 #1: typed-call ABI dynamic-tail bounds] Breaks the dynamic bytes/string payload-size accounting in walk: treats every dynamic payload as zero-length, so the tail bounds check (end = offset+32+padded_payload) under-reserves space and walk accepts a frame whose actual renderer read extent (body_off+32+count) runs past body.len(). The soundness harness reconstructs the renderer's UNPADDED read extent independently via renderer_read_end and asserts it is <= body.len(); the mutation makes that assertion (abi.rs:417) fail. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
+      "note": "[\u00a72 #1: typed-call ABI dynamic-tail bounds] Breaks the dynamic bytes/string payload-size accounting in walk: treats every dynamic payload as zero-length, so the tail bounds check (end = offset+32+padded_payload) under-reserves space and walk accepts a frame whose actual renderer read extent (body_off+32+count) runs past body.len(). The soundness harness reconstructs the renderer's UNPADDED read extent independently via renderer_read_end and asserts it is <= body.len(); the mutation makes that assertion (abi.rs:417) fail. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
+      "harness_path": "typed_call::abi::verification::walk_dyn_bytes_read_in_bounds"
     },
     {
       "id": "ns_ptr_mailbox_straddle",
@@ -164,7 +183,8 @@
       "find": "    if ptr < r.mailbox_end && end > r.mailbox_base {",
       "replace": "    if ptr > r.mailbox_end && end > r.mailbox_base {",
       "expect": "kani_fails",
-      "note": "[§2 #1: NS-ptr shared-mailbox overlap reject] Flips the write-path shared-mailbox overlap reject in ns_write_window_ok: `ptr < r.mailbox_end` -> `ptr > r.mailbox_end`. This makes a range straddling the mailbox lower boundary (ptr = mailbox_base-4, len 8) pass the overlap guard, so the TOCTOU-critical mailbox carve-out is no longer rejected. Find string is unique to line 90 (line 122's read-path check is prefixed `if in_sram && ptr ...`). Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
+      "note": "[\u00a72 #1: NS-ptr shared-mailbox overlap reject] Flips the write-path shared-mailbox overlap reject in ns_write_window_ok: `ptr < r.mailbox_end` -> `ptr > r.mailbox_end`. This makes a range straddling the mailbox lower boundary (ptr = mailbox_base-4, len 8) pass the overlap guard, so the TOCTOU-critical mailbox carve-out is no longer rejected. Find string is unique to line 90 (line 122's read-path check is prefixed `if in_sram && ptr ...`). Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
+      "harness_path": "ns_ptr_validate::verification::ns_rejects_mailbox_straddle_control"
     },
     {
       "id": "params_enum_ref_endianness",
@@ -175,7 +195,8 @@
       "find": "                p.enum_ref = Some(u16::from_be_bytes([payload[0], payload[1]]));",
       "replace": "                p.enum_ref = Some(u16::from_be_bytes([payload[1], payload[0]]));",
       "expect": "kani_fails",
-      "note": "[§2 #1: ERC-7730 enum_ref u16 decode] Swaps the two enum_ref payload bytes, breaking the big-endian u16 value decode. The harness reconstructs the expected value as u16::from_be_bytes([pool[4], pool[5]]) from the original pool at the fixed offset, so the swap produces the wrong value whenever payload[0]!=payload[1]. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
+      "note": "[\u00a72 #1: ERC-7730 enum_ref u16 decode] Swaps the two enum_ref payload bytes, breaking the big-endian u16 value decode. The harness reconstructs the expected value as u16::from_be_bytes([pool[4], pool[5]]) from the original pool at the fixed offset, so the swap produces the wrong value whenever payload[0]!=payload[1]. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
+      "harness_path": "render::params::kani_harnesses::params_enum_ref_width_and_value_sound"
     },
     {
       "id": "resolve_leaf_oob_reject",
@@ -186,7 +207,8 @@
       "find": "        return Err(RenderErr::Reject(\"7730 res leaf oob\"));",
       "replace": "        {}",
       "expect": "kani_fails",
-      "note": "[§2 #1: ERC-7730 leaf-offset bounds reject (slow ~460s -> full tier)] Drops the final leaf bounds reject so resolve_structured returns Ok(Leaf::Word/Dynamic(pos)) even when pos+32 > body.len() (a FieldIdx-terminated program with a large slot). The harness asserts every returned leaf offset satisfies off.checked_add(32) <= body.len(), which the removed check enforced. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding §2 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen)."
+      "note": "[\u00a72 #1: ERC-7730 leaf-offset bounds reject (slow ~460s -> full tier)] Drops the final leaf bounds reject so resolve_structured returns Ok(Leaf::Word/Dynamic(pos)) even when pos+32 > body.len() (a FieldIdx-terminated program with a large slot). The harness asserts every returned leaf offset satisfies off.checked_add(32) <= body.len(), which the removed check enforced. Verified 2026-07-02 by a workflow agent in an isolated worktree (mutation -> VERIFICATION:- FAILED, revert -> SUCCESSFUL); the file is UNCHANGED on origin/master since (0 commits in 63e29450..e4afbafa), so the deterministic kani verification transfers. Closes finding \u00a72 #1 (mutation-gate breadth: this file had harnesses but no vacuity screen).",
+      "harness_path": "render::resolve::kani_harness::resolve_structured_panic_free_and_in_bounds"
     },
     {
       "id": "safe_exec_data_slice_shift",
@@ -197,7 +219,8 @@
       "find": "let payload_start = offset + 32;",
       "replace": "let payload_start = offset;",
       "expect": "kani_fails",
-      "note": "shift the dynamic `data` payload start by -32 (read the length word as the payload) -> the rendered data slice starts 32 bytes early. decode_exec_data_slice_fidelity (d.data[i] == head[data_off+32+i], verbatim, for <=8-byte payloads; data_off + declared length re-read INDEPENDENTLY from the head bytes) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding §2 #5 (the empty-tail decode_exec_soundness + the single concrete offset-320 witness did not cover the data-slice content for symbolic offsets; the module note declined the biconditional as decoder-echo, but the payload-shift is a real gap this bounded fidelity harness closes)."
+      "note": "shift the dynamic `data` payload start by -32 (read the length word as the payload) -> the rendered data slice starts 32 bytes early. decode_exec_data_slice_fidelity (d.data[i] == head[data_off+32+i], verbatim, for <=8-byte payloads; data_off + declared length re-read INDEPENDENTLY from the head bytes) MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes finding \u00a72 #5 (the empty-tail decode_exec_soundness + the single concrete offset-320 witness did not cover the data-slice content for symbolic offsets; the module note declined the biconditional as decoder-echo, but the payload-shift is a real gap this bounded fidelity harness closes).",
+      "harness_path": "safe_tx::verification::decode_exec_data_slice_fidelity"
     },
     {
       "id": "offchain_eip712_exact_consumption",
@@ -208,7 +231,8 @@
       "find": "if p + trailer_len != payload.len() {",
       "replace": "if p + trailer_len > payload.len() {",
       "expect": "kani_fails",
-      "note": "weaken the EIP-712 typed-frame EXACT-consumption guard (`!=` -> `>`) so a payload with hidden trailing bytes after the trailer is accepted -> parse_frame_panic_free_and_exact's `trailer ends at payload.len()` assertion MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes review finding (h): the offchain EIP712_TYPED/_V3 companion header parser had no host-Kani coverage; now extracted to pqsigner_aa::offchain_header (behaviour-identical, re-wired into cmd_sign_offchain.rs) + panic/OOB + exact-consumption harnesses."
+      "note": "weaken the EIP-712 typed-frame EXACT-consumption guard (`!=` -> `>`) so a payload with hidden trailing bytes after the trailer is accepted -> parse_frame_panic_free_and_exact's `trailer ends at payload.len()` assertion MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes review finding (h): the offchain EIP712_TYPED/_V3 companion header parser had no host-Kani coverage; now extracted to pqsigner_aa::offchain_header (behaviour-identical, re-wired into cmd_sign_offchain.rs) + panic/OOB + exact-consumption harnesses.",
+      "harness_path": "offchain_header::verification::parse_frame_panic_free_and_exact"
     },
     {
       "id": "usb_apdu_reassembly_bounds",
@@ -219,7 +243,8 @@
       "find": "Some(e) if e <= buf.len() && e <= MAX_APDU_RX => e,",
       "replace": "Some(e) => e,",
       "expect": "kani_fails",
-      "note": "remove the HID-reassembly continuation bounds guard so `buf[rx_pos..end]` writes past the caller's reassembly buffer -> process_frame_continuation_no_oob (arbitrary assembler state incl. rx_pos over MAX_APDU_RX + a symbolic continuation frame) MUST hit an out-of-bounds slice write. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes the S-USB-OVERFLOW row of contracts/verification/docs/THREAT_CLAIM_MAP.md (UNCLAIMED -> PARTIAL): the attacker-facing USB APDU reassembly (shared/src/apdu_framing.rs, the one layer between a malicious USB host and the firmware) had proptest fuzz coverage but no exhaustive Kani panic/OOB proof. NB: with buf sized exactly MAX_APDU_RX the two guard conjuncts (e <= buf.len(), e <= MAX_APDU_RX) are individually redundant so dropping ONE is not catchable; this removes the guard entirely (the load-bearing memory-safety check)."
+      "note": "remove the HID-reassembly continuation bounds guard so `buf[rx_pos..end]` writes past the caller's reassembly buffer -> process_frame_continuation_no_oob (arbitrary assembler state incl. rx_pos over MAX_APDU_RX + a symbolic continuation frame) MUST hit an out-of-bounds slice write. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes the S-USB-OVERFLOW row of contracts/verification/docs/THREAT_CLAIM_MAP.md (UNCLAIMED -> PARTIAL): the attacker-facing USB APDU reassembly (shared/src/apdu_framing.rs, the one layer between a malicious USB host and the firmware) had proptest fuzz coverage but no exhaustive Kani panic/OOB proof. NB: with buf sized exactly MAX_APDU_RX the two guard conjuncts (e <= buf.len(), e <= MAX_APDU_RX) are individually redundant so dropping ONE is not catchable; this removes the guard entirely (the load-bearing memory-safety check).",
+      "harness_path": "apdu_framing::kani_harnesses::process_frame_continuation_no_oob"
     },
     {
       "id": "offchain_gate_gap_bypass",
@@ -230,7 +255,8 @@
       "find": "if gap >= MAX_OFFCHAIN_GAP {",
       "replace": "if false {",
       "expect": "kani_fails",
-      "note": "[work-todo §12e: off-chain counter sequence/interleave harness] Disable the MAX_OFFCHAIN_GAP gate in check_offchain_gate -> an accept can now be granted with gap >= 100, so offchain_gate_accept_is_sound's post-state gap bound (new_count - last_userop <= MAX_OFFCHAIN_GAP, i.e. gap+1) MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Guards the doc-baseline single-gate soundness proof (firmware-bounded-verification-sota-2026-06.md:81) against vacuity. `check_offchain_gate` is called in place by cmd_sign_offchain.rs so this is the shipped gate."
+      "note": "[work-todo \u00a712e: off-chain counter sequence/interleave harness] Disable the MAX_OFFCHAIN_GAP gate in check_offchain_gate -> an accept can now be granted with gap >= 100, so offchain_gate_accept_is_sound's post-state gap bound (new_count - last_userop <= MAX_OFFCHAIN_GAP, i.e. gap+1) MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Guards the doc-baseline single-gate soundness proof (firmware-bounded-verification-sota-2026-06.md:81) against vacuity. `check_offchain_gate` is called in place by cmd_sign_offchain.rs so this is the shipped gate.",
+      "harness_path": "offchain_gate::verification::offchain_gate_accept_is_sound"
     },
     {
       "id": "offchain_gate_cap_bypass",
@@ -241,7 +267,8 @@
       "find": "if userop_sigs.saturating_add(new_count) > MAX_SLOT_USES {",
       "replace": "if false {",
       "expect": "kani_fails",
-      "note": "[work-todo §12e] Disable the combined few-time-budget cap (userop_sigs + off-chain) in check_offchain_gate -> an accept can now push userop_sigs + new_count past MAX_SLOT_USES, so offchain_gate_accept_is_sound's combined-cap assertion MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. This is the MEDIUM-2 counter-replay cap (a withheld/reverted UserOp never bumps on-chain slotUses, so the device tallies its own Type-2 sigs); the harness now guards it non-vacuously."
+      "note": "[work-todo \u00a712e] Disable the combined few-time-budget cap (userop_sigs + off-chain) in check_offchain_gate -> an accept can now push userop_sigs + new_count past MAX_SLOT_USES, so offchain_gate_accept_is_sound's combined-cap assertion MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. This is the MEDIUM-2 counter-replay cap (a withheld/reverted UserOp never bumps on-chain slotUses, so the device tallies its own Type-2 sigs); the harness now guards it non-vacuously.",
+      "harness_path": "offchain_gate::verification::offchain_gate_accept_is_sound"
     },
     {
       "id": "offchain_distinct_slot_wedge",
@@ -252,7 +279,8 @@
       "find": "already_present || distinct_live < MAX_DISTINCT_SLOTS",
       "replace": "distinct_live < MAX_DISTINCT_SLOTS",
       "expect": "kani_fails",
-      "note": "[work-todo §12e: page-123 exhaustion brick, the found HIGH] Drop the already_present short-circuit from may_create_distinct_slot -> an EXISTING slot is now refused once distinct_live reaches the cap, i.e. a spray of distinct keys could wedge a live slot. distinct_slot_policy_graceful (asserts may_create_distinct_slot(any, true) is ALWAYS true) MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Pins the VULN-offchain-sync-page123-exhaustion-brick.md defence: at the cap, new-slot creation fails gracefully while existing slots keep signing."
+      "note": "[work-todo \u00a712e: page-123 exhaustion brick, the found HIGH] Drop the already_present short-circuit from may_create_distinct_slot -> an EXISTING slot is now refused once distinct_live reaches the cap, i.e. a spray of distinct keys could wedge a live slot. distinct_slot_policy_graceful (asserts may_create_distinct_slot(any, true) is ALWAYS true) MUST break. Verified 2026-07-03 by hand (verify_mutations.sh): mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Pins the VULN-offchain-sync-page123-exhaustion-brick.md defence: at the cap, new-slot creation fails gracefully while existing slots keep signing.",
+      "harness_path": "offchain_gate::verification::distinct_slot_policy_graceful"
     },
     {
       "id": "tok_array_idx_off_by_one",
@@ -263,7 +291,8 @@
       "find": "if idx >= count {",
       "replace": "if idx > count {",
       "expect": "kani_fails",
-      "note": "array_elem_address off-by-one lets idx == count through (reads one word past the last element). The panic-free harness stays green (the read is still bounds-checked); the VALUE harness's `idx < count` oracle assertion MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL."
+      "note": "array_elem_address off-by-one lets idx == count through (reads one word past the last element). The panic-free harness stays green (the read is still bounds-checked); the VALUE harness's `idx < count` oracle assertion MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
+      "harness_path": "render::resolve::kani_harness::tok_array_index_byte_binds"
     },
     {
       "id": "array_count_underreport",
@@ -274,7 +303,8 @@
       "find": "Ok((len_end, count))",
       "replace": "Ok((len_end, count.saturating_sub(1)))",
       "expect": "kani_fails",
-      "note": "under-report the element count by one (the renderer would silently HIDE the last element from review). The count == read_length_word oracle binding MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL."
+      "note": "under-report the element count by one (the renderer would silently HIDE the last element from review). The count == read_length_word oracle binding MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
+      "harness_path": "render::array::kani_harnesses::resolve_array_count_binds_to_length_word"
     },
     {
       "id": "tok_slice_tail_anchor_drift",
@@ -285,7 +315,8 @@
       "find": "dl.checked_sub(ADDR_LEN)",
       "replace": "dl.checked_sub(ADDR_LEN + 1)",
       "expect": "kani_fails",
-      "note": "[-20:] tail anchor drifts one byte early (data[len-21..len-1]) -- still in-bounds, so panic-free stays green; the byte-binding `addr == data[len-20..len]` MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL."
+      "note": "[-20:] tail anchor drifts one byte early (data[len-21..len-1]) -- still in-bounds, so panic-free stays green; the byte-binding `addr == data[len-20..len]` MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
+      "harness_path": "render::resolve::kani_harness::tok_slice_from_end_byte_binds"
     },
     {
       "id": "resolve_slot_accum_drift",
@@ -296,7 +327,8 @@
       "find": ".checked_add(u16::from_be_bytes([a[0], a[1]]) as usize)",
       "replace": ".checked_add(u16::from_be_bytes([a[0], a[1]]) as usize + 1)",
       "expect": "kani_fails",
-      "note": "FieldIdx slot accumulation drifts by +1 per op (the walker-slot-confusion class). Resolved leaf lands one word off; `Word(32*(s1+s2))` MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL."
+      "note": "FieldIdx slot accumulation drifts by +1 per op (the walker-slot-confusion class). Resolved leaf lands one word off; `Word(32*(s1+s2))` MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
+      "harness_path": "render::resolve::kani_harness::resolve_structured_slot_sum_binds"
     },
     {
       "id": "token_amount_threshold_boundary_off_by_one",
@@ -307,7 +339,8 @@
       "find": "*value >= *t",
       "replace": "*value > *t",
       "expect": "kani_fails",
-      "note": "unlimited-threshold gate off-by-one: value == threshold no longer selects the Unlimited arm (the single most dangerous approval renders as a normal amount). REPOINTED 2026-07-06 (M4 amount-decision factoring): the gate moved from formatters.rs into the pure token_amount_decision, and the catcher upgraded from the M3 concrete boundary witness to the doubly-symbolic forall biconditional (which pins BOTH directions of the gate; the concrete witness fmt_p0_token_amount_threshold_boundary_concrete still exists in formatters.rs as the paint-integration pin). Re-verified 2026-07-06 by hand on the new location: mutation -> VERIFICATION:- FAILED (assertion is_unlimited_arm == expect_unlimited); reverted -> file restored (grep-confirmed)."
+      "note": "unlimited-threshold gate off-by-one: value == threshold no longer selects the Unlimited arm (the single most dangerous approval renders as a normal amount). REPOINTED 2026-07-06 (M4 amount-decision factoring): the gate moved from formatters.rs into the pure token_amount_decision, and the catcher upgraded from the M3 concrete boundary witness to the doubly-symbolic forall biconditional (which pins BOTH directions of the gate; the concrete witness fmt_p0_token_amount_threshold_boundary_concrete still exists in formatters.rs as the paint-integration pin). Re-verified 2026-07-06 by hand on the new location: mutation -> VERIFICATION:- FAILED (assertion is_unlimited_arm == expect_unlimited); reverted -> file restored (grep-confirmed).",
+      "harness_path": "display::render::amount_decision::kani_harness::amt_dec_unlimited_iff_ge_threshold"
     },
     {
       "id": "token_amount_native_precedence_dropped",
@@ -318,7 +351,8 @@
       "find": "if is_native {",
       "replace": "if is_native && false {",
       "expect": "kani_fails",
-      "note": "disable the native-currency sentinel arm: a resolved token equal to the descriptor's Merkle-pinned nativeCurrencyAddress falls through to the erc20 ladder (UnverifiedRaw when no trailer matches) instead of Bound(18, native_ticker) -- ETH amounts on a nativeCurrencyAddress descriptor would render as raw wei with a dec=? banner, and a companion-supplied trailer could take over the sentinel's identity. The precedence forall MUST redden. Verified 2026-07-06 by hand: mutation -> VERIFICATION:- FAILED (dd == 18, ticker binding + arm asserts); reverted -> file restored (grep-confirmed)."
+      "note": "disable the native-currency sentinel arm: a resolved token equal to the descriptor's Merkle-pinned nativeCurrencyAddress falls through to the erc20 ladder (UnverifiedRaw when no trailer matches) instead of Bound(18, native_ticker) -- ETH amounts on a nativeCurrencyAddress descriptor would render as raw wei with a dec=? banner, and a companion-supplied trailer could take over the sentinel's identity. The precedence forall MUST redden. Verified 2026-07-06 by hand: mutation -> VERIFICATION:- FAILED (dd == 18, ticker binding + arm asserts); reverted -> file restored (grep-confirmed).",
+      "harness_path": "display::render::amount_decision::kani_harness::amt_dec_native_sentinel_precedence"
     },
     {
       "id": "token_amount_identity_page_dropped",
@@ -329,7 +363,8 @@
       "find": "    let identity_page = if bound.is_none() && !is_native {\n        token_addr\n    } else {\n        None\n    };",
       "replace": "let identity_page = None;",
       "expect": "kani_fails",
-      "note": "drop the MEDIUM-1 identity-page rule: an unbound token's resolved address is never emitted, so the user approves a transfer/withdraw/swap of an UNNAMED token (the identity-hiding class). The token-identity forall binds identity_page == Some(resolved addr) on every miss, so it MUST redden. Verified 2026-07-06 by hand: mutation -> VERIFICATION:- FAILED (d.identity_page == Some(addr)); reverted -> harness re-run SUCCESSFUL on the restored tree."
+      "note": "drop the MEDIUM-1 identity-page rule: an unbound token's resolved address is never emitted, so the user approves a transfer/withdraw/swap of an UNNAMED token (the identity-hiding class). The token-identity forall binds identity_page == Some(resolved addr) on every miss, so it MUST redden. Verified 2026-07-06 by hand: mutation -> VERIFICATION:- FAILED (d.identity_page == Some(addr)); reverted -> harness re-run SUCCESSFUL on the restored tree.",
+      "harness_path": "display::render::amount_decision::kani_harness::amt_dec_token_identity_binding"
     },
     {
       "id": "raw_word_hex_row_slice_drift",
@@ -340,18 +375,20 @@
       "find": "write_hex_word(r2, &word[8..16]);",
       "replace": "write_hex_word(r2, &word[9..17]);",
       "expect": "kani_fails",
-      "note": "raw-word hex row 2 drifts one byte (bytes 8..16 -> 9..17): a signed byte vanishes from the trusted display (the magnitude-hiding class). The forall exactness harness binds every row byte to an independent nibble table, so it MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; reverted -> file restored (grep-confirmed)."
+      "note": "raw-word hex row 2 drifts one byte (bytes 8..16 -> 9..17): a signed byte vanishes from the trusted display (the magnitude-hiding class). The forall exactness harness binds every row byte to an independent nibble table, so it MUST redden. Verified 2026-07-04 by hand: mutation -> VERIFICATION:- FAILED; reverted -> file restored (grep-confirmed).",
+      "harness_path": "display::render::formatters::kani_harness::fmt_p0_raw_word_hex_exactness"
     },
     {
       "id": "native_amount_exactness_helper_gate_dropped",
       "tier": "default",
       "crate": "pqsigner-erc7730",
       "harness": "fmt_p0_native_amount_prepublication_decision_concrete",
-      "file": "pqsigner-erc7730/src/display/render/formatters.rs",
-      "find": "fn scaled_amount_prepublication_refuses(value: &U256, decimals: u32) -> bool {\n    !amount_is_exact_at_fraction_digits(value, decimals, INTERPOLATED_AMOUNT_POLICY.fraction_digits)\n}",
-      "replace": "fn scaled_amount_prepublication_refuses(value: &U256, decimals: u32) -> bool {\n    false && !amount_is_exact_at_fraction_digits(value, decimals, INTERPOLATED_AMOUNT_POLICY.fraction_digits)\n}",
+      "file": "pqsigner-erc7730/src/display/primitives.rs",
+      "find": "    if discarded_digits == 0 || value.is_zero() {\n        return true;\n    }",
+      "replace": "    if discarded_digits <= 77 || value.is_zero() {\n        return true;\n    }",
       "expect": "kani_fails",
-      "note": "Disable the shared pure pre-publication scaled-amount exactness decision used by scalar amount/unit/bound tokenAmount and their array sinks. The helper-only concrete harness requires one 18-decimal unit plus one discarded base unit to refuse while exact/zero and decimals<=the six-digit policy remain allowed, so it MUST redden without entering format_decimal or any page painter. Caller-level Kani harnesses and host atomic-refusal tests remain as zero-publication integration pins. Replaces the two painter-reaching Phase-D mutants after the ordinary-amount mutant produced no Kani verdict within the bounded 900-second closure run."
+      "note": "RE-ANCHORED 2026-08-20 (issue #659): dac6fbd5 (render exact high-precision amounts) deleted the scaled_amount_prepublication_refuses wrapper and rewrote this harness to pin the SHARED pure predicate `amount_is_exact_at_fraction_digits` directly (its inlined production caller is the ExactAmountText::new precision search at display/render/formatters.rs:98). The mutation now lives at the predicate's real decision in display/primitives.rs: widening the zero-discarded-digit short-circuit to `discarded_digits <= 77` judges every in-range scaled amount exact, so a one-wei-over value would publish at the friendly six-digit precision with authenticated base units silently dropped \u2014 the same zero-publication-violation class the deleted helper gate pinned. The harness's `!amount_is_exact_at_fraction_digits(&inexact, 18, 6)` assertion MUST redden. Anchoring at the formatters.rs:98 call site instead would be DEAD: no Kani harness observes the search's chosen precision (the caller-level pins assert only is_ok + page count), so the material anchor is the shared predicate the harness exercises. Original semantics (pre-dac6fbd5, hand-verified mutation -> VERIFICATION:- FAILED): disable the shared pure pre-publication scaled-amount exactness decision used by scalar amount/unit/bound tokenAmount and their array sinks.",
+      "harness_path": "display::render::formatters::kani_harness::fmt_p0_native_amount_prepublication_decision_concrete"
     },
     {
       "id": "erc20_canonical_padding",
@@ -362,7 +399,8 @@
       "find": "word[0..12].iter().any(|&b| b != 0)",
       "replace": "false",
       "expect": "kani_fails",
-      "note": "Neuter the ERC-20 address-word zero-padding check. A non-canonical calldata (non-zero address high bytes) then decodes to a Transfer/Approve whose displayed recipient/spender differs from the signed bytes -> parse_erc20_only_accepts_canonical MUST turn red. If it SURVIVES, the show-one/sign-another canonicity proof is vacuous. (P1.2 signed-intent-to-display, 2026-07-16.)"
+      "note": "Neuter the ERC-20 address-word zero-padding check. A non-canonical calldata (non-zero address high bytes) then decodes to a Transfer/Approve whose displayed recipient/spender differs from the signed bytes -> parse_erc20_only_accepts_canonical MUST turn red. If it SURVIVES, the show-one/sign-another canonicity proof is vacuous. (P1.2 signed-intent-to-display, 2026-07-16.)",
+      "harness_path": "erc20::calldata::kani_harnesses::parse_erc20_only_accepts_canonical"
     },
     {
       "id": "cow_setpresig_selector",
@@ -373,7 +411,8 @@
       "find": "calldata[0..4] != SETPRESIG_SELECTOR",
       "replace": "false",
       "expect": "kani_fails",
-      "note": "Neuter the setPreSignature selector check. A non-setPreSignature call (any selector) would then decode to Some(uid) and bind an owner/orderUid the display did not derive from a real presign call -> decode_setpresig_orderuid_canonical MUST redden (assert c[0..4]==SETPRESIG_SELECTOR). If it SURVIVES, the CoW owner-UID canonicity proof is vacuous. (P1.2 CoW owner-UID binding, 2026-07-17.)"
+      "note": "Neuter the setPreSignature selector check. A non-setPreSignature call (any selector) would then decode to Some(uid) and bind an owner/orderUid the display did not derive from a real presign call -> decode_setpresig_orderuid_canonical MUST redden (assert c[0..4]==SETPRESIG_SELECTOR). If it SURVIVES, the CoW owner-UID canonicity proof is vacuous. (P1.2 CoW owner-UID binding, 2026-07-17.)",
+      "harness_path": "cowswap_order::verification::decode_setpresig_orderuid_canonical"
     },
     {
       "id": "native_currency_list_two_member_bound",
@@ -384,7 +423,8 @@
       "find": "address_list_is_canonical(payload, MAX_NATIVE_CURRENCY_ADDRESSES)",
       "replace": "address_list_is_canonical(payload, MAX_NATIVE_CURRENCY_ADDRESSES - 1)",
       "expect": "kani_fails",
-      "note": "Turn the inclusive two-address native-currency-list cap into an off-by-one rejection at the native-only wrapper (after address-list validation was shared with senderAddress). With MAX_NATIVE_CURRENCY_ADDRESSES=2, passing max-1 is exactly the prior count>=2 mutant without perturbing senderAddress. The exhaustive canonicality harness requires every distinct 40-byte pair to remain accepted and therefore MUST redden. The unmutated harness verified successfully with cargo-kani 0.67.0 on 2026-07-18 and the unique material mutation is statically enrolled; a targeted mutated execution receipt is still pending."
+      "note": "Turn the inclusive two-address native-currency-list cap into an off-by-one rejection at the native-only wrapper (after address-list validation was shared with senderAddress). With MAX_NATIVE_CURRENCY_ADDRESSES=2, passing max-1 is exactly the prior count>=2 mutant without perturbing senderAddress. The exhaustive canonicality harness requires every distinct 40-byte pair to remain accepted and therefore MUST redden. The unmutated harness verified successfully with cargo-kani 0.67.0 on 2026-07-18 and the unique material mutation is statically enrolled; a targeted mutated execution receipt is still pending.",
+      "harness_path": "render::params::kani_harnesses::params_native_currency_list_canonicality"
     },
     {
       "id": "interpolated_intent_single_substitution",
@@ -395,7 +435,8 @@
       "find": "substitution_count != 1",
       "replace": "substitution_count != 2",
       "expect": "kani_fails",
-      "note": "Change the single, pre-walk owner of the authority-bearing interpolation cardinality from exactly one substitution to exactly two. The executable-subset biconditional requires one-field programs to remain accepted and every two-field program to remain rejected, so this fixed-bound authority mutation MUST redden without turning the parser loop symbolic. Repointed 2026-07-18 after the prior downstream shape mutation became dead behind the early tractability gate."
+      "note": "Change the single, pre-walk owner of the authority-bearing interpolation cardinality from exactly one substitution to exactly two. The executable-subset biconditional requires one-field programs to remain accepted and every two-field program to remain rejected, so this fixed-bound authority mutation MUST redden without turning the parser loop symbolic. Repointed 2026-07-18 after the prior downstream shape mutation became dead behind the early tractability gate.",
+      "harness_path": "render::params::kani_harnesses::params_interpolated_intent_executable_subset"
     },
     {
       "id": "nft_collection_path_exactness",
@@ -406,7 +447,8 @@
       "find": "payload == NFT_COLLECTION_TO_PATH.as_slice()",
       "replace": "payload.len() == NFT_COLLECTION_TO_PATH.len()",
       "expect": "kani_fails",
-      "note": "Weaken the authenticated NFT collection-path gate from the exact frozen @.to bytecode to any four-byte path. The symbolic current-slice harness requires acceptance iff every path byte matches and therefore MUST redden. The unmutated harness verified successfully with cargo-kani 0.67.0 on 2026-07-18 and the unique material mutation is statically enrolled; a targeted mutated execution receipt is still pending."
+      "note": "Weaken the authenticated NFT collection-path gate from the exact frozen @.to bytecode to any four-byte path. The symbolic current-slice harness requires acceptance iff every path byte matches and therefore MUST redden. The unmutated harness verified successfully with cargo-kani 0.67.0 on 2026-07-18 and the unique material mutation is statically enrolled; a targeted mutated execution receipt is still pending.",
+      "harness_path": "render::params::kani_harnesses::params_nft_collection_path_current_slice"
     },
     {
       "id": "t1-frame-validate-skips-crc",
@@ -417,7 +459,8 @@
       "find": "if computed != received {\n        return Err(FrameError::Crc);\n    }",
       "replace": "let _ = (computed, received);",
       "expect": "kani_fails",
-      "note": "validate_frame stops checking the CRC and accepts anything well-shaped -> accept_implies_crc_over_declared_span MUST break, since it asserts the trailer equals crc16 over the declared span. If this SURVIVES, the soundness harness is vacuous."
+      "note": "validate_frame stops checking the CRC and accepts anything well-shaped -> accept_implies_crc_over_declared_span MUST break, since it asserts the trailer equals crc16 over the declared span. If this SURVIVES, the soundness harness is vacuous.",
+      "harness_path": "t1_frame::verification::accept_implies_crc_over_declared_span"
     },
     {
       "id": "t1-frame-validate-drops-length-bound",
@@ -428,7 +471,8 @@
       "find": "if frame.len() < total {\n        return Err(FrameError::Malformed);\n    }",
       "replace": "let _ = total;",
       "expect": "kani_fails",
-      "note": "inf_len is read OUT OF THE FRAME and then used to index it, so removing the declared-length bound is an attacker-controlled out-of-bounds read on a parser fed straight off the untrusted I2C bus (invariant #3). validate_frame_panic_free MUST break."
+      "note": "inf_len is read OUT OF THE FRAME and then used to index it, so removing the declared-length bound is an attacker-controlled out-of-bounds read on a parser fed straight off the untrusted I2C bus (invariant #3). validate_frame_panic_free MUST break.",
+      "harness_path": "t1_frame::verification::validate_frame_panic_free"
     },
     {
       "id": "t1-frame-build-len-endianness",
@@ -439,7 +483,8 @@
       "find": "buf[2] = (len >> 8) as u8; // LEN MSB\n    buf[3] = (len & 0xFF) as u8; // LEN LSB",
       "replace": "buf[2] = (len & 0xFF) as u8;\n    buf[3] = (len >> 8) as u8;",
       "expect": "kani_fails",
-      "note": "byte-swapping the 2-byte GP-1.0 LEN field breaks build/validate agreement for any inf_len whose two length bytes differ -> the round-trip MUST break. Unlike the CRC-poly case this IS caught, because only the builder changes."
+      "note": "byte-swapping the 2-byte GP-1.0 LEN field breaks build/validate agreement for any inf_len whose two length bytes differ -> the round-trip MUST break. Unlike the CRC-poly case this IS caught, because only the builder changes.",
+      "harness_path": "t1_frame::verification::build_then_validate_roundtrips"
     },
     {
       "id": "format_decimal_round_ge5_to_gt5",
@@ -450,7 +495,8 @@
       "find": "if drop_digit >= 5 {",
       "replace": "if drop_digit > 5 {",
       "expect": "kani_fails",
-      "note": "F10 (fv-deep-review 2026-07-19) executed PoC: the round-half-up boundary — a drop_digit of exactly 5 must round up (1.5 at frac=0 renders \"2\"); `> 5` truncates it to \"1\", a WYSIWYS understatement on the trusted display. Killed by the (15,1,0)->\"2\" exact case. The charset-only shape harness stays green on this swap (wrong digits are still digits) — that vacuity is what format_decimal_exact_on_boundaries exists to close."
+      "note": "F10 (fv-deep-review 2026-07-19) executed PoC: the round-half-up boundary \u2014 a drop_digit of exactly 5 must round up (1.5 at frac=0 renders \"2\"); `> 5` truncates it to \"1\", a WYSIWYS understatement on the trusted display. Killed by the (15,1,0)->\"2\" exact case. The charset-only shape harness stays green on this swap (wrong digits are still digits) \u2014 that vacuity is what format_decimal_exact_on_boundaries exists to close.",
+      "harness_path": "eip1559::kani_harness::format_decimal_exact_on_boundaries"
     },
     {
       "id": "format_decimal_drop_digit_index_div",
@@ -461,7 +507,8 @@
       "find": "let drop_digit = if round_idx - 1 < n {",
       "replace": "let drop_digit = if round_idx / 1 < n {",
       "expect": "kani_fails",
-      "note": "cargo-mutants 2026-06-26 survivor (mutants.out/missed.txt 177:43): round_idx/1 == round_idx makes the guard false exactly when the dropped digit is the value's ONLY significant digit, so 0.05 at frac=1 reads drop_digit=0, skips rounding, and renders \"0.0\" instead of \"0.1\" — the smallest-magnitude amount displayed as zero. Killed by the (5,2,1)->\"0.1\" exact case (the (15,1,0) case cannot catch it: there n_digits != round_idx so the mutant guard still passes — see the host KAT format_decimal_round_drop_is_only_significant_digit)."
+      "note": "cargo-mutants 2026-06-26 survivor (mutants.out/missed.txt 177:43): round_idx/1 == round_idx makes the guard false exactly when the dropped digit is the value's ONLY significant digit, so 0.05 at frac=1 reads drop_digit=0, skips rounding, and renders \"0.0\" instead of \"0.1\" \u2014 the smallest-magnitude amount displayed as zero. Killed by the (5,2,1)->\"0.1\" exact case (the (15,1,0) case cannot catch it: there n_digits != round_idx so the mutant guard still passes \u2014 see the host KAT format_decimal_round_drop_is_only_significant_digit).",
+      "harness_path": "eip1559::kani_harness::format_decimal_exact_on_boundaries"
     },
     {
       "id": "format_decimal_carry_and_or",
@@ -472,7 +519,8 @@
       "find": "while carry > 0 && i < digits.len() {",
       "replace": "while carry > 0 || i < digits.len() {",
       "expect": "kani_fails",
-      "note": "cargo-mutants 2026-06-26 survivor (missed.txt 187:33). HONEST SCOPE: this mutant is OUTPUT-EQUIVALENT — a 19.4M-tuple differential (values x decimals 0..=20 x frac 0..=20 x trim) shows zero output drift, because once carry=0 the extra iterations are the identity on 0..=9 digits and positions >= n_digits are always 0. NO byte-exact assertion can kill it. What it destroys is the carry loop's EARLY EXIT: every rounding then spins to the 80-element digit-array bound, which trips format_decimal_exact_on_boundaries' unwinding assertion (its unwind(48) covers the legit deepest loop — div10_inplace's 32 — but stays below 80 on purpose). This pins the loop's termination STRUCTURE; the arithmetic it guards is pinned by format_decimal_round_ge5_to_gt5 / format_decimal_drop_digit_index_div and by the extracted FormatDecimalSpec.lean theorem."
+      "note": "cargo-mutants 2026-06-26 survivor (missed.txt 187:33). HONEST SCOPE: this mutant is OUTPUT-EQUIVALENT \u2014 a 19.4M-tuple differential (values x decimals 0..=20 x frac 0..=20 x trim) shows zero output drift, because once carry=0 the extra iterations are the identity on 0..=9 digits and positions >= n_digits are always 0. NO byte-exact assertion can kill it. What it destroys is the carry loop's EARLY EXIT: every rounding then spins to the 80-element digit-array bound, which trips format_decimal_exact_on_boundaries' unwinding assertion (its unwind(48) covers the legit deepest loop \u2014 div10_inplace's 32 \u2014 but stays below 80 on purpose). This pins the loop's termination STRUCTURE; the arithmetic it guards is pinned by format_decimal_round_ge5_to_gt5 / format_decimal_drop_digit_index_div and by the extracted FormatDecimalSpec.lean theorem.",
+      "harness_path": "eip1559::kani_harness::format_decimal_exact_on_boundaries"
     }
   ]
 }

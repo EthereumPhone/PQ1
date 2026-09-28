@@ -422,7 +422,14 @@ qed.
    128-byte preimage whose last 32 bytes carry the u32 big-endian), so a reader
    could model the counter field as 256 bits rather than 32.  The separations
    hold either way -- 384 also avoids {128, 5504, 256, 1664} -- so the result
-   does not depend on resolving that modelling question. *)
+   does not depend on resolving that modelling question.
+
+   UPDATE 2026-09-21: that choice is now resolved. WOTS_C_Real fixes emb_in
+   to the compact 32-bit counter encoding. The r256 premise below is FALSE
+   in this instance (c10_emb_in_width); this legacy conditional lemma is
+   retained for statement compatibility and is now vacuous. It supplies no
+   evidence for an alternate 256-bit encoding. The physical zero padding is
+   handled separately by C10Bytes and c10_payload_recovers_emb_in. *)
 lemma c10_dfC_separations_r256 :
      n   = c10_n
   => len = c10_len
@@ -507,6 +514,12 @@ qed.
    DIFFERENT way: `size (emb_in witness) = 8*n + c10_r` constrains the FREE op `emb_in`,
    which nothing in the closure pins.  It is a one-point WIDTH condition, not a
    serialisation: a constant encoder satisfies it (see :467 below).]
+
+   UPDATE 2026-09-21: the free-emb_in and constant-encoder discussion above
+   describes the former model. emb_in is now fixed; C10DeployedInstance proves
+   its width and injectivity for the full u32 domain. thfc remains free and
+   its concrete SHA-256/output-law refinement is still open. No numerical
+   security claim follows from fixing the input encoding.
    -------------------------------------------------------------------------- *)
 
 (* ==========================================================================

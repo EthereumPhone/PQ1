@@ -1,0 +1,74 @@
+[
+  {
+    "optimization": "0",
+    "case": "count",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: self-test: clean ProVerif raw result count differs"
+    ]
+  },
+  {
+    "optimization": "0",
+    "case": "no-op",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: self-test setup: gut substitution did not apply"
+    ]
+  },
+  {
+    "optimization": "0",
+    "case": "wrong-reason",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: expected a full-source DRIFT, got: ['unrelated parser failure']"
+    ]
+  },
+  {
+    "optimization": "1",
+    "case": "count",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: self-test: clean ProVerif raw result count differs"
+    ]
+  },
+  {
+    "optimization": "1",
+    "case": "no-op",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: self-test setup: gut substitution did not apply"
+    ]
+  },
+  {
+    "optimization": "1",
+    "case": "wrong-reason",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: expected a full-source DRIFT, got: ['unrelated parser failure']"
+    ]
+  },
+  {
+    "optimization": "2",
+    "case": "count",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: self-test: clean ProVerif raw result count differs"
+    ]
+  },
+  {
+    "optimization": "2",
+    "case": "no-op",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: self-test setup: gut substitution did not apply"
+    ]
+  },
+  {
+    "optimization": "2",
+    "case": "wrong-reason",
+    "exit_code": 0,
+    "decisive_output": [
+      "CONTROL_EXCEPTION: expected a full-source DRIFT, got: ['unrelated parser failure']"
+    ]
+  }
+]

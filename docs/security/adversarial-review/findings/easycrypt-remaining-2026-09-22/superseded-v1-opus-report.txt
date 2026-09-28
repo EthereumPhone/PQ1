@@ -1,0 +1,42 @@
+Finished the read-only review. The hypertree bound, coverage indexing, memoized search, hash layouts and pins all checked out against the source. One gap is left: I couldn't open the standard-library `Birthday.ec`.
+
+VERDICT: GO
+TARGET: 928a7480667ddc9f15ae48d509ae4664ecde510e / bc40636030a631cde6dcd2c8bb3cd5708931e129
+FINDINGS: none
+
+What I checked in the source:
+
+1. **Five-term hypertree bound** (`C10HypertreeCharged.ec:10-61`). It chains `bounded_hypertree_win_le_total` (`C10BoundedHypertree.ec:212`) with `EUFNAGCMA_FLSLXMSSMTTWCESNPRF_charged` (`XmssmtCCCharged.ec:214`). Both use the same `A_ht` and `FC.O_THFC_Default`. All 10 premises of the charged lemma appear verbatim, plus the `forge` losslessness premise. The right-hand side is textually identical, including `GAME1_INT … res /\ gfail_of …`, so the failure charge stays in the bound.
+
+2. **All-leaf indexing** (`C10HypertreeCoverage.ec`).
+   - `path_cell` equals `fold edivz`, which matches the signer's `edivz tidx l'` at `C10BoundedHypertree.ec:36`.
+   - `BoundedHypertreeGame` signs every `i < l` after a nonadaptive `choose`.
+   - `all_paths_cover_cube` needs all `l` paths. The file header states this is address coverage, not a probability coupling.
+   - The `C10CoverageSinglePath` control has a satisfiable hypothesis and a false conclusion, so it fails for a semantic reason.
+
+3. **Memoized search** (`SharedROBounded.ec`).
+   - `ro_search` replays known answers and extends the history on fresh samples.
+   - The tail bound quantifies over any entry history and needs unique inputs, which `counter_inputs_unique` provides (it uses the 2^32 counter bound).
+   - The search takes a fixed input list and a history fixed at entry, with nothing interleaved during it. The header states this conditioning.
+   - Both history controls fail on the value itself: the replayed answer gives 1, not 1/2, and the duplicate input counts as one trial (1/2, not 1/4).
+   - The acceptance predicate is the existing `predC` / `acceptance_exact`, and 22169…/8^43 ≥ 2^-15.
+
+4. **Hash layouts, R truncation, Birthday clone and FORS sampler.**
+   - The address tag `take 4 (drop 12)` matches `address.rs:35` (the type is at bytes 12..16).
+   - The `H_msg` layout (`…‖pad16(R)‖msg‖0xff×32`, 160 bytes) and the 128-byte `th_pair` layout match the new Rust tests.
+   - Under the existing `bits_to_bytes` byte reversal, `drop 128` is the leading 16 bytes, which is what Rust's `truncate` keeps. Uniformity holds for either half in any case.
+   - The Birthday clone budget (`signing_budget`) covers the whole experiment and is enforced by a hoare premise.
+   - `bounded_r` reuses `good` / `dcond dmkey` and allows repeated R.
+   - The FORS_C10 baseline changes only line numbers apart from the new `bounded_r`. All seven axioms keep the same names, and no hash changed.
+
+5. **Numerical lemmas.**
+   - `fresh_trials_bound` requires at least 9,994,240 fresh inputs (32768 × 305).
+   - `shared_search_known_budget` requires at most 5,760 known inputs, which works because `signing_budget` = 10^7.
+   - The file headers and the README describe these as search-failure bounds only. They do not claim forgery, runtime, SHA-256 or quantum security.
+
+6. **Pins and controls.**
+   - There are no new `axiom` or `admit` lines in the new files.
+   - `cert-statements-split.tsv` only adds lines.
+   - Every new lemma and operator is pinned.
+
+GAPS: I couldn't read `Birthday.ec` locally or in the container, so I have not confirmed that `ge0_q` is its only obligation (`proof *` with a single `realize`). I also did not run the cold two-driver gate.

@@ -1,0 +1,33 @@
+=== verify-easycrypt (mode: full) ===
+
+[pins] comment-stripped admit/axiom sweep + semantic axiom pin
+  axioms: 8 (matches count ledger)
+  admits: pinned to 2 orphaned file(s)
+  semantic axiom pin: exact (name -> statement) set matches axiom_pins.txt
+
+[compile] every .ec as a TARGET (require does NOT re-verify)
+  FAIL: DarkSide.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: FORS_C.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: FORS_C10.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: FORS_C10_Multi.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: FORS_C_Multi.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: FORS_C_Tree.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: FORS_C_TreePort.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: Grind.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: SPHINCS_C.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: SPHINCS_C_Skeleton.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: SPHINCS_C_c10.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: STCR_C.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: WOTS_C_Bridge.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: WOTS_C_EmbDischarge.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: WOTS_C_Flag2Discharge.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: WOTS_C_Interactive.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: WOTS_C_Multi.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: WOTS_C_Real.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: WOTS_C_Reduction.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: WOTS_C_Scheme.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: XMSSMT_C_Bridge.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: XMSSMT_C_Scheme.ec cannot be required (possibly an unfinished proof at EOF)
+  FAIL: --full: compiled 0/22 .ec files (need all 21)
+
+=== verify-easycrypt FAIL ===

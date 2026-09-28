@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 8d388d66123068b995827f76840b129d4491f4a9 / 3e1801909df0d61c481dac1bbc7a3754d2e0cb8d
+FINDINGS: none
+GAPS: Read-only commands failed before execution because bwrap could not create a namespace; target identity, diff, proof consumers and controls could not be independently inspected.

@@ -1,0 +1,47 @@
+make: Entering directory '/tmp/pq-fv-master-20260916-g4woz0z8/target/contracts/verification'
+/usr/bin/python3 -E -S -B scripts/run_easycrypt_split.py
+### INPUTS_SHA256 e64e9594831f9b2df2ccdaeaf5f8c213
+OK   INPUTS_SHA256 matches the committed identity
+OK   coverage: all 1082 top-level statements across 53 CONE files are pinned (roots 46 + transitively required)
+OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK unique statement pins: 1166
+OK split static contract: 53 files; proof execution not performed
+OK toolchain: r2026.02, 25 pinned prover configurations
+### IMAGE ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3
+OK proof controls: direct dependency failure / import acceptance / open-proof rejection / abstract require and EOF
+OK   no dual-extension theory names on the include path
+### ECO_PURGED=0
+### ECO_REMAINING=0
+### PHASE 1 — TARGETS
+OK   target base-c10-split/BinaryTrees.ec
+OK   target base-c10-split/MerkleTrees.ec
+OK   target base-c10-split/KeyedHashFunctions.eca
+OK   target base-c10-split/TweakableHashFunctions.eca
+OK   target base-c10-split/HashAddresses.eca
+OK   target base-c10-split/WOTS_TW_ES.ec
+OK   target base-c10-split/FL_SL_XMSS_MT_ES.ec
+OK   target base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca
+OK   target base-c10-split/FORS_ES.ec
+OK   target base-c10-split/SPHINCS_PLUS.ec
+OK   target cdrafts-split/BadEncCountermodel.ec
+OK   target cdrafts-split/Grind.ec
+OK   target cdrafts-split/STCR_C.ec
+OK   target cdrafts-split/WOTS_C_Real.ec
+OK   target cdrafts-split/TCollResEnum.ec
+OK   target cdrafts-split/BadEncSplit.ec
+OK   target cdrafts-split/WOTS_C_Scheme.ec
+OK   target cdrafts-split/WOTS_C_Reduction.ec
+OK   target cdrafts-split/WOTS_C_Interactive.ec
+OK   target cdrafts-split/BadEncToTColl.ec
+OK   target cdrafts-split/BadEncStep4.ec
+OK   target cdrafts-split/XMSSMT_C_Scheme.ec
+Traceback (most recent call last):
+  File "/tmp/pq-fv-master-20260916-g4woz0z8/target/contracts/verification/scripts/run_easycrypt_split.py", line 21, in <module>
+    subprocess.run(['docker', 'run', '--rm', '--init', '--network', 'none',
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['docker', 'run', '--rm', '--init', '--network', 'none', '--env', 'PQ_EASYCRYPT_IMAGE=ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3', '--volume', '/tmp/pq-fv-master-20260916-g4woz0z8/target/contracts/verification/easycrypt/c10-port:/source:ro', 'ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3', 'bash', '-lc', 'set -e; eval "$(opam env)"; cp -R /source /tmp/proofs; cd /tmp/proofs; bash cert_gate_split.sh']' returned non-zero exit status 143.
+make: *** [Makefile:2225: verify-easycrypt-split] Error 1
+make: Leaving directory '/tmp/pq-fv-master-20260916-g4woz0z8/target/contracts/verification'

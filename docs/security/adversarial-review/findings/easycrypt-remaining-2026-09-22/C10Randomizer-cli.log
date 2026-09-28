@@ -1,0 +1,331 @@
+>> Copyright (c) 2012 IMDEA Software Institute
+>> Copyright (c) 2012 Inria
+>> Copyright (c) 2017 Ecole Polytechnique
+>> Copyright (c) EasyCrypt contributors (see AUTHORS)
+>> Distributed under the terms of the MIT license
+>> Standard Library (theories/**/*.ec): 
+>> 	Distributed under the terms of the MIT license
+>> 
+>> GIT hash: r2026.02
+[0|check]>
+[1|check]>
+[2|check]>
+[3|check]>
+added operator full_digest : bool list Distr.distr
+[4|check]>
+[5|check]>
+added operator randomizer : bool list Distr.distr
+[6|check]>
+added operator truncate_r : bool list -> bool list
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+is_lossless randomizer
+[7|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+is_lossless randomizer
+[8|check]>
+No more goals
+[9|check]>
+[10|check]>
+added lemma: `randomizer_ll'
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+dmap full_digest truncate_r = randomizer
+[11|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+dmap full_digest truncate_r = randomizer
+[12|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+dmap (dlist {0,1} 128 `*` dlist {0,1} 128)
+  (truncate_r \o fun (p : bool list * bool list) => p.`1 ++ p.`2) =
+dlist {0,1} 128
+[13|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+forall (x : bool list * bool list),
+  x \in dlist {0,1} 128 `*` dlist {0,1} 128 =>
+  (\o) truncate_r (fun (p : bool list * bool list) => p.`1 ++ p.`2) x =
+  (fun (xy : bool list * bool list) => xy.`2) x
+[14|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+lo: bool list
+hi: bool list
+hlo: (lo, hi).`1 \in dlist {0,1} 128
+hhi: (lo, hi).`2 \in dlist {0,1} 128
+------------------------------------------------------------------------
+hi = hi
+[15|check]>
+Current goal
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+dsnd (dlist {0,1} 128 `*` dlist {0,1} 128) = dlist {0,1} 128
+[16|check]>
+No more goals
+[17|check]>
+added lemma: `truncate_uniform'
+[18|check]>
+Current goal
+
+Type variables: <none>
+
+history: bool list list
+atom: real
+------------------------------------------------------------------------
+(forall (r : bool list), mu1 randomizer r <= atom) =>
+mu randomizer (mem history) <= (size history)%r * atom
+[19|check]>
+Current goal
+
+Type variables: <none>
+
+history: bool list list
+atom: real
+------------------------------------------------------------------------
+(forall (r : bool list), mu1 randomizer r <= atom) =>
+mu randomizer (mem history) <= (size history)%r * atom
+[20|check]>
+No more goals
+[21|check]>
+[22|check]>
+added lemma: `one_draw_history_bound'
+Current goal
+
+Type variables: <none>
+
+r: bool list
+------------------------------------------------------------------------
+mu1 (dlist {0,1} (size r)) r = (1%r / 2%r) ^ size r
+[23|check]>
+Current goal
+
+Type variables: <none>
+
+r: bool list
+------------------------------------------------------------------------
+mu1 (dlist {0,1} (size r)) r = (1%r / 2%r) ^ size r
+[24|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+------------------------------------------------------------------------
+mu1 (dlist {0,1} (size [])) [] = (1%r / 2%r) ^ size []
+[25|check]>
+Current goal
+
+Type variables: <none>
+
+b: bool
+r: bool list
+ih: mu1 (dlist {0,1} (size r)) r = (1%r / 2%r) ^ size r
+------------------------------------------------------------------------
+mu1 (dlist {0,1} (size (b :: r))) (b :: r) = (1%r / 2%r) ^ size (b :: r)
+[26|check]>
+No more goals
+[27|check]>
+[28|check]>
+added lemma: `bool_word_mass'
+Current goal
+
+Type variables: <none>
+
+r: bool list
+------------------------------------------------------------------------
+mu1 randomizer r <= (1%r / 2%r) ^ 128
+[29|check]>
+Current goal
+
+Type variables: <none>
+
+r: bool list
+------------------------------------------------------------------------
+mu1 randomizer r <= (1%r / 2%r) ^ 128
+[30|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+r: bool list
+hs: size r = 128
+------------------------------------------------------------------------
+mu1 randomizer r <= (1%r / 2%r) ^ 128
+[31|check]>
+Current goal
+
+Type variables: <none>
+
+r: bool list
+hs: size r <> 128
+------------------------------------------------------------------------
+mu1 randomizer r <= (1%r / 2%r) ^ 128
+[32|check]>
+Current goal (remaining: 2)
+
+Type variables: <none>
+
+r: bool list
+hs: size r <> 128
+------------------------------------------------------------------------
+r \notin randomizer
+[33|check]>
+Current goal
+
+Type variables: <none>
+
+r: bool list
+hs: size r <> 128
+hn: r \notin randomizer
+------------------------------------------------------------------------
+mu1 randomizer r <= (1%r / 2%r) ^ 128
+[34|check]>
+Current goal
+
+Type variables: <none>
+
+r: bool list
+hs: size r <> 128
+hn: mu1 randomizer r = 0%r
+------------------------------------------------------------------------
+mu1 randomizer r <= (1%r / 2%r) ^ 128
+[35|check]>
+No more goals
+[36|check]>
+[37|check]>
+added lemma: `randomizer_atom_bound'
+Current goal
+
+Type variables: <none>
+
+history: bool list list
+------------------------------------------------------------------------
+mu randomizer (mem history) <= (size history)%r * (1%r / 2%r) ^ 128
+[38|check]>
+Current goal
+
+Type variables: <none>
+
+history: bool list list
+------------------------------------------------------------------------
+mu randomizer (mem history) <= (size history)%r * (1%r / 2%r) ^ 128
+[39|check]>
+No more goals
+[40|check]>
+added lemma: `randomizer_history_bound'
+[41|check]>
+Remaining lemmas to prove:
+ ge0_q: 0 <= C10Counter.signing_budget
+[42|check]>
+[43|check]>
+added lemma: `ge0_q'
+Current goal
+
+Type variables: <none>
+
+A(S : RDraws.ASampler) : RDraws.Adv{-RDraws.Sample}
+&m: {}
+------------------------------------------------------------------------
+(forall (S <: RDraws.ASampler{-A}), islossless S.s => islossless A(S).a) =>
+hoare[ A(RDraws.Sample).a :
+        size RDraws.Sample.l = 0 ==>
+        size RDraws.Sample.l <= C10Counter.signing_budget] =>
+Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m : ! uniq RDraws.Sample.l] <=
+(C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+(1%r / 2%r) ^ 128
+[44|check]>
+Current goal
+
+Type variables: <none>
+
+A(S : RDraws.ASampler) : RDraws.Adv{-RDraws.Sample}
+&m: {}
+------------------------------------------------------------------------
+(forall (S <: RDraws.ASampler{-A}), islossless S.s => islossless A(S).a) =>
+hoare[ A(RDraws.Sample).a :
+        size RDraws.Sample.l = 0 ==>
+        size RDraws.Sample.l <= C10Counter.signing_budget] =>
+Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m : ! uniq RDraws.Sample.l] <=
+(C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+(1%r / 2%r) ^ 128
+[45|check]>
+Current goal
+
+Type variables: <none>
+
+A(S : RDraws.ASampler) : RDraws.Adv{-RDraws.Sample}
+&m: {}
+hll: forall (S <: RDraws.ASampler{-A}), islossless S.s => islossless A(S).a
+hb: hoare[ A(RDraws.Sample).a :
+            size RDraws.Sample.l = 0 ==>
+            size RDraws.Sample.l <= C10Counter.signing_budget]
+------------------------------------------------------------------------
+Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m : ! uniq RDraws.Sample.l] <=
+(C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+(1%r / 2%r) ^ 128
+[46|check]>
+Current goal
+
+Type variables: <none>
+
+A(S : RDraws.ASampler) : RDraws.Adv{-RDraws.Sample}
+&m: {}
+hll: forall (S <: RDraws.ASampler{-A}), islossless S.s => islossless A(S).a
+hb: hoare[ A(RDraws.Sample).a :
+            size RDraws.Sample.l = 0 ==>
+            size RDraws.Sample.l <= C10Counter.signing_budget]
+hc: Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m : ! uniq RDraws.Sample.l] <=
+    (C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+    mu1 randomizer RDraws.maxu
+------------------------------------------------------------------------
+Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m : ! uniq RDraws.Sample.l] <=
+(C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+(1%r / 2%r) ^ 128
+[47|check]>
+Current goal
+
+Type variables: <none>
+
+A(S : RDraws.ASampler) : RDraws.Adv{-RDraws.Sample}
+&m: {}
+hll: forall (S <: RDraws.ASampler{-A}), islossless S.s => islossless A(S).a
+hb: hoare[ A(RDraws.Sample).a :
+            size RDraws.Sample.l = 0 ==>
+            size RDraws.Sample.l <= C10Counter.signing_budget]
+hc: Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m : ! uniq RDraws.Sample.l] <=
+    (C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+    mu1 randomizer RDraws.maxu
+ha: mu1 randomizer RDraws.maxu <= (1%r / 2%r) ^ 128
+------------------------------------------------------------------------
+Pr[RDraws.Exp(RDraws.Sample, A).main() @ &m : ! uniq RDraws.Sample.l] <=
+(C10Counter.signing_budget * (C10Counter.signing_budget - 1))%r / 2%r *
+(1%r / 2%r) ^ 128
+[48|check]>
+No more goals
+[49|check]>
+[50|check]>
+added lemma: `adaptive_randomizer_collisions'
