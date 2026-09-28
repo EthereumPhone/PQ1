@@ -114,7 +114,7 @@ pub fn c10_sign_verified_with_progress(
 pub(crate) fn c10_sign_verified_forced_with_progress(
     sk: &sphincs_c10::SigningKey,
     msg_hash: &[u8; 32],
-    progress: fn(u8),
+    progress: (fn(u8), fn(u8)),
     rate_receipt: &crate::sign_rate::ForcedRateReceipt,
     request_digest: &[u8; 32],
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
