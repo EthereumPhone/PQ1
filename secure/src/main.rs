@@ -253,7 +253,26 @@ mod timeout;
 mod optiga;
 #[cfg(all(feature = "dual-se", not(test)))]
 mod dual_se;
-#[cfg(not(test))]
+// The secure world's "OS Fingerprint" screen. OWNER DECISION 2026-09-28: keep
+// it in debug builds, gate it out of release.
+//
+// It renders the SAME eight words, from the same digest, through the same
+// `sphincs_tz_bip39::firmware_fingerprint_lines`, as the screen the FSBL has
+// already shown moments earlier. CLAUDE.md is explicit that the FSBL row is
+// the measurement and the secure-world row is ADVISORY — invariant #10 anchors
+// on the FSBL, whose pages WRP freezes, not on a screen painted by the image
+// being measured. A slot that lies about itself can paint anything here.
+//
+// So in a shipping image it costs boot time and flash to re-state a claim the
+// trust root already made, from a less trustworthy position.
+//
+// WHAT IS LOST, stated rather than implied: the two-row cross-check. CLAUDE.md
+// calls honest-row divergence "a strong defect/tamper signal", and with this
+// gated there is one row, so that signal is gone from release images. It is
+// retained in every debug build, which is where the FSBL-vs-secure comparison
+// is actually performed during bring-up. The `fsbl-tests/tests/paired_constants.rs`
+// pin that keeps the two dwell times equal stays meaningful for those builds.
+#[cfg(all(not(test), not(feature = "mode-production")))]
 mod measured_boot;
 // ML-KEM-1024 hybrid inner-wrap firmware adapter (binds pqsigner-pq-seal to the
 // device key hierarchy + the TRNG). Compiled under the self-test feature OR
@@ -1728,7 +1747,7 @@ fn main() -> ! {
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.
     // Skipped in automated e2e tests which need non-interactive boot.
-    #[cfg(not(feature = "e2e-test"))]
+    #[cfg(all(not(feature = "e2e-test"), not(feature = "mode-production")))]
     measured_boot::run();
 
     // work-todo #36 — Phase B (post-lock provisioning). After the RDP-2
