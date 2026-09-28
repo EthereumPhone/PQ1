@@ -1200,6 +1200,7 @@ dependencies = [
  "fw-manifest",
  "panic-halt",
  "pqsigner-fi",
+ "pqsigner-hw",
  "sha2",
  "sphincs-c10",
  "sphincs-tz-bip39",
@@ -1223,6 +1224,14 @@ name = "pqsigner-hal"
 version = "0.1.0"
 dependencies = [
  "static_assertions",
+]
+
+[[package]]
+name = "pqsigner-hw"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-semihosting",
 ]
 
 [[package]]
@@ -1695,6 +1704,7 @@ dependencies = [
  "pqsigner-erc7730",
  "pqsigner-fi",
  "pqsigner-geometry",
+ "pqsigner-hw",
  "pqsigner-pq-seal",
  "pqsigner-tx",
  "pqsigner-tx-core",

@@ -5,6 +5,9 @@ edition.workspace = true
 
 [dependencies]
 sphincs-tz-shared = { workspace = true }
+# Shared STM32U585 drivers (typed MMIO + HASH). `debug-log` mirrors this
+# crate's own flag so the semihosting diagnostics keep working here.
+pqsigner-hw = { workspace = true }
 sphincs-tz-bip39  = { workspace = true, features = ["full-wordlist"] }
 fw-manifest       = { workspace = true }
 # Frozen §5 flash-geometry registry (Draft 1.1, post-errata-4): the single
@@ -180,7 +183,7 @@ legacy-fw-rollback-unsafe = []
 # temporary: the first reviewed `erc8176-verified` root rotation MUST remove
 # `erc7730-dev-unattested` from these aliases in the same change, because the
 # generated verified-root fence intentionally rejects a stale warning feature.
-debug-log = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested"]
+debug-log = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested", "pqsigner-hw/debug-log"]
 mock-se = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested"]
 ui-semihosting = []
 ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger)

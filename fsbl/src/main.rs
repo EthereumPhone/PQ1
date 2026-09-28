@@ -133,6 +133,24 @@ fn main() -> ! {
     // and why this module holds no state.
     clock::init();
 
+    // HASH peripheral, BEFORE anything hashes. Enables its clock, makes it a
+    // secure peripheral in GTZC (it is NONSECURE after reset — RM0456 Rev 7
+    // Table 4 + §3.5; the secure world only gets away without this because
+    // `sau.rs` runs first), and runs the SHA-256("abc") known-answer test,
+    // halting on mismatch.
+    //
+    // It must be called, not merely linked: with no caller the whole
+    // bring-up — clock enable, GTZC bit and KAT — is dead-stripped, leaving
+    // `pqsigner_sha256_*` talking to an unclocked, nonsecure peripheral. That
+    // exact mistake produced a 22,052 B image that looked like a better
+    // result than the correct one.
+    #[cfg(feature = "hw-sha256")]
+    // SAFETY: boot-time, single-threaded, before any SHA-256 call, TZEN = 1
+    // by construction (this is the secure boot image).
+    unsafe {
+        hash::init();
+    }
+
     // Bench diagnostic (`stage-marker`): prove the FSBL executes at all. It
     // halts silently on rejection and has no logging, so this is the only
     // evidence available for the silent-rejection bug.

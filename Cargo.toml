@@ -29,6 +29,10 @@ members = [
     # 256 pages, exactly one owner each, const exact-once coverage
     # checks. Zero-dependency by policy (same rule as proto). FA-1.1.
     "geometry",
+    # STM32U585 peripheral drivers shared by the secure world and the FSBL:
+    # typed MMIO + the HASH (SHA-256) accelerator. Extracted from
+    # `secure/src/hw/` so the FSBL stops carrying software SHA-256 (#758).
+    "hw",
     # Pure no_std journal/floor core for the Draft 1.1 A/B rollback
     # architecture: FROZEN-JRN-IFACE-3 / FROZEN-OTP-API-3 / §6.2
     # decoder semantics. FA-1.3.
@@ -119,6 +123,7 @@ pqsigner-tx       = { path = "tx" }
 pqsigner-erc7730  = { path = "pqsigner-erc7730" }
 pqsigner-hal      = { path = "hal" }
 sphincs-tz-shared = { path = "shared" }
+pqsigner-hw = { path = "hw" }
 sphincs-tz-bip39  = { path = "bip39", default-features = false }
 sphincs-c10       = { path = "sphincs-c10" }
 masked-sha2       = { path = "masked-sha2" }

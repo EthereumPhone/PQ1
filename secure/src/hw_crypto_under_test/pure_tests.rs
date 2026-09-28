@@ -2,7 +2,8 @@
 //! slice.
 //!
 //! Slice files in scope:
-//!   - `secure/src/hw/mmio.rs`        (typed MMIO wrapper)
+//!   - `hw/src/mmio.rs`                (typed MMIO wrapper; moved out of
+//!                                    `secure/src/hw/` 2026-09-28, #758)
 //!   - `secure/src/hw/hash.rs`        (STM32U585 HASH peripheral)
 //!   - `secure/src/hw/saes.rs`        (Secure-AES coprocessor)
 //!   - `secure/src/hw/saes_cmac.rs`   (CMAC-AES-256 over SAES-DHUK)
@@ -40,7 +41,12 @@
 use hmac::Mac;
 use sha2::Sha256;
 
-const HASH_SRC: &str = include_str!("../hw/hash.rs");
+// The HASH driver and the typed MMIO handles MOVED to the `pqsigner-hw`
+// workspace crate on 2026-09-28 (#758) so the FSBL shares them instead of
+// carrying a second copy. These pins follow the code rather than the old path
+// — pinning the shim would assert nothing, which is exactly the vacuity this
+// file exists to prevent.
+const HASH_SRC: &str = include_str!("../../../hw/src/hash.rs");
 const SAES_SRC: &str = include_str!("../hw/saes.rs");
 const SAES_CMAC_SRC: &str = include_str!("../hw/saes_cmac.rs");
 const SECRET_KEYS_SRC: &str = include_str!("../hw/secret_keys.rs");
@@ -59,7 +65,7 @@ const FSBL_OTP_SRC: &str = include_str!("../../../fsbl/src/otp.rs");
 const FACTORY_VERIFY_SH: &str =
     include_str!("../../../tools/factory-provisioning-verify.sh");
 const BHK_SRC: &str = include_str!("../hw/bhk.rs");
-const MMIO_SRC: &str = include_str!("../hw/mmio.rs");
+const MMIO_SRC: &str = include_str!("../../../hw/src/mmio.rs");
 
 // ─────────────────────────────────────────────────────────────────────
 // 1. Positive — register addresses + constants

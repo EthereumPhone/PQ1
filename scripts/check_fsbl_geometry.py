@@ -124,15 +124,39 @@ def main():
     # the gap (pages are the unit), so the protected range would be larger than
     # the sum of the segments — precisely the undercount this gate exists to
     # prevent.
-    if len(segs) != 1:
-        fail.append(
-            f"expected exactly 1 LOAD segment, found {len(segs)}. The WRP range "
-            f"must span from the lowest to the highest, INCLUDING the gap; "
-            f"re-derive it by hand before trusting the page range below."
-        )
+    # Partition by region before measuring. The FLASH span is what WRP has to
+    # cover; a RAM segment is not part of it and must not be folded into a
+    # min/max over every LOAD.
+    #
+    # WHY THIS EXISTS (2026-09-28): the FSBL had ZERO static RAM until the
+    # shared HASH driver arrived with a 5-byte streaming merge buffer. That
+    # single `static mut` produced a second PT_LOAD at the RAM origin, and the
+    # old all-segments min/max reported a 603,979,784 B span — 0x3000_0000
+    # minus 0x0C00_0000 — failing the gate on an image whose flash footprint
+    # had just SHRUNK by 8,476 B. The check was right to fire on a surprise;
+    # it was measuring the wrong quantity.
+    flash_segs = [g for g in segs if flash_origin <= g[0] < flash_origin + flash_len]
+    ram_segs = [g for g in segs if ram_origin <= g[0] < ram_origin + ram_len]
+    stray = [g for g in segs if g not in flash_segs and g not in ram_segs]
 
-    lo = min(p for p, _, _, _ in segs)
-    hi = max(p + m for p, _, m, _ in segs)
+    if len(flash_segs) != 1:
+        fail.append(
+            f"expected exactly 1 LOAD segment in FLASH, found {len(flash_segs)}. "
+            f"The WRP range must span from the lowest to the highest, INCLUDING "
+            f"the gap; re-derive it by hand before trusting the page range below."
+        )
+    if stray:
+        fail.append(
+            f"{len(stray)} LOAD segment(s) outside both the FLASH and RAM "
+            f"regions: {[f'0x{p:08X}' for p, _, _, _ in stray]}. A segment the "
+            f"linker script does not describe cannot be reasoned about."
+        )
+    if not flash_segs:
+        fail.append("no LOAD segment inside the FLASH region at all")
+        flash_segs = segs or [(flash_origin, 0, 0, "")]
+
+    lo = min(p for p, _, _, _ in flash_segs)
+    hi = max(p + m for p, _, m, _ in flash_segs)
     span = hi - lo
 
     if lo != flash_origin:
@@ -159,7 +183,7 @@ def main():
         fail.append(f"static RAM {static_ram} B exceeds the {ram_len} B RAM region")
 
     print(f"==> FSBL geometry ({a.elf})")
-    print(f"    LOAD segments   : {len(segs)}")
+    print(f"    LOAD segments   : {len(segs)} total ({len(flash_segs)} in FLASH, {len(ram_segs)} in RAM)")
     print(f"    physical span   : {span} B (0x{span:X})  [size -B text+data = {t + d} B]")
     if span != t + d:
         print(f"                      ^ differs by {span - (t + d)} B — the span is the real figure")
