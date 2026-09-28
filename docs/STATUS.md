@@ -49,6 +49,12 @@ now accumulates references for every successful response, preserves repeats,
 matches the signed-message list and respects the signing cap. Its private
 observer preserves the original byte-game probability. Other information
 exposures and the private/encoding numerical charges remain open.
+The [returned-coordinate partition](../contracts/verification/easycrypt/c10-port/RAW-FORGERY-PARTITION.md)
+now distinguishes new WOTS component messages, an unreturned private FORS
+coordinate and coverage assembled across prior responses. It proves exact
+returned-value agreement and retains the special root-as-secret. The same
+byte-game probability hop preserves its success residual and existing charges;
+the new cases still lack numerical bounds.
 Adaptive accumulated opening coverage, the complete byte-game component
 reduction and numerical end-to-end forgery bounds remain open.
 See the

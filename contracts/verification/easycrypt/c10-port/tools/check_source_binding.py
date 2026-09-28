@@ -147,6 +147,10 @@ SOURCES = (
         'ExposureHistory', 'ExposureLog', 'ExposureReferences', 'ExposureSessionHistory',
         'ExposureSupport',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'ExposureComponents', 'ExposureCoverage', 'ExposurePartition', 'ExposurePartitionGame',
+        'ExposurePartitionHop', 'ExposurePrivate', 'ExposureWidths', 'ForsRootDeterminism',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

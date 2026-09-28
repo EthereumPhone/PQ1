@@ -9,7 +9,7 @@
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",
-    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "b7e958c541f1fbd318c0cb7eca0c540a82812c3f493a15e704a40f8e23c1ae4f",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "4f94c928d7219615508675e125ea4915f1644623b0a5c8d7000ad060b5b39bfd",
     "contracts/verification/scripts/run_easycrypt_split.py": "4568d51ccd1e07082c816cb59432759a60fbe879b66fa72fefeb2a1e410f4487",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
@@ -395,6 +395,14 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureLog.ec": "72507328655ed40ca6f57819c88bd6ec3809d84f8591ce5bf0cdcd311f91c879",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureReferences.ec": "4750111a1583a7cdcdf69c495da0756802a055c808c0b72e18acff7db5789478",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSessionHistory.ec": "c8a2f310515e4b9f7490645e00dbdb2d871f93aeb2906e2b6a5327cbac86239c",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSupport.ec": "dc5f7a4c218f3ba468f46f4e213c70ff76d544fabdae7d0540cfcbfe7839245f"
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSupport.ec": "dc5f7a4c218f3ba468f46f4e213c70ff76d544fabdae7d0540cfcbfe7839245f",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureComponents.ec": "02253d7e750f559e47f18e151719db400dc15ad9db1124dad3cb7f149f8bfeb1",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureCoverage.ec": "da243bae71e0488bd832269da8e6037265af43a5f4951336c4b9bb346e76c393",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartition.ec": "32e91e8e1dab3c348f5baf38d03e03570e4b6b8e726cb524804cf1850e30e38e",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartitionGame.ec": "125a3fd3a5c5434cc3b827edac32f2c9343818481cc70cafa98e4cc59cce849e",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartitionHop.ec": "59f8f70527e0290e7ee46ae86c5d187a4e953b5973d7978d453e515a61be9647",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePrivate.ec": "f0648d6d58f70943d49b9ef044eb68e2f809bb13c50abfeb139e6deef91d8e14",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureWidths.ec": "fef93fdaa83c7e37104dfdbfb67aedfd1d3ec68903ade5639c75f1764ffa3180",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsRootDeterminism.ec": "f5c5bac05403caf0194171080a90d72d95a4fbdc98dc28824fe4447011c225e7"
   }
 }
