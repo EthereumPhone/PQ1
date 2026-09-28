@@ -2418,6 +2418,22 @@ bootproof-hw: ## Flash the non-monolithic image and watch the FSBL verify + bran
 	@echo "==> Running. Expect the FSBL to verify manifest A and branch into slot A."
 	@probe-rs run --chip $(CHIP) $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl
 
+.PHONY: verify-fsbl-identity
+verify-fsbl-identity: ## Read-only: check an FSBL ELF against a bundle's vendor fingerprint (#742)
+	@# The signed bundle does NOT contain or bind the FSBL — `signed_preimage`
+	@# has no FSBL field and `fwsign sign --fsbl` discards the ELF after a
+	@# vendor-key section check. So "we flashed the signed bundle, therefore
+	@# the FSBL is X" is unfounded; demonstrated 2026-09-28 by booting a fresh
+	@# FSBL against an unchanged three-day-old bundle (19/19 markers).
+	@#
+	@# This makes the vendor-key half of the manual chain a command. It proves
+	@# shared vendor provenance ONLY, never which FSBL is installed — see
+	@# docs/security/measured-boot.md and the script header.
+	@test -n "$(FSBL_ELF_IN)" -a -n "$(BUNDLE_DIR)" || { \
+		echo "usage: make verify-fsbl-identity FSBL_ELF_IN=<fsbl.elf> BUNDLE_DIR=<dir-with-measurement.txt>"; \
+		exit 2; }
+	@tools/verify-fsbl-identity.sh "$(FSBL_ELF_IN)" "$(BUNDLE_DIR)"
+
 .PHONY: verify-ship-state
 verify-ship-state: ## Read-only: check a board's option bytes + flash against a declared profile
 	@# The EXTERNAL half of invariant #10(a) — "ship at RDP-0 so anyone can verify

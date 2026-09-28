@@ -46,6 +46,58 @@ user re-verifies the new words against the published
   (`fsbl/src/fi.rs::check_true_into_sentinel`); a coordinated multi-
   glitch attack remains a residual risk handled at the
   silicon-hardening layer (RDP-2, TAMP, consumption mask).
+- **Any claim about WHICH FSBL is on the part, derived from the signed
+  bundle.** (#742; recorded 2026-09-28.) The release bundle contains
+  `manifest.bin`, `secure.bin`, `nonsecure.bin`, `measurement.txt`,
+  `pubkey.bin`, `release.json` and `erc7730-status.bin` — **no FSBL**. The
+  signed preimage is `signed_preimage(fw_version, secure_hash,
+  nonsecure_hash)`; it has no FSBL field, and neither does Draft 1.1's
+  proposed `PQFW_V6` replacement. `fwsign sign --fsbl` reads the FSBL ELF
+  only to check its retained vendor-key sections
+  (`artifact_key::verify_artifact_bytes`) and then discards it.
+
+  This is the right design, not an oversight: the FSBL is the verifier, so
+  binding it inside the manifest it verifies is circular — an attacker who
+  replaces the FSBL replaces the check with it. FSBL immutability is meant
+  to come from WRP + RDP-2 (invariant #10), and those gates are still OPEN.
+
+  What follows is an EVIDENCE rule, and it is easy to get wrong:
+  **"we flashed the signed bundle, therefore the FSBL is X" is unfounded.**
+  Bundle verification says nothing about the bootloader.
+
+  DEMONSTRATED, not merely argued (2026-09-28, bench board
+  `002f0023 30465002 2033314c`): a freshly built FSBL — different bytes,
+  different size, hardware SHA-256 instead of software — was flashed
+  alongside the **unchanged** Sept-23 signed bundle. It booted, verified
+  both images against that manifest, and branched: 19/19 stage markers
+  including `Branching`, `ImgSecureCmp=1`, `ImgNsCmp=1`. Nothing in the
+  signed artifact objected, because nothing in it describes the FSBL.
+
+  Until WRP + RDP-2 close, FSBL identity is established ONLY by:
+
+  1. **Out-of-band measurement** — `cargo run -p fwmeasure -- <fsbl.elf>`,
+     compared against a reproducible build of the published commit; and/or
+     reading the boot fingerprint off the panel.
+  2. **The vendor-key chain**, which is checkable but currently manual:
+     extract the key the FSBL actually carries and hash it —
+
+     ```
+     arm-none-eabi-objcopy -O binary --only-section=.pqsigner.vendor_pubkey \
+         <fsbl.elf> key.bin
+     sha256sum key.bin        # must equal `vendor fpr` in measurement.txt
+     ```
+
+     On 2026-09-28 that gave `ed51cd8a7fe1c395...` hashing to
+     `af8824ff2aa1d515...`, matching the bundle. That proves the FSBL and
+     the bundle share a vendor — **not** that the FSBL is the one the
+     release was built from. Two FSBLs from the same vendor key are
+     indistinguishable by this check.
+
+  Neither step is automated, and neither is part of any release receipt.
+  A release flow that emitted an FSBL measurement alongside the bundle
+  would close the gap between (1) and operator testimony; that is proposed
+  in #742 and NOT implemented.
+
 - **Denial of service.** A malicious slot can crash the device before
   the user finishes reading the FSBL row, then loop. The LCD would
   flicker honest words but never settle. This is detectable as a
