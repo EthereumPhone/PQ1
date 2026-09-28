@@ -67,6 +67,13 @@ use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
 
+/// Progress sink for the factory-calldata C10 sign. A top-level `fn` rather
+/// than a closure so `progress_halves!` can scale it across the FI
+/// double-compute (#759) — `sign_with_shuffle` takes `fn(u8)`.
+fn factory_calldata_progress(p: u8) {
+    crate::ui::show_progress("C10 sign", p);
+}
+
 /// # Safety
 /// CMSE non-secure-entry handler — dispatcher-invoked. The body
 /// snapshots the NS input under `validate_ns_read_ptr`, writes the
@@ -1309,7 +1316,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Some(c) => &c.key,
             None => return NscStatus::InternalError as u32,
         };
-        match crate::crypto::c10_sign_verified_with_progress(slot_ref, &hash_to_sign, sign_progress) {
+        match crate::crypto::c10_sign_verified_with_progress(slot_ref, &hash_to_sign, crate::progress_halves!(sign_progress)) {
             Ok(s) => s,
             Err(_) => return NscStatus::CryptoError as u32,
         }
@@ -1479,7 +1486,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             &master_pk_root_32,
             &slot0_pk_seed_32,
             &slot0_pk_root_32,
-            |p| crate::ui::show_progress("C10 sign", p),
+            crate::progress_halves!(factory_calldata_progress),
         ) {
             drop(master_c10_sk);
             crate::ui::show_status("EIP-1271", "factory sign FAIL");

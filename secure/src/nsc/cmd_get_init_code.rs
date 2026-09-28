@@ -51,6 +51,13 @@ use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
 
+/// Progress sink for the factory-calldata C10 sign. A top-level `fn` rather
+/// than a closure so `progress_halves!` can scale it across the FI
+/// double-compute (#759) — `sign_with_shuffle` takes `fn(u8)`.
+fn factory_calldata_progress(p: u8) {
+    crate::ui::show_progress("C10 sign", p);
+}
+
 /// Wire layout of the 12-byte input body.
 const INPUT_LEN: usize = 12;
 
@@ -264,7 +271,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         &master_pk_root_32,
         &slot_pk_seed_32,
         &slot_pk_root_32,
-        |p| crate::ui::show_progress("C10 sign", p),
+        crate::progress_halves!(factory_calldata_progress),
     ) {
         crate::ui::show_status("InitCode", "C10 sign fail");
         return status as u32;

@@ -2292,7 +2292,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             let factory_sig = match crate::crypto::c10_sign_verified_with_progress(
                 &c10_sk,
                 &factory_digest,
-                c10_sign_progress_bootstrap,
+                crate::progress_halves!(c10_sign_progress_bootstrap),
             ) {
                 Ok(s) => s,
                 Err(_) => {
@@ -2418,7 +2418,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             let bootstrap_sig = match crate::crypto::c10_sign_verified_with_progress(
                 &c10_sk,
                 &t1_digest,
-                c10_sign_progress_bootstrap,
+                crate::progress_halves!(c10_sign_progress_bootstrap),
             ) {
                 Ok(s) => s,
                 Err(_) => {
@@ -2542,7 +2542,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         match crate::crypto::c10_sign_verified_with_progress(
             slot_ref,
             &t2_digest,
-            c10_sign_progress_slot,
+            crate::progress_halves!(c10_sign_progress_slot),
         ) {
             Ok(s) => s,
             Err(_) => {
