@@ -2294,8 +2294,37 @@ bootproof-sign: bootproof-build ## Sign the slot-A manifest (prompts for the key
 .PHONY: bootproof-hw
 bootproof-hw: ## Flash the non-monolithic image and watch the FSBL verify + branch
 	@test -f $(BOOTPROOF_DIR)/unpacked/manifest.bin || { echo "run `make bootproof-sign` first"; exit 1; }
-	@echo "==> Erasing manifest B (page 5) + boot state (page 6) so ONE candidate validates"
-	@probe-rs erase --chip $(CHIP) 2>/dev/null || true
+	@echo "==> Erasing manifest B (bank-1 page 5) + boot state (page 6) so ONE candidate validates"
+	@# NOT `probe-rs erase --chip`. On this part probe-rs's flash map includes
+	@# 0x0BFA_0000..0x0BFA_0200 — the 512-byte OTP area (RM0456 Rev 7, flash
+	@# memory map). OTP is one-way, and the RM notes it is not erased even by an
+	@# RDP regression to level 0. So the old line asked the probe to erase
+	@# one-way memory holding the factory sentinel (0x0BFA_00A0) and the
+	@# per-device OTP master.
+	@#
+	@# It was `probe-rs erase --chip $(CHIP) 2>/dev/null || true`, which threw
+	@# away BOTH the message and the exit status. The attempt was invisible and
+	@# the erase silently never happened — that is the stale marker page in
+	@# #739. It only ever aborted harmlessly because probe-rs has no flash
+	@# algorithm for that region on STM32U585CIUx, which is luck, not a property
+	@# we chose.
+	@#
+	@# This recipe wants exactly what its own message says: two bank-1 pages.
+	@# CubeProgrammer erases named sectors and is already the tool used below
+	@# for option bytes. NO output suppression: if the erase fails the run must
+	@# stop, because everything after it would be measuring stale flash.
+	@$(STM32_PROG) --connect port=SWD -e 5 6
+	@echo "==> Verifying both pages read back BLANK"
+	@# The sector NUMBERING is not asserted, the OUTCOME is. If bank-1 page N is
+	@# not CubeProgrammer sector N on some future part, this fails loudly here
+	@# instead of handing the FSBL a stale manifest candidate.
+	@for a in 0x0C00A000 0x0C00C000; do \
+		v=$$(probe-rs read --chip $(CHIP) b32 $$a 4 2>/dev/null | tail -1); \
+		case "$$v" in \
+			*"ffffffff ffffffff ffffffff ffffffff"*) echo "    $$a blank" ;; \
+			*) echo "FAIL: $$a did not erase — read: $$v"; exit 1 ;; \
+		esac; \
+	done
 	@echo "==> FSBL -> 0x0C000000"
 	@probe-rs download --chip $(CHIP) $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl
 	@echo "==> Manifest A -> 0x0C008000"
