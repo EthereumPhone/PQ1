@@ -210,7 +210,7 @@ fn erc7730_uniswap_exact_input_screens() {
     assert!(hero_caption(&l).starts_with("SIGN "), "{text}");
     assert!(ids(&l.screens).iter().any(|i| i == "INTENT"), "{text}");
     assert!(ids(&l.screens).iter().any(|i| i == "NETWORK"), "{text}");
-    check("erc7730", "uniswap_exact_input", &l, 1, "erc7730", "1a1279b615f1c17b6e0670755eeadbe633263b828f35ae64635a6b78c2126208");
+    check("erc7730", "uniswap_exact_input", &l, 1, "erc7730", "185ff1127b4ee59e3f39f61245361f0d266576ef7f2120939d374341459ab66f");
 }
 
 // ---------------------------------------------------------------------------
@@ -370,7 +370,7 @@ fn offchain_eip712_typed_screens() {
     };
     let l = finish_ref(pinned, &inputs, "typed");
     assert!(hero_caption(&l).starts_with("SIGN "));
-    check("eip1271", "typed_ballot", &l, 1, "typed", "903d6bac036afaad6f52c0b84fb9a69fbef0bcee21b344b6ee4d207454fd431f");
+    check("eip1271", "typed_ballot", &l, 1, "typed", "264f114942d8b13de5d6067718734c4222eb8b76ca3d820699e831fd543246ba");
 }
 
 
@@ -542,7 +542,7 @@ fn erc7730_userop_envelope_screens() {
     let l = lift_erc7730(&t, &data, &verified);
     let nonce_screen = l.screens.as_slice().iter().find(|s| s.id() == b"NONCE").expect("one NONCE screen");
     assert_eq!(nonce_screen.npages(), 2);
-    check("erc7730", "uniswap_userop", &l, 1, "erc7730", "372980cbb960712b2d4a556fecf283097c7d2b84ff5d6d5fe27714f5fa1c3cba");
+    check("erc7730", "uniswap_userop", &l, 1, "erc7730", "022852fcbc64508cc5ae7602d66ba4bd9da79bfa7d54e4e524f60367e669a9a0");
 }
 
 // ---------------------------------------------------------------------------
