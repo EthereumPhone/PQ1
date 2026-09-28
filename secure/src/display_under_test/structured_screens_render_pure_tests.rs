@@ -546,8 +546,21 @@ fn erc7730_userop_envelope_screens() {
 }
 
 // ---------------------------------------------------------------------------
-// FINDING 5 of the 2026-09-24 ui-px merge review, reduced to the adapter
+// #751 — a field VALUE must never be mistaken for the renderer's chrome
 // ---------------------------------------------------------------------------
+//
+// `erc7730_screens::is_nav_row` classifies a row by its TEXT, and that
+// vocabulary is not reserved: a decoded field value can equal any of it. Until
+// 2026-09-24 the field loop dropped every match, so `setName("> Alice")`
+// rendered as `NAME` / `7 bytes` — the name absent from the trusted display
+// while the signature still committed to it.
+//
+// The fix narrows the DROP to the exact (row, text) the renderer actually
+// emits and REFUSES on anything else. That number came from measurement, not
+// taste: instrumenting the loop and running this whole corpus produced 45
+// drops, every one `"> next"` at row 3.
+//
+// These tests pin both halves — the chrome still drops, a value never does.
 
 fn row(p: &mut Pages, page: usize, r: usize, text: &[u8]) {
     let dst = p.row_mut(page, r);
@@ -555,20 +568,21 @@ fn row(p: &mut Pages, page: usize, r: usize, text: &[u8]) {
     dst[..text.len()].copy_from_slice(text);
 }
 
-/// Lift a minimal legal ERC-7730 body whose single field page is
-/// `NAME` / `value`, and return the pixel transcript as text.
-fn lift_one_field(value: &[u8]) -> alloc::string::String {
+/// Build the minimum legal ERC-7730 body — intent, one field page, confirm —
+/// whose field page carries `rows` at the given indices, and try to lift it.
+fn try_field_page(rows: &[(usize, &[u8])]) -> Result<alloc::string::String, ()> {
     const TARGET: [u8; 20] = [0x5a; 20];
     let t = tx(MAINNET, TARGET, 0, 68);
     let data = [0u8; 68];
     let f = Facts::new(MAINNET, TARGET, &data, false, false, false);
 
-    // Minimum legal body: intent page, one field page, confirm page.
     let mut pages = Pages::with_len(3);
     row(&mut pages, 0, 0, b"Set name");
     row(&mut pages, 1, 0, b"NAME");
-    row(&mut pages, 1, 1, value);
-    row(&mut pages, 2, 0, b"L=Cancel"); // confirm page: nav rows only
+    for &(r, text) in rows {
+        row(&mut pages, 1, r, text);
+    }
+    row(&mut pages, 2, 0, b"L=Cancel"); // confirm page: chrome only
     let body_len = pages.len;
 
     let facts = f.trailer(&t, TrailerSet::Sign);
@@ -580,87 +594,40 @@ fn lift_one_field(value: &[u8]) -> alloc::string::String {
         body: Body::Erc7730 { pages: pinned, start: 0, body_len, chain_id: MAINNET, family: fam },
         trailers: &facts,
     };
-    screen_text(&finish_ref(pinned, &inputs, "erc7730").screens)
+    let mut screens = pqsigner_ui_px::Screens::blank();
+    super::px_lift::emit_content(&mut screens, &inputs)?;
+    Ok(screen_text(&screens))
 }
 
-/// POSITIVE CONTROL for the two tests below.
-///
-/// Without this, a failure of `..._is_dropped_from_the_pixel_transcript`
-/// proves only that the hand-built page shape does not lift — not that
-/// `is_nav_row` is the cause. This asserts the identical shape with an
-/// ordinary value DOES reach the transcript, so the only difference left
-/// between it and the failing cases is the text of the value.
-#[test]
-fn control_an_ordinary_field_value_reaches_the_pixel_transcript() {
-    let text = lift_one_field(b"Alice");
-    assert!(
-        text.contains("Alice"),
-        "the page shape itself must lift, or the nav-row tests prove nothing:\n{text}"
-    );
-}
+fn try_celo_set_name(name: &[u8]) -> Result<alloc::string::String, ()> {
+    use super::erc7730_render_pure_tests::{build_registry, envelope, find_leaf, synth_bundle};
+    let registry = build_registry();
+    let entry = find_leaf(registry, "calldata-celo_accounts.json", 42220);
+    let bundle = synth_bundle(&registry.blob, &entry.ir_bytes, entry.leaf_index);
+    let verified = pqsigner_erc7730::bundle::verify_erc7730_bundle(&bundle, &registry.root)
+        .expect("verify celo accounts leaf");
+    let t = envelope(42220, CELO_ACCOUNTS);
+    let data = calldata_set_name(name);
 
-/// `erc7730_screens::is_nav_row` classifies a row by its TEXT: the legacy
-/// navigation vocabulary is matched against the row content, and the field
-/// loop drops every match (`erc7730_screens.rs:333`). The proven page keeps
-/// the row and the signature commits to it, so a rendered VALUE that collides
-/// with that vocabulary is a row the user signs but never sees.
-///
-/// EVIDENCE LEVEL: this is the ADAPTER defect, reduced. It drives the adapter
-/// with hand-built pages, so it does NOT establish that today's calldata and
-/// descriptor corpus can produce such a row — the renderer might quote or
-/// prefix a string value. Astra's end-to-end claim (the Celo `setName(string)`
-/// descriptor) is separately tested in
-/// `celo_set_name_with_a_chevron_value_reaches_the_transcript`.
-///
-/// It is a defect independent of reachability: a display adapter that decides
-/// what to show by pattern-matching the text it is showing cannot be sound,
-/// because the vocabulary is not reserved.
-///
-/// Every chevron-prefixed nav row in the tree is written to row index 3
-/// (`erc20_known`, `erc20_unknown`, `value_transfer`, `erc8213`,
-/// `forced_blind` — all `pages.buf[p][3]`), so position discriminates better
-/// than text. But position alone is NOT a complete fix: the confirm-page
-/// vocabulary spans several rows and a body page's row 3 can hold data. The
-/// durable fix is for the renderer to mark the rows it emitted as navigation,
-/// and for the adapter to refuse — not silently drop — anything else that
-/// matches.
-#[test]
-#[ignore = "#751 FINDING 5 — adapter drops nav-vocabulary rows; fails until fixed"]
-fn a_data_row_beginning_with_a_chevron_is_dropped_from_the_pixel_transcript() {
-    let text = lift_one_field(b"> Alice");
-    assert!(
-        text.contains("Alice"),
-        "the proven page shows `> Alice` under NAME and the signature commits \
-         to it, but the pixel transcript dropped the row because is_nav_row \
-         matched on the leading \"> \". WYSIWYS break on the pixel route.\n\
-         \nscreens:\n{text}"
-    );
-}
-
-/// The same defect is not limited to the leading chevron: `is_nav_row` also
-/// matches rows ENDING in `> next` / `> sign`, and a list of exact strings.
-/// A value equal to any of them disappears the same way.
-#[test]
-#[ignore = "#751 FINDING 5 — the full nav vocabulary, not just the chevron"]
-fn the_whole_nav_vocabulary_swallows_a_field_value() {
-    // (value, the substring that must survive)
-    let cases: [(&[u8], &str); 4] = [
-        (b"vote > next", "vote"),
-        (b"ok > sign", "ok"),
-        (b"R=Confirm", "Confirm"),
-        (b"to confirm", "confirm"),
-    ];
-    let mut lost = alloc::vec::Vec::new();
-    for (value, needle) in cases {
-        let text = lift_one_field(value);
-        if !text.contains(needle) {
-            lost.push(core::str::from_utf8(value).unwrap());
-        }
-    }
-    assert!(
-        lost.is_empty(),
-        "these field values are signed but never displayed: {lost:?}"
-    );
+    let target = t.to.unwrap();
+    let f = Facts::new(t.chain_id, target, &data, false, false, false);
+    let r = NameResolver::new();
+    let mut proofs = DispatchPageProofs::new();
+    proofs.fail_initialize();
+    let mut pages = pick_sign_pages(&t, &data, &f.sender, None, None, None, Some(&verified), None, None, &r, &mut proofs)
+        .expect("7730 call must render");
+    let facts = f.trailer(&t, TrailerSet::Sign);
+    append_handler_trailers(&mut pages, &facts);
+    let body_len = pages.len - super::trailer_screens::expected_trailer_count(&facts);
+    let family = super::erc7730_screens::family(super::erc7730_screens::Surface::Contract, &target);
+    let pinned: &'static Pages = Box::leak(Box::new(pages));
+    let inputs = ContentInputs {
+        body: Body::Erc7730 { pages: pinned, start: 0, body_len, chain_id: t.chain_id, family },
+        trailers: &facts,
+    };
+    let mut screens = pqsigner_ui_px::Screens::blank();
+    super::px_lift::emit_content(&mut screens, &inputs)?;
+    Ok(screen_text(&screens))
 }
 
 /// Celo Accounts on chain 42220 — `calldata-celo_accounts.json`.
@@ -685,110 +652,72 @@ fn calldata_set_name(name: &[u8]) -> alloc::vec::Vec<u8> {
     d
 }
 
-fn lift_celo_set_name(name: &[u8]) -> alloc::string::String {
-    use super::erc7730_render_pure_tests::{build_registry, envelope, find_leaf, synth_bundle};
-    let registry = build_registry();
-    let entry = find_leaf(registry, "calldata-celo_accounts.json", 42220);
-    let bundle = synth_bundle(&registry.blob, &entry.ir_bytes, entry.leaf_index);
-    let verified = pqsigner_erc7730::bundle::verify_erc7730_bundle(&bundle, &registry.root)
-        .expect("verify celo accounts leaf");
-    let t = envelope(42220, CELO_ACCOUNTS);
-    let data = calldata_set_name(name);
-    screen_text(&lift_erc7730(&t, &data, &verified).screens)
+/// POSITIVE CONTROL. Without it, a refusal below proves only that the
+/// hand-built page shape does not lift — not that the value's TEXT caused it.
+#[test]
+fn control_an_ordinary_field_value_lifts() {
+    let text = try_field_page(&[(1, b"Alice")]).expect("ordinary value must lift");
+    assert!(text.contains("Alice"), "{text}");
 }
 
-/// END-TO-END control: an ordinary `setName` value must reach the transcript
-/// through the REAL descriptor, decoder and renderer — not the hand-built
-/// pages of `control_an_ordinary_field_value_reaches_the_pixel_transcript`.
-///
-/// If this fails, the end-to-end probe below proves nothing about
-/// `is_nav_row`: the Celo leaf may not be admitted, or `raw` may render a
-/// string differently than assumed.
+/// POSITIVE CONTROL, end to end: the real descriptor, decoder and renderer.
+/// If this fails, the Celo refusal test proves nothing about `is_nav_row`.
 #[test]
-fn control_celo_set_name_reaches_the_pixel_transcript() {
-    let text = lift_celo_set_name(b"Alice");
+fn control_celo_set_name_lifts() {
+    let text = try_celo_set_name(b"Alice").expect("setName(\"Alice\") must lift");
+    assert!(text.contains("Alice"), "{text}");
+}
+
+/// The renderer's OWN chrome must still be dropped, or every ERC-7730 flow
+/// breaks. This is the other half of the fix and the reason it is a narrow
+/// (row, text) match rather than a blanket refusal.
+#[test]
+fn the_renderers_own_next_chrome_still_drops() {
+    let text = try_field_page(&[(1, b"Alice"), (3, b"> next")])
+        .expect("`> next` at row 3 is the renderer's own footer and must not refuse");
+    assert!(text.contains("Alice"), "{text}");
+    assert!(!text.contains("> next"), "the chrome must not reach the transcript:\n{text}");
+}
+
+/// A field VALUE colliding with the nav vocabulary must REFUSE, never drop.
+///
+/// Dropping leaves the user signing bytes the display never showed — the one
+/// failure a trusted display must not have. Refusing costs a pathological
+/// value and keeps WYSIWYS intact.
+#[test]
+fn a_value_that_collides_with_the_nav_vocabulary_is_refused() {
+    // (value, where it sits on the field page)
+    let cases: [(&[u8], usize); 6] = [
+        (b"> Alice", 1),      // the original #751 report
+        (b"vote > next", 1),  // ends with the footer string
+        (b"ok > sign", 1),
+        (b"R=Confirm", 1),
+        (b"to confirm", 1),
+        (b"> next", 1),       // the footer TEXT, but not at the footer ROW
+    ];
+    let mut dropped = alloc::vec::Vec::new();
+    for (value, r) in cases {
+        if try_field_page(&[(r, value)]).is_ok() {
+            dropped.push(core::str::from_utf8(value).unwrap());
+        }
+    }
     assert!(
-        text.contains("Alice"),
-        "the Celo setName path itself must render, or the chevron probe proves \
-         nothing:\n{text}"
+        dropped.is_empty(),
+        "these values lifted instead of refusing, so they were silently \
+         dropped from the display while the signature still commits to them: \
+         {dropped:?}"
     );
 }
 
-/// Astra's END-TO-END reachability claim for FINDING 5: the admitted Celo
-/// `setName(string)` descriptor (`format: "raw"`, `visible: always`) carries an
-/// attacker-chosen string straight onto a page row, so `"> Alice"` should be
-/// swallowed by `is_nav_row` while the signature still commits to it.
-///
-/// This is the test that separates "the adapter is unsound" (proven by
-/// `a_data_row_beginning_with_a_chevron_is_dropped_from_the_pixel_transcript`)
-/// from "an attacker can reach it today with the shipped corpus".
+/// #751 end to end, through the admitted Celo leaf: `setName(string)` is
+/// `format: "raw"`, `visible: always`, so the attacker's string goes straight
+/// onto a row. Before the fix this rendered `NAME` / `7 bytes` with the name
+/// absent; now it refuses.
 #[test]
-#[ignore = "#751 FINDING 5 — end-to-end via the shipped Celo leaf; fails until fixed"]
-fn celo_set_name_with_a_chevron_value_reaches_the_transcript() {
-    let text = lift_celo_set_name(b"> Alice");
+fn celo_set_name_with_a_colliding_value_is_refused() {
     assert!(
-        text.contains("Alice"),
-        "`setName(\"> Alice\")` on Celo Accounts: the signature commits to the \
-         name but the pixel transcript never shows it.\n\nscreens:\n{text}"
-    );
-}
-
-/// MEASURED CHARACTERISATION of FINDING 5. Passes TODAY, because it asserts
-/// the broken behaviour — invert it when the finding is fixed.
-///
-/// `setName("> Alice")` and `setName("> Carol")` are different signed
-/// operands. Their trusted displays differ in exactly ONE place: the ERC-8213
-/// 32-byte calldata digest. The name is on NEITHER screen — both render
-///
-///     NAME
-///     7 bytes
-///
-/// so the only thing separating the two on the device is a hash the user would
-/// have to recompute off-device to compare. That is blind signing with extra
-/// steps, in the middle of a flow whose entire purpose is that it is not.
-#[test]
-fn measured_two_chevron_names_differ_only_by_the_erc8213_digest() {
-    let a = lift_celo_set_name(b"> Alice");
-    let b = lift_celo_set_name(b"> Carol");
-
-    assert!(!a.contains("Alice"), "if the name now renders, FINDING 5 is fixed \
-        — invert this characterisation test and un-ignore the two above:\n{a}");
-    assert!(!b.contains("Carol"), "same:\n{b}");
-
-    // Everything except the digest hex must be identical. `0x` + 62 hex over
-    // three rows is the ERC-8213 calldata-digest screen.
-    let strip = |s: &str| -> alloc::string::String {
-        s.lines()
-            .filter(|l| {
-                let t = l.trim_start_matches("0x");
-                !(t.len() >= 20 && t.bytes().all(|c| c.is_ascii_hexdigit()))
-            })
-            .collect::<alloc::vec::Vec<_>>()
-            .join("\n")
-    };
-    assert_eq!(
-        strip(&a),
-        strip(&b),
-        "with the calldata digest removed the two displays are expected to be \
-         byte-identical — that is the finding. If they now differ, the name (or \
-         something else derived from it) reached the screen."
-    );
-}
-
-/// The sharpest statement of FINDING 5: two DIFFERENT names produce a
-/// BYTE-IDENTICAL trusted display. `"> Alice"` and `"> Carol"` are distinct
-/// signed operands; both render as `NAME` / `7 bytes`.
-///
-/// This is the WYSIWYS property itself, not a proxy for it.
-#[test]
-#[ignore = "#751 FINDING 5 — the name is never displayed; fails until fixed"]
-fn two_different_celo_names_render_identically() {
-    let a = lift_celo_set_name(b"> Alice");
-    let b = lift_celo_set_name(b"> Carol");
-    assert!(
-        a.contains("Alice") && b.contains("Carol"),
-        "setName(\"> Alice\") and setName(\"> Carol\") are different signed \
-         operands, and the user must be able to tell them apart by READING \
-         the display — not by recomputing a calldata digest.\n\n{a}\n---\n{b}"
+        try_celo_set_name(b"> Alice").is_err(),
+        "`setName(\"> Alice\")` must refuse — rendering it dropped the name \
+         while the signature still committed to it"
     );
 }

@@ -82,8 +82,32 @@ fn trimmed(row: &[u8; DISPLAY_COLS]) -> &[u8] {
     &row[s..n]
 }
 
+/// The ONE row index the body's chrome ever occupies, and the ONE string it
+/// ever is. MEASURED, not assumed: instrumenting the field loop below and
+/// running the whole golden corpus produced 45 drops, every one of them
+/// `"> next"` at row 3, and nothing else. The confirm-page vocabulary
+/// (`L=Cancel` / `R=Confirm`) never reaches this loop at all — it lives on the
+/// confirm page, which `emit` excludes from `body`.
+const NAV_ROW: usize = DISPLAY_ROWS - 1;
+const NAV_NEXT: &[u8] = b"> next";
+
 /// Instruction vocabulary the design replaces with its own chevrons and
 /// hold grammar.
+///
+/// # This is a classifier over CONTENT, so it cannot be trusted alone
+///
+/// It decides whether a row is chrome by matching the text of the row it is
+/// looking at. That vocabulary is not reserved: a decoded field VALUE can
+/// equal any of these strings. Until 2026-09-24 the field loop dropped every
+/// match, so `setName("> Alice")` rendered as `NAME` / `7 bytes` — the name
+/// absent from the trusted display while the signature still committed to it
+/// (#751).
+///
+/// It is still the right predicate for [`is_confirm_page`], which asks "is
+/// this page ENTIRELY chrome" about a page the renderer placed as the
+/// terminator. It is NOT sufficient on its own for a body row, which is why
+/// the field loop pairs it with [`NAV_ROW`]/[`NAV_NEXT`] and refuses on
+/// anything else.
 pub(crate) fn is_nav_row(row: &[u8]) -> bool {
     row.starts_with(b"> ")
         || row.ends_with(b"> next")
@@ -330,8 +354,33 @@ pub(crate) fn emit(out: &mut Screens, pages: &Pages, start: usize, body_len: usi
         let mut row0_is_label = false;
         for (r, row) in page.iter().enumerate() {
             let t = trimmed(row);
-            if t.is_empty() || is_nav_row(t) {
+            if t.is_empty() {
                 continue;
+            }
+            if is_nav_row(t) {
+                // The renderer's own chrome: drop it, the pixel design draws
+                // its own. Narrowed to the exact (row, text) the renderer
+                // actually emits — see NAV_ROW/NAV_NEXT for the measurement.
+                if r == NAV_ROW && t == NAV_NEXT {
+                    continue;
+                }
+                // Anything else matching the vocabulary is a field VALUE that
+                // collided with it. REFUSE (#751). Dropping it would leave the
+                // user signing bytes the display never showed, which is the one
+                // failure a trusted display must not have; and we cannot render
+                // it either, because the pixel design has no way to say "this
+                // row is data that looks like chrome". Refusing costs the user
+                // a pathological value and keeps WYSIWYS intact.
+                //
+                // RESIDUAL, stated because it is not closed: a value that
+                // renders to exactly `"> next"` at row 3 is indistinguishable
+                // from the chrome above and is still dropped silently. One
+                // exact string rather than a whole prefix class. Closing it
+                // needs the renderer to MARK the rows it emitted as
+                // navigation instead of the adapter recovering that by
+                // pattern match — 104 call sites across 21 files, tracked on
+                // #751.
+                return Err(());
             }
             if r == 0 {
                 row0_is_label = true;
