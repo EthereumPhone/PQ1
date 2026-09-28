@@ -1387,7 +1387,7 @@ pub(super) unsafe fn run(
         match crate::crypto::c10_sign_verified_forced_with_progress(
             slot,
             &digest_check,
-            forced_sign_progress,
+            crate::progress_halves!(forced_sign_progress),
             &prepared.rate,
             &request_digest_check,
         ) {

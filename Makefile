@@ -4734,8 +4734,17 @@ pq-ui-check: ## Verify tools/pq-ui/ against MANIFEST.sha256 (bytes + file set)
 # host tests that run the checker over every Safe scenario transcript.
 .PHONY: ui-px-goldens-bless
 ui-px-goldens-bless: ## Re-export every family's scenario transcripts and re-bless their per-frame goldens (review the PNGs first)
-	@UI_PX_EXPORT=1 cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests >/dev/null
-	@UI_PX_BLESS=1 UI_PX_PNG=1 cargo test --locked -p pqsigner-ui-px --test golden safe_flows >/dev/null
+	@# FEATURE SET MATTERS and used to be absent: this ran `--tests --release`
+	@# with DEFAULT features, which does not build, and `>/dev/null` swallowed
+	@# the reason. The export step therefore always failed, `make` aborted
+	@# before the bless step, and the `.hex` transcripts silently stayed stale
+	@# while `secure`'s own golden constants moved on — two suites asserting
+	@# different screen sequences, which is how the 2026-09-28 drift survived.
+	@# Same features CI uses (.github/workflows/ci.yml), and stderr is kept.
+	@UI_PX_EXPORT=1 cargo test --locked -p sphincs-tz-secure --release \
+		--no-default-features --features mock-se,debug-log,ui-semihosting \
+		-- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests >/dev/null
+	@UI_PX_BLESS=1 UI_PX_PNG=1 cargo test --locked -p pqsigner-ui-px --test golden >/dev/null
 	@ls pqsigner-ui-px/tests/fixtures/*/*.sha | wc -l | xargs -I{} echo "blessed {} transcript goldens (frames under target/ui-px-golden/<family>/)"
 
 .PHONY: pq-ui-port-diff ui-px-check
