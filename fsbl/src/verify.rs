@@ -24,7 +24,7 @@
 //! range is still the binding constraint, not the seconds.
 
 use fw_manifest::ManifestRef;
-use sha2::{Digest, Sha256};
+use crate::sha::{Digest, Sha256};
 
 use crate::fi;
 use crate::slot::{slot_ns_addr, slot_secure_addr, Slot};

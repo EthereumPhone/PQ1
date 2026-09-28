@@ -27,6 +27,14 @@ subtle = { version = "2", default-features = false }
 
 [features]
 default = []
+# Route every SHA-256 call through the `pqsigner_sha256_{init,update,final}`
+# symbols the linked binary supplies, instead of the software `sha2`
+# implementation — same contract as `sphincs-c10`'s feature of the same name.
+# Device-only: host tools have no HASH peripheral and must stay on the default.
+# The point is size, not just speed: `sha2::compress256` is 7,202 B and only
+# disappears from the FSBL if this crate, `fsbl/src/verify.rs` and
+# `sphincs-c10` all stop referencing it.
+hw-sha256 = []
 # Enables `std::io`-based helpers (currently only used by the host
 # `fwsign` tool). FSBL and the secure firmware never turn this on.
 std = []

@@ -88,6 +88,9 @@ mod branch;
 mod clock;
 mod fi;
 mod glyphs;
+#[cfg(feature = "hw-sha256")]
+mod hash;
+mod sha;
 mod manifest;
 #[cfg(feature = "stage-marker")]
 mod marker;

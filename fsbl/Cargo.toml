@@ -9,6 +9,14 @@ name = "pqsigner-fsbl"
 path = "src/main.rs"
 
 [features]
+# Route SHA-256 through the STM32U585 HASH peripheral instead of the software
+# `sha2` implementation. MUST enable it for every consumer in the cone or
+# `sha2::compress256` (7,202 B, 23.4% of the image) stays linked.
+hw-sha256 = ["fw-manifest/hw-sha256", "sphincs-c10/hw-sha256"]
+# Opt in to the NON-FUNCTIONAL stub in `fsbl/src/hash.rs` so the hw-sha256
+# size delta can be reproduced. Produces an image that accepts ANY firmware.
+# Never flash it. Remove this feature with the stub once the real driver lands.
+sha-stub-measure-only = ["hw-sha256"]
 # Physical board selection — MANDATORY, exactly one. `fsbl/src/board/mod.rs`
 # hard-errors when neither is set and when both are.
 #
