@@ -9,7 +9,7 @@
   },
   "_falsifying_test_rule": "Every row MUST carry a falsifying_test whose `description` states a concrete experiment that could FAIL. `exists: false` is honest and common; `exists: true` REQUIRES a make_target that the gate checks is real. A model earns assurance only in proportion to what could contradict it — a row with no falsifying test is prose in JSON.",
   "schema_version": 1,
-  "last_updated": "2026-07-21",
+  "last_updated": "2026-08-20",
   "assumptions": [
     {
       "id": "HW-ASSUME-QW-ATOMIC",
@@ -266,7 +266,12 @@
         {
           "kind": "code-enforced",
           "ref": "secure/src/hw/rng.rs",
-          "anchor": "if sr & (SECS | CECS) != 0"
+          "anchor": "if sr0 & ERROR_FLAGS != 0"
+        },
+        {
+          "kind": "code-enforced",
+          "ref": "secure/src/hw/rng.rs",
+          "anchor": "const ERROR_FLAGS: u32 = SEIS | SECS | CEIS | CECS;"
         },
         {
           "kind": "spec",

@@ -16,7 +16,11 @@ premises. It falsifies everything *around* them, which is the part that rots:
   C1  ID DISCIPLINE      — ids are unique and match HW-ASSUME-[A-Z0-9-]+.
   C2  SCHEMA             — every row carries the required fields, a status from
                            the declared vocabulary, and a non-empty statement,
-                           note and consumed_by.
+                           note and consumed_by. HARDENED 2026-08-20 (#669):
+                           `evidence` must be a NON-EMPTY list with at least
+                           one ANCHORED entry — the C3 loop over an empty or
+                           anchor-less list vacuously passes, so gutting every
+                           evidence list used to turn the whole ledger green.
   C3  ANCHORS RESOLVE    — every evidence `ref` file exists and, where an
                            `anchor` is given, that exact string is still present
                            in it. This is what catches a row going stale when
@@ -26,6 +30,13 @@ premises. It falsifies everything *around* them, which is the part that rots:
                            `make_target` that actually exists in a Makefile.
                            A claimed test that cannot be run is worse than an
                            admitted absence, because it reads as evidence.
+                           HARDENED 2026-08-20 (#669): existence is not enough —
+                           an arbitrary target (`make all` is not a falsifying
+                           test) must not read as evidence. The target must
+                           either match the hardware/e2e-test naming convention
+                           (HW_TEST_TARGET_RE: ends `-hw`/`-e2e`/`-stress...`,
+                           or is `e2e[-...]`) or its recipe text must cite the
+                           row's own HW-ASSUME id.
   C5  BIDIRECTIONAL      — the load-bearing one, borrowed from OpenTitan's
                            RTL<->Hjson countermeasure cross-check (which this
                            project's 2026-07-17 hardware survey identified as
@@ -102,15 +113,35 @@ def sweep_referenced_ids():
     return hits
 
 
+# C4 (#669): an EXISTING make target is not automatically a falsifying test —
+# `make all`/`make secure` exist too. Accept a claimed test target only when its
+# name follows the repo's hardware/e2e-test convention below, or when the
+# target's recipe text cites the row's own HW-ASSUME id (checked separately).
+HW_TEST_TARGET_RE = re.compile(r"(?:^e2e(?:-|$)|-hw$|-e2e$|-stress(?:-|$))")
+
+
 def makefile_targets():
-    targets = set()
+    """{target_name: recipe_text} across the repo Makefiles. The recipe body
+    (tab-indented lines after the target header) is kept so C4 (#669) can
+    honour the escape hatch: a non-conventionally-named target is acceptable
+    when its recipe cites the claiming row's HW-ASSUME id."""
+    targets = {}
     for mf in (REPO / "Makefile", REPO / "contracts/verification/Makefile"):
         if not mf.exists():
             continue
-        for line in mf.read_text().splitlines():
+        cur, buf = None, []
+        for line in mf.read_text().splitlines() + [""]:
             m = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*):", line)
             if m:
-                targets.add(m.group(1))
+                if cur is not None and cur not in targets:
+                    targets[cur] = "\n".join(buf)
+                cur, buf = m.group(1), []
+            elif cur is not None and (line.startswith("\t") or not line.strip()):
+                buf.append(line)
+            elif line.strip() and not line.startswith("#"):
+                cur, buf = None, []
+        if cur is not None and cur not in targets:
+            targets[cur] = "\n".join(buf)
     return targets
 
 
@@ -145,6 +176,14 @@ def check(ledger, referenced, targets):
                 fail(errs, f"C2: {rid}: `{f}` is empty — a row with no stated premise is not a row")
         if not row.get("consumed_by"):
             fail(errs, f"C2: {rid}: `consumed_by` is empty — an assumption nothing depends on should be deleted, not tracked")
+        # C2 — evidence floor (#669): the C3 loop over an EMPTY or anchor-less
+        # evidence list vacuously passes, so gutting every row's evidence used
+        # to leave the whole gate green. Require >=1 entry AND >=1 anchored entry.
+        evidence = row.get("evidence")
+        if not isinstance(evidence, list) or not evidence:
+            fail(errs, f"C2: {rid}: `evidence` is empty — a row with no evidence is prose in JSON")
+        elif not any(isinstance(e, dict) and e.get("anchor") for e in evidence):
+            fail(errs, f"C2: {rid}: no evidence entry carries an `anchor` — an unanchored row drifts into prose")
 
         # C3 — anchors resolve
         for ev in row.get("evidence", []):
@@ -178,6 +217,10 @@ def check(ledger, referenced, targets):
             elif tgt not in targets:
                 fail(errs, f"C4: {rid}: falsifying_test.make_target `{tgt}` is not a real Makefile target "
                            f"— a claimed test that cannot be run reads as evidence and is not")
+            elif not HW_TEST_TARGET_RE.search(tgt) and rid not in targets.get(tgt, ""):
+                fail(errs, f"C4: {rid}: falsifying_test.make_target `{tgt}` exists but is not a hardware/e2e test "
+                           f"(its name must match {HW_TEST_TARGET_RE.pattern!r}, or its recipe must cite {rid}) "
+                           f"— an arbitrary existing target reads as evidence and is not")
 
     # C5 — bidirectional
     ledger_ids = seen
@@ -243,6 +286,24 @@ def self_test():
     m["assumptions"][0]["status"] = "totally-proven"
     cases.append(("C2 status outside vocabulary", m, refs))
 
+    # C2 (#669): gutted evidence list — C3 over an empty list vacuously passes.
+    m = json.loads(json.dumps(base))
+    m["assumptions"][0]["evidence"] = []
+    cases.append(("C2 gutted evidence list", m, refs))
+
+    # C2 (#669): evidence entries present but ALL anchor-less — same vacuity.
+    m = json.loads(json.dumps(base))
+    for ev in m["assumptions"][0]["evidence"]:
+        ev.pop("anchor", None)
+    cases.append(("C2 anchor-less evidence", m, refs))
+
+    # C4 (#669): an ARBITRARY REAL make target that is not a hardware/e2e test
+    # and whose recipe does not cite the row id.
+    m = json.loads(json.dumps(base))
+    m["assumptions"][0]["falsifying_test"]["exists"] = True
+    m["assumptions"][0]["falsifying_test"]["make_target"] = "secure"
+    cases.append(("C4 arbitrary real target (non-hw)", m, refs))
+
     rc = 0
     for name, mutated, r in cases:
         errs = check(mutated, r, targets)
@@ -251,6 +312,22 @@ def self_test():
         else:
             print(f"  [FAIL] {name:34s} -> SURVIVED (this gate is vacuous)")
             rc = 1
+
+    # C4 escape-hatch POSITIVE control: a non-conventional target name must be
+    # ACCEPTED when its recipe text cites the claiming row's id — proves the
+    # restriction is not always-firing.
+    m = json.loads(json.dumps(base))
+    rid0 = m["assumptions"][0]["id"]
+    m["assumptions"][0]["falsifying_test"]["exists"] = True
+    m["assumptions"][0]["falsifying_test"]["make_target"] = "weird-internal-probe"
+    fake_targets = dict(targets)
+    fake_targets["weird-internal-probe"] = f'\t@echo "falsifies {rid0}"\n\t./bench-probe.sh\n'
+    errs = check(m, refs, fake_targets)
+    if errs:
+        print(f"  [FAIL] C4 recipe-cites-id escape hatch    -> false positive: {errs[0][:80]}")
+        rc = 1
+    else:
+        print(f"  [ok  ] C4 recipe-cites-id escape hatch    -> accepted (not always-firing)")
     return rc
 
 
