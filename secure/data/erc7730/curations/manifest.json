@@ -509,9 +509,9 @@
     {
       "path": "xtask",
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
-      "files": 5,
-      "bytes": 315162,
-      "sha256": "2d8c4608e885029804a46ecf24faff4beae24d210aa642ad1c59210b86822af6"
+      "files": 6,
+      "bytes": 320273,
+      "sha256": "f0b5ebd1046a9a19671ff4f58aa13714e76c08babc59b5ea636b963126d82b5a"
     }
   ],
   "capability_inputs": [
