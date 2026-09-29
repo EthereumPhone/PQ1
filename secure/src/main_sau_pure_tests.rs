@@ -849,16 +849,68 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
     // race a transfer and steal session-key material.
     assert!(SAU_SRC.contains("const SECCFGR1_I2C1_BIT: u32 = 1 << 13;"));
     assert!(SAU_SRC.contains("const SECCFGR1_I2C2_BIT: u32 = 1 << 14;"));
+    // pq1 splits the two secure elements across I2C1 and its own I2C4, so
+    // that board secures a THIRD bus (bit 16). This is the one SECCFGR bit
+    // whose omission has no functional symptom at all — the SE050 works
+    // fine from S-world either way; only NS reachability changes — so it is
+    // pinned here as well as by the build-time assert.
+    assert!(SAU_SRC.contains("const SECCFGR1_I2C4_BIT: u32 = 1 << 16;"));
     // The image is now a named const with a compile-time pin (work-todo C3,
     // 2026-07-17) rather than an inline expression — a strictly stronger form:
     // the `const _: () = assert!(SECCFGR1_IMAGE == ...)` below fails the BUILD,
-    // not just this test, if the composition drifts. Pin both.
-    assert!(SAU_SRC.contains("SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;"));
+    // not just this test, if the composition drifts. Pin the composition and
+    // all four cfg arms of its value (iwdg x board).
+    // Multi-line since UCPD1 joined the composition (2026-08-31) — pin each
+    // term so the assertion survives rustfmt reflow instead of silently
+    // becoming a needle that matches nothing.
+    for term in [
+        "const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE",
+        "| SECCFGR1_I2C1_BIT",
+        "| SECCFGR1_I2C2_BIT",
+        "| SECCFGR1_BOARD_IMAGE",
+        "| SECCFGR1_UCPD1_BIT",
+        "| SECCFGR1_TIM2_BIT",
+        "| SECCFGR1_TIM3_BIT;",
+    ] {
+        assert!(
+            SAU_SRC.contains(term),
+            "SECCFGR1_IMAGE composition drifted — missing `{term}`"
+        );
+    }
+    // UCPD1 (bit 19) is secured on BOTH boards. On pq1 it is a second handle on
+    // PA15/PB15 (SE_RST / LCM_EN) that GPIOx_SECCFGR does not cover; on iota2
+    // the secure world owns it at boot. A cleared bit has no functional symptom
+    // on either board — only NS reachability changes.
+    assert!(SAU_SRC.contains("const SECCFGR1_UCPD1_BIT: u32 = 1 << 19;"));
+    // TIM2 (bit 0) carries the production-mandatory consumption mask. Leaving
+    // it unattributed lets NS clear TIM2_CR1.CEN and flat-line the PWM with no
+    // secure-side symptom — the secure world writes CCR1 and never reads back
+    // that the counter still runs.
+    assert!(SAU_SRC.contains("const SECCFGR1_TIM2_BIT: u32 = crate::board::TZSC_SECCFGR1_TIM2SEC;"));
+    assert!(SAU_SRC.contains("| SECCFGR1_TIM2_BIT"));
+    // TIM3 joined the image when pq1's mask moved to TIM3_CH1/PA6. Both are
+    // secured on both boards so the property cannot vanish on whichever board
+    // a future edit forgets.
+    assert!(SAU_SRC.contains("const SECCFGR1_TIM3_BIT: u32 = crate::board::TZSC_SECCFGR1_TIM3SEC;"));
+    assert!(SAU_SRC.contains("| SECCFGR1_TIM3_BIT;"));
+    assert!(SAU_SRC.contains("const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;"));
     assert!(SAU_SRC.contains("let seccfgr1 = SECCFGR1_IMAGE;"));
-    assert!(
-        SAU_SRC.contains("SECCFGR1_IMAGE == (1 << 13) | (1 << 14)"),
-        "the SECCFGR1 image must stay compile-time-pinned to the two SE buses"
-    );
+    for arm in [
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 19),",                        // iota2, no iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",             // iota2 + iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",            // pq1, no iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),", // pq1 + iwdg
+    ] {
+        // EXACTLY once, not merely present. With the trailing comma these four
+        // are mutually non-containing; without it the two iota2 arms were
+        // prefixes of the two pq1 arms and could be deleted undetected.
+        assert_eq!(
+            SAU_SRC.matches(arm).count(),
+            1,
+            "the SECCFGR1 image must stay compile-time-pinned EXACTLY once for every \
+             iwdg x board combination; arm not found exactly once: {arm}"
+        );
+    }
 }
 
 #[test]
@@ -868,12 +920,45 @@ fn negative_iwdg_is_secure_attributed_and_uses_only_secure_alias() {
     // with the rest of the register image, and reached only via its S alias.
     // The separate CPU/GPDMA denial receipt remains silicon work.
     assert!(SAU_SRC.contains("const SECCFGR1_IWDG_BIT: u32 = 1 << 7;"));
-    assert!(SAU_SRC.contains(
-        "SECCFGR1_IWDG_BIT | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;"
-    ));
-    assert!(SAU_SRC.contains(
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14)"
-    ));
+    // The IWDG term is now its own cfg'd const OR-ed into the image, so the
+    // iwdg and board choices stay orthogonal instead of needing one hand-
+    // written total per combination.
+    assert!(SAU_SRC.contains("const SECCFGR1_IWDG_IMAGE: u32 = SECCFGR1_IWDG_BIT;"));
+    // The composition is multi-line since UCPD1 joined it, so pin each term
+    // rather than one flat string that reflows on the next edit.
+    for term in [
+        "const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE",
+        "| SECCFGR1_I2C1_BIT",
+        "| SECCFGR1_I2C2_BIT",
+        "| SECCFGR1_BOARD_IMAGE",
+        "| SECCFGR1_UCPD1_BIT",
+        "| SECCFGR1_TIM2_BIT",
+        "| SECCFGR1_TIM3_BIT;",
+    ] {
+        assert!(
+            SAU_SRC.contains(term),
+            "SECCFGR1_IMAGE composition drifted — missing `{term}`"
+        );
+    }
+    // Both boards' iwdg-on totals stay pinned — bit 7 must be present in each.
+    //
+    // The trailing comma is load-bearing. Without it the iota2 needle is a
+    // character-for-character PREFIX of the pq1 one (which continues
+    // ` | (1 << 16)`), so `.contains()` matched the pq1 arm and BOTH iota2
+    // const asserts could be deleted from sau.rs with this test still green.
+    // Found by the 2026-08-31 adversarial review; it was introduced by the
+    // commit that added the pq1 arms.
+    for arm in [
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",
+    ] {
+        assert_eq!(
+            SAU_SRC.matches(arm).count(),
+            1,
+            "iwdg-on SECCFGR1 arm must appear EXACTLY once (a prefix match means \
+             a sibling arm can be deleted undetected): `{arm}`"
+        );
+    }
     assert!(IWDG_SRC.contains("const IWDG_SECURE_ALIAS: u32 = 0x5000_3000;"));
     assert!(!IWDG_SRC.contains("const IWDG: u32 = 0x4000_3000;"));
 
@@ -1557,16 +1642,77 @@ fn negative_secure_log_macro_compiles_to_nop_without_debug_log() {
 }
 
 #[test]
-fn negative_reset_cause_module_declaration_is_test_excluded() {
-    // The `reset_cause` module pulls in raw MMIO and `cortex_m` —
-    // gating it `#[cfg(not(test))]` keeps host `cargo test` linkable.
-    // The host pure-logic mirror in this very file fills in the
-    // testing coverage. A refactor that removed the gate would
-    // break `cargo test -p sphincs-tz-secure` instantly.
+fn negative_reset_cause_module_stays_reachable_from_host_tests() {
+    // This assertion used to say the OPPOSITE: that `mod reset_cause;` must
+    // remain `#[cfg(not(test))]`, on the stated grounds that "a refactor that
+    // removed the gate would break `cargo test -p sphincs-tz-secure`
+    // instantly."
+    //
+    // That was measured and is false (#723). Removing the gate compiles and
+    // the module's own nine tests pass — the `#[cfg(not(feature =
+    // "stm32u585"))]` fallback arm of `classify_and_clear` keeps it
+    // host-linkable. The old assertion was pinning nine tests unreachable on
+    // a rationale that had gone stale underneath it.
+    //
+    // It now pins the opposite, so the exclusion cannot quietly come back and
+    // take `classify_bits_matches_production_exhaustively` with it.
     assert!(
-        MAIN_SRC.contains("#[cfg(not(test))]\nmod reset_cause;"),
-        "reset_cause must remain `#[cfg(not(test))] mod reset_cause;` in main.rs"
+        MAIN_SRC.contains("\nmod reset_cause;"),
+        "reset_cause must be declared in main.rs"
     );
+    assert!(
+        !MAIN_SRC.contains("#[cfg(not(test))]\nmod reset_cause;"),
+        "reset_cause must NOT be `#[cfg(not(test))]`-excluded: that makes its own \
+         tests unreachable and leaves only this file's hand-copied mirror, which \
+         cannot detect a reordering of the production branch chain (#723)"
+    );
+}
+
+#[test]
+fn classify_bits_matches_production_exhaustively() {
+    // WHY THIS EXISTS. The mirror above is a hand-written reimplementation of
+    // `reset_cause::classify_bits`. The module docs say the mirror is kept in
+    // sync by pinning its bit CONSTANTS against the production source text —
+    // and those pins are real (see `positive_reset_cause_*`). But constants
+    // are not the logic. Nothing pinned the ORDER of the production if-chain,
+    // so moving the `BORRSTF` arm above `SFTRSTF` would change what the device
+    // does while every test here kept passing against the unchanged copy.
+    //
+    // That is not a hypothetical shrug: `is_abnormal()` drives the abnormal-
+    // reset secret scrub (docs/security/brownout-hardening.md). A reset that
+    // silently reclassifies from Watchdog to Cold is a scrub that silently
+    // stops happening.
+    //
+    // Differential over every combination of the eight sticky flags — 256
+    // cases, the whole input space that `ANY_RESET_FLAG` can distinguish.
+    let bits = [RMVF, OBLRSTF, PINRSTF, BORRSTF, SFTRSTF, IWDGRSTF, WWDGRSTF, LPWRRSTF];
+    let mut compared = 0usize;
+    for mask in 0u32..(1 << 8) {
+        let csr = bits
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| mask & (1 << i) != 0)
+            .fold(0u32, |acc, (_, b)| acc | b);
+
+        let mine = classify_bits(csr);
+        let theirs = crate::reset_cause::classify_bits(csr);
+        let theirs_mirrored = match theirs {
+            crate::reset_cause::ResetCause::Cold => ResetCause::Cold,
+            crate::reset_cause::ResetCause::Software => ResetCause::Software,
+            crate::reset_cause::ResetCause::Watchdog => ResetCause::Watchdog,
+            crate::reset_cause::ResetCause::LowPower => ResetCause::LowPower,
+            crate::reset_cause::ResetCause::OptionByte => ResetCause::OptionByte,
+            crate::reset_cause::ResetCause::Unknown => ResetCause::Unknown,
+        };
+        assert_eq!(
+            mine, theirs_mirrored,
+            "mirror and production disagree for CSR {csr:#010x}: the copy in this \
+             file says {mine:?}, reset_cause.rs says {theirs_mirrored:?}"
+        );
+        compared += 1;
+    }
+    // Guard the oracle: a loop that compared nothing would pass silently.
+    assert_eq!(compared, 256, "differential must cover all 2^8 flag combinations");
 }
 
 #[test]
@@ -1703,4 +1849,143 @@ fn negative_wipe_on_duress_arm_failure_is_not_swallowed() {
         !window.contains("defaulting to decoy"),
         "F26/LIFE-1: the silent wipe→decoy downgrade must not come back"
     );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// #728 — both unlock loops must reset the inactivity timer, and
+// `enter_pin()` must still NOT (X17-UI3).
+// ═════════════════════════════════════════════════════════════════════
+
+#[test]
+fn negative_both_unlock_loops_reset_activity_before_prompting() {
+    // `enter_pin()` samples `is_idle()` BEFORE waiting and resets only after a
+    // button event. So any loop that re-prompts on `IdleWipe` MUST reset the
+    // timer itself, or it spins Enter-PIN -> Locked -> Enter-PIN forever once
+    // the deadline has passed.
+    //
+    // This was fixed in the PendSV re-unlock loop and NOT in the boot-time one,
+    // and the asymmetry shipped: on pq1 silicon the panel flickered and the
+    // operator had to enter the PIN twice (#728). Assert BOTH, so fixing one
+    // report cannot leave the other behind again.
+    let mut sites = Vec::new();
+    let mut from = 0usize;
+    // Match the PROMPT, not its exact subtitle, so a future change to the
+    // wording cannot silently drop a site from this check.
+    while let Some(i) = MAIN_SRC[from..].find(r#"show_status("Enter PIN","#) {
+        sites.push(from + i);
+        from += i + 1;
+    }
+    assert_eq!(
+        sites.len(),
+        2, // boot + PendSV re-unlock
+        "expected exactly two unlock prompts (boot + PendSV re-unlock); found {}. \
+         A new one must also reset the inactivity timer — see #728.",
+        sites.len()
+    );
+    // Was 3 while the #729 attempt counter split the PendSV site into a
+    // dev-gated arm and a plain fallback. The counter was removed 2026-09-23
+    // (its question is answered and it drew on the trusted PIN screen), so the
+    // count is back to one prompt per loop. Note the old assertion said THREE
+    // while its own message said "exactly two" — the number and the prose had
+    // drifted apart, which is why the message is now consistent with the count.
+    for (n, &at) in sites.iter().enumerate() {
+        // The reset must appear between the prompt and the enter_pin() call.
+        let tail = &MAIN_SRC[at..];
+        // Anchor on the CALL, not the token: the explanatory comments around
+        // these sites mention `enter_pin()` in prose, and matching those would
+        // slice before the reset and fail spuriously.
+        let call = tail
+            .find("match enter_pin()")
+            .expect("prompt must be followed by a match on enter_pin()");
+        assert!(
+            tail[..call].contains("timeout::reset_activity();"),
+            "unlock prompt #{n} does not reset the inactivity timer before enter_pin() — \
+             it will spin Enter-PIN/Locked once the idle deadline has passed (#728)"
+        );
+    }
+}
+
+#[test]
+fn negative_the_728_fix_did_not_weaken_x17_ui3() {
+    // The obvious fix for #728 is to move the reset INSIDE `enter_pin()` so no
+    // call site can forget it. That is exactly the HIGH-13 / X17-UI3
+    // vulnerability: `enter_pin()` is driven by the NS-reachable REQUEST_UNLOCK
+    // veneer, so an entry-reset lets a hostile companion refresh the 120 s
+    // unlocked window by spamming prompts, with zero button presses.
+    //
+    // The boot loop is safe to reset because it is not NS-reachable and nothing
+    // is unlocked yet. This test exists so the distinction is not lost: it
+    // fails if a future #728-style fix migrates the reset into `enter_pin()`.
+    const PIN_ENTRY: &str = include_str!("ui/pin_entry.rs");
+    let start = PIN_ENTRY
+        .find("pub fn enter_pin() -> PinEntryResult {")
+        .expect("enter_pin must exist");
+    let loop_at = PIN_ENTRY[start..].find("loop {").expect("enter_pin must loop") + start;
+    assert!(
+        !PIN_ENTRY[start..loop_at].contains("timeout::reset_activity()"),
+        "X17-UI3 regression: enter_pin() must NOT reset activity before its input loop. \
+         Fix the CALL SITES (#728), not the callee."
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// #729 — PendSV must actually be programmed lower-priority than SysTick.
+// ═════════════════════════════════════════════════════════════════════
+
+#[test]
+fn negative_pendsv_priority_is_programmed_not_merely_asserted() {
+    // Two comments in main.rs have long claimed "PendSV has the lowest priority
+    // so it won't block SysTick". Nothing set it. SHPR3 resets to 0, so both
+    // sat at priority 0 — equal, hence mutually non-preempting — and SysTick
+    // could not interrupt an active PendSV. A PendSV-driven PIN prompt froze
+    // the tick, so `is_idle()` never became true and the re-unlock runaway
+    // guard could never advance past its first iteration (#729).
+    //
+    // The comments were the whole basis for believing the design safe, which
+    // is exactly the shape a test should have had. This is that test.
+    assert!(
+        MAIN_SRC.contains("shpr3: hw::mmio::Reg32::new(0xE000_ED20)"),
+        "#729: SHPR3 must be mapped — it is where PendSV/SysTick priorities live"
+    );
+    assert!(
+        MAIN_SRC.contains("const SHPR3_PENDSV_LOWEST: u32 = 0xFF << 16;"),
+        "#729: PendSV must be given the LOWEST priority (SHPR3[23:16])"
+    );
+    assert!(
+        MAIN_SRC.contains("const SHPR3_SYSTICK_HIGHEST: u32 = 0x00 << 24;"),
+        "#729: SysTick must be given the HIGHEST priority (SHPR3[31:24])"
+    );
+    assert!(
+        MAIN_SRC.contains("ARCH.shpr3\n        .modify(|v| (v & 0x0000_FFFF) | SHPR3_PENDSV_LOWEST | SHPR3_SYSTICK_HIGHEST);"),
+        "#729: the priorities must actually be WRITTEN, preserving DebugMonitor in [15:0]"
+    );
+
+    // Ordering matters: priorities must be set BEFORE SysTick is enabled, or
+    // a tick can fire into the old configuration.
+    let prio = MAIN_SRC
+        .find("ARCH.shpr3")
+        .expect("SHPR3 write must exist");
+    let enable = MAIN_SRC
+        .find("ARCH.syst_csr.write(0x07);")
+        .expect("SysTick enable must exist");
+    assert!(
+        prio < enable,
+        "#729: SHPR3 must be programmed BEFORE SysTick is enabled"
+    );
+}
+
+#[test]
+fn negative_pendsv_lowest_priority_claims_have_backing_code() {
+    // The drift that produced #729 was a COMMENT asserting a configuration no
+    // code performed. If someone writes that claim again, this fails unless
+    // the programming is still present — so the claim can never again be the
+    // only thing holding the design up.
+    let claims = MAIN_SRC.matches("lowest priority").count();
+    if claims > 0 {
+        assert!(
+            MAIN_SRC.contains("ARCH.shpr3"),
+            "main.rs claims a PendSV priority ordering {claims} time(s) but never \
+             programs SHPR3 — that exact drift was #729"
+        );
+    }
 }

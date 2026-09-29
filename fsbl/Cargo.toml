@@ -9,6 +9,29 @@ name = "pqsigner-fsbl"
 path = "src/main.rs"
 
 [features]
+# hw-sha256 is ON by default: it is the whole point of the swap. Software
+# SHA-256 cost 8,476 B of a 32 KiB region that had 2,048 B free, and ~1.5 s of
+# boot. Build without it (`--no-default-features`) to get the old software path
+# back, which is what host-side and non-STM32 consumers use.
+default = ["hw-sha256"]
+# Route SHA-256 through the STM32U585 HASH peripheral instead of the software
+# `sha2` implementation. MUST enable it for every consumer in the cone or
+# `sha2::compress256` (7,202 B, 23.4% of the image) stays linked.
+hw-sha256 = ["dep:pqsigner-hw", "fw-manifest/hw-sha256", "sphincs-c10/hw-sha256"]
+# Physical board selection — MANDATORY, exactly one. `fsbl/src/board/mod.rs`
+# hard-errors when neither is set and when both are.
+#
+# The FSBL drives one board-dependent peripheral (the NV3007 LCD it renders the
+# boot fingerprint on), and a wrong pin map is SILENT on this die: port E is
+# addressable but unbonded on pq1's 48-pin package, so writes succeed, drive
+# nothing, and the FSBL branches into the slot having rendered nothing. There
+# is deliberately no default — see the `board/mod.rs` header for why the
+# secure crate retracted its earlier opt-in model.
+#
+# A recipe or test with a HARDCODED --features list must append
+# $(BOARD_FEATURE) itself; `make <target> BOARD=iota2|pq1` derives it.
+board-iota2 = []
+board-pq1 = []
 # Release-only hardening profile. Requires an absolute vendor-key snapshot
 # whose fingerprint exactly matches the reviewed workspace release policy.
 # `make fsbl-release` is the supported entry point.
@@ -23,6 +46,30 @@ legacy-fw-rollback-unsafe = []
 # silicon WITHOUT a signed slot. Never ships. Build/run via
 # `make fsbl-lcd-test-hw`.
 lcd-test = []
+# BENCH DIAGNOSTIC, default off, NEVER ships: gives the FSBL a flash-write path
+# so it can record how far it got before parking. The FSBL halts silently when
+# no slot is admissible (no logging by construction), and live core state is not
+# observable on this bench — the only attach mode that reproduces known-good
+# flash hashes also resets the core. `marker.rs` refuses to build under
+# `mode-production` (invariant #10 forbids an FSBL write path in a shipping
+# image). Writes only the ERASED manifest-B page, which `filter_valid` rejects
+# with BadMagic, so markers can never become a boot candidate.
+#
+# It writes TWO tables into that one 8 KB page, so a reader must dump at least
+# 0x520 bytes from 0x0C00A000 to see both:
+#   +0x000 + 16*n : [ b"MGR"|n, payload, !tag, n ]  the stage record
+#   +0x400 + 16*n : [ b"MGT"|n, CYCCNT,  !cyc, n ]  a DWT timestamp
+# The timestamps exist because every FSBL boot-time figure in this crate was an
+# ESTIMATE (and the pre-2026-09-16 ones were 4x out, having assumed 16 MHz on a
+# part that runs at the 4 MHz MSIS reset clock). Deciding whether to raise the
+# FSBL clock or port the HASH peripheral needs measurement, not arithmetic, so
+# the boot times itself. This also turns on DEMCR.TRCENA + DWT_CYCCNT — another
+# reason the feature is bench-only.
+#
+# Stages do NOT execute in index order, so deltas must be computed
+# chronologically (sort by CYCCNT); differencing consecutive table entries
+# yields negative nonsense.
+stage-marker = []
 
 [dependencies]
 # Signature verification — same crate the main firmware uses, so the
@@ -33,9 +80,13 @@ lcd-test = []
 # Wiring up the HASH peripheral here would require porting RCC init,
 # the HASH driver, and the `pqsigner_sha256_*` extern fns from the
 # secure crate. Software SHA-256 at 16 MHz takes about 1 s for a full
-# FSBL boot (verify + image-hash both manifests + both slots). That's
-# acceptable as a boot budget; the HW-SHA acceleration is a tracked
-# follow-up optimization.
+# FSBL boot — MEASURED on pq1, superseding two wrong estimates ("~1 s at
+# 16 MHz", then "~4 s"). At HSI16, software SHA-256 costs 1.167 s for the
+# 385,568 B secure image plus 0.023 s for the NS image, and the C10 manifest
+# verify chain 0.375 s — about 1.5 s of a 12.932 s boot, of which 10.0 s is
+# the deliberate fingerprint hold. (On the 4 MHz reset clock those were
+# 4.67 / 0.09 / 1.50 s of a 39.4 s boot.) So the HW-SHA follow-up is worth
+# only ~1.5 s against 1-2 KB in a WRP-frozen range — not a good trade.
 sphincs-c10 = { workspace = true }
 
 # Manifest / boot-state layout. no_std, no alloc.
@@ -46,6 +97,18 @@ fw-manifest = { workspace = true }
 # `verify_signature` call site the same way `secure::verify_manifest`
 # already does, so a single-fault bypass on either gate is impossible.
 pqsigner-fi = { workspace = true }
+
+# tz-1 option-byte tripwire (#366): the ship/locked option-byte PROFILE and its
+# pure compare functions live in `shared::lockdown`, host-tested there, so this
+# stage and the secure world's first-boot Phase A check ONE definition instead
+# of two drifting copies. no_std; its only deps are pqsigner-proto and
+# pqsigner-fi (already above), and `lockdown` is consts + const fns, so the
+# image cost is the call sites.
+sphincs-tz-shared = { workspace = true }
+
+# Shared STM32U585 drivers (typed MMIO + HASH), one copy with the secure
+# world. Optional: only the `hw-sha256` configuration links it.
+pqsigner-hw = { workspace = true, optional = true }
 
 # SHA-256 for the verify_digest path and the slot-image re-hash.
 # sha2 is gated behind fw-manifest's default-off std feature, but the

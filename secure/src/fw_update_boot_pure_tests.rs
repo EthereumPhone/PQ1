@@ -1326,9 +1326,20 @@ fn negative_measured_boot_module_is_test_gated_out_at_crate_root() {
     // The module pulls in `crate::ui` and `crate::timeout` which are
     // both `#[cfg(not(test))]`. main.rs must keep `measured_boot`
     // behind the same gate or the host test build will fail to link.
+    //
+    // `not(feature = "mode-production")` joined it 2026-09-28 (owner decision):
+    // the OS Fingerprint screen re-states, from the image being measured, what
+    // the FSBL already displayed from the trust root, so it is debug-only. Both
+    // conditions are asserted TOGETHER and in one attribute — two stacked
+    // `#[cfg]`s would satisfy a laxer check while making the cfg-out silently
+    // conditional on attribute order.
     assert!(
-        MAIN_SRC.contains("#[cfg(not(test))]\nmod measured_boot;"),
-        "main.rs must gate `mod measured_boot;` on cfg(not(test)) — pulls in hw-only peers"
+        MAIN_SRC.contains(
+            "#[cfg(all(not(test), not(feature = \"mode-production\")))]\nmod measured_boot;"
+        ),
+        "main.rs must gate `mod measured_boot;` on cfg(all(not(test), \
+         not(feature = \"mode-production\"))) — hw-only peers, and release \
+         images do not carry the advisory fingerprint screen"
     );
 }
 

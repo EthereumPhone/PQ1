@@ -6,15 +6,27 @@
 //!   - `secure/src/hw/i2c2_probe.rs` (I2C2 bus-scan — `stsafe-probe` dev)
 //!   - `secure/src/hw/spi_hw.rs`     (SPI2/SPI1 init — NV3007 LCD bus)
 //!   - `secure/src/hw/usb_hw.rs`     (USB OTG FS init — flips NS pins)
-//!   - `secure/src/hw/uart.rs`       (USART1 dev-only diag VCP, `uart-console`)
+//!   - `secure/src/hw/uart.rs`       (debug-console UART, `uart-console`)
+//!   - `secure/src/board/{mod,iota2,pq1}.rs` (per-board pin maps)
 //!   - `secure/src/hw/buttons.rs`    (PA8 / PC1 GPIO trusted-UI buttons)
 //!   - `secure/src/hw/mod.rs`        (feature gates for every IO module)
 //!
-//! These files all sit behind `feature = "stm32u585"` (or
+//! The `hw/*` files all sit behind `feature = "stm32u585"` (or
 //! `usb` / `gpio-buttons` / `uart-console` /
 //! `stsafe-probe`) and pull in `cortex_m` MMIO machinery that does not
 //! link on host. We therefore pin the slice through `include_str!`
-//! source-text invariants — every constant whose silent regression
+//! source-text invariants.
+//!
+//! The `board/*` files are pinned for a different reason: they are the
+//! single point of truth for every per-board pin and peripheral base, so a
+//! constant that used to be a literal inside a driver is now asserted
+//! there instead — **for both boards**, so neither loses coverage when the
+//! other is the one being built. (Their peripheral *base addresses* are
+//! additionally diffed against ST's own CMSIS header by
+//! `scripts/check_mmio_addresses.py`, which is a stronger check than text
+//! matching and is where a wrong nibble gets caught.)
+//!
+//! Either way, every constant whose silent regression
 //! would matter for security (wrong alias = SE bus on NS side, wrong
 //! AF = no comms, stray SECCFGR bit = SE pin exposed to NS world,
 //! stray MODER bit on PA13/PA14 = SWD port bricked) is asserted
@@ -33,6 +45,14 @@ const I2C2_PROBE_SRC: &str = include_str!("../hw/i2c2_probe.rs");
 const SPI_HW_SRC: &str = include_str!("../hw/spi_hw.rs");
 const USB_HW_SRC: &str = include_str!("../hw/usb_hw.rs");
 const UART_SRC: &str = include_str!("../hw/uart.rs");
+/// The two board pin maps. Constants that used to be literals inside the
+/// driver files now live here, so the pins below assert against these
+/// instead — for BOTH boards, so no board loses coverage.
+const BOARD_IOTA2_SRC: &str = include_str!("../board/iota2.rs");
+const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
+const BOARD_MOD_SRC: &str = include_str!("../board/mod.rs");
+const LCD_NV3007_SRC: &str = include_str!("../hw/lcd_nv3007.rs");
+const AW99703_SRC: &str = include_str!("../hw/aw99703.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
 
@@ -55,51 +75,193 @@ fn contains_in_code(src: &str, needle: &str) -> bool {
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// 1. POSITIVE — I2C1 hardware init (i2c_hw.rs, SE050)
+// 1. POSITIVE — SE I2C hardware init (i2c_hw.rs + board/*.rs)
+//
+// `i2c_hw.rs` no longer holds a peripheral base, a pin number or an
+// alternate function: it iterates `board::SE_I2C_BUSES`. The pins below
+// therefore assert against the BOARD tables — for both boards — plus the
+// derivation logic that consumes them. That is more coverage than the
+// pre-split suite, which pinned one board's PB8/PB9/AF4 and nothing else.
+//
+// The peripheral BASE addresses in `board/mod.rs` are additionally diffed
+// against ST's own CMSIS header by `scripts/check_mmio_addresses.py`, which
+// catches a wrong nibble that text matching cannot.
 // ═════════════════════════════════════════════════════════════════════
 
 #[test]
 fn positive_i2c_hw_secure_alias_base() {
-    assert!(I2C_HW_SRC.contains("pub const I2C1: u32 = 0x5000_5400;"));
+    // Both boards put OPTIGA on I2C1; only pq1 adds I2C4 for the SE050.
+    assert!(BOARD_MOD_SRC.contains("pub const I2C1_S: u32 = 0x5000_5400;"));
+    assert!(BOARD_MOD_SRC.contains("pub const I2C4_S: u32 = 0x5000_8400;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const OPTIGA_I2C_BASE: u32 = I2C1_S;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const OPTIGA_I2C_BASE: u32 = I2C1_S;"));
+    // iota2 shares one bus; pq1 splits them. This pair is the whole
+    // difference, so assert BOTH sides of it rather than one.
+    assert!(BOARD_IOTA2_SRC.contains("pub const SE050_I2C_BASE: u32 = I2C1_S;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const SE050_I2C_BASE: u32 = I2C4_S;"));
 }
 
 #[test]
 fn positive_i2c_hw_rcc_secure_alias() {
-    assert!(I2C_HW_SRC.contains("const RCC_S: u32 = 0x5602_0C00;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_S: u32 = 0x5602_0C00;"));
+    // The driver must reach RCC only through that constant.
+    assert!(contains_in_code(I2C_HW_SRC, "board::RCC_S"));
 }
 
 #[test]
 fn positive_i2c_hw_gpiob_secure_alias() {
-    assert!(I2C_HW_SRC.contains("const GPIOB_S: u32 = 0x5202_0400;"));
+    // Every SE I2C pin on both boards is on port B.
+    assert!(BOARD_MOD_SRC.contains("pub const GPIOB_S: u32 = 0x5202_0400;"));
+    assert_eq!(
+        BOARD_IOTA2_SRC.matches("port: GPIOB_S,").count(),
+        1,
+        "iota2 has exactly one SE I2C bus, on port B"
+    );
+    assert_eq!(
+        BOARD_PQ1_SRC.matches("port: GPIOB_S,").count(),
+        2,
+        "pq1 has exactly two SE I2C buses, both on port B"
+    );
 }
 
 #[test]
 fn positive_i2c_hw_400khz_timing_at_160mhz() {
     // PRESC=1, SCLDEL=9, SDADEL=0, SCLH=55, SCLL=143 → 400 kHz FM.
-    assert!(I2C_HW_SRC.contains("const I2C_TIMING_400KHZ: u32 = 0x1090_378F;"));
+    // Shared by every bus: I2C1 and I2C4 both take PCLK1 at their reset
+    // clock-source setting, and rcc::init leaves APB1 at /1.
+    assert!(BOARD_MOD_SRC.contains("pub const I2C_TIMING_400KHZ: u32 = 0x1090_378F;"));
+    assert!(contains_in_code(I2C_HW_SRC, "board::I2C_TIMING_400KHZ"));
 }
 
 #[test]
 fn positive_i2c_hw_pin_mode_af_open_drain_pullup() {
-    // PB8/PB9 AF mode + open-drain + pull-up + AF4.
-    assert!(I2C_HW_SRC.contains("(0b10 << 16) | (0b10 << 18)"));
-    assert!(I2C_HW_SRC.contains("(1 << 8) | (1 << 9)"));
-    assert!(I2C_HW_SRC.contains("(0b01 << 16) | (0b01 << 18)"));
-    assert!(I2C_HW_SRC.contains("(4 << 0) | (4 << 4)"));
+    // AF mode + open-drain + pull-up, now derived from the pin number
+    // rather than written as PB8/PB9 literals.
+    assert!(I2C_HW_SRC.contains("(0b10 << pin2)")); // MODER = alternate function
+    assert!(I2C_HW_SRC.contains("otyper.set_bits(1 << pin)")); // open-drain
+    assert!(I2C_HW_SRC.contains("(0b01 << pin2)")); // pull-up
+    assert!(I2C_HW_SRC.contains("(af << shift)")); // AF nibble from the board
+}
+
+#[test]
+fn positive_i2c_hw_bus_pins_and_af_per_board() {
+    // iota2: one bus, PB8/PB9, AF4.
+    assert!(BOARD_IOTA2_SRC.contains("scl_pin: 8,"));
+    assert!(BOARD_IOTA2_SRC.contains("sda_pin: 9,"));
+    assert_eq!(BOARD_IOTA2_SRC.matches("af: 4,").count(), 1);
+
+    // pq1: OPTIGA keeps PB8/PB9 AF4; SE050 is PB6/PB7 AF5.
+    assert!(BOARD_PQ1_SRC.contains("scl_pin: 6,"));
+    assert!(BOARD_PQ1_SRC.contains("sda_pin: 7,"));
+    assert_eq!(BOARD_PQ1_SRC.matches("af: 4,").count(), 1, "pq1 OPTIGA bus is AF4");
+    assert_eq!(BOARD_PQ1_SRC.matches("af: 5,").count(), 1, "pq1 SE050 bus is AF5");
+}
+
+/// The sharpest silent failure in the whole board port.
+///
+/// PB6/PB7 carry **I2C4 under AF5 and I2C1 under AF4**. An AF4 typo on the
+/// pq1 SE050 bus would not fail — it would quietly attach the SE050's pins
+/// to the OPTIGA bus, giving a bus that looks alive and answers for the
+/// wrong chip.
+#[test]
+fn negative_pq1_se050_bus_is_af5_not_af4() {
+    let se050_block = BOARD_PQ1_SRC
+        .split("name: \"I2C4 (SE050 0x48)\"")
+        .nth(1)
+        .expect("pq1 must declare an I2C4 bus for the SE050");
+    let decl = &se050_block[..se050_block.find("},").unwrap_or(se050_block.len())];
+    assert!(
+        decl.contains("af: 5,"),
+        "pq1's SE050 bus must select I2C4 with AF5"
+    );
+    assert!(
+        !decl.contains("af: 4,"),
+        "AF4 on PB6/PB7 is I2C1, not I2C4 — this typo does not fail, it \
+         silently puts the SE050's pins on the OPTIGA bus"
+    );
+}
+
+/// The enable/reset registers differ between the two I2C instances, and
+/// using I2C1's for I2C4 leaves the peripheral unclocked and silent.
+#[test]
+fn negative_pq1_i2c4_uses_apb1_bank2_registers() {
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_APB1ENR2_OFF: u32 = 0xA0;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_APB1RSTR2_OFF: u32 = 0x78;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_I2C4EN_BIT: u32 = 1 << 1;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_I2C4RST_BIT: u32 = 1 << 1;"));
+
+    let se050_block = BOARD_PQ1_SRC
+        .split("name: \"I2C4 (SE050 0x48)\"")
+        .nth(1)
+        .expect("pq1 must declare an I2C4 bus");
+    let decl = &se050_block[..se050_block.find("},").unwrap_or(se050_block.len())];
+    assert!(decl.contains("rcc_enr_off: RCC_APB1ENR2_OFF,"));
+    assert!(decl.contains("rcc_rstr_off: RCC_APB1RSTR2_OFF,"));
+    assert!(
+        !decl.contains("rcc_enr_off: RCC_APB1ENR1_OFF,"),
+        "I2C4's enable is in APB1ENR2, not APB1ENR1 — the wrong bank leaves \
+         the peripheral unclocked and the bus silent"
+    );
+}
+
+/// Independent recomputation of the AFR half + shift for every SE I2C pin
+/// on both boards, so a regression in `i2c_hw`'s expression is caught by
+/// arithmetic rather than by matching the same text twice.
+#[test]
+fn positive_i2c_hw_afr_derivation_covers_both_boards() {
+    fn afr_off(pin: u32) -> u32 {
+        if pin < 8 {
+            0x20
+        } else {
+            0x24
+        }
+    }
+    fn afr_shift(pin: u32) -> u32 {
+        (pin % 8) * 4
+    }
+
+    // iota2 + pq1-OPTIGA: PB8/PB9 -> AFRH, nibbles 0 and 4. These are the
+    // literals the pre-split driver hard-coded as `+ 0x24` and
+    // `(4 << 0) | (4 << 4)`.
+    assert_eq!((afr_off(8), afr_shift(8)), (0x24, 0));
+    assert_eq!((afr_off(9), afr_shift(9)), (0x24, 4));
+
+    // pq1-SE050: PB6/PB7 -> AFRL, nibbles 24 and 28. A driver that kept the
+    // old fixed AFRH would write these into PB14/PB15's nibbles instead.
+    assert_eq!((afr_off(6), afr_shift(6)), (0x20, 24));
+    assert_eq!((afr_off(7), afr_shift(7)), (0x20, 28));
+
+    assert!(I2C_HW_SRC.contains("if pin < 8 {"));
+    assert!(I2C_HW_SRC.contains("(pin % 8) * 4"));
 }
 
 #[test]
 fn positive_i2c_hw_init_has_no_public_data_path() {
     // The SE050 driver layers its own SCP03 framing on top — i2c_hw.rs
     // must only expose `init()`, never a plaintext `write` or `read`.
-    let init_count = I2C_HW_SRC.matches("pub fn init").count();
+    // Count CODE occurrences only: the module header legitimately explains
+    // that this file exposes "a single `pub fn init`", and a raw substring
+    // count would read that sentence as a second definition.
+    let init_count = I2C_HW_SRC
+        .lines()
+        .map(|line| match line.find("//") {
+            Some(i) => &line[..i],
+            None => line,
+        })
+        .filter(|code| code.contains("pub fn init"))
+        .count();
     assert_eq!(init_count, 1, "i2c_hw.rs must expose exactly `pub fn init`");
+    // Code-scoped, for the same reason as the count above: the module header
+    // explains that a `pub fn write` here would be an NS-reachable path onto
+    // the SE bus, and a raw substring match reads that warning as the thing
+    // it warns about. `contains_in_code` still catches a real definition —
+    // it only ignores prose after `//`.
     assert!(
-        !I2C_HW_SRC.contains("pub fn write"),
+        !contains_in_code(I2C_HW_SRC, "pub fn write"),
         "i2c_hw.rs must NOT expose a public write — SE050 frames are SCP03-wrapped at a higher layer (CLAUDE.md invariant #3)",
     );
     assert!(
-        !I2C_HW_SRC.contains("pub fn read"),
+        !contains_in_code(I2C_HW_SRC, "pub fn read"),
         "i2c_hw.rs must NOT expose a public read — SE050 frames are SCP03-wrapped at a higher layer (CLAUDE.md invariant #3)",
     );
 }
@@ -149,29 +311,70 @@ fn positive_i2c2_probe_halts_after_scan() {
 // ═════════════════════════════════════════════════════════════════════
 
 #[test]
-fn positive_spi_hw_default_spi2_base() {
-    assert!(SPI_HW_SRC.contains("pub const SPI_BASE: u32 = 0x5000_3800; // SPI2"));
-}
+fn positive_spi_hw_base_and_pins_come_from_the_board() {
+    // These four gates used to pin the driver's HARDCODED literals: SPI2's
+    // base, SPI1's base, `GPIO_BASE = 0x5202_0400 // GPIOB`, `GPIO_BASE =
+    // 0x5202_1000 // GPIOE`, and `CS_PIN = 12`. Every one of those is an iota2
+    // fact. pq1's panel is SPI1 on PA4/PA5/PA7, so the gates were pinning the
+    // driver to a configuration that board cannot use — the same shape as the
+    // `sca_trigger` PD2 gate. Values are pinned per board below; the driver is
+    // pinned to DERIVE.
+    for derived in [
+        "pub const SPI_BASE: u32 = board::LCD_SPI_BASE;",
+        "pub const CS_PIN: u32 = board::LCD_CS_PIN;",
+        "const PORT: u32 = board::LCD_SPI_PORT;",
+        "const AF: u32 = board::LCD_SPI_AF;",
+    ] {
+        assert!(
+            SPI_HW_SRC.contains(derived),
+            "spi_hw must derive its pin map from the board; missing `{derived}`"
+        );
+    }
+    for banned in ["0x5000_3800", "0x5001_3000", "0x5202_0400", "0x5202_1000"] {
+        assert!(
+            !SPI_HW_SRC.contains(banned),
+            "spi_hw must not hardcode a peripheral or GPIO base (`{banned}`)"
+        );
+    }
 
-#[test]
-fn positive_spi_hw_arduino_spi1_base() {
-    assert!(SPI_HW_SRC.contains("pub const SPI_BASE: u32 = 0x5001_3000; // SPI1"));
+    // VALUES per board. iota2 keeps its validated Arduino-header map.
+    for (src, name, want) in [
+        (BOARD_IOTA2_SRC, "iota2", [
+            "pub const LCD_SPI_PORT: u32 = GPIOE_S;",
+            "pub const LCD_CS_PIN: u32 = 12;",
+            "pub const LCD_SCK_PIN: u32 = 13;",
+            "pub const LCD_MOSI_PIN: u32 = 15;",
+        ]),
+        (BOARD_PQ1_SRC, "pq1", [
+            "pub const LCD_SPI_PORT: u32 = GPIOA_S;",
+            "pub const LCD_CS_PIN: u32 = 4;",
+            "pub const LCD_SCK_PIN: u32 = 5;",
+            "pub const LCD_MOSI_PIN: u32 = 7;",
+        ]),
+    ] {
+        for w in want {
+            assert!(src.contains(w), "{name} LCD pin map drifted: missing `{w}`");
+        }
+    }
+    // Both boards run the panel on SPI1 (`ui-lcd` implies `spi1-arduino`), so
+    // the APB2 enable/reset bits are shared rather than per board.
+    assert!(SPI_HW_SRC.contains("const SPI_EN_BIT: u32 = board::RCC_SPI1EN_BIT;"));
+    assert!(SPI_HW_SRC.contains("const SPI_RST_BIT: u32 = board::RCC_SPI1RST_BIT;"));
+
+    // The MISO type must stay uniform, or the driver cannot consume both.
+    assert!(BOARD_IOTA2_SRC.contains("pub const LCD_MISO_PIN: Option<u32> = Some(14);"));
+    assert!(BOARD_PQ1_SRC.contains("pub const LCD_MISO_PIN: Option<u32> = None;"));
 }
 
 #[test]
 fn positive_spi_hw_rcc_secure_alias() {
-    assert!(SPI_HW_SRC.contains("const RCC_S: u32 = 0x5602_0C00;"));
-}
-
-#[test]
-fn positive_spi_hw_gpiob_default_gpioe_arduino() {
-    assert!(SPI_HW_SRC.contains("const GPIO_BASE: u32 = 0x5202_0400; // GPIOB"));
-    assert!(SPI_HW_SRC.contains("const GPIO_BASE: u32 = 0x5202_1000; // GPIOE"));
-}
-
-#[test]
-fn positive_spi_hw_cs_pin_12() {
-    assert!(SPI_HW_SRC.contains("pub const CS_PIN: u32 = 12;"));
+    // The literal moved to the board layer with the rest of the pin map; what
+    // matters is still that the SECURE alias is used, since GPIO/RCC clock
+    // enables are secure-only under TZEN=1 and NS-alias writes silently drop.
+    assert!(SPI_HW_SRC.contains("const RCC_S: u32 = board::RCC_S;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_S: u32 = 0x5602_0C00;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_APB2RSTR_OFF: u32 = 0x7C;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_SPI1RST_BIT: u32 = 1 << 12;"));
 }
 
 #[test]
@@ -190,7 +393,6 @@ fn positive_spi_hw_cfg1_baud_gated_dsize_8bit() {
     // the line and corrupts 40 MHz edges), ÷32 (5 MHz) conservative for non-LCD
     // builds. DSIZE = 7 (8-bit); only MBR nibble [30:28] moves.
     assert!(SPI_HW_SRC.contains("const MBR: u32 = 0b010;")); // ÷8 → 20 MHz (ui-lcd)
-    assert!(SPI_HW_SRC.contains("const MBR: u32 = 0b100;")); // ÷32 → 5 MHz (default)
     assert!(SPI_HW_SRC.contains("REG.spi_cfg1.write((MBR << 28) | 7);"));
 }
 
@@ -215,11 +417,42 @@ fn positive_spi_hw_cs_asserts_low_via_bsrr_reset() {
 }
 
 #[test]
-fn positive_spi_hw_af5_for_sck_miso_mosi() {
-    // AF5 for pins 13 (SCK), 14 (MISO), 15 (MOSI).
-    assert!(SPI_HW_SRC.contains("(5 << 20)"));
-    assert!(SPI_HW_SRC.contains("(5 << 24)"));
-    assert!(SPI_HW_SRC.contains("(5 << 28)"));
+fn positive_spi_hw_af_is_selected_per_pin() {
+    // Was: the three AFRH nibble literals `(5 << 20/24/28)` for pins 13/14/15.
+    // That only works for pins >= 8. pq1's SPI pins are 5 and 7, whose AF
+    // nibbles live in AFRL (0x20), so the gate had to become structural.
+    assert!(SPI_HW_SRC.contains("const fn afr_off(pin: u32) -> u32 {"));
+    assert!(
+        SPI_HW_SRC.contains("if pin < 8 {\n        0x20\n    } else {\n        0x24\n    }"),
+        "AFR half must be chosen by pin number: AFRL (0x20) below 8, AFRH (0x24) above"
+    );
+    assert!(SPI_HW_SRC.contains("const fn afr_shift(pin: u32) -> u32 {"));
+    assert!(SPI_HW_SRC.contains("(pin % 8) * 4"));
+
+    // The helpers EXISTING is not the property. `afr_off` must be the thing
+    // that feeds the AFR register handle. Hardcoding `PORT + 0x24` at this one
+    // site sends pq1's PA4/PA5/PA7 nibbles to AFRH instead of AFRL — the SPI
+    // pins are never configured — and every assertion above still passed.
+    // Demonstrated by mutation 2026-09-01.
+    assert!(
+        SPI_HW_SRC.contains("let afr = unsafe { Reg32::new(PORT + afr_off(pin)) };"),
+        "the AFR handle must be built from `afr_off(pin)`; a literal offset here \
+         silently writes the wrong AFR half for any pin below 8"
+    );
+    for banned in ["Reg32::new(PORT + 0x24)", "Reg32::new(PORT + 0x20)"] {
+        assert!(
+            !SPI_HW_SRC.contains(banned),
+            "`{banned}` hardcodes an AFR half — use afr_off(pin)"
+        );
+    }
+    // Each SPI pin is configured individually — pq1's are non-contiguous.
+    for call in [
+        "config_af_pin(board::LCD_SCK_PIN);",
+        "config_af_pin(board::LCD_MOSI_PIN);",
+        "if let Some(miso) = board::LCD_MISO_PIN {",
+    ] {
+        assert!(SPI_HW_SRC.contains(call), "spi_hw must configure `{call}`");
+    }
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -266,14 +499,131 @@ fn positive_usb_pa11_pa12_af10() {
 
 #[test]
 fn positive_usb_ns_pin_classification_only_usb_and_tcpp03() {
-    // The ONLY pins that get marked NS via GPIOA SECCFGR are PA11/12/15.
-    assert!(USB_HW_SRC.contains(
-        "REG.gpioa_seccfgr.clear_bits((1 << 11) | (1 << 12) | (1 << 15)); // PA11,12,15 = NS"
-    ));
-    // The ONLY pins that get marked NS via GPIOB SECCFGR are PB5/PB15.
-    assert!(USB_HW_SRC.contains(
-        "REG.gpiob_seccfgr.clear_bits((1 << 5) | (1 << 15)); // PB5,15 = NS"
-    ));
+    // This gate used to REQUIRE the literal statements
+    //   gpioa_seccfgr.clear_bits((1 << 11) | (1 << 12) | (1 << 15))
+    //   gpiob_seccfgr.clear_bits((1 << 5) | (1 << 15))
+    // i.e. it encoded "PA15, PB5 and PB15 MUST be non-secure" as a positive
+    // requirement. On pq1 those three pins are SE_RST, SE1_EN and LCM_EN, so
+    // the gate actively obstructed the correct fix. The mask is now a board
+    // constant and this asserts SHAPE here, VALUES per board below.
+    //
+    // NOTE: a shape assertion is not a value assertion. On its own this says
+    // nothing about which pins are handed over — the value gates are the two
+    // board-file assertions below PLUS the `const assert!`s in board/mod.rs,
+    // and neither alone is sufficient.
+    assert!(USB_HW_SRC.contains("REG.gpioa_seccfgr.clear_bits(board::USB_NS_PINS_A);"));
+    assert!(USB_HW_SRC.contains("REG.gpiob_seccfgr.clear_bits(board::USB_NS_PINS_B);"));
+    // No literal mask may be re-inlined.
+    assert_eq!(
+        USB_HW_SRC.matches("board::USB_NS_PINS_").count(),
+        2,
+        "usb_hw must take both NS masks from the board map, exactly once each"
+    );
+
+    // VALUES, per board — both, so neither loses coverage. Full statements
+    // with semicolons so a second cfg'd definition cannot hide.
+    assert!(BOARD_IOTA2_SRC
+        .contains("pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12) | (1 << 15);"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const USB_NS_PINS_B: u32 = (1 << 5) | (1 << 15);"));
+    assert!(BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12);"));
+    assert!(BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_B: u32 = 0;"));
+    for src in [BOARD_IOTA2_SRC, BOARD_PQ1_SRC] {
+        assert_eq!(
+            src.matches("pub const USB_NS_PINS_").count(),
+            2,
+            "each board defines exactly one A mask and one B mask"
+        );
+    }
+
+    // The pq1 masks must not contain the three pins that are its SE/display
+    // control lines — stated explicitly because this is the whole point.
+    assert!(!BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12) | (1 << 15);"));
+    assert!(BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_B: u32 = 0;"));
+}
+
+/// The OTHER half of the pq1 USB hazard: the pins are protected by a
+/// `const assert!` at the SECCFGR layer, but the MODER/BSRR writes that put
+/// those same pads into UCPD analog mode — or drive them — are protected only
+/// by `#[cfg(not(feature = "board-pq1"))]`, and NOTHING pinned those cfgs.
+///
+/// This is not hypothetical. On 2026-08-31, while merging two doc comments in
+/// `usb_hw.rs`, a find/replace spanned one of these attributes and deleted it.
+/// The crate compiled and all 2625 host tests passed, because the function it
+/// gated (`cc_open_then_reset`) has no caller. It was caught by counting the
+/// attribute afterwards, not by any gate. Hence this one.
+///
+/// What is at stake on pq1, per `board/pq1.rs`:
+///   PA15 -> ANALOG  is `SE_RST`, the OPTIGA's reset
+///   PB15 -> ANALOG  is `LCM_EN`, the trusted display's backlight
+///   PB5  driven     is `SE1_EN`, the SE050's enable
+#[test]
+fn negative_usb_board_pq1_exclusions_are_pinned() {
+    const CFG: &str = "#[cfg(not(feature = \"board-pq1\"))]";
+
+    // Five: two call sites inside `init`, plus the three fn definitions.
+    // A bare count is the cheap half — a deletion anywhere drops it to 4.
+    assert_eq!(
+        USB_HW_SRC.matches(CFG).count(),
+        5,
+        "usb_hw.rs must keep exactly 5 `board-pq1` exclusions (2 call sites in \
+         init + `enable_tcpp03` + `cc_open_then_reset` + `init_ucpd`). A lower \
+         count means an exclusion was deleted and pq1 now executes an iota2 \
+         pin path; a higher count means a new one appeared unreviewed."
+    );
+
+    // The expensive half: each hazardous write must actually SIT INSIDE a
+    // board-gated function, not merely coexist in a file that contains a cfg
+    // somewhere. Checked positionally — the write's offset must fall after a
+    // gated `fn` header and before the next un-gated top-level `fn`.
+    let gated_spans: Vec<(usize, usize)> = {
+        let mut spans = Vec::new();
+        let mut from = 0usize;
+        while let Some(rel) = USB_HW_SRC[from..].find(CFG) {
+            let cfg_at = from + rel;
+            // Only the three definitions open a span; the two call sites inside
+            // `init` are followed by a call, not by `fn`.
+            let after = &USB_HW_SRC[cfg_at + CFG.len()..];
+            let head: String = after.chars().take(80).collect();
+            if head.trim_start().starts_with("fn ")
+                || head.trim_start().starts_with("#[inline")
+                || head.trim_start().starts_with("pub unsafe fn ")
+            {
+                // Span ends at the next top-level `}` followed by a blank line
+                // and a non-indented item — approximated by the next "\n}\n".
+                let end_rel = after.find("\n}\n").map(|e| cfg_at + CFG.len() + e + 3);
+                spans.push((cfg_at, end_rel.unwrap_or(USB_HW_SRC.len())));
+            }
+            from = cfg_at + CFG.len();
+        }
+        spans
+    };
+    assert_eq!(
+        gated_spans.len(),
+        3,
+        "expected exactly three board-gated FUNCTION definitions in usb_hw.rs"
+    );
+
+    for hazard in [
+        "REG.gpioa_moder.set_bits(0b11 << 30);", // PA15 -> analog = pq1 SE_RST
+        "REG.gpiob_moder.set_bits(0b11 << 30);", // PB15 -> analog = pq1 LCM_EN
+        "REG.gpiob_bsrr.write(1 << 5);",         // PB5 driven    = pq1 SE1_EN
+    ] {
+        let at = USB_HW_SRC
+            .find(hazard)
+            .unwrap_or_else(|| panic!("hazardous write vanished from usb_hw.rs: {hazard}"));
+        assert_eq!(
+            USB_HW_SRC.matches(hazard).count(),
+            1,
+            "`{hazard}` must appear exactly once — a second copy could sit outside a gate"
+        );
+        assert!(
+            gated_spans.iter().any(|&(lo, hi)| at > lo && at < hi),
+            "`{hazard}` is NOT inside a `board-pq1`-excluded function. On pq1 that \
+             pin is a secure element's reset/enable or the trusted display's \
+             backlight; putting it in UCPD analog mode or driving it from the USB \
+             path is exactly what the board split exists to prevent."
+        );
+    }
 }
 
 #[test]
@@ -324,42 +674,148 @@ fn positive_usb_ucpd_cfg1_constants() {
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// 7. POSITIVE — USART1 (uart.rs, `uart-console`)
+// 7. POSITIVE — debug-console UART (uart.rs + board/*.rs, `uart-console`)
+//
+// `uart.rs` no longer carries a peripheral base or a pin number: it reads
+// them from `crate::board`. So the pins that used to sit on the driver now
+// assert against BOTH board maps. That is strictly more coverage than
+// before, not less — the previous suite pinned one board's USART1/PA9;
+// this one pins that AND pq1's USART2/PA2, and would catch either being
+// silently swapped for the other.
 // ═════════════════════════════════════════════════════════════════════
 
 #[test]
-fn positive_uart_usart1_secure_alias() {
-    assert!(UART_SRC.contains("const USART1: u32 = 0x5001_3800;"));
+fn positive_uart_iota2_usart1_secure_alias() {
+    // Unchanged from the pre-board-split value, just relocated.
+    assert!(BOARD_IOTA2_SRC.contains("pub const CONSOLE_UART_BASE: u32 = USART1_S;"));
+    assert!(BOARD_MOD_SRC.contains("pub const USART1_S: u32 = 0x5001_3800;"));
+}
+
+#[test]
+fn positive_uart_pq1_usart2_secure_alias() {
+    // pq1's console is USART2 on PA2/PA3 (header J211), NOT USART1: PA9 is
+    // the USB VBUS sense node on that board.
+    assert!(BOARD_PQ1_SRC.contains("pub const CONSOLE_UART_BASE: u32 = USART2_S;"));
+    assert!(BOARD_MOD_SRC.contains("pub const USART2_S: u32 = 0x5000_4400;"));
 }
 
 #[test]
 fn positive_uart_rcc_secure_alias() {
-    assert!(UART_SRC.contains("const RCC_S: u32 = 0x5602_0C00;"));
+    // The NS RCC alias silently drops GPIOxEN writes at TZEN=1.
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_S: u32 = 0x5602_0C00;"));
 }
 
 #[test]
 fn positive_uart_gpioa_secure_alias() {
-    assert!(UART_SRC.contains("const GPIOA: u32 = 0x5202_0000;"));
+    // Both boards put the console TX on port A; only the pin differs.
+    assert!(BOARD_MOD_SRC.contains("pub const GPIOA_S: u32 = 0x5202_0000;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const CONSOLE_TX_PORT: u32 = GPIOA_S;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const CONSOLE_TX_PORT: u32 = GPIOA_S;"));
 }
 
 #[test]
 fn positive_uart_brr_115200_at_160mhz() {
-    // 160_000_000 / 115_200 ≈ 1389 (0.064% baud error).
-    assert!(UART_SRC.contains("REG.brr.write(1389);"));
+    // 160_000_000 / 115_200 ≈ 1389 (0.064% baud error). iota2's USART1 runs
+    // off PCLK2 and pq1's USART2 off PCLK1, but rcc::init leaves both APB
+    // prescalers at /1, so the divisor is the same on both boards.
+    assert!(BOARD_IOTA2_SRC.contains("pub const CONSOLE_BRR: u32 = 1389;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const CONSOLE_BRR: u32 = 1389;"));
+    assert!(UART_SRC.contains("REG.brr.write(board::CONSOLE_BRR);"));
     assert_eq!(160_000_000u32 / 115_200, 1388); // sanity — 1388 rounds to 1389
 }
 
 #[test]
-fn positive_uart_usart1_enable_bit_14() {
-    assert!(UART_SRC.contains("const RCC_APB2ENR_USART1EN: u32 = 1 << 14;"));
+fn positive_uart_enable_bits_differ_per_board() {
+    // iota2: USART1EN is RCC_APB2ENR bit 14.
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_USART1EN_BIT: u32 = 1 << 14;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_APB2ENR_OFF: u32 = 0xA4;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const CONSOLE_UART_RCC_ENR_OFF: u32 = RCC_APB2ENR_OFF;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const CONSOLE_UART_RCC_EN_BIT: u32 = RCC_USART1EN_BIT;"));
+
+    // pq1: USART2EN is a DIFFERENT register — RCC_APB1ENR1 bit 17. Enabling
+    // the wrong one leaves the peripheral unclocked and the console silent.
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_USART2EN_BIT: u32 = 1 << 17;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_APB1ENR1_OFF: u32 = 0x9C;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const CONSOLE_UART_RCC_ENR_OFF: u32 = RCC_APB1ENR1_OFF;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const CONSOLE_UART_RCC_EN_BIT: u32 = RCC_USART2EN_BIT;"));
 }
 
 #[test]
-fn positive_uart_pa9_af7_via_afrh() {
-    // AFRH bits [7:4] = AF7 for pin 9.
-    assert!(UART_SRC.contains("(0x7 << 4)"));
-    // PA9 in MODER = bits [19:18] = AF mode (0b10).
-    assert!(UART_SRC.contains("(0b10 << 18)"));
+fn positive_uart_tx_pin_and_af_per_board() {
+    // iota2 PA9 AF7 (ST-LINK VCP); pq1 PA2 AF7 (J211 pin 1).
+    assert!(BOARD_IOTA2_SRC.contains("pub const CONSOLE_TX_PIN: u32 = 9;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const CONSOLE_TX_AF: u32 = 7;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const CONSOLE_TX_PIN: u32 = 2;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const CONSOLE_TX_AF: u32 = 7;"));
+}
+
+#[test]
+fn positive_uart_afr_half_is_derived_not_hardcoded() {
+    // The old driver hard-coded AFRH (+0x24) and shift 4, which is correct
+    // for PA9 and WRONG for PA2 — pins 0..7 live in AFRL (+0x20). The split
+    // must therefore be derived from the pin number.
+    assert!(UART_SRC.contains("if board::CONSOLE_TX_PIN < 8 { 0x20 } else { 0x24 }"));
+    assert!(UART_SRC.contains("(board::CONSOLE_TX_PIN % 8) * 4"));
+}
+
+/// Independent recomputation of the AFR half + shift for each board's TX
+/// pin, so a regression in the `uart.rs` expression is caught by arithmetic
+/// rather than by matching the same text twice.
+#[test]
+fn positive_uart_afr_derivation_matches_both_boards() {
+    fn afr_off(pin: u32) -> u32 {
+        if pin < 8 {
+            0x20
+        } else {
+            0x24
+        }
+    }
+    fn afr_shift(pin: u32) -> u32 {
+        (pin % 8) * 4
+    }
+
+    // iota2 PA9 -> AFRH, nibble [7:4] — exactly what the pre-split driver
+    // wrote as the literals `+ 0x24` and `(0x7 << 4)`.
+    assert_eq!(afr_off(9), 0x24);
+    assert_eq!(afr_shift(9), 4);
+
+    // pq1 PA2 -> AFRL, nibble [11:8].
+    assert_eq!(afr_off(2), 0x20);
+    assert_eq!(afr_shift(2), 8);
+}
+
+/// The GPIO-port clock-enable bit must follow the 0x400 base stride.
+#[test]
+fn positive_uart_gpio_rcc_bit_derivation() {
+    assert!(BOARD_MOD_SRC.contains("1 << ((port_base - GPIOA_S) / 0x400)"));
+    // GPIOA -> bit 0 (what the pre-split driver hard-coded), GPIOB -> bit 1.
+    assert_eq!(1u32 << ((0x5202_0000u32 - 0x5202_0000u32) / 0x400), 1 << 0);
+    assert_eq!(1u32 << ((0x5202_0400u32 - 0x5202_0000u32) / 0x400), 1 << 1);
+}
+
+/// pq1 bonds only ports A, B and PC13. A console TX on any other port
+/// would be driving a pad that does not exist — and would do so silently,
+/// because the port logic is still on the die.
+#[test]
+fn negative_pq1_console_tx_is_on_a_bonded_port() {
+    assert!(
+        BOARD_PQ1_SRC.contains("pub const CONSOLE_TX_PORT: u32 = GPIOA_S;"),
+        "pq1 console TX must be on GPIOA or GPIOB — the 48-pin UFQFPN package \
+         bonds no other full port, and writes to an unbonded port succeed \
+         silently instead of faulting"
+    );
+}
+
+/// pq1's PA9 is the USB VBUS sense divider, not a console pin. If the
+/// iota2 TX pin ever leaked into the pq1 map, the driver would push a
+/// push-pull output into that divider.
+#[test]
+fn negative_pq1_console_tx_is_not_pa9() {
+    assert!(
+        !BOARD_PQ1_SRC.contains("pub const CONSOLE_TX_PIN: u32 = 9;"),
+        "pq1 PA9 is USB_FS_VBUS (sense divider) — driving it as USART TX \
+         fights the divider and loses the console"
+    );
 }
 
 #[test]
@@ -395,35 +851,104 @@ fn positive_uart_flush_waits_tc() {
 // 8. POSITIVE — GPIO buttons (buttons.rs)
 // ═════════════════════════════════════════════════════════════════════
 
+// The button pins moved into the board maps, so `BUTTONS_SRC` no longer
+// contains a pin literal for EITHER board. A naive re-point would therefore
+// have made this whole block vacuous universally, not just on pq1 — so the
+// which-pin assertions now run against both board files, and what stays
+// pinned in the driver is the *property* (active-low, pull-up), which is
+// board-independent and must never change.
+
+// Two tests were deleted here 2026-09-23 with the bench OLED backend:
+// `positive_oled_geometry_derives_from_board_height` (it `include_str!`d
+// `../ui/oled.rs`, so it was the build-breaker — a missing file is a compile
+// error for the whole test binary, not a test failure) and
+// `negative_secret_row_is_not_hardcoded_to_a_four_page_panel` (it pinned
+// `render_secret_row`, whose only production caller was the OLED backend).
+//
+// The font-table oracle they are sometimes credited with is NOT lost:
+// `ui/secret_text.rs`'s `ct_glyph_col_recovers_known_glyphs` asserts the same
+// end-to-end property, on the function that actually carries the F-24
+// constant-time guarantee.
+
 #[test]
-fn positive_buttons_left_pc1_right_pa8_pin_bits() {
-    assert!(BUTTONS_SRC.contains("const LEFT_BIT: u32 = 1 << 1;"));
-    assert!(BUTTONS_SRC.contains("const RIGHT_BIT: u32 = 1 << 8;"));
+fn positive_buttons_pins_per_board() {
+    // iota2: LEFT = PC1, RIGHT = PA8 (CN13 jumpers).
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_LEFT_PORT: u32 = GPIOC_S;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_LEFT_PIN: u32 = 1;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_RIGHT_PORT: u32 = GPIOA_S;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_RIGHT_PIN: u32 = 8;"));
+
+    // pq1: LEFT = PA0, RIGHT = PA1 — BOTH on GPIOA, unlike iota2.
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_LEFT_PORT: u32 = GPIOA_S;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_LEFT_PIN: u32 = 0;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_RIGHT_PORT: u32 = GPIOA_S;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_RIGHT_PIN: u32 = 1;"));
 }
 
 #[test]
 fn positive_buttons_gpioa_gpioc_secure_alias() {
-    assert!(BUTTONS_SRC.contains("const GPIOA_S: u32 = 0x5202_0000;"));
-    assert!(BUTTONS_SRC.contains("const GPIOC_S: u32 = 0x5202_0800;"));
+    assert!(BOARD_MOD_SRC.contains("pub const GPIOA_S: u32 = 0x5202_0000;"));
+    assert!(BOARD_MOD_SRC.contains("pub const GPIOC_S: u32 = 0x5202_0800;"));
 }
 
 #[test]
 fn positive_buttons_rcc_secure_alias() {
-    assert!(BUTTONS_SRC.contains("const RCC_S: u32 = 0x5602_0C00;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_S: u32 = 0x5602_0C00;"));
+    assert!(contains_in_code(BUTTONS_SRC, "board::RCC_S"));
 }
 
 #[test]
 fn positive_buttons_active_low_pressed_reads_zero() {
-    // pressed = pin reads 0 (shorted to GND).
-    assert!(BUTTONS_SRC.contains("REG.gpioc_idr.read() & LEFT_BIT == 0"));
-    assert!(BUTTONS_SRC.contains("REG.gpioa_idr.read() & RIGHT_BIT == 0"));
+    // pressed = pin reads 0 (shorted to GND). Board-independent property:
+    // neither board fits a pull-down, and pq1 fits no pull-up at all, so the
+    // internal pull-up + active-low read is what makes a press detectable.
+    assert!(BUTTONS_SRC.contains("REG.left_idr.read() & LEFT_BIT == 0"));
+    assert!(BUTTONS_SRC.contains("REG.right_idr.read() & RIGHT_BIT == 0"));
 }
 
 #[test]
 fn positive_buttons_pullup_internal_pupdr_01() {
-    // PUPDR 0b01 = pull-up for both LEFT (PC1, bits [3:2]) and RIGHT (PA8, bits [17:16]).
-    assert!(BUTTONS_SRC.contains("(0b01 << 2)"));
-    assert!(BUTTONS_SRC.contains("(0b01 << 16)"));
+    // PUPDR 0b01 = pull-up, at each button's own field shift. On pq1 the
+    // board fits NO external pull-up (only a 100nF cap and an ESD diode to
+    // GND), so losing this makes both buttons read permanently pressed.
+    assert!(BUTTONS_SRC.contains("(0b01 << LEFT_PIN2)"));
+    assert!(BUTTONS_SRC.contains("(0b01 << RIGHT_PIN2)"));
+    // ...and the shift really is 2*pin, checked by arithmetic rather than by
+    // matching the same text twice.
+    assert!(BUTTONS_SRC.contains("const LEFT_PIN2: u32 = board::BTN_LEFT_PIN * 2;"));
+    assert!(BUTTONS_SRC.contains("const RIGHT_PIN2: u32 = board::BTN_RIGHT_PIN * 2;"));
+}
+
+/// The USER button is configured on boards that have one and skipped on
+/// boards that do not — pq1 must not enable a GPIO clock or drive a pin for
+/// a button that is not fitted.
+#[test]
+fn positive_buttons_user_is_optional_and_never_a_ui_input() {
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_USER: Option<(u32, u32)> = Some((GPIOC_S, 13));"));
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_USER: Option<(u32, u32)> = None;"));
+    assert!(BUTTONS_SRC.contains("const HAS_USER: bool = board::BTN_USER.is_some();"));
+    assert!(BUTTONS_SRC.contains("if HAS_USER {"));
+    // It is a bench reference, never an input event: `wait_event` must not
+    // read it. (`ui::Button` has only Left/Right, so it could not construct
+    // one anyway — but keep the driver honest.)
+    // Scope to wait_event's own body: the slice must STOP before `run_test`,
+    // which legitimately reads the USER pin for its bench state dump. An
+    // earlier version ran to end-of-file and so failed on run_test's read —
+    // the assertion was right, its window was wrong.
+    let after = BUTTONS_SRC
+        .split("fn wait_event")
+        .nth(1)
+        .expect("buttons.rs must define wait_event");
+    let wait_event = &after[..after.find("fn run_test").unwrap_or(after.len())];
+    assert!(
+        !wait_event.contains("user_idr"),
+        "the USER button must never feed a UI input event"
+    );
+    // ...and the only place it IS read is that diagnostic.
+    assert!(
+        BUTTONS_SRC.contains("REG.user_idr.read() & USER_BIT"),
+        "the USER read should still exist, in run_test only"
+    );
 }
 
 #[test]
@@ -463,9 +988,19 @@ fn positive_button_release_hold_carries_the_wait_abort_predicate() {
 }
 
 #[test]
-fn positive_buttons_gpio_clocks_a_and_c() {
-    // AHB2ENR1 bit 0 = GPIOAEN, bit 2 = GPIOCEN.
-    assert!(BUTTONS_SRC.contains("REG.rcc_ahb2enr1.set_bits((1 << 0) | (1 << 2));"));
+fn positive_buttons_gpio_clocks_derived_per_board() {
+    // The clock set is derived from the button ports rather than hard-coded,
+    // because the two boards differ: iota2 straddles GPIOA+GPIOC, pq1 has
+    // both buttons on GPIOA.
+    assert!(BUTTONS_SRC.contains(
+        "board::gpio_rcc_bit(board::BTN_LEFT_PORT) | board::gpio_rcc_bit(board::BTN_RIGHT_PORT)"
+    ));
+    // Independent arithmetic check of what that derivation yields, so a
+    // regression is caught by value and not only by matching text.
+    let bit = |port_base: u32| 1u32 << ((port_base - 0x5202_0000) / 0x400);
+    let (gpioa, gpioc) = (0x5202_0000u32, 0x5202_0800u32);
+    assert_eq!(bit(gpioc) | bit(gpioa), 0b101, "iota2: GPIOAEN + GPIOCEN");
+    assert_eq!(bit(gpioa) | bit(gpioa), 0b001, "pq1: GPIOAEN alone");
 }
 
 #[test]
@@ -599,51 +1134,62 @@ fn negative_buttons_does_not_use_ns_aliases() {
 
 #[test]
 fn negative_usb_must_not_mark_i2c1_pins_pb8_pb9_ns() {
-    // The expected GPIOB SECCFGR clear pattern is exactly `(1 << 5) | (1 << 15)`.
-    // Any extra bit — especially PB8 or PB9 — would expose the SE050 I2C1 bus.
-    assert!(
-        USB_HW_SRC.contains("REG.gpiob_seccfgr.clear_bits((1 << 5) | (1 << 15))"),
-        "usb_hw::init must clear GPIOB SECCFGR bits exactly PB5 and PB15",
-    );
+    // The exactly-once count is the anti-second-call gate and is KEPT
+    // verbatim: a second clear_bits call is how extra pins would leak to NS,
+    // and that property survives the move to a symbolic mask unchanged.
     let gpiob_seccfgr_calls = USB_HW_SRC.matches("gpiob_seccfgr.clear_bits").count();
     assert_eq!(
         gpiob_seccfgr_calls, 1,
         "usb_hw::init must call gpiob_seccfgr.clear_bits exactly once (extra calls would expose SE buses to NS)",
     );
-    // Pin-by-pin reject: scan for any clear-bits expression containing PB8/PB9/PB12-14.
-    for pin in [8u32, 9, 12, 13, 14] {
-        let needle = format!("(1 << {pin})");
-        // Allow `(1 << 14)` if the surrounding line is a clock-enable on AHB2 (USB OTG FS = bit 14),
-        // which is unambiguously a different register. Reject only if it appears within a
-        // *_seccfgr.clear_bits call.
-        let pattern = format!("seccfgr.clear_bits({needle})");
-        assert!(
-            !USB_HW_SRC.contains(&pattern),
-            "usb_hw must NOT mark PB{pin} as NS — it would expose a secure bus (PB8/9 = SE050 I2C1, PB12-14 = SPI2)",
-        );
-    }
+
+    // The per-pin reject loop that used to live here has been DELETED, not
+    // relaxed, because it never worked. It built the needle
+    //     format!("seccfgr.clear_bits({}
+    // ...)", "(1 << 8)")  ->  `seccfgr.clear_bits((1 << 8))`
+    // which requires that term to be the ENTIRE argument. Against any real
+    // multi-pin mask the next characters are " |", so it never matched.
+    // Verified by running its own logic against a line deliberately marking
+    // PB8 non-secure: it caught nothing. It had been green since it was
+    // written while testing nothing, and its panic message claimed to prevent
+    // exactly the breach it could not see.
+    //
+    // Its replacement is `board::ns_forbidden_mask` + the `const assert!`s in
+    // board/mod.rs, which are strictly stronger: they are value checks rather
+    // than text checks, they derive from the same constants the drivers
+    // consume, they fire on every hardware build of either board, and they
+    // cover PB6/PB7 — the SE050's own I2C4 bus on pq1 — which this loop never
+    // did, because it was written when both secure elements shared I2C1.
+    //
+    // Same migration as `negative_buttons_must_not_touch_swd_pins_pa13_pa14`
+    // in this file. Do NOT reintroduce a symbolic look-alike here: a
+    // `contains("clear_bits(SOME_MASK)")` plus the surviving count would be
+    // fully green while testing nothing, which is the specific trap.
+    assert!(
+        BOARD_MOD_SRC.contains("pub const fn ns_forbidden_mask(port: u32) -> u32 {"),
+        "the value gate for the NS mask must exist in the board layer"
+    );
+    assert!(BOARD_MOD_SRC.contains("USB_NS_PINS_B & ns_forbidden_mask(GPIOB_S) == 0,"));
+    // ...and it must fold in the secure-element buses, which is what covers
+    // PB8/PB9 on both boards and PB6/PB7 on pq1.
+    assert!(BOARD_MOD_SRC.contains("mask |= (1 << bus.scl_pin) | (1 << bus.sda_pin);"));
 }
 
 #[test]
 fn negative_usb_must_not_mark_arbitrary_gpioa_pins_ns() {
-    // The expected GPIOA SECCFGR clear pattern is exactly PA11/PA12/PA15.
-    assert!(
-        USB_HW_SRC.contains("REG.gpioa_seccfgr.clear_bits((1 << 11) | (1 << 12) | (1 << 15))"),
-        "usb_hw::init must clear GPIOA SECCFGR bits exactly PA11, PA12, PA15",
-    );
+    // Exactly-once count kept verbatim — see the GPIOB twin for why, and for
+    // why the per-pin reject loop that used to follow it was deleted rather
+    // than relaxed (it was structurally incapable of matching).
     let gpioa_seccfgr_calls = USB_HW_SRC.matches("gpioa_seccfgr.clear_bits").count();
     assert_eq!(
         gpioa_seccfgr_calls, 1,
-        "usb_hw::init must call gpioa_seccfgr.clear_bits exactly once",
+        "usb_hw::init must call gpioa_seccfgr.clear_bits exactly once (extra calls would expose secure pins to NS)",
     );
-    // Pin-by-pin reject for PA8 (RIGHT button), PA9 (UART TX), PA13/PA14 (SWD).
-    for pin in [8u32, 9, 13, 14] {
-        let pattern = format!("gpioa_seccfgr.clear_bits((1 << {pin}))");
-        assert!(
-            !USB_HW_SRC.contains(&pattern),
-            "usb_hw must NOT mark PA{pin} as NS — it would expose a secure peripheral pin",
-        );
-    }
+    assert!(BOARD_MOD_SRC.contains("USB_NS_PINS_A & ns_forbidden_mask(GPIOA_S) == 0,"));
+    // SWDIO/SWCLK are in the forbidden table by name, so a mask containing
+    // them fails the build rather than this test.
+    assert!(BOARD_MOD_SRC.contains("(Some((GPIOA_S, 13)), \"SWDIO\")"));
+    assert!(BOARD_MOD_SRC.contains("(Some((GPIOA_S, 14)), \"SWCLK\")"));
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -656,23 +1202,30 @@ fn negative_usb_must_not_mark_arbitrary_gpioa_pins_ns() {
 
 #[test]
 fn negative_buttons_must_not_touch_swd_pins_pa13_pa14() {
-    // Confirm the documented comment.
-    assert!(BUTTONS_SRC.contains("PA13 (SWDIO) and PA14 (SWCLK) are untouched"));
-
-    // The only MODER bits buttons.rs may clear on GPIOA are bits [17:16]
-    // (PA8). Reject MODER writes touching bits 26/27 (PA13) or 28/29
-    // (PA14).
-    for shift in [26u32, 28] {
-        let needle1 = format!("gpioa_moder.modify(|v| (v & !(0b11 << {shift}))");
-        let needle2 = format!("gpioa_moder.set_bits(0b11 << {shift}");
-        assert!(
-            !BUTTONS_SRC.contains(&needle1),
-            "buttons must NOT clear GPIOA MODER bits at shift {shift} — would brick SWD (PA13/14)",
-        );
-        assert!(
-            !BUTTONS_SRC.contains(&needle2),
-            "buttons must NOT set GPIOA MODER bits at shift {shift} — would brick SWD (PA13/14)",
-        );
+    // This test USED to scan for `gpioa_moder.modify(|v| (v & !(0b11 << 26))`
+    // and friends. Once the shifts became symbolic (`LEFT_PIN2`), no such
+    // literal can appear for ANY pin — so the scan would have kept passing
+    // while being incapable of catching anything. It asserts absence, so the
+    // vacuity would have been silent. That is the exact failure mode this
+    // suite exists to prevent, so the check moved to where it can still bite:
+    // a compile-time collision assert in the driver, over the board's pins.
+    assert!(BUTTONS_SRC.contains("(Some((board::GPIOA_S, 13)), \"SWDIO\")"));
+    assert!(BUTTONS_SRC.contains("(Some((board::GPIOA_S, 14)), \"SWCLK\")"));
+    assert!(BUTTONS_SRC.contains("const fn collides(pin: (u32, u32)) -> bool"));
+    assert!(BUTTONS_SRC.contains("!collides((board::BTN_LEFT_PORT, board::BTN_LEFT_PIN)),"));
+    assert!(BUTTONS_SRC.contains("!collides((board::BTN_RIGHT_PORT, board::BTN_RIGHT_PIN)),"));
+    // The driver must still only ever touch its own two pins' fields.
+    assert!(BUTTONS_SRC.contains("PA13 (SWDIO) and PA14 (SWCLK) in AF mode"));
+    // And neither board may place a button on a debug pin (belt and braces —
+    // the const assert is the enforcement, this is the readable statement).
+    for src in [BOARD_IOTA2_SRC, BOARD_PQ1_SRC] {
+        for pin in [13u32, 14] {
+            assert!(
+                !src.contains(&format!("pub const BTN_LEFT_PIN: u32 = {pin};"))
+                    || !src.contains("pub const BTN_LEFT_PORT: u32 = GPIOA_S;"),
+                "a button on PA{pin} would brick SWD"
+            );
+        }
     }
 }
 
@@ -963,20 +1516,43 @@ fn negative_buttons_long_press_threshold_is_500ms() {
 
 #[test]
 fn negative_buttons_must_not_consume_extra_swd_pins() {
-    // GPIOC moder is touched at bits [3:2] (PC1) and [27:26] (PC13). No
-    // other shifts allowed.
-    let allowed_c_modes = ["!(0b11 << 2)", "!(0b11 << 26)"];
-    for line in BUTTONS_SRC.lines() {
-        if line.contains("gpioc_moder.modify") {
-            let mut ok = false;
-            for allowed in allowed_c_modes {
-                if line.contains(allowed) {
-                    ok = true;
-                    break;
-                }
-            }
-            assert!(ok, "buttons gpioc_moder.modify touches unexpected bits: `{line}`");
-        }
+    // USED to iterate BUTTONS_SRC.lines() filtering on `gpioc_moder.modify`.
+    // pq1 has no GPIOC button path at all, and after the refactor the handles
+    // are role-named (`left_*`/`right_*`), so that loop body would never
+    // execute and the test would pass having asserted nothing.
+    //
+    // The property it wanted — "buttons touch ONLY their own pins' fields" —
+    // is now structural: every MODER/PUPDR write is at a derived
+    // `{LEFT,RIGHT,USER}_PIN2` shift, so it cannot reach another pin's field
+    // by construction, and which pins those are is guarded by the collision
+    // assert.
+    // Match WRITES only — `.modify(` on a moder/pupdr handle. (An earlier
+    // version of this filter also matched the bare struct field declaration
+    // `left_pupdr: Reg32,` and failed on it; the test was right to complain,
+    // the filter was wrong.) The `.modify(` calls are split across lines by
+    // rustfmt, so join the source first.
+    let flat = BUTTONS_SRC.replace('\n', " ");
+    let writes: Vec<&str> = flat
+        .match_indices(".modify(")
+        .map(|(i, _)| {
+            let start = flat[..i].rfind("REG.").unwrap_or(i);
+            let end = flat[i..].find(");").map_or(flat.len(), |e| i + e);
+            &flat[start..end]
+        })
+        .filter(|w| w.contains("_moder") || w.contains("_pupdr"))
+        .collect();
+    assert!(
+        !writes.is_empty(),
+        "the pin-config writes vanished — this test would be vacuous"
+    );
+    for w in &writes {
+        let symbolic =
+            w.contains("LEFT_PIN2") || w.contains("RIGHT_PIN2") || w.contains("USER_PIN2");
+        assert!(
+            symbolic,
+            "buttons.rs configures a GPIO field at a NON-derived shift, which can \
+             reach a pin the board map never named: `{w}`"
+        );
     }
 }
 
@@ -1053,19 +1629,327 @@ fn negative_spi_hw_public_surface_only_init_cs() {
 
 #[test]
 fn positive_buttons_bit_positions_match_pin_numbers() {
-    // PC1 = pin 1, so LEFT_BIT = 1 << 1.
-    let left_pin: u32 = 1;
-    assert!(BUTTONS_SRC.contains(&format!("const LEFT_BIT: u32 = 1 << {left_pin};")));
-    // PA8 = pin 8, so RIGHT_BIT = 1 << 8.
-    let right_pin: u32 = 8;
-    assert!(BUTTONS_SRC.contains(&format!("const RIGHT_BIT: u32 = 1 << {right_pin};")));
+    // COMPUTED-NEEDLE REWRITE. This used to format!() the literal pin numbers
+    // into needles like `const LEFT_BIT: u32 = 1 << {left_pin};`. After the
+    // pins moved to the board maps, none of those six needles could ever
+    // match again — it would have failed loudly (good), and the tempting fix
+    // is to relax the needles, which makes it assert nothing (bad).
+    //
+    // The computation moved to where the numbers now live: each BOARD file is
+    // checked for the pin it declares, and the driver is checked for deriving
+    // the mask and shift from that constant rather than restating a literal.
+    for (src, board, left, right) in [
+        (BOARD_IOTA2_SRC, "iota2", 1u32, 8u32),
+        (BOARD_PQ1_SRC, "pq1", 0u32, 1u32),
+    ] {
+        assert!(
+            src.contains(&format!("pub const BTN_LEFT_PIN: u32 = {left};")),
+            "{board} LEFT pin drifted"
+        );
+        assert!(
+            src.contains(&format!("pub const BTN_RIGHT_PIN: u32 = {right};")),
+            "{board} RIGHT pin drifted"
+        );
+        // MODER/PUPDR field for pin N is [2N+1:2N] — assert the arithmetic
+        // the driver relies on, per board, by value.
+        assert_eq!(left * 2, [2u32, 0][usize::from(board == "pq1")]);
+        assert_eq!(right * 2, [16u32, 2][usize::from(board == "pq1")]);
+    }
 
-    // MODER bits for pin N are [2N+1:2N].
-    let pc1_moder_shift = 2 * left_pin; // 2
-    let pa8_moder_shift = 2 * right_pin; // 16
-    assert!(BUTTONS_SRC.contains(&format!("!(0b11 << {pc1_moder_shift})")));
-    assert!(BUTTONS_SRC.contains(&format!("!(0b11 << {pa8_moder_shift})")));
-    // PUPDR bits same shift as MODER (2N+1:2N).
-    assert!(BUTTONS_SRC.contains(&format!("(0b01 << {pc1_moder_shift})")));
-    assert!(BUTTONS_SRC.contains(&format!("(0b01 << {pa8_moder_shift})")));
+    // The driver derives, never restates.
+    assert!(BUTTONS_SRC.contains("const LEFT_BIT: u32 = 1 << board::BTN_LEFT_PIN;"));
+    assert!(BUTTONS_SRC.contains("const RIGHT_BIT: u32 = 1 << board::BTN_RIGHT_PIN;"));
+}
+
+// ---------------------------------------------------------------------------
+// Consumption gates
+// ---------------------------------------------------------------------------
+//
+// Established by mutation testing on 2026-08-31: four separate mutations to
+// driver code passed the ENTIRE 2627-test suite. Every gate in this file that
+// covered them pinned that an expression EXISTS, never that anything CONSUMES
+// it — so deriving a value correctly and then ignoring it was invisible.
+//
+//   uart.rs   move `t -= 1` after the loop      -> infinite hang on wedged TEACK
+//   i2c_hw.rs delete both config_i2c_pin calls  -> SCL/SDA never configured
+//   i2c_hw.rs hardcode the APB1 RCC offsets     -> I2C4 never clocked (pq1 SE050 dead)
+//   buttons.rs hardcode the GPIO clock mask     -> wrong port clocked
+//
+// Two further mutations from the same review were CAUGHT by existing gates and
+// are deliberately not re-covered here: inverting uart's AFRL/AFRH selection,
+// and swapping pq1's two SE bus pin tables.
+//
+// Brace-matching below is textual and would be confused by a `{` inside a
+// string literal or comment within the scanned block. None of the four blocks
+// contains one; if that changes, these gates fail loudly rather than silently.
+
+/// Extract the `{...}` block that follows `marker`, by brace matching.
+fn block_after<'a>(src: &'a str, marker: &str) -> &'a str {
+    let start = src
+        .find(marker)
+        .unwrap_or_else(|| panic!("marker vanished from source: {marker}"));
+    let open = start + marker.len() - 1; // marker ends with the `{`
+    let bytes = src.as_bytes();
+    assert_eq!(bytes[open], b'{', "marker must end with its opening brace");
+    let mut depth = 0usize;
+    for i in open..src.len() {
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &src[open..=i];
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("unbalanced braces after marker: {marker}");
+}
+
+/// The UART's TEACK wait must stay BOUNDED — the decrement has to be inside
+/// the loop, not merely present in the function.
+///
+/// `hw::uart::init` spins on TEACK because the first byte is silently dropped
+/// on STM32U5 otherwise. Its own comment says "Bounded so we don't hang if the
+/// peripheral is in a wedged state". Moving `t -= 1;` after the loop keeps
+/// every token the old gates looked for — the `while`, the counter, the
+/// `return`, the `t -= 1` — while making the loop genuinely infinite. That
+/// mutation passed all 2627 tests.
+#[test]
+fn negative_uart_teack_wait_decrement_is_inside_the_loop() {
+    let body = block_after(UART_SRC, "while REG.isr.read() & ISR_TEACK == 0 {");
+    assert!(
+        body.contains("t -= 1;"),
+        "the TEACK spin must decrement its bound INSIDE the loop body — a \
+         decrement after the loop leaves `hw::uart::init` hanging forever on a \
+         wedged peripheral. Loop body was:\n{body}"
+    );
+    assert!(
+        body.contains("if t == 0 {"),
+        "the TEACK spin must still bail out when the bound is exhausted"
+    );
+}
+
+/// `i2c_hw::init_bus` must actually CONSUME the board's per-bus description.
+///
+/// Three independent mutations of this function were invisible to the suite:
+/// deleting both pin-configuration calls, and hardcoding either RCC offset.
+/// The last one is the sharpest — on pq1 the SE050 lives on I2C4, whose enable
+/// and reset bits are in a DIFFERENT RCC register than I2C1/I2C2's, so a
+/// hardcoded APB1ENR1 offset leaves that bus unclocked and the SE050 dead,
+/// with the board map still looking perfectly correct.
+#[test]
+fn negative_i2c_hw_init_bus_consumes_the_board_bus_record() {
+    let body = block_after(I2C_HW_SRC, "fn init_bus(bus: &board::SeI2cBus) {");
+
+    // The pins must be configured, from the bus record.
+    for call in [
+        "config_i2c_pin(bus.port, bus.scl_pin, bus.af);",
+        "config_i2c_pin(bus.port, bus.sda_pin, bus.af);",
+    ] {
+        assert!(
+            body.contains(call),
+            "`init_bus` must configure its pins from the board record — missing \
+             `{call}`. Without it SCL/SDA keep their reset state and the bus is \
+             silently dead, which no other gate in this file can see."
+        );
+    }
+
+    // The RCC registers must be derived per-bus, never hardcoded.
+    for field in ["bus.rcc_enr_off", "bus.rcc_rstr_off"] {
+        assert!(
+            body.contains(field),
+            "`init_bus` must take its RCC register from `{field}` — a hardcoded \
+             offset works for I2C1/I2C2 and silently fails for pq1's I2C4, \
+             leaving the SE050 unclocked."
+        );
+    }
+    for field in ["bus.rcc_en_bit", "bus.rcc_rst_bit"] {
+        assert!(body.contains(field), "`init_bus` must use `{field}`");
+    }
+    assert!(
+        body.contains("board::gpio_rcc_bit(bus.port)"),
+        "`init_bus` must derive the GPIO clock bit from the bus's own port"
+    );
+
+    // And `init` must actually CALL it, for every bus the board declares.
+    // Without this the whole gate above sits one call-edge below the defect it
+    // names: replacing init()'s loop with `let _ = board::SE_I2C_BUSES;` leaves
+    // BOTH secure elements uninitialised and passed all 2609 tests.
+    // Demonstrated by mutation 2026-09-01.
+    let init_body = block_after(I2C_HW_SRC, "pub fn init() {");
+    assert!(
+        init_body.contains("for bus in board::SE_I2C_BUSES {") && init_body.contains("init_bus(bus);"),
+        "`i2c_hw::init` must iterate `board::SE_I2C_BUSES` and call `init_bus` for \
+         each — a board record that is read and then dropped leaves every secure \
+         element's bus dead, with no host-visible symptom. init body was:\n{init_body}"
+    );
+}
+
+/// `hw::buttons::init` must clock the ports the BOARD names, not a literal.
+///
+/// Replacing `set_bits(gpio_clocks)` with `set_bits(1 << 7)` — clocking GPIOH
+/// instead of whichever ports carry the buttons — passed the whole suite,
+/// because the gate covering this checked only that the `gpio_clocks`
+/// derivation expression existed somewhere in the file.
+#[test]
+fn negative_buttons_clock_enable_consumes_the_derived_mask() {
+    let body = block_after(BUTTONS_SRC, "pub unsafe fn init() {");
+    assert!(
+        body.contains("REG.rcc_ahb2enr1.set_bits(gpio_clocks);"),
+        "`buttons::init` must enable exactly the derived `gpio_clocks` mask; a \
+         literal there clocks the wrong port and the buttons read as never \
+         pressed — or, on pq1, touches a pin the SE rail depends on."
+    );
+    // And the derivation must still come from the board map.
+    assert!(
+        body.contains("board::gpio_rcc_bit(board::BTN_LEFT_PORT)")
+            && body.contains("board::gpio_rcc_bit(board::BTN_RIGHT_PORT)"),
+        "`gpio_clocks` must be derived from the board's own button ports, inside \
+         `init` — a derivation that lives elsewhere and is never consumed here is \
+         exactly the defect this gate exists for"
+    );
+}
+
+/// The NV3007 driver's control pins must come from the board, not from GPIOE.
+///
+/// `spi_hw` was only half the LCD port. `lcd_nv3007` independently hardcoded
+/// `GPIOE_S`/`GPIOD_S`, DC = pin 7 and RES = pin 14 — plus ten dead register
+/// handles for a PD15 reset abandoned during bring-up. Port E is not bonded on
+/// pq1 at all, so with only `spi_hw` ported the build went GREEN while DC and
+/// RES still pointed at a port that does not exist on that package. A passing
+/// build is not a port.
+#[test]
+fn negative_lcd_nv3007_control_pins_come_from_the_board() {
+    for derived in [
+        "const DC_PORT: u32 = board::LCD_DC_PORT;",
+        "const DC_PIN: u32 = board::LCD_DC_PIN;",
+        "const RES_PORT: u32 = board::LCD_RST_PORT;",
+        "const RES_PIN: u32 = board::LCD_RST_PIN;",
+        "const RES_DRIVABLE: bool = board::LCD_RST_IS_DRIVABLE;",
+    ] {
+        assert!(
+            LCD_NV3007_SRC.contains(derived),
+            "lcd_nv3007 must derive its control pins from the board; missing `{derived}`"
+        );
+    }
+    // Ban EVERY GPIO base, not just iota2's. The original list was
+    // [GPIOE, GPIOD, RCC] — precisely the ports pq1's LCD does NOT use — so it
+    // could only catch an iota2-shaped hardcode. pq1's LCD lives on GPIOA
+    // (SPI) and GPIOB (DC/RST/backlight); hardcoding either passed the gate.
+    for banned in [
+        "0x5202_0000", // GPIOA — pq1 LCD SPI
+        "0x5202_0400", // GPIOB — pq1 LCD DC/RST/backlight
+        "0x5202_0800", // GPIOC
+        "0x5202_0C00", // GPIOD
+        "0x5202_1000", // GPIOE — iota2 LCD
+        "0x5602_0C8C", // RCC AHB2ENR1
+    ] {
+        assert!(
+            !LCD_NV3007_SRC.contains(banned),
+            "lcd_nv3007 must not hardcode a GPIO/RCC address (`{banned}`) — port E \
+             does not exist on pq1's 48-pin package"
+        );
+    }
+    // It must clock the ports its own pins live on: `spi_hw` only enables the
+    // SPI port, which on pq1 is a DIFFERENT port from DC/RES/backlight.
+    assert!(LCD_NV3007_SRC.contains("board::gpio_rcc_bit(DC_PORT) | board::gpio_rcc_bit(RES_PORT)"));
+    // Reset strategy follows the board: a real pin pulse where one is wired.
+    assert!(
+        LCD_NV3007_SRC.contains("if RES_DRIVABLE {")
+            && LCD_NV3007_SRC.contains("hard_reset();"),
+        "a board whose reset pin reaches the panel must get a real pulse, not SWRESET"
+    );
+    // pq1's backlight enable must actually be asserted.
+    assert!(LCD_NV3007_SRC.contains("if let Some((port, pin)) = board::LCD_BACKLIGHT_EN {"));
+
+    // Per-board values.
+    assert!(BOARD_IOTA2_SRC.contains("pub const LCD_RST_IS_DRIVABLE: bool = false;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const LCD_RST_IS_DRIVABLE: bool = true;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const LCD_DC_PIN: u32 = 0;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const LCD_RST_PIN: u32 = 1;"));
+}
+
+/// `src` with every `//` comment removed, line structure kept. Positions are
+/// then taken on code only — the #730 comments in `lcd_nv3007::init` name
+/// `fill_screen` and DISPON in prose, and an ordering check that matched
+/// those would pass or fail on the wording of a comment.
+fn strip_line_comments(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    for line in src.lines() {
+        out.push_str(match line.find("//") {
+            Some(i) => &line[..i],
+            None => line,
+        });
+        out.push('\n');
+    }
+    out
+}
+
+/// The body of the top-level fn whose header is `header`, up to the first
+/// column-0 `}`. Panics if the header is absent or not unique.
+fn top_level_fn_body<'a>(code: &'a str, header: &str) -> &'a str {
+    assert_eq!(code.matches(header).count(), 1, "expected exactly one `{header}`");
+    let start = code.find(header).unwrap();
+    let len = code[start..].find("\n}\n").expect("unterminated fn body");
+    &code[start..start + len]
+}
+
+/// #730: on pq1 the backlight must light only AFTER the panel content is defined.
+///
+/// `DISPON` is the last command of `run_init_sequence`. The old one-shot
+/// `aw99703::init()` left Standby before the panel was even reset, so for the
+/// ~170 ms between DISPON and the first `fill_screen` a lit panel showed
+/// whatever GRAM held. The fix splits the chip bring-up: `configure()` (limits
+/// and brightness, chip still dark) stays early for its settle delay, and
+/// `enable()` — the one write that emits light — moves after the fill.
+///
+/// What this checks is statement ORDER in a straight-line body, which source
+/// positions do capture (unlike the arm order of a branch chain, where a text
+/// pin is unsound). "Enable only after a successful configure" is not tested
+/// here because the compiler already enforces it: `enable` takes a
+/// `Configured` token only `configure` can construct.
+#[test]
+fn negative_backlight_enables_only_after_the_panel_is_painted() {
+    let lcd = strip_line_comments(LCD_NV3007_SRC);
+    let body = top_level_fn_body(&lcd, "pub fn init() {");
+    let pos = |needle: &str| {
+        body.find(needle)
+            .unwrap_or_else(|| panic!("lcd_nv3007::init: missing `{needle}`"))
+    };
+    let configure = pos("aw99703::configure()");
+    let reset = pos("hard_reset();");
+    let fill = pos("fill_screen(0x0000);");
+    let enable = pos("aw99703::enable(");
+    assert!(
+        configure < reset,
+        "configure() must run early: it carries the HWEN settle delay and leaves the chip dark"
+    );
+    assert!(
+        fill < enable,
+        "#730: aw99703::enable() must come AFTER fill_screen — enabling earlier lights \
+         undefined GRAM between DISPON and the first fill"
+    );
+    assert!(
+        !contains_in_code(LCD_NV3007_SRC, "aw99703::init("),
+        "the one-shot init that bundled the enable must not return"
+    );
+
+    // Driver side: the light-emitting write lives in `enable` and nowhere else.
+    let drv = strip_line_comments(AW99703_SRC);
+    let cfg = top_level_fn_body(&drv, "pub fn configure() -> Option<Configured> {");
+    assert!(
+        !cfg.contains("write_reg(REG_MODE"),
+        "configure() must leave the chip in Standby — it must not write REG_MODE"
+    );
+    let en = top_level_fn_body(&drv, "pub fn enable(_proof: Configured) -> bool {");
+    assert!(en.contains("write_reg(REG_MODE, MODE_I2C_LINEAR_BACKLIGHT)"));
+    assert_eq!(
+        drv.matches("write_reg(REG_MODE").count(),
+        1,
+        "REG_MODE (the boost enable) must be written from exactly one place"
+    );
+    // The private field is what makes the token unforgeable outside the module.
+    assert!(drv.contains("pub struct Configured(());"));
 }

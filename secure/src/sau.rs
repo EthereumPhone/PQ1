@@ -260,13 +260,96 @@ mod stm32 {
     // - IWDG (bit 7): Secure-owned watchdog. Selected only with the `iwdg`
     //   feature, which is mandatory for production and for any production
     //   forced-blind build. Runtime register access uses only 0x5000_3000.
-    // - I2C1 (bit 13): OPTIGA Trust M + SE050 driver bus.
-    // - I2C2 (bit 14): STSAFE-A110 on-board probe bus.
+    // - I2C1 (bit 13): OPTIGA Trust M (+ SE050 too, on `iota2`).
+    // - I2C2 (bit 14): STSAFE-A110 on-board probe bus (`iota2`); the
+    //   AW99703 backlight + AW21036 RGB LED drivers (`pq1`).
+    // - I2C4 (bit 16): SE050's dedicated bus — `pq1` only.
     // All selected entries are secure-world-only; NS has no writer.
     #[cfg(feature = "iwdg")]
     const SECCFGR1_IWDG_BIT: u32 = 1 << 7;
     const SECCFGR1_I2C1_BIT: u32 = 1 << 13;
     const SECCFGR1_I2C2_BIT: u32 = 1 << 14;
+    // I2C4 (bit 16, `GTZC_CFGR1_I2C4_Pos`): the SE050's OWN bus on `pq1`,
+    // which splits the two secure elements across I2C1 and I2C4 instead of
+    // sharing one. Unused on `iota2`, where both chips are on I2C1.
+    //
+    // This bit is the sharpest invariant-#3/#4 hazard in the whole board
+    // port, because leaving it clear has **no functional symptom at all**:
+    // the SE050 works perfectly from the secure world either way. The only
+    // thing that changes is whether the non-secure world can also drive the
+    // bus. `configure_gtzc` writes SECCFGR1 absolutely, so a missing bit is
+    // actively driven to 0, not merely left at reset.
+    #[cfg(feature = "board-pq1")]
+    const SECCFGR1_I2C4_BIT: u32 = 1 << 16;
+
+    // UCPD1 (bit 19, `GTZC_CFGR1_UCPD1_Pos` — CMSIS stm32u585xx.h:20063).
+    //
+    // Secured on BOTH boards, for two different reasons.
+    //
+    // On `iota2` UCPD1 is driven from the secure world at boot (`hw::usb_hw::
+    // init_ucpd`, Type-C CC detection) and never touched again; NS has no
+    // business there. That file used to *assert* this was already the case —
+    // "APB1 peripherals are secure with TZEN=1; writes via NS alias are
+    // silently ignored" — which is false. TZEN=1 secures GPIO by default;
+    // APB peripheral attribution is GTZC's, and bit 19 was never set. The
+    // comment claimed a guarantee this register did not deliver.
+    //
+    // On `pq1` it matters more, and in a way no GPIO gate can see. That board
+    // routes NO CC line to the MCU, so `init_ucpd` is compiled out — but the
+    // pads UCPD1 owns are still physically wired to something: PA15 is
+    // `SE_RST`, the OPTIGA's reset, and PB15 is `LCM_EN`, the trusted
+    // display's backlight. `board::ns_forbidden_mask` keeps those two pins out
+    // of the USB non-secure mask, but that guards `GPIOx_SECCFGR` only. An
+    // NS-reachable UCPD1 is a second, independent handle on the same two pads
+    // via the CC analog front-end and the dead-battery Rd, underneath the
+    // layer that assert protects. ST's HAL also documents `PWR_UCPDR` as
+    // secure only when UCPD1 is secure in GTZC, so this bit gates the
+    // dead-battery control too.
+    //
+    // Whether that analog path can pull a secure GPIO output hard enough to
+    // actually reset the OPTIGA is NOT established — it needs RM0456 plus a
+    // scope on pq1 silicon. This closes the attribution hole regardless,
+    // because the cost is one bit and NS has no legitimate use for UCPD1 on
+    // either board (`grep -r UCPD nonsecure/` is empty).
+    const SECCFGR1_UCPD1_BIT: u32 = 1 << 19;
+
+    // TIM2 (bit 0, `GTZC_CFGR1_TIM2_Pos` — CMSIS stm32u585xx.h:20025).
+    //
+    // TIM2 CH1 drives the `consumption-mask` PWM, which `nsc/mod.rs` makes
+    // MANDATORY for every production hardware build: without it the
+    // SPHINCS+C10 keygen/sign window runs with an undiluted power signature
+    // and a bench CPA/DPA attacker reads the WOTS/FORS secrets out of it.
+    //
+    // A countermeasure the non-secure world can switch off is not a
+    // countermeasure. With TIM2 unattributed, NS reaches the timer through its
+    // own peripheral alias and clears `TIM2_CR1.CEN` — the PWM stops, the mask
+    // goes flat, and NOTHING in the secure world notices, because the secure
+    // side only ever writes CCR1 and never reads back that the counter is
+    // still running. This repo's own audit recorded that trace in
+    // `docs/security/audits/tz-tamper-debug-20260611-141459.md:142,154`; it
+    // predates the board port and was surfaced again by the 2026-08-31 review.
+    //
+    // NS has no legitimate use for TIM2 (`grep -rn TIM2 nonsecure/` is empty),
+    // so securing it costs nothing and removes the off-switch. As with UCPD1,
+    // final exploitability was NOT reproduced on silicon here — the audit
+    // above argues it and this closes it either way.
+    //
+    // TIM3 (bit 1) is secured alongside it. When this comment was written TIM3
+    // was unused and explicitly NOT secured, with the note that "if the mask
+    // ever moves to TIM3, it must join this image in the same commit, or pq1
+    // ships the exact hole this bit closes". It has: pq1 runs the mask on
+    // TIM3_CH1/PA6 because every TIM2_CH1 pin is taken there (PA0 LEFT KEY,
+    // PA5 the LCD's SCK, PA15 SE_RST).
+    //
+    // BOTH are secured on BOTH boards rather than one per board. The mask
+    // timer differs by board, and a per-board bit would put the whole
+    // security property one editing mistake away from silently vanishing on
+    // the board whose bit was forgotten — which is exactly what the note above
+    // was worried about. Neither timer has a non-secure consumer on either
+    // board (`grep -rn "TIM[23]" nonsecure/` is empty), so securing both costs
+    // one bit and removes the coupling.
+    const SECCFGR1_TIM2_BIT: u32 = crate::board::TZSC_SECCFGR1_TIM2SEC;
+    const SECCFGR1_TIM3_BIT: u32 = crate::board::TZSC_SECCFGR1_TIM3SEC;
 
     // ---- SECCFGR2 (APB2) — SPI1 (trusted display) SECURE (finding F1) ----
     // Bit position per `GTZC_CFGR2_SPI1_Pos` in CMSIS `stm32u585xx.h` (= 1).
@@ -294,8 +377,10 @@ mod stm32 {
     //   lives in NS; pulling USB control into the secure world would
     //   require re-architecting transport, which is way out of scope.
     //   GPIO security (PA11/PA12 = D+/D-) is governed separately by
-    //   GPIOA_SECCFGR; UCPD1 handshake is done from secure world at
-    //   boot and never touched again.
+    //   GPIOA_SECCFGR. The UCPD1 handshake is done from the secure world at
+    //   boot and never touched again — on iota2 only, since pq1 routes no CC
+    //   line to the MCU and compiles that path out entirely. UCPD1 itself is
+    //   Secure on both boards (bit 19, above); it is only OTG that stays NS.
     // - AES (bit 11): no current consumer (we use SAES); marked
     //   SECURE defensively so a stale NS-side AES driver can't
     //   accidentally race a secure SAES op.
@@ -376,7 +461,10 @@ mod stm32 {
         // Intentionally LEFT NS (the NS world legitimately needs them):
         //   - OTG (SECCFGR3 bit 10): USB HID transport to companion
         //   - GPIO banks: governed per-pin by GPIOx_SECCFGR, not TZSC
-        //   - TIM / USART / etc.: NS-side UI + debug logging (SPI1 is now
+        //   - USART / etc.: NS-side UI + debug logging. NOT the timers:
+        //     TIM2 and TIM3 are SECURED above (they carry the consumption
+        //     mask, which production mandates), so this line no longer
+        //     covers them. (SPI1 is now
         //     secured above; SPI2 stays NS on the non-LCD Tropic bench build)
         //
         // Other peripherals (SDMMC, OCTOSPI, FDCAN, etc.) keep their
@@ -404,22 +492,58 @@ mod stm32 {
         // is cited as evidence for it. Recorded as HW-ASSUME-CMSE-SAU's note
         // and work-todo C3; closing it needs the test rebuilt on the shipping
         // combo, which these pins make reviewable in the meantime.
+        // The image is two orthogonal choices — IWDG on/off, and which
+        // board — so it is built from two independently-cfg'd terms rather
+        // than four hand-written totals. The `assert!`s below still pin the
+        // FULL expected value for each of the four combinations, by exact
+        // equality: a subset test would let a stray extra bit through, and
+        // the whole point of this pin is that every secured peripheral was
+        // deliberately chosen.
         #[cfg(feature = "iwdg")]
-        const SECCFGR1_IMAGE: u32 =
-            SECCFGR1_IWDG_BIT | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;
+        const SECCFGR1_IWDG_IMAGE: u32 = SECCFGR1_IWDG_BIT;
         #[cfg(not(feature = "iwdg"))]
-        const SECCFGR1_IMAGE: u32 = SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;
-        #[cfg(feature = "iwdg")]
+        const SECCFGR1_IWDG_IMAGE: u32 = 0;
+
+        #[cfg(feature = "board-pq1")]
+        const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;
+        #[cfg(not(feature = "board-pq1"))]
+        const SECCFGR1_BOARD_IMAGE: u32 = 0;
+
+        const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE
+            | SECCFGR1_I2C1_BIT
+            | SECCFGR1_I2C2_BIT
+            | SECCFGR1_BOARD_IMAGE
+            | SECCFGR1_UCPD1_BIT
+            | SECCFGR1_TIM2_BIT
+            | SECCFGR1_TIM3_BIT;
+
+        #[cfg(all(feature = "iwdg", not(feature = "board-pq1")))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),
             "TZSC_SECCFGR1 IWDG image drifted — IWDG must be Secure alongside the SE buses. \
              Source closure is not #79 silicon denial evidence."
         );
-        #[cfg(not(feature = "iwdg"))]
+        #[cfg(all(not(feature = "iwdg"), not(feature = "board-pq1")))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 13) | (1 << 14),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 19),
             "TZSC_SECCFGR1 image drifted — I2C1+I2C2 are the SE buses (invariant #3). \
              Update the pin ONLY with a matching gtzc-enforcement-hw receipt."
+        );
+        #[cfg(all(feature = "iwdg", feature = "board-pq1"))]
+        const _: () = assert!(
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
+            "TZSC_SECCFGR1 pq1+IWDG image drifted — on pq1 the SE050 has its OWN bus (I2C4, \
+             bit 16) and it MUST be Secure: a clear bit hands the non-secure world the SE050 \
+             bus with no functional symptom whatsoever. Update ONLY with a matching \
+             gtzc-enforcement-hw receipt taken on pq1 silicon."
+        );
+        #[cfg(all(not(feature = "iwdg"), feature = "board-pq1"))]
+        const _: () = assert!(
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
+            "TZSC_SECCFGR1 pq1 image drifted — on pq1 the SE050 has its OWN bus (I2C4, bit 16) \
+             and it MUST be Secure: a clear bit hands the non-secure world the SE050 bus with \
+             no functional symptom whatsoever. Update ONLY with a matching gtzc-enforcement-hw \
+             receipt taken on pq1 silicon."
         );
         // SECCFGR2 is the one that differs between the tested and shipped
         // builds. Both arms are pinned so neither can move unnoticed.

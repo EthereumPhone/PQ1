@@ -52,6 +52,7 @@ import json
 import os
 import struct
 import sys
+import select
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -72,13 +73,26 @@ CMD_PRODTEST_OPTIGA_HANDSHAKE = 106
 CMD_PRODTEST_SE050_HANDSHAKE = 107
 CMD_PRODTEST_USB_LOOPBACK = 108
 CMD_PRODTEST_BUTTON_TEST = 109
+CMD_PRODTEST_RGB_TEST = 110
+CMD_PRODTEST_RGB_OSD = 111
+CMD_PRODTEST_RNG_CONFIG = 112
 
 # Shared wire contract. Mirrors
 # `proto/src/lib.rs::PRODTEST_MAX_RESPONSE_DATA_LEN`.
 PRODTEST_MAX_RESPONSE_DATA_LEN = 254
-EXPECTED_PRODTEST_FW_VERSION = 3
+EXPECTED_PRODTEST_FW_VERSION = 5
 
-PROFILE_ID = "pqsigner-prodtest-reversible-v1"
+# Acceptance-profile identity. Board-scoped and versioned, because the matrix
+# below is not board-neutral: v2 REQUIRES the two AW21036 RGB commands, which
+# exist only on `pq1`. Running this profile against an `iota2` unit is therefore
+# expected to fail, and the failure is the correct answer rather than a bug —
+# the RGB decoders say so explicitly when the firmware has no RGB driver.
+#
+# v1 -> v2 (2026-09-21): RGB_TEST and RGB_OSD promoted OPTIONAL -> REQUIRED, so
+# LED acceptance is a machine gate rather than an operator's glance; profile id
+# carries the board. Receipts from the two versions stay distinguishable.
+PROFILE_ID = "pqsigner-prodtest-reversible-pq1-v2"
+PROFILE_BOARD = "pq1"
 PROFILE_REQUIRED = "required"
 PROFILE_OPTIONAL = "optional"
 PROFILE_UNSUPPORTED = "unsupported"
@@ -101,6 +115,16 @@ COMMAND_POLICIES = {
     CMD_PRODTEST_SE050_HANDSHAKE: ("SE050_HANDSHAKE", PROFILE_REQUIRED),
     CMD_PRODTEST_USB_LOOPBACK: ("USB_LOOPBACK", PROFILE_REQUIRED),
     CMD_PRODTEST_BUTTON_TEST: ("BUTTON_TEST", PROFILE_REQUIRED),
+    # Both RGB commands are `pq1`-only, which is why this profile is
+    # board-scoped (see PROFILE_ID). RGB_TEST proves the drive path — the part
+    # identifies itself and every register write ACKs; the colour itself is the
+    # operator's half. RGB_OSD is the fully machine-checkable half: it names a
+    # dead LED by channel, needs no camera, and cannot pass vacuously.
+    CMD_PRODTEST_RGB_TEST: ("RGB_TEST", PROFILE_REQUIRED),
+    CMD_PRODTEST_RGB_OSD: ("RGB_OSD", PROFILE_REQUIRED),
+    # Board-independent: every STM32U585 unit must be in the ESV-certified TRNG
+    # configuration, and must BE the certified silicon revision.
+    CMD_PRODTEST_RNG_CONFIG: ("RNG_CONFIG", PROFILE_REQUIRED),
 }
 
 
@@ -112,7 +136,14 @@ def profile_receipt() -> dict:
             for cmd, (_, policy) in COMMAND_POLICIES.items()
             if policy == PROFILE_REQUIRED
         ],
-        PROFILE_OPTIONAL: [],
+        # Derived, not hardcoded: an earlier version pinned this to [] while the
+        # other two classes were computed, so a receipt silently claimed there
+        # were no optional commands while two were declared optional.
+        PROFILE_OPTIONAL: [
+            cmd
+            for cmd, (_, policy) in COMMAND_POLICIES.items()
+            if policy == PROFILE_OPTIONAL
+        ],
         PROFILE_UNSUPPORTED: [
             cmd
             for cmd, (_, policy) in COMMAND_POLICIES.items()
@@ -121,8 +152,13 @@ def profile_receipt() -> dict:
     }
     return {
         "id": PROFILE_ID,
+        "board": PROFILE_BOARD,
         "feature_list_authority": "host_expected_not_device_attested",
-        "secure_features": ["prodtest", "dev-testkey", "saes-dhuk"],
+        # `board-pq1` is listed because naming a board is mandatory on every
+        # stm32u585 build: omitting it compiles the iota2 pin map with every
+        # pq1 fence silently inert, which is how an earlier recipe put iota2
+        # pins on pq1 silicon.
+        "secure_features": ["prodtest", "dev-testkey", "saes-dhuk", "board-pq1"],
         "nonsecure_features": ["stm32u585", "usb", "prodtest"],
         "max_response_data_len": PRODTEST_MAX_RESPONSE_DATA_LEN,
         "expected_firmware_version": EXPECTED_PRODTEST_FW_VERSION,
@@ -146,6 +182,9 @@ INS_FOR_CMD = {
     CMD_PRODTEST_SE050_HANDSHAKE:   0x87,
     CMD_PRODTEST_USB_LOOPBACK:      0x88,
     CMD_PRODTEST_BUTTON_TEST:       0x89,
+    CMD_PRODTEST_RGB_TEST:          0x8A,
+    CMD_PRODTEST_RGB_OSD:           0x8B,
+    CMD_PRODTEST_RNG_CONFIG:        0x8C,
 }
 
 # APDU + HID framing constants. Mirror `proto/src/lib.rs::APDU_CLA_V2`
@@ -182,8 +221,14 @@ STATUS_INVALID_POINTER = 4
 STATUS_NOT_INITIALIZED = 5
 STATUS_INTERNAL_ERROR = 0xFFFFFFFF  # catch-all for the dispatcher
 
-USB_VID_DEFAULT = 0x2C97
-USB_PID_DEFAULT = 0x0006
+# The device's own ids, from `nonsecure/src/usb/mod.rs`'s
+# `UsbVidPid(0x1209, 0x7051)`. These were previously Ledger's 0x2C97:0x0006 —
+# a stale default that made the runner unable to find any PQSigner unit, which
+# a factory would hit on its first run. `test_usb_ids_match_the_firmware`
+# derives the expected values from that source file so they cannot drift again.
+# 0x1209 is pid.codes, the community VID; 0x7051 is our allocation.
+USB_VID_DEFAULT = 0x1209
+USB_PID_DEFAULT = 0x7051
 
 # Display test patterns
 PATTERN_WHITE = 0
@@ -283,6 +328,59 @@ class UnitReport:
 # ---------------------------------------------------------------------------
 
 
+def _find_hidraw_node(vid: int, pid: int) -> str | None:
+    """The `/dev/hidrawN` node for `vid:pid`, or None.
+
+    Reads the ids out of sysfs rather than shelling out, so it works on a bare
+    fixture image with no extra tooling.
+    """
+    for entry in sorted(Path("/sys/class/hidraw").glob("hidraw*")):
+        try:
+            uevent = (entry / "device/uevent").read_text()
+        except OSError:
+            continue
+        # HID_ID looks like "3:0000109:00007051" — bus:vendor:product, hex.
+        for line in uevent.splitlines():
+            if not line.startswith("HID_ID="):
+                continue
+            parts = line.split("=", 1)[1].split(":")
+            if len(parts) == 3:
+                try:
+                    if int(parts[1], 16) == vid and int(parts[2], 16) == pid:
+                        return f"/dev/{entry.name}"
+                except ValueError:
+                    pass
+    return None
+
+
+class HidRawDevice:
+    """Minimal hidapi-compatible wrapper over a `/dev/hidrawN` node.
+
+    Implements only what `ProdtestTransport` calls — `write`, `read` with a
+    millisecond timeout, and `close` — and matches hidapi's semantics: the
+    caller supplies the leading report-ID byte on write, and read returns the
+    report without it. A timeout returns empty, which is what the transport's
+    own timeout check expects.
+    """
+
+    def __init__(self, path: str) -> None:
+        self.fd = os.open(path, os.O_RDWR)
+        self.path = path
+
+    def write(self, data: bytes) -> int:
+        return os.write(self.fd, data)
+
+    def read(self, size: int, timeout_ms: int = 0) -> bytes:
+        timeout_s = (timeout_ms / 1000.0) if timeout_ms else None
+        ready, _, _ = select.select([self.fd], [], [], timeout_s)
+        if not ready:
+            return b""
+        return os.read(self.fd, size)
+
+    def close(self) -> None:
+        os.close(self.fd)
+
+
 class ProdtestTransport:
     """USB-HID APDU-over-Ledger-framing transport.
 
@@ -314,8 +412,25 @@ class ProdtestTransport:
         try:
             import hid  # type: ignore
         except ImportError:
-            print("ERROR: hidapi not installed. `pip install hid`.", file=sys.stderr)
-            raise
+            # Fall back to the kernel's hidraw. A factory fixture should not
+            # need a pip install to talk to a USB HID device, and on Linux
+            # hidraw is always present — so this is the preferred path there,
+            # not a degraded one. `HidRawDevice` implements exactly the three
+            # hidapi calls this class uses.
+            node = _find_hidraw_node(self.vid, self.pid)
+            if node is None:
+                print(
+                    "ERROR: hidapi not installed and no matching hidraw node "
+                    f"for {self.vid:#06x}:{self.pid:#06x}. Either `pip install "
+                    "hid` or check the device is connected and readable "
+                    "(a udev rule may be needed).",
+                    file=sys.stderr,
+                )
+                raise
+            self._dev = HidRawDevice(node)
+            if self.verbose:
+                print(f"[hid] opened {node} via hidraw (hidapi not installed)")
+            return
         self._dev = hid.device()
         self._dev.open(self.vid, self.pid)
         if self.verbose:
@@ -542,7 +657,14 @@ def test_saes_selftest(tx: ProdtestTransport) -> TestResult:
         cmd=CMD_PRODTEST_SAES_SELFTEST,
         passed=nonzero,
         status_code=status,
-        detail=f"fingerprint={fingerprint}",
+        # NOT a unit identity. This is a DHUK-derived value, and DHUK is shared
+        # across all parts at RDP-0 (per-device only from RDP0.5 up, RM0456
+        # Table 21). Units are tested and shipped at RDP-0, so every unit on the
+        # line prints the SAME fingerprint — measured identical on two dies. It
+        # proves the SAES/DHUK path runs; it does not distinguish boards, and
+        # reading it as a per-unit value would make every unit look cloned. Use
+        # the STM32 UID from GET_ID for identity.
+        detail=f"fingerprint={fingerprint} (shared at RDP-0, not a unit id)",
         raw_response=resp,
     )
 
@@ -727,6 +849,278 @@ def test_button_test(tx: ProdtestTransport) -> TestResult:
     )
 
 
+# RGB_TEST response layout — mirrors `proto/src/lib.rs::CMD_PRODTEST_RGB_TEST`.
+RGB_OUT_LEN = 24
+RGB_SCAN_LEN = 16
+RGB_VER_EXPECTED = 0xA8
+RGB_RESET_ID_EXPECTED = 0x18
+RGB_ADDR = 0x34           # AW21036, AD strapped to GND
+RGB_BROADCAST_ADDR = 0x1C  # answered by the AW21036 regardless of the strap
+BACKLIGHT_ADDR = 0x36      # AW99703 on the same bus — the bus's positive control
+
+
+def decode_rgb_scan(scan: bytes) -> list[int]:
+    """7-bit addresses present in the bitmap (bit a%8 of byte a//8)."""
+    return [a for a in range(128) if scan[a // 8] & (1 << (a % 8))]
+
+
+def test_rgb_test(
+    tx: ProdtestTransport,
+    r: int = 0,
+    g: int = 0,
+    b: int = 0,
+    gcc: int = 0,
+    en: int = 1,
+    label: str = "",
+) -> TestResult:
+    """Light the 9 RGB LEDs and interpret the driver's self-report.
+
+    The detail string is written to localize a dark board: if the AW21036 did
+    not answer but the AW99703 backlight at 0x36 did, the bus is fine and the
+    fault is the part or its strap; if neither answered, the fault is the bus.
+    """
+    name = f"RGB_TEST({label or f'{r:02x}{g:02x}{b:02x}'})"
+    in_data = bytes([r & 0xFF, g & 0xFF, b & 0xFF, gcc & 0xFF, 1 if en else 0, 0])
+    status, resp = tx.send_cmd(CMD_PRODTEST_RGB_TEST, in_data, out_size=RGB_OUT_LEN)
+    if len(resp) != RGB_OUT_LEN:
+        return TestResult(
+            name=name,
+            cmd=CMD_PRODTEST_RGB_TEST,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes (expected {RGB_OUT_LEN})",
+        )
+    seen = decode_rgb_scan(resp[:RGB_SCAN_LEN])
+    ver, reset_id, acks_ok, acks_total, en_level, gcc_used = resp[16:22]
+    parts = [
+        f"ver=0x{ver:02x}",
+        f"id=0x{reset_id:02x}",
+        f"acks={acks_ok}/{acks_total}",
+        f"en={en_level}",
+        f"gcc=0x{gcc_used:02x}",
+        "bus=[" + " ".join(f"0x{a:02x}" for a in seen) + "]",
+    ]
+    if ver != RGB_VER_EXPECTED:
+        if acks_total == 0:
+            parts.append(
+                "HINT: firmware attempted no writes — this build has no RGB "
+                "driver (wrong board, or built without board-pq1)"
+            )
+        elif BACKLIGHT_ADDR in seen and RGB_ADDR not in seen:
+            parts.append("HINT: bus OK (backlight answered), AW21036 silent — part or AD strap")
+        elif not seen:
+            parts.append("HINT: nothing on the bus — I2C2 pins, pull-ups or rail")
+        else:
+            parts.append("HINT: part addressable but identity wrong — wrong chip or bad read")
+    return TestResult(
+        name=name,
+        cmd=CMD_PRODTEST_RGB_TEST,
+        passed=(status == STATUS_OK and ver == RGB_VER_EXPECTED and acks_ok == acks_total),
+        status_code=status,
+        detail=", ".join(parts),
+        raw_response=resp,
+    )
+
+
+# RGB_OSD response layout — mirrors `proto/src/lib.rs::CMD_PRODTEST_RGB_OSD`.
+RGB_OSD_OUT_LEN = 24
+OSST_BYTES = 5
+OSD_INCONCLUSIVE = "INCONCLUSIVE"
+
+
+def decode_osst(bitmap: bytes, total_channels: int) -> set[int]:
+    """1-based channel numbers flagged in an OSST bitmap.
+
+    `LED(k)` is bit `(k-1) % 8` of byte `(k-1) // 8`.
+    """
+    return {
+        k
+        for k in range(1, total_channels + 1)
+        if bitmap[(k - 1) // 8] & (1 << ((k - 1) % 8))
+    }
+
+
+def channel_label(k: int) -> str:
+    """Name channel `k` as its RGB package and colour.
+
+    The board wires LED1..LED27 as LED_R1, LED_G1, LED_B1, LED_R2, ... so the
+    channel index identifies both which of the nine packages and which die.
+    """
+    return f"LED{(k - 1) // 3 + 1}-{'RGB'[(k - 1) % 3]}"
+
+
+def test_rgb_osd(tx: ProdtestTransport, gcc: int = 0, en: int = 1) -> TestResult:
+    """Per-channel open detection — the dead-LED test a fixture can gate on.
+
+    Two things have to be established before any verdict is meaningful, and
+    both come from the same board fact:
+
+    1. **Which `OSDE` encoding is open detection.** The datasheet contradicts
+       itself (prose says 10=open/11=short, the register table says the
+       reverse), so firmware returns both bitmaps and we resolve it here.
+    2. **That detection actually ran.** Channels LED28..36 have no LED
+       attached, so they MUST read open. Whichever mode flags all of them is
+       open detection; if neither does, the mechanism did not work and the
+       verdict is INCONCLUSIVE.
+
+    A certification gate that reports PASS when the measurement silently did
+    nothing is worse than no gate, so INCONCLUSIVE never passes.
+    """
+    in_data = bytes([gcc & 0xFF, 1 if en else 0, 0, 0])
+    status, resp = tx.send_cmd(CMD_PRODTEST_RGB_OSD, in_data, out_size=RGB_OSD_OUT_LEN)
+    if len(resp) != RGB_OSD_OUT_LEN:
+        return TestResult(
+            name="RGB_OSD",
+            cmd=CMD_PRODTEST_RGB_OSD,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes (expected {RGB_OSD_OUT_LEN})",
+        )
+
+    mode_a = resp[0:OSST_BYTES]
+    mode_b = resp[OSST_BYTES : 2 * OSST_BYTES]
+    ver, acks_ok, acks_total, en_level, gcc_used, wired, total = resp[10:17]
+
+    parts = [
+        f"ver=0x{ver:02x}",
+        f"acks={acks_ok}/{acks_total}",
+        f"en={en_level}",
+        f"gcc=0x{gcc_used:02x}",
+        f"wired={wired}/{total}",
+        f"a={mode_a.hex()}",
+        f"b={mode_b.hex()}",
+    ]
+
+    if acks_total == 0:
+        parts.append(
+            "firmware attempted no writes — this build has no RGB driver "
+            "(wrong board, or built without board-pq1)"
+        )
+        return TestResult(
+            name="RGB_OSD",
+            cmd=CMD_PRODTEST_RGB_OSD,
+            passed=False,
+            status_code=status,
+            detail=", ".join(parts),
+            raw_response=resp,
+        )
+
+    if not 0 < wired <= total or total > OSST_BYTES * 8:
+        parts.append("channel counts from the device are not sane")
+        return TestResult(
+            name="RGB_OSD",
+            cmd=CMD_PRODTEST_RGB_OSD,
+            passed=False,
+            status_code=status,
+            detail=", ".join(parts),
+            raw_response=resp,
+        )
+
+    flagged_a = decode_osst(mode_a, total)
+    flagged_b = decode_osst(mode_b, total)
+    unwired = set(range(wired + 1, total + 1))
+    a_is_open = bool(unwired) and unwired <= flagged_a
+    b_is_open = bool(unwired) and unwired <= flagged_b
+
+    if a_is_open == b_is_open:
+        # Neither mode flagged the physically-open control channels (detection
+        # did not run), or both did (cannot tell the encodings apart).
+        why = (
+            "both modes flagged the unwired control channels — cannot identify "
+            "the open-detect encoding"
+            if a_is_open
+            else f"neither mode flagged the unwired control channels {sorted(unwired)} "
+            "— open detection did not run (check the ~1 mA bias and PWMDIS)"
+        )
+        parts.append(f"{OSD_INCONCLUSIVE}: {why}")
+        return TestResult(
+            name="RGB_OSD",
+            cmd=CMD_PRODTEST_RGB_OSD,
+            passed=False,
+            status_code=status,
+            detail=", ".join(parts),
+            raw_response=resp,
+        )
+
+    open_mode = "a(OSDE=10)" if a_is_open else "b(OSDE=11)"
+    flagged_open = flagged_a if a_is_open else flagged_b
+    faulty = sorted(flagged_open & set(range(1, wired + 1)))
+    parts.append(f"open-encoding={open_mode}")
+    parts.append(
+        "channels OK"
+        if not faulty
+        else "OPEN: " + " ".join(f"{channel_label(k)}(ch{k})" for k in faulty)
+    )
+    return TestResult(
+        name="RGB_OSD",
+        cmd=CMD_PRODTEST_RGB_OSD,
+        passed=(status == STATUS_OK and not faulty),
+        status_code=status,
+        detail=", ".join(parts),
+        raw_response=resp,
+    )
+
+
+# CMD_PRODTEST_RNG_CONFIG — NIST ESV certificate E11 (STM32U575x/U585x,
+# validated 2022-12-16). Table 2 fixes the configuration; the certificate covers
+# "revision B and Later" silicon, identified by 0x41 in the RNG version register.
+RNG_CONFIG_LEN = 20
+RNG_CR_EXPECTED = 0x80F00D04      # config + RNGEN (bit 2) + CONFIGLOCK (bit 31)
+RNG_NSCR_EXPECTED = 0x00017CBB
+RNG_HTCR_ALLOWED = (0x00006E9C, 0x0000A2B0)   # alpha = 2^-20 or 2^-30
+RNG_VER_EXPECTED = 0x41
+DEV_ID_U575_U585 = 0x482
+
+
+def test_rng_config(tx: ProdtestTransport) -> TestResult:
+    """Per-unit evidence that the TRNG is in the ESV-certified configuration.
+
+    Neither half is visible from outside the device and both are per-unit
+    facts: silicon revision varies by batch, and a configuration write can be
+    silently ignored (RNG_HTCR and RNG_NSCR are only honoured while CONDRST=1,
+    and are frozen entirely once CONFIGLOCK is set).
+    """
+    status, resp = tx.send_cmd(CMD_PRODTEST_RNG_CONFIG, b"", out_size=RNG_CONFIG_LEN)
+    if len(resp) != RNG_CONFIG_LEN:
+        return TestResult(
+            name="RNG_CONFIG",
+            cmd=CMD_PRODTEST_RNG_CONFIG,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes (expected {RNG_CONFIG_LEN})",
+        )
+    cr, nscr, htcr, ver, idcode = struct.unpack("<5I", resp)
+    dev_id, rev_id = idcode & 0xFFF, (idcode >> 16) & 0xFFFF
+    parts, bad = [], []
+    parts.append(f"CR=0x{cr:08x}")
+    if cr != RNG_CR_EXPECTED:
+        bad.append(f"CR 0x{cr:08x} != 0x{RNG_CR_EXPECTED:08x}"
+                   + ("" if cr & (1 << 31) else " (CONFIGLOCK NOT set)"))
+    parts.append(f"NSCR=0x{nscr:05x}")
+    if nscr != RNG_NSCR_EXPECTED:
+        bad.append(f"NSCR 0x{nscr:x} != 0x{RNG_NSCR_EXPECTED:x}")
+    parts.append(f"HTCR=0x{htcr:04x}")
+    if htcr not in RNG_HTCR_ALLOWED:
+        bad.append(f"HTCR 0x{htcr:x} is not one of E11's permitted values")
+    parts.append(f"VER=0x{ver:02x}")
+    if ver != RNG_VER_EXPECTED:
+        bad.append(f"RNG version 0x{ver:x} != 0x{RNG_VER_EXPECTED:x}"
+                   " — E11 covers revision B and later only")
+    parts.append(f"DEV_ID=0x{dev_id:03x} REV_ID=0x{rev_id:04x}")
+    if dev_id != DEV_ID_U575_U585:
+        bad.append(f"DEV_ID 0x{dev_id:03x} is not U575/U585 (0x482)")
+    if bad:
+        parts.append("NOT CERTIFIED-CONFIG: " + "; ".join(bad))
+    return TestResult(
+        name="RNG_CONFIG",
+        cmd=CMD_PRODTEST_RNG_CONFIG,
+        passed=(status == STATUS_OK and not bad),
+        status_code=status,
+        detail=", ".join(parts),
+        raw_response=resp,
+    )
+
+
 def test_trng_sample(
     tx: ProdtestTransport, n: int = PRODTEST_MAX_RESPONSE_DATA_LEN
 ) -> TestResult:
@@ -794,6 +1188,22 @@ def run_all_tests(tx: ProdtestTransport, report: UnitReport) -> None:
     # operator must be present and pressing buttons; failures from
     # the prior automated tests are easier to recover from without
     # involving a human).
+    # RGB LEDs: a colour sweep the operator (or the fixture's camera) watches.
+    # Held long enough to be seen, and left dark at the end so the next unit
+    # starts from an unlit board.
+    for r, g, b, label in (
+        (0xFF, 0x00, 0x00, "red"),
+        (0x00, 0xFF, 0x00, "green"),
+        (0x00, 0x00, 0xFF, "blue"),
+        (0xFF, 0xFF, 0xFF, "white"),
+    ):
+        report.results.append(test_rgb_test(tx, r, g, b, label=label))
+        time.sleep(1.0)
+    report.results.append(test_rgb_test(tx, 0, 0, 0, label="off"))
+    # Machine-checkable dead-LED detection — names the failing channel, so it
+    # does not depend on the operator noticing a wrong colour.
+    report.results.append(test_rgb_osd(tx))
+    report.results.append(test_rng_config(tx))
     report.results.append(test_button_test(tx))
 
 
@@ -827,7 +1237,7 @@ def write_report_atomic(path: str, report: UnitReport) -> None:
 def print_summary(report: UnitReport) -> None:
     print()
     print("=" * 60)
-    print(f"Profile:    {PROFILE_ID}")
+    print(f"Profile:    {PROFILE_ID} (board {PROFILE_BOARD})")
     print(f"UID:        {report.stm32_uid_hex}")
     print(f"FW version: {report.prodtest_fw_version}")
     print("=" * 60)

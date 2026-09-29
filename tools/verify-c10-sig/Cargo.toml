@@ -1,0 +1,34 @@
+# Offline verifier for the C10 Type-2 signature captured over USB HID.
+#
+# Lives OUTSIDE the repo on purpose: another session has ~52 uncommitted
+# files in that working tree, so adding a crate there (and touching the
+# workspace Cargo.toml) risks entangling their work. Path deps reach into
+# the repo read-only.
+#
+# Build/run with `env -u RUSTFLAGS` — the firmware's exported
+# `-C linker=arm-none-eabi-ld` breaks host build scripts, and a run made
+# with it inherited is void rather than informative.
+[package]
+name = "verify-c10-sig"
+version = "0.1.0"
+edition = "2021"
+
+# Standalone: do NOT let this be absorbed into any parent workspace.
+[workspace]
+
+[dependencies]
+sphincs-c10 = { path = "../../sphincs-c10" }
+pqsigner-aa = { path = "../../aa" }
+pqsigner-domain = { path = "../../domain" }
+sphincs-tz-bip39 = { path = "../../bip39" }
+pqsigner-tx-core = { path = "../../tx-core" }
+sha2 = "0.10"
+hex = "0.4"
+
+[[bin]]
+name = "verify-c10-sig"
+path = "src/main.rs"
+
+# Release: C10 verify does a lot of hashing; debug builds are painfully slow.
+[profile.release]
+opt-level = 3

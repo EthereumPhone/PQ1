@@ -151,14 +151,27 @@ const WORDS_MS: u32 = 4_000;
 /// 4 deputy 8 simple
 /// ```
 fn render_all_words(hash: &[u8; 32]) {
-    let d = display();
-    d.clear();
-
     // Consume the exact same pure 4x16 byte grid as the legacy bench FSBL.
     // Keeping layout and prefix truncation in one shared helper makes an
     // honest FSBL/secure-world mismatch a meaningful tamper signal instead
     // of a renderer-width artifact.
     let rows = firmware_fingerprint_lines(hash);
+
+    // Port step 4: the design's words grid has room for the eight words
+    // whole (BIP-39 words are at most eight letters), so it shows them
+    // uncut; the FSBL's own text window keeps its five-letter prefixes (plan
+    // § 4), which are the starts of these words.
+    #[cfg(feature = "ui-px")]
+    {
+        let indices = sphincs_tz_bip39::hash_to_word_indices(hash);
+        let words: [[u8; 8]; 8] = core::array::from_fn(|i| sphincs_tz_bip39::word_bytes_at(indices[i]).0);
+        if crate::ui::px::screens::show(&crate::ui::px::status_map::fingerprint_grid(&words)) {
+            return;
+        }
+    }
+
+    let d = display();
+    d.clear();
     for (row_idx, row) in rows.iter().enumerate() {
         d.draw_line(row_idx, ascii_str(row));
     }
@@ -176,6 +189,30 @@ fn render_all_words(hash: &[u8; 32]) {
 /// 1. Shows "OS Fingerprint" title for 1.5 s so the user knows these
 ///    are firmware identification words, not their seed phrase.
 /// 2. Shows all 8 words on a single screen for 4 s (any button skips).
+/// Hold the current screen for `ms`, tolerating a tick source that has not
+/// started yet.
+///
+/// Driven by SysTick via `timeout::now()`. On real STM32U585 hardware SysTick
+/// is already running (`main::setup_systick` runs before `measured_boot`), so
+/// `now()` advances and this returns after `ms`. On QEMU SysTick starts
+/// *after* `measured_boot`, so `now()` is frozen at 0: `t0 == 0` and
+/// `0.wrapping_sub(0) < ms` is permanently true, and a bare deadline loop
+/// would spin FOREVER, wedging boot at this screen. The spin-count fallback
+/// detects the stopped tick source and skips the cosmetic delay instead of
+/// hanging.
+fn hold_ms(ms: u32) {
+    let t0 = timeout::now();
+    let mut spins: u32 = 0;
+    while timeout::now().wrapping_sub(t0) < ms {
+        cortex_m::asm::nop();
+        spins = spins.saturating_add(1);
+        if spins >= TITLE_STALLED_TICK_SPINS && timeout::now() == t0 {
+            // Tick source hasn't moved — not running yet. Don't hang.
+            break;
+        }
+    }
+}
+
 pub fn run() {
     let hash = firmware_hash();
     #[cfg(feature = "debug-log")]
@@ -212,16 +249,105 @@ pub fn run() {
     // words + gateway never appear). The TITLE_STALLED_TICK_SPINS fallback
     // detects the stopped tick source (counter never advances) and skips
     // the cosmetic delay instead of hanging.
-    show_status("OS Fingerprint", "");
-    let t0 = timeout::now();
-    let mut spins: u32 = 0;
-    while timeout::now().wrapping_sub(t0) < TITLE_MS {
-        cortex_m::asm::nop();
-        spins = spins.saturating_add(1);
-        if spins >= TITLE_STALLED_TICK_SPINS && timeout::now() == t0 {
-            // Tick source hasn't moved — not running yet. Don't hang.
-            break;
-        }
+    // #705 diagnostic (dev images only): the AW99703 backlight chip's state
+    // BEFORE this boot reprogrammed it, shown in the otherwise-empty subtitle
+    // of a screen that already holds for TITLE_MS. Put here because the
+    // earlier BOOT-step screens are overwritten faster than a human can read.
+    //
+    // Legend CORRECTED 2026-09-23 (the previous one misread AW=0, and MSB is
+    // degenerate in one build):
+    //
+    //   AW=1 M=BF MD=15 -> config survived this reset: the FSBL's fingerprint
+    //                      window would be VISIBLE
+    //   AW=1 M=FF MD=00 -> the part was reset (HWEN low / POR / soft reset):
+    //                      these are the documented defaults, so the window is
+    //                      DARK and the FSBL must program the part
+    //   AW=0            -> the chip is not answering NOW: bus fault, chip
+    //                      absent, or still in power-on reset. It does NOT
+    //                      mean "HWEN went low" — `init_dc_res_gpios` drives
+    //                      HWEN high before `configure()`, which then waits
+    //                      ~5 ms, far beyond the 250 us t_reset.
+    //
+    // MODE is the discriminator and MSB alone is not. That mattered acutely
+    // while the retired `aw99703-full-brightness` experiment wrote MSB=FF,
+    // which IS the reset default, leaving that build unable to tell "survived"
+    // from "reset" on MSB at all. MODE's default is 0x00 (Standby) against the
+    // 0x15 we write, in every build, so prefer it regardless.
+    //
+    // `HW=` was dropped from this row: `hwen_float_level` is documented
+    // INVALID AS MEASURED (PB15 resets to analog mode, so IDR reads 0 whatever
+    // the pin voltage), and printing an invalid number next to valid ones is
+    // how it got believed the first time.
+    #[cfg(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd"))]
+    {
+        let (acked, msb, mode) = crate::hw::aw99703::pre_init_snapshot();
+        let hex = |n: u8| -> [u8; 2] {
+            let d = |x: u8| if x < 10 { b'0' + x } else { b'A' + (x - 10) };
+            [d(n >> 4), d(n & 0xF)]
+        };
+        let m = hex(msb);
+        let md = hex(mode);
+        let row = [
+            b'A', b'W', b'=', if acked { b'1' } else { b'0' },
+            b' ', b'M', b'=', m[0], m[1],
+            b' ', b'M', b'D', b'=', md[0], md[1],
+        ];
+        show_status("OS Fingerprint", crate::ui::ascii_str(&row));
+        // Dev images hold 8 s because one 16-column subtitle is unreadable in
+        // the production 1.5 s. Two diagnostics now SPLIT that budget rather
+        // than extending it, so boot time is unchanged.
+        hold_ms(4_000);
+
+        // #733: the fault registers, read ONCE, seconds after `enable()` — late
+        // enough for a protection to have tripped, and never on a timer (the
+        // read is itself a documented restart path once a flag is set).
+        //
+        //   ID03 B1=26 MO=15 -> bus verified; BSTCTR1 and MODE read back as
+        //                       written.
+        //   ID=xx BUS FAULT  -> CHIP_ID is not 0x03, so nothing else could be
+        //                       believed and no register was read. A stuck-low
+        //                       bus reads 0x00 everywhere, which is
+        //                       byte-identical to a good value of 0x00.
+        //
+        // WHY THESE TWO, and not the fault flags they replaced (2026-09-23):
+        // the OVP question the flags answered is CLOSED — OVPSEL stays 001. The
+        // open question is now the FSBL's, and it is sharper. A fail-closed
+        // FSBL that refuses handoff when a read-back mismatches is unpatchable
+        // after the RDP-2 self-lock, so a constant that does not match on
+        // HEALTHY silicon does not mean a false alarm: it means every unit
+        // refuses forever. `CHIP_ID == 0x03` has a receipt (#733). These two
+        // have none — nothing has ever read them back on hardware. This is that
+        // receipt. Expected: B1=26 (reset is 0x2E, so 26/2E/00/-- are four
+        // distinguishable states) and MO=15 (reset is 0x00, Standby).
+        //
+        // FLAGS1/FLAGS2 are still read and still logged; only the LCD row
+        // changed, because the panel has 16 columns and this is what is open.
+        // Full detail goes to `secure_log!`, since the bench board has no panel.
+        let f = crate::hw::aw99703::read_fault_snapshot();
+        let frow: [u8; 16] = if f.bus_trustworthy() {
+            // `--` distinguishes "did not ACK" from any real byte value.
+            let dash = [b'-', b'-'];
+            let b1 = f.bstctr1.map_or(dash, hex);
+            let mo = f.mode.map_or(dash, hex);
+            [
+                b'I', b'D', b'0', b'3',
+                b' ', b'B', b'1', b'=', b1[0], b1[1],
+                b' ', b'M', b'O', b'=', mo[0], mo[1],
+            ]
+        } else {
+            let id = f.chip_id.map_or([b'-', b'-'], hex);
+            [
+                b'I', b'D', b'=', id[0], id[1],
+                b' ', b'B', b'U', b'S', b' ', b'F', b'A', b'U', b'L', b'T', b' ',
+            ]
+        };
+        show_status("OS Fingerprint", crate::ui::ascii_str(&frow));
+        hold_ms(4_000);
+    }
+    #[cfg(not(all(feature = "board-pq1", feature = "dev-testkey", feature = "ui-lcd")))]
+    {
+        show_status("OS Fingerprint", "");
+        hold_ms(TITLE_MS);
     }
 
     // Phase 2: show all 8 words, auto-dismiss after 4 s or any button.

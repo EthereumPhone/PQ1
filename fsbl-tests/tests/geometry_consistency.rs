@@ -26,7 +26,7 @@
 
 #![forbid(unsafe_code)]
 
-use pqsigner_geometry::{owner_of, page_addr, Bank, Owner, BANK1_BASE, PAGE_SIZE};
+use pqsigner_geometry::{owner_of, page_addr, updater_must_preserve, Bank, Owner, BANK1_BASE, PAGE_SIZE};
 use std::fs;
 
 fn read_workspace_file(rel: &str) -> String {
@@ -171,4 +171,59 @@ fn fsbl_slot_layout_constants_are_deliberate_legacy() {
              (cutover target is the pqsigner-geometry registry, issue #540)"
         );
     }
+}
+
+/// The live NS slot A OVERLAPS the frozen registry's bank-2 FSBL mirror, and
+/// the updater would therefore erase pages the registry says it must preserve.
+///
+/// This is the #540 cutover conflict, pinned rather than fixed. Today it is
+/// HARMLESS — no recipe writes an FSBL copy to bank 2 (`make bootproof-hw` and
+/// `tools/flash-evt-dfu.sh` both put only `nonsecure.bin` at `0x0810_0000`,
+/// which is bank-2 page 0), so `erase_slot(Slot::A)` destroys nothing. It stops
+/// being harmless the moment the mirror is actually written, which is part of
+/// the cutover this test exists to make un-silent.
+///
+/// Recorded because it was nearly mis-triaged twice: once as a live
+/// invariant-#10 violation (it is not, today), and once as "a known legacy
+/// deviation" whose CONSEQUENCE — that the updater's erase range covers
+/// `Owner::Fsbl` pages — is not written down anywhere the cutover would find
+/// it. The deviation is pinned in this file's other tests; the consequence was
+/// not.
+#[test]
+fn ns_slot_a_overlaps_the_registry_fsbl_mirror_until_540() {
+    let flash = read_workspace_file("secure/src/hw/flash.rs");
+
+    // The LIVE legacy NS slot A spans bank-2 pages 0..=63.
+    assert!(
+        flash.contains("pub const SLOT_A_NS_FIRST_PAGE: u32 = 0;"),
+        "legacy NS slot A must still start at bank-2 page 0, or this pin is stale"
+    );
+    assert!(flash.contains("pub const SLOT_A_NS_LAST_PAGE: u32 = 63;"));
+
+    // The REGISTRY says bank-2 pages 0..=4 are the FSBL mirror, and that the
+    // updater must preserve them.
+    for page in 0..=4u8 {
+        assert_eq!(
+            owner_of(Bank::Two, page),
+            Some(Owner::Fsbl),
+            "registry: bank-2 page {page} is the FSBL mirror"
+        );
+        assert!(
+            updater_must_preserve(Bank::Two, page),
+            "registry: the updater must preserve bank-2 page {page}"
+        );
+    }
+
+    // Therefore the live erase range covers registry-preserved pages. When the
+    // cutover moves NS slot A off page 0 this assertion flips and the test
+    // fails — which is the signal to delete it and enable a real guard in
+    // `erase_slot`, not to widen it.
+    assert!(
+        updater_must_preserve(Bank::Two, 0),
+        "CONFLICT (#540): live NS slot A starts at bank-2 page 0, which the \
+         registry owns as the FSBL mirror and marks updater-preserved. Harmless \
+         only because nothing writes that mirror yet. If you are reading this \
+         because the test failed, the cutover has happened: replace this pin \
+         with an `updater_must_preserve` guard inside `erase_slot`."
+    );
 }

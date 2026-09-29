@@ -226,7 +226,28 @@ jobs:
             -p sphincs-c10 -p pqsigner-fi \
             -p sphincs-tz-bip39 -p fw-manifest -p sphincs-tz-shared \
             -p pqsigner-hal -p pqsigner-pq-seal -p masked-sha2 -p pqsigner-xtask \
-            -p fwsign -p fwmeasure
+            -p fwsign -p fwmeasure \
+            -p pqsigner-ui-px
+      # Pixel trusted-UI design-rule gates (docs/ui/pixel-ui-port-plan.md,
+      # step 1 Safe): the vendored PQ-UI tree matches its manifest, the asset bake
+      # (fonts + marks + the NS atlas container + its pinned root) is
+      # reproducible, and the firmware's motion / input / film constants match
+      # the design spec except for the recorded device deviations.
+      - name: Pixel-UI design gates (pq-ui-check, ui-px-assets-check, pq-ui-port-diff)
+        run: |
+          python3 -m pip install --quiet -r tools/pq-ui/requirements.txt
+          # The vendored requirements say `Pillow>=10.0`, and that file is
+          # byte-pinned by MANIFEST.sha256 so it cannot be edited here.
+          # Pillow's rasteriser decides the glyph bitmaps -> the atlas bytes
+          # -> ATLAS_ROOT, which the secure image re-hashes around every
+          # pixel dialog, so the bake records the version it ran under.
+          # Unpinned, CI re-baked under whatever it resolved to and
+          # ui-px-assets-check reported drift on every run; it could only
+          # pass on a machine that happened to have the recorded version.
+          python3 -m pip install --quiet "Pillow==10.2.0"
+          make pq-ui-check
+          make ui-px-assets-check
+          make pq-ui-port-diff
       # Keep the host-only fsbl-tests suites enrolled explicitly.
       # The whole fsbl-tests crate stays out of this job because its footprint
       # suite cross-compiles the real FSBL; these named suites have no Thumb or
@@ -242,7 +263,8 @@ jobs:
             --test draft09_codec_candidates \
             --test draft09_resource_envelope \
             --test draft11_deletion_experiments \
-            --test source_invariants
+            --test source_invariants \
+            --test paired_constants
       # ERC-7730 descriptor catalog gate: (1) the firmware-pinned
       # `ERC7730_DESCRIPTORS_ROOT` in secure/src/db_roots.rs must match a
       # fresh dbgen build — catches a forgotten `cargo run -p dbgen` after a
@@ -343,7 +365,8 @@ jobs:
             --test draft09_codec_candidates \
             --test draft09_resource_envelope \
             --test draft11_deletion_experiments \
-            --test source_invariants
+            --test source_invariants \
+            --test paired_constants
           cargo llvm-cov --locked --no-report -p sphincs-tz-secure \
             --no-default-features \
             --features mock-se,debug-log,ui-semihosting
@@ -360,8 +383,9 @@ jobs:
     name: QEMU unified-sign E2E
     runs-on: ubuntu-latest
     # Generous bound for two release cross-builds + the ~40-scenario QEMU run
-    # (normally ~5-10 min); a hang previously ran to the 6 h default.
-    timeout-minutes: 30
+    # (normally ~5-10 min) — twice, once with the pixel UI; a hang previously
+    # ran to the 6 h default.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -380,6 +404,13 @@ jobs:
       # 5p/5n, to reach the explicit ALL ASSERTIONS PASSED sentinel.
       - name: make e2e
         run: make e2e
+      # The same suite through the pixel trusted UI (`ui-px`): every sign
+      # dialog (Safe, single-UserOp, rotation, direct CoW, ERC-7730, off-chain,
+      # batch) must produce a pixel transcript (a hero per family, the deploy
+      # twin, the structured-route screens) with zero page-wrapped Legacy
+      # records (port plan steps 1-3).
+      - name: make e2e-px
+        run: make e2e-px
       # TZP-12 (#483): publish the QEMU ELF pair + the interactive runner so
       # companion/third-party developers can exercise the wallet UX without a
       # firmware toolchain. The paths are exactly $(SECURE_ELF)/$(NONSECURE_ELF)
@@ -442,6 +473,17 @@ jobs:
           cp target/secure/thumbv8m.main-none-eabi/release/sphincs-tz-secure target/pqsigner-release/secure.elf
           cp target/nonsecure/thumbv8m.main-none-eabi/release/sphincs-tz-nonsecure target/pqsigner-release/nonsecure.elf
           make size-report
+      # Pixel-UI flash budget (port plan § Flash): the nearest buildable
+      # ship-shaped dual-SE image with ui-px, linked at slot A, against the v6
+      # secure slot with 40 KB headroom. INFORMATIONAL until the owner's flash
+      # decision: measured 2026-09-23 the image is 9.2 KB OVER the v6 slot
+      # with the atlas already relocated to the NS slot (Safe family only),
+      # 25,408 B over after port step 2 and 39,520 B over after step 3, so this
+      # step fails by design and must not block the pipeline yet. Flip continue-on-error
+      # off once the budget lever lands.
+      - name: Pixel-UI flash budget (make size-report-px, informational)
+        continue-on-error: true
+        run: make size-report-px BOARD=pq1 PX_EXTRA_FEATURES=,ui-px-spi40
 
   miri:
     name: Miri (UB in host-reachable unsafe)
@@ -490,7 +532,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: install foundry (slither drives `forge build` for this project)
-        uses: foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d # v1
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
       - name: install slither (pinned)
         run: pip install "slither-analyzer==0.11.6"
       # SAME restore as the contracts job, deliberately duplicated rather than
@@ -535,7 +577,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - uses: foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d # v1
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
       # lib/ is gitignored and the deps are git-pinned by foundry.lock (NOT
       # submodules), so restore each at its EXACT locked rev. The codehash
       # freeze tests are lib-exact: an extra/missing lib changes the

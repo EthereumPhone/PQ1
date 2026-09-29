@@ -178,3 +178,53 @@ fn out_of_range_pages_have_no_owner() {
     assert_eq!(owner_of(Bank::One, 128), None);
     assert_eq!(owner_of(Bank::Two, 200), None);
 }
+
+/// The two bank-2 aliases are different addresses, and that difference is the
+/// whole point.
+///
+/// `page_addr` returns the NON-SECURE alias for bank 2 — correct under this
+/// registry, where every bank-2 page is non-secure. A geometry that puts a
+/// secure watermark over part of bank 2 (RM0456 §7.5.2 permits one secure area
+/// per bank) makes it quietly wrong: a secure-state read of a secure page
+/// through the NS alias returns ZEROS rather than faulting. That is exactly
+/// how the FSBL halted on 2026-09-16, hashing 7,488 zero bytes and failing the
+/// NS image comparison with no output.
+#[test]
+fn the_bank_two_secure_alias_is_distinct_from_the_nonsecure_one() {
+    use pqsigner_geometry::{
+        page_addr, page_addr_secure, Bank, BANK1_BASE, BANK2_BASE, BANK2_SECURE_BASE, PAGE_SIZE,
+        PAGES_PER_BANK,
+    };
+
+    assert_eq!(BANK2_BASE, 0x0810_0000, "bank 2, non-secure alias");
+    assert_eq!(BANK2_SECURE_BASE, 0x0C10_0000, "bank 2, secure alias");
+    assert_ne!(
+        BANK2_BASE, BANK2_SECURE_BASE,
+        "if these were ever equal this whole distinction would be vacuous"
+    );
+
+    // Derived, not hard-coded: the secure aliases are contiguous across banks.
+    assert_eq!(
+        BANK2_SECURE_BASE,
+        BANK1_BASE + u32::from(PAGES_PER_BANK) * PAGE_SIZE,
+        "bank 2's secure base is bank 1's plus exactly one bank"
+    );
+
+    // Bank 1 is already the secure alias, so both accessors agree there.
+    for page in [0u8, 7, 63, 127] {
+        assert_eq!(
+            page_addr(Bank::One, page),
+            page_addr_secure(Bank::One, page),
+            "bank 1 has one alias"
+        );
+    }
+    // Bank 2 is where they diverge, by exactly one bank.
+    for page in [0u8, 5, 65, 127] {
+        assert_ne!(page_addr(Bank::Two, page), page_addr_secure(Bank::Two, page));
+        assert_eq!(
+            page_addr_secure(Bank::Two, page) - page_addr(Bank::Two, page),
+            BANK2_SECURE_BASE - BANK2_BASE,
+            "the offset between aliases is constant across pages"
+        );
+    }
+}

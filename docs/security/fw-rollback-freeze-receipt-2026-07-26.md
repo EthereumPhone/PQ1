@@ -6,11 +6,17 @@ is recorded here.
 
 ## Frozen pair
 
-> **GATE STATE: REOPENED (2026-08-06).** The digests below are the CURRENT
-> freeze identity. They are **not** the digests the dual APPROVE was granted
-> over — see "Re-freeze 2026-08-06" immediately after this table. Milestone 0
-> is **reopened** pending re-ratification. Do not cite this receipt as an
-> approval of the current bytes.
+> **GATE STATE: REOPENED (2026-08-06) — REVIEW ATTRIBUTION. Milestone 0
+> RE-CLOSED 2026-09-16 by owner de-minimis acceptance.** The digests below
+> are the CURRENT freeze identity. They are **not** the digests the dual
+> APPROVE was granted over — see "Re-freeze 2026-08-06" immediately after
+> this table. No reviewer has run against Draft 1.2 `51be51b7…ebb8`, so this
+> marker stays and `APPROVED_PAIR` in `check_rollback_freeze_pin.py` still
+> names the reviewed pair: both track *review* attribution, not closure.
+> Milestone-0 closure at the current bytes rests on "Amendment 2026-09-16"
+> below, route 2 of this receipt's own re-closure rules. Do not cite this
+> receipt as an *approval* of the current bytes; cite it as owner-accepted
+> at specification stage.
 
 | document | path | SHA-256 |
 |---|---|---|
@@ -89,6 +95,60 @@ silently reopened a ratified gate and went unnoticed for six days. The gate
 recomputes both digests against **this table** and fails the build on any drift.
 Re-pinning is therefore a deliberate, reviewable edit to this file rather than
 an invisible side effect of editing a draft.
+
+## Amendment 2026-09-16 — owner de-minimis acceptance (Milestone 0 re-closed)
+
+**Owner acceptance (2026-09-16):** "I accept the one-word rename, record the
+de-minimis acceptance." Recorded under route 2 of "To re-close Milestone 0"
+above, which fixes this acceptance's scope as exactly the `fb66a1e5` delta.
+
+**Scope — the entire delta accepted.** One line of non-normative
+Reconciliation prose in Draft 1.2 (hunk `@@ -372,7 +372,7 @@`):
+
+```diff
+-   pin, `HW-CONFIRM-PUTKEY-KCV-RESP`, DEK-liveness bench. This draft's
++   pin, `HW-ASSUME-PUTKEY-KCV-RESP`, DEK-liveness bench. This draft's
+```
+
+The token is a hardware-assumption ledger id. `HW-ASSUME-PUTKEY-KCV-RESP` is
+the canonical spelling in `contracts/verification/docs/HW_ASSUMPTIONS.json`,
+enforced by `contracts/verification/scripts/check_hw_assumptions.py`; the old
+`HW-CONFIRM-*` spelling was an orphan the assumption gate could not see. It
+appears in a list of other people's open gates, disturbs no reviewed row, and
+carries no normative force (Draft 1.2's Reconciliation section is descriptive).
+
+**Reproduction before recording (2026-09-16).**
+
+- `sha256sum` of both drafts equals the pinned table above, and
+  `make -C contracts/verification verify-rollback-freeze-pin` passes
+  (self-test: 1 good + 38 parser mutations + 11 attribution controls ok).
+- `git show fb66a1e5^:docs/security/fw-rollback-draft12-candidate-2026-07-21.md
+  | sha256sum` = `6173fe598d43ec7ac597f7ab843142bebe3456d63a63653cebc0ed369ad964ee`
+  — the pre-rename bytes are exactly the dual-approved ones.
+- `git show fb66a1e5 --stat` on that path: 1 file changed, 1 insertion,
+  1 deletion. The diff quoted above is the whole change.
+- Draft 1.1 is untouched and still matches its approved digest
+  `abc058b1667d76cecf73f563340d24da17af4a35af61312e7abe61ee86da6284`.
+
+**What this acceptance does.** Restores Milestone-0 closure at the current
+frozen pair (Draft 1.1 `abc058b1…6284` + Draft 1.2 `51be51b7…ebb8`).
+Specification-stage authority only, per Draft 1.1 §14's own bounds.
+
+**What it does NOT do.**
+
+- It is **not a review**. The dual APPROVE stays recorded over
+  `6173fe59…64ee` only; the `GATE STATE: REOPENED` marker and the script's
+  `APPROVED_PAIR` constant are deliberately left naming the reviewed pair, so
+  a green gate keeps telling readers no reviewer ran against these bytes.
+- Ratification condition 1 (precedent cap) is untouched: this authorizes no
+  irreversible or hardware act — not physical-backend selection,
+  `OPEN-OTP-1..3` closure, OTP programming, OPTIGA LcsO ratchets, nor the §13
+  named-board sacrificial campaign. Each still needs its own owner acceptance.
+- It covers **only** the delta quoted above. The substantive amendments parked
+  in `docs/security/vendor-signing-key-compromise.md` (FSBL fingerprint input
+  scope, the §6.3 step-11 zeroization row, the recovery-key row) are NOT
+  accepted here; adopting any of them changes the bytes again and owes a fresh
+  gate run.
 
 ## Gate history (all GPT-5.6 SOL `ultra`, exact-digest)
 
@@ -272,8 +332,10 @@ Specification-stage authority only, per §14's own bounds.
 
 *Superseded 2026-08-06: that closure covered digests `abc058b1…6284` /
 `6173fe59…64ee` only. Draft 1.2's bytes have since changed (see "Re-freeze
-2026-08-06"), so the current state is the GATE STATE: REOPENED note at the
-top of this file — do not quote this paragraph as current closure.*
+2026-08-06"). Milestone-0 closure at the current bytes rests on "Amendment
+2026-09-16 — owner de-minimis acceptance", not on this paragraph, and the
+dual APPROVE still covers only the pair named here — do not quote this
+paragraph as current closure.*
 
 ## Banked non-blocking observations (Opus-5 leg run 1)
 

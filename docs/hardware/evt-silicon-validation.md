@@ -194,6 +194,487 @@ EVT); the two button pins; TCPP03 PB5. `reset_pin.rs:29-104` also documents a
 silicon-write-ordering quirk (a bare BSRR store produced no edge; full
 MODER→…→BSRR + 50 ms settle was required) — re-check on EVT silicon.
 
+### UPDATE 2026-08-30 — the cross-check above is DONE
+
+The first PQ1 board (`AL_A66_MB_V10`, MCU marked `STM32U585CU6TR`) is on the
+bench. The "cross-check every row against the EVT schematic" instruction has now
+been carried out against three sources, in this precedence order:
+
+1. **`STM32U585CIU6TR Pin Functions.xls`** (vendor pin table, carries the AF
+   numbers) — authoritative for what the board *uses*.
+2. **`AL_A66_MB_V10_20260826_1500.pdf`** sheets 1–2 — net names, I2C addresses,
+   power topology.
+3. **ST `DS13086` Rev 10** Tables 28/29 and the `STM32U585.svd` shipped with
+   STM32CubeProgrammer — authoritative for what the *silicon* supports.
+
+The resolved map now lives in code, one file per board, at
+`secure/src/board/{iota2,pq1}.rs`, so the table below is orientation and those
+files are the authority. **The package bonds only PA0–15, PB0–15 and PC13** — no
+port D/E/F/G/H/I, and PB11 is not bonded either.
+
+| Signal | `iota2` (this table above) | **pq1 (as built)** |
+|---|---|---|
+| LEFT / UP button | PC1 | **PA0** |
+| RIGHT / DOWN button | PA8 | **PA1** |
+| USER button | PC13 | **does not exist — only two buttons** |
+| Debug UART TX / RX | PA9 / PA10 (USART1 AF7) | **PA2 / PA3, header `J211` pins 1–2** |
+| I2C1 SCL / SDA (OPTIGA @0x30) | PB8 / PB9 AF4 | **unchanged — PB8 / PB9 AF4** |
+| SE050 @0x48 | shares I2C1 | **own bus: I2C4, PB6 / PB7, AF5** |
+| LCD SPI | PE12/13/14/15 SPI1 AF5 | **PA4 CS / PA5 SCK / PA7 MOSI, SPI1 AF5; no MISO** |
+| LCD DC / RES | PE7 / PE14 (RES tied to 3V3) | **PB0 / PB1 — RES is genuinely driven here** |
+| LCD TE | not wired | **PB2** |
+| LCD backlight | unconditional | **`LCM_EN` = PB15 + AW99703 driver @0x36 on I2C2 (PB13/PB14)** |
+| OPTIGA RST | PE0 (empirical, flagged above) | **PA15 (`SE_RST`) — from the schematic, not empirical** |
+| SE050 ENA | PE4 (implicit) | **PB5 (`SE1_EN`)** |
+| SE supply | always on | **`LDO2_EN` = PA8 gates `VDD1_3V3` for BOTH SEs** |
+| USB D-/D+ | PA11 / PA12 AF10 | **unchanged** |
+| USB CC1/CC2 + TCPP03 EN | PA15 / PB15 / PB5 | **no TCPP03; an AW35602 with `FLAGB` on PB10** |
+| SCA trigger | PD2 | **PD2 does not exist — PB3/SWO is the repoint** |
+| STSAFE probe I2C2 | PH4 / PH5 | **port H does not exist; I2C2 here is PB13/PB14, carrying the LED drivers** |
+| RGB LED enable | — | **PB12** (the schematic's apparent PB11 is not bonded) |
+
+Three findings worth carrying forward:
+
+- **The `OPTIGA RST` row's warning was right.** PE0 was indeed wrong for this
+  board; the net is `SE_RST` on PA15. It came from the schematic this time, not
+  from an LA capture, so the "empirical, contradicts UM2839" caveat retires.
+- **`PA8` is the sharpest collision in the port, and it is silent in both
+  directions.** On `iota2` it is the RIGHT button; on pq1 it is `LDO2_EN`, the
+  enable for the rail powering both secure elements. The dev-board driver holds
+  it as a *pulled-up input*, which on pq1 leaves both SEs unpowered — and the
+  symptom is an I2C NACK, which reads as a bus bug rather than a power bug.
+- **The console UART's peripheral was ambiguous and is now settled.** The
+  schematic names the PA2/PA3 nets `LPUART1_*`; the pin table marks them AF7.
+  Both describe real silicon: DS13086 Table 28 gives `AF7 = USART2_TX/RX` on
+  those pads and Table 29 gives `AF8 = LPUART1_TX/RX`. The firmware takes
+  **USART2/AF7** — an ordinary USART (`BRR = f_ck/baud`, APB1) rather than
+  LPUART1's `256*f_ck/baud` on APB3, and in **GTZC1** with everything else
+  `sau.rs` configures, where LPUART1 sits in GTZC2 which the firmware never
+  touches.
+
+**Not yet cross-checked:** the AW99703 backlight and AW21036 RGB drivers have no
+firmware at all, so `LCM_EN` alone may not light the panel; and nothing reads
+`FLAGB`.
+
+> **UPDATE 2026-09-21 — the RGB driver has firmware on this branch; the
+> backlight driver exists but is NOT merged; `FLAGB` still has neither.**
+> Be precise about which is where, because the two arrived by different routes:
+>
+> - **AW21036 RGB** — landed here: `secure/src/hw/aw21036.rs` plus a
+>   pin-generic bit-banged master (`soft_i2c_aux.rs`) and
+>   `CMD_PRODTEST_RGB_TEST` (INS `0x8A`).
+> - **AW99703 backlight** — implemented on the **`pq1-evt-dfu` branch**
+>   (`secure/src/hw/aw99703.rs`), deliberately not merged while provisioning is
+>   held to the last step. The silicon run below used a throwaway build that
+>   combined that branch with this one, so the working panel is evidence about
+>   *that image*, not about `feat/pq1-board-target` alone.
+>
+> The backlight finding itself is confirmed either way: `LCM_EN` (PB15) alone
+> leaves the panel dark, because that pin is only the AW99703's `HWEN` and the
+> chip emits no LED current until `MODE[1:0]` is written over I2C2.
+>
+> Two board facts settled from the schematic while doing it: `RGB_EN` is
+> **PB12** (MCU pin 25 — an earlier note in `board/pq1.rs` claimed the
+> schematic showed PB11, which it does not), and the nine RGB LEDs are wired
+> to channels `LED1..LED27` through the **`LCM+RGB` connector**, i.e. they live
+> on the module, not the mainboard. A bare board therefore passes the
+> electrical half of the RGB test with nothing lit.
+>
+> **Both now run on silicon (2026-09-21, sealed EVT unit).** Every phase
+> reported `ver=0xa8`, `id=0x18`, `acks=58/58` and `bus=[0x1c 0x34 0x36]` — the
+> part identifies itself, all 58 register writes ACK, and exactly the three
+> predicted addresses answer (broadcast, AW21036, and the AW99703 backlight
+> serving as the bus's positive control). The operator saw the colour sweep.
+>
+> `RGB_EN`/PB12 is confirmed by **functional differential**, the only test that
+> works on this part: its I2C stays accessible with `EN` low, so it ACKs
+> identically either way. With byte-identical register writes the board was
+> dark at `--en 0` and lit at `--en 1`.
+>
+> One hardware defect found: on white, one LED renders **magenta** — red and
+> blue present, green absent — while the other eight render white from the same
+> register values. 58/58 ACKs plus the uniform `ch % 3` colour mapping (a code
+> bug would kill green on all nine) narrow it to that green die, its driver
+> output, or its trace. Naming the exact channel is possible in hardware via the
+> part's `OSST0..4` open/short status registers; see #709, including the
+> datasheet's self-contradiction on the `OSDE` enable encoding.
+>
+> **Dead-LED detection works, and it found the defect independently
+> (2026-09-21).** `CMD_PRODTEST_RGB_OSD` (INS `0x8B`) runs the AW21036's
+> per-channel open detection. On the EVT unit, `OSDE = 0b11` returned
+> `00 20 00 f8 0f` = channels `{14, 28..36}`:
+>
+> - channels **28..36** are the nine with no LED attached, so they *must* read
+>   open — the positive control fired, which is what makes the result mean
+>   anything rather than "the scan returned zeros";
+> - channel **14 = LED5's green die**, the only wired channel open. That
+>   matches, from a completely independent mechanism, the LED an operator saw
+>   rendering magenta instead of white — with no one looking at the board;
+> - `OSDE = 0b10` (short detection) flagged nothing, as a healthy board should.
+>
+> Bit-identical across five runs and across `gcc` 0x10/0x20/0x40, so the
+> measurement is stable and — usefully — insensitive to the `R_EXT` ambiguity
+> over a 4x bias range.
+>
+> **Vendor-doc erratum, resolved empirically:** the AW21036 datasheet
+> contradicts itself on the `OSDE` encoding (prose: `10` = open, `11` = short;
+> `OSDCR` register table: the reverse). The register table is correct — `0b11`
+> is open detection. The firmware still reports both bitmaps and re-derives the
+> answer from the unwired channels on every run, rather than hardcoding a fact
+> taken from a document that is demonstrably wrong in one of two places.
+>
+> Still open (#709): the ambiguous `R_EXT` value, which leaves per-channel
+> full-scale *drive* current known only to ±2x (it does not affect the OSD
+> result above).
+
+### UPDATE 2026-09-21 — first complete factory acceptance run on hardware
+
+`tools/factory-prodtest-runner.py` against the sealed EVT unit, profile
+**`pqsigner-prodtest-reversible-pq1-v2`**. Receipt archived as
+[`prodtest-receipt-example-pq1.json`](prodtest-receipt-example-pq1.json) — one
+example so the format is reviewable; per-unit receipts belong in the factory's
+traceability DB, not this repo.
+
+20 checks: **18 PASS**, 2 approved `SKIP_UNSUPPORTED` (BHK, FLASH_RW — the
+reversible profile's deliberate non-authority probes), **1 FAIL**. Verdict
+`PROFILE REJECTED`, exit 1 — the right answer for this board, whose single
+defect is a dead green channel (`RGB_OSD` → `OPEN: LED5-G(ch14)`).
+
+Covered in one run: chip UID + prodtest version gate, five LCD patterns,
+SAES/DHUK, MCU TRNG (167 distinct values in 254 B), an OPTIGA handshake, an
+SE050 handshake, a 254-byte USB loopback returned byte-identical, the RGB colour
+sweep, per-channel open detection, and the three-step button test.
+
+Incidental anti-vacuity evidence: across runs the TRNG distinct-value count and
+both secure elements' RNG outputs differ, so those checks read live entropy
+rather than replaying a cached constant.
+
+**Two tool defects only a hardware run could expose, both now fixed:**
+
+- The runner's default USB ids were **Ledger's** `0x2C97:0x0006`, so it could not
+  find a PQSigner unit at all — "no matching hidraw node" against a device that
+  was plugged in and working. The firmware advertises `0x1209:0x7051`. A factory
+  would have hit this on its first run. A test now derives the expected ids from
+  `nonsecure/src/usb/mod.rs` so they cannot drift again.
+- The SAES line read like a per-unit fingerprint. It is DHUK-derived, and **DHUK
+  is shared across all parts at RDP-0** (per-device only from RDP0.5, RM0456
+  Table 21) — `117d822a62a50830` is byte-identical on two different dies. Units
+  are tested and shipped at RDP-0, so in a per-unit receipt that invites reading
+  a constant as a device identity, which would make every unit look cloned. The
+  receipt now says so and points at the STM32 UID for identity.
+
+The runner also no longer needs `hidapi`: it falls back to the kernel's hidraw,
+so a fixture image needs no `pip install` to talk to the device.
+
+### UPDATE 2026-08-30 (later) — secure-element path ported to pq1
+
+The SE half of the pin table above is now implemented, not just recorded. What
+landed:
+
+| Piece | Change |
+|---|---|
+| OPTIGA bus | unchanged — I2C1, PB8/PB9, AF4 |
+| SE050 bus | `hw::i2c_hw` now brings up a *set* of buses (`board::SE_I2C_BUSES`), so pq1 adds **I2C4 on PB6/PB7, AF5** alongside I2C1 |
+| Driver bases | `se050::i2c` / `optiga::i2c` take their base from `board::{SE050,OPTIGA}_I2C_BASE` instead of a shared `i2c_hw::I2C1` |
+| OPTIGA reset | `optiga::reset_pin` parameterised on `board::OPTIGA_RST` — PE0 on iota2, **PA15** on pq1 |
+| SE power | new `hw::se_power`, asserting **`LDO2_EN` (PA8)** then **`SE1_EN` (PB5)** before any bus traffic; a no-op on iota2 |
+| GTZC | `sau.rs` secures **I2C4 (SECCFGR1 bit 16)** on pq1, under four exact-equality `const assert!` arms (iwdg x board) |
+
+Three things found while doing it, each of which would have cost real debugging
+time later:
+
+1. **`R130` decides it.** `U108`, the `NCP114AMX330TCG` producing `VDD1_3V3`, has
+   a **10 kΩ pull-down (`R130`) on its `EN` node**. At reset PA8 is a high-Z
+   analog input, so the LDO is held *off* and both secure elements are unpowered.
+   This is not a "nice to set" line — without it there is nothing on either bus
+   to answer.
+2. **The dev-board button driver would undo it.** `ui::init()` runs *after* the
+   SE power-up in `main.rs`, and it calls `hw::buttons::init()`, which claims PA8
+   as a **pulled-up input**. The internal pull-up against `R130` lands well below
+   the NCP114 enable threshold (~0.66 V taking the pull-up at its typical
+   ~40 kΩ — computed, not measured; the margin is large either way), so on pq1
+   the SEs would come up and then quietly power off again a few hundred
+   microseconds later. That is
+   now a `compile_error!` on `board-pq1` rather than a runtime trap. Note
+   **`ui-lcd` implies `gpio-buttons`**, so it fences that path too.
+3. **`usb` is worse and is likewise fenced.** `hw::usb_hw` puts PA15 (= pq1
+   `SE_RST`) and PB15 (= pq1 `LCM_EN`) into ANALOG mode, drives PB5 (= pq1
+   `SE1_EN`) high for a TCPP03 that this board does not have, and clears all
+   three in `GPIOx_SECCFGR` — handing the non-secure world both SEs' reset and
+   enable lines plus the trusted display's backlight (invariant #4). pq1 routes
+   no CC lines to the MCU at all, so this must be compiled out rather than
+   remapped: a reviewed port, not a pin-table edit.
+
+**Initially left undriven — then refuted by measurement.** `SE_RST` was at first
+deliberately not driven on the normal boot path, on the argument that this die's
+`PA15_PUPEN` option bit (read off `FLASH_OPTR`) would leave PA15 idling high.
+**That argument was wrong.** `hw::se_power::init` now samples `IDR` before
+driving, and the first run read PA15 **low**: the OPTIGA was held in reset and
+NACKed every probe, while the SE050 on the same rail ACKed immediately. It now
+releases the reset explicitly and reports both the before- and after-level.
+
+### UPDATE 2026-08-30 (later still) — BOTH secure elements answer on silicon
+
+`make se-i2c-probe-hw BOARD=pq1` → **PASS**:
+
+```
+SePowerState { rail_en: Some(true), se050_en: Some(true),
+               optiga_rst_before: Some(false), optiga_rst: Some(true) }
+bus I2C1 (OPTIGA 0x30) base=0x50005400 SCL=PB8 SDA=PB9 AF want=4 got=(4,4) OK
+  0x30 OPTIGA Trust M -> ACK (attempt 2/10)
+bus I2C4 (SE050 0x48) base=0x50008400 SCL=PB6 SDA=PB7 AF want=5 got=(5,5) OK
+  0x48 SE050 -> ACK (attempt 1/10)
+```
+
+What this closes, without a single data byte having reached either part:
+
+- **`LDO2_EN` (PA8) works and `VDD1_3V3` is up.** Neither chip can ACK without
+  it, so step 2's meter is now redundant — the probe proved the rail. (Both
+  chips NACKing was the only case that needed the multimeter.)
+- **`SE1_EN` (PB5) works**, and **SE050 really is on I2C4 at PB6/PB7 AF5** —
+  base, pins and alternate function all confirmed by read-back *and* by a
+  device answering.
+- **OPTIGA is on I2C1 at PB8/PB9 AF4**, unchanged from iota2, and its reset is
+  PA15.
+- The two buses are independent: one answered while the other did not.
+
+Nothing here exercises SCP03, the shielded connection, or any lifecycle state —
+an address ACK is not a handshake.
+
+### UPDATE 2026-08-30 — Tier 2: buttons ported (compile-verified only)
+
+`hw::buttons` now takes its pins from `board::BTN_*`: iota2 keeps PC1/PA8 (+
+PC13 as a bench reference), pq1 uses **PA0 / PA1**, both on GPIOA. The clock
+enable is derived (`gpio_rcc_bit(LEFT_PORT) | gpio_rcc_bit(RIGHT_PORT)`), which
+folds to GPIOAEN alone on pq1 and GPIOAEN|GPIOCEN on iota2 with no `cfg`. The
+USER-button path is gated on `board::BTN_USER` being `Some`, so pq1 does not
+configure a pin it has not fitted.
+
+**The `compile_error!` fence is gone, replaced by something stronger.** The
+fence kept pq1 out wholesale; a `const assert!` now checks the actual property
+on *every* board — that neither button pin collides with the SE supply enable,
+either SE reset/enable, the console TX, or SWDIO/SWCLK, and that LEFT != RIGHT.
+That is the check which would have caught the original PA8 = `LDO2_EN` bug
+instead of quarantining it, and it keeps working as boards are added.
+
+**No UI design decision was needed, contrary to what this document and the
+board maps previously said.** The trusted UI has always been two-button:
+`ui::Button` has exactly two variants, `ui::Press` adds Short/Long, every
+dialog matches all four arms with no wildcard (compile-time proof the event
+space is exactly four), confirm is `(Right, Long)`, and
+`hw::buttons::wait_combo_release` already implements the both-buttons chord.
+The dev board's PC13 was never a UI input — configured, never sampled by
+`wait_event`. Those claims have been retracted where they were written.
+
+**NOT verified on hardware.** No buttons are fitted to the board — pads
+`J203`/`J204` (LEFT) and `J205`/`J206` (RIGHT) are bare. Each pad pair is
+signal + GND with a 100nF cap and an ESD diode and **no board pull-up**, so the
+driver's internal pull-up plus active-low read is what makes a press
+detectable; that is unchanged from iota2 and is the property the gates pin. To
+check it when buttons exist (or with tweezers across a pad pair), build with
+`gpio-buttons` and use the `button-test` scanner.
+
+### UPDATE 2026-08-30 (later still) — step 4 CLOSED: the I2C4 SECCFGR receipt
+
+`make gtzc-enforcement-hw BOARD=pq1` → **PASS, 8/8**, with the eighth probe
+being the one that matters:
+
+```
+[NS][gtzc] target: STM32U585CIU6 AL_A66_MB_V10 (pq1)
+[NS][gtzc] probe 8/8  addr=0x40008400 (I2C4_CR1)
+[NS][gtzc]   read=0x00000000  tzic_count=8  irqs_for_probe=1
+[NS][gtzc] tzic_status final = 8 (delta = 8, expected = 8)
+```
+
+**The first run of this target did NOT close the item, and looked like it did.**
+`nonsecure/src/gtzc_test.rs` carried a fixed seven-entry probe table written for
+iota2 — I2C1, I2C2, AES, HASH, RNG, PKA, SAES. I2C4 was simply not in it, so the
+target reported `PASS — GTZC1 TZSC + TZIC enforcement confirmed` on pq1 while
+never touching the bit whose whole risk is that it has no functional symptom.
+The probe table is now board-conditional (pq1 = 8), which required giving the
+non-secure crate the `board-*` axis it did not have; its banner also hardcoded
+`B-U585I-IOT02A` regardless of target and now reports the real board.
+
+**Control run — the receipt can fail.** Un-securing I2C4 (dropping the bit from
+`SECCFGR1_BOARD_IMAGE` *and* relaxing the two pq1 `const assert!` arms that
+guard it, since otherwise the build stops first):
+
+```
+[NS][gtzc] probe 8/8  addr=0x40008400 (I2C4_CR1)
+[NS][gtzc]   read=0x00000000  tzic_count=7  irqs_for_probe=0
+[NS][gtzc] tzic_status final = 7 (delta = 7, expected = 8)
+[NS][gtzc] === FAIL n=7 expected=8 ===
+```
+
+Worth reading that carefully: **`read` is `0x00000000` in BOTH cases.** The RAZ
+value is not the discriminator — I2C4_CR1 reads zero anyway when the peripheral
+is idle. Only `irqs_for_probe` (1 → 0) distinguishes "NS was denied" from "NS
+was allowed in". A future reader scraping this log for `read=0x0` as evidence of
+denial would draw the wrong conclusion.
+
+So invariant #3/#4 for the SE050's dedicated bus now has a silicon denial
+receipt on the shipping board, which is what the `const assert!` message in
+`sau.rs` demands. **Step 3 (scope/LA both buses during a real transaction)
+remains the only open item from this list.**
+
+**Still unverified on silicon — the port compiles and the gates hold, but no SE
+has answered yet.** In order:
+
+1. **`make se-i2c-probe-hw BOARD=pq1`** — the non-destructive address probe
+   (`hw::se_i2c_probe`, feature `se-i2c-probe`, in `PROD_FORBIDDEN`). Every
+   probe is a **zero-data-byte** transfer (`NBYTES=0` + `AUTOEND`, so the
+   address phase is the whole transaction): no register pointer, no APDU, no
+   T=1' frame, no lifecycle transition. It is deliberately safe to run on a
+   virgin OPTIGA, which is why it comes first. It runs before anything else
+   addresses the buses, reads back the GPIO AF nibbles, and retries with a
+   bounded backoff reporting the attempt number.
+
+   Read the result by pattern, not as a verdict:
+
+   | Symptom | Most likely cause |
+   |---|---|
+   | both NACK | `VDD1_3V3` never rose — go to step 2 |
+   | only `0x48` NACKs | `SE1_EN` (PB5), or probed before the SE050 booted |
+   | only `0x30` NACKs | I2C1 pins/AF, or `SE_RST` |
+   | ACK on a late attempt | part is fine; the settle time is short |
+   | AF `MISMATCH` line | the pin config never landed — not a chip problem |
+
+2. Meter **`VDD1_3V3`** — but only if step 1 comes back all-NACK. If both chips
+   ACK, the rail is up by construction and the meter is redundant. The `ODR`
+   read-back `se_power::init` returns proves the *latch*, not the rail: a dead
+   LDO or an unmet enable threshold reads as success.
+3. Scope/LA **PB8/PB9** and **PB6/PB7** for clock during an SE transaction, and
+   confirm the two buses are genuinely independent.
+4. `make gtzc-enforcement-hw` on pq1 silicon — the I2C4 SECCFGR bit is the one
+   item here with **no functional symptom either way**, so only a denial receipt
+   closes it. The `const assert!` message names this obligation deliberately.
+
+**Do not extend the probe into a handshake.** `flash-hw-optiga-shield-handshake-only`
+already exists for that and is *not* non-destructive on a virgin part. The whole
+value of `se-i2c-probe` is that its contract stops at "address ACK, zero data
+bytes"; the module header says so, and it should stay true.
+
+---
+
+### UPDATE 2026-09-16 — the NV3007 LCD pin map is now SILICON-verified on pq1
+
+The LCD was the last pq1 pin-map port still only compile-verified. It is now
+exercised on the board.
+
+The FSBL had hardcoded iota2's panel wiring — SPI1 with AF5 on **port E** (PE12
+CS / PE13 SCK / PE15 MOSI / PE7 DC), one `GPIOE` clock enable, and `AFRH`
+nibbles. pq1 bonds only PA0–15, PB0–15 and PC13, so none of that reaches a pad
+there, and it failed **silently** in the way this section exists to catch: port
+E exists on the die, so the writes succeeded, drove nothing, and the FSBL
+branched having rendered no fingerprint. `fsbl/src/board/{mod,iota2,pq1}.rs` now
+supplies every pin, port base and AF number, with board selection mandatory and
+its fence unconditional.
+
+Three properties the old form could not express, each a silent failure on its
+own: the SPI pins are **non-contiguous** (PA4/PA5/PA7, PA6 skipped and `NC`),
+they sit **below pin 8** so their AF nibbles are in `AFRL` not `AFRH`, and
+DC/RST/EN are on **port B** while the SPI is on port A, so two GPIO port clocks
+are needed rather than one. pq1 also drives a real `LCM_RST` pulse on PB1
+(10/200/120 ms, mirroring `secure/src/hw/lcd_nv3007.rs`) where iota2 issues
+`SWRESET` against a RES line strapped to 3V3.
+
+**Receipt — an A/B against the pre-port build, not a timeout count.** The same
+board, same 40 s settle, same freshly erased marker page, twice:
+
+| build | `LcdInited` | `RenderFlushed` | `Branching` |
+|---|---|---|---|
+| `board-pq1` (ported, PA4/5/7 + PB0/1/15) | reached | reached, 0 timeouts | **reached** |
+| `board-iota2` (pre-port, port E) | **not reached** | **not reached** | **not reached** |
+
+The two marker pages differ at exactly the bytes for stage 16 (`LcdInited`) and
+stage 5 (`Branching`) — erased in the control, written in the ported run. The
+images were confirmed distinct at the binary level too: disassembling the
+`movw`/`movt` pairs shows the control referencing **GPIOE** only and the ported
+build referencing **GPIOA + GPIOB**.
+
+So the wrong pin map **hangs inside `Lcd::init()`** on this silicon, and the
+port fixes a real, measured defect. Two wrong explanations were eliminated by
+this control, both recorded because they are easy to re-derive:
+
+* *"It was only an early marker read"* (plausible once the ~17 s boot at 4 MHz
+  was understood) — **no**: the control got the identical 40 s and still never
+  returned from the render.
+* *"`TXP`/`EOT` come from the shift logic and `TSIZE`, not pad routing, so the
+  pin map cannot be observable"* — **also no**. That reasoning is right about
+  `spi_wait` specifically, which is why the timeout count is NOT the receipt,
+  but something else in `Lcd::init()` blocks when CS/DC sit on an unclocked,
+  unbonded port. **The precise mechanism is not yet identified** — do not assert
+  one without splitting `init()` further.
+
+**What this does NOT prove:** that anything was *visible*. There is **no panel
+attached to this bench board at all**, so visual confirmation is not available
+here by any means. Separately, pq1's `LCM_EN` (PB15) only enables an AW99703 LED
+driver whose brightness is programmed over I2C2 at `0x36`, and there is no
+driver for it in the tree — the FSBL has no I2C stage by design. The AW99703
+datasheet is not in the repo; that driver is the open follow-up, and it is only
+testable on a board that has a panel.
+
+> ### UPDATE 2026-09-23 — CLOSED. The FSBL fingerprint is visible and legible on a real panel.
+>
+> Run on the **enclosed screen unit** (UID `003B0022 30465002 2033314C`), which
+> is the board that has a panel. The operator read the four rows off the glass
+> and they matched the prediction exactly:
+>
+> ```
+> 1 fresh  5 febru
+> 2 narro  6 patie
+> 3 place  7 stumb
+> 4 box    8 local
+> ```
+>
+> **Why this is a binding and not just "a screen lit up".** The words were
+> computed HOST-SIDE BEFORE the run, by calling the same pure function the
+> firmware calls (`sphincs_tz_bip39::firmware_fingerprint_lines`) on digest
+> `5cd262970d45454235ec1a942b7de6ec15ba8e132c73f6f429a51f30552d3152` — the
+> `secure_hash` the signed manifest binds. The bank-1 blob's secure region was
+> independently re-hashed to the same value before flashing. So the glass is
+> tied to the exact image in the slot, and a stale or wrong frame could not
+> have produced these words.
+>
+> **What it closes**, against the three gaps stated immediately above:
+>
+> * *"nothing was visible"* — resolved. The render is visible AND legible at the
+>   4x16 grid's font size, which matters because invariant #10 asks a human to
+>   read 8 words inside a ~10 s window.
+> * *the FSBL's OWN driver copy* — `fsbl/src/nv3007.rs` is separate code from
+>   `secure/src/hw/{spi_hw,lcd_nv3007}.rs` and runs at **HSI16**, not 160 MHz.
+>   Prodtest's five LCD patterns (2026-09-21) validated the secure-world driver;
+>   this validates the FSBL's.
+> * *the AW99703 follow-up* — no longer open and no longer driverless.
+>   `fsbl/src/aw99703.rs` exists, and the words being LIT means `backlight_on`
+>   returned true: the verdict is folded into the display verdict (`94f02777`,
+>   corrected by `548d3d51`), and the refusal path returns BEFORE the hold, so a
+>   10 s hold with visible words is itself the receipt. This is also the first
+>   time that path ran against a **real LED load** — the bench board's AW99703
+>   drives an open circuit.
+>
+> **What it does NOT prove.** Nothing here makes the FSBL immutable: this unit is
+> RDP-0 with no WRP, which is the whole point of invariant #10's remaining open
+> gates. It does not exercise the FSBL-row vs secure-world-row divergence check
+> either, because slot A was built `ui-noop` and never drew a second row.
+>
+> **Route.** No SWD — the enclosed unit's 10-pin connector is removed and the
+> pads are inside the case. The operator put it into DFU with the USB-C sideband
+> adapter (`A8`/SBU shorted to VCC); the mechanism by which that reaches BOOT0 is
+> the schematic reading in `evt-debug-pins.md`, NOT something measured here — what
+> is measured is that the unit enumerated as `0483:df11`. Flashed with
+> `tools/flash-evt-dfu.sh --erase`, which regressed TrustZone, wrote at
+> TZEN=0 and re-enabled TZEN last. The boot proof needs four flash regions but
+> that tool writes two, so FSBL + manifest + secure were composed into ONE
+> bank-1 blob (offsets `0x0000` / `0x8000` / `0xE000`) and handed over as
+> `secure.bin`; each region was re-extracted and re-hashed from the blob before
+> flashing. `stage-marker` was deliberately OFF: with TZEN=1 the ROM bootloader
+> is non-secure and reads the secure bank back as zeros, so the marker page is
+> unreadable on this unit and the panel is the whole of the evidence.
+>
+> Final option bytes, re-read after the run: `RDP 0xAA`, `TZEN 0x1`,
+> `SECBOOTADD0 0x180000`, `SECWM1` all-secure, `SECWM2` off. No WRP, no RDP-2.
+
 ---
 
 ## §2 — Clock, bus, and timing re-verification (NON-DEST, do first)
@@ -219,6 +700,76 @@ silently drops to 16 MHz and **all** of it is wrong at once.
 `=== PASS ===`; substantially-slower-than-expected timings ⇒ HASH peripheral or
 clock wrong), `make saes-self-test-hw`, `make lcd-test-hw` / `make splash-test-hw`,
 `make flash-hw-optiga-shield-handshake-only`, `make pin-gate-hw-counter-e2e`.
+
+### UPDATE 2026-08-30 — §2 partially closed on the first pq1 board
+
+`make test-key-speed BOARD=pq1` **passes** on `AL_A66_MB_V10` s/n
+`002F0023 30465002 2033314C` (die UID). What that closes and what it does not:
+
+**Closed — the clock fallback risk this section leads with.** The table warns
+that a board unable to reach VOS1 "silently drops to 16 MHz and **all** of it is
+wrong at once". Read back over SWD from the running part:
+
+| Register | Value | Meaning |
+|---|---|---|
+| `RCC_CFGR1` | `0x0000_000F` | `SW = SWS = 0b11` — SYSCLK is PLL1, not the HSI16 fallback |
+| `RCC_CR` | `0x0300_3535` | `PLL1ON` + `PLL1RDY` + `HSI48ON` + `HSI48RDY` all set |
+| `RCC_PLL1DIVR` | `0x0100_0013` | `N = 20`, `R = 2` → 16 MHz × 20 / 2 = **160 MHz** |
+| `PWR_VOSR` | `0x0007_C000` | `VOS = 0b11` (Range 1), `VOSRDY`, `BOOSTRDY`, `BOOSTEN` |
+
+So VOS1 + the EPOD booster do come up on this power design, and every busy-wait,
+`TIMINGR`, BRR and SysTick reload calibrated to 160 MHz is on its assumed clock.
+The "LDO-vs-SMPS dependent / BOOSTRDY may never set" risk is **not observed on
+the first board (n = 1)**. That is one die, at room temperature, on bench power —
+enough to unblock bring-up, not enough to call the row closed. Re-read these four
+registers on each new board until there is a population behind the claim, and
+note that `rcc.rs:132-138` fails *silently* to 16 MHz, so a board where the
+booster does not come up will look like a slow board rather than a broken one.
+
+**Also closed:** the clock tree needs neither crystal — `rcc.rs` runs HSI16 → PLL1
+and HSI48 for the RNG, and touches HSE/LSE nowhere. pq1's 8 MHz HSE (vs the dev
+kit's 16 MHz) therefore cannot matter. The HASH KAT row passes on this silicon
+rev: `[S] hash: HW SHA-256 self-test PASS` appears on every boot.
+
+**Open — signing is slower than this repo's own expectation, and the repo
+disagrees with itself about what that expectation is.** Measured here, `hw-sha256`
+on, 160 MHz confirmed:
+
+| Measurement | pq1, measured | `CLAUDE.md` "expected" | `docs/archive/production-todo-retired-2026-07-19.md:1146` |
+|---|---|---|---|
+| first-sign | 14.7 s | ≤ 3 s | ~9.2 s |
+| type2-only, cached slot (avg of 5) | 6.8 s | ≈ 1.1 s | ~4.0 s |
+
+The two in-repo figures already differ by ~3.6× from each other, so at least one
+predates a parameter or build change. **This is very unlikely to be a board
+property:** the bench build is `mock-se` and touches no board peripheral in the
+timed path, and a *cycle count* is fixed by code and data, not by wiring — the
+gap is ~6× in cycles, not in wall-clock. `hw-sha256` is confirmed wired
+(`sphincs-c10/src/hash.rs:105-150` routes `Sha256` to the `pqsigner_sha256_*`
+externs, and the feature is on). The likely readings are that the HASH
+peripheral's per-call MMIO overhead does not pay off for SPHINCS+'s many tiny
+hashes, or that the documented numbers are stale.
+
+**To close it:** run `make test-key-speed` on the B-U585I-IOT02A and compare
+cycle counts directly. Until that A/B exists, do not attribute the difference to
+this board, and treat the `CLAUDE.md` "first-sign ≤ 3 s" line as unverified.
+
+**A `mode-production` pq1 image is currently unsatisfiable, by construction.**
+`Makefile` `PROD_SHIP_FEATURES` requires both `consumption-mask` and `ui-lcd`.
+The consumption mask is TIM2_CH1 on **PA5** (`hw/consumption_mask.rs:113`), and
+PA5 on pq1 is **`SPI1_SCK`** — the LCD clock. The two cannot coexist on this
+board without repointing the mask; PA6 is free and carries `AF2 = TIM3_CH1`
+(DS13086 Table 28), which is the obvious landing spot. `make prod-feature-check`
+passes today *because no board feature is in `PROD_REQUIRED` yet* — that is a
+future gate, not a present pass, and it should only be added once the mask has
+somewhere to live.
+
+**Also observed, not yet explained:** `[S] rng::fill: seed/clock error —
+recovering` fires roughly once per sign (`RNG_SR = 0x41`, `SEIS` set) and the
+recovery-once path clears it every time. The §2 RNG row anticipates exactly this
+("noisier EVT rail can raise SEIS/CEIS"). It is not the cause of the timing gap
+— a `CONDRST` cycle is microseconds — but it should be characterised before the
+rail is trusted, since the code's contract is recover-once-then-panic.
 
 ---
 
@@ -387,6 +938,71 @@ needs a ChipWhisperer-Husky / ChipSHOUTER, which is **not yet on the bench**
 
 ---
 
+### UPDATE 2026-09-16 — 10.5 advanced: the non-monolithic boot proof RAN on pq1
+
+The FSBL verified slot A and **branched into it** on a pq1 board
+(AL_A66_MB_V10). This is the first time the non-monolithic boot path has
+executed on any silicon; `docs/firmware/firmware-update.md` had recorded
+hardware bring-up as "intentionally stopped".
+
+Instrumented with the default-off `stage-marker` feature (`fsbl/src/marker.rs`),
+which records one quad-word per boot stage into the erased manifest-B page, read
+back with CubeProgrammer `mode=UR`. **All 18 stages reached, none missing.**
+Load-bearing payloads:
+
+| stage | payload | what it establishes |
+|---|---|---|
+| `FloorRead` | 0 | OTP rollback floor is 0 — **no OTP has been consumed** |
+| `SlotAAdmitted` | 4097 | full admission chain passed (CRC, digest, fpr, C10 signature, rollback) |
+| `ImgSecureHashed` | `0xCE47B27A` | = `7ab247ce…` LE, the signed secure hash |
+| `ImgNsHashed` | `0x1EEAAC71` | = `71acea1e…` LE — the **SAU fix works**; this read as SHA-of-zeros before |
+| `ImgSecureCmp` / `ImgNsCmp` | 1 / 1 | `verify_images` matched both images against the manifest |
+| `Tz1Verdict` | 1 | the tz-1 option-byte tripwire passed (issue #270) |
+| `LcdInited` / `RenderFlushed` | — / 0 | panel init returned; zero SPI timeouts (see §1 update) |
+| `Branching` | 0 | **render returned and the FSBL branched into slot A** |
+
+**Device read-back receipts:** FSBL `4a8d28f7…` (29,616 B), manifest A
+`dfd66ca1…`, secure slot A `7ab247ce…` (385,568 B), NS slot A `71acea1e…`
+(7,488 B). Reproduced **byte-for-byte across two runs**, the second from a
+freshly erased marker page, with manifest A and the FSBL image both re-read as
+in-session controls.
+
+**Scope — this is evidence toward 10.5, not closure of it, and not production
+approval.** The build carried `stage-marker`, which gives the FSBL a
+flash-write path invariant #10 forbids in a shipping image; it was signed with
+the development vendor key; the board is at RDP-0 with **no WRP and no RDP-2**;
+the geometry is still the legacy pages-0..3 layout (cutover #540 open); and
+**no fault-injection sweep has touched this path** — §8.2 and §8.5 remain
+exactly as open as before. Nothing here bears on the ceremony in §3.
+
+**Two procedural traps, both of which produce convincing false readings:**
+
+1. **The marker page must be erased between runs.** Flash quad-words cannot be
+   reprogrammed, so a second run silently fails to record and you re-read the
+   *first* run's stages. Erase bank-1 sector 5 (`-e 5`); it is correctly
+   targeted — manifest A on sector 4 survives, verified.
+2. **A CubeProgrammer invocation releases the target on exit, so the FSBL runs
+   between commands.** Any read placed between the erase and the reset is
+   itself an opportunity for the page to be repopulated — which is how this
+   run's own "is-it-erased" pre-check came back already-written. Put the erase
+   last before the reset, and discriminate on a marker only the new build can
+   write.
+
+A third, from the same day: **size the settle to the measured boot, and the
+boot has since changed.** It was measured at 39.4 s (78% of it `delay_ms`
+nop-spinning on the 4 MHz reset clock with an 8×-long loop), and after
+`fsbl/src/clock.rs` switched the FSBL to HSI16 and `delay_ms` was made to
+derive its calibration from the achieved clock, the WORK dropped to 2.93 s
+(1.19 s `Lcd::init()` + 1.19 s image hashing + 0.38 s C10 manifest verify +
+0.17 s glyph blit). Wall-clock is then whatever `FINGERPRINT_HOLD_MS` adds:
+**12.932 s** at the current 10 s hold, 5.931 s at the earlier 3 s one. A
+marker page read too early shows late stages "not reached" for purely timing
+reasons, so re-check the current figure rather than reusing a remembered one —
+the estimates that preceded these were "~3 s" and "~17 s", both wrong, and the
+hold is a policy constant that can move again.
+
+---
+
 ## §11 — Firmware-rollback + SCP03-rotation receipts (DESTRUCTIVE, ship-blockers)
 
 | # | Item | Destructive? | Ref |
@@ -444,3 +1060,26 @@ current authority. Listed for completeness; do not action without owner stage de
 | One-shot RDP-2 self-lock | first-boot only (`program_rdp_level2_and_launch`) | never run |
 
 *End of index. Amend in place — do not fork a parallel silicon-validation doc.*
+
+### UPDATE 2026-09-21 — sealed EVT #1 booted end-to-end over USB-C DFU (no probe)
+
+Image: `origin/feat/pq1-board-target` @ `0cf0cfe8` + an AW99703 backlight
+driver (`secure/src/hw/aw99703.rs`, bit-banged I2C2 on PB13/PB14, channel 1
+only, OVP lowered to 24 V for the 25 V output cap, ~75 % brightness), features
+`dual-se,dev-testkey,ui-lcd,stm32u585,usb,board-pq1` — deliberately WITHOUT
+`optiga-hw-counter` (its first provisioning rewrites F1D0 metadata). Flashed
+through the SBU-bridged breakout + `tools/flash-evt-dfu.sh` (see
+`evt-debug-pins.md` for the TZEN-off-then-on order the ROM bootloader forces).
+
+Observed on the sealed unit: backlight + NV3007 panel + both buttons work
+(closes "LCD bring-up: dev board only so far" — with the caveat that the panel
+stays DARK without the AW99703 driver, `LCM_EN` alone is not enough);
+PIN pad seeded with random digits (i.e. `rng_strong` = STM32 TRNG ⊕ OPTIGA ⊕
+SE050 all answered — `3c1c95f7` HTCR fix + E2 keyset default were both
+required); 24-word wizard; both SEs provisioned; "PQSigner OS Ready";
+enumerates `1209:7051 PQSigner OS` on the host. Wallet state is reversible via
+`wipe-for-wizard`. Unit remains RDP-0 / TZEN=1.
+
+Before those two fixes the same flow on this unit showed an all-zero PIN pad
+(the `pin_entry` fallback when `rng_strong::fill` fails) — a useful field
+signature for "an SE session or the TRNG is down".

@@ -7,7 +7,9 @@
 //!   development today.
 //! * `ui-lcd` — real backend that drives an NV3007 142×428 SPI LCD
 //!   (`hw::lcd_nv3007`) and reads two GPIO buttons. The only shipping display
-//!   backend (the SSD1306 `ui-oled` backend was removed 2026-06-30).
+//!   backend. The SSD1306 `ui-oled` backend was removed 2026-06-30 and the
+//!   bench-only `ui-oled-bench` one on 2026-09-23, so the NV3007 LCD is the
+//!   only pixel backend left.
 //!
 //! Both backends export the same `Display` and `Input` types so the rest of
 //! the secure world is backend-agnostic.
@@ -36,6 +38,11 @@ pub use lcd::{Display, Input};
 pub mod capture;
 
 pub mod confirm;
+/// Pixel trusted UI (`ui-px`): the screen-transcript confirm loop and its
+/// presenters. Phase 4 ships the text presenter (QEMU / bench fallback); the
+/// NV3007 rasteriser lands as the LCD presenter.
+#[cfg(feature = "ui-px")]
+pub mod px;
 mod confirm_core;
 // Render-only golden-screenshot harness (#21 — fast ui-golden).
 #[cfg(feature = "ui-golden-render")]
@@ -213,11 +220,26 @@ pub fn input() -> &'static mut Input {
 /// Play the boot/plug-in animation. Backend-specific; a no-op on backends
 /// without a pixel display. Safe to call once, after `init()`.
 pub fn splash() {
+    // Port step 4: the boot splash is the mono token over PQ1.
+    #[cfg(feature = "ui-px")]
+    if px::screens::show(&px::status_map::splash()) {
+        #[cfg(feature = "ui-lcd")]
+        cortex_m::asm::delay(160_000 * 700); // the legacy splash's 700 ms hold
+        return;
+    }
     display().splash();
 }
 
 /// Show a single-line status message ("Locked", "Signing...", etc.).
+///
+/// Under `ui-px` the status is the design's screen for it (a verdict, the
+/// busy film, the idle screen, the detail-grid notice — `px::status_map`);
+/// the 16×4 page below is only the fallback when the pixel path declines.
 pub fn show_status(title: &str, sub: &str) {
+    #[cfg(feature = "ui-px")]
+    if px::screens::status(title, sub) {
+        return;
+    }
     let d = display();
     d.clear();
     d.draw_line(1, title);
@@ -233,6 +255,10 @@ pub fn show_status(title: &str, sub: &str) {
 ///   row 2: (empty)
 ///   row 3: [######          ]   <- 14 usable cells
 pub fn show_progress(title: &str, percent: u8) {
+    #[cfg(feature = "ui-px")]
+    if px::screens::progress(title, percent) {
+        return;
+    }
     let pct = if percent > 100 { 100 } else { percent };
     let filled = (pct as usize * 14 + 50) / 100; // 0..14, rounded
 

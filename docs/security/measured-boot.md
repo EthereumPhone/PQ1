@@ -46,6 +46,58 @@ user re-verifies the new words against the published
   (`fsbl/src/fi.rs::check_true_into_sentinel`); a coordinated multi-
   glitch attack remains a residual risk handled at the
   silicon-hardening layer (RDP-2, TAMP, consumption mask).
+- **Any claim about WHICH FSBL is on the part, derived from the signed
+  bundle.** (#742; recorded 2026-09-28.) The release bundle contains
+  `manifest.bin`, `secure.bin`, `nonsecure.bin`, `measurement.txt`,
+  `pubkey.bin`, `release.json` and `erc7730-status.bin` — **no FSBL**. The
+  signed preimage is `signed_preimage(fw_version, secure_hash,
+  nonsecure_hash)`; it has no FSBL field, and neither does Draft 1.1's
+  proposed `PQFW_V6` replacement. `fwsign sign --fsbl` reads the FSBL ELF
+  only to check its retained vendor-key sections
+  (`artifact_key::verify_artifact_bytes`) and then discards it.
+
+  This is the right design, not an oversight: the FSBL is the verifier, so
+  binding it inside the manifest it verifies is circular — an attacker who
+  replaces the FSBL replaces the check with it. FSBL immutability is meant
+  to come from WRP + RDP-2 (invariant #10), and those gates are still OPEN.
+
+  What follows is an EVIDENCE rule, and it is easy to get wrong:
+  **"we flashed the signed bundle, therefore the FSBL is X" is unfounded.**
+  Bundle verification says nothing about the bootloader.
+
+  DEMONSTRATED, not merely argued (2026-09-28, bench board
+  `002f0023 30465002 2033314c`): a freshly built FSBL — different bytes,
+  different size, hardware SHA-256 instead of software — was flashed
+  alongside the **unchanged** Sept-23 signed bundle. It booted, verified
+  both images against that manifest, and branched: 19/19 stage markers
+  including `Branching`, `ImgSecureCmp=1`, `ImgNsCmp=1`. Nothing in the
+  signed artifact objected, because nothing in it describes the FSBL.
+
+  Until WRP + RDP-2 close, FSBL identity is established ONLY by:
+
+  1. **Out-of-band measurement** — `cargo run -p fwmeasure -- <fsbl.elf>`,
+     compared against a reproducible build of the published commit; and/or
+     reading the boot fingerprint off the panel.
+  2. **The vendor-key chain**, which is checkable but currently manual:
+     extract the key the FSBL actually carries and hash it —
+
+     ```
+     arm-none-eabi-objcopy -O binary --only-section=.pqsigner.vendor_pubkey \
+         <fsbl.elf> key.bin
+     sha256sum key.bin        # must equal `vendor fpr` in measurement.txt
+     ```
+
+     On 2026-09-28 that gave `ed51cd8a7fe1c395...` hashing to
+     `af8824ff2aa1d515...`, matching the bundle. That proves the FSBL and
+     the bundle share a vendor — **not** that the FSBL is the one the
+     release was built from. Two FSBLs from the same vendor key are
+     indistinguishable by this check.
+
+  Neither step is automated, and neither is part of any release receipt.
+  A release flow that emitted an FSBL measurement alongside the bundle
+  would close the gap between (1) and operator testimony; that is proposed
+  in #742 and NOT implemented.
+
 - **Denial of service.** A malicious slot can crash the device before
   the user finishes reading the FSBL row, then loop. The LCD would
   flicker honest words but never settle. This is detectable as a
@@ -65,7 +117,7 @@ flash region    │   1. Read manifest A, manifest B         │
                 │      │ render::render_fingerprint    │   │
                 │      │   * SPI + NV3007 init         │   │
                 │      │   * firmware_fingerprint_lines│   │
-                │      │   * draw + flush + hold ~3 s  │   │
+                │      │   * draw + flush + hold ~12 s │   │
                 │      └───────────────────────────────┘   │
                 │   6. branch::into_slot(slot)             │
                 └──────────────────────────────────────────┘
@@ -123,10 +175,34 @@ The `bip39/tests/prefix5_roundtrip.rs` test pins these invariants
 ### First boot (initial provisioning)
 
 1. Power up the device for the first time.
-2. Observe the 8 words on the NV3007 LCD (~3 s, then the boot continues).
+2. Observe the 8 words on the NV3007 LCD (~12 s, then the boot continues).
 3. Independently rebuild the release commit (`./measure.sh` or
    `nix run .#measure`) on a separate trusted machine.
 4. Confirm the 8 words match. Record them on paper as the baseline.
+
+> **UPDATE 2026-09-17 — first boot needs a panel AND buttons, and USB comes up
+> only after it.** Step 4 is not the end of first boot: the boot then enters
+> `run_first_boot_wizard()` (`secure/src/main.rs:3778`) and **blocks** there
+> until the user drives the PIN/seed dialogs with the two hardware buttons
+> (pq1: PA0 `UP_KEY`/LEFT, PA1 `DOWN_KEY`/RIGHT). `hw::usb_hw::init()` runs at
+> `main.rs:3975` — *after* the wizard and unlock — and `boot_ns::boot` at
+> `:4022` after that.
+>
+> The consequence is worth stating because it cost a bring-up session: on a
+> board with **no display**, a shipping-shaped image (`ui-lcd`, no `e2e-test`)
+> boots correctly, renders the fingerprint to a panel that isn't there, parks in
+> an invisible wizard, and **never enumerates USB**. That looks exactly like a
+> secure-world hang and is not one. Only `e2e-test` short-circuits the dialogs;
+> `dev-testkey` does not (`dev-testkey = ["otp-hardcoded-master-key"]`), and
+> `ui-lcd` *implies* `gpio-buttons` (`secure/Cargo.toml:534`), so the real
+> button driver is always compiled into an LCD build.
+>
+> To exercise first boot on a panel-less bench board, use `e2e-test`
+> (fixed-mnemonic auto-provisioning, no dialogs) or a semihosting UI. Nothing
+> in the waiting state is destructive: `is_provisioned()` is read-only, and the
+> wizard's idle timeout loops back (`main.rs:876-880` treats
+> `PinEntryResult::IdleWipe` as `show_status("Idle","retry...")` + `continue`)
+> rather than wiping — despite the variant's name.
 
 ### Every subsequent boot
 
@@ -193,9 +269,88 @@ signal would then be permanently tripped and ignored). See
   (init, draw, flush, hold).
 - `fsbl/src/nv3007.rs` — minimal NV3007 142×428 SPI LCD driver (ported from
   the bench-validated secure `ui-lcd` driver). Drops every secure-world dep
-  (`embedded-graphics`, `secure_log!`, `hw::mmio::Reg32`); 16 MHz-calibrated
-  `delay_ms`, SWRESET (RES tied to 3V3). The SSD1306 OLED driver was removed
-  2026-06-30 — only the NV3007 LCD ships.
+  (`embedded-graphics`, `secure_log!`, `hw::mmio::Reg32`). The SSD1306 OLED
+  driver was removed 2026-06-30 — only the NV3007 LCD ships.
+- `fsbl/src/board/{mod,iota2,pq1}.rs` — the LCD pin map, selected at compile
+  time; naming a board is mandatory and the fence is unconditional. Added
+  2026-09-16: the driver had hardcoded iota2's port-E wiring, which on pq1's
+  48-pin package writes to a port that exists on the die but drives no pad —
+  so the fingerprint render silently produced nothing and the FSBL branched
+  anyway. iota2 resets the panel with `SWRESET` (its RES is strapped to 3V3);
+  pq1 drives `LCM_RST` on PB1 and gets a real reset pulse.
+
+**UPDATE 2026-09-16 — the boot is MEASURED, and is now 5.9 s.** Timed on pq1
+with DWT `CYCCNT` per boot stage (`fsbl/src/marker.rs`, `stage-marker`),
+`MainEntered` → `Branching`:
+
+| | now (HSI16) | share | at 4 MHz |
+|---|---|---|---|
+| fingerprint hold (`delay_ms(10_000)`) | **10.002 s** | 77% | — |
+| `Lcd::init()` | 1.188 s | 9% | 8.405 s |
+| SHA-256, secure image (385,568 B) | 1.167 s | 9% | 4.667 s |
+| `filter_valid` (CRC/digest/fpr/**C10 signature**/rollback) | 0.375 s | 3% | 1.498 s |
+| 16×4 glyph blit | 0.174 s | 1% | 0.697 s |
+| SHA-256, NS image (7,488 B) | 0.023 s | 0% | 0.092 s |
+| **total** | **12.932 s** | | **39.367 s** |
+
+Actual work is **2.930 s**; the remainder is the deliberately-long trust
+window. The hold was 3,000 ms (measuring 3.001 s, a 5.931 s boot) until it was
+raised to 10 s by owner decision on 2026-09-16.
+
+Two faults produced the 39.4 s figure, and both are fixed. The FSBL wrote no
+RCC configuration, so it ran at the 4 MHz MSIS reset clock (`RCC_CFGR1.SW` =
+00, `RCC_CSR.MSISSRANGE` = 4 — "range 4 around 4 MHz (reset value)" in the
+vendor SVD); and its `delay_ms` nop loop assumed 4 cycles/iteration at 16 MHz
+while actually costing 8 at 4 MHz, making every delay **8× nominal** — 30.8 s
+of that boot (78%) was nop-spinning. `fsbl/src/clock.rs` now switches to HSI16
+(bounded, fail-safe, no VOS or flash-latency change), and `delay_ms` derives
+its calibration from the clock actually achieved. The improvement decomposes
+exactly: compute terms 4.0× (the clock), delay terms 8.0× (the calibration).
+
+The hold is honoured to within 0.03% at both nominals tested — 3,000 ms →
+3.001 s and 10,000 ms → 10.002 s, linear across a 3.3× range — and the
+NV3007's reset / SLPOUT / DISPON waits are now the vendor nominals rather than
+8× over. The boot is also cycle-deterministic: across those two runs every
+stage timestamp except the one after the hold was identical to the cycle.
+
+**Observation window: ~10 s** (owner decision, 2026-09-16), 77% of the boot.
+Longer buys the user reading time for the 8 words at the cost of boot latency;
+that trade is a policy choice, not a performance defect. `CLAUDE.md`'s
+Lifecycle line was updated to match (2026-09-16); it had said "~3 s", which was
+accurate only while the hold was 3 s. **If the hold changes again, that line
+changes too** — it is the one figure about this page that lives outside it.
+
+Three superseded estimates are recorded here deliberately — "~3 s", then
+"~12 s hold / ~800 ms per image" after a 4× rescale, then the measured 39.4 s.
+Do not rescale a figure on this page; measure it.
+
+**UPDATE 2026-09-24 — the hold is now 4 s, to match the secure world.** Owner
+decision. `FINGERPRINT_HOLD_MS` 10,000 → 4,000.
+
+The reason is consistency, not latency. The SECURE WORLD has shown the same
+eight words for 4 s since 2026-04-14 — `measured_boot::WORDS_MS = 4_000`,
+"auto-dismiss after 4 s or any button" — and both screens derive their grid
+from the same digest through the same `sphincs_tz_bip39::firmware_fingerprint_lines`.
+The two durations diverged by six seconds only because they were set on
+different dates by different decisions. They now agree.
+
+One asymmetry is deliberate and remains: the secure world's screen is
+DISMISSIBLE (`input().wait_button`), the FSBL's is not — the FSBL never
+initialises the GPIO buttons, so 4 s there is a floor. A power-cycle is still
+its only abort path.
+
+Expected boot: **~6.93 s** = the measured 2.930 s of work + ~4.001 s of hold,
+the latter extrapolated from the +0.02..0.03% calibration error measured at the
+3,000 and 10,000 ms nominals. **Neither the new hold nor the new total has been
+measured on silicon.** Per the rule directly above — do not rescale a figure on
+this page, measure it — the table above is left at its measured 10 s values and
+this note is an extrapolation until a `stage-marker` run replaces it.
+
+**pq1 backlight caveat.** On pq1 the panel may render correctly and still look
+dark: `LCM_EN` (PB15) only enables an AW99703 LED driver whose brightness is
+programmed over I2C2 at `0x36`, and the FSBL has no I2C stage. Absence of
+visible words on pq1 is therefore not by itself evidence that measured boot
+failed.
 - `sphincs_tz_bip39::firmware_fingerprint_lines` — pure layout
   function shared between FSBL and `secure/src/measured_boot.rs`.
 

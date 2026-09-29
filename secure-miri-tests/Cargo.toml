@@ -1,0 +1,38 @@
+# Stand-alone workspace (empty table below): kept OUT of the main PQSigner
+# workspace so this crate's existence cannot perturb the root
+# Cargo.toml/Cargo.lock — both are hash-bound inputs of the ERC-7730
+# curation manifest (secure/data/erc7730/curations/manifest.json). Same
+# isolation pattern as fuzz/.
+
+[package]
+name = "pqsigner-secure-miri-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+pqsigner-fi = { path = "../pqsigner-fi" }
+zeroize = { version = "1.8", default-features = false }
+# Host stub (under stubs/) providing the `cortex_m::asm::{nop,wfe}` surface
+# the mounted `ui::lcd` references via the extern prelude.
+cortex-m = { path = "stubs/cortex-m" }
+
+# Feature flags the mounted production files test with `#[cfg(feature = …)]`.
+# Declaring them keeps `--check-cfg` quiet; the two the mount needs ON are in
+# `default`, the rest exist only so the mounted cfg arms stay named-checked.
+[features]
+default = ["ui-lcd", "lcd-test"]
+# Gates the whole mounted `ui/lcd.rs` (`#![cfg(feature = "ui-lcd")]`) and the
+# `secret_glyph_cols`/`public_glyph_cols` fns in `ui/secret_text.rs`.
+ui-lcd = []
+# Exposes `ui::lcd::set_flip` (production's bench-only orientation knob) so
+# the tests can sweep all four FLIP combos.
+lcd-test = []
+# Referenced by mounted files but intentionally OFF on host.
+debug-log = []
+gpio-buttons = []
+# Referenced by the mounted `rng_strong.rs` production/mock arm split;
+# intentionally OFF so the strict three-source arm is what runs here.
+mock-se = []

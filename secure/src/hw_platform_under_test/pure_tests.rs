@@ -51,14 +51,89 @@ const FLASH_SRC: &str = include_str!("../hw/flash.rs");
 /// `negative_hal_flash_contract_agrees_with_driver_on_quad_word_rule`.
 const HAL_SRC: &str = include_str!("../../../hal/src/lib.rs");
 const TAMP_SRC: &str = include_str!("../hw/tamp.rs");
+/// The decode body moved to `hw/tamp_reason.rs` (#723) so it could be tested
+/// against the real function; the label pins below moved with it.
+const TAMP_REASON_SRC: &str = include_str!("../hw/tamp_reason.rs");
 const CONSUMPTION_MASK_SRC: &str = include_str!("../hw/consumption_mask.rs");
+const CONSUMPTION_MASK_PRNG_SRC: &str = include_str!("../consumption_mask_prng.rs");
 const SCA_TRIGGER_SRC: &str = include_str!("../hw/sca_trigger.rs");
 const RCC_SRC: &str = include_str!("../hw/rcc.rs");
+const USB_HW_SRC_PLAT: &str = include_str!("../hw/usb_hw.rs");
 const RNG_SRC: &str = include_str!("../hw/rng.rs");
 const RNG_EXACT_SRC: &str = include_str!("../rng_exact.rs");
 const BOOT_PULSE_SRC: &str = include_str!("../hw/boot_pulse.rs");
+const BOARD_IOTA2_SRC: &str = include_str!("../board/iota2.rs");
+const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
+const BOARD_MOD_SRC_PLAT: &str = include_str!("../board/mod.rs");
 const BOOT_STATE_SRC: &str = include_str!("../hw/boot_state.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
+
+// ═════════════════════════════════════════════════════════════════════
+// 0. NEGATIVE — the option-byte COMMAND register (known defect #268)
+// ═════════════════════════════════════════════════════════════════════
+
+/// `OPTSTRT` (bit 17), `OBL_LAUNCH` (27) and `OPTLOCK` (30) exist **only** in
+/// `FLASH_NSCR` (0x28) per the vendor SVD; `FLASH_SECCR` (0x2C) implements
+/// none of them. Writing them to `seccr` is therefore silently inert — it
+/// neither commits nor errors — so `program_rdp_level2_and_launch` stages
+/// `RDP=0xCC`, fails to burn it, reads a clean `SECSR`, and returns `Ok(())`.
+///
+/// The fix is deliberately NOT applied: that is the irreversible RDP-2 path
+/// and it wants an owner decision plus a sacrificial-silicon plan rather than
+/// a drive-by edit (issue #268). Nothing has executed it —
+/// `rdp2-self-lock` is production-quarantined.
+///
+/// This guard is therefore written to accept EITHER state, so it is green
+/// today and stays green after a future fix:
+///   * the writes still target `seccr` **and** the defect marker is present, or
+///   * the writes target `nscr` (fixed), needing no marker.
+/// It fails only if someone strips the marker while leaving the bug, or
+/// "fixes" some sites and not others — the mixed state that would make the
+/// burn's behaviour depend on which line was touched.
+#[test]
+fn negative_optbyte_commit_defect_268_is_marked_or_fixed() {
+    const SECCR_SITES: [&str; 3] = [
+        "REG.seccr.write(OPTSTRT)",
+        "REG.seccr.write(OBL_LAUNCH)",
+        "REG.seccr.read() & OPTLOCK",
+    ];
+    let still_on_seccr: Vec<&str> = SECCR_SITES
+        .iter()
+        .copied()
+        .filter(|s| FLASH_SRC.contains(s))
+        .collect();
+
+    if still_on_seccr.is_empty() {
+        // Fixed. Assert the fix actually moved to the right register rather
+        // than merely renaming the sites away from this pattern.
+        assert!(
+            FLASH_SRC.contains("REG.nscr.write(OPTSTRT)"),
+            "the SECCR option-byte writes are gone, but no `REG.nscr.write(OPTSTRT)` \
+             replaced them. Per the vendor SVD, FLASH_NSCR (0x28) is the ONLY register \
+             carrying OPTSTRT/OBL_LAUNCH/OPTLOCK — see \
+             `sphincs_tz_shared::lockdown::is_optbyte_command_register`."
+        );
+        return;
+    }
+
+    assert!(
+        FLASH_SRC.contains("KNOWN DEFECT #268"),
+        "flash.rs still writes option-byte command bits to SECCR ({still_on_seccr:?}) but \
+         the `KNOWN DEFECT #268` marker has been removed. Those bits exist only in \
+         FLASH_NSCR (0x28); SECCR (0x2C) implements none of them, so the irreversible \
+         RDP-2 burn cannot commit yet reports success. Either move all three accesses to \
+         `REG.nscr` (and update this test), or keep the marker."
+    );
+    assert_eq!(
+        still_on_seccr.len(),
+        SECCR_SITES.len(),
+        "PARTIAL fix: {} of {} option-byte accesses still target SECCR ({still_on_seccr:?}). \
+         A mixed state is worse than either end — the burn's behaviour would depend on which \
+         line was edited. Move all three or none.",
+        still_on_seccr.len(),
+        SECCR_SITES.len()
+    );
+}
 
 // ═════════════════════════════════════════════════════════════════════
 // 1. POSITIVE — flash page geometry (every page-number / address pin)
@@ -249,8 +324,45 @@ fn positive_rng_peripheral_secure_alias() {
 
 #[test]
 fn positive_rng_nist_compliant_default_cr() {
-    // ST LL driver value (CONFIG3=0x0F, CONFIG1=0x34, NISTC=0).
+    // RM0456 Rev 7 Table 464 configuration C CR bits: NISTC=0,
+    // CONFIG1=0x0F, CONFIG2=0x0, CONFIG3=0xD, CLKDIV=0. (An earlier comment
+    // here said "CONFIG3=0x0F, CONFIG1=0x34"; the value never decoded to that.)
     assert!(RNG_SRC.contains("const RNG_CR_NIST_DEFAULT: u32 = 0x00F0_0D00;"));
+}
+
+#[test]
+fn positive_rng_htcr_an4230_written_inside_condrst_window() {
+    // UPDATED (#704). This pinned RNG_HTCR = 0xAAC7 as "configuration C", taken
+    // from RM0456 Table 464's generic row. That value is wrong for this part:
+    // NIST ESV certificate E11 covers "STM32U575x / STM32U585x ... revision B
+    // and Later" and its Table 2 permits only 0x06E9C (alpha=2^-20) or 0x0A2B0
+    // (alpha=2^-30). 0xAAC7 is neither — it is what stm32u535xx.h/u545xx.h
+    // define, the two parts with no RNG_NSCR register at all.
+    //
+    // The ordering requirement is unchanged and still the point of this test:
+    // HTCR is only taken into account while CONDRST=1 (§48.7.5), so the write
+    // must sit between the CR write that sets CONDRST and the one that clears
+    // it, and be read back fail-closed. Without any HTCR write the health tests
+    // run at the reset thresholds (0x72AC) and pq1 latched a seed error
+    // (SR=0x41) before nearly every post-idle draw (#698).
+    assert!(RNG_SRC.contains("const RNG_HTCR_AN4230: u32 = 0x0000_A2B0;"));
+    assert!(
+        !RNG_SRC.contains("0x0000_AAC7"),
+        "0xAAC7 is not one of E11's two permitted HTCR values for this part"
+    );
+    assert!(RNG_SRC.contains("htcr: Reg32::new(RNG + 0x10),"));
+    let init = extract_body(RNG_SRC, "fn init_locked() -> Result<(), ()> {");
+    let set = init
+        .find("REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);")
+        .expect("CONDRST set");
+    let write = init
+        .find("REG.htcr.write(RNG_HTCR_AN4230);")
+        .expect("HTCR write missing from init_locked");
+    let clear = init
+        .find("REG.cr.write(RNG_CR_NIST_DEFAULT);")
+        .expect("CONDRST clear");
+    assert!(set < write && write < clear, "HTCR must be written while CONDRST=1");
+    assert!(init.contains("if htcr_after != RNG_HTCR_AN4230 {\n        return Err(());"));
 }
 
 #[test]
@@ -314,20 +426,107 @@ fn positive_tamp_reason_from_sr_covers_crypto_fault() {
     // ITAMP9 = CRYPTO_FAULT is the SAES/AES/PKA/TRNG glitch canary —
     // the highest-signal source. The mapping string must be findable
     // by name in post-mortem logs.
-    assert!(TAMP_SRC.contains(r#""CRYPTO_FAULT""#));
-    assert!(TAMP_SRC.contains(r#""VOLTAGE""#));
-    assert!(TAMP_SRC.contains(r#""LSE_CLOCK""#));
-    assert!(TAMP_SRC.contains(r#""IWDG""#));
-    assert!(TAMP_SRC.contains(r#""SWD_ACCESS""#));
+    // Retargeted in #723: the literals now live in `hw/tamp_reason.rs`.
+    // `positive_tamp_reason_decodes_every_itamp_flag` is the stronger check
+    // (all 11 labels, against the REAL function); this one survives because
+    // "findable by name in a postmortem log" is about the text, not the value.
+    assert!(TAMP_REASON_SRC.contains(r#""CRYPTO_FAULT""#));
+    assert!(TAMP_REASON_SRC.contains(r#""VOLTAGE""#));
+    assert!(TAMP_REASON_SRC.contains(r#""LSE_CLOCK""#));
+    assert!(TAMP_REASON_SRC.contains(r#""IWDG""#));
+    assert!(TAMP_REASON_SRC.contains(r#""SWD_ACCESS""#));
 }
 
 #[test]
-fn positive_consumption_mask_pa5_pwm_tim2_ch1() {
-    // Trezor convention; PA5 is the only pin claimed by this module.
-    // TIM2 ch1 AF1 on PA5.
-    assert!(CONSUMPTION_MASK_SRC.contains("pub const TIM2: u32 = 0x5000_0000;"));
-    assert!(CONSUMPTION_MASK_SRC.contains("pub const GPIOA: u32 = 0x5202_0000;"));
+fn positive_consumption_mask_pin_and_timer_come_from_the_board() {
+    // Was: the hardcoded `TIM2 = 0x5000_0000` and `GPIOA = 0x5202_0000`. Both
+    // are iota2 facts, and PA5 is the trusted display's SPI clock on pq1 — so
+    // this gate pinned the mask to a pin that would have contended with the
+    // LCD driver. It was also the ONLY pin in the board port with no `board::`
+    // entry, which is why no collision guard could see the clash.
+    for derived in [
+        "pub const PORT: u32 = board::MASK_PWM_PORT;",
+        "pub const PIN: u32 = board::MASK_PWM_PIN;",
+        "pub const AF: u32 = board::MASK_PWM_AF;",
+        "pub const TIM: u32 = board::MASK_TIM_BASE;",
+        "pub const RCC_APB1ENR1_TIMEN: u32 = board::MASK_TIM_RCC_EN_BIT;",
+    ] {
+        assert!(
+            CONSUMPTION_MASK_SRC.contains(derived),
+            "consumption_mask must derive its pin/timer from the board; missing `{derived}`"
+        );
+    }
     assert!(CONSUMPTION_MASK_SRC.contains("const TIMER_PERIOD: u32 = 16_000;"));
+
+    // Per-board values. iota2 keeps TIM2_CH1/PA5/AF1 exactly.
+    for (src, name, want) in [
+        (BOARD_IOTA2_SRC, "iota2", [
+            "pub const MASK_PWM_PIN: u32 = 5;",
+            "pub const MASK_PWM_AF: u32 = 1;",
+            "pub const MASK_TIM_BASE: u32 = super::TIM2_S;",
+        ]),
+        (BOARD_PQ1_SRC, "pq1", [
+            "pub const MASK_PWM_PIN: u32 = 6;",
+            "pub const MASK_PWM_AF: u32 = 2;",
+            "pub const MASK_TIM_BASE: u32 = super::TIM3_S;",
+        ]),
+    ] {
+        for w in want {
+            assert!(src.contains(w), "{name} mask pin/timer drifted: missing `{w}`");
+        }
+    }
+
+    // The mask pin must never be one the board already uses for something
+    // else. This is the check that did not exist when the mask pointed at PA5.
+    assert!(
+        !BOARD_PQ1_SRC.contains("pub const MASK_PWM_PIN: u32 = 5;"),
+        "pq1's PA5 is LCD_SCK_PIN — the mask must not claim it"
+    );
+
+    // And the AF-vs-pin mapping is checkable only on silicon, so the driver
+    // ships a self-test that catches a timer that never reaches the pad.
+    assert!(CONSUMPTION_MASK_SRC.contains("pub fn selftest_pin_toggles() -> bool {"));
+
+    // Every timer register handle must be built from `TIM` — the board-derived
+    // base — not from a literal. Constants being right is not the property:
+    // changing ONE handle to `board::TIM2_S + 0x34` passed all 2609 tests, and
+    // on pq1 that writes the duty to an unclocked TIM2 while TIM3 free-runs at
+    // whatever duty it last held, i.e. a deterministic mask with no symptom.
+    // Demonstrated by mutation 2026-09-01.
+    for handle in [
+        "tim_cr1: Reg32::new(TIM + 0x00),",
+        "tim_egr: Reg32::new(TIM + 0x14),",
+        "tim_ccmr1: Reg32::new(TIM + 0x18),",
+        "tim_ccer: Reg32::new(TIM + 0x20),",
+        "tim_psc: Reg32::new(TIM + 0x28),",
+        "tim_arr: Reg32::new(TIM + 0x2C),",
+        "tim_ccr1: Reg32::new(TIM + 0x34),",
+    ] {
+        assert!(
+            CONSUMPTION_MASK_SRC.contains(handle),
+            "every mask timer register must derive from the board's `TIM` base; \
+             missing `{handle}`"
+        );
+    }
+    for banned in ["Reg32::new(board::TIM2_S", "Reg32::new(board::TIM3_S", "Reg32::new(0x5000_"] {
+        assert!(
+            !CONSUMPTION_MASK_SRC.contains(banned),
+            "`{banned}` pins the mask to one specific timer — use the board's `TIM`"
+        );
+    }
+    // Likewise the GPIO side: the pad handles must come from PORT.
+    for handle in [
+        "gpio_moder: Reg32::new(PORT + 0x00),",
+        "gpio_otyper: Reg32::new(PORT + 0x04),",
+        "gpio_ospeedr: Reg32::new(PORT + 0x08),",
+        "gpio_pupdr: Reg32::new(PORT + 0x0C),",
+    ] {
+        assert!(CONSUMPTION_MASK_SRC.contains(handle), "mask GPIO handle drifted: `{handle}`");
+    }
+    // The AFR half is chosen by pin number here too — the mask pin is 5 on
+    // iota2 and 6 on pq1, both below 8, but a future move above 7 must not
+    // silently write the wrong word.
+    assert!(CONSUMPTION_MASK_SRC.contains("gpio_afr: Reg32::new(PORT + if PIN < 8 { 0x20 } else { 0x24 }),"));
 }
 
 #[test]
@@ -336,12 +535,50 @@ fn positive_consumption_mask_pwm_mode1() {
     assert!(CONSUMPTION_MASK_SRC.contains("pub const TIM_CCMR1_OC1PE: u32 = 1 << 3;"));
 }
 
+/// The scope trigger must come from the BOARD, and iota2's value must not move.
+///
+/// This gate used to assert the opposite — that `sca_trigger.rs` contained the
+/// literals `0x5202_0C00` and `2`. That is PD2, an iota2 pin: port D is not
+/// bonded at all on pq1's 48-pin package. So the gate was actively pinning the
+/// driver to a pin that cannot exist on the production board, and it passed
+/// throughout the board port while `board/pq1.rs` declared a DIFFERENT trigger
+/// (PB3) that nothing consumed — `hw/soft_i2c.rs` even built its collision
+/// guard from that unused value, so guard and writer disagreed.
+///
+/// Values are now pinned per board; the derivation is pinned in the driver.
 #[test]
-fn positive_sca_trigger_pin_pd2() {
-    // Default pin per module docstring. PD2 = Arduino D4 area on
-    // B-U585I-IOT02A — easy header access for a scope probe.
-    assert!(SCA_TRIGGER_SRC.contains("const TRIG_GPIO_PORT_BASE: u32 = 0x5202_0C00;"));
-    assert!(SCA_TRIGGER_SRC.contains("const TRIG_PIN: u8 = 2;"));
+fn positive_sca_trigger_comes_from_the_board_map() {
+    // Driver derives, never hardcodes.
+    for derived in [
+        "const HAS_TRIG: bool = crate::board::SCA_TRIGGER.is_some();",
+        "const TRIG_GPIO_PORT_BASE: u32 = match crate::board::SCA_TRIGGER {",
+        "const TRIG_PIN: u8 = match crate::board::SCA_TRIGGER {",
+    ] {
+        assert!(
+            SCA_TRIGGER_SRC.contains(derived),
+            "sca_trigger must derive its pin from board::SCA_TRIGGER; missing `{derived}`"
+        );
+    }
+    assert!(
+        !SCA_TRIGGER_SRC.contains("0x5202_0C00;"),
+        "sca_trigger must not hardcode a GPIO port base — PD2 does not exist on pq1"
+    );
+    assert!(
+        SCA_TRIGGER_SRC.contains("crate::board::gpio_rcc_bit(TRIG_GPIO_PORT_BASE)"),
+        "the trigger port's clock bit must be derived from the trigger port"
+    );
+
+    // VALUES, per board. iota2 keeps PD2 byte-for-byte (Arduino D4 area, easy
+    // scope access); pq1 uses PB3 because port D is not bonded there.
+    assert!(
+        BOARD_IOTA2_SRC.contains("pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOD_S, 2));"),
+        "iota2's scope trigger must stay PD2 — moving it silently invalidates \
+         every capture taken against the old pin"
+    );
+    assert!(
+        BOARD_PQ1_SRC.contains("pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOB_S, 3));"),
+        "pq1's scope trigger must stay PB3"
+    );
 }
 
 #[test]
@@ -784,12 +1021,23 @@ fn negative_tamp_pwr_alias_matches_secure_backup_domain() {
 }
 
 #[test]
-fn negative_consumption_mask_tim2_is_secure_alias() {
-    // TIM2 secure alias 0x5000_0000. NS alias is 0x4000_0000. A
-    // wrong alias here would silently produce a non-functional PWM
-    // (writes are dropped under TZ's default-secure GTZC config).
-    assert!(CONSUMPTION_MASK_SRC.contains("pub const TIM2: u32 = 0x5000_0000;"));
-    assert!(!CONSUMPTION_MASK_SRC.contains("pub const TIM2: u32 = 0x4000_0000;"));
+fn negative_consumption_mask_timer_is_secure_alias() {
+    // The timer base moved to the board map; both boards' must be the SECURE
+    // alias (0x5000_xxxx). The NS alias is 0x4000_xxxx, and a wrong alias here
+    // silently produces a non-functional PWM — writes are dropped under the
+    // default-secure GTZC config, with no error anywhere.
+    assert!(BOARD_MOD_SRC_PLAT.contains("pub const TIM2_S: u32 = 0x5000_0000;"));
+    assert!(BOARD_MOD_SRC_PLAT.contains("pub const TIM3_S: u32 = 0x5000_0400;"));
+    for ns in ["0x4000_0000", "0x4000_0400"] {
+        assert!(
+            !BOARD_MOD_SRC_PLAT.contains(ns),
+            "the mask timer must use the SECURE alias, never the NS one (`{ns}`)"
+        );
+    }
+    // Both timers are secured in GTZC, so NS cannot stop whichever the board
+    // uses by clearing CR1.CEN.
+    assert!(BOARD_MOD_SRC_PLAT.contains("pub const TZSC_SECCFGR1_TIM2SEC: u32 = 1 << 0;"));
+    assert!(BOARD_MOD_SRC_PLAT.contains("pub const TZSC_SECCFGR1_TIM3SEC: u32 = 1 << 1;"));
 }
 
 #[test]
@@ -993,19 +1241,21 @@ fn negative_consumption_mask_xorshift_seeded_from_hw_trng() {
     );
     let seed_body = extract_body(
         CONSUMPTION_MASK_SRC,
-        "unsafe fn seed_prng_from_rng() -> Result<(), ()> {",
+        "fn seed_prng_from_rng() -> Result<(), ()> {",
     );
     assert!(!seed_body.contains("rng_strong"));
     // Fail closed on a zero / failed seed (finding F12): the mask must NOT
     // substitute a fixed constant — that produced a deterministic, attacker-
-    // predictable PWM duty. A zero seed is an RNG fault and returns Err.
+    // predictable PWM duty. A zero seed is an RNG fault and returns Err; the
+    // rejection lives in the extracted `consumption_mask_prng` state machine.
     assert!(
-        CONSUMPTION_MASK_SRC.contains("if seed == 0 {\n        return Err(());\n    }"),
-        "consumption_mask must fail closed (Err) on a 0 seed, not substitute a constant"
+        CONSUMPTION_MASK_PRNG_SRC.contains("if seed == 0 {\n            return Err(());"),
+        "consumption_mask_prng must fail closed (Err) on a 0 seed, not substitute a constant"
     );
     assert!(
-        !CONSUMPTION_MASK_SRC.contains("0xDEADBEEF"),
-        "consumption_mask must not fall back to a fixed predictable seed constant (F12)"
+        !CONSUMPTION_MASK_SRC.contains("0xDEADBEEF")
+            && !CONSUMPTION_MASK_PRNG_SRC.contains("0xDEADBEEF"),
+        "consumption_mask(_prng) must not fall back to a fixed predictable seed constant (F12)"
     );
 }
 
@@ -1082,13 +1332,29 @@ fn negative_flash_erase_secure_page_inside_interrupt_free() {
 
 #[test]
 fn negative_flash_erase_ns_page_inside_interrupt_free() {
+    // The work moved to `erase_ns_page_in` on 2026-09-24 when the NS erase
+    // gained an explicit bank; `erase_ns_page` is now a thin bank-2 wrapper.
+    // Pin BOTH: the property in the implementation, and that the wrapper stays
+    // a pure delegation so nothing can be smuggled in ahead of it.
     let body = extract_body(
+        FLASH_SRC,
+        "pub unsafe fn erase_ns_page_in(bank: pqsigner_geometry::Bank, page: u8) -> Result<(), ()> {",
+    );
+    assert!(
+        body.contains("cortex_m::interrupt::free"),
+        "erase_ns_page_in MUST run inside cortex_m::interrupt::free"
+    );
+    let wrapper = extract_body(
         FLASH_SRC,
         "pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {",
     );
     assert!(
-        body.contains("cortex_m::interrupt::free"),
-        "erase_ns_page MUST run inside cortex_m::interrupt::free"
+        wrapper.contains("erase_ns_page_in(pqsigner_geometry::Bank::Two, page)"),
+        "erase_ns_page must delegate to the bank-explicit form, not re-implement it"
+    );
+    assert!(
+        !wrapper.contains("REG.nscr.write"),
+        "the thin wrapper must not touch the control register itself"
     );
 }
 
@@ -1150,8 +1416,8 @@ fn negative_flash_bank2_program_erase_invalidate_icache() {
             "unsafe fn write_ns_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {",
         ),
         (
-            "erase_ns_page",
-            "pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {",
+            "erase_ns_page_in",
+            "pub unsafe fn erase_ns_page_in(bank: pqsigner_geometry::Bank, page: u8) -> Result<(), ()> {",
         ),
         (
             "erase_secure_page",
@@ -1619,7 +1885,22 @@ fn negative_page_127_has_no_generic_erase_or_key_storage_owner() {
         FLASH_SRC,
         "pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {",
     );
-    assert!(generic_erase.contains("GenericSecurePage::new(page).ok_or(())?.get()"));
+    // The proof is still the only way in. Split across two lines since
+    // 2026-09-24, when `GenericSecurePage` gained its bank — the driver has to
+    // hold the proof to ask it, so the single-expression form no longer works.
+    assert!(generic_erase.contains("GenericSecurePage::new(page).ok_or(())?"));
+    assert!(generic_erase.contains("let page = proof.get();"));
+    // And the bank must come FROM the proof, not be assumed. Erasing without
+    // consulting it is bank-1-only by construction, which silently erases the
+    // bank-1 twin of any bank-2 page a future geometry introduces.
+    assert!(
+        generic_erase.contains("match proof.bank()"),
+        "erase_secure_page must take BKER from the page proof, not assume bank 1"
+    );
+    assert!(
+        generic_erase.contains("PER | bker | (page << PNB_SHIFT)"),
+        "the computed BKER must reach the control-register write"
+    );
 
     let journal_write = extract_body(
         FLASH_SRC,
@@ -1938,4 +2219,174 @@ fn negative_rng_serializes_isr_and_checks_after_dr() {
             >= 2,
         "exact word-to-output copy must have two caller receipt gates"
     );
+}
+
+/// pq1 must release the USB Type-C dead-battery Rd; iota2 must NOT do it early.
+///
+/// Out of reset the die engages a dead-battery pull-down on the UCPD CC pads —
+/// PA15 and PB15. ST says to disable it "in all cases". On pq1 those pads are
+/// `SE_RST` (the OPTIGA's reset) and `LCM_EN` (the display backlight), and that
+/// board compiles `usb_hw::init_ucpd` out, which was the ONLY place the
+/// `PWR_UCPDR.UCPD_DBDIS` write lived — so the Rd sat on the OPTIGA's reset line
+/// from power-on until `se_power::init` drove PA15 high.
+///
+/// The asymmetry is deliberate and is the whole point of the gate: on iota2
+/// those pads ARE the CC lines and `init_ucpd` sets DBDIS *after* configuring
+/// `UCPD1_CR`, so there is never a window with no Rd presented. Releasing it
+/// early there re-breaks USB-C-to-USB-C attach detection.
+#[test]
+fn negative_pq1_releases_ucpd_dead_battery_early_iota2_does_not() {
+    assert!(
+        RCC_SRC.contains("#[cfg(feature = \"board-pq1\")]\n        pwr_ucpdr: Reg32::new(PWR + 0x2C),"),
+        "rcc must own a PWR_UCPDR handle on pq1 (PWR + 0x2C)"
+    );
+    assert!(
+        RCC_SRC.contains("REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS"),
+        "pq1 must set PWR_UCPDR.UCPD_DBDIS during rcc::init — before any pad use"
+    );
+    // Guarded so iota2 keeps init_ucpd's ordering.
+    //
+    // Checked as ONE contiguous string, not by scanning backwards for a nearby
+    // `#[cfg]`. The first version of this assertion did the latter and was
+    // VACUOUS: deleting the guard let `rfind` walk back to the `#[cfg]` on the
+    // `pwr_ucpdr` struct field and the check still passed. Caught by its own
+    // control, 2026-09-01 — the same defect this whole commit is fixing.
+    assert!(
+        RCC_SRC.contains(
+            "    #[cfg(feature = \"board-pq1\")]\n    {\n        REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS"
+        ),
+        "the DBDIS write must sit directly under its own board-pq1 guard — \
+         releasing the dead-battery Rd early on iota2 breaks USB-C attach \
+         detection there, which was already found and fixed once on that board"
+    );
+    // And iota2's ordering is untouched: usb_hw still does it after CR config.
+    assert!(
+        USB_HW_SRC_PLAT.contains("REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS"),
+        "iota2's init_ucpd must still release dead-battery after UCPD1_CR"
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// TAMP status decode (#723)
+//
+// `hw/tamp.rs` held one test for `reason_from_sr`, and it never ran:
+// `mod hw;` is `#[cfg(not(test))]` in main.rs, so no feature flag reaches
+// the module. It was also a spot-check of 4 flags under the name
+// `reason_strings_cover_every_itamp_bit`, for a decoder with 11.
+//
+// The decoder is now `hw/tamp_reason.rs`, mounted by `super`, so these run
+// against the REAL function rather than a copy. That distinction is the
+// whole point: `reason_from_sr` is an if-chain whose meaning is the ORDER
+// of its arms, and a source-text pin on one arm says nothing about where
+// that arm sits. 74d949e9 demonstrated the same shape on
+// `reset_cause::classify_bits`, where a swap silently disabled the
+// abnormal-reset secret scrub while every mirror test stayed green.
+// ═════════════════════════════════════════════════════════════════════
+
+use super::tamp_reason::{reason_from_sr, DECODE_ORDER};
+
+#[test]
+fn positive_tamp_reason_decodes_every_itamp_flag() {
+    // The name the old test claimed and did not deliver: all eleven.
+    for (bit, label) in DECODE_ORDER {
+        assert_eq!(
+            reason_from_sr(bit),
+            label,
+            "TAMP_SR bit {} must decode as {label}",
+            bit.trailing_zeros()
+        );
+    }
+    assert_eq!(DECODE_ORDER.len(), 11, "eleven documented internal-tamper flags");
+}
+
+#[test]
+fn negative_tamp_reason_is_unknown_for_no_flag_and_for_reserved_bits() {
+    assert_eq!(reason_from_sr(0), "UNKNOWN");
+    // Bits 19, 25 and 29..31 are not decoded; and the low half of TAMP_SR is
+    // external-tamper flags, which this decoder deliberately ignores.
+    for bit in [1u32 << 0, 1 << 15, 1 << 19, 1 << 25, 1 << 29, 1 << 31] {
+        assert_eq!(
+            reason_from_sr(bit),
+            "UNKNOWN",
+            "undecoded TAMP_SR bit {} must not claim a reason",
+            bit.trailing_zeros()
+        );
+    }
+}
+
+#[test]
+fn negative_tamp_reason_priority_order_is_exact() {
+    // THE assertion a text pin cannot make. For every pair, setting BOTH
+    // flags must yield the earlier one — which is false the moment two arms
+    // are swapped, and true for any suite that only checks one flag at a
+    // time. Multiple internal tampers latching together is the normal case
+    // for a real attack (glitch -> voltage AND crypto-fault), so the order
+    // decides what the postmortem inspector reports.
+    let mut pairs = 0usize;
+    for (i, (hi_bit, hi_label)) in DECODE_ORDER.iter().enumerate() {
+        for (lo_bit, _) in &DECODE_ORDER[i + 1..] {
+            assert_eq!(
+                reason_from_sr(hi_bit | lo_bit),
+                *hi_label,
+                "bit {} must outrank bit {}",
+                hi_bit.trailing_zeros(),
+                lo_bit.trailing_zeros()
+            );
+            pairs += 1;
+        }
+    }
+    // Guard the oracle: 11 choose 2. A loop that compared nothing would pass.
+    assert_eq!(pairs, 55, "must compare every ordered pair");
+}
+
+#[test]
+fn negative_tamp_reason_labels_are_distinct_and_log_safe() {
+    // The label goes into `secure_log!` and the postmortem inspector parses
+    // it by name, so duplicates would merge two different tamper causes.
+    for (i, (_, a)) in DECODE_ORDER.iter().enumerate() {
+        assert_ne!(*a, "UNKNOWN", "a decoded flag must not reuse the fallback");
+        assert!(!a.is_empty() && a.len() <= 16, "label must fit a log row: {a}");
+        assert!(
+            a.bytes().all(|c| c.is_ascii_uppercase() || c == b'_' || c.is_ascii_digit()),
+            "label must be log-safe ASCII: {a}"
+        );
+        for (_, b) in &DECODE_ORDER[i + 1..] {
+            assert_ne!(a, b, "duplicate TAMP reason label");
+        }
+    }
+}
+
+#[test]
+fn reason_from_sr_ref_matches_production_exhaustively() {
+    // `reason_from_sr_ref` above is a hand-written reimplementation that
+    // predates #723, from when the real decoder was unreachable host-side.
+    // It is now reachable, so rather than delete the copy this holds the two
+    // together — the same move made for `reset_cause::classify_bits` in
+    // 74d949e9, which turns a drift liability into an oracle.
+    //
+    // Every single bit, every decodable pair, and the empty word.
+    let mut compared = 0usize;
+    for bit in 0..32u32 {
+        let csr = 1u32 << bit;
+        assert_eq!(
+            reason_from_sr_ref(csr),
+            reason_from_sr(csr),
+            "mirror and production disagree for TAMP_SR bit {bit}"
+        );
+        compared += 1;
+    }
+    for (i, (a, _)) in DECODE_ORDER.iter().enumerate() {
+        for (b, _) in &DECODE_ORDER[i + 1..] {
+            let csr = a | b;
+            assert_eq!(
+                reason_from_sr_ref(csr),
+                reason_from_sr(csr),
+                "mirror and production disagree for TAMP_SR {csr:#010x}"
+            );
+            compared += 1;
+        }
+    }
+    assert_eq!(reason_from_sr_ref(0), reason_from_sr(0));
+    // Guard the oracle: 32 singles + 55 pairs.
+    assert_eq!(compared, 87, "differential must cover singles and pairs");
 }

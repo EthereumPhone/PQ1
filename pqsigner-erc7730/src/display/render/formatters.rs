@@ -1086,6 +1086,7 @@ fn render_amount(
         let [_, r1, r2, foot] = pages.page_mut(p);
         amount_text.paint(r1, r2);
         write_line(foot, "> next");
+        pages.mark_nav(p, 3);
     }
     Ok(amount_text.witness())
 }
@@ -1162,6 +1163,7 @@ fn render_token_amount(
                     bound_identity_ticker = Some(ticker);
                 }
                 write_line(foot, "> next");
+                pages.mark_nav(p, 3);
             }
             // Unlimited on an UNKNOWN token: still the loud message (an unbound
             // 2^256-1 used to fall through to "!AMOUNT OVERFLOW" — an alarming
@@ -1172,11 +1174,13 @@ fn render_token_amount(
                 write_line_bytes(r1, message);
                 write_line(r2, "(unverified)");
                 write_line(foot, "> next");
+                pages.mark_nav(p, 3);
             }
             TokenAmountArm::Bound { ticker, .. } => {
                 let amount_text = bound_text.expect("bound arm precomputes exact amount text");
                 amount_text.paint(r1, r2);
                 write_line(foot, "> next");
+                pages.mark_nav(p, 3);
                 // For a non-native token, independently re-check the metadata's
                 // chain as well as its contract before allowing the banner to
                 // summarize it. The witness reuses the painted bytes.
@@ -1546,6 +1550,7 @@ fn render_date(
         }
     }
     write_line(foot, "> next");
+    pages.mark_nav(p, 3);
     Ok(())
 }
 
@@ -1571,6 +1576,7 @@ fn render_duration(
         return write_raw_word_two_pages(pages, p, field.label, &bytes);
     }
     write_line(foot, "> next");
+    pages.mark_nav(p, 3);
     Ok(())
 }
 
@@ -2946,6 +2952,7 @@ fn render_array_element(
             let amount_text = exact_amount_text.expect("scaled amount array was precomputed");
             amount_text.paint(r1, r2);
             write_line(foot, "> next");
+            pages.mark_nav(p, 3);
             Ok(())
         }
         FormatOp::Unit => {
@@ -2958,6 +2965,7 @@ fn render_array_element(
             let amount_text = exact_amount_text.expect("scaled unit array was precomputed");
             amount_text.paint(r1, r2);
             write_line(foot, "> next");
+            pages.mark_nav(p, 3);
             Ok(())
         }
         FormatOp::TokenAmount => {
@@ -2974,6 +2982,7 @@ fn render_array_element(
                         exact_amount_text.expect("bound token amount array was precomputed");
                     amount_text.paint(r1, r2);
                     write_line(foot, "> next");
+                    pages.mark_nav(p, 3);
                 }
                 None => {
                     let fit = write_amount_two_rows(r1, r2, &value, 0, 0, false, true, "");
@@ -3116,6 +3125,7 @@ fn render_unit(
         let [_, r1, r2, foot] = pages.page_mut(p);
         amount_text.paint(r1, r2);
         write_line(foot, "> next");
+        pages.mark_nav(p, 3);
     }
     Ok(())
 }
@@ -3163,6 +3173,7 @@ fn render_chain_id(
         None => return write_raw_word_two_pages(pages, p, field.label, &bytes),
     }
     write_line(foot, "> next");
+    pages.mark_nav(p, 3);
     Ok(())
 }
 
@@ -3194,6 +3205,7 @@ fn render_token_ticker(
             let [_, r1, _r2, foot] = pages.page_mut(p);
             write_line_bytes(r1, meta.symbol);
             write_line(foot, "> next");
+            pages.mark_nav(p, 3);
             // Symbols are not unique, even inside the authenticated token
             // catalogue. Always follow the friendly ticker with the exact
             // contract so two signed token operands cannot paint identically.
@@ -3240,6 +3252,7 @@ fn render_interop_address_name(
         id_head[..n].copy_from_slice(&digits[..n]);
         id_head[n] = b':';
         write_line(id_tail, "> next");
+        pages.mark_nav(p1, 3);
     } else {
         // A u64 has at most 20 digits. Fifteen digits plus a visible
         // continuation marker fill row 2; the remaining five plus ':' fit
@@ -3358,6 +3371,7 @@ fn write_raw_word_two_pages(
         write_hex_word(r1, &word[0..8]);
         write_hex_word(r2, &word[8..16]);
         write_line(foot, "1/2 > next");
+        pages.mark_nav(first_page, 3);
     }
     let p2 = pages.push_blank().map_err(|_| RenderErr::PageBudget)?;
     write_label_row(pages, p2, label);
@@ -3365,6 +3379,7 @@ fn write_raw_word_two_pages(
     write_hex_word(r1, &word[16..24]);
     write_hex_word(r2, &word[24..32]);
     write_line(foot, "2/2 > next");
+    pages.mark_nav(p2, 3);
     Ok(())
 }
 

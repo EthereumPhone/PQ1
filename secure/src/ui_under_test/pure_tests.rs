@@ -1266,3 +1266,101 @@ fn positive_collect_duress_pin_is_bounded() {
         "collect_duress_pin must bound its retry loop to 3 attempts",
     );
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// NV3007 window-byte builder (#723)
+//
+// Migrated from `hw/lcd_nv3007.rs`, where four tests lived and none ran:
+// that file is `#![cfg(feature = "ui-lcd")]`, the host suite builds
+// `ui-semihosting`, and `mod hw;` is `#[cfg(not(test))]` regardless. The
+// builder is now `hw/lcd_window.rs`, mounted by `super`, so these exercise
+// the REAL function the firmware calls — not a copy of its arithmetic.
+//
+// Worth keeping precisely because the bench board has no panel
+// (project note: pq1 bench has NO LCD), so a visual check is not available
+// as a fallback. These bytes are the only thing tying our pixel addressing
+// to the panel the production board ships with.
+// ═════════════════════════════════════════════════════════════════════
+
+use super::lcd_window::{
+    build_set_window_bytes, FRAME_HEIGHT, FRAME_WIDTH, X_OFFSET, Y_OFFSET,
+};
+
+#[test]
+fn positive_full_screen_window_matches_production_bytes() {
+    let bytes = build_set_window_bytes(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
+    // X: 0+12 = 12 (0x000C); X1: 141+12 = 153 (0x0099)
+    assert_eq!(bytes.caset, [0x00, 0x0C, 0x00, 0x99]);
+    // Y: 0; Y1: 427 (0x01AB)
+    assert_eq!(bytes.raset, [0x00, 0x00, 0x01, 0xAB]);
+}
+
+#[test]
+fn negative_set_window_offset_matches_dgen1_bootloader_literal() {
+    // From nv3007_142x428_4line_8bit.c::nv3007_Init_lcm():
+    //   SPI_WriteComm(0x2a);
+    //   SPI_WriteData(0x00); SPI_WriteData(0x0c);   // x0 = 12
+    //   SPI_WriteData(0x00); SPI_WriteData(0x99);   // x1 = 153
+    //   SPI_WriteComm(0x2b);
+    //   SPI_WriteData(0x00); SPI_WriteData(0x00);   // y0 = 0
+    //   SPI_WriteData(0x01); SPI_WriteData(0xab);   // y1 = 427
+    //
+    // This is the cross-check against the vendor's own bootloader. If our
+    // builder produces different bytes, every pixel is off by N and the
+    // trusted display renders shifted or torn — on a device whose whole
+    // security story is that the user reads what they are signing.
+    let bytes = build_set_window_bytes(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
+    assert_eq!(bytes.caset, [0x00, 0x0C, 0x00, 0x99]);
+    assert_eq!(bytes.raset, [0x00, 0x00, 0x01, 0xAB]);
+}
+
+#[test]
+fn positive_inner_window_offsets_both_endpoints() {
+    let bytes = build_set_window_bytes(10, 50, 25, 73);
+    // x0 = 10+12 = 22 (0x0016), x1 = 25+12 = 37 (0x0025)
+    assert_eq!(bytes.caset, [0x00, 0x16, 0x00, 0x25]);
+    // y0 = 50, y1 = 73
+    assert_eq!(bytes.raset, [0x00, 0x32, 0x00, 0x49]);
+}
+
+#[test]
+fn negative_frame_geometry_constants_pinned() {
+    assert_eq!(FRAME_WIDTH, 142, "ZT165M017AT visible width is 142 px");
+    assert_eq!(FRAME_HEIGHT, 428, "ZT165M017AT visible height is 428 px");
+    assert_eq!(X_OFFSET, 12, "NV3007 X offset is 12 per production BlockWrite");
+    assert_eq!(Y_OFFSET, 0, "NV3007 Y offset is 0 per production BlockWrite");
+}
+
+#[test]
+fn negative_x_offset_is_applied_to_both_endpoints_never_once() {
+    // The original suite tested one inner window. The specific regression it
+    // was written against — "set_window forgets to add X_OFFSET to x1" —
+    // survives any single example where x0 happens to equal x1. Sweep the
+    // whole coordinate range so a one-sided offset cannot hide.
+    for x0 in 0..FRAME_WIDTH {
+        for x1 in x0..FRAME_WIDTH {
+            let b = build_set_window_bytes(x0, 0, x1, 0);
+            let got_x0 = u16::from(b.caset[0]) << 8 | u16::from(b.caset[1]);
+            let got_x1 = u16::from(b.caset[2]) << 8 | u16::from(b.caset[3]);
+            assert_eq!(got_x0, x0 + X_OFFSET, "x0 offset wrong at ({x0},{x1})");
+            assert_eq!(got_x1, x1 + X_OFFSET, "x1 offset wrong at ({x0},{x1})");
+            // Window must never invert: x1 < x0 makes the NV3007 ignore the
+            // command and the next RAMWR writes into the previous window.
+            assert!(got_x1 >= got_x0, "inverted column window at ({x0},{x1})");
+        }
+    }
+}
+
+#[test]
+fn negative_full_frame_window_never_exceeds_the_panel_ram() {
+    // The addressable column must stay inside the panel's RAM once the
+    // offset is applied. 141 + 12 = 153; the NV3007's column RAM is 0..=159,
+    // so a width bump without an offset review would silently clip.
+    let b = build_set_window_bytes(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
+    let x1 = u16::from(b.caset[2]) << 8 | u16::from(b.caset[3]);
+    let y1 = u16::from(b.raset[2]) << 8 | u16::from(b.raset[3]);
+    assert!(x1 <= 159, "column {x1} past NV3007 RAM (0..=159)");
+    assert!(y1 <= 447, "row {y1} past NV3007 RAM (0..=447)");
+    assert_eq!(x1, FRAME_WIDTH - 1 + X_OFFSET);
+    assert_eq!(y1, FRAME_HEIGHT - 1 + Y_OFFSET);
+}

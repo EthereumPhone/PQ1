@@ -42,7 +42,7 @@ pub(super) fn build(
     master_pk_root_32: &[u8; 32],
     slot0_pk_seed_32: &[u8; 32],
     slot0_pk_root_32: &[u8; 32],
-    progress: fn(u8),
+    progress: (fn(u8), fn(u8)),
 ) -> Result<(), NscStatus> {
     out.fill(0);
 

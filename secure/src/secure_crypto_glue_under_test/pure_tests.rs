@@ -628,6 +628,138 @@ fn positive_selectors_shim_exposes_compat_alias_bundle_module() {
     );
 }
 
+// ── Top-level `crate::selectors::verify_selector_bundle` (shim L17-19) ──
+//
+// The tests above only exercise the back-compat alias
+// (`crate::selectors::bundle::verify_selector_bundle`); the top-level
+// wrapper needs its own proof, including a POSITIVE one. A positive
+// bundle must verify against the firmware-embedded `SELECTOR_DB_ROOT`,
+// whose preimage is the checked-in corpus — so rebuild the Merkle DB
+// with dbgen (already the suite's fixture compiler for the ERC-7730
+// render tests) and extract a real (entry, proof) pair from it. The
+// root-equality assert makes any corpus↔firmware drift fail loudly
+// here rather than silently refusing every production bundle.
+
+#[cfg(feature = "e2e-test")]
+const SELECTORS_CORPUS_JSON: &str = "secure/data/selectors-e2e.json";
+#[cfg(not(feature = "e2e-test"))]
+const SELECTORS_CORPUS_JSON: &str = "secure/data/selectors.json";
+
+fn selectors_workspace_root() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("secure/ has a workspace parent")
+        .to_path_buf()
+}
+
+/// Rebuild the selectors Merkle DB from the checked-in corpus, pin the
+/// regenerated root to the firmware-embedded one, then assemble the
+/// exact on-wire bundle for `want_selector`:
+/// `selector(4) | text_sig_len(1) | text_sig | leaf_index(u32 LE) |
+///  proof_depth(u32 LE) | proof`.
+fn build_embedded_root_selector_bundle(want_selector: [u8; 4]) -> Vec<u8> {
+    use sphincs_tz_shared::db_format::*;
+    let res = dbgen::selectors::build_db(&selectors_workspace_root().join(SELECTORS_CORPUS_JSON))
+        .expect("checked-in selectors corpus must rebuild");
+    assert_eq!(
+        res.root, SELECTOR_DB_ROOT,
+        "checked-in selectors corpus and firmware-embedded SELECTOR_DB_ROOT drifted apart",
+    );
+
+    let blob = &res.blob;
+    let entry_cnt = read_u32_le(blob, SELECTOR_HDR_OFF_ENTRY_CNT) as usize;
+    let pool_off = read_u32_le(blob, SELECTOR_HDR_OFF_POOL_OFF) as usize;
+    let proof_depth = read_u32_le(blob, SELECTOR_HDR_OFF_PROOF_DEPTH) as usize;
+    let proofs_off = read_u32_le(blob, SELECTOR_HDR_OFF_PROOFS_OFF) as usize;
+
+    // Entries are sorted by selector — binary-search the target.
+    let mut lo = 0usize;
+    let mut hi = entry_cnt;
+    let index = loop {
+        assert!(lo < hi, "selector {want_selector:02x?} missing from corpus");
+        let mid = (lo + hi) / 2;
+        let off = SELECTOR_DB_HEADER_LEN + mid * SELECTOR_DB_ENTRY_LEN;
+        match blob[off..off + 4].cmp(want_selector.as_slice()) {
+            std::cmp::Ordering::Less => lo = mid + 1,
+            std::cmp::Ordering::Greater => hi = mid,
+            std::cmp::Ordering::Equal => break mid,
+        }
+    };
+
+    let entry_off = SELECTOR_DB_HEADER_LEN + index * SELECTOR_DB_ENTRY_LEN;
+    let text_off = read_u32_le(blob, entry_off + SELECTOR_ENTRY_OFF_TEXT_OFF) as usize;
+    let text_len = blob[pool_off + text_off] as usize;
+    let text_sig = &blob[pool_off + text_off + 1..pool_off + text_off + 1 + text_len];
+
+    let mut bundle = Vec::new();
+    bundle.extend_from_slice(&want_selector);
+    bundle.push(text_len as u8);
+    bundle.extend_from_slice(text_sig);
+    bundle.extend_from_slice(&(index as u32).to_le_bytes());
+    bundle.extend_from_slice(&(proof_depth as u32).to_le_bytes());
+    let proof_base = proofs_off + index * proof_depth * 32;
+    bundle.extend_from_slice(&blob[proof_base..proof_base + proof_depth * 32]);
+    bundle
+}
+
+#[test]
+fn positive_selectors_shim_accepts_bundle_from_the_shipped_corpus() {
+    // The positive counterpart to the synthetic-root rejection above:
+    // the wrapper must not only refuse foreign roots, it must ACCEPT a
+    // genuine curated entry — transfer(address,uint256), selector
+    // 0xa9059cbb, present in both the production corpus and the e2e
+    // fixture.
+    let bundle = build_embedded_root_selector_bundle([0xa9, 0x05, 0x9c, 0xbb]);
+    let meta = crate::selectors::verify_selector_bundle(&bundle)
+        .expect("the shim must accept a bundle rooted at SELECTOR_DB_ROOT");
+    assert_eq!(meta.selector, [0xa9, 0x05, 0x9c, 0xbb]);
+    assert_eq!(meta.text_sig, b"transfer(address,uint256)");
+    assert_eq!(
+        meta.provenance,
+        crate::selectors::SelectorProvenance::Curated
+    );
+}
+
+#[test]
+fn negative_selectors_shim_rejects_truncated_bundle() {
+    // Chop the final proof byte: the exact-length gate
+    // (`bundle.len() != off + proof_size`) must reject before the Merkle
+    // walk. The empty input must not even pass the header parse.
+    let bundle = build_embedded_root_selector_bundle([0xa9, 0x05, 0x9c, 0xbb]);
+    let truncated = &bundle[..bundle.len() - 1];
+    assert!(crate::selectors::verify_selector_bundle(truncated).is_none());
+    assert!(crate::selectors::verify_selector_bundle(&[]).is_none());
+}
+
+#[test]
+fn negative_selectors_shim_rejects_tampered_text_sig_and_proof() {
+    let bundle = build_embedded_root_selector_bundle([0xa9, 0x05, 0x9c, 0xbb]);
+
+    // Tampered payload: flip one text_sig byte to a DIFFERENT printable
+    // ASCII byte, so the ASCII gate passes and the Merkle leaf-hash
+    // check is the only thing left to reject it.
+    let mut bad_text = bundle.clone();
+    bad_text[5] ^= 0x02; // 't' (0x74) -> 'v' (0x76): still printable
+    assert!(
+        crate::selectors::verify_selector_bundle(&bad_text).is_none(),
+        "a tampered text_sig must fail Merkle verification",
+    );
+
+    // Tampered proof: flip the last byte (inside the final proof
+    // sibling).
+    let mut bad_proof = bundle.clone();
+    let last = bad_proof.len() - 1;
+    bad_proof[last] ^= 0x01;
+    assert!(
+        crate::selectors::verify_selector_bundle(&bad_proof).is_none(),
+        "a tampered proof sibling must fail Merkle verification",
+    );
+
+    // Sanity: the untouched bundle still verifies — the tampering, not
+    // the fixture, caused the rejections.
+    assert!(crate::selectors::verify_selector_bundle(&bundle).is_some());
+}
+
 // =====================================================================
 //  PART F — `offchain_state.rs` (per-slot counter facade).
 //
@@ -2524,4 +2656,163 @@ fn positive_offchain_gate_model_matches_mock_backend() {
 
     // The model tracked the mock through 5 interleaved steps.
     assert_eq!((model.offchain, model.last_userop, model.userop_sigs), (53, 50, 3));
+}
+
+// ── c10_sign_verified_with_progress: the host-runnable signing path ──
+//
+// `crypto.rs` is compiled on host (ungated); the hardware-only peers
+// (sign_rate, rng_strong, nsc relock) are `cfg(not(test))`-gated inside the
+// function, so the genuine glue — double-compute + ct_eq + verify-before-
+// release + CFI transcript + progress ramp — runs here against a real C10
+// keypair. Under cfg(test) the OptRand and both shuffle seeds are all-zero,
+// so output is fully deterministic.
+
+const SIGN_TEST_SK_SEED: [u8; 32] = [0x42; 32];
+const SIGN_TEST_PK_SEED: [u8; 16] = [0x24; 16];
+const SIGN_TEST_MSG: [u8; 32] = [0xA5; 32];
+
+fn sign_test_key() -> &'static sphincs_c10::SigningKey {
+    // Keygen once per process (same discipline as sphincs-c10's own suite).
+    static SK: std::sync::OnceLock<sphincs_c10::SigningKey> = std::sync::OnceLock::new();
+    SK.get_or_init(|| {
+        sphincs_c10::SigningKey::keygen(SIGN_TEST_SK_SEED, SIGN_TEST_PK_SEED)
+    })
+}
+
+static PROGRESS_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PROGRESS_MONOTONIC: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
+static PROGRESS_LAST: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+fn record_progress(p: u8) {
+    use std::sync::atomic::Ordering;
+    let last = PROGRESS_LAST.load(Ordering::SeqCst);
+    if p < last {
+        PROGRESS_MONOTONIC.store(false, Ordering::SeqCst);
+    }
+    PROGRESS_LAST.store(p, Ordering::SeqCst);
+    PROGRESS_CALLS.fetch_add(1, Ordering::SeqCst);
+}
+
+#[test]
+fn positive_c10_sign_verified_ok_len_and_independent_verify() {
+    // NOTE: `|_| {}` here — only the ramp test drives `record_progress`
+    // (the statics are shared; parallel tests must not interleave ramps).
+    let sk = sign_test_key();
+    let sig = crate::crypto::c10_sign_verified_with_progress(sk, &SIGN_TEST_MSG, crate::progress_halves!(nop_progress))
+        .expect("signing path must succeed with valid key + msg");
+    assert_eq!(sig.len(), sphincs_c10::params::SIGNATURE_LEN);
+    // The released signature must verify under the honest public key through
+    // the crate's own free verify (independent of the internal gate).
+    assert!(
+        sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), &SIGN_TEST_MSG, &sig),
+        "released signature must verify under the honest verifying key"
+    );
+    // A passing call proves the full CFI transcript ran (rate charge →
+    // OptRand → shuffle → sign A → sign B → ct_eq → verify gate).
+}
+
+/// Silent sink for the tests that do not inspect progress.
+fn nop_progress(_pct: u8) {}
+
+#[test]
+fn positive_c10_sign_progress_ramps_monotonically_to_100() {
+    use std::sync::atomic::Ordering;
+    PROGRESS_CALLS.store(0, Ordering::SeqCst);
+    PROGRESS_LAST.store(0, Ordering::SeqCst);
+    PROGRESS_MONOTONIC.store(true, Ordering::SeqCst);
+
+    let sk = sign_test_key();
+    let _ = crate::crypto::c10_sign_verified_with_progress(sk, &SIGN_TEST_MSG, crate::progress_halves!(record_progress))
+        .expect("sign must succeed");
+    let calls = PROGRESS_CALLS.load(Ordering::SeqCst);
+    assert!(calls >= 2, "progress must fire at each major phase, got {calls}");
+    assert!(
+        PROGRESS_MONOTONIC.load(Ordering::SeqCst),
+        "progress must be non-decreasing (UI ramp)"
+    );
+    assert_eq!(
+        PROGRESS_LAST.load(Ordering::SeqCst),
+        100,
+        "progress ramp must reach 100 on success"
+    );
+}
+
+#[test]
+fn positive_c10_sign_deterministic_given_zeroed_test_seeds() {
+    // cfg(test) leaves OptRand and both shuffle seeds all-zero, so two calls
+    // must produce byte-identical signatures — the same invariant the
+    // production ct_eq gate relies on. NOTE: this pins the TEST harness,
+    // not the production contract — production is the exact opposite:
+    // `crypto.rs` draws a fresh OptRand per call via `rng_strong::fill`, so
+    // two production signs over the same message MUST differ. If the test
+    // posture is ever improved to seed OptRand under cfg(test), this test
+    // must be updated to match (do not revert the improvement).
+    let sk = sign_test_key();
+    let sig_a = crate::crypto::c10_sign_verified_with_progress(sk, &SIGN_TEST_MSG, crate::progress_halves!(nop_progress))
+        .expect("first sign");
+    let sig_b = crate::crypto::c10_sign_verified_with_progress(sk, &SIGN_TEST_MSG, crate::progress_halves!(nop_progress))
+        .expect("second sign");
+    assert_eq!(sig_a, sig_b, "given identical (zeroed) seeds, signing must be deterministic");
+}
+
+#[test]
+fn positive_c10_sign_distinct_shuffle_seeds_stay_byte_equal() {
+    // The production F-16 configuration: each double-compute pass draws its
+    // OWN nonzero shuffle seed, and the glue tests above only exercise the
+    // degenerate all-zero-seed configuration under cfg(test). Assert the
+    // load-bearing invariant directly: two DISTINCT nonzero seeds must
+    // still produce byte-identical signatures (order-only shuffle) that
+    // verify. Mirrors sphincs-c10/tests/shuffle_byte_equality.rs at the
+    // glue level — a regression here false-rejects 100% of production
+    // signs (signing DoS), never a forgery.
+    let sk = sign_test_key();
+    let opt_rand = [0x07u8; sphincs_c10::params::N];
+    let sig_a = sk.sign_with_shuffle(
+        &SIGN_TEST_MSG,
+        Some(&opt_rand),
+        &sphincs_c10::shuffle::ShuffleSeed([0x11; 32]),
+        |_| {},
+    );
+    let sig_b = sk.sign_with_shuffle(
+        &SIGN_TEST_MSG,
+        Some(&opt_rand),
+        &sphincs_c10::shuffle::ShuffleSeed([0x22; 32]),
+        |_| {},
+    );
+    assert_eq!(
+        sig_a, sig_b,
+        "distinct nonzero shuffle seeds must not affect signature bytes"
+    );
+    assert!(sphincs_c10::verify(
+        sk.pk_seed(),
+        sk.pk_root(),
+        &SIGN_TEST_MSG,
+        &sig_a
+    ));
+}
+
+#[test]
+fn negative_c10_verify_gate_primitive_rejects_tampered_signature() {
+    // The glue's negative branches (ct_eq mismatch / verify failure) are
+    // FI-only paths — they need a fault to fire. What host testing CAN pin
+    // is the gate primitive itself: a single-bit tamper of a genuinely
+    // produced signature must fail `sphincs_c10::verify`, otherwise the
+    // verify-before-release gate could never fire in production either.
+    let sk = sign_test_key();
+    let mut sig = crate::crypto::c10_sign_verified_with_progress(sk, &SIGN_TEST_MSG, crate::progress_halves!(nop_progress))
+        .expect("sign must succeed");
+    sig[123] ^= 0x01;
+    assert!(
+        !sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), &SIGN_TEST_MSG, &sig),
+        "tampered signature must fail verification"
+    );
+    // And the wrong message must fail too (gate binds the message).
+    let sig = crate::crypto::c10_sign_verified_with_progress(sk, &SIGN_TEST_MSG, crate::progress_halves!(nop_progress))
+        .expect("sign must succeed");
+    let wrong_msg = [0x5Au8; 32];
+    assert!(
+        !sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), &wrong_msg, &sig),
+        "signature must not verify under a different message"
+    );
 }

@@ -82,7 +82,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    fn hash(&self) -> &[u8; 32] {
+    pub(crate) fn hash(&self) -> &[u8; 32] {
         match self {
             Kind::CalldataDigest(h)
             | Kind::Eip712Final(h)
@@ -129,6 +129,11 @@ pub(crate) fn append_fingerprint_page(
     }
     let banner = pages.push_blank()?;
     pages.buf[banner] = expected[0];
+    // `build_fingerprint_pair` returns bare pages, so the `> verify off-dev`
+    // chrome it writes to the banner's row 3 is declared where the pages join
+    // `pages` (#751 chrome mask). The hash page is four rows of hex — all
+    // content, nothing to mark.
+    pages.mark_nav(banner, 3);
     let hash_page = pages.push_blank()?;
     pages.buf[hash_page] = expected[1];
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
@@ -136,7 +141,7 @@ pub(crate) fn append_fingerprint_page(
     Ok(())
 }
 
-fn build_fingerprint_pair(kind: Kind) -> FingerprintPair {
+pub(crate) fn build_fingerprint_pair(kind: Kind) -> FingerprintPair {
     let mut pair = [[[b' '; DISPLAY_COLS]; crate::ui::DISPLAY_ROWS]; FINGERPRINT_PAGES];
 
     write_line(&mut pair[0][0], "8213 Fingerprint");

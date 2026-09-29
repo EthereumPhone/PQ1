@@ -66,6 +66,7 @@
 
 #![cfg(feature = "ui-lcd")]
 
+use crate::board;
 use crate::hw::mmio::{Reg32, RoReg32};
 use crate::hw::spi_hw::{cs_assert, cs_deassert, SPI_BASE};
 
@@ -73,17 +74,22 @@ use crate::hw::spi_hw::{cs_assert, cs_deassert, SPI_BASE};
 // Display geometry
 // ---------------------------------------------------------------------------
 
-/// Visible pixel width (X axis).
-pub const FRAME_WIDTH: u16 = 142;
-/// Visible pixel height (Y axis).
-pub const FRAME_HEIGHT: u16 = 428;
+// Geometry + the pure CASET/RASET builder live in `hw/lcd_window.rs`, a
+// module with no `#![cfg]` header so the host test build can reach it. This
+// file is `#![cfg(feature = "ui-lcd")]` and `mod hw;` is `#[cfg(not(test))]`,
+// which is why four tests here could never run (#723). Re-exported, so every
+// `lcd_nv3007::FRAME_WIDTH` / `build_set_window_bytes` call site is unchanged.
+#[path = "lcd_window.rs"]
+pub mod lcd_window;
 
-/// X offset applied to all column-address commands. The NV3007's RAM
-/// extends past the visible window; the production driver's
-/// `BlockWrite()` adds `a=12` to every X coordinate. Replicated here.
-pub const X_OFFSET: u16 = 12;
-/// Y offset. The production driver uses `b=0`.
-pub const Y_OFFSET: u16 = 0;
+// Which of these the compiler sees used depends on the feature combination
+// (`ui/lcd.rs` and `ui/splash_test.rs` consume the geometry, `set_window`
+// consumes the builder), and `mod hw` is private in a binary crate, so the
+// unused-import lint cannot see the re-export's real callers.
+#[allow(unused_imports)]
+pub use lcd_window::{
+    build_set_window_bytes, SetWindowBytes, FRAME_HEIGHT, FRAME_WIDTH, X_OFFSET, Y_OFFSET,
+};
 
 // ---------------------------------------------------------------------------
 // GPIO — DC on GPIOE bit 7 (Arduino D4 / PE7), RES on GPIOE bit 14 (Arduino D12 / PE14)
@@ -97,57 +103,65 @@ pub const Y_OFFSET: u16 = 0;
 // GPIOE bank as DC + the SPI pins (proven to drive), on the solid CN13
 // connector. The panel is write-only so MISO is free. See docs/hardware/nv3007-wiring.md.
 
-/// DC (Data/Command) pin position on GPIOE (PE7 = Arduino D4). Drive HIGH
-/// for data, LOW for command. Configured as push-pull output by `init()`.
-const DC_PIN: u32 = 7;
+/// DC (Data/Command). HIGH = data, LOW = command. Push-pull output.
+/// iota2: PE7 (Arduino D4). pq1: PB0, vendor net "LCM DC".
+const DC_PORT: u32 = board::LCD_DC_PORT;
+const DC_PIN: u32 = board::LCD_DC_PIN;
 
-/// RES (hardware reset, active-low) pin position on GPIOE (PE14 = Arduino
-/// D12 / CN13 pin 5, the unused SPI1_MISO). Driven by [`hard_reset`] during
-/// init. Push-pull output (overrides spi_hw's AF on PE14).
-const RES_PIN: u32 = 14;
+/// RES (hardware reset, active-low).
+///
+/// iota2: PE14 — the panel's reset is strapped to 3V3 there, so this pin is
+/// NOT the panel reset; configuring it as an output merely overrides spi_hw's
+/// AF5 (SPI1_MISO), which is harmless because the panel is write-only. That
+/// board resets via the `SWRESET` command instead. pq1: PB1, vendor net
+/// "LCM RST", genuinely driven by the MCU — see [`board::LCD_RST_IS_DRIVABLE`].
+const RES_PORT: u32 = board::LCD_RST_PORT;
+const RES_PIN: u32 = board::LCD_RST_PIN;
 
-/// Bit mask in `GPIOE_BSRR` for DC = HIGH (data).
+/// Whether the board's reset pin actually reaches the panel. Selects a real
+/// reset pulse over the `SWRESET` command in [`init`].
+const RES_DRIVABLE: bool = board::LCD_RST_IS_DRIVABLE;
+
+/// BSRR masks for DC.
 const DC_HIGH_BS: u32 = 1 << DC_PIN;
-/// Bit mask in `GPIOE_BSRR` for DC = LOW (command).
 const DC_LOW_BR: u32 = 1 << (DC_PIN + 16);
 
-/// Bit masks in `GPIOE_BSRR` for RES (PE14).
+/// BSRR masks for RES.
 const RES_HIGH_BS: u32 = 1 << RES_PIN;
 const RES_LOW_BR: u32 = 1 << (RES_PIN + 16);
 
 // ---------------------------------------------------------------------------
-// MMIO handles — GPIOE secure alias (extends what spi_hw already touches)
+// MMIO handles — all ports come from the board map
 // ---------------------------------------------------------------------------
 //
-// `hw::spi_hw::init()` already enables the GPIOE clock and binds PE12-PE15
-// (CS, SCK, MISO, MOSI). This module extends the configuration by setting
-// PE7 (DC) as a push-pull output on GPIOE, and PD15 (RES) as a push-pull
-// output on GPIOD — for which it must also enable the GPIOD clock (spi_hw
-// only enabled GPIOE). We do NOT re-touch PE12-PE15 here.
-
-const GPIOE_S: u32 = 0x5202_1000;
-/// GPIOD secure alias — RES is PD15 (Arduino D2).
-const GPIOD_S: u32 = 0x5202_0C00;
-/// RCC AHB2ENR1 (secure alias) — GPIODEN is bit 3 (matches `pin_diag` +
-/// `spi_hw`'s `RCC_S + 0x8C`).
-const RCC_AHB2ENR1: u32 = 0x5602_0C8C;
-const GPIODEN_BIT: u32 = 3;
+// `hw::spi_hw::init()` enables the clock for the SPI port only. On iota2 the
+// DC and RES pins happen to sit on that same port (GPIOE); on pq1 the SPI is
+// on port A while DC/RES/backlight are all on port B, so this module enables
+// whatever extra port clocks its own pins need.
+//
+// The previous version hardcoded `GPIOE_S` plus a `GPIOD_S` block for a PD15
+// reset that had been abandoned during bring-up — ten dead register handles
+// with no consumer anywhere in the file.
 
 struct LcdRegs {
-    gpioe_moder: Reg32,
-    gpioe_otyper: Reg32,
-    gpioe_ospeedr: Reg32,
-    gpioe_pupdr: Reg32,
-    gpioe_bsrr: Reg32,
+    // DC port.
+    dc_moder: Reg32,
+    dc_otyper: Reg32,
+    dc_ospeedr: Reg32,
+    dc_pupdr: Reg32,
+    dc_bsrr: Reg32,
 
-    // GPIOD — RES on PD15.
-    gpiod_moder: Reg32,
-    gpiod_otyper: Reg32,
-    gpiod_ospeedr: Reg32,
-    gpiod_pupdr: Reg32,
-    gpiod_bsrr: Reg32,
+    // RES port. The same physical registers as the DC ones when a board puts
+    // both pins on one port (iota2 does; pq1 also does, on a different port
+    // from the SPI). Aliasing is fine: every write below is a disjoint-bit RMW
+    // or a single-bit BSRR store.
+    res_moder: Reg32,
+    res_otyper: Reg32,
+    res_ospeedr: Reg32,
+    res_pupdr: Reg32,
+    res_bsrr: Reg32,
 
-    // RCC AHB2ENR1 — to enable the GPIOD clock (GPIODEN).
+    // RCC AHB2ENR1 — to clock whatever ports the pins above live on.
     rcc_ahb2enr1: Reg32,
 
     // SPI peripheral — same base as `spi_hw::SPI_BASE`. We use direct
@@ -169,19 +183,19 @@ struct LcdRegs {
 // removed 2026-07-14).
 const REG: LcdRegs = unsafe {
     LcdRegs {
-        gpioe_moder: Reg32::new(GPIOE_S + 0x00),
-        gpioe_otyper: Reg32::new(GPIOE_S + 0x04),
-        gpioe_ospeedr: Reg32::new(GPIOE_S + 0x08),
-        gpioe_pupdr: Reg32::new(GPIOE_S + 0x0C),
-        gpioe_bsrr: Reg32::new(GPIOE_S + 0x18),
+        dc_moder: Reg32::new(DC_PORT + 0x00),
+        dc_otyper: Reg32::new(DC_PORT + 0x04),
+        dc_ospeedr: Reg32::new(DC_PORT + 0x08),
+        dc_pupdr: Reg32::new(DC_PORT + 0x0C),
+        dc_bsrr: Reg32::new(DC_PORT + 0x18),
 
-        gpiod_moder: Reg32::new(GPIOD_S + 0x00),
-        gpiod_otyper: Reg32::new(GPIOD_S + 0x04),
-        gpiod_ospeedr: Reg32::new(GPIOD_S + 0x08),
-        gpiod_pupdr: Reg32::new(GPIOD_S + 0x0C),
-        gpiod_bsrr: Reg32::new(GPIOD_S + 0x18),
+        res_moder: Reg32::new(RES_PORT + 0x00),
+        res_otyper: Reg32::new(RES_PORT + 0x04),
+        res_ospeedr: Reg32::new(RES_PORT + 0x08),
+        res_pupdr: Reg32::new(RES_PORT + 0x0C),
+        res_bsrr: Reg32::new(RES_PORT + 0x18),
 
-        rcc_ahb2enr1: Reg32::new(RCC_AHB2ENR1),
+        rcc_ahb2enr1: Reg32::new(board::RCC_S + board::RCC_AHB2ENR1_OFF),
 
         spi_cr1: Reg32::new(SPI_BASE + 0x00),
         spi_cr2: Reg32::new(SPI_BASE + 0x04),
@@ -217,46 +231,108 @@ const MAX_CHUNK: u16 = 65_534;
 
 #[inline(always)]
 fn dc_low() {
-    REG.gpioe_bsrr.write(DC_LOW_BR);
+    REG.dc_bsrr.write(DC_LOW_BR);
 }
 
 #[inline(always)]
 fn dc_high() {
-    REG.gpioe_bsrr.write(DC_HIGH_BS);
+    REG.dc_bsrr.write(DC_HIGH_BS);
 }
 
 #[inline(always)]
 fn res_low() {
-    REG.gpioe_bsrr.write(RES_LOW_BR);
+    REG.res_bsrr.write(RES_LOW_BR);
 }
 
 #[inline(always)]
 fn res_high() {
-    REG.gpioe_bsrr.write(RES_HIGH_BS);
+    REG.res_bsrr.write(RES_HIGH_BS);
 }
 
-/// Configure DC (PE7) and RES (PE14) as push-pull outputs at very-high
-/// speed — both on GPIOE. Both start HIGH so RES doesn't accidentally
-/// reset the LCD before [`hard_reset`] sequences it.
+/// Configure DC and RES as push-pull outputs at very-high speed, and assert
+/// the backlight enable where the board has one.
 ///
-/// Assumes [`hw::spi_hw::init()`] has already enabled the GPIOE clock.
-/// RES = PE14 overrides spi_hw's AF (SPI1_MISO) — harmless, the panel is
-/// write-only so MISO is unused.
+/// Both pins start HIGH so RES does not hold the panel in reset before
+/// [`hard_reset`] sequences it.
+///
+/// `spi_hw::init()` has already clocked the SPI port; this additionally clocks
+/// whatever ports DC, RES and the backlight enable live on. On iota2 those are
+/// all the SPI port (GPIOE) so the extra enables are same-value writes; on pq1
+/// the SPI is on port A and these are on port B.
+///
+/// RES is configured on BOTH boards even though only pq1 drives a real panel
+/// reset: on iota2 the pin is PE14, whose only other role is spi_hw's AF5
+/// (SPI1_MISO) on a write-only panel. Keeping the write preserves that board's
+/// register sequence exactly.
 fn init_dc_res_gpios() {
-    // DC = PE7, RES = PE14 — both GPIOE: output, push-pull, very-high speed.
-    REG.gpioe_moder.modify(|v| {
-        (v & !(0b11 << (DC_PIN * 2)) & !(0b11 << (RES_PIN * 2)))
-            | (0b01 << (DC_PIN * 2))
-            | (0b01 << (RES_PIN * 2))
-    });
-    REG.gpioe_otyper.clear_bits((1 << DC_PIN) | (1 << RES_PIN));
-    REG.gpioe_ospeedr.set_bits((0b11 << (DC_PIN * 2)) | (0b11 << (RES_PIN * 2)));
-    REG.gpioe_pupdr.modify(|v| {
-        v & !(0b11 << (DC_PIN * 2)) & !(0b11 << (RES_PIN * 2))
-    });
+    // Clock every port this module touches.
+    let mut clocks = board::gpio_rcc_bit(DC_PORT) | board::gpio_rcc_bit(RES_PORT);
+    if let Some((port, _)) = board::LCD_BACKLIGHT_EN {
+        clocks |= board::gpio_rcc_bit(port);
+    }
+    REG.rcc_ahb2enr1.set_bits(clocks);
+    cortex_m::asm::dsb();
 
-    // Start both HIGH (RES deasserted, DC = data) at boot.
-    REG.gpioe_bsrr.write(DC_HIGH_BS | RES_HIGH_BS);
+    // #705 HWEN BIAS PROBE — REMOVED 2026-09-23, recorded so it is not
+    // re-invented. It sampled `LCD_BACKLIGHT_EN`'s IDR here to decide whether
+    // the board's passive bias holds HWEN up (config survives a warm reset,
+    // so the FSBL's fingerprint window could be visible) or pulls it down
+    // (the window is always dark).
+    //
+    // It could never work. PB15's RESET MODER is 0b11 (GPIOB MODER resets to
+    // 0xFFFF_FEBF), i.e. ANALOG mode, and analog mode disables the Schmitt
+    // trigger, so IDR reads 0 REGARDLESS of the pin's actual voltage (RM0456
+    // GPIO chapter). The `HW=0` it produced proved nothing, and was retracted
+    // in `fbf8fdd8`. It was deleted rather than kept because it ran on EVERY
+    // boot of every build — `ui-lcd` is in RELEASE_FEATURES — to populate a
+    // static nothing read.
+    //
+    // A valid replacement must configure PB15 as a digital INPUT with pulls
+    // disabled, record that configuration, and only then sample IDR — and even
+    // that measures the steady state, not the reset-time trajectory, which
+    // needs a waveform. The question it was aimed at (the R112 10k-at-HWEN vs
+    // R124 100K-at-PWM schematic ambiguity) is still open.
+
+    // DC: output, push-pull, very-high speed, no pull.
+    let dc2 = DC_PIN * 2;
+    let dcf = 0b11u32 << dc2;
+    REG.dc_moder.modify(|v| (v & !dcf) | (0b01 << dc2));
+    REG.dc_otyper.clear_bits(1 << DC_PIN);
+    REG.dc_ospeedr.set_bits(dcf);
+    REG.dc_pupdr.modify(|v| v & !dcf);
+
+    // RES: same treatment.
+    let res2 = RES_PIN * 2;
+    let resf = 0b11u32 << res2;
+    REG.res_moder.modify(|v| (v & !resf) | (0b01 << res2));
+    REG.res_otyper.clear_bits(1 << RES_PIN);
+    REG.res_ospeedr.set_bits(resf);
+    REG.res_pupdr.modify(|v| v & !resf);
+
+    // Start both HIGH (RES deasserted, DC = data).
+    REG.dc_bsrr.write(DC_HIGH_BS);
+    REG.res_bsrr.write(RES_HIGH_BS);
+
+    // Backlight enable, where the board has one (pq1: PB15 = "LCM EN").
+    //
+    // NOTE: on pq1 this alone may not light the panel. LCM_EN gates an
+    // AW99703 LED-driver IC whose brightness is set over I2C2 at 0x36, and
+    // there is no driver for that chip in the tree yet. Asserting the enable
+    // is necessary, not obviously sufficient — see `board/pq1.rs`.
+    if let Some((port, pin)) = board::LCD_BACKLIGHT_EN {
+        // SAFETY: `port` is a GPIO base from the board map; these are that
+        // block's real MODER/OTYPER/OSPEEDR/BSRR registers, touched with
+        // disjoint-bit RMW on this pin alone.
+        unsafe {
+            let two = pin * 2;
+            let field = 0b11u32 << two;
+            Reg32::new(port + 0x18).write(1 << pin); // drive high before enabling the output
+            Reg32::new(port + 0x00).modify(|v| (v & !field) | (0b01 << two));
+            Reg32::new(port + 0x04).clear_bits(1 << pin);
+            Reg32::new(port + 0x08).set_bits(field);
+            Reg32::new(port + 0x18).write(1 << pin);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -575,23 +651,6 @@ pub fn set_window(x0: u16, y0: u16, x1: u16, y1: u16) {
     write_cmd(0x2C); // RAMWR — pixel data follows via write_pixels*
 }
 
-/// Pure-logic byte builder for [`set_window`] — host-testable.
-fn build_set_window_bytes(x0: u16, y0: u16, x1: u16, y1: u16) -> SetWindowBytes {
-    let x0 = x0 + X_OFFSET;
-    let x1 = x1 + X_OFFSET;
-    let y0 = y0 + Y_OFFSET;
-    let y1 = y1 + Y_OFFSET;
-    SetWindowBytes {
-        caset: [(x0 >> 8) as u8, x0 as u8, (x1 >> 8) as u8, x1 as u8],
-        raset: [(y0 >> 8) as u8, y0 as u8, (y1 >> 8) as u8, y1 as u8],
-    }
-}
-
-struct SetWindowBytes {
-    caset: [u8; 4],
-    raset: [u8; 4],
-}
-
 /// Write `n` pixels of `color` (RGB565, big-endian on the wire) to the current
 /// window. Chunked by pixel count — never builds a 121 KB buffer (no_std,
 /// stack-only). CS stays low across all chunks; only SPE toggles per chunk.
@@ -709,16 +768,46 @@ pub fn fill_rect(x0: u16, y0: u16, w: u16, h: u16, color: u16) {
 ///
 /// Assumes [`hw::spi_hw::init()`] has already run (SPI1 + CS/SCK/MOSI).
 pub fn init() {
-    // RES is tied to 3V3 on this board (PD15/PE14 both proved un-drivable),
-    // so use a software SWRESET instead of hard_reset()'s pin pulse, and init
-    // SPI ourselves — main.rs does not init SPI1 for ui-lcd. Mirrors the
-    // validated lcd_test_loop bring-up sequence.
+    // main.rs does not init SPI for ui-lcd, so do it here.
     crate::hw::spi_hw::init();
     init_dc_res_gpios();
-    write_cmd(0x01); // SWRESET
+    // pq1: LCM_EN (asserted just above) is only the AW99703's HWEN. Program
+    // the backlight over I2C2 or the panel stays dark whatever SPI does.
+    // Stage 1 only: limits + brightness, chip left in Standby (still dark).
+    #[cfg(feature = "board-pq1")]
+    let backlight = crate::hw::aw99703::configure();
+
+    // Reset the panel the way this board can. iota2 has its RES strapped to
+    // 3V3 (PD15 and PE14 both proved un-drivable during bring-up), so it
+    // issues the SWRESET command; pq1 routes LCM_RST to PB1 and gets a real
+    // pin pulse, which also resets state SWRESET leaves alone.
+    if RES_DRIVABLE {
+        hard_reset();
+    } else {
+        write_cmd(0x01); // SWRESET
+    }
     delay_ms(150);
     run_init_sequence();
     fill_screen(0x0000);
+
+    // #730: light the panel only NOW, once its content is defined. DISPON is
+    // the last command of `run_init_sequence`, so enabling the backlight
+    // before `fill_screen` lit whatever GRAM held for ~170 ms. Same shape is
+    // required of the FSBL driver #705 will add — that one cannot be patched.
+    //
+    // The ACK is logged inside `enable()` and deliberately not stored: a flag
+    // with no consumer reads as handling that does not exist. What this needs
+    // is a failure POLICY (does a dark panel block the boot?), the open owner
+    // decision in #705.
+    #[cfg(feature = "board-pq1")]
+    if let Some(configured) = backlight {
+        let _ = crate::hw::aw99703::enable(configured);
+    }
+    // iota2 is NOT covered by this fix: its ER-TFTM1.65-2 backlight is
+    // hard-wired on (`board::LCD_BACKLIGHT_EN == None`), so the same
+    // DISPON -> fill window is lit there. Bench-only board; closing it would
+    // mean moving DISPON after the first fill, which re-validates the vendor
+    // init sequence.
 }
 
 /// Phase-B bench bring-up (`lcd-test` feature): set up SPI1 + the LCD, then
@@ -734,6 +823,11 @@ pub fn lcd_test_loop() -> ! {
     crate::hw::spi_hw::init();
     secure_log!("[LCD-TEST] spi_hw::init done");
     init_dc_res_gpios(); // DC = PE7 (the PE14/RES config is now unused)
+    // pq1: LCM_EN (asserted just above) is only the AW99703's HWEN. Program
+    // the backlight over I2C2 or the panel stays dark whatever SPI does.
+    // Stage 1 only (#730) — enabled after the first fill below.
+    #[cfg(feature = "board-pq1")]
+    let backlight = crate::hw::aw99703::configure();
     secure_log!("[LCD-TEST] dc gpio done");
     // Software reset first (RES is tied to 3V3, so no hardware-reset pulse).
     write_cmd(0x01); // SWRESET
@@ -772,6 +866,10 @@ pub fn lcd_test_loop() -> ! {
     let t0 = unsafe { core::ptr::read_volatile(0xE000_1004 as *mut u32) };
     fill_screen(0x07E0); // measured green repaint
     let dt = unsafe { core::ptr::read_volatile(0xE000_1004 as *mut u32) }.wrapping_sub(t0);
+    #[cfg(feature = "board-pq1")]
+    if let Some(configured) = backlight {
+        let _ = crate::hw::aw99703::enable(configured);
+    }
     let us = dt / 160; // 160 cycles/µs @160 MHz
     secure_log!(
         "[LCD-TEST] full repaint = {} us ({} cyc) ~ {} fps",
@@ -835,67 +933,8 @@ pub fn lcd_test_loop() -> ! {
 // Host tests — pure logic only (no MMIO access at test time)
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// `set_window(0, 0, FRAME_WIDTH-1, FRAME_HEIGHT-1)` should
-    /// produce CASET = X_OFFSET..X_OFFSET+FRAME_WIDTH-1 and
-    /// RASET = Y_OFFSET..Y_OFFSET+FRAME_HEIGHT-1 — matching the
-    /// production `BlockWrite(0, FRAME_WIDTH-1, 0, FRAME_HEIGHT-1)`.
-    #[test]
-    fn positive_full_screen_window_matches_production_bytes() {
-        let bytes = build_set_window_bytes(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
-        // X: 0+12 = 12 (0x000C); X1: 141+12 = 153 (0x0099)
-        assert_eq!(bytes.caset, [0x00, 0x0C, 0x00, 0x99]);
-        // Y: 0; Y1: 427 (0x01AB)
-        assert_eq!(bytes.raset, [0x00, 0x00, 0x01, 0xAB]);
-    }
-
-    /// Cross-check against the production driver's `nv3007_Init_lcm`
-    /// initial CASET/RASET values (the literal bytes the C code
-    /// writes after the init sequence). If our builder produces
-    /// different bytes, our pixel addressing would be off-by-N from
-    /// production, leading to a torn or shifted display.
-    #[test]
-    fn negative_set_window_offset_matches_dgen1_bootloader_literal() {
-        // From nv3007_142x428_4line_8bit.c::nv3007_Init_lcm():
-        //   SPI_WriteComm(0x2a);
-        //   SPI_WriteData(0x00); SPI_WriteData(0x0c);   // x0 = 12
-        //   SPI_WriteData(0x00); SPI_WriteData(0x99);   // x1 = 153
-        //   SPI_WriteComm(0x2b);
-        //   SPI_WriteData(0x00); SPI_WriteData(0x00);   // y0 = 0
-        //   SPI_WriteData(0x01); SPI_WriteData(0xab);   // y1 = 427
-        let bytes = build_set_window_bytes(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
-        assert_eq!(bytes.caset[0], 0x00);
-        assert_eq!(bytes.caset[1], 0x0C);
-        assert_eq!(bytes.caset[2], 0x00);
-        assert_eq!(bytes.caset[3], 0x99);
-        assert_eq!(bytes.raset[0], 0x00);
-        assert_eq!(bytes.raset[1], 0x00);
-        assert_eq!(bytes.raset[2], 0x01);
-        assert_eq!(bytes.raset[3], 0xAB);
-    }
-
-    /// A small inner window — e.g. drawing 16×24 starting at (10, 50)
-    /// — must apply the X offset but not double-count it. Catches
-    /// regressions where set_window forgets to add X_OFFSET to x1.
-    #[test]
-    fn positive_inner_window_offsets_both_endpoints() {
-        let bytes = build_set_window_bytes(10, 50, 25, 73);
-        // x0 = 10+12 = 22 (0x0016), x1 = 25+12 = 37 (0x0025)
-        assert_eq!(bytes.caset, [0x00, 0x16, 0x00, 0x25]);
-        // y0 = 50, y1 = 73
-        assert_eq!(bytes.raset, [0x00, 0x32, 0x00, 0x49]);
-    }
-
-    /// Frame geometry pins — silent drift in either constant would
-    /// invalidate every X/Y address we compute.
-    #[test]
-    fn negative_frame_geometry_constants_pinned() {
-        assert_eq!(FRAME_WIDTH, 142, "ZT165M017AT visible width is 142 px");
-        assert_eq!(FRAME_HEIGHT, 428, "ZT165M017AT visible height is 428 px");
-        assert_eq!(X_OFFSET, 12, "NV3007 X offset is 12 per production BlockWrite");
-        assert_eq!(Y_OFFSET, 0, "NV3007 Y offset is 0 per production BlockWrite");
-    }
-}
+// Host tests for the window-byte builder live in
+// `secure/src/ui_under_test/pure_tests.rs`, NOT here — see `hw/lcd_window.rs`.
+// The `mod tests` that used to sit here could never run: this file is
+// `#![cfg(feature = "ui-lcd")]`, the host suite builds `ui-semihosting`, and
+// `mod hw;` is `#[cfg(not(test))]` regardless (#723).

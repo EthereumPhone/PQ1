@@ -65,6 +65,25 @@ EXPECTED = {
         "MPCBB2_BASE": "GTZC_MPCBB2_BASE_S",
     },
     "secure/src/hw/spi_hw.rs": {"SPI_BASE": "SPI1_BASE_S"},
+    # The per-board pin maps (`BOARD=iota2|pq1`). These are the single point of
+    # truth for every peripheral a driver reaches through `crate::board`, so
+    # they are exactly the constants worth diffing against ST. Note both USARTs
+    # and both I2Cs appear here: a board swap chooses BETWEEN them, so a wrong
+    # nibble in the unused one stays invisible until someone flips BOARD.
+    "secure/src/board/mod.rs": {
+        "RCC_S": "RCC_BASE_S",
+        "GPIOA_S": "GPIOA_BASE_S",
+        "GPIOB_S": "GPIOB_BASE_S",
+        "GPIOC_S": "GPIOC_BASE_S",
+        "GPIOD_S": "GPIOD_BASE_S",
+        "GPIOE_S": "GPIOE_BASE_S",
+        "USART1_S": "USART1_BASE_S",
+        "USART2_S": "USART2_BASE_S",
+        "I2C1_S": "I2C1_BASE_S",
+        "I2C4_S": "I2C4_BASE_S",
+        "SPI1_S": "SPI1_BASE_S",
+        "SPI2_S": "SPI2_BASE_S",
+    },
     # A4a's die-identity probe. DBGMCU has no _S/_NS split — one base.
     "secure/src/hw/dbgmcu.rs": {"DBGMCU_BASE": "DBGMCU_BASE"},
 }

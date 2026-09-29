@@ -14,6 +14,50 @@ help-verify: ## Show only the FV / spec-assurance targets (contracts/verificatio
 	@$(MAKE) --no-print-directory -C contracts/verification help
 
 TARGET = thumbv8m.main-none-eabi
+
+# ---------------------------------------------------------------------------
+# Board / target selection
+# ---------------------------------------------------------------------------
+# BOARD picks the physical board a hardware target is built and flashed for.
+#
+#   iota2  (default) — ST B-U585I-IOT02A dev board, STM32U585AII6 (169-pin).
+#                      Every existing bench flow assumes this; nothing changes.
+#   pq1              — AL_A66_MB_V10 production board, STM32U585CIU6 (48-pin).
+#                      Only ports A, B and PC13 are bonded — see
+#                      `secure/src/board/` for the pin map.
+#
+# Usage:  make test-key-speed BOARD=pq1
+#
+# CHIP and BOARD_FEATURE are derived from BOARD with `override`, which is
+# load-bearing: a plain `?=` (or even `:=`) loses to a command-line assignment,
+# because make gives command-line variables precedence over every makefile
+# assignment except an overridden one. Before 2026-08-31 both used `?=`, so
+#
+#     make flash-hw-usb-test BOARD=pq1 BOARD_FEATURE=board-iota2
+#
+# selected the pq1 probe target and compiled the iota2 pin map — handing
+# PA15/PB5/PB15 (SE_RST, SE1_EN, LCM_EN on that board) to the non-secure world
+# on pq1 silicon. The Rust exact-one fence in `secure/src/board/mod.rs` cannot
+# catch that: it sees exactly one board feature and passes. The two must not be
+# separable, so they no longer are.
+BOARD ?= iota2
+
+ifeq ($(BOARD),iota2)
+override CHIP          := STM32U585AIIx
+override BOARD_FEATURE := board-iota2
+else ifeq ($(BOARD),pq1)
+override CHIP          := STM32U585CIUx
+override BOARD_FEATURE := board-pq1
+else
+$(error BOARD must be `iota2` or `pq1`, got `$(BOARD)`)
+endif
+
+# STM32CubeProgrammer CLI. Not always on PATH (the default install lands in
+# ~/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin); override with
+#   make <target> STM32_PROG=/path/to/STM32_Programmer_CLI
+STM32_PROG ?= $(firstword $(wildcard \
+        $(HOME)/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI) \
+        STM32_Programmer_CLI)
 RUSTFLAGS_VAR = CARGO_TARGET_THUMBV8M_MAIN_NONE_EABI_RUSTFLAGS
 VENEERS = $(CURDIR)/target/veneers.o
 
@@ -115,10 +159,43 @@ endif
 endif
 endif
 
+# Thread the board selection into every $(FEATURES)-driven secure build.
+# Only hardware builds have a board: the QEMU mps2-an505 target has no pin
+# map, and `secure/src/board/` is gated on `stm32u585`.
+#
+# `board-iota2` is NOT "inert by construction" — that was the retracted
+# opt-in-to-pq1 model, and believing it is what left seven recipes without a
+# board term. Since a15561b4 naming a board is mandatory and `board-iota2` is
+# load-bearing.
+#
+# If FEATURES already names a board we do not append, but we no longer stay
+# silent about it either: a FEATURES board that disagrees with BOARD is the
+# same wrong-image hazard as the BOARD_FEATURE override closed above, and it
+# is a hard error rather than a silently mismatched build.
+ifneq (,$(findstring stm32u585,$(FEATURES)))
+ifeq (,$(findstring board-,$(FEATURES)))
+override FEATURES := $(FEATURES),$(BOARD_FEATURE)
+else
+ifeq (,$(findstring $(BOARD_FEATURE),$(FEATURES)))
+$(error FEATURES names a board that disagrees with BOARD=$(BOARD). \
+  FEATURES=$(FEATURES) but BOARD implies $(BOARD_FEATURE). \
+  CHIP would be $(CHIP) while the image is built for the other board's pin map. \
+  Drop the board- token from FEATURES and select with BOARD=iota2|pq1.)
+endif
+endif
+endif
+
 # Extract features relevant to the nonsecure crate (it doesn't know about
 # mock-se, debug-log, ui-semihosting, etc. — only the shared platform,
 # transport, test, and watchdog features below).
-NS_FEATURES_LIST := $(strip $(foreach f,stm32u585 e2e-test usb iwdg,$(if $(findstring $(f),$(FEATURES)),$(f))))
+#
+# The board is forwarded too (2026-08-31). It was not, so `make e2e-hw BOARD=pq1`
+# built secure=pq1 against NS=implicit-iota2 — and `nonsecure/src/gtzc_test.rs`
+# treats "not board-pq1" as iota2, so its denial probe silently skipped pq1's
+# I2C4 (the SE050's own bus) while reporting a pass. Only the gtzc recipe passed
+# the board by hand. Two worlds in one image must not disagree about the board.
+NS_FEATURES_LIST := $(strip $(foreach f,stm32u585 e2e-test usb iwdg,$(if $(findstring $(f),$(FEATURES)),$(f))) \
+  $(if $(findstring stm32u585,$(FEATURES)),$(BOARD_FEATURE)))
 comma := ,
 empty :=
 space := $(empty) $(empty)
@@ -179,21 +256,21 @@ play: all ## Interactive QEMU (arrow-key UI)
 # Display renders on the physical OLED; button input comes from your laptop
 # keyboard via probe-rs semihosting READC.
 # Requires: ST-LINK connected, SSD1306 OLED wired to PB8/PB9/3V3/GND.
-play-hw-display: ## Interactive OLED + arrow-key forwarding (HW)
-	@echo "==> Building secure + nonsecure for interactive OLED play"
+play-hw-display: ## Interactive NV3007 LCD + arrow-key forwarding (HW)
+	@echo "==> Building secure + nonsecure for interactive LCD play"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-lcd,stm32u585,dev-testkey,gpio-buttons
+			--features mock-se,debug-log,ui-lcd,stm32u585,dev-testkey,gpio-buttons,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features stm32u585
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Starting interactive wallet (Ctrl-C to quit)..."
@@ -212,22 +289,47 @@ play-hw-lcd:
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-lcd,stm32u585,dev-testkey
+			--features mock-se,debug-log,ui-lcd,stm32u585,dev-testkey,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features stm32u585
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Drive the wizard with the physical buttons; streaming logs (Ctrl-C to quit)..."
 	@python3 tools/wallet_run_hw.py
 
-# §32 P4/P5 interactive UI test — drive JUST the duress-PIN setup dialogs
+.PHONY: play-hw-px
+play-hw-px: ## Interactive NV3007 play with the pixel trusted UI (ui-px), physical buttons
+	@echo "==> Building secure + nonsecure for interactive pixel-UI play (NV3007, ui-px)"
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-lcd,ui-px,stm32u585,dev-testkey,$(BOARD_FEATURE)$(PX_EXTRA_FEATURES)
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features stm32u585,ui-px-atlas,$(BOARD_FEATURE)
+	@arm-none-eabi-size $(SECURE_ELF)
+	@echo "==> Flashing..."
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Drive the flow with the physical buttons; streaming logs (Ctrl-C to quit)..."
+	@python3 tools/wallet_run_hw.py
+
+# Extra features for play-hw-px (e.g. `,ui-px-spi40`).
+PX_EXTRA_FEATURES ?=
+
+
 # on the real OLED. No SE, no provisioning (mock-se + duress-ui-test
 # short-circuits into a dialog loop at boot). Driven by the PHYSICAL
 # perfboard buttons (gpio-buttons: LEFT=PC1/D8, RIGHT=PA8/D9; both = OK,
@@ -239,16 +341,16 @@ play-hw-duress-ui:
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-lcd,stm32u585,dev-testkey,duress-ui-test,gpio-buttons
+			--features mock-se,debug-log,ui-lcd,stm32u585,dev-testkey,duress-ui-test,gpio-buttons,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features stm32u585
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Starting interactive duress-UI harness (Ctrl-C to quit)..."
@@ -274,7 +376,7 @@ stm32-harden-opts:
 	@echo "==> Configuring brown-out supervision + SRAM2 auto-erase"
 	@echo "    BOR_LEV=3 (~2.7V), SRAM2_RST=0 (auto-erase on reset)"
 	@echo "    This triggers an Option Byte Load — the chip will reset."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes BOR_LEV=3 SRAM2_RST=0
 	@echo "==> Option bytes written. Reset triggered. Chip state: hardened."
 
@@ -307,15 +409,15 @@ build-hw: ## Build the real-hardware STM32U585 smoke image (non-shippable)
 # once after a chip erase. Subsequent flashes can skip step 2 if OBs are
 # already configured.
 flash-hw: build-hw ## Flash + run on real STM32U585 (probe-rs/OpenOCD)
-	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	STM32_Programmer_CLI --connect port=SWD \
+	$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching (Ctrl-C to quit)..."
-	probe-rs reset --chip STM32U585AIIx
-	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs reset --chip $(CHIP)
+	probe-rs attach --chip $(CHIP) $(SECURE_ELF)
 
 # Non-interactive automated end-to-end test for the sign dispatch logic.
 # Builds both worlds with the `e2e-test` cargo feature, runs them in QEMU
@@ -333,12 +435,30 @@ flash-hw: build-hw ## Flash + run on real STM32U585 (probe-rs/OpenOCD)
 # pre-sign, all through on-device native decode.
 #
 # Pass → exits 0. Any missing assertion or non-zero status → exits 1.
+# Extra secure-side features for the e2e build (e.g. `,ui-px`). Set by the
+# `e2e-px` alias below; leave empty for the byte-identical legacy run.
+E2E_EXTRA_FEATURES ?=
+# Keep the QEMU semihosting log (default: a deleted mktemp) — e.g.
+# `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px` feeds `tools/ui_screens_export.py
+# --px LOG` (the docs/ui-screens/px/ catalogue).
+E2E_LOG_KEEP ?=
+
+.PHONY: e2e-px
+e2e-px: E2E_EXTRA_FEATURES = ,ui-px
+# Dialogs the suite confirms through the pixel UI: every sign dialog — the
+# Safe routes, every single-UserOp route, each slot-rotation consent, direct
+# CoW, ERC-7730, the off-chain kinds and every batch member + final ask
+# (port steps 1-3).
+E2E_PX_TRANSCRIPTS ?= 0
+e2e-px: E2E_PX_TRANSCRIPTS = 47
+e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — pixel routes print [UI-PX]
+
 e2e: ## Automated unified-sign E2E (QEMU)
 	@echo "==> Building secure + nonsecure with e2e-test feature (QEMU mailbox transport)"
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-semihosting,e2e-test
+			--features mock-se,debug-log,ui-semihosting,e2e-test$(E2E_EXTRA_FEATURES)
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test
@@ -351,7 +471,7 @@ e2e: ## Automated unified-sign E2E (QEMU)
 	@# `e2e-test` cargo feature) so a failed assertion terminates QEMU
 	@# instead of looping forever — without that, this target would
 	@# never return on any test bug.
-	@log=$$(mktemp); \
+	@log=$${E2E_LOG_KEEP:-$$(mktemp)}; \
 	qemu-system-arm \
 		-M mps2-an505 \
 		-monitor null \
@@ -376,6 +496,9 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 2: repeat sign on chain A slot 1" \
 		"\\[NS\\]\\[e2e\\] Scenario 3: rotate to slot 2 on chain A" \
 		"\\[NS\\]\\[e2e\\] Scenario 4: register slot 1 on chain B" \
+		"\\[NS\\]\\[e2e\\] Scenario 4a: zero-value contract call" \
+		"\\[NS\\]\\[e2e\\] Scenario 4b: unknown-token ERC-20 transfer" \
+		"\\[NS\\]\\[e2e\\] Scenario 4c: first deploy with initCode" \
 		"\\[NS\\]\\[e2e\\] Scenario 5: Safe approveHash clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5b: verified function-selector bundle" \
 		"\\[NS\\]\\[e2e\\] Scenario 5v: companion-supplied ERC-20 metadata trailer" \
@@ -397,8 +520,11 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 5m-nested: ERC-7730 nested proof set matches + signs" \
 		"\\[NS\\]\\[e2e\\] Scenario 5m-multi-tail: ERC-7730 two-string tails match + signs" \
 		"\\[NS\\]\\[e2e\\] Scenario 5p: EIP-712 typed sign + binding differential" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-personal: personal_sign off-chain signature" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-raw32: RAW32 off-chain signature" \
 		"\\[NS\\]\\[e2e\\] Scenario 5n: known-call mis-bound descriptor is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5q: Safe-wrapped CoW presign clear-sign" \
+		"\\[NS\\]\\[e2e\\] Scenario 5q-direct: direct CoW order clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5r: safe-wrapped presign without cow_order is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5s: multiSend (approve+presign) safe-wrapped CoW clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5t: multiSend with a delegatecall record is refused" \
@@ -414,45 +540,74 @@ e2e: ## Automated unified-sign E2E (QEMU)
 	done; \
 	names_region=$$(mktemp); \
 	awk '/Scenario 5w:/{capture=1} capture{print} /names bundle verified/{exit}' $$log > $$names_region; \
-	for text in \
-		"+ Uniswap V3 Rou" \
-		" ter" \
-		"0xE59242..861564" \
-		"0.000001 ETH"; do \
+	case "$(E2E_EXTRA_FEATURES)" in \
+		*ui-px*) names_texts="s:Uniswap V3 Router|0xE592427A0AEce92De3E|dee1F18E0157C05861564|0.000001 ETH" ;; \
+		*) names_texts="+ Uniswap V3 Rou| ter|0xE59242..861564|0.000001 ETH" ;; \
+	esac; \
+	IFS='|'; for text in $$names_texts; do \
 		if ! grep -Fq "$$text" $$names_region; then \
 			echo "  MISS  names trailer trusted row: $$text"; \
 			fail=1; \
 		fi; \
-	done; \
+	done; unset IFS; \
 	rm -f $$names_region; \
 	if ! grep -q "\\[ERC-7730\\] matched: chain=31337 contract=0x34343434..34343434 .* nested=true" $$log; then \
 		echo "  MISS  secure nested ERC-7730 dispatch receipt"; fail=1; \
 	fi; \
 	rt_region=$$(mktemp); \
 	awk '/Scenario 5e-rt-erc20:/{capture=1} capture{print} /RT-ERC20 trusted pages complete/{exit}' $$log > $$rt_region; \
-	for text in \
-		"0x1CDD2EaB611126" \
-		"97626F7b4bB0e23D" \
-		"a4FeBF7B7C" \
-		"0xdAC17F958D2ee5" \
-		"23a2206206994597" \
-		"C13D831ec7"; do \
+	case "$(E2E_EXTRA_FEATURES)" in \
+		*ui-px*) rt_texts="0x1CDD2EaB61112697626|F7b4bB0e23Da4FeBF7B7C|0xdAC17F958D2ee523a22|06206994597C13D831ec7" ;; \
+		*) rt_texts="0x1CDD2EaB611126|97626F7b4bB0e23D|a4FeBF7B7C|0xdAC17F958D2ee5|23a2206206994597|C13D831ec7" ;; \
+	esac; \
+	IFS='|'; for text in $$rt_texts; do \
 		if ! grep -Fq "$$text" $$rt_region; then \
 			echo "  MISS  RT-ERC20 trusted row: $$text"; \
 			fail=1; \
 		fi; \
-	done; \
+	done; unset IFS; \
 	if [ $$(grep -Fc "Token contract" $$rt_region) -lt 2 ]; then \
 		echo "  MISS  RT-ERC20 two exact token-identity pages"; fail=1; \
 	fi; \
-	if [ $$(grep -Fc "Amount" $$rt_region) -lt 2 ] || [ $$(grep -Fc "USDT" $$rt_region) -lt 2 ]; then \
+	if [ $$(grep -Fic "Amount" $$rt_region) -lt 2 ] || [ $$(grep -Fc "USDT" $$rt_region) -lt 2 ]; then \
 		echo "  MISS  RT-ERC20 two decoded amount+ticker displays"; fail=1; \
 	fi; \
 	if grep -Fq "Token (UNVERI" $$rt_region || grep -Fq "Approve Safe TX" $$rt_region; then \
 		echo "  FAIL  RT-ERC20 regressed to unverified or Safe-attributed display"; fail=1; \
 	fi; \
 	rm -f $$rt_region; \
-	rm -f $$log; \
+	case "$(E2E_EXTRA_FEATURES)" in *ui-px*) \
+		px_flows=$$(grep -c '^\[UI-PX\] 0000/[0-9a-f]* p0' $$log || true); \
+		if [ "$$px_flows" -eq $(E2E_PX_TRANSCRIPTS) ]; then echo "  PASS  ui-px: $(E2E_PX_TRANSCRIPTS) pixel transcripts (every sign dialog)"; \
+		else echo "  FAIL  ui-px: expected $(E2E_PX_TRANSCRIPTS) pixel transcripts, saw $$px_flows"; fail=1; fi; \
+		for hero in APPROVE EXECUTE SEND CALL TRANSFER UNKNOWN BLIND ROTATE; do \
+			if grep -Eq "^\[UI-PX\] 0000/[0-9a-f]{4} p0 H.* id=$$hero " $$log; then echo "  PASS  ui-px: family hero $$hero"; \
+			else echo "  FAIL  ui-px: no pixel transcript opens with $$hero"; fail=1; fi; \
+		done; \
+		if grep -q '^\[UI-PX\] .* id=DEPLOY ' $$log; then echo "  PASS  ui-px: deployment trailer twin (Scenario 4c)"; \
+		else echo "  FAIL  ui-px: no DEPLOY trailer screen"; fail=1; fi; \
+		for want in 'cap="SIGN COWSWAP[?]"' 'cap="SIGN EIP-1271[?]"' 'cap="SIGN BLIND HASH[?]"' 'id=INTENT ' 'id=BATCH ' 'cap="SIGN [0-9] TXS[?]"' 'id=OFFSIGNR '; do \
+			if grep -Eq "^\[UI-PX\] .* $$want" $$log; then echo "  PASS  ui-px: structured route screen $$want"; \
+			else echo "  FAIL  ui-px: no $$want screen (port step 3)"; fail=1; fi; \
+		done; \
+		legacy=$$(grep -cE '^\[UI-PXR\] [0-9a-f]{4} p[0-9] 4c' $$log || true); \
+		if [ "$$legacy" -eq 0 ]; then echo "  PASS  ui-px: zero Legacy (page-wrapped) records on the pixel routes"; \
+		else echo "  FAIL  ui-px: $$legacy Legacy records on the pixel routes"; fail=1; fi; \
+		short=$$(grep -E '^\[UI-PXR\] ' $$log | awk '{ if (length($$4) != 512) n++ } END { print n+0 }'); \
+		if [ "$$short" -eq 0 ]; then echo "  PASS  ui-px: every [UI-PXR] record is 512 hex characters"; \
+		else echo "  FAIL  ui-px: $$short malformed [UI-PXR] records"; fail=1; fi; \
+		for want in 'id=SPLASH ' 'id=READY ' 'id=SIGNED ' 'id=NOTICE ' 'id=BUSY cap="GENERATING KEYS"'; do \
+			if grep -Eq "^\[UI-PXS\] .* $$want" $$log; then echo "  PASS  ui-px: status screen $$want (port step 4)"; \
+			else echo "  FAIL  ui-px: no $$want status screen (port step 4)"; fail=1; fi; \
+		done; \
+		pages=$$(grep -c -- '^    +----------------+' $$log || true); \
+		if [ "$$pages" -eq 0 ]; then echo "  PASS  ui-px: zero 16x4 text pages in the whole run (port step 4)"; \
+		else echo "  FAIL  ui-px: $$((pages / 2)) 16x4 text pages shown"; fail=1; fi; \
+		badpxs=$$(grep -E '^\[UI-PXSR\] ' $$log | awk '{ if (length($$2) != 512) n++ } END { print n+0 }'); \
+		if [ "$$badpxs" -eq 0 ]; then echo "  PASS  ui-px: every [UI-PXSR] record is 512 hex characters"; \
+		else echo "  FAIL  ui-px: $$badpxs malformed [UI-PXSR] records"; fail=1; fi; \
+		;; esac; \
+	[ -n "$(E2E_LOG_KEEP)" ] || rm -f $$log; \
 	if [ $$fail -eq 0 ]; then \
 		echo "==> e2e: ALL ASSERTIONS PASSED"; \
 		exit 0; \
@@ -481,7 +636,7 @@ e2e: ## Automated unified-sign E2E (QEMU)
 # accelerate signing ~10x vs software Keccak.  This target establishes
 # the baseline number.
 #
-# Requires: ST-LINK connected, STM32_Programmer_CLI on PATH.
+# Requires: ST-LINK connected, $(STM32_PROG) on PATH.
 # Pass: exits 0 with "[NS][bench] === PASS ===" on stdout.
 # Fail: exits 1 if any sign returns non-Ok or the PASS line is missing.
 test-key-speed: ## DWT-timed signing bench on HW
@@ -489,16 +644,16 @@ test-key-speed: ## DWT-timed signing bench on HW
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256
+			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features bench-key-speed,stm32u585
+			-p sphincs-tz-nonsecure --features bench-key-speed,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running key-speed bench on hardware (160 MHz)..."
@@ -507,7 +662,7 @@ test-key-speed: ## DWT-timed signing bench on HW
 	trap 'rm -f "$$log"' EXIT; \
 	rc_file=$$(mktemp -t test-key-speed-rc.XXXXXX); \
 	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
-	{ probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
+	{ probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
 	rc=$$(cat "$$rc_file"); \
 	echo "===================================="; \
 	if [ "$$rc" != "0" ] && [ "$$rc" != "130" ]; then \
@@ -549,7 +704,7 @@ test-key-speed: ## DWT-timed signing bench on HW
 # this happens on every hardware boot of this firmware, not just this
 # target, so there is nothing new here).
 #
-# Requires: ST-LINK connected, STM32_Programmer_CLI on PATH.
+# Requires: ST-LINK connected, $(STM32_PROG) on PATH.
 # Pass: exits 0 with "[NS][fwup-test] === PASS ===" on stdout.
 # Fail: exits 1 if any test case fails or the PASS marker is missing.
 test-update-hw: ## Firmware-update (CMD_FW_*) E2E on HW (non-destructive)
@@ -557,16 +712,16 @@ test-update-hw: ## Firmware-update (CMD_FW_*) E2E on HW (non-destructive)
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256
+			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features fwup-hw-test,stm32u585
+			-p sphincs-tz-nonsecure --features fwup-hw-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running firmware-update logic test (safe mode)..."
@@ -574,7 +729,7 @@ test-update-hw: ## Firmware-update (CMD_FW_*) E2E on HW (non-destructive)
 	@log=$$(mktemp -t test-update-hw.XXXXXX.log); \
 	rc_file=$$(mktemp -t test-update-hw-rc.XXXXXX); \
 	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
-	{ probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
+	{ probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
 	rc=$$(cat "$$rc_file"); \
 	echo "===================================="; \
 	if [ "$$rc" != "0" ] && [ "$$rc" != "130" ]; then \
@@ -590,7 +745,7 @@ test-update-hw: ## Firmware-update (CMD_FW_*) E2E on HW (non-destructive)
 	fi
 
 # Same e2e suite but on real STM32U585 hardware via probe-rs semihosting.
-# Requires: ST-LINK connected, STM32_Programmer_CLI on PATH.
+# Requires: ST-LINK connected, $(STM32_PROG) on PATH.
 # Phase 5 item 8 — ERC-7730 e2e on real STM32U585 hardware. Drives the
 # Scenario 5m + 5p clear-signing paths through probe-rs semihosting +
 # arrow-key forwarder. Requires the same hardware bench as `e2e-hw`
@@ -609,20 +764,20 @@ e2e-hw: ## Unified-sign E2E on real STM32U585 (probe-rs)
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585
+			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running e2e on hardware (Ctrl-C to abort)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Same e2e suite on real STM32U585, but with OLED display output.
 # The SSD1306 128x64 OLED is driven via I2C1 (PB8=SCL, PB9=SDA).
@@ -634,20 +789,20 @@ e2e-hw-display:
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-lcd,e2e-test,stm32u585
+			--features mock-se,debug-log,ui-lcd,e2e-test,stm32u585,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running e2e on hardware with OLED display (Ctrl-C to abort)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Full sign e2e on real STM32U585 with *both* real SEs (OPTIGA
 # Trust M + SE050, XOR-split entropy) driving the SSD1306 OLED.
@@ -661,7 +816,7 @@ e2e-hw-display:
 #   * otp-hardcoded-master-key — avoids burning real OTP each run
 #                                (same choice as dual-se-admin-wipe-e2e)
 #
-# Requires: ST-LINK, STM32_Programmer_CLI, OPTIGA Trust M + SE050 on
+# Requires: ST-LINK, $(STM32_PROG), OPTIGA Trust M + SE050 on
 # the I2C bus, SSD1306 OLED wired to PB8/PB9/3V3/GND.
 #
 # Watch semihosting for "[NS][e2e] === All scenarios passed! ===".
@@ -673,16 +828,16 @@ e2e-hw-dual-se:
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features dual-se,ui-lcd,debug-log,e2e-test,e2e-skip-admin-wipe,stm32u585,otp-hardcoded-master-key
+			--features dual-se,ui-lcd,debug-log,e2e-test,e2e-skip-admin-wipe,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running dual-SE e2e on hardware..."
@@ -691,7 +846,7 @@ e2e-hw-dual-se:
 	@log=$$(mktemp -t e2e-hw-dual-se.XXXXXX.log); \
 	rc_file=$$(mktemp -t e2e-hw-dual-se-rc.XXXXXX); \
 	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
-	{ timeout 300 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; \
+	{ timeout 300 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; \
 	  echo $$? >"$$rc_file"; } | tee "$$log"; \
 	rc=$$(cat "$$rc_file"); \
 	echo "===================================="; \
@@ -732,29 +887,89 @@ e2e-hw-dual-se:
 #
 # Requires: ST-LINK on B-U585I-IOT02A. Non-destructive (no SE writes,
 # no PIN attempts). Safe to re-run.
+# Non-destructive secure-element address probe.
+#
+# Answers exactly one question per chip: does it ACK its I2C address? Every
+# probe is a ZERO-DATA-BYTE transfer (NBYTES=0 + AUTOEND), so not one payload
+# byte reaches either part — no register pointer, no APDU, no T=1' frame, no
+# lifecycle transition. That is the whole point: on a production board the
+# OPTIGA is virgin and its pairing/lifecycle steps are irreversible, so this
+# is the one SE check that is safe to run on hardware you cannot replace.
+#
+# It runs BEFORE anything else addresses the buses, right after
+# `hw::se_power::init()` brings up the SE rail, so on pq1 it also proves the
+# LDO2_EN path. Reads back the GPIO AF nibbles too, which is what separates
+# "configured right, nobody answered" from "AF typo put the SE050 on the
+# OPTIGA bus".
+#
+# Reading a failure:
+#   both addresses NACK   -> VDD1_3V3 never rose; check LDO2_EN (PA8), meter it
+#   only 0x48 NACKs       -> SE1_EN (PB5), or probed before the SE050 booted
+#   only 0x30 NACKs       -> I2C1 pins/AF, or SE_RST
+#   ACK on a late attempt -> part is fine, settle time is short
+#
+#   make se-i2c-probe-hw BOARD=pq1
+se-i2c-probe-hw: ## Non-destructive SE I2C address probe: does each chip ACK? (HW)
+	@echo "==> Building SE I2C probe (dual-se + se-i2c-probe + $(BOARD_FEATURE))"
+	@echo "    NOTE: read-only. Zero data bytes reach either secure element."
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features dual-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,se-i2c-probe,$(BOARD_FEATURE)
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
+	@echo "==> Flashing..."
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Probing secure-element buses on hardware..."
+	@log=$$(mktemp -t se-i2c-probe.XXXXXX.log); \
+	rc_file=$$(mktemp -t se-i2c-probe-rc.XXXXXX); \
+	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
+	{ timeout 120 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; \
+	  echo $$? >"$$rc_file"; } | tee "$$log"; \
+	echo "===================================="; \
+	if grep -q "\[S\]\[se-probe\] === PASS ===" "$$log"; then \
+		echo "==> se-i2c-probe-hw: PASS — every expected SE address acknowledged"; \
+		exit 0; \
+	elif grep -q "\[S\]\[se-probe\] === FAIL ===" "$$log"; then \
+		echo "==> se-i2c-probe-hw: FAIL — see the per-address lines above."; \
+		echo "    both NACK => meter VDD1_3V3 (LDO2_EN/PA8 never enabled the rail)"; \
+		exit 1; \
+	else \
+		echo "==> se-i2c-probe-hw: INCONCLUSIVE — no probe verdict in the log."; \
+		echo "    The image may not have reached the probe; check for an earlier halt."; \
+		exit 1; \
+	fi
+
 gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
 	@echo "==> Building GTZC1 enforcement test (secure + stm32u585 + e2e-test + mock-se)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key
+			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@echo "==> Building GTZC1 enforcement test (NS + gtzc-test + stm32u585)"
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585
+			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585,,$(BOARD_FEATURE)$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running GTZC enforcement validation on hardware..."
 	@log=$$(mktemp -t gtzc-enforcement-hw.XXXXXX.log); \
 	rc_file=$$(mktemp -t gtzc-enforcement-hw-rc.XXXXXX); \
 	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
-	{ timeout 120 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; \
+	{ timeout 120 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; \
 	  echo $$? >"$$rc_file"; } | tee "$$log"; \
 	rc=$$(cat "$$rc_file"); \
 	echo "===================================="; \
@@ -801,23 +1016,23 @@ tzic-wipe-hw:
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,tzic-wipe
+			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,tzic-wipe,$(BOARD_FEATURE)
 	@echo "==> Building TZIC wipe demo (NS + tzic-wipe-test + stm32u585)"
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features tzic-wipe-test,stm32u585
+			-p sphincs-tz-nonsecure --features tzic-wipe-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running TZIC wipe demo on hardware (30 s probe-then-reset)..."
 	@log=$$(mktemp -t tzic-wipe-hw.XXXXXX.log); \
 	trap 'rm -f "$$log"' EXIT; \
-	timeout 30 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1 | tee "$$log" || true; \
+	timeout 30 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1 | tee "$$log" || true; \
 	probes=$$(grep -c '\[NS\]\[gtzc-wipe\] probing' "$$log" || true); \
 	survived=$$(grep -c '\[NS\]\[gtzc-wipe\] SURVIVED' "$$log" || true); \
 	reset_seen=$$(grep -c 'Exception\|Firmware exited' "$$log" || true); \
@@ -846,33 +1061,33 @@ build-hw-usb:
 build-hw-usb-test:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test
+		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> USB test build ready (auto-provisioned, no semihosting)."
 
 # Flash auto-provisioned USB build.
 flash-hw-usb-test: build-hw-usb-test
-	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	STM32_Programmer_CLI --connect port=SWD \
+	$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching (Ctrl-C to quit)..."
-	probe-rs reset --chip STM32U585AIIx
-	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs reset --chip $(CHIP)
+	probe-rs attach --chip $(CHIP) $(SECURE_ELF)
 
 # mock-se USB build WITH debug-log — boot-trace the USB path over probe-rs
 # semihosting (does boot reach USB init / does it fault?). Diagnostic only.
 build-hw-usb-test-debug:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test,debug-log
+		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> mock-se USB test (debug) build ready."
 
 # SE050 + USB build with auto-provisioning for testing.
@@ -881,43 +1096,43 @@ build-hw-usb-test-debug:
 build-hw-se050-usb-test:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test
+		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> SE050 + USB test build ready."
 
 flash-hw-se050-usb-test: build-hw-se050-usb-test
-	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	STM32_Programmer_CLI --connect port=SWD \
+	$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching (Ctrl-C to quit)..."
-	probe-rs reset --chip STM32U585AIIx
-	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs reset --chip $(CHIP)
+	probe-rs attach --chip $(CHIP) $(SECURE_ELF)
 
 # SE050 + USB test with semihosting debug output (requires probe-rs attach).
 build-hw-se050-usb-test-debug:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test,debug-log
+		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> SE050 + USB test (debug) build ready."
 
 flash-hw-se050-usb-test-debug: build-hw-se050-usb-test-debug
-	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	STM32_Programmer_CLI --connect port=SWD \
+	$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching with semihosting (Ctrl-C to quit)..."
-	probe-rs reset --chip STM32U585AIIx
-	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs reset --chip $(CHIP)
+	probe-rs attach --chip $(CHIP) $(SECURE_ELF)
 
 # Real SE050 + GPIO hardware buttons + semihosting display.
 # The SE050 runs over I2C1 (PB8/PB9 on the Arduino shield), buttons on
@@ -927,20 +1142,20 @@ flash-hw-se050-buttons:
 	@echo "==> Building SE050 + GPIO buttons + semihosting UI"
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,debug-log,ui-semihosting,stm32u585,usb
+		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,debug-log,ui-semihosting,stm32u585,usb,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running SE050 + buttons wallet (Ctrl-C to quit)..."
 	@echo "    LEFT=CN13 pin1 (D8), RIGHT=CN13 pin2 (D9), GND=CN13 pin7"
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # GPIO button test: scan Arduino header pins, then test debounced events.
 # Requires: jumper wires on CN14 (D8=LEFT, D9=RIGHT, pin7=GND).
@@ -950,9 +1165,9 @@ button-test:
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features button-test,debug-log,ui-semihosting
 	@echo "==> Flashing button test firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running button test (Ctrl-C to quit)..."
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # STSAFE-A110 I2C2 bus probe: detect on-board secure element.
 # Scans I2C2 (PH4/PH5) for the STSAFE-A110 at 0x20 and any other devices.
@@ -962,9 +1177,9 @@ stsafe-probe:
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features stsafe-probe,debug-log,ui-semihosting
 	@echo "==> Flashing probe firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running I2C2 bus scan (Ctrl-C to quit)..."
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # SE050 factory reset: wipe all objects, then halt.
 # Run this once to clear stale SE050 state, then flash normal firmware.
@@ -995,13 +1210,13 @@ se050-reset:
 	$(RUSTFLAGS_VAR)="$(subst $(VENEERS),$(CURDIR)/target/veneers-se050-reset.o,$(RUSTFLAGS_SECURE_HW))" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features se050-factory-reset,dev-testkey,ui-lcd,stm32u585,usb,debug-log
+		--features se050-factory-reset,dev-testkey,ui-lcd,stm32u585,usb,debug-log,$(BOARD_FEATURE)
 	@echo "==> Flashing reset firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running factory reset (150s timeout; watch LCD + semihosting for clean/wrong-PIN/blocked)..."
 	@echo "    (heavily-reused bench chips hold many objects; the authenticated"
 	@echo "     pass + UserID self-delete can take a while across all UserID/PIN combos)"
-	-@timeout 150 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) || true
+	-@timeout 150 probe-rs run --chip $(CHIP) $(SECURE_ELF) || true
 	@echo "==> Reset run finished. Re-flash normal firmware, e.g.:"
 	@echo "      make flash-hw-dual-se-lcd-standalone-debug"
 
@@ -1015,7 +1230,7 @@ se050-reset:
 #     Reuses the se050-factory-reset firmware (assumes dev PIN in
 #     {00000000, 12345678, 11111111}; a wrong guess consumes one of the
 #     SE050's 10 PIN attempts).
-#   * All STM32 secure flash — mass-erased via STM32_Programmer_CLI,
+#   * All STM32 secure flash — mass-erased via $(STM32_PROG),
 #     which clears:
 #       - page 124 — MCU PIN-attempt counter (one programmed QW per
 #                    attempt; capacity 32, lockout at 10)
@@ -1035,7 +1250,7 @@ se050-reset:
 #     erase and the normal flash-hw-* targets re-assert them anyway.
 #
 # Prompts for confirmation. Requires ST-LINK connected and
-# STM32_Programmer_CLI on PATH.
+# $(STM32_PROG) on PATH.
 factory-reset: ## Full device factory reset — wipe all persistent state (HW)
 	@echo "==> FACTORY RESET"
 	@echo "    Wipes: SE050 data objects + all STM32 flash (pages 123-127 + firmware)"
@@ -1049,12 +1264,12 @@ factory-reset: ## Full device factory reset — wipe all persistent state (HW)
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features se050-factory-reset,ui-noop,stm32u585,debug-log
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
-	-@timeout 20 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) || true
+			--features se050-factory-reset,ui-noop,stm32u585,debug-log,$(BOARD_FEATURE)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	-@timeout 20 probe-rs run --chip $(CHIP) $(SECURE_ELF) || true
 	@echo ""
 	@echo "==> Step 2/2: STM32 mass-erase (wipes all flash pages + firmware)"
-	@STM32_Programmer_CLI --connect port=SWD mode=UR -e all
+	@$(STM32_PROG) --connect port=SWD mode=UR -e all
 	@echo ""
 	@echo "==> Factory reset complete. Chip is blank."
 	@echo "    Re-flash firmware to use the device again, e.g.:"
@@ -1074,11 +1289,11 @@ se050-reset-e2e: ## SE050 factory-reset roundtrip (HW)
 	@echo "==> Building SE050 reset-roundtrip e2e firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050-reset-e2e,ui-noop,stm32u585,debug-log
+		-p sphincs-tz-secure --no-default-features --features se050-reset-e2e,ui-noop,stm32u585,debug-log,$(BOARD_FEATURE)
 	@echo "==> Flashing e2e firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running e2e (watch semihosting output)..."
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # SE050 crash-safety (power-loss mid-wipe) e2e test.
 # Two-phase: phase 1 provisions test objects at 0x7B0A_xxxx, writes a
@@ -1093,20 +1308,20 @@ se050-crash-safety-e2e:
 	@echo "==> Building SE050 crash-safety e2e firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050-crash-safety-e2e,ui-noop,stm32u585,debug-log
+		-p sphincs-tz-secure --no-default-features --features se050-crash-safety-e2e,ui-noop,stm32u585,debug-log,$(BOARD_FEATURE)
 	@echo "==> Flashing crash-safety firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo ""
 	@echo "==> PHASE 1: provision + partial wipe + halt"
 	@echo "    (Watching for 'PHASE 1 COMPLETE' — 30s timeout)..."
-	-timeout 30 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) || true
+	-timeout 30 probe-rs run --chip $(CHIP) $(SECURE_ELF) || true
 	@echo ""
 	@echo "==> Resetting board (simulated power cycle)..."
-	probe-rs reset --chip STM32U585AIIx
+	probe-rs reset --chip $(CHIP)
 	@echo ""
 	@echo "==> PHASE 2: boot-time resume"
 	@echo "    (Watching for 'CRASH-SAFETY RESUME: PASS' — 30s timeout)..."
-	-timeout 30 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) || true
+	-timeout 30 probe-rs run --chip $(CHIP) $(SECURE_ELF) || true
 
 # SE050 admin-auth wipe e2e test.
 # Exercises the exact path PIN-lockout factory reset uses: admin UserID
@@ -1118,11 +1333,11 @@ se050-admin-wipe-e2e:
 	@echo "==> Building SE050 admin-wipe e2e firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050-admin-wipe-e2e,ui-noop,stm32u585,debug-log,e2e-test
+		-p sphincs-tz-secure --no-default-features --features se050-admin-wipe-e2e,ui-noop,stm32u585,debug-log,e2e-test,$(BOARD_FEATURE)
 	@echo "==> Flashing admin-wipe e2e firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running admin-wipe e2e (watch semihosting output)..."
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # ---------------------------------------------------------------------------
 # SE050 on-silicon stress-test harness — `make se050-stress*`
@@ -1149,7 +1364,7 @@ se050-admin-wipe-e2e:
 #                                    SE050_STRESS_ONLY filter)
 # `make se050-stress-list`         — host-side catalog dump (no flash)
 
-SE050_STRESS_FEATURES = se050-stress,ui-lcd,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key,usb
+SE050_STRESS_FEATURES = se050-stress,ui-lcd,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key,usb,$(BOARD_FEATURE)
 
 # Cache-bust the secure-crate build whenever the SE050_STRESS_* env vars
 # change. cargo doesn't include env vars in its fingerprint, so without
@@ -1173,7 +1388,7 @@ SE050_STRESS_RUSTFLAGS = $(RUSTFLAGS_SECURE_HW) --cfg=stress_build_$(shell date 
 #  $(1) = display label
 define SE050_STRESS_RUN
 	@log=$$(mktemp); rc_file=$$(mktemp); \
-	{ timeout 1200 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
+	{ timeout 1200 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
 	rc=$$(cat "$$rc_file"); \
 	if ! grep -q "=== SUMMARY:" "$$log"; then \
 		echo "==> $(1): FAIL (no SUMMARY line, probe-rs rc=$$rc, log=$$log)"; exit 1; \
@@ -1192,7 +1407,7 @@ se050-stress: ## SE050 on-silicon stress catalog (HW)
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features $(SE050_STRESS_FEATURES)
 	@echo "==> Flashing stress firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running stress catalog (watch semihosting output)..."
 	$(call SE050_STRESS_RUN,se050-stress)
 
@@ -1204,7 +1419,7 @@ se050-stress-destructive:
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features $(SE050_STRESS_FEATURES)
 	@echo "==> Flashing stress firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running stress catalog (Safe + Destructive)..."
 	$(call SE050_STRESS_RUN,se050-stress-destructive)
 
@@ -1221,7 +1436,7 @@ se050-stress-only-%:
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features $(SE050_STRESS_FEATURES)
 	@echo "==> Flashing stress firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running stress test '$*' (watch semihosting output)..."
 	$(call SE050_STRESS_RUN,se050-stress-only-$*)
 
@@ -1259,7 +1474,7 @@ se050-stress-list:
 # by the flash target below AND the `se050-scp03-axis-parity` gate, finding F7,
 # so the two can never drift). `bhk` keeps the Tier-2 split (owner decision
 # 2026-07-14: SE050 on BHK, OPTIGA PBS on DHUK).
-SE050_ROTATE_FEATURES := se050-rotate-scp03,bhk,stm32u585,ui-lcd,debug-log,e2e-test
+SE050_ROTATE_FEATURES := se050-rotate-scp03,bhk,stm32u585,ui-lcd,debug-log,e2e-test,$(BOARD_FEATURE)
 
 .PHONY: se050-scp03-axis-parity
 se050-scp03-axis-parity: ## F7: SE050 SCP03 ceremony-vs-ship key-derivation axis parity gate
@@ -1276,16 +1491,16 @@ flash-hw-se050-rotate-scp03:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running SCP03 rotation ceremony (watch for [SCP03-ROTATE] PUT KEY OK)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # SE050 admin-extract-attempt e2e — NEGATIVE security test.
 # Falsifies the load-bearing claim that the two-entry TAG_POLICY (user →
@@ -1306,11 +1521,11 @@ se050-admin-extract-attempt-e2e:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features se050-admin-extract-attempt-e2e,ui-noop,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key
+		--features se050-admin-extract-attempt-e2e,ui-noop,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@echo "==> Flashing admin-extract-attempt e2e firmware..."
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running admin-extract-attempt e2e (watch semihosting output)..."
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # SE050 + OLED interactive build (real SE050, real OLED display, real buttons).
 # Full first-boot wizard: user enters PIN and creates/restores mnemonic.
@@ -1318,11 +1533,11 @@ se050-admin-extract-attempt-e2e:
 build-hw-se050-oled:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-lcd,stm32u585,usb,debug-log
+		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-lcd,stm32u585,usb,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> SE050 + OLED interactive build ready."
 
 # Standalone build: no debug-log, no semihosting. Safe to run with only
@@ -1330,22 +1545,22 @@ build-hw-se050-oled:
 build-hw-se050-oled-standalone:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested
+		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Standalone build ready (no semihosting, USB-C only)."
 
 flash-hw-se050-oled-standalone: build-hw-se050-oled-standalone
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting target..."
-	@probe-rs reset --chip STM32U585AIIx
+	@probe-rs reset --chip $(CHIP)
 	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
 	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
 
@@ -1392,22 +1607,22 @@ build-hw-dual-se-oled-standalone:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se,optiga-hw-counter,dev-testkey,gpio-buttons,ui-lcd,stm32u585,usb
+		--features dual-se,optiga-hw-counter,dev-testkey,gpio-buttons,ui-lcd,stm32u585,usb,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Dual-SE standalone build ready (no semihosting, USB-C only, LcsO=Creation)."
 
 flash-hw-dual-se-oled-standalone: build-hw-dual-se-oled-standalone
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting target..."
-	@probe-rs reset --chip STM32U585AIIx
+	@probe-rs reset --chip $(CHIP)
 	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
 	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
 
@@ -1421,22 +1636,22 @@ build-hw-dual-se-lcd-standalone:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se,optiga-hw-counter,dev-testkey,ui-lcd,stm32u585,usb
+		--features dual-se,optiga-hw-counter,dev-testkey,ui-lcd,stm32u585,usb,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Dual-SE LCD standalone build ready (no semihosting, USB-C only, LcsO=Creation)."
 
 flash-hw-dual-se-lcd-standalone: build-hw-dual-se-lcd-standalone
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting target..."
-	@probe-rs reset --chip STM32U585AIIx
+	@probe-rs reset --chip $(CHIP)
 	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
 	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
 
@@ -1450,24 +1665,24 @@ build-hw-dual-se-lcd-standalone-debug:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se,optiga-hw-counter,dev-testkey,ui-lcd,stm32u585,usb,debug-log
+		--features dual-se,optiga-hw-counter,dev-testkey,ui-lcd,stm32u585,usb,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Dual-SE LCD standalone DEBUG build ready (debug-log ON, ST-LINK powered)."
 
 flash-hw-dual-se-lcd-standalone-debug: build-hw-dual-se-lcd-standalone-debug
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Attaching probe-rs run — semihosting stream follows. Ctrl-C to detach."
 	@echo "    Wizard + PIN entry are driven by the physical buttons as usual;"
 	@echo "    probe-rs only captures stdout."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Same build as `flash-hw-dual-se-oled-standalone` PLUS `debug-log`, so
 # `secure_log!` / `hprintln!` output streams over the ST-LINK SWO/SWD
@@ -1498,25 +1713,25 @@ build-hw-dual-se-oled-standalone-debug:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se,optiga-hw-counter,dev-testkey,gpio-buttons,ui-lcd,stm32u585,usb,debug-log
+		--features dual-se,optiga-hw-counter,dev-testkey,gpio-buttons,ui-lcd,stm32u585,usb,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Dual-SE standalone DEBUG build ready (debug-log ON, USB-C + ST-LINK)."
 
 flash-hw-dual-se-oled-standalone-debug: build-hw-dual-se-oled-standalone-debug
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Attaching probe-rs run — semihosting stream follows. Ctrl-C to detach."
 	@echo "    Power-cycle the board (pull+replug USB-C, or press the B2 RESET button)"
 	@echo "    to see the full boot sequence. Wizard + PIN entry are driven by the"
 	@echo "    physical buttons as usual; probe-rs only captures stdout."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # OPTIGA Trust M + OLED standalone — single-SE variant of the SE050
 # standalone target above. Uses Infineon OPTIGA Trust M V3 on I2C1
@@ -1538,22 +1753,22 @@ flash-hw-dual-se-oled-standalone-debug: build-hw-dual-se-oled-standalone-debug
 build-hw-optiga-oled-standalone:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features optiga-trust-m,gpio-buttons,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested
+		-p sphincs-tz-secure --no-default-features --features optiga-trust-m,gpio-buttons,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Standalone OPTIGA build ready (no semihosting, USB-C only, LcsO=Creation)."
 
 flash-hw-optiga-oled-standalone: build-hw-optiga-oled-standalone
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting target..."
-	@probe-rs reset --chip STM32U585AIIx
+	@probe-rs reset --chip $(CHIP)
 	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
 	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
 
@@ -1585,7 +1800,7 @@ flash-hw-optiga-oled-standalone: build-hw-optiga-oled-standalone
 #
 # Runs non-interactively: `probe-rs reset` starts the firmware, OLED
 # shows "OPTIGA wipe: running..." → "OPTIGA wipe: PASS" (or FAIL), then
-# the device halts in `wfi`. The STM32_Programmer_CLI call re-asserts the
+# the device halts in `wfi`. The $(STM32_PROG) call re-asserts the
 # TZ option bytes (safe to repeat; ST-LINK may reset them between runs).
 optiga-factory-reset-hw:
 	@echo "==> Building OPTIGA factory-reset firmware (nuclear path)..."
@@ -1596,16 +1811,16 @@ optiga-factory-reset-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-nuclear-reset,stm32u585,ui-lcd,gpio-buttons,debug-log
+		--features optiga-nuclear-reset,stm32u585,ui-lcd,gpio-buttons,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo ""
@@ -1614,7 +1829,7 @@ optiga-factory-reset-hw:
 	@echo "      [OPTIGA-E2E-ADMIN] ADMIN-WIPE ROUNDTRIP: PASS/FAIL"
 	@echo "    Ctrl+C to detach once PASS/FAIL lines appear."
 	@echo ""
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Pre-provision the connected board's OPTIGA chip with a known mnemonic
 # + PIN, skipping the interactive wizard. Uses the `e2e-test` fast-path
@@ -1648,23 +1863,23 @@ optiga-preprovision-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-trust-m,stm32u585,ui-lcd,gpio-buttons,e2e-test,e2e-skip-unlock,otp-hardcoded-master-key,debug-log
+		--features optiga-trust-m,stm32u585,ui-lcd,gpio-buttons,e2e-test,e2e-skip-unlock,otp-hardcoded-master-key,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,e2e-test
+		-p sphincs-tz-nonsecure --features stm32u585,e2e-test,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo ""
 	@echo "==> Running with semihosting — watch for PBS fingerprint + provision OK."
 	@echo "    Ctrl+C once you see '[OPTIGA] Provisioning complete' + halt."
 	@echo ""
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Testkey standalone build — byte-for-byte the interactive
 # `flash-hw-optiga-oled-standalone` flow, with the single difference
@@ -1687,23 +1902,23 @@ flash-hw-optiga-oled-standalone-testkey:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-trust-m,gpio-buttons,ui-lcd,stm32u585,usb,dev-testkey,debug-log
+		--features optiga-trust-m,gpio-buttons,ui-lcd,stm32u585,usb,dev-testkey,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting target..."
-	@probe-rs reset --chip STM32U585AIIx
+	@probe-rs reset --chip $(CHIP)
 	@echo "==> Flashed. Interactive first-boot wizard runs on a blank chip."
 	@echo "    PBS is the shared dev-testkey constant (NOT device-unique)."
 	@echo "    To wipe wallet state:           make optiga-factory-reset-hw"
-	@echo "    To see semihosting output:      probe-rs run --chip STM32U585AIIx $(SECURE_ELF)"
+	@echo "    To see semihosting output:      probe-rs run --chip $(CHIP) $(SECURE_ELF)"
 
 # Same interactive dev-testkey build as above, but flashes and then
 # stays attached via `probe-rs run` so semihosting (`secure_log!`,
@@ -1718,28 +1933,28 @@ flash-hw-optiga-oled-testkey:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-trust-m,gpio-buttons,ui-lcd,stm32u585,usb,dev-testkey,debug-log
+		--features optiga-trust-m,gpio-buttons,ui-lcd,stm32u585,usb,dev-testkey,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo ""
 	@echo "==> Running with semihosting attached. Ctrl+C to detach."
 	@echo "    Hardware buttons (PC1 LEFT / PA8 RIGHT) drive the UI."
 	@echo ""
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 flash-hw-se050-oled: build-hw-se050-oled
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Starting interactive SE050 wallet (Ctrl-C to quit)..."
@@ -1748,15 +1963,15 @@ flash-hw-se050-oled: build-hw-se050-oled
 
 # Flash USB-enabled build to real STM32U585.
 flash-hw-usb: build-hw-usb ## Flash the USB-HID build to STM32U585
-	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	STM32_Programmer_CLI --connect port=SWD \
+	$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching (Ctrl-C to quit)..."
-	probe-rs reset --chip STM32U585AIIx
-	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+	probe-rs reset --chip $(CHIP)
+	probe-rs attach --chip $(CHIP) $(SECURE_ELF)
 
 # Run all three test layers: Rust unit tests, Foundry Solidity tests, and
 # the full e2e suite under QEMU.
@@ -2010,6 +2225,7 @@ test-all: ## Everything host-runnable
 	run "sphincs-tz-secure --features mock-se" cargo test -p sphincs-tz-secure --tests \
 	    --features mock-se --no-fail-fast --quiet; \
 	run "fuzz workspace" bash -c "cd fuzz && cargo test --tests --no-fail-fast --quiet"; \
+	run "secure-miri-tests (rng_strong + ui_lcd mounts)" bash -c "cd secure-miri-tests && cargo test --tests --no-fail-fast --quiet"; \
 	if command -v forge >/dev/null 2>&1; then \
 	  run "contracts/smart-wallet forge" bash -c "cd contracts/smart-wallet && forge test"; \
 	else \
@@ -2050,6 +2266,191 @@ measure: build-hw-dual-se-oled-standalone ## Build + print the 8 BIP-39 measurem
 # is not the Draft-1.1 candidate resource gate: that candidate proposes a
 # 40,960-byte hard ceiling plus separate physical LOAD-span and RAM/stack gates.
 .PHONY: fsbl
+# ---------------------------------------------------------------------------
+# NON-MONOLITHIC BOOT PROOF — FSBL verifies a manifest and branches into slot A
+# ---------------------------------------------------------------------------
+#
+# Every bench flow to date has been MONOLITHIC: SECBOOTADD0 points at
+# 0x0C000000 and the secure world IS the boot image, linked there. The FSBL's
+# slot-selection, manifest-verify and branch code has therefore never executed
+# on silicon — no other target even flashes the FSBL to a board.
+#
+# This target builds and flashes the four pieces at their real addresses:
+#
+#   0x0C000000  FSBL                (pages 0-3)
+#   0x0C008000  Manifest A          (page 4)
+#   0x0C00A000  Manifest B          (page 5)   left ERASED — one candidate only
+#   0x0C00C000  Boot state          (page 6)   left ERASED
+#   0x0C00E000  Secure slot A       (pages 7-64)
+#   0x08100000  NS slot A           (bank 2)
+#
+# LEGACY layout, deliberately. `pqsigner-geometry` freezes a different map and
+# the cutover is issue #540 (FA-1.1 consumer rewiring). This proof exercises the
+# FSBL that EXISTS rather than pre-empting that decision — see
+# secure/memory-stm32u585-slot-a.x. Two things make that the right order: the
+# FSBL page count cannot be finalised until the rollback backend fixes the final
+# FSBL size, and the handoff machinery proved here is needed by BOTH layouts.
+#
+# NOTHING IRREVERSIBLE. No WRP, no RDP-2, no option-byte change beyond the
+# TZEN/SECWM/SECBOOTADD0 set every bench target already uses. The board stays
+# reflashable.
+#
+# Requires a signed bundle. Generate one once with a throwaway key:
+#   cargo run --release -p fwsign -- keygen --out <key>
+#   cargo run --release -p fwsign -- pubkey --key <key> --out <pubkey.bin>
+#   printf '<fingerprint>' > <policy.sha256>
+#   ... then BOOTPROOF_KEY=<key> BOOTPROOF_PUBKEY=<pubkey.bin> \
+#       BOOTPROOF_POLICY=<policy.sha256> make bootproof-hw
+# `fwsign` prompts for the passphrase on a TTY.
+# Manifest version to sign. It must exceed the board's legacy OTP rollback
+# floor: `fsbl/src/otp.rs::rollback_floor` counts ZERO BITS across the 32 words
+# at 0x0BFA_0000, and `verify_rollback` is strict (`fw_version > floor`). On a
+# pristine die that region is all-0xFF => floor 0, so version 1 is admissible.
+# Check before blaming the floor, and VALIDATE THE READ with a known-good
+# control in the same session — a wedged ST-LINK returns all-zeros, which reads
+# as "floor 1024" and sent one bring-up session chasing a phantom:
+#   STM32_Programmer_CLI --connect port=SWD mode=UR --read 0x0BFA0000 0x80 otp.bin
+# (probe-rs with a reset-on-attach mode is NOT a reliable reader here.)
+BOOTPROOF_VERSION ?= 1
+BOOTPROOF_DIR ?= target/bootproof
+
+# Extra FSBL features for a boot-proof run. Empty by default so the ordinary
+# proof builds the FSBL a shipping image would carry.
+#
+#   BOOTPROOF_FSBL_EXTRA=stage-marker make bootproof-hw
+#
+# `stage-marker` is the one that matters: it gives the FSBL a flash-write path
+# recording one quad-word per boot stage at 0x0C00_A000, which is how a run is
+# read back at all. It is NOT default because that write path is exactly what
+# invariant #10 forbids in a shipping image — the September proof carried it and
+# `evt-silicon-validation.md` scopes the result accordingly.
+#
+# The marker page is manifest B's page (sector 5), reused deliberately because
+# this layout leaves manifest B erased. Erase it between runs (`-e 5`) or the
+# second run silently records nothing and you re-read the first run's stages.
+BOOTPROOF_FSBL_EXTRA ?=
+
+.PHONY: bootproof-build
+bootproof-build: ## Build FSBL + slot-A secure + NS for the non-monolithic boot proof
+	@test -n "$(BOOTPROOF_PUBKEY)" || { echo "set BOOTPROOF_PUBKEY=<vendor-pubkey.bin>"; exit 1; }
+	@mkdir -p $(BOOTPROOF_DIR)
+	@echo "==> FSBL (vendor key $(BOOTPROOF_PUBKEY))"
+	@FSBL_VENDOR_PUBKEY=$(BOOTPROOF_PUBKEY) $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
+		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/fsbl \
+			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe,$(BOARD_FEATURE)$(if $(BOOTPROOF_FSBL_EXTRA),$(comma)$(BOOTPROOF_FSBL_EXTRA))
+	@echo "==> secure world LINKED AT SLOT A (0x0C00E000)"
+	@FSBL_VENDOR_PUBKEY=$(BOOTPROOF_PUBKEY) PQSIGNER_SECURE_SLOT=a $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,ui-noop,stm32u585,e2e-test,debug-log,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)
+	@echo "==> non-secure world"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/ns \
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
+	@echo "==> measurements (the bytes the manifest will bind):"
+	@cargo run --release -p fwmeasure --quiet -- $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl | head -3 | sed 's/^/    fsbl   /'
+	@cargo run --release -p fwmeasure --quiet -- $(BOOTPROOF_DIR)/secure/$(TARGET)/release/sphincs-tz-secure | head -3 | sed 's/^/    secure /'
+	@cargo run --release -p fwmeasure --quiet -- $(BOOTPROOF_DIR)/ns/$(TARGET)/release/sphincs-tz-nonsecure | head -3 | sed 's/^/    ns     /'
+
+.PHONY: bootproof-sign
+bootproof-sign: bootproof-build ## Sign the slot-A manifest (prompts for the key passphrase)
+	@test -n "$(BOOTPROOF_KEY)" -a -n "$(BOOTPROOF_POLICY)" || { echo "set BOOTPROOF_KEY and BOOTPROOF_POLICY"; exit 1; }
+	@rm -f $(BOOTPROOF_DIR)/bundle
+	cargo run --release -p fwsign -- sign --legacy-bench-unsafe \
+		--key $(BOOTPROOF_KEY) \
+		--fsbl $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl \
+		--secure $(BOOTPROOF_DIR)/secure/$(TARGET)/release/sphincs-tz-secure \
+		--nonsecure $(BOOTPROOF_DIR)/ns/$(TARGET)/release/sphincs-tz-nonsecure \
+		--trusted-fingerprint $(BOOTPROOF_POLICY) \
+		--version $(BOOTPROOF_VERSION) --slot 0 \
+		--build-id $$(printf 'pq1-nonmonolithic-bootproof' | sha256sum | cut -d' ' -f1) \
+		--out $(BOOTPROOF_DIR)/bundle
+	@rm -rf $(BOOTPROOF_DIR)/unpacked && mkdir -p $(BOOTPROOF_DIR)/unpacked
+	@tar -xf $(BOOTPROOF_DIR)/bundle -C $(BOOTPROOF_DIR)/unpacked
+	@cargo run --release -p fwsign --quiet -- inspect --bundle $(BOOTPROOF_DIR)/bundle | head -10
+
+.PHONY: bootproof-hw
+bootproof-hw: ## Flash the non-monolithic image and watch the FSBL verify + branch
+	@test -f $(BOOTPROOF_DIR)/unpacked/manifest.bin || { echo "run `make bootproof-sign` first"; exit 1; }
+	@echo "==> Erasing manifest B (bank-1 page 5) + boot state (page 6) so ONE candidate validates"
+	@# NOT `probe-rs erase --chip`. On this part probe-rs's flash map includes
+	@# 0x0BFA_0000..0x0BFA_0200 — the 512-byte OTP area (RM0456 Rev 7, flash
+	@# memory map). OTP is one-way, and the RM notes it is not erased even by an
+	@# RDP regression to level 0. So the old line asked the probe to erase
+	@# one-way memory holding the factory sentinel (0x0BFA_00A0) and the
+	@# per-device OTP master.
+	@#
+	@# It was `probe-rs erase --chip $(CHIP) 2>/dev/null || true`, which threw
+	@# away BOTH the message and the exit status. The attempt was invisible and
+	@# the erase silently never happened — that is the stale marker page in
+	@# #739. It only ever aborted harmlessly because probe-rs has no flash
+	@# algorithm for that region on STM32U585CIUx, which is luck, not a property
+	@# we chose.
+	@#
+	@# This recipe wants exactly what its own message says: two bank-1 pages.
+	@# CubeProgrammer erases named sectors and is already the tool used below
+	@# for option bytes. NO output suppression: if the erase fails the run must
+	@# stop, because everything after it would be measuring stale flash.
+	@$(STM32_PROG) --connect port=SWD -e 5 6
+	@echo "==> Verifying both pages read back BLANK"
+	@# The sector NUMBERING is not asserted, the OUTCOME is. If bank-1 page N is
+	@# not CubeProgrammer sector N on some future part, this fails loudly here
+	@# instead of handing the FSBL a stale manifest candidate.
+	@for a in 0x0C00A000 0x0C00C000; do \
+		v=$$(probe-rs read --chip $(CHIP) b32 $$a 4 2>/dev/null | tail -1); \
+		case "$$v" in \
+			*"ffffffff ffffffff ffffffff ffffffff"*) echo "    $$a blank" ;; \
+			*) echo "FAIL: $$a did not erase — read: $$v"; exit 1 ;; \
+		esac; \
+	done
+	@echo "==> FSBL -> 0x0C000000"
+	@probe-rs download --chip $(CHIP) $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl
+	@echo "==> Manifest A -> 0x0C008000"
+	@probe-rs download --chip $(CHIP) --binary-format bin --base-address 0x0C008000 $(BOOTPROOF_DIR)/unpacked/manifest.bin
+	@echo "==> Secure slot A -> 0x0C00E000"
+	@probe-rs download --chip $(CHIP) --binary-format bin --base-address 0x0C00E000 $(BOOTPROOF_DIR)/unpacked/secure.bin
+	@echo "==> NS slot A -> 0x08100000"
+	@probe-rs download --chip $(CHIP) --binary-format bin --base-address 0x08100000 $(BOOTPROOF_DIR)/unpacked/nonsecure.bin
+	@echo "==> Option bytes: TZEN + SECWM + SECBOOTADD0 (NO WRP, NO RDP-2)"
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running. Expect the FSBL to verify manifest A and branch into slot A."
+	@probe-rs run --chip $(CHIP) $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl
+
+.PHONY: verify-fsbl-identity
+verify-fsbl-identity: ## Read-only: check an FSBL ELF against a bundle's vendor fingerprint (#742)
+	@# The signed bundle does NOT contain or bind the FSBL — `signed_preimage`
+	@# has no FSBL field and `fwsign sign --fsbl` discards the ELF after a
+	@# vendor-key section check. So "we flashed the signed bundle, therefore
+	@# the FSBL is X" is unfounded; demonstrated 2026-09-28 by booting a fresh
+	@# FSBL against an unchanged three-day-old bundle (19/19 markers).
+	@#
+	@# This makes the vendor-key half of the manual chain a command. It proves
+	@# shared vendor provenance ONLY, never which FSBL is installed — see
+	@# docs/security/measured-boot.md and the script header.
+	@test -n "$(FSBL_ELF_IN)" -a -n "$(BUNDLE_DIR)" || { \
+		echo "usage: make verify-fsbl-identity FSBL_ELF_IN=<fsbl.elf> BUNDLE_DIR=<dir-with-measurement.txt>"; \
+		exit 2; }
+	@tools/verify-fsbl-identity.sh "$(FSBL_ELF_IN)" "$(BUNDLE_DIR)"
+
+.PHONY: verify-ship-state
+verify-ship-state: ## Read-only: check a board's option bytes + flash against a declared profile
+	@# The EXTERNAL half of invariant #10(a) — "ship at RDP-0 so anyone can verify
+	@# flash + option bytes over SWD, connect-under-reset, before first power".
+	@# Read-only by construction: every programmer invocation is checked against an
+	@# allow-list before it runs, and a write verb aborts rather than being filtered.
+	@#
+	@# Option B (owner decision 2026-07-21) is what makes this the load-bearing
+	@# check: the device ships at RDP-0 precisely so this can be run, and only
+	@# self-locks to RDP-2 on first field boot. On-device self-verification at
+	@# RDP-0 is worth zero against interdiction (Draft 1.2 §2.2) — the code doing
+	@# the checking is the flash an attacker can rewrite. This tool is off-device.
+	@#
+	@#   make verify-ship-state                       # current bench profile
+	@#   make verify-ship-state PROFILE=<path>.json
+	python3 tools/verify_ship_state.py $(if $(PROFILE),$(PROFILE),tools/ship-profiles/bench-rdp0-tzen.json)
+
 fsbl: ## Build legacy bench FSBL (32 KB regression gate; not candidate approval)
 	@echo "==> Building FSBL (FSBL_VENDOR_PUBKEY=$${FSBL_VENDOR_PUBKEY:-<dev fixture>})"
 	@# FSBL_ALLOW_DEV_KEY opts this dev target into fsbl/build.rs's committed
@@ -2057,17 +2458,25 @@ fsbl: ## Build legacy bench FSBL (32 KB regression gate; not candidate approval)
 	@# `cargo build -p pqsigner-fsbl` without either env var now fails the
 	@# build instead of silently embedding the public dev key; `fsbl-release`
 	@# sets neither and supplies a real pubkey via FSBL_VENDOR_PUBKEY.
-	@FSBL_ALLOW_DEV_KEY=1 $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
+	@# `-Z emit-stack-sizes` adds a NON-ALLOC `.stack_sizes` section carrying one
+	@# frame size per function, which the geometry gate below turns into an upper
+	@# bound on stack depth. Verified non-perturbing: the LOAD span is byte-identical
+	@# with and without it (0x06EC0 both ways), so the flag cannot change the thing
+	@# it is there to measure.
+	@FSBL_ALLOW_DEV_KEY=1 $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS) -Z emit-stack-sizes" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/fsbl \
-			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe
+			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe,$(BOARD_FEATURE)
 	@echo "==> FSBL built: $(FSBL_ELF)"
-	@# Legacy-linker regression gate only. It protects the current 32 KB bench
-	@# image from overflow; it does not close Draft 1.1's physical LOAD-span or
-	@# independent RAM/worst-case-stack gates.
+	@# Geometry gate. Measures the PHYSICAL LOAD span (not `size -B` text+data,
+	@# which undercounts by any inter-segment alignment gap) and derives the
+	@# flash PAGE RANGE that WRP would have to cover — the quantity invariant #10
+	@# actually depends on, since WRP protects pages and RDP-2 freezes the option
+	@# bytes forever. Neither selects nor approves a geometry: Draft 1.1's 40 KiB
+	@# envelope is not adopted, and the WRP/option-byte ceremony stays open.
+	@python3 scripts/check_fsbl_geometry.py $(FSBL_ELF) --linker fsbl/memory-stm32u585.x
+	@# Budget warning against the declared region, kept from the previous gate.
 	@arm-none-eabi-size -B $(FSBL_ELF) | awk -v cap=32768 -v warn=95 'NR==2 { \
 	  used=$$1+$$2; pct=used*100.0/cap; \
-	  printf "==> FSBL: %d B of %d B (%.1f%% of 32 KB), %d B free\n", used, cap, pct, cap-used; \
-	  if (used>cap) { print "==> FSBL: FAIL — exceeds the legacy 32 KB linker region"; exit 1 } \
 	  if (pct>=warn) { printf "==> FSBL: WARN — over %d%% of the legacy bench budget (only %d B headroom)\n", warn, cap-used } \
 	}'
 
@@ -2087,11 +2496,11 @@ fsbl-lcd-test-hw:
 	@echo "==> Building FSBL NV3007 LCD bring-up test (lcd-test short-circuit)..."
 	@FSBL_ALLOW_DEV_KEY=1 $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/fsbl \
-			-p pqsigner-fsbl --features lcd-test,legacy-fw-rollback-unsafe
+			-p pqsigner-fsbl --features lcd-test,legacy-fw-rollback-unsafe,$(BOARD_FEATURE)
 	@size $(FSBL_ELF) 2>/dev/null || arm-none-eabi-size $(FSBL_ELF)
 	@echo "==> Flashing FSBL to the boot base + running. Watch the LCD:"
 	@echo "    green -> red -> blue, then 8 words, repeating. Ctrl-C to detach."
-	@probe-rs run --chip STM32U585AIIx $(FSBL_ELF)
+	@probe-rs run --chip $(CHIP) $(FSBL_ELF)
 
 # Production-only: refuse to build the FSBL without FSBL_VENDOR_PUBKEY.
 # Use this in the release pipeline.
@@ -2250,7 +2659,7 @@ _repro_one:
 # wizard), so the earlier "bhk yields zero-keyed derivations without phase-2B"
 # caveat no longer applies. It is not correct-to-ship evidence: handoff,
 # recovery/KVN, E140 ordering, and silicon gates remain open.
-RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock
+RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock,$(BOARD_FEATURE)
 
 # MED-2 ship gate (audits/tz-tamper-debug-20260611). Resolve the ACTUAL feature
 # set cargo would compile for the shipping image and fail if any never-ship
@@ -2260,7 +2669,7 @@ RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-
 # forbidden set. Independent of the `mode-production` compile fences in
 # nsc/mod.rs: this also catches a release built as `stm32u585,…` WITHOUT
 # mode-production. `make release` depends on it; CI runs it as a fast gate.
-override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key \
+override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key se-lcd-diag dev-dfu \
                  ui-capture bhk-hardcoded-master-key uart-console \
                  boot-pulse sca-trigger erc7730-dev-unattested optiga-reset-oids \
                  erc7730-forced-blind \
@@ -2271,7 +2680,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  se050-crash-safety-e2e se050-admin-extract-attempt-e2e se050-stress \
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e duress-provision-e2e \
-                 pin-gate-e2e dual-se-multi-unlock-e2e
+                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required
@@ -2306,7 +2715,7 @@ override PROD_REQUIRED := mode-production stm32u585 se050 optiga-trust-m dual-se
 # exact actor/order relative to the final pairing rotation is OPEN, so this
 # feature list grants no authority to flash or ratchet hardware. See
 # secure/Cargo.toml and docs/archive/production-todo-retired-2026-07-19.md.
-override PROD_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock
+override PROD_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock,$(BOARD_FEATURE)
 
 # Exact machine-readable provenance string emitted by dbgen only after a real
 # ERC-8176 EAS verification implementation has authenticated every leaf.
@@ -2377,7 +2786,7 @@ build-rdp2-self-lock: ## Prove self-lock is rejected outside mode-production (wo
 	@echo "==> build-rdp2-self-lock: checking non-production anti-footgun"
 	@set -eu; out="$$(mktemp)"; trap 'rm -f "$$out"' EXIT; \
 		if cargo check -p sphincs-tz-secure --no-default-features \
-			--features "stm32u585,dual-se,ui-lcd,usb,saes-dhuk,se050-derived-scp03,bhk,rdp2-self-lock,iwdg,legacy-fw-rollback-unsafe,erc7730-dev-unattested" \
+			--features "stm32u585,dual-se,ui-lcd,usb,saes-dhuk,se050-derived-scp03,bhk,rdp2-self-lock,iwdg,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)" \
 			--target $(TARGET) >"$$out" 2>&1; then \
 			cat "$$out"; \
 			echo "build-rdp2-self-lock: FAIL — unsafe non-production self-lock build succeeded" >&2; \
@@ -2445,6 +2854,57 @@ size-report: ## Report secure/NS/FSBL image sizes against their flash/SRAM budge
 	  arm-none-eabi-size -B $(FSBL_ELF) | awk 'NR==2 { u=$$1+$$2; printf "    fsbl   : %d B of 32768 B legacy bench region (%.1f%%), %d B free\n", u, u*100.0/32768, 32768-u }'; \
 	fi
 
+# Pixel trusted-UI flash-budget gate (docs/ui/pixel-ui-port-plan.md § Flash).
+# Builds the nearest BUILDABLE ship-shaped dual-SE image with `ui-px` linked at
+# A/B slot A and measures its physical span with fwmeasure against the frozen
+# v6 secure-slot span (geometry::SECURE_SLOT_SPAN = 0x72000, stricter than the
+# legacy 464 KB fw-manifest cap), failing under PX_HEADROOM_MIN of headroom
+# (the reserve Phases 2-4 of the port need). Two production features cannot be
+# in the measured set today and are NOT counted: `mode-production` (the
+# OPTIGA_S2_PRODUCTION_BLOCKED fence rejects every mode-production +
+# optiga-trust-m build while S-2 is open) and `rdp2-self-lock` (requires
+# mode-production; secure/src/first_boot/ is ~1.8 kLOC, so budget a few KB for
+# it on top). The two dev fences `legacy-fw-rollback-unsafe` /
+# `erc7730-dev-unattested` are needed to link at all and add no image code.
+# The NS image is measured against geometry::NS_SLOT_SPAN because the pixel
+# atlas lives there (make ui-px-assets, S2 of the port).
+PX_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)
+PX_NS_FEATURES := stm32u585,ui-px-atlas,$(BOARD_FEATURE)
+PX_SECURE_CAP := 466944
+PX_NS_CAP := 499712
+PX_HEADROOM_MIN := 40960
+.PHONY: size-report-px
+size-report-px: VENEERS := $(CURDIR)/target/secure-px/veneers.o
+size-report-px: dev-pubkey-fixture
+size-report-px: ## Ship-shaped dual-SE + ui-px image at slot A vs the v6 slot; fails under 40 KB headroom
+	$(if $(findstring i,$(filter-out --%,$(firstword $(MAKEFLAGS)) $(firstword $(MFLAGS)))),$(error size-report-px refuses make --ignore-errors; a capacity failure must propagate))
+	@grep -q 'pub const SECURE_SLOT_SPAN: u32 = 0x72000;' geometry/src/lib.rs || { echo "size-report-px: PX_SECURE_CAP drifted from geometry::SECURE_SLOT_SPAN"; exit 1; }
+	@grep -q 'pub const NS_SLOT_SPAN: u32 = 0x7A000;' geometry/src/lib.rs || { echo "size-report-px: PX_NS_CAP drifted from geometry::NS_SLOT_SPAN"; exit 1; }
+	@echo "==> size-report-px: secure ($(PX_SHIP_FEATURES),ui-px$(PX_EXTRA_FEATURES)) at slot A"
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) PQSIGNER_SECURE_SLOT=a $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure-px \
+			-p sphincs-tz-secure --no-default-features --features $(PX_SHIP_FEATURES),ui-px$(PX_EXTRA_FEATURES)
+	@echo "==> size-report-px: nonsecure ($(PX_NS_FEATURES))"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure-px \
+			-p sphincs-tz-nonsecure --features $(PX_NS_FEATURES)
+	@report=$$(cargo run --locked --quiet -p fwmeasure -- \
+	  target/secure-px/$(TARGET)/release/sphincs-tz-secure --require-secure-slot 2>&1 >/dev/null) || { \
+	    echo "    secure : FAIL — strict fwmeasure/capacity check rejected the ELF"; printf '%s\n' "$$report" >&2; exit 1; }; \
+	used=$$(printf '%s\n' "$$report" | sed -n 's/^Flash end:.*(\([0-9][0-9]*\) bytes)$$/\1/p'); \
+	case "$$used" in ''|*[!0-9]*) echo "    secure : FAIL — could not parse fwmeasure receipt"; printf '%s\n' "$$report" >&2; exit 1 ;; esac; \
+	arm-none-eabi-size -B target/secure-px/$(TARGET)/release/sphincs-tz-secure | awk 'NR==2 { printf "    secure : text %d  data %d  bss %d\n", $$1, $$2, $$3 }'; \
+	awk -v used="$$used" -v cap="$(PX_SECURE_CAP)" -v min="$(PX_HEADROOM_MIN)" 'BEGIN { \
+	  free=cap-used; \
+	  printf "    secure : %d B physical span of %d B v6 slot (%.1f%%), headroom %d B (gate >= %d B)\n", used, cap, used*100.0/cap, free, min; \
+	  if (free<min) { printf "    secure : FAIL — under %d B headroom for Phases 2-4 of the pixel-UI port\n", min; exit 1 } }'; \
+	arm-none-eabi-size -B target/nonsecure-px/$(TARGET)/release/sphincs-tz-nonsecure | awk -v cap="$(PX_NS_CAP)" -v sram=$(NS_SRAM_CAP) -v min=$(NS_STACK_MIN) 'NR==2 { \
+	  fl=$$1+$$2; st=$$2+$$3; \
+	  printf "    ns     : %d B flash (text+data) of %d B v6 NS slot (%.1f%%); %d B static of %d B SRAM2, %d B left for stack\n", fl, cap, fl*100.0/cap, st, sram, sram-st; \
+	  if (fl>cap) { print "    ns     : FAIL — NS image exceeds the v6 NS slot"; exit 1 } \
+	  if (sram-st<min) { printf "    ns     : FAIL — under %d B stack reserve\n", min; exit 1 } }'; \
+	echo "    note   : mode-production + rdp2-self-lock are not in the measured set (S-2 fence); budget their code separately"
+
 .PHONY: release _release
 # Refusal-only while the rollback implementation is quarantined. Keeping the
 # old cleanup/package recipe here would let `make -i` ignore a prerequisite
@@ -2499,22 +2959,22 @@ flash-hw-optiga-bringup:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-trust-m,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features optiga-trust-m,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching — watch for PRL handshake markers."
 	@echo "    (Ctrl-C to abort; rerun the target after a code change to"
 	@echo "     prove the PBS is stable across rebuilds.)"
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Phase A of the OPTIGA Stage-1 hardware validation.
 #
@@ -2545,22 +3005,22 @@ flash-hw-optiga-bringup-write-only:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-trust-m,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,e2e-skip-unlock
+		--features optiga-trust-m,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,e2e-skip-unlock,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching — Phase-A validation (no LcsO=op bump)."
 	@echo "    Watch for the PBS fingerprint + '[OPTIGA] PBS provisioned'"
 	@echo "    followed by 'e2e-skip-unlock active: halting after provisioning'."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Full unlock test: provision + verify_pin + read all secrets through
 # the Shielded Connection. Identical features to
@@ -2581,20 +3041,20 @@ flash-hw-optiga-unlock-test:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-trust-m,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features optiga-trust-m,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching — expect 'gateway pre-unlocked, ready for tests'"
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # OPTIGA factory_reset roundtrip e2e. Exercises `factory_reset` end-to-end
 # on the real chip: provision F1D0..F1D4 + F1E1 with known test vectors,
@@ -2633,20 +3093,20 @@ optiga-hw-counter-e2e: ## Provision E120 LUC + drive PIN cycles (HW)
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-hw-counter-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features optiga-hw-counter-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running hw-counter e2e (watch semihosting for PASS/FAIL)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 optiga-admin-wipe-e2e:
 	@echo "==> Building OPTIGA factory_reset roundtrip e2e firmware..."
@@ -2654,20 +3114,20 @@ optiga-admin-wipe-e2e:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-admin-wipe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features optiga-admin-wipe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running admin-wipe e2e (watch semihosting for PASS/FAIL)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e. Exercises
 # `DualSecureElement::provision` + `DualSecureElement::unlock` end-to-end:
@@ -2719,23 +3179,23 @@ dual-se-multi-unlock-e2e:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se-multi-unlock-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features dual-se-multi-unlock-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo ""
 	@for n in 1 2 3; do \
 		echo "==> Boot $$n/3..."; \
 		log=$$(mktemp -t dual-se-multi-b$$n.XXXXXX.log); \
-		probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1 | tee "$$log"; \
+		probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1 | tee "$$log"; \
 		sleep 3; \
 		if grep -q "MULTI-UNLOCK ROUNDTRIP: PASS" "$$log"; then \
 			echo "==> Boot $$n PASS"; \
@@ -2755,20 +3215,20 @@ dual-se-admin-wipe-e2e:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se-admin-wipe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features dual-se-admin-wipe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running dual-SE unlock e2e (watch semihosting for PASS/FAIL)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Tier-2 silicon-root variant of dual-se-admin-wipe-e2e: exercises the
 # SAME dual-SE unlock roundtrip + admin-wipe cascade, but with the real
@@ -2803,20 +3263,20 @@ dual-se-bhk-e2e:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se-admin-wipe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,saes-dhuk,bhk
+		--features dual-se-admin-wipe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,saes-dhuk,bhk,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running dual-SE Tier-2 e2e (watch semihosting for SAES/BHK init lines + PASS/FAIL)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # PIN-gate roundtrip e2e. Direct non-interactive test of the MCU-side
 # PIN attempt counter at flash page 124 + the `nsc::gated_unlock`
@@ -2853,20 +3313,20 @@ duress-timing-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features duress-probe-e2e,stm32u585,ui-lcd,e2e-test,otp-hardcoded-master-key
+		--features duress-probe-e2e,stm32u585,ui-lcd,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running timing measurement (watch for [DURESS-TIMING] lines)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 duress-probe-hw:
 	@echo "==> Building §32 duress-PIN coexistence probe firmware..."
@@ -2876,20 +3336,20 @@ duress-probe-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features duress-probe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features duress-probe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running duress-PIN coexistence probe (watch for DURESS COEXISTENCE PROBE: PASS)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 duress-provision-hw:
 	@echo "==> Building §32 P2 full provision_duress silicon-validation firmware..."
@@ -2900,20 +3360,20 @@ duress-provision-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features duress-provision-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features duress-provision-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running duress provision validation (watch for DURESS PROVISION VALIDATION: PASS)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 pin-gate-hw-counter-e2e: ## Three-way MCU+OPTIGA+SE050 PIN-sync E2E (HW)
 	@echo "==> Building combined sync + desync recovery e2e firmware..."
@@ -2923,20 +3383,20 @@ pin-gate-hw-counter-e2e: ## Three-way MCU+OPTIGA+SE050 PIN-sync E2E (HW)
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features pin-gate-hw-counter-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features pin-gate-hw-counter-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running combined sync + desync e2e (watch for SYNC+DESYNC ROUNDTRIP: PASS)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 pin-gate-wipe-e2e: ## 10 wrong PINs -> factory-reset both SEs (HW)
 	@echo "==> Building MCU-MAX-ATTEMPTS lockout-wipe dispatch e2e firmware..."
@@ -2948,20 +3408,20 @@ pin-gate-wipe-e2e: ## 10 wrong PINs -> factory-reset both SEs (HW)
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features pin-gate-wipe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features pin-gate-wipe-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running wipe dispatch e2e (watch for WIPE+RECOVERY ROUNDTRIP: PASS)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Re-run the currently-flashed wipe-for-wizard firmware under probe-rs
 # with semihosting, WITHOUT rebuilding, re-downloading non-secure, or
@@ -2985,7 +3445,7 @@ pin-gate-wipe-e2e: ## 10 wrong PINs -> factory-reset both SEs (HW)
 wipe-for-wizard-rerun:
 	@echo "==> Re-running already-flashed wipe-for-wizard firmware under probe-rs semihosting..."
 	@echo "    (no rebuild, no NS re-flash, no TZ option-byte rewrite)"
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 wipe-for-wizard: ## Dev: wipe both SEs + page 124, halt (HW)
 	@echo "==> Building dev wipe-for-wizard firmware..."
@@ -2999,20 +3459,20 @@ wipe-for-wizard: ## Dev: wipe both SEs + page 124, halt (HW)
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features wipe-for-wizard,stm32u585,debug-log
+		--features wipe-for-wizard,stm32u585,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running wipe (watch OLED for 'WIPED — power-cycle me')..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # One-shot D6 pin-identification diagnostic.
 # Builds a minimal secure-world firmware that runs `pin_diag::run()`
@@ -3034,16 +3494,16 @@ pin-diag-boot-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running (pulses fire once, then CPU halts in wfe)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # One-shot SAES self-test on real silicon. Boots the firmware just far
 # enough to init SAES (Tier 1 of work-todo #7), runs the software-key
@@ -3082,18 +3542,18 @@ bench-masked-sha-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running masked-SHA-256 bench (streaming results)..."
 	@log=$$(mktemp -t bench-masked-sha.XXXXXX.log); \
 	trap 'rm -f "$$log"' EXIT; \
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1 | tee "$$log"; \
+	probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1 | tee "$$log"; \
 	echo "===================================="; \
 	if grep -q "=== masked-sha2 bench complete ===" "$$log"; then \
 		echo "==> bench-masked-sha: DONE"; exit 0; \
@@ -3110,18 +3570,18 @@ saes-self-test-hw: ## SAES SW + DHUK round-trip + fingerprint (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running SAES self-test..."
 	@log=$$(mktemp -t saes-self-test.XXXXXX.log); \
 	trap 'rm -f "$$log"' EXIT; \
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1 | tee "$$log"; \
+	probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1 | tee "$$log"; \
 	echo "===================================="; \
 	if grep -q "=== self_test PASS ===" "$$log"; then \
 		echo "==> saes-self-test: PASS"; exit 0; \
@@ -3160,12 +3620,12 @@ saes-self-test-hw-rdp1:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing at RDP0..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Ensuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@set -e; \
@@ -3184,8 +3644,8 @@ saes-self-test-hw-rdp1:
 	cat_pid=$$!; \
 	sleep 0.3; \
 	echo "==> Stepping chip to RDP1 (RDP=0xBB) — chip resets + firmware runs at RDP1..."; \
-	STM32_Programmer_CLI --connect port=SWD mode=UR --optionbytes RDP=0xBB || \
-		STM32_Programmer_CLI --connect port=SWD mode=HotPlug --optionbytes RDP=0xBB || true; \
+	$(STM32_PROG) --connect port=SWD mode=UR --optionbytes RDP=0xBB || \
+		$(STM32_PROG) --connect port=SWD mode=HotPlug --optionbytes RDP=0xBB || true; \
 	wait $$cat_pid 2>/dev/null || true; \
 	echo "===================================="; \
 	echo "==> ST-LINK VCP capture:"; \
@@ -3223,19 +3683,19 @@ saes-self-test-hw-rdp1:
 saes-self-test-hw-rdp0-regress:
 	@echo "==> Regressing RDP1 → RDP0 (mass-erase will wipe flash banks 1+2)..."
 	@echo "    Note: OTP survives; SE050 / OPTIGA NVM are separate chips and unaffected."
-	@STM32_Programmer_CLI --connect port=SWD mode=UR --optionbytes RDP=0xAA \
+	@$(STM32_PROG) --connect port=SWD mode=UR --optionbytes RDP=0xAA \
 		UNLOCK_1A=1 UNLOCK_1B=1 UNLOCK_2A=1 UNLOCK_2B=1 || \
-		STM32_Programmer_CLI --connect port=SWD mode=HotPlug --optionbytes RDP=0xAA \
+		$(STM32_PROG) --connect port=SWD mode=HotPlug --optionbytes RDP=0xAA \
 			UNLOCK_1A=1 UNLOCK_1B=1 UNLOCK_2A=1 UNLOCK_2B=1
 	@echo "==> Stripping write-protect + secure watermarks..."
-	@STM32_Programmer_CLI --connect port=SWD --optionbytes \
+	@$(STM32_PROG) --connect port=SWD --optionbytes \
 		WRP1A_PSTRT=0x7F WRP1A_PEND=0x0 WRP1B_PSTRT=0x7F WRP1B_PEND=0x0 \
 		WRP2A_PSTRT=0x7F WRP2A_PEND=0x0 WRP2B_PSTRT=0x7F WRP2B_PEND=0x0 \
 		SECWM1_PSTRT=0x7F SECWM1_PEND=0x0 SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 || true
 	@echo "==> Mass-erase both banks..."
-	@STM32_Programmer_CLI --connect port=SWD -e all
+	@$(STM32_PROG) --connect port=SWD -e all
 	@echo "==> Restoring default option bytes (TZEN=1 + full-secure banks + SECBOOTADD0)..."
-	@STM32_Programmer_CLI --connect port=SWD --optionbytes \
+	@$(STM32_PROG) --connect port=SWD --optionbytes \
 		TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Regression complete — board is back at RDP0."
@@ -3246,20 +3706,20 @@ pin-gate-e2e: ## MCU PIN pre-commit/reset E2E (HW; no E120 counter or reboot rec
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features pin-gate-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key
+		--features pin-gate-e2e,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running PIN-gate e2e (watch semihosting for PASS/FAIL)..."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Shield-handshake-only test. Skips `provision_from_mnemonic` entirely
 # and runs `init` → `load_pbs_from_device_root` → `ensure_shield` against an
@@ -3277,20 +3737,20 @@ flash-hw-optiga-shield-handshake-only:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features optiga-trust-m,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,e2e-skip-unlock,e2e-skip-provision
+		--features optiga-trust-m,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,e2e-skip-unlock,e2e-skip-provision,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching — expect '[S][e2e] SHIELD UP — PRL handshake succeeded'."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Retired OPTIGA SetObjectProtected experiment: regenerate the historical
 # manifest bytes for incident/evidence reproducibility only. This target does
@@ -3323,6 +3783,7 @@ flash-hw-optiga-reset:
 #   make fuzz-erc20-bundle [TIME=600]
 #   make fuzz-apdu-parse-header [TIME=600]
 #   make fuzz-hid-frame-assembler [TIME=600]
+#   make fuzz-optiga-response-parse [TIME=600]
 #
 # TIME (seconds) bounds the libFuzzer run; omit for unbounded.
 FUZZ_TIME ?= $(TIME)
@@ -3348,7 +3809,7 @@ FUZZ_ENV := $(if $(FUZZ_LD),LD_LIBRARY_PATH=$(FUZZ_LD),) $(if $(FUZZ_SYMBOLIZER)
 # without bwrap, or inside a CI container that already drops the network).
 FUZZ_ISOLATE ?= $(CURDIR)/tools/sca/run-isolated.sh
 
-.PHONY: fuzz-list fuzz-all fuzz-aa-userop-parse fuzz-rlp-decode-item fuzz-eip1559-parse fuzz-erc20-calldata fuzz-erc20-bundle fuzz-apdu-parse-header fuzz-hid-frame-assembler
+.PHONY: fuzz-list fuzz-all fuzz-aa-userop-parse fuzz-rlp-decode-item fuzz-eip1559-parse fuzz-erc20-calldata fuzz-erc20-bundle fuzz-apdu-parse-header fuzz-hid-frame-assembler fuzz-optiga-response-parse
 
 # Smoke the whole adversarial parse surface: run every target for FUZZ_TIME
 # seconds (default 30) against its seed corpus. Coverage-guided libFuzzer; a
@@ -3413,6 +3874,9 @@ fuzz-erc20-bundle:
 fuzz-apdu-parse-header:
 	cd fuzz && cargo +nightly fuzz run apdu_parse_header $(FUZZ_LIBFUZZER_ARGS)
 
+fuzz-optiga-response-parse:
+	cd fuzz && cargo +nightly fuzz run optiga_response_parse $(FUZZ_LIBFUZZER_ARGS)
+
 fuzz-hid-frame-assembler:
 	cd fuzz && cargo +nightly fuzz run hid_frame_assembler $(FUZZ_LIBFUZZER_ARGS)
 
@@ -3460,20 +3924,20 @@ decoy-flicker-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features decoy-flicker-test,mock-se,debug-log,ui-lcd,stm32u585,dev-testkey
+		--features decoy-flicker-test,mock-se,debug-log,ui-lcd,stm32u585,dev-testkey,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running — watch the OLED. Ctrl-C to detach."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Decoy-flicker test on the NV3007 LCD (Phase D — F-24 stage E sub-channel 4).
 # Same harness as decoy-flicker-hw but `ui-lcd`. The LCD's slow-response pixels
@@ -3482,23 +3946,23 @@ decoy-flicker-hw:
 # while the SPI bus still carries it (the defense). The loop SWEEPS DECOY_HOLD =
 # 40/25/15/8/3/0 ms (~4-5 s each, logged) so you can find the subliminal
 # threshold. Builds + flashes; then run + watch the panel:
-#   probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+#   probe-rs run --chip $(CHIP) $(SECURE_ELF)
 # Requires the NV3007 wired per docs/hardware/nv3007-wiring.md.
 decoy-flicker-lcd-hw:
 	@echo "==> Building decoy-flicker-test firmware for the NV3007 LCD..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features decoy-flicker-test,mock-se,debug-log,ui-lcd,stm32u585,dev-testkey,usb
+		--features decoy-flicker-test,mock-se,debug-log,ui-lcd,stm32u585,dev-testkey,usb,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Flashed. Run + watch the LCD (log prints the active DECOY_HOLD):"
-	@echo "    probe-rs run --chip STM32U585AIIx $(SECURE_ELF)"
+	@echo "    probe-rs run --chip $(CHIP) $(SECURE_ELF)"
 
 # Factory production-line test (prodtest) firmware. Single-purpose,
 # reversible acceptance-test candidate; a pass does NOT authorize or chain the
@@ -3514,7 +3978,7 @@ decoy-flicker-lcd-hw:
 # not passing component tests. Communication and button tests are required.
 # Keep these feature lists exact and synchronized with the machine-readable
 # receipt emitted by tools/factory-prodtest-runner.py.
-override PRODTEST_SECURE_FEATURES := prodtest,dev-testkey,saes-dhuk
+override PRODTEST_SECURE_FEATURES := prodtest,dev-testkey,saes-dhuk,$(BOARD_FEATURE)
 override PRODTEST_NONSECURE_FEATURES := stm32u585,usb,prodtest
 #
 # Use this target to validate the prodtest build compiles cleanly;
@@ -3644,11 +4108,11 @@ build-hw-lcd-bringup:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features ui-lcd,ui-noop,mock-se,debug-log,stm32u585,dev-testkey
+		--features ui-lcd,ui-noop,mock-se,debug-log,stm32u585,dev-testkey,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> LCD bring-up build ready (Phase A — no init call site yet)."
 	@echo "    Next: add a hw::lcd_nv3007::init() + fill_screen() call"
 	@echo "    in main.rs behind a lcd-test feature gate, mirror"
@@ -3665,16 +4129,16 @@ lcd-test-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features lcd-test,mock-se,debug-log,stm32u585,dev-testkey,usb
+		--features lcd-test,mock-se,debug-log,stm32u585,dev-testkey,usb,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running — watch the LCD: green -> red -> blue cycling. Ctrl-C to detach."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 # Animated splash-screen preview (NV3007). Flashes a firmware that short-circuits
 # main() into ui::splash_test::run — the three assets/splash-1{6,7,8}-*.html
@@ -3690,16 +4154,16 @@ splash-test-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW) -C target-feature=+fp-armv8d16sp" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features splash-test,mock-se,debug-log,stm32u585,dev-testkey,usb
+		--features splash-test,mock-se,debug-log,stm32u585,dev-testkey,usb,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Running — watch the LCD cycle the 3 splash revisions. Ctrl-C to detach."
-	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
 
 clean: ## Remove build artifacts
 	rm -rf target/secure target/nonsecure target/veneers.o
@@ -3724,24 +4188,24 @@ fw-rollback-hw: dev-pubkey-fixture
 	@echo "==> Building FW anti-rollback test (secure + stm32u585 + fw-rollback-e2e + mock-se)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-	  -p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,fw-rollback-e2e
+	  -p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,fw-rollback-e2e,$(BOARD_FEATURE)
 	@echo "==> Building minimal NS image (stm32u585; not reached, flashed for layout)"
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-	  -p sphincs-tz-nonsecure --features stm32u585
+	  -p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 	  --optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 	  SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running FW anti-rollback test on hardware (~10s; signs 4 manifests)..."
 	@log=$$(mktemp -t fw-rollback-hw.XXXXXX.log); \
 	rc_file=$$(mktemp -t fw-rollback-hw-rc.XXXXXX); \
 	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
-	{ timeout 120 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; \
+	{ timeout 120 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; \
 	  echo $$? >"$$rc_file"; } | tee "$$log"; \
 	rc=$$(cat "$$rc_file"); \
 	echo "===================================="; \
@@ -3835,34 +4299,34 @@ fwup-transport-hw: dev-pubkey-fixture fwup-transport-fixture
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	  cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 	    -p sphincs-tz-secure --no-default-features \
-	    --features mock-se,ui-noop,stm32u585,usb,fwup-transport-e2e
+	    --features mock-se,ui-noop,stm32u585,usb,fwup-transport-e2e,$(BOARD_FEATURE)
 	@echo "==> Building NS (usb)"
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	  cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-	    -p sphincs-tz-nonsecure --features stm32u585,usb
+	    -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 	  --optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 	  SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> probe-rs run (background) — letting the device boot + USB enumerate..."
-	@(timeout 120 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) > /tmp/fwup-transport-run.log 2>&1 &)
+	@(timeout 120 probe-rs run --chip $(CHIP) $(SECURE_ELF) > /tmp/fwup-transport-run.log 2>&1 &)
 	@for i in $$(seq 1 25); do \
 	  if lsusb 2>/dev/null | grep -qi '1209:7051'; then echo "==> Enumerated (~$${i}s)"; break; fi; \
 	  sleep 1; \
 	done
 	@if ! lsusb 2>/dev/null | grep -qi '1209:7051'; then \
 	  echo "ERROR: 1209:7051 did not enumerate within 25s — is the USB-C cable plugged into the host?"; \
-	  pkill -f "probe-rs run --chip STM32U585AIIx" 2>/dev/null; \
+	  pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null; \
 	  cat /tmp/fwup-transport-run.log | tail -20; \
 	  exit 1; \
 	fi
 	@echo "==> Running transport e2e test (tools/fwup-transport-test.py)..."
 	@rc=0; python3 tools/fwup-transport-test.py --fixture-dir $(FWUP_FIXTURE_DIR) || rc=$$?; \
-	pkill -f "probe-rs run --chip STM32U585AIIx" 2>/dev/null || true; \
+	pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null || true; \
 	echo "===================================="; \
 	if [ $$rc -eq 0 ]; then \
 	  echo "==> fwup-transport-hw: PASS — full BEGIN+CHUNK+COMMIT round-trip green"; \
@@ -3895,28 +4359,28 @@ fwup-transport-hw-iwdg: dev-pubkey-fixture fwup-transport-fixture
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	  cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 	    -p sphincs-tz-secure --no-default-features \
-	    --features mock-se,ui-noop,stm32u585,usb,fwup-transport-e2e,iwdg
+	    --features mock-se,ui-noop,stm32u585,usb,fwup-transport-e2e,iwdg,$(BOARD_FEATURE)
 	@echo "==> Building NS (usb + IWDG)"
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	  cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-	    -p sphincs-tz-nonsecure --features stm32u585,usb,iwdg
+	    -p sphincs-tz-nonsecure --features stm32u585,usb,iwdg,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
-	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
-	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	@STM32_Programmer_CLI --connect port=SWD \
+	@$(STM32_PROG) --connect port=SWD \
 	  --optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 	  SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> probe-rs run (background) — letting the device boot + USB enumerate..."
-	@(timeout 120 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) > /tmp/fwup-transport-run.log 2>&1 &)
+	@(timeout 120 probe-rs run --chip $(CHIP) $(SECURE_ELF) > /tmp/fwup-transport-run.log 2>&1 &)
 	@for i in $$(seq 1 25); do \
 	  if lsusb 2>/dev/null | grep -qi '1209:7051'; then echo "==> Enumerated (~$${i}s)"; break; fi; \
 	  sleep 1; \
 	done
 	@if ! lsusb 2>/dev/null | grep -qi '1209:7051'; then \
 	  echo "ERROR: 1209:7051 did not enumerate within 25s"; \
-	  pkill -f "probe-rs run --chip STM32U585AIIx" 2>/dev/null; \
+	  pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null; \
 	  cat /tmp/fwup-transport-run.log | tail -20; \
 	  exit 1; \
 	fi
@@ -3924,13 +4388,13 @@ fwup-transport-hw-iwdg: dev-pubkey-fixture fwup-transport-fixture
 	@sleep 12
 	@if ! lsusb 2>/dev/null | grep -qi '1209:7051'; then \
 	  echo "==> fwup-transport-hw-iwdg: FAIL — device dropped off USB during idle (IWDG false-fired)"; \
-	  pkill -f "probe-rs run --chip STM32U585AIIx" 2>/dev/null; \
+	  pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null; \
 	  exit 1; \
 	fi
 	@echo "==> Still enumerated after 12 s idle — no false-fire ✓"
 	@echo "==> Running transport e2e test (tools/fwup-transport-test.py)..."
 	@rc=0; python3 tools/fwup-transport-test.py --fixture-dir $(FWUP_FIXTURE_DIR) || rc=$$?; \
-	pkill -f "probe-rs run --chip STM32U585AIIx" 2>/dev/null || true; \
+	pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null || true; \
 	echo "===================================="; \
 	if [ $$rc -eq 0 ]; then \
 	  echo "==> fwup-transport-hw-iwdg: PASS — idle-survival + full round-trip green with IWDG ON"; \
@@ -3963,6 +4427,13 @@ prod-symbol-audit: ## Binary-level audit of a firmware ELF for never-ship symbol
 
 prod-symbol-audit-selftest: ## Prove the binary audit can fail (two-sided control)
 	scripts/prod_symbol_audit.sh --self-test
+
+.PHONY: check-fi-ir
+check-fi-ir: ## IR gate: fi_min's FI recompute guard must survive -O (issue #130)
+	@echo "==> check-fi-ir: self-test first (a detector nobody has watched"
+	@echo "    fire is not a detector), then the real crate"
+	scripts/check_fi_ir.sh --self-test
+	scripts/check_fi_ir.sh
 
 invisible-unicode: ## Refuse zero-width / bidi-override codepoints in tracked text files
 	@echo "==> invisible-unicode: zero-width + Trojan-Source bidi scan"
@@ -4053,6 +4524,8 @@ kani-heavy: ## Kani harnesses excluded from `make kani` (peak RSS near the 16 GB
 	cargo kani -p pqsigner-tx --features kani-heavy \
 		--harness per_record_page_bound --harness no_hidden_value \
 		--harness cow_presign_precedence
+	@# anti-vacuity for the same cfg(kani-heavy)-gated surface (issue #662):
+	@# canary + the heavy mutation tier (local-only, same RSS ceiling).
 	$(MAKE) verify-kani-mutation-heavy
 
 kani: ## Bounded model-checking on firmware decoders/counters
@@ -4068,6 +4541,8 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
 	@echo "         + Safe management-op decoder (classify_safe_mgmt: accept => length-exact + selector-match + canonical address words + faithful threshold, reconstructed from original bytes; selector-gating reject + accept/reject controls)"
 	cargo kani -p pqsigner-tx
+	@echo "==> Kani: pixel trusted-UI tier fitter / splitters (total, lossless) + FlowDriver arming"
+	cargo kani -p pqsigner-ui-px
 	@echo "==> Kani: ERC-7730 IR header parser (offset-bounds safety)"
 	@echo "         + TLV param parser (panic/OOB-free over symbolic pool+offset; per-tag width/value soundness: enum_ref/decimals/token/visibility; reject unknown-tag + out-of-range visibility byte)"
 	@echo "         + visibility evaluator (should_render_with_mode total + spec-exact over all (visibility,compact))"
@@ -4090,6 +4565,7 @@ kani: ## Bounded model-checking on firmware decoders/counters
 # crate + runs one harness per mutation, ~1-4 min each) → nightly, not per-PR.
 #   make verify-kani-mutation                 # quick + default mutation tiers
 #   make verify-kani-mutation MUTATIONS=quick # canary + the fast fw-manifest/aa ones
+#   make verify-kani-mutation-heavy           # canary + the heavy tier (LOCAL ONLY)
 .PHONY: verify-kani-mutation verify-kani-mutation-heavy
 # C2: hand-transcribed MMIO base addresses vs ST's OWN CMSIS header. Peripheral
 # bases are typed in by hand from RM0456 and a wrong nibble is SILENT — the TAMP
@@ -4106,7 +4582,14 @@ verify-kani-mutation: ## anti-vacuity: break a decoder, expect a Kani harness to
 	@command -v cargo-kani >/dev/null 2>&1 || { echo "ERROR: cargo-kani not found. Install: cargo install --locked kani-verifier && cargo kani setup"; exit 1; }
 	python3 scripts/check_kani_mutations.py
 
-verify-kani-mutation-heavy: ## Local-only high-memory Kani mutation checks plus the canary
+# Heavy-tier twin (issue #662): entries whose harnesses are cfg(feature =
+# "kani-heavy")-gated — the default/nightly tier compiles those OUT and dies
+# with a HarnessError, so they live in a non-cumulative heavy tier. Peak RSS
+# (no_hidden_value 13.05 GiB / 7m55s, measured 2026-07-31) sits near the 16 GB
+# hosted-runner ceiling: LOCAL ONLY, never wire into CI — an OOM kills the
+# runner and suppresses the rest of the job's evidence (same reasoning as
+# kani-heavy / verify-extracted-heavy). Also runs as the tail of `make kani-heavy`.
+verify-kani-mutation-heavy: ## anti-vacuity for the cfg(kani-heavy)-gated harnesses (LOCAL ONLY, ~13 GiB peak RSS)
 	@command -v cargo-kani >/dev/null 2>&1 || { echo "ERROR: cargo-kani not found. Install: cargo install --locked kani-verifier && cargo kani setup"; exit 1; }
 	python3 scripts/check_kani_mutations.py --tier heavy
 
@@ -4139,11 +4622,21 @@ miri: ## Miri UB check on host crates
 	@echo "==> Miri: secure-world NS-pointer deref + validation (the genuine host-reachable unsafe)"
 	@# permissive-provenance: the NS-ptr boundary is a legitimate int->ptr cast.
 	MIRIFLAGS="-Zmiri-permissive-provenance" cargo +nightly miri test -p sphincs-tz-secure --no-default-features --features mock-se,debug-log,ui-semihosting -- ns_ptr ptr_validate
+	@echo "==> Miri: extracted fold/exact/PRNG pure modules (strict provenance — no int->ptr boundary here)"
+	cargo +nightly miri test -p sphincs-tz-secure --no-default-features --features mock-se,debug-log,ui-semihosting -- rng_strong_fold rng_exact consumption_mask_prng
 	@echo "==> Miri (tree-borrows): shared NS-pointer deref primitives over a REAL allocation"
 	@# the secure-crate pass above can't deref (its addr is a u32, never a host ptr); the
 	@# extracted shared primitives run read_volatile/write_volatile/from_raw_parts on a real
 	@# stack allocation, so tree-borrows actually vets the deref for aliasing/provenance UB.
 	MIRIFLAGS="-Zmiri-tree-borrows" cargo +nightly miri test -p sphincs-tz-shared -- ns_ptr_validate
+	@echo "==> Miri: secure-miri-tests (rng_strong production-arm fill + ui_lcd rasterizer mounts)"
+	@# secure-miri-tests mounts the firmware's #[cfg(not(test))] rng_strong surface
+	@# against mock platform/SE draws; the strict three-source path is what runs.
+	@# It also mounts the ui-lcd-gated NV3007 rasterizer (ui/lcd.rs) against a
+	@# recording lcd_nv3007 stub for the pixel-level differential/FLIP/bounds/
+	@# CT-discipline tests. It is its own workspace so it cannot perturb the
+	@# ERC-7730-bound root Cargo.toml/Cargo.lock. Serial: shared statics.
+	cd secure-miri-tests && cargo +nightly miri test -- --test-threads=1
 	@echo "==> miri: PASS"
 
 # Mutation testing (SOTA 2026-06 §11 mutation-testing pilot): measures TEST
@@ -4218,6 +4711,91 @@ ui-golden:
 # in seconds.
 #   make ui-golden-render               # check vs tests/ui_golden_render_fixtures.json
 #   make ui-golden-render-bless         # re-baseline after an intentional UI change
+# ---------------------------------------------------------------------------
+# Pixel trusted-UI assets (`ui-px`): Aileron glyph atlases + disc marks baked
+# from the vendored PQ-UI design system (tools/pq-ui/, pinned in UPSTREAM.txt).
+# The outputs are committed; `ui-px-assets-check` re-bakes into a temp dir and
+# diffs the manifest so a stale or hand-edited atlas fails CI.
+# The vendored PQ-UI subset itself (tools/pq-ui/, pin in UPSTREAM.txt): re-sync
+# from a local upstream checkout at the pinned commit, or verify that the
+# committed bytes + file set still match MANIFEST.sha256.
+PQ_UI_SRC ?= ../PQ-UI
+.PHONY: pq-ui-sync pq-ui-check
+pq-ui-sync: ## Re-vendor tools/pq-ui/ from $(PQ_UI_SRC) (must be at the UPSTREAM.txt pin)
+	@tools/pq-ui/sync.sh $(PQ_UI_SRC)
+
+pq-ui-check: ## Verify tools/pq-ui/ against MANIFEST.sha256 (bytes + file set)
+	@tools/pq-ui/sync.sh --check
+
+# Design-rule gates for the pixel trusted UI: the vendored PQ-UI tree, the
+# reproducible asset bake, upstream's port_diff over the firmware's motion /
+# input / film constants (recorded deviations in PORT_DEVIATIONS.toml), the
+# crate's own tests (incl. the `check` design-rule checker) and the secure
+# host tests that run the checker over every Safe scenario transcript.
+.PHONY: ui-px-goldens-bless
+ui-px-goldens-bless: ## Re-export every family's scenario transcripts and re-bless their per-frame goldens (review the PNGs first)
+	@# FEATURE SET MATTERS and used to be absent: this ran `--tests --release`
+	@# with DEFAULT features, which does not build, and `>/dev/null` swallowed
+	@# the reason. The export step therefore always failed, `make` aborted
+	@# before the bless step, and the `.hex` transcripts silently stayed stale
+	@# while `secure`'s own golden constants moved on — two suites asserting
+	@# different screen sequences, which is how the 2026-09-28 drift survived.
+	@# Same features CI uses (.github/workflows/ci.yml), and stderr is kept.
+	@UI_PX_EXPORT=1 cargo test --locked -p sphincs-tz-secure --release \
+		--no-default-features --features mock-se,debug-log,ui-semihosting \
+		-- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests >/dev/null
+	@UI_PX_BLESS=1 UI_PX_PNG=1 cargo test --locked -p pqsigner-ui-px --test golden >/dev/null
+	@ls pqsigner-ui-px/tests/fixtures/*/*.sha | wc -l | xargs -I{} echo "blessed {} transcript goldens (frames under target/ui-px-golden/<family>/)"
+
+.PHONY: pq-ui-port-diff ui-px-check
+pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails on an unrecorded MISMATCH
+	@python3 tools/pq_ui_port_diff.py
+
+ui-px-check: pq-ui-check ui-px-assets-check pq-ui-port-diff ## All pixel-UI design-rule gates (vendored tree, bake, port_diff, checker tests)
+	@cargo test --locked -p pqsigner-ui-px
+	@# FEATURE SET MATTERS. This ran with DEFAULT features while the same
+	@# tests' golden constants are authored under CI's set, so three of them
+	@# (erc7730_uniswap_exact_input / erc7730_userop_envelope /
+	@# offchain_eip712_typed) were RED here and green everywhere else. CI never
+	@# caught it because CI does not run this target — it runs pq-ui-check,
+	@# ui-px-assets-check and pq-ui-port-diff directly — so the red sat in a
+	@# target humans run by hand. Identical bug to the one fixed in
+	@# ui-px-goldens-bless; same fix, same reason.
+	@cargo test --locked -p sphincs-tz-secure --release \
+		--no-default-features --features mock-se,debug-log,ui-semihosting \
+		-- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests ui_px_status_map
+
+.PHONY: ui-px-assets ui-px-assets-check
+ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1a, atlas_root.rs + metrics_gen.rs
+	@python3 tools/ui_px_assets.py
+
+ui-px-assets-check: ## Verify the committed ui-px assets (incl. the NS atlas container + pinned root) are reproducible
+	@# Pillow decides the glyph bitmaps, so it decides the atlas bytes and
+	@# therefore ATLAS_ROOT. Check it FIRST: otherwise a version difference
+	@# surfaces as an opaque "ui-px asset drift: manifest.json" and reads as
+	@# "someone forgot to re-bake" when the bake is in fact fine and the
+	@# TOOL differs. That misdiagnosis is what kept this gate red in CI while
+	@# it passed on every developer box with the recorded version.
+	@want=$$(python3 -c "import json;print(json.load(open('secure/assets/ui-px/manifest.json'))['pillow'])"); \
+	have=$$(python3 -c "import PIL;print(PIL.__version__)"); \
+	if [ "$$want" != "$$have" ]; then \
+	  echo "ui-px assets: Pillow $$have, but the committed bake recorded $$want."; \
+	  echo "  The atlas is rasterised by Pillow, so a different version can change"; \
+	  echo "  ATLAS_ROOT — which the secure image re-hashes around every pixel dialog."; \
+	  echo "  Install the recorded version (pip install 'Pillow==$$want'), or re-bake"; \
+	  echo "  deliberately with 'make ui-px-assets' and re-approve the new root."; \
+	  exit 1; \
+	fi
+	@tmp=$$(mktemp -d); \
+	python3 tools/ui_px_assets.py --out $$tmp --ns-out $$tmp/ns --metrics $$tmp/metrics_gen.rs --root-rs $$tmp/atlas_root.rs >/dev/null && \
+	for f in fonts.bin safe.a4 mainnet.a4 base.a4 eth.a4 blind.a4 rotate.a4 usdc.a4 usdt.a4 dai.a4 cowswap.a4 fprint.a4 manifest.json; do \
+	  cmp -s $$tmp/$$f secure/assets/ui-px/$$f || { echo "ui-px asset drift: $$f (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	done; \
+	cmp -s $$tmp/ns/atlas.pq1a nonsecure/assets/ui-px/atlas.pq1a || { echo "ui-px asset drift: atlas.pq1a (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	cmp -s $$tmp/atlas_root.rs secure/src/ui/px/atlas_root.rs || { echo "ui-px atlas root drift (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	cmp -s $$tmp/metrics_gen.rs pqsigner-ui-px/src/metrics_gen.rs || { echo "ui-px metrics drift (run make ui-px-assets)"; rm -rf $$tmp; exit 1; }; \
+	rm -rf $$tmp; echo "ui-px assets reproducible"
+
 .PHONY: ui-golden-render ui-golden-render-bless
 ui-golden-render: ## Render UI golden frames + compare to baseline
 	@echo "==> Building secure (ui-golden-render harness) + NS loader payload"
@@ -4356,14 +4934,15 @@ kontrol: ## Kontrol/KEVM proofs on the deployed bytecode
 
 # binsec is OCaml + a local opam switch; ~/checkct_env.sh sets the nix PATH,
 # OPAMROOT, the `checkct` switch + gmp store paths (DONJON-RUST-TOOLING §1).
-# cargo-checkct lives in ~/repos/cargo-checkct (not on PATH). The kdf/fors/th
-# drivers prove SECURE; the `driver` (fisher_yates shuffle) is INSECURE BY
-# DESIGN (address-channel + statistical misalignment, not bitwise CT) so the
-# suite exits non-zero — the three green drivers are the signal, not the exit.
+# cargo-checkct lives in ~/repos/cargo-checkct (not on PATH). Five drivers
+# prove SECURE (kdf/fors/th/saes/ct_eq — DONJON-RUST-TOOLING §1); the `driver`
+# (fisher_yates shuffle) is INSECURE BY DESIGN (the address-channel +
+# statistical-misalignment control, not bitwise CT) so the suite exits
+# non-zero — the five green drivers are the signal, not the exit.
 checkct: ## Constant-time check (cargo-checkct)
 	@test -f $(HOME)/checkct_env.sh || { echo "ERROR: ~/checkct_env.sh not found — see tools/sca/DONJON-RUST-TOOLING.md §1 (install binsec + the opam switch)"; exit 1; }
 	@test -x $(HOME)/repos/cargo-checkct/target/release/cargo-checkct || { echo "ERROR: cargo-checkct not built — git clone https://github.com/Ledger-Donjon/cargo-checkct ~/repos/cargo-checkct && cargo build --release"; exit 1; }
-	@echo "==> cargo-checkct: relational CT proof of kdf/fors/th (+ by-design-INSECURE fisher_yates shuffle) on thumbv8m"
+	@echo "==> cargo-checkct: relational CT proof of kdf/fors/th/saes/ct_eq (+ by-design-INSECURE fisher_yates shuffle control) on thumbv8m"
 	@bash -c 'source $(HOME)/checkct_env.sh && export PATH="$(HOME)/repos/cargo-checkct/target/release:$(HOME)/.cargo/bin:$$PATH" && cargo-checkct run --dir tools/sca --timeout 300'
 
 # Muscat (Donjon SCA, successor to lascar): Welch-T TVLA + CPA. With TRACES_DIR

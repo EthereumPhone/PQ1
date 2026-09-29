@@ -1,0 +1,2678 @@
+{
+ "anims": {
+  "confirm/hold_to_confirm": {
+   "anim": "hold_to_confirm",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "HoldToConfirm",
+   "curves_used": [
+    "arrive",
+    "clamp01",
+    "ease_out",
+    "hold_fill",
+    "hold_fill_ms"
+   ],
+   "doc": "Hold to confirm — a hold fills the token's ring; confirm or cancel.",
+   "duration": 12710,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "D1-07",
+     "key": "motion.arrive(u)",
+     "reason": "the cancel branch of the hold demo copies the entrance law's two lines for the same reason as ArriveStatus. Fixed by the same lift. Zero pixel change.",
+     "rule": "V-ENTRANCE"
+    }
+   ],
+   "frames_14": {
+    "duration": 177.9,
+    "t_resolve": 143.6
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "DRIFT_AMP": 11.875,
+    "ENDINGS": [
+     "confirm",
+     "cancel"
+    ],
+    "RELEASE_K": 0.6,
+    "T_COMMIT": 3800,
+    "T_FADE": 260,
+    "T_IDLE": 1800,
+    "T_IN": 300,
+    "T_POP": 3480,
+    "T_RECENTER": 300,
+    "T_REL": 3100,
+    "T_TEXT": 300,
+    "T_WAIT": 450
+   },
+   "phases": {},
+   "previews": [
+    2925,
+    12110
+   ],
+   "rests_on_token": true,
+   "result_hold": 2450,
+   "source": "screens/confirm/hold_to_confirm.py:54",
+   "spec": {
+    "anim": "hold_to_confirm",
+    "busy": "HOLD TO CONFIRM",
+    "ending": "confirm",
+    "handoff": true,
+    "icon": "eth",
+    "kind": "status",
+    "result": null
+   },
+   "t_busy": [
+    0,
+    3800
+   ],
+   "t_resolve": 10260,
+   "t_tail": null
+  },
+  "confirm/hold_to_confirm|hold_confirm_cancel": {
+   "anim": "hold_to_confirm",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "HoldToConfirm",
+   "curves_used": [
+    "arrive",
+    "clamp01",
+    "ease_out",
+    "hold_fill",
+    "hold_fill_ms"
+   ],
+   "doc": "Hold to confirm — a hold fills the token's ring; confirm or cancel.",
+   "duration": 6980,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "D1-07",
+     "key": "motion.arrive(u)",
+     "reason": "the cancel branch of the hold demo copies the entrance law's two lines for the same reason as ArriveStatus. Fixed by the same lift. Zero pixel change.",
+     "rule": "V-ENTRANCE"
+    }
+   ],
+   "frames_14": {
+    "duration": 97.7,
+    "t_resolve": 63.4
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "DRIFT_AMP": 11.875,
+    "ENDINGS": [
+     "confirm",
+     "cancel"
+    ],
+    "RELEASE_K": 0.6,
+    "T_COMMIT": 3800,
+    "T_FADE": 260,
+    "T_IDLE": 1800,
+    "T_IN": 300,
+    "T_POP": 3480,
+    "T_RECENTER": 300,
+    "T_REL": 3100,
+    "T_TEXT": 300,
+    "T_WAIT": 450
+   },
+   "phases": {},
+   "previews": [
+    2925,
+    6380
+   ],
+   "rests_on_token": true,
+   "result_hold": 2450,
+   "source": "screens/confirm/hold_to_confirm.py:54",
+   "spec": {
+    "anim": "hold_to_confirm",
+    "busy": "HOLD TO CONFIRM",
+    "ending": "cancel",
+    "handoff": true,
+    "icon": "eth",
+    "kind": "status",
+    "result": null
+   },
+   "t_busy": [
+    0,
+    3100
+   ],
+   "t_resolve": 4530,
+   "t_tail": null
+  },
+  "confirm/hold_to_confirm|hold_confirm_success": {
+   "anim": "hold_to_confirm",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "HoldToConfirm",
+   "curves_used": [
+    "arrive",
+    "clamp01",
+    "ease_out",
+    "hold_fill",
+    "hold_fill_ms"
+   ],
+   "doc": "Hold to confirm — a hold fills the token's ring; confirm or cancel.",
+   "duration": 12710,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "D1-07",
+     "key": "motion.arrive(u)",
+     "reason": "the cancel branch of the hold demo copies the entrance law's two lines for the same reason as ArriveStatus. Fixed by the same lift. Zero pixel change.",
+     "rule": "V-ENTRANCE"
+    }
+   ],
+   "frames_14": {
+    "duration": 177.9,
+    "t_resolve": 143.6
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "DRIFT_AMP": 11.875,
+    "ENDINGS": [
+     "confirm",
+     "cancel"
+    ],
+    "RELEASE_K": 0.6,
+    "T_COMMIT": 3800,
+    "T_FADE": 260,
+    "T_IDLE": 1800,
+    "T_IN": 300,
+    "T_POP": 3480,
+    "T_RECENTER": 300,
+    "T_REL": 3100,
+    "T_TEXT": 300,
+    "T_WAIT": 450
+   },
+   "phases": {},
+   "previews": [
+    2925,
+    12110
+   ],
+   "rests_on_token": true,
+   "result_hold": 2450,
+   "source": "screens/confirm/hold_to_confirm.py:54",
+   "spec": {
+    "anim": "hold_to_confirm",
+    "busy": "HOLD TO CONFIRM",
+    "ending": "confirm",
+    "handoff": true,
+    "icon": "eth",
+    "kind": "status",
+    "result": null
+   },
+   "t_busy": [
+    0,
+    3800
+   ],
+   "t_resolve": 10260,
+   "t_tail": null
+  },
+  "core/arrive": {
+   "anim": "arrive",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "ArriveStatus",
+   "curves_used": [
+    "arrive",
+    "busy_pulse",
+    "clamp01",
+    "ease_out",
+    "lerp"
+   ],
+   "duration": 3900,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 54.6,
+    "t_resolve": 20.3
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 450
+   },
+   "previews": [
+    550,
+    3300
+   ],
+   "rests_on_token": true,
+   "result_hold": 2450,
+   "source": "pq1/status.py:520",
+   "spec": {
+    "anim": "arrive",
+    "bottom": "UPDATED",
+    "busy": null,
+    "chev": null,
+    "icon": "eth",
+    "id": "screen0",
+    "kind": "status",
+    "result": "check",
+    "state": "done"
+   },
+   "t_busy": null,
+   "t_resolve": 1450,
+   "t_tail": null
+  },
+  "core/qubit": {
+   "anim": "qubit",
+   "busy_pulse": true,
+   "can_lead": false,
+   "cls": "QubitStatus",
+   "curves_used": [
+    "arrive",
+    "busy_pulse",
+    "clamp01",
+    "ease_out",
+    "lerp"
+   ],
+   "duration": 8650,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 121.1,
+    "t_resolve": 86.8
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": [
+    2250,
+    4800
+   ],
+   "loop_ms": 850,
+   "loops": true,
+   "phases": {},
+   "previews": [
+    3500,
+    6850
+   ],
+   "rests_on_token": true,
+   "result_hold": 2450,
+   "source": "pq1/status.py:409",
+   "spec": {
+    "anim": "qubit",
+    "bottom": "CONFIRMED",
+    "busy": null,
+    "chev": null,
+    "icon": "eth",
+    "id": "screen0",
+    "kind": "status",
+    "result": "check",
+    "state": "done"
+   },
+   "t_busy": [
+    2250,
+    4800
+   ],
+   "t_resolve": 6200,
+   "t_tail": null
+  },
+  "core/qubit-fail": {
+   "anim": "qubit",
+   "busy_pulse": true,
+   "can_lead": false,
+   "cls": "QubitStatus",
+   "curves_used": [
+    "arrive",
+    "busy_pulse",
+    "clamp01",
+    "ease_out",
+    "lerp"
+   ],
+   "duration": 8650,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 121.1,
+    "t_resolve": 86.8
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": [
+    2250,
+    4800
+   ],
+   "loop_ms": 850,
+   "loops": true,
+   "phases": {},
+   "previews": [
+    3500,
+    6850
+   ],
+   "rests_on_token": true,
+   "result_hold": 2450,
+   "source": "pq1/status.py:409",
+   "spec": {
+    "anim": "qubit",
+    "bottom": "FAILED",
+    "busy": null,
+    "chev": null,
+    "icon": "eth",
+    "id": "screen0",
+    "kind": "status",
+    "result": "x",
+    "state": "failed"
+   },
+   "t_busy": [
+    2250,
+    4800
+   ],
+   "t_resolve": 6200,
+   "t_tail": null
+  },
+  "core/resolve": {
+   "anim": "resolve",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "ResolveStatus",
+   "curves_used": [
+    "arrive",
+    "busy_pulse",
+    "clamp01",
+    "ease_out",
+    "lerp"
+   ],
+   "duration": 2850,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 39.9,
+    "t_resolve": 5.6
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "phases": {},
+   "previews": [
+    200,
+    1600
+   ],
+   "rests_on_token": true,
+   "result_hold": 2450,
+   "source": "pq1/status.py:452",
+   "spec": {
+    "anim": "resolve",
+    "bottom": "DECLINED",
+    "busy": null,
+    "chev": null,
+    "icon": "eth",
+    "id": "screen0",
+    "kind": "status",
+    "result": "x",
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 400,
+   "t_tail": null
+  },
+  "fx/explosion": {
+   "anim": "explosion",
+   "busy_pulse": true,
+   "can_lead": true,
+   "cls": "Explosion",
+   "curves_used": [
+    "clamp01",
+    "ease_out"
+   ],
+   "doc": "Explosion — the token loads, clumps, and blows apart; major or minor.",
+   "duration": 10250,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 143.5,
+    "t_resolve": 109.2
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": [
+    2250,
+    4800
+   ],
+   "loop_ms": 850,
+   "loops": true,
+   "module_constants": {
+    "BUSY_UNTIL": [
+     "spiral",
+     "boom"
+    ],
+    "CFGS": {
+     "major": {
+      "aspect": 0.72,
+      "bloom": [
+       300,
+       44
+      ],
+      "grow_p": 2.6,
+      "intensity": [
+       0.6,
+       2.4
+      ],
+      "jitter": [
+       1.4,
+       4.2
+      ],
+      "qubit": {
+       "T_FLASH": 400,
+       "T_JOIN": 1300,
+       "T_RAMP": 1300,
+       "T_SEED": 300,
+       "T_SPIN": 2550,
+       "T_SPIRAL": 1000,
+       "T_SPLIT": 650,
+       "gc": [
+        214.0,
+        72.0
+       ],
+       "loop": [
+        2250,
+        4800
+       ],
+       "loop_ms": 850,
+       "orbit_r": 23.0,
+       "r_big": 30.0,
+       "r_q": 13.0,
+       "rev_ms": 850,
+       "split_x": 120.0,
+       "t2": 300,
+       "t5": 4800,
+       "t6": 5800,
+       "t7": 6200,
+       "t_orbit": 2250
+      },
+      "ring_a": 0.9,
+      "ring_span": [
+       300,
+       -42
+      ],
+      "ring_w": [
+       2.6,
+       -0.35
+      ],
+      "rings": 5,
+      "squeeze": 0.35,
+      "stagger_ms": 145,
+      "t_boom": 900,
+      "t_clump": 1100
+     },
+     "minor": {
+      "aspect": 0.9,
+      "bloom": [
+       240,
+       22
+      ],
+      "grow_p": 2.4,
+      "intensity": [
+       0.5,
+       1.0
+      ],
+      "jitter": [
+       0.8,
+       1.6
+      ],
+      "qubit": {
+       "T_FLASH": 400,
+       "T_JOIN": 1300,
+       "T_RAMP": 1300,
+       "T_SEED": 300,
+       "T_SPIN": 2550,
+       "T_SPIRAL": 1000,
+       "T_SPLIT": 650,
+       "gc": [
+        214.0,
+        72.0
+       ],
+       "loop": [
+        2250,
+        4800
+       ],
+       "loop_ms": 850,
+       "orbit_r": 23.0,
+       "r_big": 30.0,
+       "r_q": 13.0,
+       "rev_ms": 850,
+       "split_x": 120.0,
+       "t2": 300,
+       "t5": 4800,
+       "t6": 5800,
+       "t7": 6200,
+       "t_orbit": 2250
+      },
+      "ring_a": 0.85,
+      "ring_span": [
+       62,
+       -16
+      ],
+      "ring_w": [
+       2.4,
+       -0.5
+      ],
+      "rings": 2,
+      "squeeze": 0.22,
+      "stagger_ms": 145,
+      "t_boom": 750,
+      "t_clump": 800
+     }
+    },
+    "COLOR_FIELDS": [
+     "trail",
+     "body",
+     "clump_from",
+     "clump_to",
+     "ring"
+    ],
+    "SEVERITIES": [
+     "major",
+     "minor"
+    ]
+   },
+   "phases": {},
+   "previews": [
+    3000,
+    8400
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/fx/explosion.py:80",
+   "spec": {
+    "anim": "explosion",
+    "bottom": "",
+    "busy_until": "spiral",
+    "enter": null,
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "revs": null,
+    "severity": "major"
+   },
+   "t_busy": [
+    2250,
+    4800
+   ],
+   "t_resolve": 7800,
+   "t_tail": 580
+  },
+  "fx/explosion|major_explosion": {
+   "anim": "explosion",
+   "busy_pulse": true,
+   "can_lead": true,
+   "cls": "Explosion",
+   "curves_used": [
+    "clamp01",
+    "ease_out"
+   ],
+   "doc": "Explosion — the token loads, clumps, and blows apart; major or minor.",
+   "duration": 10250,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 143.5,
+    "t_resolve": 109.2
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": [
+    2250,
+    4800
+   ],
+   "loop_ms": 850,
+   "loops": true,
+   "module_constants": {
+    "BUSY_UNTIL": [
+     "spiral",
+     "boom"
+    ],
+    "CFGS": {
+     "major": {
+      "aspect": 0.72,
+      "bloom": [
+       300,
+       44
+      ],
+      "grow_p": 2.6,
+      "intensity": [
+       0.6,
+       2.4
+      ],
+      "jitter": [
+       1.4,
+       4.2
+      ],
+      "qubit": {
+       "T_FLASH": 400,
+       "T_JOIN": 1300,
+       "T_RAMP": 1300,
+       "T_SEED": 300,
+       "T_SPIN": 2550,
+       "T_SPIRAL": 1000,
+       "T_SPLIT": 650,
+       "gc": [
+        214.0,
+        72.0
+       ],
+       "loop": [
+        2250,
+        4800
+       ],
+       "loop_ms": 850,
+       "orbit_r": 23.0,
+       "r_big": 30.0,
+       "r_q": 13.0,
+       "rev_ms": 850,
+       "split_x": 120.0,
+       "t2": 300,
+       "t5": 4800,
+       "t6": 5800,
+       "t7": 6200,
+       "t_orbit": 2250
+      },
+      "ring_a": 0.9,
+      "ring_span": [
+       300,
+       -42
+      ],
+      "ring_w": [
+       2.6,
+       -0.35
+      ],
+      "rings": 5,
+      "squeeze": 0.35,
+      "stagger_ms": 145,
+      "t_boom": 900,
+      "t_clump": 1100
+     },
+     "minor": {
+      "aspect": 0.9,
+      "bloom": [
+       240,
+       22
+      ],
+      "grow_p": 2.4,
+      "intensity": [
+       0.5,
+       1.0
+      ],
+      "jitter": [
+       0.8,
+       1.6
+      ],
+      "qubit": {
+       "T_FLASH": 400,
+       "T_JOIN": 1300,
+       "T_RAMP": 1300,
+       "T_SEED": 300,
+       "T_SPIN": 2550,
+       "T_SPIRAL": 1000,
+       "T_SPLIT": 650,
+       "gc": [
+        214.0,
+        72.0
+       ],
+       "loop": [
+        2250,
+        4800
+       ],
+       "loop_ms": 850,
+       "orbit_r": 23.0,
+       "r_big": 30.0,
+       "r_q": 13.0,
+       "rev_ms": 850,
+       "split_x": 120.0,
+       "t2": 300,
+       "t5": 4800,
+       "t6": 5800,
+       "t7": 6200,
+       "t_orbit": 2250
+      },
+      "ring_a": 0.85,
+      "ring_span": [
+       62,
+       -16
+      ],
+      "ring_w": [
+       2.4,
+       -0.5
+      ],
+      "rings": 2,
+      "squeeze": 0.22,
+      "stagger_ms": 145,
+      "t_boom": 750,
+      "t_clump": 800
+     }
+    },
+    "COLOR_FIELDS": [
+     "trail",
+     "body",
+     "clump_from",
+     "clump_to",
+     "ring"
+    ],
+    "SEVERITIES": [
+     "major",
+     "minor"
+    ]
+   },
+   "phases": {},
+   "previews": [
+    3000,
+    8400
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/fx/explosion.py:80",
+   "spec": {
+    "anim": "explosion",
+    "bottom": "",
+    "busy_until": "spiral",
+    "enter": null,
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "revs": null,
+    "severity": "major"
+   },
+   "t_busy": [
+    2250,
+    4800
+   ],
+   "t_resolve": 7800,
+   "t_tail": 580
+  },
+  "fx/explosion|minor_explosion": {
+   "anim": "explosion",
+   "busy_pulse": true,
+   "can_lead": true,
+   "cls": "Explosion",
+   "curves_used": [
+    "clamp01",
+    "ease_out"
+   ],
+   "doc": "Explosion — the token loads, clumps, and blows apart; major or minor.",
+   "duration": 9800,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 137.2,
+    "t_resolve": 102.9
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": [
+    2250,
+    4800
+   ],
+   "loop_ms": 850,
+   "loops": true,
+   "module_constants": {
+    "BUSY_UNTIL": [
+     "spiral",
+     "boom"
+    ],
+    "CFGS": {
+     "major": {
+      "aspect": 0.72,
+      "bloom": [
+       300,
+       44
+      ],
+      "grow_p": 2.6,
+      "intensity": [
+       0.6,
+       2.4
+      ],
+      "jitter": [
+       1.4,
+       4.2
+      ],
+      "qubit": {
+       "T_FLASH": 400,
+       "T_JOIN": 1300,
+       "T_RAMP": 1300,
+       "T_SEED": 300,
+       "T_SPIN": 2550,
+       "T_SPIRAL": 1000,
+       "T_SPLIT": 650,
+       "gc": [
+        214.0,
+        72.0
+       ],
+       "loop": [
+        2250,
+        4800
+       ],
+       "loop_ms": 850,
+       "orbit_r": 23.0,
+       "r_big": 30.0,
+       "r_q": 13.0,
+       "rev_ms": 850,
+       "split_x": 120.0,
+       "t2": 300,
+       "t5": 4800,
+       "t6": 5800,
+       "t7": 6200,
+       "t_orbit": 2250
+      },
+      "ring_a": 0.9,
+      "ring_span": [
+       300,
+       -42
+      ],
+      "ring_w": [
+       2.6,
+       -0.35
+      ],
+      "rings": 5,
+      "squeeze": 0.35,
+      "stagger_ms": 145,
+      "t_boom": 900,
+      "t_clump": 1100
+     },
+     "minor": {
+      "aspect": 0.9,
+      "bloom": [
+       240,
+       22
+      ],
+      "grow_p": 2.4,
+      "intensity": [
+       0.5,
+       1.0
+      ],
+      "jitter": [
+       0.8,
+       1.6
+      ],
+      "qubit": {
+       "T_FLASH": 400,
+       "T_JOIN": 1300,
+       "T_RAMP": 1300,
+       "T_SEED": 300,
+       "T_SPIN": 2550,
+       "T_SPIRAL": 1000,
+       "T_SPLIT": 650,
+       "gc": [
+        214.0,
+        72.0
+       ],
+       "loop": [
+        2250,
+        4800
+       ],
+       "loop_ms": 850,
+       "orbit_r": 23.0,
+       "r_big": 30.0,
+       "r_q": 13.0,
+       "rev_ms": 850,
+       "split_x": 120.0,
+       "t2": 300,
+       "t5": 4800,
+       "t6": 5800,
+       "t7": 6200,
+       "t_orbit": 2250
+      },
+      "ring_a": 0.85,
+      "ring_span": [
+       62,
+       -16
+      ],
+      "ring_w": [
+       2.4,
+       -0.5
+      ],
+      "rings": 2,
+      "squeeze": 0.22,
+      "stagger_ms": 145,
+      "t_boom": 750,
+      "t_clump": 800
+     }
+    },
+    "COLOR_FIELDS": [
+     "trail",
+     "body",
+     "clump_from",
+     "clump_to",
+     "ring"
+    ],
+    "SEVERITIES": [
+     "major",
+     "minor"
+    ]
+   },
+   "phases": {},
+   "previews": [
+    3000,
+    7950
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/fx/explosion.py:80",
+   "spec": {
+    "anim": "explosion",
+    "bottom": "",
+    "busy_until": "spiral",
+    "enter": null,
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "revs": null,
+    "severity": "minor"
+   },
+   "t_busy": [
+    2250,
+    4800
+   ],
+   "t_resolve": 7350,
+   "t_tail": 145
+  },
+  "idle/batch_sign": {
+   "anim": "batch_sign",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "BatchSign",
+   "curves_used": [
+    "chevron_hint",
+    "tau_chase"
+   ],
+   "doc": "Batch sign — the teal token drifts on the idle sweep, trail following.",
+   "duration": 5000,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 70.0,
+    "t_resolve": 0.0
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "LOOP_MS": 5000,
+    "STEP_MS": 33.333333333333336
+   },
+   "phases": {},
+   "previews": [
+    2250,
+    3750
+   ],
+   "rests_on_token": true,
+   "result_hold": 5000,
+   "source": "screens/idle/batch_sign.py:28",
+   "spec": {
+    "anim": "batch_sign",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "total": 5,
+    "tx": 1
+   },
+   "t_busy": null,
+   "t_resolve": 0,
+   "t_tail": null
+  },
+  "idle/unknown_token": {
+   "anim": "unknown_token",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "UnknownToken",
+   "curves_used": [
+    "chevron_hint",
+    "tau_chase"
+   ],
+   "doc": "Token idle — a solid token drifts on the idle sweep, its ramp trailing.",
+   "duration": 5000,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 70.0,
+    "t_resolve": 0.0
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "LOOP_MS": 5000,
+    "STEP_MS": 33.333333333333336
+   },
+   "phases": {},
+   "previews": [
+    2250,
+    3750
+   ],
+   "rests_on_token": true,
+   "result_hold": 5000,
+   "source": "screens/idle/unknown_token.py:34",
+   "spec": {
+    "anim": "unknown_token",
+    "bottom": "UNKNOWN TOKEN",
+    "handoff": true,
+    "icon": "eth",
+    "kind": "status",
+    "result": null
+   },
+   "t_busy": null,
+   "t_resolve": 0,
+   "t_tail": null
+  },
+  "pin/pin_differ": {
+   "anim": "pin_differ",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "PinDiffer",
+   "curves_used": [
+    "clamp01",
+    "ease",
+    "ease_out",
+    "shake"
+   ],
+   "doc": "Duress PIN differ — the PIN pill is scanned, rejected by a shake.",
+   "duration": 4795,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 67.1,
+    "t_resolve": 32.8
+   },
+   "interactive": false,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "SCAN_CYCLES": 1.5,
+    "SHAKE_CYCLES": 2.0,
+    "SHAKE_PX": 7.0,
+    "T_FILL": 200,
+    "T_FILLED": 200,
+    "T_HOLD": 250,
+    "T_SCAN": 975,
+    "T_SHAKE": 420,
+    "T_TEXT": 300
+   },
+   "phases": {
+    "T0_FILL": 250,
+    "T0_FILLED": 450,
+    "T0_SCAN": 650,
+    "T0_SHAKE": 1625,
+    "T0_TEXT": 2045
+   },
+   "previews": [
+    1137,
+    4195
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/pin/pin_differ.py:40",
+   "spec": {
+    "anim": "pin_differ",
+    "bottom": "DURESS PIN MUST DIFFER",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "warning"
+   },
+   "t_busy": null,
+   "t_resolve": 2345,
+   "t_tail": null
+  },
+  "pin/pin_entering": {
+   "anim": "pin_entering",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "PinEntering",
+   "curves_used": [
+    "clamp01",
+    "ease",
+    "ease_out",
+    "hold_fill"
+   ],
+   "doc": "PIN entering — the eight-ring input, typed with the two buttons.",
+   "duration": 17600,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "D1-11",
+     "key": "hold=2840",
+     "reason": "the PIN entry is an ENTRY, not an ending: its duration is the typed row plus whichever verdict tail follows, so the 2450 ms result hold does not apply to the screen as a whole (the tail inside it does rest 2450). The rule should arguably skip interactive screens.",
+     "rule": "V-HOLD"
+    }
+   ],
+   "frames_14": {
+    "duration": 246.4,
+    "t_resolve": 206.6
+   },
+   "interactive": true,
+   "is_verdict": false,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "ACT_MS": 400,
+    "BOUNCE_MS": 220,
+    "CHEV_STAGGER": 250,
+    "DIGITS": 8,
+    "DONE_PAIR": [],
+    "EXITS": [
+     "rest",
+     "submit"
+    ],
+    "LBL_GAP": 8.8,
+    "LBL_L": 36.5,
+    "LBL_LS": 0.5,
+    "LBL_R": 390.5,
+    "LBL_SIZE": 16,
+    "L_FADE": 500,
+    "L_GAP": 3000,
+    "L_SHOW": 2000,
+    "L_SLOT": 6000,
+    "PAIRS": [
+     [
+      "−",
+      "+"
+     ],
+     [
+      "ENTER (BOTH)"
+     ],
+     [
+      "BACK (2X)",
+      "NEXT (2X)"
+     ]
+    ],
+    "REST_MS": 2600,
+    "SIGNS": {
+     "+": "<pq1.procedural.marks.plus>",
+     "-": "<pq1.procedural.marks.minus>",
+     "−": "<pq1.procedural.marks.minus>"
+    },
+    "SIGN_GAP": 22.0,
+    "SIGN_R": 19.0,
+    "SIGN_STROKE": 0.11,
+    "STEP_ADV": 240,
+    "STEP_SETTLE": 420,
+    "STEP_TICK": 260,
+    "SWAP_MS": 300,
+    "T_BLACK": 400,
+    "T_CHECK": 200,
+    "T_FADE": 500,
+    "T_OUT": 500,
+    "T_SETTLE": 600,
+    "T_TEXT": 300,
+    "T_UI": 500
+   },
+   "phases": {},
+   "previews": [
+    7380,
+    15560
+   ],
+   "rests_on_token": false,
+   "result_hold": 2840,
+   "source": "screens/pin/pin_entering.py:258",
+   "spec": {
+    "anim": "pin_entering",
+    "bottom": "PIN ENTERED",
+    "busy": "ENTER PIN",
+    "done_labels": null,
+    "exit": "rest",
+    "handoff": true,
+    "kind": "status",
+    "labels": null,
+    "match": null,
+    "miss": null,
+    "pin": "24031958",
+    "result": null,
+    "typed": null
+   },
+   "t_busy": null,
+   "t_resolve": 14760,
+   "t_tail": null
+  },
+  "verdict/duress_differ": {
+   "anim": "duress_differ",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "DuressDiffer",
+   "curves_used": [
+    "shake"
+   ],
+   "doc": "Duress PIN must differ — the pill is scanned, the rule refuses it.",
+   "duration": 4770,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 66.8,
+    "t_resolve": 32.5
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "SCAN_CYCLES": 1.0,
+    "SHAKE_CYCLES": 2.0,
+    "SHAKE_PX": 7.0,
+    "T_BEAT": 200,
+    "T_FILLED": 200,
+    "T_SCAN": 650,
+    "T_SHAKE": 420
+   },
+   "phases": {
+    "T0_SCAN": 200,
+    "T0_SHAKE": 850,
+    "T_HOLD": 250,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1470
+   },
+   "previews": [
+    400,
+    4170
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/duress_differ.py:50",
+   "spec": {
+    "anim": "duress_differ",
+    "bottom": "DURESS PIN MUST DIFFER",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "warning"
+   },
+   "t_busy": null,
+   "t_resolve": 2320,
+   "t_tail": null
+  },
+  "verdict/factory_signing": {
+   "anim": "factory_signing",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "FactorySigning",
+   "curves_used": [
+    "clamp01",
+    "freewheel"
+   ],
+   "doc": "Factory signing — the blue signing-machine gear coasts to a stop.",
+   "duration": 5050,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 70.7,
+    "t_resolve": 36.4
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "DECAY_K": 4.2,
+    "GEAR_R": 32,
+    "SHUTTER_MS": 72.5,
+    "TOTAL_TURNS": 1.0,
+    "T_BEAT": 150,
+    "T_SPIN": 1800
+   },
+   "phases": {
+    "T_HOLD": 350,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1650
+   },
+   "previews": [
+    950,
+    4450
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/factory_signing.py:61",
+   "spec": {
+    "anim": "factory_signing",
+    "bottom": "FACTORY SIGNING SLOT - 0",
+    "color": [
+     74,
+     159,
+     240
+    ],
+    "handoff": true,
+    "kind": "status",
+    "result": null
+   },
+   "t_busy": null,
+   "t_resolve": 2600,
+   "t_tail": null
+  },
+  "verdict/firmware_verified": {
+   "anim": "firmware_verified",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "FirmwareVerified",
+   "curves_used": [],
+   "doc": "Firmware verified — a white disc arrives carrying a black check.",
+   "duration": 3900,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 54.6,
+    "t_resolve": 20.3
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {},
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 450
+   },
+   "previews": [
+    550,
+    3300
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/firmware_verified.py:14",
+   "spec": {
+    "anim": "firmware_verified",
+    "bottom": "FIRMWARE VERIFIED",
+    "color": [
+     255,
+     255,
+     255
+    ],
+    "handoff": true,
+    "kind": "status",
+    "result": null
+   },
+   "t_busy": null,
+   "t_resolve": 1450,
+   "t_tail": null
+  },
+  "verdict/headshake": {
+   "anim": "headshake",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Headshake",
+   "curves_used": [
+    "shake"
+   ],
+   "doc": "Headshake — the X ring arrives and shakes its head once: no.",
+   "duration": 4320,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 60.5,
+    "t_resolve": 26.2
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "RING_INSET": 1.2,
+    "SHAKE_PX": 6.0,
+    "T_BEAT": 450,
+    "T_SHAKE": 420
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 870
+   },
+   "previews": [
+    550,
+    3720
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/headshake.py:42",
+   "spec": {
+    "anim": "headshake",
+    "bottom": "CANCELED",
+    "handoff": true,
+    "kind": "status",
+    "result": "x",
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1870,
+   "t_tail": null
+  },
+  "verdict/headshake|canceled": {
+   "anim": "headshake",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Headshake",
+   "curves_used": [
+    "shake"
+   ],
+   "doc": "Headshake — the X ring arrives and shakes its head once: no.",
+   "duration": 4320,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 60.5,
+    "t_resolve": 26.2
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "RING_INSET": 1.2,
+    "SHAKE_PX": 6.0,
+    "T_BEAT": 450,
+    "T_SHAKE": 420
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 870
+   },
+   "previews": [
+    550,
+    3720
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/headshake.py:42",
+   "spec": {
+    "anim": "headshake",
+    "bottom": "CANCELED",
+    "handoff": true,
+    "kind": "status",
+    "result": "x",
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1870,
+   "t_tail": null
+  },
+  "verdict/headshake|wrong_seed_phrase": {
+   "anim": "headshake",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Headshake",
+   "curves_used": [
+    "shake"
+   ],
+   "doc": "Headshake — the X ring arrives and shakes its head once: no.",
+   "duration": 4320,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 60.5,
+    "t_resolve": 26.2
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "RING_INSET": 1.2,
+    "SHAKE_PX": 6.0,
+    "T_BEAT": 450,
+    "T_SHAKE": 420
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 870
+   },
+   "previews": [
+    550,
+    3720
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/headshake.py:42",
+   "spec": {
+    "anim": "headshake",
+    "bottom": "WRONG SEED PHRASE",
+    "handoff": true,
+    "kind": "status",
+    "result": "x",
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1870,
+   "t_tail": null
+  },
+  "verdict/last_attempt": {
+   "anim": "last_attempt",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "LastAttempt",
+   "curves_used": [
+    "decel",
+    "heartbeat",
+    "wobble"
+   ],
+   "doc": "Last attempt — the attempt counter reels down to 1 beside a red heart.",
+   "duration": 7250,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 101.5,
+    "t_resolve": 67.2
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "BOUNCE": 0.18,
+    "DIGIT_DY": -0.8,
+    "DIGIT_PX": 40.0,
+    "DIGIT_WEIGHT": "semibold",
+    "HEART_DX": 34.0,
+    "HEART_H": 30.0,
+    "NUM_X": 191.5,
+    "T_BEAT": 700,
+    "T_REST": 400,
+    "T_ROLL": 2000,
+    "T_SETTLE": 700,
+    "WIN_DN": 0.4
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 3800
+   },
+   "previews": [
+    2100,
+    6650
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/last_attempt.py:64",
+   "spec": {
+    "anim": "last_attempt",
+    "attempts": 8,
+    "bottom": "LAST ATTEMPT",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 4800,
+   "t_tail": null
+  },
+  "verdict/padlock": {
+   "anim": "padlock",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Padlock",
+   "curves_used": [
+    "arrive",
+    "clamp01",
+    "ease",
+    "ease_out",
+    "recoil"
+   ],
+   "doc": "Padlock — the shackle turns in and clicks shut, or springs open.",
+   "duration": 4320,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "D1-06",
+     "key": "arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))",
+     "reason": "the padlock re-derives the entrance inline because it overrides T_IN to its whole mechanism window (1070 lock / 1600 unlock), so VerdictAnim's u is the mechanism's progress, not the entrance's. The fix is the same as V-TIN's: move the mechanism into T_WAIT and let the inherited entrance() run. Output is identical today — this is a structural exception, not a visual one.",
+     "rule": "V-ENTRANCE"
+    },
+    {
+     "audit": "D1-06",
+     "key": "T_IN=1070",
+     "reason": "padlock lock spends its whole mechanism (turn-in 520 -> drop 260 -> click 290) inside T_IN instead of T_WAIT, so T_IN reads as a 1070 ms entrance. The icon's own fade + rise still finish within ARRIVE_MS — the law is obeyed on screen, only the bookkeeping differs.",
+     "rule": "V-TIN"
+    }
+   ],
+   "frames_14": {
+    "duration": 60.5,
+    "t_resolve": 26.2
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "DIRECTIONS": [
+     "lock",
+     "unlock"
+    ],
+    "KICK": 10.0,
+    "OPEN_LIFT": 9.0,
+    "T_CLICK": 290,
+    "T_DROP": 260,
+    "T_KICK": 250,
+    "T_MECH": 1070,
+    "T_MECH_UNLOCK": 1600,
+    "T_PAUSE": 250,
+    "T_SNAP": 145,
+    "T_TURN": 520,
+    "T_TURN_OUT": 800
+   },
+   "phases": {
+    "T_HOLD": 500,
+    "T_IN": 1070,
+    "T_TEXT": 300,
+    "T_WAIT": 0
+   },
+   "previews": [
+    1035,
+    3720
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/padlock.py:48",
+   "spec": {
+    "anim": "padlock",
+    "bottom": "LOCKED",
+    "direction": "lock",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1870,
+   "t_tail": null
+  },
+  "verdict/padlock|lock": {
+   "anim": "padlock",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Padlock",
+   "curves_used": [
+    "arrive",
+    "clamp01",
+    "ease",
+    "ease_out",
+    "recoil"
+   ],
+   "doc": "Padlock — the shackle turns in and clicks shut, or springs open.",
+   "duration": 4320,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "D1-06",
+     "key": "arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))",
+     "reason": "the padlock re-derives the entrance inline because it overrides T_IN to its whole mechanism window (1070 lock / 1600 unlock), so VerdictAnim's u is the mechanism's progress, not the entrance's. The fix is the same as V-TIN's: move the mechanism into T_WAIT and let the inherited entrance() run. Output is identical today — this is a structural exception, not a visual one.",
+     "rule": "V-ENTRANCE"
+    }
+   ],
+   "frames_14": {
+    "duration": 60.5,
+    "t_resolve": 26.2
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "DIRECTIONS": [
+     "lock",
+     "unlock"
+    ],
+    "KICK": 10.0,
+    "OPEN_LIFT": 9.0,
+    "T_CLICK": 290,
+    "T_DROP": 260,
+    "T_KICK": 250,
+    "T_MECH": 1070,
+    "T_MECH_UNLOCK": 1600,
+    "T_PAUSE": 250,
+    "T_SNAP": 145,
+    "T_TURN": 520,
+    "T_TURN_OUT": 800
+   },
+   "phases": {
+    "T_HOLD": 500,
+    "T_IN": 1070,
+    "T_TEXT": 300,
+    "T_WAIT": 0
+   },
+   "previews": [
+    1035,
+    3720
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/padlock.py:48",
+   "spec": {
+    "anim": "padlock",
+    "bottom": "LOCKED",
+    "direction": "lock",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1870,
+   "t_tail": null
+  },
+  "verdict/padlock|unlock": {
+   "anim": "padlock",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Padlock",
+   "curves_used": [
+    "arrive",
+    "clamp01",
+    "ease",
+    "ease_out",
+    "recoil"
+   ],
+   "doc": "Padlock — the shackle turns in and clicks shut, or springs open.",
+   "duration": 4850,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "D1-06",
+     "key": "arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))",
+     "reason": "the padlock re-derives the entrance inline because it overrides T_IN to its whole mechanism window (1070 lock / 1600 unlock), so VerdictAnim's u is the mechanism's progress, not the entrance's. The fix is the same as V-TIN's: move the mechanism into T_WAIT and let the inherited entrance() run. Output is identical today — this is a structural exception, not a visual one.",
+     "rule": "V-ENTRANCE"
+    },
+    {
+     "audit": "D1-06",
+     "key": "T_IN=1600",
+     "reason": "as above, for unlock (snap 145 -> kick 250 -> pause 250 -> swing 800).",
+     "rule": "V-TIN"
+    }
+   ],
+   "frames_14": {
+    "duration": 67.9,
+    "t_resolve": 33.6
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "DIRECTIONS": [
+     "lock",
+     "unlock"
+    ],
+    "KICK": 10.0,
+    "OPEN_LIFT": 9.0,
+    "T_CLICK": 290,
+    "T_DROP": 260,
+    "T_KICK": 250,
+    "T_MECH": 1070,
+    "T_MECH_UNLOCK": 1600,
+    "T_PAUSE": 250,
+    "T_SNAP": 145,
+    "T_TURN": 520,
+    "T_TURN_OUT": 800
+   },
+   "phases": {
+    "T_HOLD": 500,
+    "T_IN": 1600,
+    "T_TEXT": 300,
+    "T_WAIT": 0
+   },
+   "previews": [
+    1300,
+    4250
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/padlock.py:48",
+   "spec": {
+    "anim": "padlock",
+    "bottom": "UNLOCKED",
+    "direction": "unlock",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "done"
+   },
+   "t_busy": null,
+   "t_resolve": 2400,
+   "t_tail": null
+  },
+  "verdict/pin_mismatch": {
+   "anim": "pin_mismatch",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "PinMismatch",
+   "curves_used": [
+    "clamp01",
+    "ease",
+    "shake"
+   ],
+   "doc": "PIN mismatch — the entered PIN fills the pill, turns red, is shaken off.",
+   "duration": 4520,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 63.3,
+    "t_resolve": 29.0
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "SHAKE_CYCLES": 2.0,
+    "SHAKE_PX": 7.0,
+    "T_BEAT": 200,
+    "T_FILL": 200,
+    "T_FILLED": 200,
+    "T_SHAKE": 420,
+    "T_TURN": 200
+   },
+   "phases": {
+    "T0_SHAKE": 600,
+    "T0_TURN": 400,
+    "T_HOLD": 250,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1220
+   },
+   "previews": [
+    400,
+    3920
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/pin_mismatch.py:50",
+   "spec": {
+    "anim": "pin_mismatch",
+    "bottom": "PIN MISMATCH",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 2070,
+   "t_tail": null
+  },
+  "verdict/pin_mismatch|wrong_pin": {
+   "anim": "pin_mismatch",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "PinMismatch",
+   "curves_used": [
+    "clamp01",
+    "ease",
+    "shake"
+   ],
+   "doc": "PIN mismatch — the entered PIN fills the pill, turns red, is shaken off.",
+   "duration": 4520,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 63.3,
+    "t_resolve": 29.0
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "SHAKE_CYCLES": 2.0,
+    "SHAKE_PX": 7.0,
+    "T_BEAT": 200,
+    "T_FILL": 200,
+    "T_FILLED": 200,
+    "T_SHAKE": 420,
+    "T_TURN": 200
+   },
+   "phases": {
+    "T0_SHAKE": 600,
+    "T0_TURN": 400,
+    "T_HOLD": 250,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1220
+   },
+   "previews": [
+    400,
+    3920
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/pin_mismatch.py:50",
+   "spec": {
+    "anim": "pin_mismatch",
+    "bottom": "WRONG PIN",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 2070,
+   "t_tail": null
+  },
+  "verdict/rng_failed": {
+   "anim": "rng_failed",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "RngFailed",
+   "curves_used": [
+    "clamp01",
+    "decel"
+   ],
+   "doc": "RNG failed — the red die rests, tumbles on three axes and lands on 1-2-3.",
+   "duration": 5450,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 76.3,
+    "t_resolve": 42.0
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "DECEL_P": 2.8,
+    "DIE_DX": 0.5,
+    "SHUTTER_MS": 24.166666666666668,
+    "SIZE": 21.0,
+    "SPIN": [
+     3.141592653589793,
+     4.71238898038469,
+     1.5707963267948966
+    ],
+    "T_BEAT": 150,
+    "T_REST": 350,
+    "T_TUMBLE": 1500
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 2000
+   },
+   "previews": [
+    1800,
+    4850
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/rng_failed.py:69",
+   "spec": {
+    "anim": "rng_failed",
+    "bottom": "RNG FAILED",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 3000,
+   "t_tail": null
+  },
+  "verdict/shield": {
+   "anim": "shield",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Shield",
+   "curves_used": [
+    "shake"
+   ],
+   "doc": "Shield — the backup shield arrives with its mark and nods yes, or shakes no.",
+   "duration": 4600,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 64.4,
+    "t_resolve": 30.1
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "GESTURES": {
+     "nod": [
+      "y",
+      5.0,
+      700
+     ],
+     "wiggle": [
+      "x",
+      6.0,
+      420
+     ]
+    },
+    "MARK_DY": 2.0,
+    "MARK_R": {
+     "check": 25.0,
+     "x": 28.333333333333336
+    },
+    "SHIELD_H": 62.0,
+    "T_BEAT": 450
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1150
+   },
+   "previews": [
+    550,
+    4000
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/shield.py:52",
+   "spec": {
+    "anim": "shield",
+    "bottom": "BACKUP OK",
+    "gesture": "nod",
+    "handoff": true,
+    "kind": "status",
+    "result": "check",
+    "state": "done"
+   },
+   "t_busy": null,
+   "t_resolve": 2150,
+   "t_tail": null
+  },
+  "verdict/shield|backup_ok": {
+   "anim": "shield",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Shield",
+   "curves_used": [
+    "shake"
+   ],
+   "doc": "Shield — the backup shield arrives with its mark and nods yes, or shakes no.",
+   "duration": 4600,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 64.4,
+    "t_resolve": 30.1
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "GESTURES": {
+     "nod": [
+      "y",
+      5.0,
+      700
+     ],
+     "wiggle": [
+      "x",
+      6.0,
+      420
+     ]
+    },
+    "MARK_DY": 2.0,
+    "MARK_R": {
+     "check": 25.0,
+     "x": 28.333333333333336
+    },
+    "SHIELD_H": 62.0,
+    "T_BEAT": 450
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1150
+   },
+   "previews": [
+    550,
+    4000
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/shield.py:52",
+   "spec": {
+    "anim": "shield",
+    "bottom": "BACKUP OK",
+    "gesture": "nod",
+    "handoff": true,
+    "kind": "status",
+    "result": "check",
+    "state": "done"
+   },
+   "t_busy": null,
+   "t_resolve": 2150,
+   "t_tail": null
+  },
+  "verdict/shield|no_match": {
+   "anim": "shield",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Shield",
+   "curves_used": [
+    "shake"
+   ],
+   "doc": "Shield — the backup shield arrives with its mark and nods yes, or shakes no.",
+   "duration": 4320,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 60.5,
+    "t_resolve": 26.2
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "GESTURES": {
+     "nod": [
+      "y",
+      5.0,
+      700
+     ],
+     "wiggle": [
+      "x",
+      6.0,
+      420
+     ]
+    },
+    "MARK_DY": 2.0,
+    "MARK_R": {
+     "check": 25.0,
+     "x": 28.333333333333336
+    },
+    "SHIELD_H": 62.0,
+    "T_BEAT": 450
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 870
+   },
+   "previews": [
+    550,
+    3720
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/shield.py:52",
+   "spec": {
+    "anim": "shield",
+    "bottom": "NO MATCH",
+    "gesture": "wiggle",
+    "handoff": true,
+    "kind": "status",
+    "result": "x",
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1870,
+   "t_tail": null
+  },
+  "verdict/sig_error": {
+   "anim": "sig_error",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "SigError",
+   "curves_used": [
+    "attention_pulse",
+    "clamp01",
+    "ease_out"
+   ],
+   "doc": "Sig error — the warning triangle reports a failed check, detail-grid.",
+   "duration": 4300,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 60.2,
+    "t_resolve": 25.9
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "SIDES": {
+     "left": 74,
+     "right": 352
+    },
+    "TIERS": [
+     [
+      36,
+      12,
+      1
+     ],
+     [
+      32,
+      14,
+      1
+     ],
+     [
+      28,
+      16,
+      2
+     ],
+     [
+      22,
+      21,
+      3
+     ]
+    ],
+    "TRI_H": 60
+   },
+   "phases": {
+    "T_HOLD": 350,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 900
+   },
+   "previews": [
+    500,
+    3700
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/sig_error.py:51",
+   "spec": {
+    "anim": "sig_error",
+    "bottom": "",
+    "handoff": true,
+    "kind": "status",
+    "label": "ERROR",
+    "lines": [
+     "Sig verify FAIL"
+    ],
+    "result": null,
+    "side": "left",
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1850,
+   "t_tail": null
+  },
+  "verdict/tamper": {
+   "anim": "tamper",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Tamper",
+   "curves_used": [
+    "attention_pulse"
+   ],
+   "doc": "Tamper detected — the warning triangle's exclamation, centred, sounds the alarm.",
+   "duration": 4300,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 60.2,
+    "t_resolve": 25.9
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "TRI_H": 64
+   },
+   "phases": {
+    "T_HOLD": 350,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 900
+   },
+   "previews": [
+    500,
+    3700
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/tamper.py:20",
+   "spec": {
+    "anim": "tamper",
+    "bottom": "TAMPER DETECTED",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1850,
+   "t_tail": null
+  },
+  "verdict/wipe": {
+   "anim": "wipe",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Wipe",
+   "curves_used": [
+    "attention_pulse"
+   ],
+   "doc": "Wallet wiped — the warning triangle carries the brush, two treatments.",
+   "duration": 4650,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 65.1,
+    "t_resolve": 30.8
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "ACCENT": {
+     "pulse": 900,
+     "sweep": 1400
+    },
+    "BRUSH_DY": 9,
+    "BRUSH_W": 30,
+    "TREATMENTS": [
+     "pulse",
+     "sweep"
+    ],
+    "TRI_H": 64,
+    "T_MARK": 300
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1200
+   },
+   "previews": [
+    550,
+    4050
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/wipe.py:51",
+   "spec": {
+    "anim": "wipe",
+    "bottom": "WALLET WIPED",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed",
+    "treatment": "pulse"
+   },
+   "t_busy": null,
+   "t_resolve": 2200,
+   "t_tail": null
+  },
+  "verdict/wipe|wallet_wiped": {
+   "anim": "wipe",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Wipe",
+   "curves_used": [
+    "attention_pulse"
+   ],
+   "doc": "Wallet wiped — the warning triangle carries the brush, two treatments.",
+   "duration": 4650,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 65.1,
+    "t_resolve": 30.8
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "ACCENT": {
+     "pulse": 900,
+     "sweep": 1400
+    },
+    "BRUSH_DY": 9,
+    "BRUSH_W": 30,
+    "TREATMENTS": [
+     "pulse",
+     "sweep"
+    ],
+    "TRI_H": 64,
+    "T_MARK": 300
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1200
+   },
+   "previews": [
+    550,
+    4050
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/wipe.py:51",
+   "spec": {
+    "anim": "wipe",
+    "bottom": "WALLET WIPED",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed",
+    "treatment": "pulse"
+   },
+   "t_busy": null,
+   "t_resolve": 2200,
+   "t_tail": null
+  },
+  "verdict/wipe|wallet_wiped_anim": {
+   "anim": "wipe",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Wipe",
+   "curves_used": [
+    "attention_pulse"
+   ],
+   "doc": "Wallet wiped — the warning triangle carries the brush, two treatments.",
+   "duration": 5150,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 72.1,
+    "t_resolve": 37.8
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "ACCENT": {
+     "pulse": 900,
+     "sweep": 1400
+    },
+    "BRUSH_DY": 9,
+    "BRUSH_W": 30,
+    "TREATMENTS": [
+     "pulse",
+     "sweep"
+    ],
+    "TRI_H": 64,
+    "T_MARK": 300
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1700
+   },
+   "previews": [
+    550,
+    4550
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/wipe.py:51",
+   "spec": {
+    "anim": "wipe",
+    "bottom": "WALLET WIPED",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed",
+    "treatment": "sweep"
+   },
+   "t_busy": null,
+   "t_resolve": 2700,
+   "t_tail": null
+  },
+  "verdict/wipe|wallet_wiped_explosion": {
+   "anim": "wipe",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Wipe",
+   "curves_used": [
+    "attention_pulse"
+   ],
+   "doc": "Wallet wiped — the warning triangle carries the brush, two treatments.",
+   "duration": 14598,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 204.4,
+    "t_resolve": 170.1
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "lead": {
+    "anim": "explosion",
+    "main_starts_at": 9448,
+    "t_resolve": 8748,
+    "t_tail": 580
+   },
+   "loop": [
+    1698.1455947722839,
+    5748
+   ],
+   "loop_ms": 850,
+   "loops": true,
+   "module_constants": {
+    "ACCENT": {
+     "pulse": 900,
+     "sweep": 1400
+    },
+    "BRUSH_DY": 9,
+    "BRUSH_W": 30,
+    "TREATMENTS": [
+     "pulse",
+     "sweep"
+    ],
+    "TRI_H": 64,
+    "T_MARK": 300
+   },
+   "phases": {
+    "T_HOLD": 400,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 1700
+   },
+   "previews": [
+    2248,
+    13998
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/wipe.py:51",
+   "spec": {
+    "anim": "wipe",
+    "bottom": "WALLET WIPED",
+    "handoff": true,
+    "kind": "status",
+    "lead": {
+     "anim": "explosion",
+     "body": [
+      255,
+      66,
+      61
+     ],
+     "busy": [
+      "WIPING…",
+      "DO NOT POWER OFF"
+     ],
+     "busy_until": "boom",
+     "clump_from": [
+      255,
+      66,
+      61
+     ],
+     "clump_to": [
+      255,
+      66,
+      61
+     ],
+     "enter": "sides",
+     "revs": 5,
+     "ring": [
+      255,
+      66,
+      61
+     ],
+     "severity": "major",
+     "trail": [
+      255,
+      66,
+      61
+     ]
+    },
+    "lead_gap": 700,
+    "result": null,
+    "state": "failed",
+    "treatment": "sweep"
+   },
+   "t_busy": null,
+   "t_resolve": 12148,
+   "t_tail": null
+  }
+ },
+ "note": "phases are per INSTANCE (they change per preset). duration = t_resolve + result_hold. All ms.",
+ "result_hold_ms": 2450,
+ "schema_version": 1
+}

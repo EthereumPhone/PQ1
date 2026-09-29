@@ -41,6 +41,65 @@ use sphincs_tz_bip39::{
 };
 use zeroize::Zeroize;
 
+// ---------------------------------------------------------------------------
+// Port step 4 — the pixel UI's twins of the wizard pages
+// ---------------------------------------------------------------------------
+//
+// Each painter returns `true` when the pixel UI showed the screen; `false`
+// (no `ui-px`, or no verified atlas) means the caller paints its 16×4 page.
+
+/// The chooser ask (`status_map::choice`).
+fn px_choice(title: &[u8], option: &[u8]) -> bool {
+    #[cfg(feature = "ui-px")]
+    {
+        super::px::screens::show(&super::px::status_map::choice(title, option))
+    }
+    #[cfg(not(feature = "ui-px"))]
+    {
+        let _ = (title, option);
+        false
+    }
+}
+
+/// Words a seed page holds on the pixel grid (two columns of four).
+#[cfg(feature = "ui-px")]
+const PX_WORDS_PER_PAGE: usize = 8;
+
+/// `(total pages, words per page)` for one walk through the seed words,
+/// decided ONCE before the first page: the design's grid (3 × 8) when the
+/// pixel UI can paint, else the 16×4 pages (8 × 3). A later paint failure
+/// cancels the walk (the wizard retries on the pages) rather than ever
+/// mixing the two pagings — no word can be skipped.
+fn mnemonic_paging() -> (usize, usize) {
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if super::px::assets::verify_atlas().is_ok() {
+        return (WORD_COUNT / PX_WORDS_PER_PAGE, PX_WORDS_PER_PAGE);
+    }
+    #[cfg(all(feature = "ui-px", not(feature = "ui-lcd")))]
+    return (WORD_COUNT / PX_WORDS_PER_PAGE, PX_WORDS_PER_PAGE);
+    #[allow(unreachable_code)]
+    (TOTAL_PAGES, WORDS_PER_PAGE)
+}
+
+/// A seed page on the pixel grid: the numbers are public, the words go
+/// through the constant-time run (F-24 — `Font::blit_secret_run`), fetched
+/// with the constant-time `word_bytes` (no load addressed by a word index)
+/// into fixed eight-byte cells (no length-dependent copy).
+#[cfg(feature = "ui-px")]
+fn px_mnemonic_page(m: &Mnemonic, page: usize) -> bool {
+    let mut cells = [[0u8; MAX_WORD_BYTES]; PX_WORDS_PER_PAGE];
+    for (slot, cell) in cells.iter_mut().enumerate() {
+        let _ = m.word_bytes(page * PX_WORDS_PER_PAGE + slot, cell);
+    }
+    let secret: [(usize, &[u8]); PX_WORDS_PER_PAGE] = core::array::from_fn(|k| (k, &cells[k][..]));
+    let first = (page * PX_WORDS_PER_PAGE + 1) as u8;
+    let ok = super::px::screens::show_with(&super::px::status_map::seed_page(first, PX_WORDS_PER_PAGE), &secret);
+    for c in cells.iter_mut() {
+        c.zeroize();
+    }
+    ok
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum WizardChoice {
     NewWallet,
@@ -72,19 +131,23 @@ pub fn choose_setup_mode() -> WizardChoice {
     let mut idx: usize = 0;
 
     loop {
-        let d = display();
-        d.clear();
-        d.draw_line(0, "  Wallet Setup");
-        for (i, label) in options.iter().enumerate() {
-            let mut row = [b' '; DISPLAY_COLS];
-            row[0] = if i == idx { b'>' } else { b' ' };
-            let lb = label.as_bytes();
-            let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
-            row[2..2 + max].copy_from_slice(&lb[..max]);
-            d.draw_line(i + 1, super::ascii_str(&row));
+        // Port step 4: the chooser is the design's ask, the highlighted
+        // option as its caption (taps switch it, the chord selects).
+        if !px_choice(b"", [&b"Create new wallet"[..], b"Restore wallet"][idx]) {
+            let d = display();
+            d.clear();
+            d.draw_line(0, "  Wallet Setup");
+            for (i, label) in options.iter().enumerate() {
+                let mut row = [b' '; DISPLAY_COLS];
+                row[0] = if i == idx { b'>' } else { b' ' };
+                let lb = label.as_bytes();
+                let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
+                row[2..2 + max].copy_from_slice(&lb[..max]);
+                d.draw_line(i + 1, super::ascii_str(&row));
+            }
+            d.draw_line(3, "L=- R=+ LR=ok");
+            d.flush();
         }
-        d.draw_line(3, "L=- R=+ LR=ok");
-        d.flush();
 
         let mut idle = || timeout::is_idle();
         let event = match input().wait_button(&mut idle) {
@@ -135,19 +198,21 @@ fn yes_no(title: &str) -> Option<bool> {
     let options = ["No", "Yes"];
     let mut idx: usize = 0;
     loop {
-        let d = display();
-        d.clear();
-        d.draw_line(0, title);
-        for (i, label) in options.iter().enumerate() {
-            let mut row = [b' '; DISPLAY_COLS];
-            row[0] = if i == idx { b'>' } else { b' ' };
-            let lb = label.as_bytes();
-            let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
-            row[2..2 + max].copy_from_slice(&lb[..max]);
-            d.draw_line(i + 1, super::ascii_str(&row));
+        if !px_choice(title.as_bytes(), options[idx].as_bytes()) {
+            let d = display();
+            d.clear();
+            d.draw_line(0, title);
+            for (i, label) in options.iter().enumerate() {
+                let mut row = [b' '; DISPLAY_COLS];
+                row[0] = if i == idx { b'>' } else { b' ' };
+                let lb = label.as_bytes();
+                let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
+                row[2..2 + max].copy_from_slice(&lb[..max]);
+                d.draw_line(i + 1, super::ascii_str(&row));
+            }
+            d.draw_line(3, "L=- R=+ LR=ok");
+            d.flush();
         }
-        d.draw_line(3, "L=- R=+ LR=ok");
-        d.flush();
 
         let mut idle = || timeout::is_idle();
         let event = match input().wait_button(&mut idle) {
@@ -305,10 +370,23 @@ pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {
 fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {
     let mut page: usize = 0;
     let mut seen_last = false;
+    // The pixel grid holds eight words a page, the 16×4 page three; the
+    // paging is fixed for the whole walk (see `mnemonic_paging`).
+    let (total_pages, per_page) = mnemonic_paging();
 
     loop {
-        render_mnemonic_page(m, page);
-        if page == TOTAL_PAGES - 1 {
+        if per_page == WORDS_PER_PAGE {
+            render_mnemonic_page(m, page);
+        } else {
+            #[cfg(feature = "ui-px")]
+            if !px_mnemonic_page(m, page) {
+                // The atlas stopped verifying mid-walk: never fall back to
+                // a paging that would skip words — cancel, the wizard
+                // retries on the 16×4 pages.
+                return WizardResult::Cancelled;
+            }
+        }
+        if page == total_pages - 1 {
             seen_last = true;
         }
 
@@ -321,7 +399,7 @@ fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {
 
         match event {
             (Button::Right, Press::Short) => {
-                if page + 1 < TOTAL_PAGES {
+                if page + 1 < total_pages {
                     page += 1;
                 }
             }
@@ -337,7 +415,7 @@ fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {
                     return WizardResult::Confirmed;
                 }
                 // Otherwise treat long-Right as "next page" hint.
-                if page + 1 < TOTAL_PAGES {
+                if page + 1 < total_pages {
                     page += 1;
                 }
             }
@@ -831,6 +909,12 @@ fn prefix_is_exact_word(p: &str) -> bool {
 }
 
 fn render_letter_screen(title: &str, buf: &[u8; MAX_LETTERS], len: usize) {
+    // Port step 4: the entry row (committed letters in white rings, the
+    // dialed one in the active ring) — the same letters the page shows.
+    #[cfg(feature = "ui-px")]
+    if super::px::screens::show(&super::px::status_map::letter_row(title.as_bytes(), buf, len)) {
+        return;
+    }
     let d = display();
     d.clear();
     d.draw_line(0, title);
@@ -906,6 +990,26 @@ fn pick_candidate(title: &str, start: usize, end: usize) -> CandidateResult {
 }
 
 fn render_candidate_screen(title: &str, start: usize, end: usize, cur: usize) {
+    // Port step 4: the three candidates on the grid's rows, the middle one
+    // the cursor — fetched with the constant-time `word_bytes_at` and drawn
+    // by the constant-time run, like the page's secret rows.
+    #[cfg(feature = "ui-px")]
+    {
+        let mut cells = [[0u8; MAX_WORD_BYTES]; 3];
+        for (slot, cell) in cells.iter_mut().enumerate() {
+            let idx = wrap_in_range(start, end, cur, slot as isize - 1);
+            let (wb, _) = word_bytes_at(idx as u16);
+            cell.copy_from_slice(&wb[..MAX_WORD_BYTES]);
+        }
+        let secret: [(usize, &[u8]); 3] = [(0, &cells[0][..]), (1, &cells[1][..]), (2, &cells[2][..])];
+        let ok = super::px::screens::show_with(&super::px::status_map::candidate_list(title.as_bytes()), &secret);
+        for c in cells.iter_mut() {
+            c.zeroize();
+        }
+        if ok {
+            return;
+        }
+    }
     let d = display();
     d.clear();
     d.draw_line(0, title);

@@ -126,14 +126,29 @@ order, and silicon receipts remain OPEN.
 ```rust
 //! USB OTG FS hardware initialization for STM32U585.
 //!
-//! Configures GPIO (PA11/PA12 for D-/D+), enables VDDUSB power supply,
-//! and initializes UCPD1 for USB Type-C CC pin detection on the
-//! B-U585I-IOT02A discovery board.
+//! Common to both boards: PA11/PA12 as D-/D+ (AF10), the VDDUSB supply
+//! monitor (`PWR_SVMCR.USV`), the OTG FS clock and reset, and handing the
+//! USB pads to the non-secure world.
+//!
+//! **Board-dependent:** `iota2` additionally brings up UCPD1 for USB Type-C
+//! CC detection (PA15/PB15) and drives the TCPP03-M20 port-protection enable
+//! (PB5). `pq1` does neither — no CC line reaches the MCU there (an AW35602
+//! owns CC and orientation with its enable strapped on-board), and all three
+//! of those pins carry something else: PA15 is the OPTIGA reset, PB5 the
+//! SE050 enable, PB15 the display backlight. Those paths are `#[cfg]`-ed out
+//! rather than remapped, because there is no counterpart to remap them to.
+//!
+//! Which pads go non-secure is likewise a board fact — `USB_NS_PINS_A` /
+//! `USB_NS_PINS_B` in `board/{iota2,pq1}.rs`, guarded by the `const assert!`s
+//! in `board/mod.rs` that reject a mask overlapping the board's reserved
+//! lines. Enumeration on pq1 was confirmed on silicon with only PA11/PA12
+//! handed over (`GPIOA_SECCFGR` readback `0xe7ff` — PA15 still secure).
 //!
 //! All configuration is done from the secure world before the non-secure
 //! USB stack starts.  The USB OTG peripheral itself is marked non-secure
 //! by GTZC TZSC (see sau.rs).
 
+use crate::board;
 use crate::hw::mmio::Reg32;
 
 // ---------------------------------------------------------------------------
@@ -160,8 +175,18 @@ const GPIOA_S: u32 = 0x5202_0000;
 const GPIOB_S: u32 = 0x5202_0400;
 
 // ---------------------------------------------------------------------------
-// UCPD1 registers — secure alias (APB1 peripherals are secure with TZEN=1;
-// writes via NS alias 0x4000_xxxx are silently ignored).
+// UCPD1 registers — secure alias.
+//
+// This block used to claim "APB1 peripherals are secure with TZEN=1; writes via
+// NS alias 0x4000_xxxx are silently ignored". That was false, and it was the
+// kind of false that reads as a guarantee: TZEN=1 secures GPIO by default, but
+// APB peripheral attribution belongs to GTZC TZSC, and UCPD1's bit (SECCFGR1
+// bit 19) was never in `sau::configure_gtzc`'s image — so the NS alias was
+// live. It is set now, on both boards, and pinned by the exact-equality asserts
+// in `sau.rs`; see the rationale on `SECCFGR1_UCPD1_BIT` there for why pq1
+// cares even though it compiles `init_ucpd` out (PA15/PB15 are SE_RST and
+// LCM_EN on that board, and UCPD1 is a second handle on those pads that
+// GPIOx_SECCFGR does not cover).
 // ---------------------------------------------------------------------------
 const UCPD1: u32 = 0x5000_DC00;
 
@@ -214,22 +239,28 @@ const REG: UsbHwRegs = unsafe {
 /// This must be called after `rcc::init()` (HSI48 is already running)
 /// and after `sau::init()` (GTZC TZSC has marked USB OTG as NS).
 ///
-/// On the B-U585I-IOT02A (MB1551), the USB Type-C connector goes through
-/// a **TCPP03-M20** port protection chip (U8) that must be enabled via
-/// GPIO PB5 before USB data lines are connected.
-///
-/// Pin mapping (from UM2839 Table 8 + Table 9):
+/// Pin mapping — **iota2** (B-U585I-IOT02A / MB1551, UM2839 Tables 8+9),
+/// where the USB-C connector goes through a **TCPP03-M20** port-protection
+/// chip (U8) that must be enabled before the data lines are connected:
 ///   PA11 = USB_OTG_FS_DM (D-)    — direct to CN1
 ///   PA12 = USB_OTG_FS_DP (D+)    — direct to CN1
 ///   PA15 = UCPD1_CC1              — through TCPP03 to CN1
 ///   PB15 = UCPD1_CC2              — through TCPP03 to CN1
 ///   PB5  = TCPP03 EN (drive HIGH to enable)
 ///
+/// Pin mapping — **pq1** (AL_A66_MB_V10):
+///   PA11 = USB_OTG_FS_DM (D-)    — through the AW35602 to the USB-C port
+///   PA12 = USB_OTG_FS_DP (D+)    — through the AW35602 to the USB-C port
+/// and nothing else: steps 8 and 9 below are compiled out, because PA15,
+/// PB5 and PB15 belong to the secure elements and the display there.
+///
 /// # Safety
 /// Direct register access.  Must be called exactly once during boot.
 pub unsafe fn init() {
     // ---- 1. Enable GPIO clocks: GPIOA, GPIOB, GPIOE (AHB2ENR1 bits 0,1,4) ----
-    REG.rcc_ahb2enr1.set_bits((1 << 0) | (1 << 1) | (1 << 4));
+    // GPIOAEN | GPIOBEN. (GPIOEEN was also set here; no USB pin is on port E
+    // on either board, and port E is not even bonded on pq1's 48-pin part.)
+    REG.rcc_ahb2enr1.set_bits((1 << 0) | (1 << 1));
     cortex_m::asm::dsb();
 
     // ---- 2. Enable VDDUSB supply monitoring (PWR_SVMCR.USV) ----
@@ -253,8 +284,20 @@ pub unsafe fn init() {
     // The USB OTG FS peripheral runs in NS domain, so it can only drive
     // pins that are marked as non-secure. Clear the security bits for
     // PA11 (D-), PA12 (D+), PA15 (CC1) and PB5 (TCPP03 EN), PB15 (CC2).
-    REG.gpioa_seccfgr.clear_bits((1 << 11) | (1 << 12) | (1 << 15)); // PA11,12,15 = NS
-    REG.gpiob_seccfgr.clear_bits((1 << 5) | (1 << 15)); // PB5,15 = NS
+    // Hand the USB pads — and only those — to the non-secure world.
+    //
+    // WHICH pads is a board fact: see `USB_NS_PINS_A` / `USB_NS_PINS_B` in
+    // `board/{iota2,pq1}.rs`, and the exact `const assert!`s in `board/mod.rs`
+    // that reject any mask overlapping this board's reserved lines. iota2
+    // hands over five pins (its UCPD CC pair and the TCPP03 enable as well);
+    // pq1 hands over two, because there those three pins are the secure
+    // elements' reset/enable and the trusted display's backlight.
+    //
+    // Deliberately ONE unconditional call per port rather than a cfg'd pair:
+    // a second call site is how extra pins would leak to NS, so the test suite
+    // counts these, and a zero mask is a harmless same-value write.
+    REG.gpioa_seccfgr.clear_bits(board::USB_NS_PINS_A);
+    REG.gpiob_seccfgr.clear_bits(board::USB_NS_PINS_B);
 
     #[cfg(feature = "debug-log")]
     {
@@ -305,13 +348,23 @@ pub unsafe fn init() {
     // ---- 8. Enable TCPP03 (PB5 HIGH) ----
     // The TCPP03-M20 (U8) provides ESD protection and CC routing for the
     // USB-C connector (CN1).  Must be enabled for both USB-A→C and C→C cables.
+    // iota2 only — see enable_tcpp03. On pq1 PB5 is the SE050 enable, owned
+    // by hw::se_power; there is no TCPP03 on that board.
+    #[cfg(not(feature = "board-pq1"))]
     enable_tcpp03();
 
     // ---- 9. UCPD1 CC detection (PA15/PB15) ----
+    // iota2 only — see init_ucpd. pq1 has no CC lines routed to the MCU.
+    #[cfg(not(feature = "board-pq1"))]
     init_ucpd();
 }
 
 /// Drive PB5 HIGH to enable the TCPP03-M20 port protection chip.
+///
+/// **iota2 only.** On pq1 this pin (PB5) is `SE1_EN`, the SE050 enable owned
+/// by `hw::se_power`, and there is no TCPP03 on that board — an AW35602
+/// handles port protection with its enable strapped on-board.
+#[cfg(not(feature = "board-pq1"))]
 fn enable_tcpp03() {
     // PB5: output, push-pull, very-high speed, no pull
     // MODER bits [11:10] = 01 (output)
@@ -433,9 +486,15 @@ pub unsafe fn soft_disconnect_then_reset() -> ! {
 ///
 /// Does not return.
 ///
+/// **iota2 only**, and dead code even there: it has NO caller anywhere in the
+/// tree (`grep` finds only doc mentions and a forbidden-string assertion
+/// against a different file). On pq1 it would touch UCPD1 — which that board
+/// never enables — so it would be a silent ~1.5 s stall followed by a reset.
+///
 /// # Safety
 /// Secure-alias UCPD1 + PWR registers (same as `init_ucpd`), single-
 /// threaded about-to-reset path.
+#[cfg(not(feature = "board-pq1"))]
 #[inline(never)]
 pub unsafe fn cc_open_then_reset() -> ! {
     // UCPD1 CR (secure alias, matches `init_ucpd`).
@@ -500,6 +559,12 @@ pub unsafe fn soft_disconnect() {
 ///   PB15 = UCPD1_CC2 (analog)
 ///
 /// We configure UCPD1 as a sink so the host detects Rd on CC and provides VBUS.
+///
+/// **iota2 only.** pq1 routes NO CC line to the MCU (an AW35602 owns CC and
+/// orientation), so this would be dead silicon there — and PA15/PB15, which
+/// it puts into ANALOG mode, are `SE_RST` and `LCM_EN` on that board.
+/// Compiled out rather than remapped: there is no counterpart.
+#[cfg(not(feature = "board-pq1"))]
 fn init_ucpd() {
     // Enable UCPD1 clock (APB1ENR2 bit 23)
     REG.rcc_apb1enr2.set_bits(1 << 23);
@@ -1448,6 +1513,7 @@ impl CommandRouter {
         match ins {
             INS_V2_GET_DEVICE_INFO => return self.cmd_get_device_info(),
             INS_V2_GET_STATUS => return self.cmd_get_status(),
+            INS_V2_GET_PIN_ATTEMPT_LOG => return self.cmd_get_pin_attempt_log(),
             INS_V2_UNLOCK => return self.cmd_unlock(),
             INS_V2_LOCK => return self.cmd_lock(),
             INS_V2_GET_WALLET_ADDRESS => return self.cmd_get_wallet_address(data),
@@ -1498,6 +1564,12 @@ impl CommandRouter {
             INS_V2_PRODTEST_USB_LOOPBACK => return self.cmd_prodtest_usb_loopback(data),
             #[cfg(feature = "prodtest")]
             INS_V2_PRODTEST_BUTTON_TEST => return self.cmd_prodtest_button_test(),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_RGB_TEST => return self.cmd_prodtest_rgb_test(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_RGB_OSD => return self.cmd_prodtest_rgb_osd(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_RNG_CONFIG => return self.cmd_prodtest_rng_config(),
 
             _ => {}
         }
@@ -1633,6 +1705,23 @@ impl CommandRouter {
         Response {
             ptr: RESP_BUF.as_ptr(),
             len: 4,
+        }
+    }
+
+    /// 0x03 GET_PIN_ATTEMPT_LOG — why each PIN attempt was consumed (#715).
+    /// Read-only; no secret material (see `secure/src/pin_attempt_log.rs`).
+    unsafe fn cmd_get_pin_attempt_log(&self) -> Response {
+        let mut out = [0u8; PIN_ATTEMPT_LOG_LEN];
+        let status = nsc_api::get_pin_attempt_log(&mut out);
+        if status != 0 {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+        RESP_BUF[..PIN_ATTEMPT_LOG_LEN].copy_from_slice(&out);
+        RESP_BUF[PIN_ATTEMPT_LOG_LEN] = (SW_OK >> 8) as u8;
+        RESP_BUF[PIN_ATTEMPT_LOG_LEN + 1] = (SW_OK & 0xFF) as u8;
+        Response {
+            ptr: RESP_BUF.as_ptr(),
+            len: PIN_ATTEMPT_LOG_LEN + 2,
         }
     }
 
@@ -2278,6 +2367,40 @@ impl CommandRouter {
         self.prodtest_finalize(4, status)
     }
 
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_rgb_test(&self, data: &[u8]) -> Response {
+        if data.len() != PRODTEST_RGB_IN_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let mut req = [0u8; PRODTEST_RGB_IN_LEN];
+        req.copy_from_slice(data);
+        let mut out = [0u8; PRODTEST_RGB_OUT_LEN];
+        let status = nsc_api::prodtest_rgb_test(&req, &mut out);
+        RESP_BUF[..PRODTEST_RGB_OUT_LEN].copy_from_slice(&out);
+        self.prodtest_finalize(PRODTEST_RGB_OUT_LEN, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_rng_config(&self) -> Response {
+        let mut out = [0u8; PRODTEST_RNG_CONFIG_LEN];
+        let status = nsc_api::prodtest_rng_config(&mut out);
+        RESP_BUF[..PRODTEST_RNG_CONFIG_LEN].copy_from_slice(&out);
+        self.prodtest_finalize(PRODTEST_RNG_CONFIG_LEN, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_rgb_osd(&self, data: &[u8]) -> Response {
+        if data.len() != PRODTEST_RGB_OSD_IN_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let mut req = [0u8; PRODTEST_RGB_OSD_IN_LEN];
+        req.copy_from_slice(data);
+        let mut out = [0u8; PRODTEST_RGB_OSD_OUT_LEN];
+        let status = nsc_api::prodtest_rgb_osd(&req, &mut out);
+        RESP_BUF[..PRODTEST_RGB_OSD_OUT_LEN].copy_from_slice(&out);
+        self.prodtest_finalize(PRODTEST_RGB_OSD_OUT_LEN, status)
+    }
+
     // ===================================================================
     // Helpers
     // ===================================================================
@@ -2358,19 +2481,20 @@ fn nsc_status_to_sw(status: u32) -> u16 {
         //
         // BadState, BadChunk, FlashError → SW_CONDITIONS_NOT_SATISFIED
         //   The companion can issue CMD_FW_ABORT and retry from BEGIN.
+        //   (FlashError is also what the post-FA-1.5 fail-closed COMMIT
+        //   refusal returns; on this build shape COMMIT can never
+        //   succeed, so the "retry" advice is moot but harmless.)
         // BadManifest, BadVersion, BadImage → SW_WRONG_DATA
         //   The release the companion holds is unacceptable to this
         //   device. The companion must fetch a different release.
-        // OtpExhausted → SW_FEATURE_NOT_SUPPORTED
-        //   This device will never accept another update. Surface a
-        //   clear end-of-life message in the companion UI.
+        // (FwUpdateOtpExhausted → SW_FEATURE_NOT_SUPPORTED was RETIRED in
+        //   FA-1.5 with the removed unary OTP floor writer.)
         NscStatus::FwUpdateBadState => SW_CONDITIONS_NOT_SATISFIED,
         NscStatus::FwUpdateBadChunk => SW_CONDITIONS_NOT_SATISFIED,
         NscStatus::FwUpdateFlashError => SW_CONDITIONS_NOT_SATISFIED,
         NscStatus::FwUpdateBadManifest => SW_WRONG_DATA,
         NscStatus::FwUpdateBadVersion => SW_WRONG_DATA,
         NscStatus::FwUpdateBadImage => SW_WRONG_DATA,
-        NscStatus::FwUpdateOtpExhausted => SW_FEATURE_NOT_SUPPORTED,
         // Off-chain (EIP-1271) sign refusals. All recoverable on the
         // companion side: register a slot / publish a UserOp / rotate.
         NscStatus::OffchainSlotUnregistered => SW_CONDITIONS_NOT_SATISFIED,

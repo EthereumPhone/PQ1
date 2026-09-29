@@ -43,6 +43,116 @@ There is no legitimate NSC call that returns the seed, the mnemonic, the SPHINCS
 
 ---
 
+### 2.4 Trusted-display consent gate
+
+Two consent policies coexist, by path, since 2026-09-22:
+
+| Path | The sign gesture is armed… | Since |
+|---|---|---|
+| Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right / chord is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
+| Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`; every sign dialog since port step 3, 2026-09-23 — `forced_blind` excepted) | **only after the LAST screen has been painted** (scroll-to-end, `PX_COMMIT_REQUIRES_SEEN_LAST = true`), and then only on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) or the returning ask; **never on a detail** | owner decision **2026-09-24** (see the UPDATE below), superseding 2026-09-22 |
+
+**UPDATE 2026-09-23 (port plan step 3):** the pixel path now carries every
+sign dialog — Safe, every single-UserOp route, the slot-rotation consent,
+direct CoW, ERC-7730, the off-chain kinds (typed, `personal_sign`, RAW32) and
+each batch member plus the batch's final ask — so the row above applies to
+all of them under `ui-px`. `forced_blind` keeps its own ceremony; the legacy
+row still governs every build without `ui-px`.
+
+**UPDATE 2026-09-22 (later the same day, owner decision on the EVT):** on the
+pixel path the sign gesture is the **two-button chord click** — both buttons
+down together, the sign fires when both are released
+(`InputFsm` → `Gesture::ChordClick` → `FlowDriver` `Gesture::Chord` →
+`NavResult::Sign`) — not the design's 2 s hold-right, which is now a no-op
+everywhere on that path (hold-left still declines everywhere). Rationale:
+parity with the legacy dialog, whose `hw::buttons::wait_event` has always
+synthesised the two-button chord as the confirm. Residual accepted: the sign
+is an instantaneous gesture rather than a 2 s deliberate hold, so a squeeze
+on a commit-armed screen signs; a chord formed from the post-tap window (one
+side already up) never clicks, so a fast left-tap-then-right-tap cannot
+sign, and details remain unarmed. The `FihBool` gate and single
+`OK_SENTINEL` site are unchanged. PQ-UI `DESIGN.md` § Input (vendored) still
+describes hold-right; the device deviates here and in `TAP_MAX_MS` (500 ms).
+
+**SUPERSEDED 2026-09-24 — see the UPDATE below. The paragraph is kept because
+the mitigations it lists are still real, and because the reasoning that was
+accepted and then reversed is worth preserving.** ~~The pixel path
+intentionally re-opens the class the 2026-06-26 fix closed for that path only:
+a user can sign from the opening ask without paging through the details.~~
+Mitigations the design supplies: declining is armed on every
+screen (hold-left), the `Confirm?` early exit sits after five detail screens,
+the returning ask is the demo's canonical hold point, and every value the
+legacy pages showed is present in the transcript (host fact differential in
+`safe_screens_render_pure_tests.rs`). The arming flag is a `FihBool`
+re-derived from the record's `commit` byte (double read) on every screen
+change; the `OK_SENTINEL` is minted at exactly one site.
+
+**UPDATE 2026-09-24 — REVERSED, by owner decision: the gate is ON.**
+`secure/src/ui/px/confirm_px.rs::PX_COMMIT_REQUIRES_SEEN_LAST` is now `true`.
+Owner, asked directly whether the pixel path should still require paging past
+the recipient and the amount: *"all screens should be viewed before the user
+can sign."*
+
+The concrete case that decided it: an ERC-20 transfer is EIGHT screens
+(`tx::display::erc20_known`). The opening screen says "Send USDC"; the
+RECIPIENT is screen 3 and the AMOUNT is screen 4. With the gate off, one chord
+click on the opening ask approved a transfer whose destination and value had
+never been displayed. The mitigations listed above (decline armed everywhere,
+the `Confirm?` early exit after five details, the values present in the
+transcript) are real but none of them puts the recipient in front of the user.
+
+The evidence is a real paint, not an index: `FlowDriver::mark_rendered` is
+called by the presenter immediately after `build_and_present` (`px/lcd.rs`) and
+after `text::present` (`confirm_px.rs`), and sets `seen_last` only when
+`cur + 1 == count` — the same "evidence of display, not merely an index
+assignment" rule `confirm_core.rs` states for the legacy path. As this section
+already noted, the loop maintains `seen_last` either way, so the constant was
+the only change needed.
+
+The two paths now AGREE, and `fsbl-tests/tests/paired_constants.rs` pins them
+so they cannot drift apart silently again.
+
+RESIDUAL, not closed by this change: on the legacy path `seen_last` is a
+`FihBool` (complement pair + double read); on the pixel path it is a plain
+`bool` feeding the `FihBool` arming flag. A stuck-at fault on the pixel
+`seen_last` would defeat scroll-to-end without defeating arming. Worth
+hardening; tracked separately.
+
+Do not re-litigate without new evidence; record any change here and in
+`CLAUDE.md` Pre-Production Caveats.
+
+**Device input model (frozen 2026-09-23, port plan step 1).** The
+device's gesture grammar on the pixel path is this table; the conformance
+oracle is the vendored PQ-UI `handoff/spec/gestures.json` (an 80-row executed
+truth table) + `traces.json`, and the deliberate deviations from it are the
+single list `tools/pq-ui/PORT_DEVIATIONS.toml`, machine-checked against
+`handoff/spec/motion.json` by `make pq-ui-port-diff` (an unrecorded drift is
+a red build).
+
+| Constant (`pqsigner-ui-px`) | Device | Reference | Note |
+|---|---|---|---|
+| `DEBOUNCE_MS` (`input.rs`) | 25 | — | SysTick ISR lockout per side, first edge exact; device-only |
+| `TAP_MAX_MS` (`motion.rs`) | **500** | 250 | recorded deviation (EVT #1 2026-09-22: deliberate presses run 250–400 ms) |
+| `DOUBLE_TAP_MS` | 250 | 250 | entry contexts only |
+| `CHORD_MS` | 150 | 150 | the other side within this = the chord |
+| `HOLD_COMMIT_MS` | 2000 | 2000 | hold-left decline fires here |
+| `HOLD_SNAPBACK_MS` | 200 | 200 | early-release drain |
+| `PRESS_FEEDBACK_MS` | 120 | 120 | chevron nudge |
+
+| Screen kind | tap L / R | hold-left | hold-right | chord click (both down, fires on release) |
+|---|---|---|---|---|
+| Hero (opening / returning ask), `Confirm?` | navigate | decline | **no-op** (reference: sign) | **sign** (reference: unbound) |
+| Detail / Value | navigate, page-turn | decline | no-op | ignored (never armed) |
+| Status / film / ending | **input-dead**: edges are ignored while the film plays and its result holds; the inactivity deadline and idle wipe stay enforced | | | |
+
+Input during a transit retargets the springs and is never dropped. The film
+(`ui::px::lcd::film_*`) runs around the signer's FI chain, paced by its opaque
+`fn(u8)` progress hook, and cannot change any decision: by the time it
+starts, the `OK_SENTINEL` has been minted and re-proved. The upstream
+catalogue (`handoff/catalog/actions/{hold-right-sign,unbound-gestures,
+tap-navigate}.md`) still describes the reference grammar; a device-deviation
+note for those pages is proposed upstream (see `tools/pq-ui/UPSTREAM.txt`).
+
 ## 3. SE050 Configuration
 
 ### 3.1 Authentication Object

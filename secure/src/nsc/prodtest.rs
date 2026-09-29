@@ -22,9 +22,10 @@
 //!   user secrets leave the chip via these commands.
 //!
 //! - **Supported profile**: GET_ID, DISPLAY_PATTERN, SAES, TRNG, the
-//!   two SE handshakes, USB loopback, and buttons are required. BHK
-//!   and FLASH_RW remain explicit unsupported-capability probes; they
-//!   return `InternalError` and never mutate persistent state.
+//!   two SE handshakes, USB loopback, buttons, the TRNG certified-config
+//!   receipt, and (on `pq1`) the RGB LED test are required. BHK and FLASH_RW remain explicit
+//!   unsupported-capability probes; they return `InternalError` and
+//!   never mutate persistent state.
 
 #![cfg(feature = "prodtest")]
 
@@ -40,18 +41,18 @@ use super::GatewayArgs;
 /// Prodtest firmware version. Bumped on every prodtest behavioral
 /// change so the factory's traceability DB can correlate per-unit
 /// diagnostic data with the firmware version that produced it.
-const PRODTEST_FW_VERSION: u32 = 3;
+const PRODTEST_FW_VERSION: u32 = sphincs_tz_shared::PRODTEST_FW_VERSION;
 
 /// STM32U585 chip UID, 96 bits at `0x0BFA_0700` per RM0456 §28.10.
 const STM32_UID_ADDR: u32 = 0x0BFA_0700;
-const STM32_UID_LEN: usize = 12;
+const STM32_UID_LEN: usize = sphincs_tz_shared::PRODTEST_STM32_UID_LEN;
 
 // ---------------------------------------------------------------------------
 // CMD_PRODTEST_GET_ID (100)
 // ---------------------------------------------------------------------------
 
 /// Output layout: 12 B UID || 4 B fw version (LE) || 8 B reserved.
-const GET_ID_OUT_LEN: usize = 24;
+const GET_ID_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_GET_ID_OUT_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — NS pointer derefs only after
@@ -197,7 +198,7 @@ fn render_lcd_pattern(pattern: u32) {
 // CMD_PRODTEST_SAES_SELFTEST (102) — Phase B
 // ---------------------------------------------------------------------------
 
-const SAES_FINGERPRINT_LEN: usize = 8;
+const SAES_FINGERPRINT_LEN: usize = sphincs_tz_shared::PRODTEST_SAES_FINGERPRINT_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — writes 8 bytes to NS after
@@ -248,7 +249,7 @@ pub(super) unsafe fn cmd_saes_selftest_run(args: &GatewayArgs) -> u32 {
 // CMD_PRODTEST_BHK_SELFTEST (103) — Phase B
 // ---------------------------------------------------------------------------
 
-const BHK_FINGERPRINT_LEN: usize = 8;
+const BHK_FINGERPRINT_LEN: usize = sphincs_tz_shared::PRODTEST_BHK_FINGERPRINT_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — writes an eight-byte zero diagnostic after
@@ -367,7 +368,7 @@ pub(super) unsafe fn cmd_trng_sample_run(args: &GatewayArgs) -> u32 {
 // minimum (8 bytes) without padding overhead. Tests can also feed
 // these bytes into the fixture's per-die uniqueness DB.
 
-const OPTIGA_HANDSHAKE_RNG_LEN: usize = 16;
+const OPTIGA_HANDSHAKE_RNG_LEN: usize = sphincs_tz_shared::PRODTEST_OPTIGA_HANDSHAKE_RNG_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — writes 16 bytes to NS after
@@ -419,7 +420,7 @@ pub(super) unsafe fn cmd_optiga_handshake_run(args: &GatewayArgs) -> u32 {
 //   - default SCP03 keys missing / pre-rotated (factory replacement)
 //   - chip RNG defect
 
-const SE050_HANDSHAKE_RNG_LEN: usize = 16;
+const SE050_HANDSHAKE_RNG_LEN: usize = sphincs_tz_shared::PRODTEST_SE050_HANDSHAKE_RNG_LEN;
 
 /// # Safety
 /// CMSE non-secure-entry handler — writes 16 bytes to NS after
@@ -528,20 +529,20 @@ pub(super) unsafe fn cmd_usb_loopback_run(args: &GatewayArgs) -> u32 {
 // that the press registered at all is the diagnostic signal; precise
 // µs timing adds no information.
 
-const BUTTON_TEST_TIMEOUT_MS: u32 = 10_000;
+const BUTTON_TEST_TIMEOUT_MS: u32 = sphincs_tz_shared::PRODTEST_BUTTON_TEST_TIMEOUT_MS;
 const BUTTON_TEST_DEBOUNCE_MS: u32 = 30;
 const BUTTON_TEST_POLL_MS: u32 = 5;
-const BUTTON_TEST_OUT_LEN: usize = 4;
+const BUTTON_TEST_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_BUTTON_TEST_OUT_LEN;
 
-const STEP_OK: u8 = 0x00;
-const STEP_LEFT_TIMEOUT: u8 = 0x11;
-const STEP_LEFT_WRONG: u8 = 0x12;
-const STEP_LEFT_STUCK: u8 = 0x13;
-const STEP_RIGHT_TIMEOUT: u8 = 0x21;
-const STEP_RIGHT_WRONG: u8 = 0x22;
-const STEP_RIGHT_STUCK: u8 = 0x23;
-const STEP_BOTH_TIMEOUT: u8 = 0x31;
-const STEP_BOTH_STUCK: u8 = 0x33;
+const STEP_OK: u8 = sphincs_tz_shared::PRODTEST_STEP_OK;
+const STEP_LEFT_TIMEOUT: u8 = sphincs_tz_shared::PRODTEST_STEP_LEFT_TIMEOUT;
+const STEP_LEFT_WRONG: u8 = sphincs_tz_shared::PRODTEST_STEP_LEFT_WRONG;
+const STEP_LEFT_STUCK: u8 = sphincs_tz_shared::PRODTEST_STEP_LEFT_STUCK;
+const STEP_RIGHT_TIMEOUT: u8 = sphincs_tz_shared::PRODTEST_STEP_RIGHT_TIMEOUT;
+const STEP_RIGHT_WRONG: u8 = sphincs_tz_shared::PRODTEST_STEP_RIGHT_WRONG;
+const STEP_RIGHT_STUCK: u8 = sphincs_tz_shared::PRODTEST_STEP_RIGHT_STUCK;
+const STEP_BOTH_TIMEOUT: u8 = sphincs_tz_shared::PRODTEST_STEP_BOTH_TIMEOUT;
+const STEP_BOTH_STUCK: u8 = sphincs_tz_shared::PRODTEST_STEP_BOTH_STUCK;
 
 #[cfg(all(feature = "gpio-buttons", feature = "ui-lcd"))]
 fn show_button_prompt(line0: &str, line1: &str) {
@@ -718,100 +719,260 @@ pub(super) unsafe fn cmd_button_test_run(args: &GatewayArgs) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// Host tests — pure helpers
+// CMD_PRODTEST_RGB_TEST (110) — Phase D
 // ---------------------------------------------------------------------------
+//
+// Lights the `pq1` board's 9 RGB LEDs via the AW21036 on I2C2 and hands the
+// fixture everything needed to localize a dark board in one shot: a bus scan
+// (with the AW99703 backlight at 0x36 as the bus's positive control and the
+// AW21036's broadcast address 0x1C as a second witness for the part), both
+// readable identity registers, and an ACK tally.
+//
+// Why the output is written even on failure: "the LEDs are dark" has at least
+// six causes (bus pins, pull-ups, chip absent, AD strap, RGB_EN, current
+// registers), and a bare status byte distinguishes none of them. The handler
+// therefore always writes the diagnostic and reports health in the status.
+//
+// Why no pass/fail on the light itself: the firmware cannot see its own LEDs.
+// The chip ACKing every write is the machine-checkable half; the colour and
+// the per-LED coverage are the operator's half, which is why the command takes
+// (r, g, b) rather than running a fixed pattern.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+const RGB_TEST_IN_LEN: usize = sphincs_tz_shared::PRODTEST_RGB_IN_LEN;
+const RGB_TEST_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_RGB_OUT_LEN;
+/// Sentinel for "the addressing phase was not ACKed", distinct from a chip
+/// that genuinely answers `0x00`.
+const RGB_READ_FAILED: u8 = 0xFF;
 
-    #[test]
-    fn positive_get_id_output_layout() {
-        // 12 B UID + 4 B version + 8 B reserved = 24 B total. Pin
-        // the constant so a future re-shuffle of fields breaks the
-        // build (fixture parses on byte offsets).
-        assert_eq!(GET_ID_OUT_LEN, 24);
-        assert_eq!(STM32_UID_LEN, 12);
+// Wire contract, asserted at compile time rather than in this file's
+// `#[cfg(test)]` module: that module is inside `#![cfg(feature = "prodtest")]`
+// and `prodtest` only builds for `thumbv8m`, so nothing in it ever runs
+// host-side. These asserts DO fire on every prodtest firmware build.
+// The fixture decodes `out[16]`/`out[17]` by number, so the sentinel must not
+// collide with either identity value or a dead bus would read as a live chip.
+const _: () = assert!(RGB_TEST_OUT_LEN == 16 + 6 + 2, "scan + 6 fields + 2 reserved");
+const _: () = assert!(RGB_TEST_IN_LEN == 6, "[r, g, b, gcc, en, reserved]");
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+const _: () = assert!(RGB_READ_FAILED != crate::hw::aw21036::VER_EXPECTED);
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+const _: () = assert!(RGB_READ_FAILED != crate::hw::aw21036::RESET_ID_EXPECTED);
+
+/// # Safety
+/// CMSE non-secure-entry handler — NS pointer derefs only after
+/// `validate_ns_read_ptr` / `validate_ns_write_ptr`, and the NS input is
+/// copied to the S-stack before use (TOCTOU).
+pub(super) unsafe fn cmd_rgb_test_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_read_ptr(args.arg0, RGB_TEST_IN_LEN)
+        || !validate_ns_write_ptr(args.arg1, RGB_TEST_OUT_LEN)
+    {
+        return NscStatus::InvalidPointer as u32;
     }
 
-    #[test]
-    fn positive_prodtest_fw_version_pinned() {
-        // The factory's traceability DB correlates this with
-        // per-unit diagnostic data. Drop a row in the operator
-        // manual every time this bumps.
-        assert_eq!(PRODTEST_FW_VERSION, 3);
+    // Copy the NS request to the S-stack before parsing it (invariant #4).
+    let mut req = [0u8; RGB_TEST_IN_LEN];
+    for (i, byte) in req.iter_mut().enumerate() {
+        // SAFETY: arg0 was validated for RGB_TEST_IN_LEN bytes above.
+        *byte = unsafe { core::ptr::read_volatile((args.arg0 as *const u8).add(i)) };
     }
 
-    #[test]
-    fn positive_trng_sample_cap_matches_proto_doc() {
-        assert_eq!(TRNG_SAMPLE_MAX, PRODTEST_MAX_RESPONSE_DATA_LEN);
-        assert_eq!(TRNG_SAMPLE_MAX, 254);
+    let mut out = [0u8; RGB_TEST_OUT_LEN];
+    let healthy = rgb_test_fill(&req, &mut out);
+
+    let out_ptr = args.arg1 as *mut u8;
+    for (i, byte) in out.iter().enumerate() {
+        // SAFETY: arg1 was validated for RGB_TEST_OUT_LEN bytes above.
+        unsafe { core::ptr::write_volatile(out_ptr.add(i), *byte) };
     }
 
-    #[test]
-    fn positive_saes_fingerprint_len_matches_existing_self_test() {
-        // The existing `hw::saes::self_test` returns an 8-byte
-        // fingerprint. Prodtest mirrors that contract so the
-        // fixture's reference values stay reusable across builds.
-        assert_eq!(SAES_FINGERPRINT_LEN, 8);
-        assert_eq!(BHK_FINGERPRINT_LEN, 8);
-    }
-
-    #[test]
-    fn positive_phase_c_handshake_rng_lens_pinned() {
-        // Both handshake commands return 16 bytes — the fixture
-        // parses on these offsets in its per-die uniqueness DB. Any
-        // change here must also update `docs/provisioning/factory-prodtest.md`
-        // and the host runner.
-        assert_eq!(OPTIGA_HANDSHAKE_RNG_LEN, 16);
-        assert_eq!(SE050_HANDSHAKE_RNG_LEN, 16);
-    }
-
-    #[test]
-    fn positive_usb_loopback_cap_matches_proto_doc() {
-        // Cap matches TRNG_SAMPLE_MAX so the same caller-side buffer
-        // can be reused for both commands.
-        assert_eq!(USB_LOOPBACK_MAX, PRODTEST_MAX_RESPONSE_DATA_LEN);
-    }
-
-    #[test]
-    fn positive_button_test_step_codes_have_compact_layout() {
-        // Upper nibble = step (1, 2, 3); lower nibble = error kind
-        // (1=timeout, 2=wrong button, 3=release stuck — #453). The
-        // fixture's error table depends on this — change the encoding
-        // and the operator manual decoder also has to change.
-        assert_eq!(STEP_OK, 0x00);
-        assert_eq!(STEP_LEFT_TIMEOUT, 0x11);
-        assert_eq!(STEP_LEFT_WRONG, 0x12);
-        assert_eq!(STEP_LEFT_STUCK, 0x13);
-        assert_eq!(STEP_RIGHT_TIMEOUT, 0x21);
-        assert_eq!(STEP_RIGHT_WRONG, 0x22);
-        assert_eq!(STEP_RIGHT_STUCK, 0x23);
-        assert_eq!(STEP_BOTH_TIMEOUT, 0x31);
-        assert_eq!(STEP_BOTH_STUCK, 0x33);
-        // Compact-encoding invariant: per-step error nibbles are
-        // distinct and non-overlapping with success.
-        for code in [
-            STEP_LEFT_TIMEOUT,
-            STEP_LEFT_WRONG,
-            STEP_LEFT_STUCK,
-            STEP_RIGHT_TIMEOUT,
-            STEP_RIGHT_WRONG,
-            STEP_RIGHT_STUCK,
-            STEP_BOTH_TIMEOUT,
-            STEP_BOTH_STUCK,
-        ] {
-            assert_ne!(code, STEP_OK);
-            assert!((code >> 4) >= 1 && (code >> 4) <= 3);
-            assert!((code & 0x0F) >= 1 && (code & 0x0F) <= 3);
-        }
-    }
-
-    #[test]
-    fn positive_button_test_timeout_is_operator_friendly() {
-        // 10 s per step gives the operator enough time without
-        // making the per-unit test take forever (30 s total budget).
-        assert_eq!(BUTTON_TEST_TIMEOUT_MS, 10_000);
-        assert_eq!(BUTTON_TEST_OUT_LEN, 4);
+    if healthy {
+        NscStatus::Ok as u32
+    } else {
+        NscStatus::InternalError as u32
     }
 }
+
+/// Run the test and serialise the report. Split out so the wire layout is
+/// exercised by the host tests below without any hardware.
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+fn rgb_test_fill(req: &[u8; RGB_TEST_IN_LEN], out: &mut [u8; RGB_TEST_OUT_LEN]) -> bool {
+    let report = crate::hw::aw21036::light(req[0], req[1], req[2], req[3], req[4] != 0);
+    out[..16].copy_from_slice(&report.scan);
+    out[16] = report.ver.unwrap_or(RGB_READ_FAILED);
+    out[17] = report.reset_id.unwrap_or(RGB_READ_FAILED);
+    out[18] = report.acks_ok;
+    out[19] = report.acks_total;
+    out[20] = u8::from(report.en_level);
+    out[21] = report.gcc;
+    secure_log!(
+        "[PRODTEST] rgb_test: ver=0x{:02x} acks={}/{} en={}",
+        out[16],
+        out[18],
+        out[19],
+        out[20]
+    );
+    report.healthy()
+}
+
+/// Boards with no RGB driver: all-zero output, unhealthy. The `_` bindings keep
+/// the signature identical to the `pq1` arm.
+#[cfg(not(all(feature = "stm32u585", feature = "board-pq1")))]
+fn rgb_test_fill(_req: &[u8; RGB_TEST_IN_LEN], _out: &mut [u8; RGB_TEST_OUT_LEN]) -> bool {
+    false
+}
+
+// ---------------------------------------------------------------------------
+// CMD_PRODTEST_RGB_OSD (111) — Phase D
+// ---------------------------------------------------------------------------
+//
+// Per-channel open/short detection: the machine-checkable dead-LED test, which
+// names the failing channel by index rather than relying on an operator seeing
+// a wrong colour. Firmware deliberately makes no pass/fail judgement over the
+// channels — it returns both `OSDE` bitmaps raw, because the datasheet
+// contradicts itself about which encoding is open detection, and because the
+// board's nine unwired channels let the host both resolve that AND verify that
+// detection actually ran. A gate that cannot tell "all good" from "did not
+// run" is not a gate.
+
+const RGB_OSD_IN_LEN: usize = sphincs_tz_shared::PRODTEST_RGB_OSD_IN_LEN;
+const RGB_OSD_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_RGB_OSD_OUT_LEN;
+
+const _: () = assert!(RGB_OSD_IN_LEN == 4, "[gcc, en, reserved, reserved]");
+const _: () = assert!(RGB_OSD_OUT_LEN == 24, "2x5 bitmaps + 7 scalars + 7 rsvd");
+
+/// # Safety
+/// CMSE non-secure-entry handler — NS pointer derefs only after validation,
+/// and the NS input is copied to the S-stack before use (TOCTOU).
+pub(super) unsafe fn cmd_rgb_osd_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_read_ptr(args.arg0, RGB_OSD_IN_LEN)
+        || !validate_ns_write_ptr(args.arg1, RGB_OSD_OUT_LEN)
+    {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    let mut req = [0u8; RGB_OSD_IN_LEN];
+    for (i, byte) in req.iter_mut().enumerate() {
+        // SAFETY: arg0 was validated for RGB_OSD_IN_LEN bytes above.
+        *byte = unsafe { core::ptr::read_volatile((args.arg0 as *const u8).add(i)) };
+    }
+
+    let mut out = [0u8; RGB_OSD_OUT_LEN];
+    let ran = rgb_osd_fill(&req, &mut out);
+
+    let out_ptr = args.arg1 as *mut u8;
+    for (i, byte) in out.iter().enumerate() {
+        // SAFETY: arg1 was validated for RGB_OSD_OUT_LEN bytes above.
+        unsafe { core::ptr::write_volatile(out_ptr.add(i), *byte) };
+    }
+
+    if ran {
+        NscStatus::Ok as u32
+    } else {
+        NscStatus::InternalError as u32
+    }
+}
+
+/// Serialise the scan. Returns whether the scan *ran* (part identified itself
+/// and every write ACKed) — explicitly NOT whether the LEDs are healthy, which
+/// only the host can decide from the bitmaps.
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+fn rgb_osd_fill(req: &[u8; RGB_OSD_IN_LEN], out: &mut [u8; RGB_OSD_OUT_LEN]) -> bool {
+    use crate::hw::aw21036;
+    let r = aw21036::open_short_scan(req[0], req[1] != 0);
+    out[..aw21036::OSST_BYTES].copy_from_slice(&r.mode_a);
+    out[aw21036::OSST_BYTES..2 * aw21036::OSST_BYTES].copy_from_slice(&r.mode_b);
+    out[10] = r.ver.unwrap_or(RGB_READ_FAILED);
+    out[11] = r.acks_ok;
+    out[12] = r.acks_total;
+    out[13] = u8::from(r.en_level);
+    out[14] = r.gcc;
+    out[15] = aw21036::WIRED_CHANNELS;
+    out[16] = aw21036::TOTAL_CHANNELS;
+    secure_log!(
+        "[PRODTEST] rgb_osd: ver=0x{:02x} acks={}/{} wired={} total={}",
+        out[10],
+        out[11],
+        out[12],
+        out[15],
+        out[16]
+    );
+    r.ver == Some(aw21036::VER_EXPECTED) && r.acks_ok == r.acks_total
+}
+
+/// Boards with no RGB driver: all-zero output, did-not-run.
+#[cfg(not(all(feature = "stm32u585", feature = "board-pq1")))]
+fn rgb_osd_fill(_req: &[u8; RGB_OSD_IN_LEN], _out: &mut [u8; RGB_OSD_OUT_LEN]) -> bool {
+    false
+}
+
+// ---------------------------------------------------------------------------
+// CMD_PRODTEST_RNG_CONFIG (112) — TRNG certified-configuration receipt
+// ---------------------------------------------------------------------------
+//
+// Reads back the three RNG configuration registers plus two identity values.
+// It asserts nothing on-device: the raw words always reach the host so a
+// failing unit still produces a receipt saying WHAT was wrong, the same
+// reasoning as the RGB command.
+//
+// The version register is not in RM0456's RNG register map (which documents
+// 0x000..0x010 only); ESV certificate E11 names it as the place revision B is
+// identified by the value 0x41, and ST's IP-version registers conventionally
+// sit at offset 0x3F4.
+
+const RNG_CONFIG_OUT_LEN: usize = sphincs_tz_shared::PRODTEST_RNG_CONFIG_LEN;
+const _: () = assert!(RNG_CONFIG_OUT_LEN == 20, "5 u32 words");
+
+/// # Safety
+/// CMSE non-secure-entry handler — NS pointer deref only after
+/// `validate_ns_write_ptr`. Reads five MMIO words; no writes, no secrets.
+pub(super) unsafe fn cmd_rng_config_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_write_ptr(args.arg1, RNG_CONFIG_OUT_LEN) {
+        return NscStatus::InvalidPointer as u32;
+    }
+    let mut out = [0u8; RNG_CONFIG_OUT_LEN];
+
+    #[cfg(feature = "stm32u585")]
+    {
+        const RNG_BASE: u32 = 0x520C_0800;
+        const DBGMCU_IDCODE: u32 = 0xE004_4000;
+        // SAFETY: RNG_BASE is the secure-alias RNG peripheral from RM0456's
+        // memory map (0x520C_0800, 1 KB window) and DBGMCU_IDCODE is the
+        // documented debug identity register. All five are plain reads.
+        let words = unsafe {
+            [
+                core::ptr::read_volatile((RNG_BASE + 0x00) as *const u32), // CR
+                core::ptr::read_volatile((RNG_BASE + 0x0C) as *const u32), // NSCR
+                core::ptr::read_volatile((RNG_BASE + 0x10) as *const u32), // HTCR
+                core::ptr::read_volatile((RNG_BASE + 0x3F4) as *const u32), // VERR
+                core::ptr::read_volatile(DBGMCU_IDCODE as *const u32),
+            ]
+        };
+        for (i, w) in words.iter().enumerate() {
+            out[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        secure_log!(
+            "[PRODTEST] rng_config: CR=0x{:08x} NSCR=0x{:08x} HTCR=0x{:08x} VER=0x{:08x} ID=0x{:08x}",
+            words[0], words[1], words[2], words[3], words[4]
+        );
+    }
+
+    let out_ptr = args.arg1 as *mut u8;
+    for (i, b) in out.iter().enumerate() {
+        // SAFETY: arg1 was validated for RNG_CONFIG_OUT_LEN bytes above.
+        unsafe { core::ptr::write_volatile(out_ptr.add(i), *b) };
+    }
+    NscStatus::Ok as u32
+}
+
+// Host tests for this module's wire contract live in
+// `proto/src/lib.rs`'s `tests` module (`prodtest_*`), NOT here.
+//
+// #708: a `#[cfg(test)] mod tests` at this spot never compiled. The module is
+// `#![cfg(feature = "prodtest")]`, `prodtest` implies `stm32u585`, and that
+// does not build for the host — so eight tests reported neither pass nor fail
+// for as long as they existed. One asserted `PRODTEST_FW_VERSION == 3` while
+// the constant was already 5, and the operator manual had drifted with it.
+//
+// The constants above are now ALIASES over `pqsigner-proto`, so the values the
+// host tests pin are the values this firmware compiles. Anything asserted here
+// instead of there is asserted nowhere; `scripts/check_tests_actually_run.py`
+// fails the build if a `#[test]` reappears in an unreachable module.

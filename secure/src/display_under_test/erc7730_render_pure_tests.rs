@@ -268,7 +268,7 @@ fn explicit_hidden_material_descriptors_have_no_verified_runtime_leaf() {
 
 /// Locate a leaf by `(source filename, chain_id)` so a multi-chain
 /// descriptor (USDT on mainnet vs Polygon) is unambiguous.
-fn find_leaf<'a>(
+pub(super) fn find_leaf<'a>(
     res: &'a dbgen::erc7730::Erc7730BuildResult,
     source_name: &str,
     chain_id: u64,
@@ -346,7 +346,7 @@ fn u256_max() -> U256 {
 /// Plain receiver-tx envelope. ERC-7730 path expects `tx.to ==
 /// descriptor.contract`; the caller fills `to` with the real contract
 /// address per-test.
-fn envelope(chain_id: u64, contract: [u8; 20]) -> Eip1559Tx {
+pub(super) fn envelope(chain_id: u64, contract: [u8; 20]) -> Eip1559Tx {
     let mut tx = Eip1559Tx::default();
     tx.chain_id = chain_id;
     tx.nonce = 7;
@@ -590,6 +590,52 @@ fn assert_all_pages_printable(pages: &Pages) {
                     dump_pages(pages),
                 );
             }
+        }
+    }
+    assert_nav_mask_matches_chrome(pages);
+}
+
+/// #751 conversion check: the renderer's CHROME MASK must agree with the text
+/// inference it replaces, on every page of every corpus descriptor.
+///
+/// Called from `assert_all_pages_printable`, which 66 corpus tests already
+/// run, so this is a corpus-wide differential rather than a spot check.
+///
+/// The two directions are NOT symmetric and the assertions say so:
+///
+///   * marked-but-not-chrome-text is a BUG and fails. It means the renderer
+///     claimed a content row is navigation, which is the direction that drops
+///     signed bytes from the display.
+///   * chrome-text-but-unmarked is a MISSED WRITE SITE and also fails here,
+///     because leaving one behind silently returns that row to text inference.
+///     In production it is merely cosmetic (the row renders instead of being
+///     dropped), which is why the mask is safe to land incrementally — but a
+///     test that tolerated it would not finish the job.
+fn assert_nav_mask_matches_chrome(pages: &Pages) {
+    for (p, page) in pages.as_slice().iter().enumerate() {
+        for (r, row) in page.iter().enumerate() {
+            let text = {
+                let mut n = row.len();
+                while n > 0 && row[n - 1] == b' ' {
+                    n -= 1;
+                }
+                let mut s = 0;
+                while s < n && row[s] == b' ' {
+                    s += 1;
+                }
+                &row[s..n]
+            };
+            let looks_like_chrome = !text.is_empty() && super::erc7730_screens::is_nav_row(text);
+            let marked = pages.is_nav(p, r);
+            assert_eq!(
+                marked,
+                looks_like_chrome,
+                "page {p} row {r} {:?}: nav mask says {marked}, text inference says \
+                 {looks_like_chrome}. Either a chrome writer did not call \
+                 `Pages::mark_nav`, or a content row was marked.\n{}",
+                core::str::from_utf8(text).unwrap_or("<non-utf8>"),
+                dump_pages(pages),
+            );
         }
     }
 }
@@ -1401,6 +1447,22 @@ fn production_celo_validators_add_first_member_renders_all_signed_operands_mainn
         page_strs(&baseline.pages, intent_page_index(&baseline.pages)),
         [
             "Add First Member".to_string(),
+            // The OWNER, on a page whose intent is exactly DISPLAY_COLS wide.
+            //
+            // `Add First Member` fills row 0 exactly, so the finished bytes
+            // cannot tell a consumer whether row 1 continues the intent or
+            // holds the owner — and `erc7730_screens::intent_text` guessed
+            // "row 0 full => continuation", captioning the page
+            // `SIGN ADD FIRST MEMBERCELO?`. 95d7831a "fixed" that by bending
+            // the renderer until the guess was right, which EMPTIED this row:
+            // the owner is anti-spoof material (it is how a user tells Celo's
+            // descriptor from a lookalike), so that traded a caption bug for
+            // an information loss on a shipping surface.
+            //
+            // The ambiguity is now resolved by DECLARATION, not layout — see
+            // `Pages::intent_rows` — so the owner keeps its line AND the
+            // caption is right. `the_16_char_intent_caption_does_not_absorb_
+            // the_owner` below is the other half of this pair.
             "Celo".to_string(),
             "Celo Validators".to_string(),
             "> next".to_string(),
@@ -11462,7 +11524,7 @@ fn erc2612_permit_with_hidden_owner_is_excluded() {
 // compiler-level collection-path backstop; the production tests below exercise
 // the real Merkle-bound Router02 leaf.
 // ───────────────────────────────────────────────────────────────────────
-const UNI_V3: [u8; 20] = [
+pub(super) const UNI_V3: [u8; 20] = [
     0x68, 0xb3, 0x46, 0x58, 0x33, 0xfb, 0x72, 0xa7, 0x0e, 0xcd, 0xf4, 0x85, 0xe0, 0xe4, 0xc7, 0xbd,
     0x86, 0x65, 0xfc, 0x45,
 ];
@@ -11508,7 +11570,7 @@ fn calldata_uniswap_single(
     )
 }
 
-fn calldata_uniswap_exact_input(recipient: [u8; 20]) -> Vec<u8> {
+pub(super) fn calldata_uniswap_exact_input(recipient: [u8; 20]) -> Vec<u8> {
     calldata_uniswap_single(UNI_EXACT_INPUT_SINGLE, recipient, 1_500_000, 1_000_000, 0)
 }
 
@@ -15346,7 +15408,20 @@ fn production_1inch_v6_cancellation_controls_render_complete_neutral_transcripts
     assert_eq!(registry.known_calls_bloom.len(), BLOOM_BYTES);
     assert_eq!(
         std::mem::size_of::<Pages>(),
-        MAX_PAGES * 4 * DISPLAY_COLS + std::mem::size_of::<usize>(),
+        // buf + the #751 chrome mask + len, rounded to the struct's alignment.
+        //
+        // The mask is `[u8; MAX_PAGES]` — 31 bytes, 32 after padding — and it
+        // is the ONLY growth this object has taken. It buys the trusted display
+        // the ability to know which rows the renderer emitted as navigation
+        // instead of inferring it from the text it is showing, which produced
+        // three distinct WYSIWYS defects (#751: nav-vocabulary collision,
+        // whitespace normalisation, and the 16-character intent).
+        //
+        // Kept as an EXACT equality rather than a bound: this pin exists so
+        // that growth is a decision, not a drift, and widening it to `<=` would
+        // retire the only thing enforcing that.
+        (MAX_PAGES * 4 * DISPLAY_COLS + MAX_PAGES + std::mem::size_of::<usize>())
+            .next_multiple_of(std::mem::align_of::<Pages>()),
         "descriptor growth must not resize the fixed trusted-page stack object"
     );
     for entry in &entries {

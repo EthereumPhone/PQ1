@@ -1,0 +1,57 @@
+## What it is
+
+The transit *out of* a screen that owns its canvas. A [verdict](verdict-law.md), a [PIN row](../components/pin-row.md) or an explosion film never showed the flow's token disc, so there is nothing to morph into the next screen. Instead the screen's own resting frame stays on the panel and **fades to black**, while the next screen fades in over it. A fade, never a cut. No token rides the transit and no trail follows it.
+
+The ordinary [spring morph](spring-morph.md) still runs underneath — the circle springs, the mix and the alphas are all retargeted as usual. This page is only about what is drawn while they travel.
+
+## Which screens
+
+`StatusAnim.rests_on_token` ({{loc:pq1.status.StatusAnim.rests_on_token}}) decides it, and `Sim` reads it once per screen at construction:
+
+| owns its canvas — this fade | rests on the token — the ordinary morph |
+|---|---|
+| every verdict in `screens/verdict/` | the [qubit film](../screen-types/status-qubit.md) |
+| the [explosion](../library/fx-explosion.md) film | the [resolve](../screen-types/status-resolve.md) |
+| the [PIN row](../library/pin-pin-entering.md) and `pin/pin_differ` | [arrive](../screen-types/status-arrive.md), the idle screens, hold-to-confirm |
+
+A [led screen](lead-film.md) inherits the flag from its **main**, not from the film: the firmware endings lead with an explosion but arrive on a token, so leaving them is an ordinary morph.
+
+## When it appears
+
+On the device: leaving a PIN row once its verdict tail has played — the next attempt, or the first screen after the attempts (`pin/unlock`, `unlock_batch`). Everywhere else the reference driver freezes on the ending's resting frame instead of moving on, so this transit is never reached ([result hold](result-hold.md)). The demo loop walks out of every verdict, so it is the path the GIFs show.
+
+## How it draws
+
+In `flow.Sim.draw` ({{loc:pq1.flow.Sim.draw}}), before anything else on the frame:
+
+1. pick the endpoint the morph is leaving — `a` when the mix target is 1, `b` when it is 0;
+2. if that screen is token-less and the leg is still running, draw its animation **at its own `duration`** — its resting frame, frozen;
+3. `canvas.dim(1 − alpha)` ({{loc:pq1.canvas.Canvas.dim}}): a black rectangle over the whole frame at that opacity, where `alpha` is the outgoing screen's own text-alpha spring.
+
+Everything drawn after step 3 — the chevrons, the incoming screen's text, the incoming token — is drawn **on top** and is never dimmed. Draw order is the whole trick; a port that dims at the end of the frame will fade the arriving screen as well.
+
+The reference recomputes the frozen frame every tick because every animation is a pure function of `t`. Keeping the last rendered framebuffer and fading that instead is equivalent, and cheaper on the device.
+
+## Motion
+
+{{motion-head}}
+{{row:the outgoing frame fades to black | - | spring NAV | the screen's alpha spring is retargeted to 0 the instant the leg starts — no delay on the way out}}
+{{row:the incoming text is released after the leg begins | pq1.motion.TEXT_IN_DELAY_MS | — | as on any leg — see [text-in delay](text-in-delay.md)}}
+{{row:the incoming text and chevrons fade in | - | spring NAV | drawn over the dimmed frame}}
+{{row:the next screen's token fades in, when it has one | - | spring NAV | at the circle springs' live pose, under the incoming screen's alpha — so a film after a PIN row opens on the disc it splits}}
+{{row:into another token-less screen | - | — | nothing: black between the two, until the next screen's own time 0}}
+{{row:the follower trail | - | cut | dropped for the whole transit and rebuilt at the new position once the leg lands}}
+
+## Input
+
+A press during this transit behaves like any other mid-leg press — the springs retarget, nothing is dropped ([reversal](reversal.md)) — **unless** the destination is a status screen. The driver refuses every press while the leg into one is still running ({{loc:pq1.driver.FlowDriver.press}}), whatever the screen is: an ending then refuses input for good, an entry opens for typing the moment the leg lands ([unbound gestures](../actions/unbound-gestures.md)).
+
+## Do / Don't
+
+- **Do** fade. A verdict that cuts to black reads as a crash.
+- **Do** drop the incoming screen's `handoff` after one of these: there is no token to hand off, and drawing one would pop a disc out of black ([handoff crossfade](handoff.md)).
+- **Do** keep the trail off the transit. The followers chase the token, and there is no token here.
+- **Don't** dim the arriving screen with it — dim first, draw the new screen after.
+- **Don't** draw the outgoing animation at the transit's clock. It is pinned at its `duration`, its last resting frame, for as long as the fade lasts.
+
+{{partial:port-notes}}

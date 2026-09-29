@@ -134,16 +134,34 @@ pub fn wrap_pages_with_batch_banner(
     for page in &mut out.buf[..new_len] {
         *page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     }
+    // The chrome mask (#751) is per-page state that travels WITH the page
+    // bytes. Clearing the bytes without clearing the mask would leave a stale
+    // bit from a previous member claiming a row of this member's page is
+    // navigation — the one direction that silently DROPS content.
+    for mask in &mut out.nav[..new_len] {
+        *mask = 0;
+    }
     // Publish the bounded visible length before using the checked row helpers;
     // no caller can observe it until this non-inlined operation returns.
     unsafe { core::ptr::write_volatile(&mut out.len, new_len) };
     out.buf[0] = build_batch_banner_page(tx_index, batch_total);
 
-    // Copy inner pages onto pages 1..=inner.len.
+    // Copy inner pages onto pages 1..=inner.len, mask included.
+    //
+    // The mask MUST shift with the bytes. `erc7730_screens` reads page
+    // structure from it positionally (`is_confirm_page_at`, `is_nav`), so a
+    // copy that moved the rows but left the mask behind turned every wrapped
+    // ERC-7730 body into an unrecognisable one and REFUSED the batch sign.
+    // That is the failure this banner exists to prevent, arriving by the back
+    // door — hence the proof below covers the mask too.
+    //
+    // The banner page itself carries no chrome row (`build_batch_banner_page`
+    // writes rows 1 and 2 only), so `out.nav[0]` stays 0.
     for i in 0..inner.len {
         for r in 0..DISPLAY_ROWS {
             out.buf[i + 1][r].copy_from_slice(&inner.buf[i][r]);
         }
+        out.nav[i + 1] = inner.nav[i];
     }
 
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
@@ -151,7 +169,7 @@ pub fn wrap_pages_with_batch_banner(
     Ok(())
 }
 
-fn build_batch_banner_page(tx_index: usize, batch_total: usize) -> BannerPage {
+pub(crate) fn build_batch_banner_page(tx_index: usize, batch_total: usize) -> BannerPage {
     let mut page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     write_centered(&mut page[1], b"BATCH SIGN");
     write_tx_position(&mut page[2], tx_index, batch_total);
@@ -190,12 +208,20 @@ pub(crate) fn batch_banner_copy_proof(
             return false;
         }
         let mut diff = 0u8;
+        // The banner owns no chrome row, so a set bit there would be a stale
+        // mask claiming the "BATCH SIGN | Tx i of N" anchor is navigation.
+        diff |= wrapped.nav[0];
         for page_index in 0..inner.len {
             for row in 0..DISPLAY_ROWS {
                 for col in 0..DISPLAY_COLS {
                     diff |= inner.buf[page_index][row][col] ^ wrapped.buf[page_index + 1][row][col];
                 }
             }
+            // The chrome mask is part of the transcript, not metadata about it:
+            // it decides which rows the pixel adapter DISPLAYS. A copy that
+            // dropped or altered it is exactly as wrong as one that dropped a
+            // row, so it fails the same proof.
+            diff |= inner.nav[page_index] ^ wrapped.nav[page_index + 1];
         }
         core::hint::black_box(diff == 0)
     })

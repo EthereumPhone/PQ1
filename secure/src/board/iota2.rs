@@ -1,0 +1,212 @@
+//! Pin map for the **ST B-U585I-IOT02A** dev board (`iota2`).
+//!
+//! MCU: STM32U585AII6, 169-pin BGA — every GPIO port A..I is bonded.
+//!
+//! This is the historical bench board: every constant here is the value
+//! the driver modules used before the board split, so selecting `iota2`
+//! (the default) reproduces the previous behaviour exactly.
+//!
+//! Empirical notes worth keeping with the pin numbers, because several of
+//! these were established by logic-analyser capture rather than from the
+//! ST user manual:
+//!
+//! - The Arduino-header silkscreen is off-by-one against UM2839 — `D5` is
+//!   actually PE4 and `D6` is PE0, confirmed with `pin_diag::header_sweep`.
+//!   That is why the OPTIGA reset lands on PE0 and not where the board
+//!   documentation implies.
+//! - The LCD `RES` line is strapped to 3V3 on this wiring, so the NV3007
+//!   driver reaches reset over the SPI `SWRESET` (0x01) command instead of
+//!   pulsing the pin. `LCD_RST` below is recorded for completeness but the
+//!   driver does not rely on it.
+
+#![allow(dead_code)] // Full board inventory; consumed incrementally by drivers.
+
+use super::{
+    SeI2cBus, GPIOA_S, GPIOB_S, GPIOC_S, GPIOD_S, GPIOE_S, I2C1_S, RCC_APB1ENR1_OFF,
+    RCC_APB1RSTR1_OFF,
+    RCC_APB2ENR_OFF, RCC_I2C1EN_BIT, RCC_I2C1RST_BIT, RCC_USART1EN_BIT, SPI1_S, USART1_S,
+};
+
+/// Human-readable board name, for boot banners and log headers.
+pub const BOARD_NAME: &str = "B-U585I-IOT02A (iota2)";
+
+// ---------------------------------------------------------------------------
+// Debug console UART
+//
+// USART1 TX on PA9 (AF7), routed to the on-board ST-LINK's USB virtual COM
+// port. The VCP is a feature of the *debugger* MCU, not the target, so it
+// keeps forwarding bytes at RDP >= 1 where SWD (and therefore semihosting)
+// is gone — this is the channel the RDP1 SAES self-test reports through.
+// ---------------------------------------------------------------------------
+
+pub const CONSOLE_UART_BASE: u32 = USART1_S;
+/// `USART1EN` lives in `RCC_APB2ENR`.
+pub const CONSOLE_UART_RCC_ENR_OFF: u32 = RCC_APB2ENR_OFF;
+pub const CONSOLE_UART_RCC_EN_BIT: u32 = RCC_USART1EN_BIT;
+pub const CONSOLE_TX_PORT: u32 = GPIOA_S;
+pub const CONSOLE_TX_PIN: u32 = 9;
+pub const CONSOLE_TX_AF: u32 = 7;
+
+/// 115200 8N1. USART1's default clock source (`CCIPR1[1:0]` = 00) is PCLK2,
+/// which `hw::rcc::init` leaves at SYSCLK = 160 MHz (APB2 prescaler /1).
+/// With 16x oversampling `BRR = PCLK / baud = 160_000_000 / 115_200 = 1389`
+/// (0.064 % error — well inside the framing tolerance).
+pub const CONSOLE_BRR: u32 = 1389;
+
+// ---------------------------------------------------------------------------
+// LCD — NV3007 over SPI1 on the Arduino header (`spi1-arduino`)
+// ---------------------------------------------------------------------------
+
+pub const LCD_SPI_BASE: u32 = SPI1_S;
+pub const LCD_SPI_PORT: u32 = GPIOE_S;
+pub const LCD_SPI_AF: u32 = 5;
+pub const LCD_CS_PIN: u32 = 12;
+pub const LCD_SCK_PIN: u32 = 13;
+/// MISO — PE14. `Option` so the two boards share one type: pq1 routes no
+/// MISO at all (its PA6, the MISO position in SPI1's pin group, is `NC` on
+/// the board). The panel is write-only in both cases; iota2 merely happens to
+/// have the pad wired.
+pub const LCD_MISO_PIN: Option<u32> = Some(14);
+pub const LCD_MOSI_PIN: u32 = 15;
+
+/// Data/command select — PE7 (Arduino `D4`).
+pub const LCD_DC_PORT: u32 = GPIOE_S;
+pub const LCD_DC_PIN: u32 = 7;
+
+/// Reset — PE14. Strapped to 3V3 on this board, so the driver uses the
+/// `SWRESET` command instead; see the module note above.
+pub const LCD_RST_PORT: u32 = GPIOE_S;
+pub const LCD_RST_PIN: u32 = 14;
+/// This board drives the panel reset over SPI, not over the pin.
+pub const LCD_RST_IS_DRIVABLE: bool = false;
+
+/// No tearing-effect input is wired.
+pub const LCD_TE: Option<(u32, u32)> = None;
+/// Backlight is unconditional — no enable line and no LED-driver IC.
+pub const LCD_BACKLIGHT_EN: Option<(u32, u32)> = None;
+
+// ---------------------------------------------------------------------------
+// Secure elements — both share I2C1 on PB8/PB9 (AF4)
+// ---------------------------------------------------------------------------
+
+pub const OPTIGA_I2C_BASE: u32 = I2C1_S;
+pub const OPTIGA_I2C_PORT: u32 = GPIOB_S;
+pub const OPTIGA_I2C_SCL_PIN: u32 = 8;
+pub const OPTIGA_I2C_SDA_PIN: u32 = 9;
+pub const OPTIGA_I2C_AF: u32 = 4;
+
+/// SE050 shares the OPTIGA bus on this board (`pq1` splits them).
+pub const SE050_I2C_BASE: u32 = I2C1_S;
+pub const SE050_I2C_PORT: u32 = GPIOB_S;
+pub const SE050_I2C_SCL_PIN: u32 = 8;
+pub const SE050_I2C_SDA_PIN: u32 = 9;
+pub const SE050_I2C_AF: u32 = 4;
+
+// The bench-OLED pin map lived here until 2026-09-23, when the
+// `ui-oled-bench` backend was removed. On this board it bit-banged PB8/PB9 —
+// which are also the secure-element bus — so an OLED build and a real SE
+// backend could never coexist here, and `hw::soft_i2c` rejected the pair at
+// compile time. That constraint goes with the backend.
+
+/// The SE I2C buses to bring up: exactly one, shared by both chips.
+pub const SE_I2C_BUSES: &[SeI2cBus] = &[SeI2cBus {
+    name: "I2C1 (OPTIGA 0x30 + SE050 0x48)",
+    base: I2C1_S,
+    rcc_enr_off: RCC_APB1ENR1_OFF,
+    rcc_rstr_off: RCC_APB1RSTR1_OFF,
+    rcc_en_bit: RCC_I2C1EN_BIT,
+    rcc_rst_bit: RCC_I2C1RST_BIT,
+    port: GPIOB_S,
+    scl_pin: 8,
+    sda_pin: 9,
+    af: 4,
+    // Both chips share this bus on the dev board; no address conflict.
+    probe_addrs: &[(0x30, "OPTIGA Trust M"), (0x48, "SE050")],
+}];
+
+/// OPTIGA active-low reset — PE0, i.e. the header pin silkscreened `D6`
+/// (UM2839 disagrees; the LA capture wins).
+pub const OPTIGA_RST: Option<(u32, u32)> = Some((GPIOE_S, 0));
+/// No independent SE050 enable line is wired.
+pub const SE050_EN: Option<(u32, u32)> = None;
+/// The secure-element supply is not software-gated on this board — both
+/// parts are powered whenever the board is.
+pub const SE_RAIL_EN: Option<(u32, u32)> = None;
+
+// ---------------------------------------------------------------------------
+// USB front end
+// ---------------------------------------------------------------------------
+
+/// GPIOA / GPIOB pins this board's USB front end hands to the NON-SECURE
+/// world via `GPIOx_SECCFGR`. Consumed by `hw::usb_hw::init`; checked against
+/// this board's reserved lines by the `const assert!`s in `super`.
+///
+/// **Frozen at the five bits this board was validated with.** A security
+/// review found PA15 / PB5 / PB15 are almost certainly unnecessary here too —
+/// PB5 is driven only from secure code and PA15/PB15 exist solely for UCPD CC
+/// — but narrowing them is a behaviour change on the working bench board and
+/// must be landed separately, bench-verified, not smuggled in on a port for a
+/// different board.
+pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12) | (1 << 15);
+pub const USB_NS_PINS_B: u32 = (1 << 5) | (1 << 15);
+
+/// No port-protection fault flag is routed to the MCU on this board.
+pub const USB_FAULT_FLAG: Option<(u32, u32)> = None;
+/// VBUS is not routed to the MCU here; NS bypasses VBUS sensing anyway.
+pub const USB_VBUS_SENSE: Option<(u32, u32)> = None;
+
+/// Board-specific pins that must never reach the non-secure world, beyond the
+/// ones `super` derives from the shared pin map. Nothing extra on this board.
+/// `sca-trigger` scope trigger — **PD2**, this board's historical hardcoded
+/// value, preserved byte-for-byte.
+///
+/// This constant did not exist until 2026-08-31. `hw/sca_trigger.rs` hardcoded
+/// `0x5202_0C00` (GPIOD_S) pin 2 and read no board constant, so the board port
+/// gave pq1 a `SCA_TRIGGER` (PB3, since port D is not bonded on the 48-pin
+/// package) that nothing consumed — the driver kept writing PD2 on both
+/// boards, while `hw/soft_i2c.rs` built its collision guard from the pq1 value.
+/// Guard and writer were looking at different pins.
+///
+/// Adding it here is what let the driver be ported without changing iota2
+/// behaviour: PD2 in, PD2 out.
+/// Consumption-mask PWM — **PA5, TIM2_CH1, AF1**. Unchanged: this is the
+/// Trezor-convention pin the mask has always used on this board.
+///
+/// Note what it is NOT: a driven load. Nothing on the dev board is wired to
+/// PA5 — `hw/consumption_mask.rs` chose it because no driver claimed it. How
+/// much a PWM on an unloaded pad actually dilutes the die's power signature is
+/// an open bench question for BOTH boards, already recorded in
+/// `docs/hardware/evt-silicon-validation.md` ("must sit near/across the die
+/// supply to matter"). Nothing here changes that either way.
+pub const MASK_PWM_PORT: u32 = GPIOA_S;
+pub const MASK_PWM_PIN: u32 = 5;
+pub const MASK_PWM_AF: u32 = 1;
+pub const MASK_TIM_BASE: u32 = super::TIM2_S;
+pub const MASK_TIM_RCC_EN_BIT: u32 = super::RCC_TIM2EN_BIT;
+
+pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOD_S, 2));
+
+pub const EXTRA_RESERVED_PINS: &[(Option<(u32, u32)>, &str)] = &[];
+
+// ---------------------------------------------------------------------------
+// Buttons — active-low, internal pull-up
+// ---------------------------------------------------------------------------
+
+/// `LEFT` — PC1, Arduino `D8` (CN13 pin 1 jumper).
+pub const BTN_LEFT_PORT: u32 = GPIOC_S;
+pub const BTN_LEFT_PIN: u32 = 1;
+/// `RIGHT` — PA8, Arduino `D9` (CN13 pin 2 jumper).
+pub const BTN_RIGHT_PORT: u32 = GPIOA_S;
+pub const BTN_RIGHT_PIN: u32 = 8;
+/// The blue on-board `USER` (B3) button.
+///
+/// **Not a UI input.** An earlier version of this comment called it "a genuine
+/// third input, which the UI's three-action dialogs rely on" — that was wrong.
+/// `hw::buttons::init` configures PC13, but `wait_event` never samples it; the
+/// only reads are inside the `button-test` diagnostic, where it just prints a
+/// state change. It never constructs a `Button` and never reaches a dialog.
+///
+/// Kept here because the pin *is* wired on this board and is useful as a
+/// bench "is the firmware alive" reference, but nothing in the tree consumes
+/// this constant.
+pub const BTN_USER: Option<(u32, u32)> = Some((GPIOC_S, 13));
