@@ -532,7 +532,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: install foundry (slither drives `forge build` for this project)
-        uses: foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d # v1
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
       - name: install slither (pinned)
         run: pip install "slither-analyzer==0.11.6"
       # SAME restore as the contracts job, deliberately duplicated rather than
@@ -577,7 +577,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - uses: foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d # v1
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
       # lib/ is gitignored and the deps are git-pinned by foundry.lock (NOT
       # submodules), so restore each at its EXACT locked rev. The codehash
       # freeze tests are lib-exact: an extra/missing lib changes the
