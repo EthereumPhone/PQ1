@@ -1,0 +1,48 @@
+{
+  "source_commit": "d03db3d99bf1eb34b6e27ed32fa60c43bed66fed",
+  "source_tree": "703275ba24d5b610d494df3f9fbad928904d3d05",
+  "base": "75d7bdaaf3840edc8570b685ecd21591ababcff3",
+  "input_identity": "06793da6caf1b7efe0ff7b7691927981",
+  "inventory": {
+    "files": 438,
+    "roots": 181,
+    "pins": 3000,
+    "statements": 2599,
+    "census": 2155,
+    "controls": 411,
+    "new_pins": 47,
+    "assumptions_unchanged": true,
+    "headlines_added": 8,
+    "source_bindings": 402
+  },
+  "full_gate": {
+    "started_utc": "2026-09-29T13:36:09.331514+00:00",
+    "epoch": 1790688969.3315377,
+    "clock_start": {
+      "utc": "2026-09-29T13:36:09.331514+00:00",
+      "epoch": 1790688969.3315377,
+      "monotonic": 67961.583879087,
+      "boottime": 178391.124436683,
+      "boot_id": "fe9afb8b-5e95-4660-ae21-f14dfb35ddbd"
+    },
+    "timing_basis": "Linux CLOCK_MONOTONIC (excludes host suspension)",
+    "active_limit_seconds": 18000,
+    "pid": 979710,
+    "commit": "d03db3d99bf1eb34b6e27ed32fa60c43bed66fed",
+    "tree": "703275ba24d5b610d494df3f9fbad928904d3d05",
+    "exit_code": 0,
+    "finished_utc": "2026-09-29T16:53:32.916993+00:00",
+    "clock_end": {
+      "utc": "2026-09-29T16:53:32.916993+00:00",
+      "epoch": 1790700812.917018,
+      "monotonic": 79805.169359823,
+      "boottime": 190234.709917289,
+      "boot_id": "fe9afb8b-5e95-4660-ae21-f14dfb35ddbd"
+    },
+    "active_elapsed_seconds": 11843.585480736001,
+    "wall_elapsed_seconds": 11843.585480213165,
+    "boottime_elapsed_seconds": 11843.585480606009,
+    "suspended_seconds": 0.0
+  },
+  "metadata_delta": "Receipt only; no proof or gate inputs change."
+}

@@ -2164,3 +2164,17 @@ cdrafts-split/ExposureReferences.ec	defined-op:cff6a4e306dd	logged_fors_value	# 
 cdrafts-split/ExposureReferences.ec	defined-op:8768317f24b2	logged_special_root	# line 42
 cdrafts-split/ExposureSupport.ec	defined-op:c60f21aa19b4	exposure_supported	# line 7
 cdrafts-split/ExposureSupport.ec	defined-op:fc6445416bce	exposures_supported	# line 10
+
+# Returned-coordinate forgery partition; existing census preserved.
+cdrafts-split/ExposureComponents.ec	defined-op:d5a1b0f24279	returned_top_message	# line 8
+cdrafts-split/ExposureComponents.ec	defined-op:62408d86ed67	returned_bottom_message	# line 13
+cdrafts-split/ExposureComponents.ec	defined-op:fd80cda1a867	new_top_component	# line 34
+cdrafts-split/ExposureComponents.ec	defined-op:582018721e8d	new_bottom_component	# line 39
+cdrafts-split/ExposureCoverage.ec	defined-op:f86743d7b4c5	logged_digest	# line 7
+cdrafts-split/ExposureCoverage.ec	defined-op:5e659eb3edb5	returned_coordinate	# line 10
+cdrafts-split/ExposureCoverage.ec	defined-op:60959b5eb11e	returned_coverage	# line 13
+cdrafts-split/ExposureCoverage.ec	defined-op:9e8413439bb2	unreturned_private_opening	# line 74
+cdrafts-split/ExposureCoverage.ec	defined-op:36a5047825b4	returned_private_values	# line 79
+cdrafts-split/ExposurePartition.ec	defined-op:bd79fbbbd477	exposure_forgery_cases	# line 8
+cdrafts-split/ExposurePartition.ec	defined-op:991055d128b6	new_message_exposure_partition	# line 29
+cdrafts-split/ExposureWidths.ec	defined-op:bc4d45bf5244	exposures_width	# line 7

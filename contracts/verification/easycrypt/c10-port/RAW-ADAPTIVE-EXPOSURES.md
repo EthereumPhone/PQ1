@@ -75,3 +75,8 @@ component coordinates or values. #100 and #295 remain open. No new project
 axiom, admit, clone assumption, runtime, wire or parameter change is introduced.
 Rust extraction, concrete SHA-256, QROM and production assurance remain separate;
 the owner-triggered combined playbook pass #509 remains deferred.
+
+The later [returned-coordinate partition](RAW-FORGERY-PARTITION.md) retains
+response widths, proves exact ordinary/special returned-value agreement, and
+refines the actual game into explicit new-component/private/coverage cases.
+Their numerical charges and general information-exposure analysis remain open.

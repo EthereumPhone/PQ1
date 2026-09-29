@@ -1,0 +1,17 @@
+{
+  "candidate": "d03db3d99bf1eb34b6e27ed32fa60c43bed66fed",
+  "astra": {
+    "requested": "gpt-6-astra",
+    "effort": "ultra",
+    "runtime_model_ids": [],
+    "limitation": "No separate resolved model field observed in structured runtime JSONL."
+  },
+  "opus": {
+    "requested": "opus",
+    "effort": "xhigh",
+    "observed": [
+      "claude-opus-5-5"
+    ],
+    "evidence": "q21-review-wave-r3/claude/runtime.json"
+  }
+}

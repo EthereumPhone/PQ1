@@ -3652,7 +3652,8 @@ seq 15 18 : (
     + have [_ hb] := Index.valP msigidx.`3.
       have hl : nr_trees 0 * l' = 2 ^ (h' * d).
       + rewrite /nr_trees /nr_nodes_ht /nr_nodes /l' /=.
-        have hd : 0 <= h' * (d - 1) by smt(ge1_hp ge1_d).
+        have hd : 0 <= h' * (d - 1).
+        + apply mulr_ge0; smt(ge1_hp ge1_d).
         have h0 : 0 <= h' by smt(ge1_hp).
         rewrite -exprD_nneg //.
         by rewrite (: h' * (d - 1) + h' = h' * d) 1:/#.

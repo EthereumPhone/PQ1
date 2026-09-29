@@ -1,0 +1,55 @@
+{
+  "candidate": "d03db3d99bf1eb34b6e27ed32fa60c43bed66fed",
+  "base": "75d7bdaaf3840edc8570b685ecd21591ababcff3",
+  "overall_ci": "red",
+  "counts": {
+    "success": 13,
+    "failure": 2,
+    "pending": 0
+  },
+  "failure_evidence": [
+    {
+      "job": "109432314873",
+      "name": "PR",
+      "log": "q21-ci-logs/109432314873.log",
+      "sha256": "0aa669ffce72c2cf88b7afccf8b726360644a0a2159106ded1f91e12aa5bf235",
+      "existing_issue": 711,
+      "reason": "Existing locked fuzz Cargo.lock mismatch",
+      "tracker": {
+        "number": 711,
+        "state": "OPEN",
+        "title": "Repair baseline curation receipt and fuzz lockfile CI failures",
+        "url": "https://github.com/EthereumPhone/PQ1/issues/711"
+      }
+    },
+    {
+      "job": "109432314593",
+      "name": "Contracts (forge test)",
+      "log": "q21-ci-logs/109432314593.log",
+      "sha256": "4b81aaac7d25fa1cd99032a0a0ed885eb5b2734decf753bacf92b0ba0e23d9cb",
+      "existing_issue": 767,
+      "reason": "Existing forge 1.8.x transaction-boundary behavior: 12 contract tests revert OwnerIndexMismatch; 115 pass, 2 skip",
+      "tracker": {
+        "number": 767,
+        "state": "OPEN",
+        "title": "12 contract tests fail on forge 1.8.x: the transient validated-op credit does not survive the harness's call boundary",
+        "url": "https://github.com/EthereumPhone/PQ1/issues/767"
+      }
+    }
+  ],
+  "unchanged_baseline_inputs": [
+    "contracts/smart-wallet",
+    ".github/workflows",
+    "fuzz",
+    "Cargo.toml",
+    "Cargo.lock"
+  ],
+  "checked_utc": "2026-09-29T13:52:24.195059+00:00",
+  "coordinator_review_required": false,
+  "coordinator_confirmed": true,
+  "source_scope": "Q21 delta from current master changes EasyCrypt proofs/enrollment/source bindings and owner-status files only.",
+  "coordinator_notes": [
+    "All current failing-job logs read; actual diagnostics match existing OPEN issues #711 and #767. Related contract/fuzz/workflow/Cargo inputs are identical to the frozen master base.",
+    "Previous TRNG/provenance/Foundry-install failures no longer describe this candidate; current CI status is recorded independently. No overall green hosted-CI claim."
+  ]
+}

@@ -1,0 +1,19 @@
+VERDICT: GO
+TARGET: d03db3d99bf1eb34b6e27ed32fa60c43bed66fed / 703275ba24d5b610d494df3f9fbad928904d3d05
+FINDINGS: none
+GAPS: The full cold two-driver 438-target replay is still pending, and I did not re-run it here (source-only review).
+
+What I checked, from the source (proof validity itself rests on your green replay evidence; I did not recompile):
+- **Item 1, widths through adaptive calls and final verification:** `ExposureWidths.ec:73-77` sets up the log check at init (`mem_nil`). Hash leaves the log untouched. Sign appends only when the result is a success that meets `signature_width`, via `exposures_width_rcons` and `full_sign_valid_width`, including repeats through its else branch. The verifier (`:59`) keeps the check. The client cannot touch `ExposureLog`, and `ExposureDriver.ec` is unchanged by this diff.
+- **Item 2, roots and literal values:** `fors_root_witness_unique` uses no collision premise, which matches the doc's claim that this is determinism. `logged_fors_value` reads `nth []`. `ExposurePrivate.ec:144,158` uses the width to change that to `nth (nseq 16 0)`. It then ties the value to `s.[fors_private_key ht tree index]`, only under `!public_node_collision`. Tree 12 stays a whole-root witness at `(ht,12)`.
+- **Item 3, coverage:** `returned_coverage` lets each tree have its own logged digest, so different responses can cover different trees. The empty-log (`:22`), repeat (`:25`) and concatenation (`:29`) lemmas are present. The uncovered branch (`:74`) gives a private-table witness plus absence from returned coordinates, with no secrecy claim; the doc at lines 28-30 disclaims secrecy. The mixed-coverage control assumes its premises, and the doc says so.
+- **Item 4, component messages:** top messages are compared at layer 1, tree 0, leaf ht/512, and bottom messages at layer 0, tree ht/512, leaf ht%512. "New" follows from `!merkle_root_witness` / `!forest_root_witness` (`SubtreeOpeningCases.ec:10`, `ForestOpeningCases.ec:19`). The doc at lines 36-37 says chain exposure is not excluded.
+- **Item 5, hop:** the three charges in `ExposurePartitionHop.ec:168-170` match `byte_public_node_bad_hop` (`BytePublicNodeBad.ec:43-45`) term for term. The residual keeps `res ∧ ¬collision ∧ ¬zero`. The seed comes from `KeygenInputs{m}` (the client cannot modify `KeygenInputs`), and the signing cap is `qs`. Freshness is `!mem (exposure_messages)`, which equals `FullSession.signed_messages`. `partition_message_input_new` is only an H_msg-input inequality, and the doc at line 51 disclaims freshness against public queries. `exists root0` follows the existing `Byte*Hop` pattern and is pinned by `merkle_root_witness … 1 0 root` plus `merkle_root_witness_unique`.
+- **Item 6, XmssmtCC_All:** only the internal `have hd` proof changed, to `apply mulr_ge0; smt(...)`. The statement and assumptions are unchanged. Controls are classified MUST-PASS/MUST-FAIL. `C10Q21DropsResidual` weakens `res` to `false` and is expected to fail. The doc gives no numerical EUF bound and makes no full information-exposure claim.
+- **Item 7, Rust delta from 4bc96312:**
+  - `find_count` reports only after the `sum == TARGET_SUM` check.
+  - `build_subtree_with_auth` reports only after the stack push. The interpolated value is at most `pct_hi`, so the `u8` cast is in range.
+  - With the no-callback sink, nothing is reported and the hash/chain/count/byte data flow is unchanged.
+  - Narrowing `pub` to `pub(crate)` breaks no callers. The model harness uses `SigningKey::sign_with_shuffle_silent`, and `secure/` uses the unchanged public `sign_with_shuffle`.
+  - The three file hashes match the updated `cert-source-binding.json`.
+  - This says nothing about callback side effects, timing, extraction or production assurance.

@@ -1,0 +1,26 @@
+Review PQSigner OS for merge of returned-coordinate forgery-partition proofs. Do not launch agents or other models.
+Target: /home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/review-target-forgery-partition-r3
+Commit: d03db3d99bf1eb34b6e27ed32fa60c43bed66fed
+Tree: 703275ba24d5b610d494df3f9fbad928904d3d05
+Compare: 75d7bdaaf3840edc8570b685ecd21591ababcff3..d03db3d99bf1eb34b6e27ed32fa60c43bed66fed
+
+Focus on formal-verification correctness:
+1. Every actual successful response, including repeats, must satisfy the retained width invariant through adaptive calls and final verification. The observer and original signer/client/oracle calls, failure behavior and caps must be unchanged.
+2. Fixed-coordinate complete FORS roots must be unique from the actual public/private tables. Literal logged ordinary values must match their exact private coordinates outside the stated collision event; the thirteenth component remains a root-as-secret.
+3. Coverage ranges over all logged responses. Different ordinary trees may be covered by different responses; empty logs and repeated entries behave correctly. The uncovered case must identify a private value at a coordinate absent from every returned response, without inferring secrecy.
+4. New top/bottom WOTS component messages must be compared at their correct addresses with all retained returned messages. Missing references must not imply absence of public/intermediate/chain exposure.
+5. Four-case extraction and the probability hop must retain the same initialized byte client, seed/root, message freshness, cap, res event, collision/zero exclusions and original charges. Different H_msg inputs from prior outputs do not mean freshness against public queries.
+6. The explicit nonnegative-product proof in XmssmtCC_All must preserve the original statement and assumptions. Preserve all previous statements and assumptions; add no axiom/admit/clone assumption. Controls and claims must distinguish successful proofs, conditional examples, rejected applications and unresolved probability charges. No closed numerical EUF or full information-exposure claim.
+7. Three Rust bindings (wots.rs, hypertree.rs, merkle.rs) are refreshed after upstream progress callbacks. Compare their delta from 4bc963120eabe5e2bc7d2c6fb4b8c123386d27f6: verify unchanged hash/chain/count/byte correspondence for the noninterfering callback path; do not infer callback-side-effect, timing, extraction or production assurance from finite fixtures.
+
+Evidence already green: all proof and control bytes are unchanged from a completed 438-direct/438-CLI/411-control cold replay. The combined tree passed Rust transcript and progress-correspondence tests, source binding, static contract and eleven checker regression groups. The corrected XmssmtCC_All file also passed both whole-file drivers. Eight selected modules passed 16 source-matched whole-file checks under direct/default-CLI drivers. Enrolled bytes match that checkpoint. All 25 new controls match their declared outcomes (ten positives, eight scope probes, seven exact-statement mismatches). Eleven checker regression groups, static contract and 402-input source binding pass. Inventory: 438 targets, 181 roots, 3000 pins, 2599 statements, 2155 census rows and 411 controls. Full cold two-driver replay is running separately and remains required before landing.
+Non-goals: further runtime/API/parameter changes, complete information-exposure analysis, private/chain/encoding numerical charges, closed EUF, Rust extraction, SHA-256/QROM, hardware/shipment, deferred playbook sweep or optional hardening.
+
+Inspect the exact diff and affected callers source-first. Keep the target immutable. Use read-only commands only; no edits, hardware, external writes, prior reports, status prose, playbook catalogs, other models or follow-up turns. Ignore style and optional hardening. You have 15 minutes and 800 words. Stop exploration in time to return a compact report.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: d03db3d99bf1eb34b6e27ed32fa60c43bed66fed / 703275ba24d5b610d494df3f9fbad928904d3d05
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — mechanism; evidence; smallest fix
+GAPS: none | one line
+Use at most three findings; FIX needs falsifiable evidence. If none, write FINDINGS: none.

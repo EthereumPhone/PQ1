@@ -94,6 +94,12 @@ the original byte game's probability. All entries retain their construction
 references; the ledger matches the signed-message list and respects the cap.
 Full information-exposure and numerical private/encoding charges remain open.
 
+The [returned-coordinate partition](RAW-FORGERY-PARTITION.md) separates the
+actual game's residual into new WOTS component messages, an unreturned private
+FORS coordinate, or coverage assembled from earlier responses. Covered values
+agree with actual logged outputs; the special root remains separate. These
+cases still need probability charges.
+
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every

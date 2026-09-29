@@ -1,0 +1,77 @@
+{
+  "candidate": "d03db3d99bf1eb34b6e27ed32fa60c43bed66fed",
+  "tree": "703275ba24d5b610d494df3f9fbad928904d3d05",
+  "coordinator_review_complete": true,
+  "accepted_blockers": [],
+  "reviewers": {
+    "codex": {
+      "verdict": "GAP",
+      "seconds": 233.953,
+      "words": 34,
+      "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q21-review-wave-r3/codex/report.txt",
+      "sha256": "a01477834cd2c1629fcd5766d85f0526855ce0fd699df642ab2eb409bcc7e83a"
+    },
+    "claude": {
+      "verdict": "GO",
+      "seconds": 156.249,
+      "words": 504,
+      "report": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q21-review-wave-r3/claude/report.txt",
+      "sha256": "1e082c8f6f8bda047eee34a57e5f6d5c3ea98e23ea77ab423439d97006af35fb"
+    }
+  },
+  "pending_gate_only": true,
+  "mandatory_gap": {
+    "description": "Combined-source full cold two-driver replay must complete GREEN before landing",
+    "resolved": true
+  },
+  "coordinator_verdict": "GO",
+  "remaining_gate": "none; source-matched full cold replay completed GREEN",
+  "notes": [
+    {
+      "source": "Opus",
+      "status": "NOTE; nonblocking; deferred to #100/#295 next reduction work",
+      "claim": "Game/hop statements omit the accumulated support invariant, making downstream reuse less direct.",
+      "coordinator_evidence": "ExposurePartitionGame.exposure_driver_partition proves support for seed0/pad root0 before applying new_message_forest_partition. exposure_context_partition applies it to the actual keygen root. new_message_exposure_partition retains the corresponding top root witness. Existing ExposureForge.byte_exposure_forgery_accounted and MerkleRootWitness.merkle_root_witness_unique support later recombination. No incorrect claim or required source correction; keep future invariant-carrying convenience out of Phase D."
+    }
+  ],
+  "remediation": {
+    "trigger": "Observed mandatory CLI failure at existing XmssmtCC_All.ec:3655",
+    "correction": "Explicit mulr_ge0 application; unchanged theorem and assumptions",
+    "focused_evidence": "Both whole-file drivers passed without diagnostics on the corrected source",
+    "initial_evidence": "q21-initial-failed-replay",
+    "prior_verdicts_authorize_corrected_source": false
+  },
+  "integration": "q21-integration-remediation.json",
+  "receipt_summary": "Opus returned GO; Astra reported GAP solely for the then-pending combined-source full cold replay. Both found no source-level blocker across all seven focus areas, including the three refreshed Rust bindings. The coordinator resolved the exact pending-replay gap with the matching completed green replay; raw reviewer verdicts are preserved.",
+  "utc": "2026-09-29T13:41:45.502973+00:00",
+  "resolved_gate": {
+    "started_utc": "2026-09-29T13:36:09.331514+00:00",
+    "epoch": 1790688969.3315377,
+    "clock_start": {
+      "utc": "2026-09-29T13:36:09.331514+00:00",
+      "epoch": 1790688969.3315377,
+      "monotonic": 67961.583879087,
+      "boottime": 178391.124436683,
+      "boot_id": "fe9afb8b-5e95-4660-ae21-f14dfb35ddbd"
+    },
+    "timing_basis": "Linux CLOCK_MONOTONIC (excludes host suspension)",
+    "active_limit_seconds": 18000,
+    "pid": 979710,
+    "commit": "d03db3d99bf1eb34b6e27ed32fa60c43bed66fed",
+    "tree": "703275ba24d5b610d494df3f9fbad928904d3d05",
+    "exit_code": 0,
+    "finished_utc": "2026-09-29T16:53:32.916993+00:00",
+    "clock_end": {
+      "utc": "2026-09-29T16:53:32.916993+00:00",
+      "epoch": 1790700812.917018,
+      "monotonic": 79805.169359823,
+      "boottime": 190234.709917289,
+      "boot_id": "fe9afb8b-5e95-4660-ae21-f14dfb35ddbd"
+    },
+    "active_elapsed_seconds": 11843.585480736001,
+    "wall_elapsed_seconds": 11843.585480213165,
+    "boottime_elapsed_seconds": 11843.585480606009,
+    "suspended_seconds": 0.0
+  },
+  "mandatory_gap_resolution": "The same-source cold replay completed GREEN with unchanged proof checks and reviewer bounds. Local watchdog now measures active elapsed time excluding suspension; raw reviewer GAP preserved."
+}

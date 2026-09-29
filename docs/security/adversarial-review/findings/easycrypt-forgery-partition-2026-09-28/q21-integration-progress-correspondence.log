@@ -1,0 +1,10 @@
+   Compiling sphincs-c10 v0.1.0 (/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-forgery-partition/sphincs-c10)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.37s
+     Running tests/signing_suite.rs (/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/host-target/x86_64-unknown-linux-gnu/debug/deps/signing_suite-76f06d8dc8d8f655)
+
+running 2 tests
+test positive_progress_callback_invoked_monotonically_to_100 ... ok
+test positive_progress_reports_inside_each_hypertree_layer ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.19s
+

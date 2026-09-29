@@ -1,0 +1,7 @@
+{
+  "utc": "2026-09-29T10:09:27.468179+00:00",
+  "outcome": "Incomplete; coordinator stopped run after confusing host suspend with local wall watchdog expiry. Not accepted as a complete replay.",
+  "user_confirmation": "I had my laptop hiberante overnight, dont worry",
+  "journal": "suspend-journal.log",
+  "replacement": "Fresh full replay with suspension-aware active elapsed watchdog; source, proof command, checks and completed bounded reviews unchanged."
+}

@@ -1,0 +1,38 @@
+{
+  "utc": "2026-09-29T10:11:28.156613+00:00",
+  "basis": "Linux CLOCK_MONOTONIC (excludes host suspension)",
+  "active_limit_seconds": 18000,
+  "source_changes": false,
+  "review_bounds_changed": false,
+  "command": [
+    "timeout",
+    "-k",
+    "60",
+    "18000",
+    "make",
+    "-C",
+    "contracts/verification",
+    "verify-easycrypt-split"
+  ],
+  "reason": "Coordinator incorrectly applied its own proof replay watchdog to suspended wall time. Project workflow section 7 separately bounds reviewer waves, not mandatory proof replay. User confirms laptop hibernation; systemd journal independently records suspension.",
+  "reference": "Local Linux man-pages 6.7 clock_gettime(2): CLOCK_MONOTONIC excludes suspension; CLOCK_BOOTTIME includes suspension.",
+  "preserved_incomplete_attempts": [
+    "q21-paused-replay",
+    "q21-overnight-replay"
+  ],
+  "validation": "Deterministic 12-hour suspension excluded, reboot rejected, failed/inconsistent/over-budget result rejected; all helper scripts compile.",
+  "helper_sha256": {
+    "q21_clock.py": "aa1180d91f9b46a04e096c2d14962889d2677c8b238559a163212fabcfca96b0",
+    "run_q21_full_gate.py": "20ed3cd148e2b826fee111c3391e540531d5e03865a7e446e9470d322aa710fb",
+    "await_q21_closure.py": "73dd329bf8d5ac7bda625eda7c9960a5be89fa81cebe547289e6a79c3ff15836",
+    "prepare_q21_landing.py": "b06fc989665fefc98cfc0fcde1fa57e91ae24deea93986c33d242b82818ec451",
+    "q21_gate_status.py": "b8cb344138ae09615ee0cc5fa3597f316e8a555c37967eb1094f8cb4b48aabac"
+  },
+  "host_clock_observation": {
+    "utc": "2026-09-29T10:11:28.156748+00:00",
+    "epoch": 1790676688.1567512,
+    "monotonic": 55678.785448053,
+    "boottime": 166108.326005379,
+    "boot_id": "fe9afb8b-5e95-4660-ae21-f14dfb35ddbd"
+  }
+}

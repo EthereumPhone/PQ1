@@ -1,0 +1,8 @@
+{
+  "exit_code": 2,
+  "started_utc": "2026-09-28T10:38:26.798819+00:00",
+  "finished_utc": "2026-09-28T13:40:23.846604+00:00",
+  "elapsed_seconds": 10917.05,
+  "commit": "e9f0524407b9dfe0f17e4c77410c38fe6cb32c68",
+  "tree": "cd149b0c21c583e0dcb7958e335cdf0cf955ee8b"
+}

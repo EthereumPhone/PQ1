@@ -207,3 +207,13 @@ ExposureSessionHistory
 ExposureReferences
 ExposureGameHistory
 ExposureForge
+
+# Returned-coordinate forgery partition.
+ExposureWidths
+ForsRootDeterminism
+ExposurePrivate
+ExposureCoverage
+ExposureComponents
+ExposurePartition
+ExposurePartitionGame
+ExposurePartitionHop

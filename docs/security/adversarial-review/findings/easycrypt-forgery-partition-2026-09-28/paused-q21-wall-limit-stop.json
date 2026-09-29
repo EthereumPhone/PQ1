@@ -1,0 +1,16 @@
+{
+  "utc": "2026-09-28T19:16:43.401557+00:00",
+  "reason": "Recorded 18000-second wall bound exceeded after large clock gap; incomplete run cannot authorize landing",
+  "status": {
+    "elapsed_minutes": 300.8,
+    "direct_pass": 438,
+    "cli_pass": 438,
+    "controls_pass": 371,
+    "failures": [],
+    "latest_phase": "### PHASE 3 \u2014 CONTROLS (polarity AND declared reason)",
+    "gate_finished": false,
+    "closure_finished": false
+  },
+  "source_unchanged": true,
+  "docker_container": "12fa4055f962"
+}
