@@ -33,7 +33,7 @@ anyhow       = "1"
 rpassword    = "7.5"
 
 # ELF trust-root extraction (flattening itself is shared via fwmeasure).
-object       = { version = "0.36", features = ["read_core", "elf", "std"] }
+object       = { version = "0.39", features = ["read_core", "elf", "std"] }
 
 # .pqfw bundle packing
 tar          = "0.4"
