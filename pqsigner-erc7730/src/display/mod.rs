@@ -117,10 +117,41 @@ pub struct Pages {
     /// visible and harmless. The dangerous direction (content silently treated
     /// as chrome and dropped) cannot occur, because only the renderer's own
     /// chrome writers ever call [`Pages::mark_nav`].
+    ///
+    /// ## Bit layout — two independent planes in one byte
+    ///
+    /// ```text
+    ///   bit 0..3  row r is renderer-emitted CHROME   (mark_nav / is_nav)
+    ///   bit 4     the intent is COMPLETE on row 0    (mark_intent_complete)
+    ///   bit 5     the intent CONTINUES onto row 1    (mark_intent_continues)
+    ///   bit 6..7  reserved (must stay 0)
+    /// ```
+    ///
+    /// One byte, not two arrays, and deliberately so: the batch banner copies
+    /// pages between `Pages` instances, and a second array is a second thing to
+    /// forget to copy — which is exactly the bug that refused batch ERC-7730
+    /// signing when `nav` itself was added. Everything that already carries
+    /// this byte carries both planes for free.
+    ///
+    /// The intent plane declares BOTH states positively, never one by the
+    /// absence of the other, so a forgotten write degrades to the neutral
+    /// `CONFIRM CLEAR SIGN?` caption rather than to a confident wrong one.
     pub nav: [u8; MAX_PAGES],
     /// Number of currently-visible pages (`0..=MAX_PAGES`).
     pub len: usize,
 }
+
+/// `nav` bit 4 — the intent is complete on row 0 (see [`Pages::nav`]).
+const INTENT_COMPLETE: u8 = 1 << 4;
+/// `nav` bit 5 — the intent continues onto row 1 (see [`Pages::nav`]).
+const INTENT_CONTINUES: u8 = 1 << 5;
+/// Both intent-plane bits, for a repaint that must re-declare from scratch.
+pub(crate) const INTENT_EXTENT_MASK: u8 = INTENT_COMPLETE | INTENT_CONTINUES;
+
+// The chrome plane owns one bit per row and must not collide with the intent
+// plane above it.
+const _: () = assert!(DISPLAY_ROWS <= 4);
+const _: () = assert!((1u8 << (DISPLAY_ROWS - 1)) < INTENT_COMPLETE);
 
 impl Pages {
     /// View the visible pages (indices `0..len`) as a slice. This is what
@@ -205,6 +236,45 @@ impl Pages {
             return false;
         }
         self.nav[page] & (1 << row) != 0
+    }
+
+    /// Declare that page `page`'s intent text is COMPLETE on row 0, so row 1
+    /// (if any) holds something else — the owner.
+    pub fn mark_intent_complete(&mut self, page: usize) {
+        assert!(page < MAX_PAGES);
+        self.nav[page] |= INTENT_COMPLETE;
+    }
+
+    /// Declare that page `page`'s intent text CONTINUES onto row 1, so rows
+    /// 0 and 1 are one unbroken string and the owner was dropped for space.
+    pub fn mark_intent_continues(&mut self, page: usize) {
+        assert!(page < MAX_PAGES);
+        self.nav[page] |= INTENT_CONTINUES;
+    }
+
+    /// How far page `page`'s intent text runs, as the renderer declared it.
+    ///
+    /// `None` when the renderer declared nothing, or contradicted itself by
+    /// setting both. Consumers MUST treat `None` as "I do not know what this
+    /// page says" and fall back to a neutral caption. That is the whole point
+    /// of declaring both states: at exactly `DISPLAY_COLS` characters the two
+    /// layouts are byte-indistinguishable, so a consumer that guessed from
+    /// "row 0 is full" read a 16-character intent plus the owner as one
+    /// string and captioned it `SIGN SET ACCOUNT NAMECELO?`.
+    #[must_use]
+    pub fn intent_rows(&self, page: usize) -> Option<usize> {
+        if page >= MAX_PAGES {
+            return None;
+        }
+        match (
+            self.nav[page] & INTENT_COMPLETE != 0,
+            self.nav[page] & INTENT_CONTINUES != 0,
+        ) {
+            (true, false) => Some(1),
+            (false, true) => Some(2),
+            // Neither: undeclared. Both: the renderer contradicted itself.
+            _ => None,
+        }
     }
 
     /// Volatile-poison the full fixed buffer and reset its visible length.

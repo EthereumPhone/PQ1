@@ -857,7 +857,7 @@ fn render_contract_format_scope<'ir>(
             if first != second {
                 return Err(RenderErr::Reject("7730 intent derivation mismatch"));
             }
-            let expected_page = intent::build_intent_page(
+            let (expected_page, expected_extent) = intent::build_intent_page(
                 &descriptor.ir,
                 format,
                 Some(&second.bytes[..second.len as usize]),
@@ -868,6 +868,14 @@ fn render_contract_format_scope<'ir>(
                 .ok_or(RenderErr::Reject("7730 missing intent page"))?;
             if !intent::page_exact(actual, &expected_page) {
                 return Err(RenderErr::Reject("7730 intent publication mismatch"));
+            }
+            // The declared extent is part of what this page says, not a note
+            // about it: it decides whether the consumer reads row 1 as more
+            // intent or as the owner. Re-check it here, or a repaint that
+            // published the right BYTES under the wrong declaration would pass
+            // the byte-exactness check and still caption the page wrongly.
+            if pages.intent_rows(intent_page) != Some(expected_extent.rows()) {
+                return Err(RenderErr::Reject("7730 intent extent mismatch"));
             }
             Ok(INTENT_PUBLICATION_INTERPOLATED)
         }

@@ -586,6 +586,9 @@ fn try_field_page_marked(rows: &[(usize, &[u8])], nav: &[usize]) -> Result<alloc
 
     let mut pages = Pages::with_len(3);
     row(&mut pages, 0, 0, b"Set name");
+    // Model the renderer faithfully: it declares how far its intent runs.
+    // "Set name" is short, so it is complete on row 0.
+    pages.mark_intent_complete(0);
     row(&mut pages, 1, 0, b"NAME");
     for &(r, text) in rows {
         row(&mut pages, 1, r, text);
@@ -850,5 +853,126 @@ fn the_chrome_mask_survives_the_batch_banner_copy() {
         super::erc7730_screens::is_confirm_page_at(&wrapped, inner.len),
         "the wrapped confirm page must still be recognised — this is the exact \
          check whose failure refused the batch ERC-7730 sign"
+    );
+}
+
+
+// ---------------------------------------------------------------------------
+// A 16-character intent: caption AND owner, not one at the cost of the other
+// ---------------------------------------------------------------------------
+
+/// Build an intent page whose intent is `intent` and whose owner row is
+/// `owner`, declaring the extent the way the renderer would, and return the
+/// pixel hero caption.
+fn caption_for(intent: &[u8], owner: &[u8], continues: bool) -> alloc::string::String {
+    const TARGET: [u8; 20] = [0x5b; 20];
+    let t = tx(MAINNET, TARGET, 0, 68);
+    let data = [0u8; 68];
+    let f = Facts::new(MAINNET, TARGET, &data, false, false, false);
+
+    let mut pages = Pages::with_len(2);
+    row(&mut pages, 0, 0, intent);
+    row(&mut pages, 0, 1, owner);
+    row(&mut pages, 0, 3, b"> next");
+    pages.mark_nav(0, 3);
+    if continues {
+        pages.mark_intent_continues(0);
+    } else {
+        pages.mark_intent_complete(0);
+    }
+    row(&mut pages, 1, 0, b"L=Cancel");
+    pages.mark_nav(1, 0);
+    let body_len = pages.len;
+
+    let facts = f.trailer(&t, TrailerSet::Sign);
+    append_handler_trailers(&mut pages, &facts);
+
+    let fam = super::erc7730_screens::family(super::erc7730_screens::Surface::Contract, &TARGET);
+    let pinned: &'static Pages = Box::leak(Box::new(pages));
+    let inputs = ContentInputs {
+        body: Body::Erc7730 { pages: pinned, start: 0, body_len, chain_id: MAINNET, family: fam },
+        trailers: &facts,
+    };
+    let mut screens = pqsigner_ui_px::Screens::blank();
+    super::px_lift::emit_content(&mut screens, &inputs).expect("intent page must lift");
+    screen_text(&screens)
+}
+
+/// THE BUG (#751, third instance). `Set Account Name` is exactly
+/// `DISPLAY_COLS`, so row 0 is full and the finished page cannot say whether
+/// row 1 continues the intent or holds the owner. The adapter guessed
+/// "row 0 full => continuation" and captioned the page
+/// `SIGN SET ACCOUNT NAMECELO?` — two distinct strings welded into one.
+///
+/// It now reads the renderer's declaration, so a complete-on-row-0 intent
+/// captions cleanly and the owner stays a separate line.
+#[test]
+fn the_16_char_intent_caption_does_not_absorb_the_owner() {
+    let text = caption_for(b"Set Account Name", b"Celo", false);
+    assert!(
+        text.contains("SIGN SET ACCOUNT NAME?"),
+        "a declared complete-on-row-0 intent must caption exactly:\n{text}"
+    );
+    assert!(
+        !text.contains("NAMECELO"),
+        "the owner must not be welded onto the intent:\n{text}"
+    );
+    assert!(
+        text.contains("Celo"),
+        "the owner is anti-spoof material and must still appear:\n{text}"
+    );
+}
+
+/// The other half: a genuinely continued intent still joins rows 0+1. Same
+/// bytes on row 0, opposite declaration, opposite reading — which is precisely
+/// the distinction text inference could not make.
+#[test]
+fn a_declared_continuation_still_joins_both_rows() {
+    let text = caption_for(b"Set Account Name", b"d Limits", true);
+    assert!(
+        text.contains("SIGN SET ACCOUNT NAMED LIMITS?"),
+        "a declared continuation must join rows 0+1:\n{text}"
+    );
+}
+
+/// An intent page carrying NO declaration must not be captioned from a guess.
+/// The failure direction is deliberate: both extent states are declared
+/// positively, so a forgotten write degrades to the neutral ask rather than to
+/// a confident wrong one.
+#[test]
+fn an_undeclared_intent_page_falls_back_to_the_neutral_caption() {
+    const TARGET: [u8; 20] = [0x5c; 20];
+    let t = tx(MAINNET, TARGET, 0, 68);
+    let data = [0u8; 68];
+    let f = Facts::new(MAINNET, TARGET, &data, false, false, false);
+
+    let mut pages = Pages::with_len(2);
+    row(&mut pages, 0, 0, b"Set Account Name");
+    row(&mut pages, 0, 1, b"Celo");
+    row(&mut pages, 0, 3, b"> next");
+    pages.mark_nav(0, 3);
+    // No mark_intent_* call: the renderer said nothing.
+    row(&mut pages, 1, 0, b"L=Cancel");
+    pages.mark_nav(1, 0);
+    let body_len = pages.len;
+
+    let facts = f.trailer(&t, TrailerSet::Sign);
+    append_handler_trailers(&mut pages, &facts);
+    let fam = super::erc7730_screens::family(super::erc7730_screens::Surface::Contract, &TARGET);
+    let pinned: &'static Pages = Box::leak(Box::new(pages));
+    let inputs = ContentInputs {
+        body: Body::Erc7730 { pages: pinned, start: 0, body_len, chain_id: MAINNET, family: fam },
+        trailers: &facts,
+    };
+    let mut screens = pqsigner_ui_px::Screens::blank();
+    super::px_lift::emit_content(&mut screens, &inputs).expect("must still lift");
+    let text = screen_text(&screens);
+    assert!(
+        text.contains("CONFIRM CLEAR SIGN?"),
+        "an undeclared extent must fall back to the neutral ask:\n{text}"
+    );
+    assert!(
+        !text.contains("NAMECELO"),
+        "and must never guess its way back to the merged caption:\n{text}"
     );
 }

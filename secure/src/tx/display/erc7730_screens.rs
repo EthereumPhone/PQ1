@@ -239,30 +239,47 @@ fn page_lines(rows: &[&[u8]], head: Option<&[u8]>) -> Result<PageLines, ()> {
     Ok(out)
 }
 
-/// The intent text the intent page shows: row 0 alone for a short intent
-/// (< 16 cells); a long one continues on row 1 unbroken
-/// (`build_intent_page`), so rows 0 + 1 join. `None` when row 1 carries the
-/// `~` overflow marker (the page itself could not show it all).
-fn intent_text(intent: &Page) -> Option<([u8; 2 * DISPLAY_COLS], usize, usize)> {
+/// The intent text the intent page shows, and how many rows it consumed.
+///
+/// STRUCTURAL, not inferred (#751). The renderer declares how far its intent
+/// runs (`Pages::intent_rows`); this reads that declaration and never looks at
+/// whether row 0 happens to be full.
+///
+/// It used to infer: "row 0 full => row 1 continues it". At EXACTLY
+/// `DISPLAY_COLS` characters that is wrong — row 0 is full and row 1 holds the
+/// OWNER — so the 16-character `Set Account Name` plus owner `Celo` captioned
+/// as `SIGN SET ACCOUNT NAMECELO?`, and the owner never appeared as its own
+/// line. The first attempt at a fix bent the renderer to match the guess, which
+/// deleted the owner from the page entirely; the owner is anti-spoof material,
+/// so that traded a caption bug for an information loss.
+///
+/// `None` when the renderer declared nothing (or contradicted itself), or when
+/// row 1 carries the `~` overflow marker — the page itself could not show the
+/// whole intent, so no caption may claim to. Callers fall back to the neutral
+/// `CONFIRM CLEAR SIGN?`.
+fn intent_text(pages: &Pages, idx: usize) -> Option<([u8; 2 * DISPLAY_COLS], usize, usize)> {
+    let intent = &pages.buf[idx];
     let r0 = trimmed(&intent[0]);
     let r1 = trimmed(&intent[1]);
     let mut out = [0u8; 2 * DISPLAY_COLS];
-    if r0.len() < DISPLAY_COLS {
-        out[..r0.len()].copy_from_slice(r0);
-        Some((out, r0.len(), 1))
-    } else if !r1.contains(&b'~') {
-        out[..r0.len()].copy_from_slice(r0);
-        out[r0.len()..r0.len() + r1.len()].copy_from_slice(r1);
-        Some((out, r0.len() + r1.len(), 2))
-    } else {
-        None
+    match pages.intent_rows(idx)? {
+        1 => {
+            out[..r0.len()].copy_from_slice(r0);
+            Some((out, r0.len(), 1))
+        }
+        2 if !r1.contains(&b'~') => {
+            out[..r0.len()].copy_from_slice(r0);
+            out[r0.len()..r0.len() + r1.len()].copy_from_slice(r1);
+            Some((out, r0.len() + r1.len(), 2))
+        }
+        _ => None,
     }
 }
 
 /// The `SIGN <INTENT>?` caption from the intent page, when its text is
 /// unambiguous and renders on the hero band; otherwise a fixed ask.
-fn hero_caption(intent: &Page) -> Text {
-    if let Some((text, n, _)) = intent_text(intent) {
+fn hero_caption(pages: &Pages, idx: usize) -> Text {
+    if let Some((text, n, _)) = intent_text(pages, idx) {
         let t = Text::new().push(b"SIGN ").push(&text[..n]).push(b"?");
         if t.ok() {
             let mut up = [0u8; 32];
@@ -287,7 +304,7 @@ fn emit_intent(e: &mut Emit<'_>, pages: &Pages, idx: usize) -> Result<(), ()> {
     let intent = &pages.buf[idx];
     let mut l: [(&[u8], Weight); 6] = [(&[], Weight::Regular); 6];
     let mut n = 0;
-    let (text, len, used) = intent_text(intent).unwrap_or(([0u8; 2 * DISPLAY_COLS], 0, 0));
+    let (text, len, used) = intent_text(pages, idx).unwrap_or(([0u8; 2 * DISPLAY_COLS], 0, 0));
     let wrapped;
     if used > 0 {
         wrapped = wrap(&text[..len], Region::Docked).ok_or(())?;
@@ -323,8 +340,13 @@ pub(crate) fn emit(out: &mut Screens, pages: &Pages, start: usize, body_len: usi
     let mut e = Emit::new(out, chain_id, fam.look);
     // The optional dev-build warning precedes the intent page.
     let intent_at = usize::from(trimmed(&body[0][0]) == b"** DEV BUILD **");
-    let intent = body.get(intent_at).ok_or(())?;
-    e.hero(b"SIGN", hero_caption(intent).as_bytes())?;
+    // `intent_at` indexes `body`; the declaration lives on `pages` at the
+    // absolute index, so the caption reads `start + intent_at`.
+    let intent_idx = start.checked_add(intent_at).ok_or(())?;
+    if intent_idx >= pages.len {
+        return Err(());
+    }
+    e.hero(b"SIGN", hero_caption(pages, intent_idx).as_bytes())?;
     let mut skip_next = false;
     for (i, page) in body.iter().enumerate() {
         if core::mem::take(&mut skip_next) {

@@ -1447,16 +1447,23 @@ fn production_celo_validators_add_first_member_renders_all_signed_operands_mainn
         page_strs(&baseline.pages, intent_page_index(&baseline.pages)),
         [
             "Add First Member".to_string(),
-            // Row 1 is EMPTY, not the owner "Celo", and that is deliberate.
-            // `Add First Member` is exactly DISPLAY_COLS, so the finished page
+            // The OWNER, on a page whose intent is exactly DISPLAY_COLS wide.
+            //
+            // `Add First Member` fills row 0 exactly, so the finished bytes
             // cannot tell a consumer whether row 1 continues the intent or
-            // holds the owner. `erc7730_screens::intent_text` joined rows 0+1
-            // whenever row 0 was full and produced the caption
-            // `SIGN ADD FIRST MEMBERCELO?`. The renderer now treats "fills row
-            // 0 exactly" as the continuation case, so the layout follows the
-            // same predicate the consumer applies; the owner line is the price,
-            // the same trade the >16 branch already made.
-            String::new(),
+            // holds the owner — and `erc7730_screens::intent_text` guessed
+            // "row 0 full => continuation", captioning the page
+            // `SIGN ADD FIRST MEMBERCELO?`. 95d7831a "fixed" that by bending
+            // the renderer until the guess was right, which EMPTIED this row:
+            // the owner is anti-spoof material (it is how a user tells Celo's
+            // descriptor from a lookalike), so that traded a caption bug for
+            // an information loss on a shipping surface.
+            //
+            // The ambiguity is now resolved by DECLARATION, not layout — see
+            // `Pages::intent_rows` — so the owner keeps its line AND the
+            // caption is right. `the_16_char_intent_caption_does_not_absorb_
+            // the_owner` below is the other half of this pair.
+            "Celo".to_string(),
             "Celo Validators".to_string(),
             "> next".to_string(),
         ]
