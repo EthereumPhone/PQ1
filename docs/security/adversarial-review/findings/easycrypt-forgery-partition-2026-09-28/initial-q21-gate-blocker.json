@@ -1,0 +1,7 @@
+{
+  "recorded_utc": "2026-09-28T13:40:23.525397+00:00",
+  "source": "e9f0524407b9dfe0f17e4c77410c38fe6cb32c68",
+  "failure": "XmssmtCC_All.ec default cli -iterate; first diagnostic line 3655 cannot prove goal (strict), then cascade",
+  "unchanged_from_base": true,
+  "action": "Stop the already-failed disposable gate; preserve receipts, isolate explicit nonnegative-product proof, then re-freeze/re-review and rerun mandatory gate. No gate waiver or budget change."
+}

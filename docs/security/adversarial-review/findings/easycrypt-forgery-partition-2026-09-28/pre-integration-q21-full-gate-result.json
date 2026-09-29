@@ -1,0 +1,33 @@
+{
+  "started_utc": "2026-09-29T10:11:38.126162+00:00",
+  "epoch": 1790676698.1261854,
+  "clock_start": {
+    "utc": "2026-09-29T10:11:38.126162+00:00",
+    "epoch": 1790676698.1261854,
+    "monotonic": 55688.754883375,
+    "boottime": 166118.295440911,
+    "boot_id": "fe9afb8b-5e95-4660-ae21-f14dfb35ddbd"
+  },
+  "timing_basis": "Linux CLOCK_MONOTONIC (excludes host suspension)",
+  "active_limit_seconds": 18000,
+  "pid": 605433,
+  "commit": "4bc963120eabe5e2bc7d2c6fb4b8c123386d27f6",
+  "tree": "c5c2f0977ded379d29bcd24f9ead80bd13d27bcb",
+  "exit_code": 0,
+  "exit_scope": "original proof container, observed by docker wait",
+  "host_make_exit_directly_observed": false,
+  "proof_restarted": false,
+  "recovery": "q21-daemon-recovery.json",
+  "finished_utc": "2026-09-29T13:29:24.294334+00:00",
+  "clock_end": {
+    "utc": "2026-09-29T13:29:24.294334+00:00",
+    "epoch": 1790688564.2943602,
+    "monotonic": 67556.546702391,
+    "boottime": 177986.087260258,
+    "boot_id": "fe9afb8b-5e95-4660-ae21-f14dfb35ddbd"
+  },
+  "active_elapsed_seconds": 11867.791819016005,
+  "wall_elapsed_seconds": 11866.168174743652,
+  "boottime_elapsed_seconds": 11867.79181934701,
+  "suspended_seconds": 3.310051397420466e-07
+}

@@ -1,0 +1,178 @@
+[
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposureComponents.ec",
+    "source_sha256": "02253d7e750f559e47f18e151719db400dc15ad9db1124dad3cb7f149f8bfeb1",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 7.73,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposureComponents-compile-1790591498651511684.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureComponents.ec",
+    "log_sha256": "6883a27045980ecaf3952f4f156e67a6b7e1aa286c67e73c3b822ac7cd4ab0fe"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposureComponents.ec",
+    "source_sha256": "02253d7e750f559e47f18e151719db400dc15ad9db1124dad3cb7f149f8bfeb1",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 7.73,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposureComponents-cli-1790591506409240355.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureComponents.ec",
+    "log_sha256": "bf5e5323bf8f45d4bedd74268fd171bd17391198359de8a47b6274e8b7c5a2bc"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposureCoverage.ec",
+    "source_sha256": "da243bae71e0488bd832269da8e6037265af43a5f4951336c4b9bb346e76c393",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 8.83,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposureCoverage-compile-1790591514164452189.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureCoverage.ec",
+    "log_sha256": "8d77736eb610525f4b609c76f600ab6ef6209bbe661b913339852f36ebb31e0d"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposureCoverage.ec",
+    "source_sha256": "da243bae71e0488bd832269da8e6037265af43a5f4951336c4b9bb346e76c393",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 8.98,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposureCoverage-cli-1790591523020941391.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureCoverage.ec",
+    "log_sha256": "4e6a2200d98fd380e05131c7bfa2768b99de4ebb2af42107f080861f6688cf8f"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposurePartition.ec",
+    "source_sha256": "32e91e8e1dab3c348f5baf38d03e03570e4b6b8e726cb524804cf1850e30e38e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 9.58,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposurePartition-compile-1790591532035410745.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartition.ec",
+    "log_sha256": "3e26ac56edaa990375b3d211d883be254c890aa982e3270c8c59d6accbff7168"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposurePartition.ec",
+    "source_sha256": "32e91e8e1dab3c348f5baf38d03e03570e4b6b8e726cb524804cf1850e30e38e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 9.63,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposurePartition-cli-1790591541655685478.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartition.ec",
+    "log_sha256": "6ea02b0dc8936e9f4bfe808e49aea273db36ed712929cbe1dee825d061953c4b"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposurePartitionGame.ec",
+    "source_sha256": "125a3fd3a5c5434cc3b827edac32f2c9343818481cc70cafa98e4cc59cce849e",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 10.92,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposurePartitionGame-compile-1790591551324247543.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartitionGame.ec",
+    "log_sha256": "9df4edd98fa369c23e3638f3a1a7c83e9353d192bfb2161d0954444d7e03ea87"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposurePartitionGame.ec",
+    "source_sha256": "125a3fd3a5c5434cc3b827edac32f2c9343818481cc70cafa98e4cc59cce849e",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 12.29,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposurePartitionGame-cli-1790591562276994689.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartitionGame.ec",
+    "log_sha256": "b4b5b41338023fce67f1f2ccf786053b953a60a1627f90d6c69398b536f20d1a"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposurePartitionHop.ec",
+    "source_sha256": "59f8f70527e0290e7ee46ae86c5d187a4e953b5973d7978d453e515a61be9647",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 12.39,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposurePartitionHop-compile-1790591574596953737.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartitionHop.ec",
+    "log_sha256": "1da02b5c143bf1057fef457b039fb489423a0924fc2e7a79597cd4c451f126ef"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposurePartitionHop.ec",
+    "source_sha256": "59f8f70527e0290e7ee46ae86c5d187a4e953b5973d7978d453e515a61be9647",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 12.77,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposurePartitionHop-cli-1790591587021310498.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePartitionHop.ec",
+    "log_sha256": "9dac7b541678e294f8329e1b2c2987ee2ab2656c26c275f71842cbde0478d6ef"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposurePrivate.ec",
+    "source_sha256": "f0648d6d58f70943d49b9ef044eb68e2f809bb13c50abfeb139e6deef91d8e14",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 10.04,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposurePrivate-compile-1790591599819187341.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePrivate.ec",
+    "log_sha256": "ea9a9c295183f7df3263214f146e91472fd370a3dcf67c2e312628cd1704c828"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposurePrivate.ec",
+    "source_sha256": "f0648d6d58f70943d49b9ef044eb68e2f809bb13c50abfeb139e6deef91d8e14",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 10.11,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposurePrivate-cli-1790591609887665624.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposurePrivate.ec",
+    "log_sha256": "67cc2c6bb65054fb2d06cea450d8fc4340412e1a0c2ca673eb3f2b31e8fee0e2"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposureWidths.ec",
+    "source_sha256": "fef93fdaa83c7e37104dfdbfb67aedfd1d3ec68903ade5639c75f1764ffa3180",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.72,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposureWidths-compile-1790591620032260840.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureWidths.ec",
+    "log_sha256": "501669de1ceedfef9ebe82082f65c1432c8e5b7398d92902974a8523a2630b04"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ExposureWidths.ec",
+    "source_sha256": "fef93fdaa83c7e37104dfdbfb67aedfd1d3ec68903ade5639c75f1764ffa3180",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 4.82,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ExposureWidths-cli-1790591624788266643.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureWidths.ec",
+    "log_sha256": "b5c9f6bc24bad350d4a5ac9b867b3d3d6071669034335408564f67d10f11532b"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ForsRootDeterminism.ec",
+    "source_sha256": "f5c5bac05403caf0194171080a90d72d95a4fbdc98dc28824fe4447011c225e7",
+    "mode": "compile",
+    "exit": 0,
+    "seconds": 4.92,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ForsRootDeterminism-compile-1790591629645288552.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsRootDeterminism.ec",
+    "log_sha256": "f6515a7406a37bf6eebc0768471672e0183889eeb5f3197179f09df21d221e6e"
+  },
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/ForsRootDeterminism.ec",
+    "source_sha256": "f5c5bac05403caf0194171080a90d72d95a4fbdc98dc28824fe4447011c225e7",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 5.04,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/ForsRootDeterminism-cli-1790591634605396352.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsRootDeterminism.ec",
+    "log_sha256": "6791e6a0a256581ea2131c2226dc669054b82036d7eb11968c4a5185175470c6"
+  }
+]

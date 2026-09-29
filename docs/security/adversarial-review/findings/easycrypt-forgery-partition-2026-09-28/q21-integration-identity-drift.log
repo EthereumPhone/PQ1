@@ -1,0 +1,4 @@
+### INPUTS_SHA256 06793da6caf1b7efe0ff7b7691927981
+FAIL INPUTS_SHA256 DRIFT: committed 116f7fa68bf756dd0602c916d3eb3959, computed 06793da6caf1b7efe0ff7b7691927981
+     a certified input or the certification machinery changed;
+     re-baseline deliberately and update cert-identity.tsv in the same commit

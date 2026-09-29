@@ -1,0 +1,33 @@
+{
+  "utc": "2026-09-29T13:32:37.816183+00:00",
+  "previous_source": "4bc963120eabe5e2bc7d2c6fb4b8c123386d27f6",
+  "previous_base": "459a749562cc6edec0997b14d145da958492fd63",
+  "new_base": "75d7bdaaf3840edc8570b685ecd21591ababcff3",
+  "changed_source_bindings": [
+    {
+      "path": "sphincs-c10/src/wots.rs",
+      "old": "e7ebe1d71591e68f6045383b041905ff17ad5822def35e77e11244ffdf49c56b",
+      "new": "c4f756501733a54d30dc4ae1f193032d4f720a350d8c9f511b49b1aab272a019",
+      "exists": true
+    },
+    {
+      "path": "sphincs-c10/src/hypertree.rs",
+      "old": "0541fe8f4b6f284d060c620e9aa38f02a9384e551f47577e85cd7f648ab14b7b",
+      "new": "8e34ace4dad4c9171564f2293513de3c357fcb70ca6124db0415160bce205500",
+      "exists": true
+    },
+    {
+      "path": "sphincs-c10/src/merkle.rs",
+      "old": "f787428b15cea6fb353eb3e1830f9f737067ce70a74e4d6b79113b83a1f3aed0",
+      "new": "9fe60480789238abbb7e680fc532464ff98679d8c66f8cfbc07329bb853afdc6",
+      "exists": true
+    }
+  ],
+  "completed_previous_replay": "q21-pre-integration-green",
+  "proof_source_changes": false,
+  "blocker": "Prospective merge has stale Rust binding hashes after upstream signing-progress changes. Refresh source correspondence with focused host checks, then re-freeze, full replay and bounded review on combined candidate.",
+  "input_identity": "06793da6caf1b7efe0ff7b7691927981",
+  "manual_correspondence": "Changes thread the existing ProgressSink into fixed leaf-count and public WOTS-count progress notifications. With progress_none()/returning observational callback, hash inputs, chain construction, counters and returned bytes are unchanged. Callback side effects, panics, reentrancy, timing and production UI are outside the EasyCrypt model. Finite host checks are not extraction/refinement.",
+  "candidate": "d03db3d99bf1eb34b6e27ed32fa60c43bed66fed",
+  "candidate_tree": "703275ba24d5b610d494df3f9fbad928904d3d05"
+}

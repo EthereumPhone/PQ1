@@ -1,0 +1,30 @@
+{
+  "candidate": "d03db3d99bf1eb34b6e27ed32fa60c43bed66fed",
+  "source_tree": "703275ba24d5b610d494df3f9fbad928904d3d05",
+  "review_base": "75d7bdaaf3840edc8570b685ecd21591ababcff3",
+  "landing_base": "13769cfbdf30654a9b81aeafea4e6eca5ddad695",
+  "prospective_tree_before_receipt": "d4fe81e3ac05baffe4bc8696d7a54763fe518717",
+  "coordinator_confirmed": true,
+  "checked_utc": "2026-09-29T16:55:15.278018+00:00",
+  "upstream_changes": [
+    ".github/workflows/ci.yml",
+    "contracts/smart-wallet/test/PQMultiOpBundle.t.sol",
+    "contracts/smart-wallet/test/PQSmartWallet.t.sol",
+    "contracts/smart-wallet/test/PQSmartWalletInvariants.t.sol",
+    "contracts/smart-wallet/test/mocks/MockEntryPoint06.sol"
+  ],
+  "unchanged_local_gate_paths": [
+    "contracts/verification/easycrypt",
+    "contracts/verification/scripts/run_easycrypt_split.py",
+    "contracts/verification/Makefile",
+    "sphincs-c10",
+    "Cargo.toml",
+    "Cargo.lock",
+    ".cargo",
+    "rust-toolchain.toml"
+  ],
+  "source_bindings_verified": 402,
+  "binding_manifest_sha256": "48ec803edc5f966329792faace2f30967cd4d546b5beeedc2703f1dc11043820",
+  "classification": "Already-landed contract test and Foundry version changes, outside the EasyCrypt product surface. All other files, including every proof, control, checker, Rust correspondence file and local gate/build input, are byte-identical to the reviewed and replayed candidate.",
+  "review_boundary": "Raw verdicts remain bound to the frozen source commit/tree; no claim that they reviewed the unrelated upstream contract-test changes or the final receipt-only merge artifact."
+}

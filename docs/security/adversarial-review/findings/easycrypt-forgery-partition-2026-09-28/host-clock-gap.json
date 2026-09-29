@@ -1,0 +1,19 @@
+{
+  "observed_utc": "2026-09-28T18:49:50.233612+00:00",
+  "gate_start_utc": "2026-09-28T14:15:55.538547+00:00",
+  "wall_elapsed_seconds": 16434.7,
+  "wall_deadline_utc": "2026-09-28T19:15:55.538562+00:00",
+  "monitor_observations": [
+    {
+      "elapsed_minutes": 174.6,
+      "controls": 113
+    },
+    {
+      "elapsed_minutes": 269.6,
+      "controls": 127
+    }
+  ],
+  "interpretation": "Large wall-clock gap with little proof progress is consistent with a host pause; cause not established. Original per-run wall bound remains 18000 seconds; no landing if exceeded.",
+  "commit": "4bc963120eabe5e2bc7d2c6fb4b8c123386d27f6",
+  "tree": "c5c2f0977ded379d29bcd24f9ead80bd13d27bcb"
+}

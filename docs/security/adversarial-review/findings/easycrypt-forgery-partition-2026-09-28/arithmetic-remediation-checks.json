@@ -1,0 +1,13 @@
+[
+  {
+    "file": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/experiments-q21/XmssmtCC_All.ec",
+    "source_sha256": "bb9cac743712c52d4488b9074523a3968cc21ebbf8519fea9be834879cae70da",
+    "mode": "cli",
+    "exit": 0,
+    "seconds": 917.23,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/XmssmtCC_All-cli-1790603881404965246.log",
+    "diagnostics": [],
+    "enrolled_file": "contracts/verification/easycrypt/c10-port/cdrafts-split/XmssmtCC_All.ec",
+    "log_sha256": "88cfffc8e2cdee6faa46f1cd81ded2120ad85ed7638541d718073f81aebcf325"
+  }
+]

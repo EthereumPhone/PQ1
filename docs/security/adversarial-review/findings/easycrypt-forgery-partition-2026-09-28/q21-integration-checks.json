@@ -1,0 +1,94 @@
+[
+  {
+    "name": "source-binding",
+    "command": [
+      "python3",
+      "tools/check_source_binding.py"
+    ],
+    "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-forgery-partition/contracts/verification/easycrypt/c10-port",
+    "exit": 0,
+    "seconds": 0.027927517992793582,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q21-integration-source-binding.log",
+    "sha256": "fd3dce2452bf9d4d85e512839702758b15daaa730abc0dead6d53aec047c6e7b"
+  },
+  {
+    "name": "identity",
+    "command": [
+      "bash",
+      "cert_gate_split.sh",
+      "--identity-only"
+    ],
+    "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-forgery-partition/contracts/verification/easycrypt/c10-port",
+    "exit": 0,
+    "seconds": 5.523136297008023,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q21-integration-identity.log",
+    "sha256": "c3b38fb51a19a9023906e64c2120e3628c6103f25c67be262f4403e73480c74e"
+  },
+  {
+    "name": "static-contract",
+    "command": [
+      "python3",
+      "tools/split_contract.py"
+    ],
+    "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-forgery-partition/contracts/verification/easycrypt/c10-port",
+    "exit": 0,
+    "seconds": 41.26204337600211,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q21-integration-static-contract.log",
+    "sha256": "65a340017cef3848daa07e87bc634032336bae05792b76424be63b252f781e58"
+  },
+  {
+    "name": "checker-regressions",
+    "command": [
+      "python3",
+      "tools/test_split_contract.py"
+    ],
+    "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-forgery-partition/contracts/verification/easycrypt/c10-port",
+    "exit": 0,
+    "seconds": 3.6985352049960056,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q21-integration-checker-regressions.log",
+    "sha256": "e10260cf4e9f3b13647de83052601584deddfea72e4c6f3b7956ad369954d08a"
+  },
+  {
+    "name": "rust-transcript",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "sphincs-c10",
+      "--target",
+      "x86_64-unknown-linux-gnu",
+      "--features",
+      "sim-internals",
+      "--test",
+      "easycrypt_transcript"
+    ],
+    "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-forgery-partition",
+    "exit": 0,
+    "seconds": 0.5439600639947457,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q21-integration-rust-transcript.log",
+    "sha256": "92e8d9bd6db7286ee726ce6344d1fa8d79f7dccfe2cf1a1fefd7d2ec62e2ac68"
+  },
+  {
+    "name": "progress-correspondence",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "sphincs-c10",
+      "--target",
+      "x86_64-unknown-linux-gnu",
+      "--features",
+      "sim-internals",
+      "--test",
+      "signing_suite",
+      "positive_progress"
+    ],
+    "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/candidate-forgery-partition",
+    "exit": 0,
+    "seconds": 0.5840760050050449,
+    "log": "/home/nicola/.local/state/pqsigner-research/easycrypt-closure-20260923-o4g9cwcr/q21-integration-progress-correspondence.log",
+    "sha256": "77e9f1e557be9e522948abc6000843d78b7d753266143e40e8c4276b3699157c"
+  }
+]

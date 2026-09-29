@@ -1,0 +1,37 @@
+{
+  "all_match": true,
+  "files": [
+    {
+      "file": "ExposureComponents.ec",
+      "sha256": "02253d7e750f559e47f18e151719db400dc15ad9db1124dad3cb7f149f8bfeb1"
+    },
+    {
+      "file": "ExposureCoverage.ec",
+      "sha256": "da243bae71e0488bd832269da8e6037265af43a5f4951336c4b9bb346e76c393"
+    },
+    {
+      "file": "ExposurePartition.ec",
+      "sha256": "32e91e8e1dab3c348f5baf38d03e03570e4b6b8e726cb524804cf1850e30e38e"
+    },
+    {
+      "file": "ExposurePartitionGame.ec",
+      "sha256": "125a3fd3a5c5434cc3b827edac32f2c9343818481cc70cafa98e4cc59cce849e"
+    },
+    {
+      "file": "ExposurePartitionHop.ec",
+      "sha256": "59f8f70527e0290e7ee46ae86c5d187a4e953b5973d7978d453e515a61be9647"
+    },
+    {
+      "file": "ExposurePrivate.ec",
+      "sha256": "f0648d6d58f70943d49b9ef044eb68e2f809bb13c50abfeb139e6deef91d8e14"
+    },
+    {
+      "file": "ExposureWidths.ec",
+      "sha256": "fef93fdaa83c7e37104dfdbfb67aedfd1d3ec68903ade5639c75f1764ffa3180"
+    },
+    {
+      "file": "ForsRootDeterminism.ec",
+      "sha256": "f5c5bac05403caf0194171080a90d72d95a4fbdc98dc28824fe4447011c225e7"
+    }
+  ]
+}
