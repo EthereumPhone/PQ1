@@ -4753,7 +4753,17 @@ pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails
 
 ui-px-check: pq-ui-check ui-px-assets-check pq-ui-port-diff ## All pixel-UI design-rule gates (vendored tree, bake, port_diff, checker tests)
 	@cargo test --locked -p pqsigner-ui-px
-	@cargo test --locked -p sphincs-tz-secure --tests --release -- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests ui_px_status_map
+	@# FEATURE SET MATTERS. This ran with DEFAULT features while the same
+	@# tests' golden constants are authored under CI's set, so three of them
+	@# (erc7730_uniswap_exact_input / erc7730_userop_envelope /
+	@# offchain_eip712_typed) were RED here and green everywhere else. CI never
+	@# caught it because CI does not run this target — it runs pq-ui-check,
+	@# ui-px-assets-check and pq-ui-port-diff directly — so the red sat in a
+	@# target humans run by hand. Identical bug to the one fixed in
+	@# ui-px-goldens-bless; same fix, same reason.
+	@cargo test --locked -p sphincs-tz-secure --release \
+		--no-default-features --features mock-se,debug-log,ui-semihosting \
+		-- display_under_test::safe_screens_render_pure_tests display_under_test::userop_screens_render_pure_tests display_under_test::structured_screens_render_pure_tests ui_px_status_map
 
 .PHONY: ui-px-assets ui-px-assets-check
 ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1a, atlas_root.rs + metrics_gen.rs
