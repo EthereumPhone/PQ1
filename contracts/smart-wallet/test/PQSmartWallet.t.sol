@@ -9,12 +9,19 @@ import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
 import {PQMultiOwnable} from "../src/PQMultiOwnable.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
+import {MockEntryPoint06} from "./mocks/MockEntryPoint06.sol";
 
 /// @notice End-to-end tests for the post-quantum smart wallet + proxy
 ///         factory. The real C10 verifier is tested separately by
 ///         `SPHINCsC10Asm.t.sol`.
 contract PQSmartWalletTest is Test {
-    address constant ENTRY_POINT_ADDR = address(0x4337);
+    /// The entry point is now a real contract, not a bare address, because the
+    /// wallet's validated-op credit lives in TRANSIENT storage and therefore
+    /// only survives when validate and execute happen in ONE transaction.
+    /// Driving both through `ep` is what makes these tests model a v0.6
+    /// bundle; two separate `vm.prank`ed calls do not. See MockEntryPoint06.
+    address internal ENTRY_POINT_ADDR;
+    MockEntryPoint06 internal ep;
 
     MockSPHINCSVerifier internal c10;
     PQSmartWallet internal impl;
@@ -32,6 +39,8 @@ contract PQSmartWalletTest is Test {
     bytes internal constant FACTORY_SIG = hex"aaaa"; // mock accepts anything when setValid(true)
 
     function setUp() public {
+        ep = new MockEntryPoint06();
+        ENTRY_POINT_ADDR = address(ep);
         c10 = new MockSPHINCSVerifier();
         impl = new PQSmartWallet(IEntryPoint(ENTRY_POINT_ADDR), c10);
         factory = new PQSmartWalletFactory(address(impl), c10);
@@ -47,6 +56,26 @@ contract PQSmartWalletTest is Test {
             uint64(block.chainid),
             FACTORY_SIG
         );
+    }
+
+    /// First four bytes of returned revert data.
+    function _selector(bytes memory ret) internal pure returns (bytes4 s) {
+        require(ret.length >= 4, "revert data has no selector");
+        assembly ("memory-safe") { s := mload(add(ret, 0x20)) }
+    }
+
+    /// The execute phase must have reverted with exactly `expected`.
+    /// Used where validation legitimately SUCCEEDS and the guard under test
+    /// lives at execute time — both phases must be in one transaction for
+    /// that distinction to mean anything (see MockEntryPoint06).
+    function _assertExecuteReverted(bool ok, bytes memory ret, bytes memory expected) internal {
+        assertFalse(ok, "execute phase must revert");
+        assertEq(ret, expected, "execute revert data");
+    }
+
+    function _assertExecuteRevertedWith(bool ok, bytes memory ret, bytes4 sel) internal {
+        assertFalse(ok, "execute phase must revert");
+        assertEq(_selector(ret), sel, "execute revert selector");
     }
 
     function _wrapSig(uint256 ownerIndex, bytes memory innerSig) internal pure returns (bytes memory) {
@@ -92,13 +121,14 @@ contract PQSmartWalletTest is Test {
             w.executeWithOffchainCount, (ownerIndex, newOffchainCount, target, value, data)
         );
         bytes memory sig = _wrapSig(ownerIndex, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
+        // ONE transaction: validate then execute, the v0.6 order. The credit
+        // is transient, so two separate top-level calls would not carry it.
         require(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0) == 0,
+            ep.validateThenExecute(
+                address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
+            ) == 0,
             "validate failed"
         );
-        vm.prank(ENTRY_POINT_ADDR);
-        w.executeWithOffchainCount(ownerIndex, newOffchainCount, target, value, data);
     }
 
     /// @dev Same as `_validateAndExecute` but for the batch variant.
@@ -114,13 +144,13 @@ contract PQSmartWalletTest is Test {
             w.executeBatchWithOffchainCount, (ownerIndex, newOffchainCount, targets, values, datas)
         );
         bytes memory sig = _wrapSig(ownerIndex, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
+        // ONE transaction, as above.
         require(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0) == 0,
+            ep.validateThenExecute(
+                address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
+            ) == 0,
             "validate failed"
         );
-        vm.prank(ENTRY_POINT_ADDR);
-        w.executeBatchWithOffchainCount(ownerIndex, newOffchainCount, targets, values, datas);
     }
 
     /// @dev Stamp the transient ownerIndex token without running real
@@ -549,16 +579,15 @@ contract PQSmartWalletTest is Test {
             w.executeWithOffchainCount, (1, 17, address(0xbeef), 0, "")
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(1)), 0),
-            0
-        );
-        // Then the EntryPoint runs the user's call against the wallet:
-        vm.prank(ENTRY_POINT_ADDR);
         vm.expectEmit(true, true, true, true);
         emit PQMultiOwnable.OffchainSigCountUpdated(1, 0, 17);
-        w.executeWithOffchainCount(1, 17, address(0xbeef), 0, "");
+        // One transaction: the EntryPoint validates, then runs the user's call.
+        assertEq(
+            ep.validateThenExecute(
+                address(w), _packedOp(address(w), callData, sig), bytes32(uint256(1)), 0, callData
+            ),
+            0
+        );
         assertEq(w.offchainSigCount(1), 17);
         assertEq(w.slotUses(1), 1);
     }
@@ -588,18 +617,13 @@ contract PQSmartWalletTest is Test {
             w.executeWithOffchainCount, (1, 9, address(0xbeef), 0, "")
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
-            0
+        (uint256 vd, bool ok, bytes memory ret) = ep.validateThenTryExecute(
+            address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
         );
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PQMultiOwnable.OffchainSigCountNotMonotonic.selector, uint256(1), uint256(10), uint256(9)
-            )
-        );
-        w.executeWithOffchainCount(1, 9, address(0xbeef), 0, "");
+        assertEq(vd, 0, "validation passes; monotonicity is an execute-time gate");
+        _assertExecuteReverted(ok, ret, abi.encodeWithSelector(
+            PQMultiOwnable.OffchainSigCountNotMonotonic.selector, uint256(1), uint256(10), uint256(9)
+        ));
     }
 
     function test_executeWithOffchainCount_rejectsCombinedCapExceeded() public {
@@ -615,21 +639,15 @@ contract PQSmartWalletTest is Test {
             w.executeWithOffchainCount, (1, 65_536, address(0xbeef), 0, "")
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
-            0
+        (uint256 vd, bool ok, bytes memory ret) = ep.validateThenTryExecute(
+            address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
         );
+        assertEq(vd, 0, "validation passes and bumps slotUses to 1");
         assertEq(w.slotUses(1), 1);
-
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PQMultiOwnable.CombinedSlotCapExceeded.selector,
-                uint256(1), uint256(1), uint256(65_536), uint256(65_536)
-            )
-        );
-        w.executeWithOffchainCount(1, 65_536, address(0xbeef), 0, "");
+        _assertExecuteReverted(ok, ret, abi.encodeWithSelector(
+            PQMultiOwnable.CombinedSlotCapExceeded.selector,
+            uint256(1), uint256(1), uint256(65_536), uint256(65_536)
+        ));
     }
 
     function test_validateUserOp_rejectsType2WhenCombinedCapHit() public {
@@ -857,15 +875,11 @@ contract PQSmartWalletTest is Test {
             w.executeBatchWithOffchainCount, (1, 0, tos, vals, ds)
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
-            0
+        (uint256 vd, bool ok, bytes memory ret) = ep.validateThenTryExecute(
+            address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
         );
-
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(PQSmartWallet.BatchArrayLengthMismatch.selector);
-        w.executeBatchWithOffchainCount(1, 0, tos, vals, ds);
+        assertEq(vd, 0, "validation passes; the length check is an execute-time gate");
+        _assertExecuteRevertedWith(ok, ret, PQSmartWallet.BatchArrayLengthMismatch.selector);
     }
 
     function test_batch_combinedCapEnforcedByValidate() public {
@@ -1005,16 +1019,11 @@ contract PQSmartWalletTest is Test {
             w.executeWithOffchainCount, (1, 0, address(w), 0, innerAddOwnerCall)
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
-            0,
-            "validation passes; the role-split must be enforced at execute time"
+        (uint256 vd, bool ok, bytes memory ret) = ep.validateThenTryExecute(
+            address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
         );
-
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(PQSmartWallet.SelfCallForbidden.selector);
-        w.executeWithOffchainCount(1, 0, address(w), 0, innerAddOwnerCall);
+        assertEq(vd, 0, "validation passes; the role-split must be enforced at execute time");
+        _assertExecuteRevertedWith(ok, ret, PQSmartWallet.SelfCallForbidden.selector);
 
         assertEq(w.nextOwnerIndex(), 2, "slot key MUST NOT mint new owners");
     }
@@ -1041,15 +1050,11 @@ contract PQSmartWalletTest is Test {
             w.executeBatchWithOffchainCount, (1, 0, tos, vals, ds)
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
-            0
+        (uint256 vd, bool ok, bytes memory ret) = ep.validateThenTryExecute(
+            address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
         );
-
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(PQSmartWallet.SelfCallForbidden.selector);
-        w.executeBatchWithOffchainCount(1, 0, tos, vals, ds);
+        assertEq(vd, 0, "validation passes; the role-split is an execute-time gate");
+        _assertExecuteRevertedWith(ok, ret, PQSmartWallet.SelfCallForbidden.selector);
 
         assertEq(w.nextOwnerIndex(), 2, "no new owner installed via batch self-call");
     }
@@ -1069,19 +1074,16 @@ contract PQSmartWalletTest is Test {
             w.executeWithOffchainCount, (99, 0, address(0xbeef), 0, "")
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
-            1,
-            "mismatched ownerIndex rejected at validation"
+        // ONE transaction. Across two, the execute would revert merely because
+        // transient storage was cleared between them, proving nothing about
+        // whether the REJECTED validation leaked a credit to index 99. Paired,
+        // it proves exactly that.
+        (uint256 vd, bool ok, bytes memory ret) = ep.validateThenTryExecute(
+            address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
         );
+        assertEq(vd, 1, "mismatched ownerIndex rejected at validation");
         assertEq(w.slotUses(1), 0, "rejected op must NOT burn slot 1's budget");
-
-        // Defense in depth: a direct execute(99) still reverts (no credit).
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(PQSmartWallet.OwnerIndexMismatch.selector);
-        w.executeWithOffchainCount(99, 0, address(0xbeef), 0, "");
-
+        _assertExecuteRevertedWith(ok, ret, PQSmartWallet.OwnerIndexMismatch.selector);
         assertEq(w.offchainSigCount(99), 0, "victim slot must NOT be poisoned");
     }
 
@@ -1159,17 +1161,12 @@ contract PQSmartWalletTest is Test {
             w.executeBatchWithOffchainCount, (99, 0, tos, vals, ds)
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
-            1,
-            "mismatched ownerIndex rejected at validation"
+        // ONE transaction, for the same reason as the single-call sibling.
+        (uint256 vd, bool ok, bytes memory ret) = ep.validateThenTryExecute(
+            address(w), _packedOp(address(w), callData, sig), bytes32(0), 0, callData
         );
-
-        // Defense in depth: a direct batch execute(99) still reverts.
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(PQSmartWallet.OwnerIndexMismatch.selector);
-        w.executeBatchWithOffchainCount(99, 0, tos, vals, ds);
+        assertEq(vd, 1, "mismatched ownerIndex rejected at validation");
+        _assertExecuteRevertedWith(ok, ret, PQSmartWallet.OwnerIndexMismatch.selector);
     }
 
     function test_audit_h3_executeFailsIfCalledOutsideValidatedFlow() public {
@@ -1178,9 +1175,11 @@ contract PQSmartWalletTest is Test {
         // (Also defends against a future EntryPoint-impersonator who
         // skips validate.)
         PQSmartWallet w = _deployWallet();
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(PQSmartWallet.OwnerIndexMismatch.selector);
-        w.executeWithOffchainCount(1, 0, address(0xbeef), 0, "");
+        (bool ok, bytes memory ret) = ep.tryExecuteOnly(
+            address(w),
+            abi.encodeCall(w.executeWithOffchainCount, (1, 0, address(0xbeef), 0, ""))
+        );
+        _assertExecuteRevertedWith(ok, ret, PQSmartWallet.OwnerIndexMismatch.selector);
     }
 
     /// H-3 sibling — one-shot consumption. After a validated execute
@@ -1200,21 +1199,26 @@ contract PQSmartWalletTest is Test {
             w.executeWithOffchainCount, (1, 7, address(0xbeef), 0, "")
         );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
-            0
-        );
-        vm.prank(ENTRY_POINT_ADDR);
-        w.executeWithOffchainCount(1, 7, address(0xbeef), 0, "");
+        // ONE validate, then TWO executes, all inside a single transaction —
+        // which is the only setting where "the credit is one-shot" is a
+        // meaningful claim. Across separate transactions the second call would
+        // fail merely because transient storage was cleared, proving nothing.
+        (uint256 vd, bool firstOk, bool secondOk, bytes memory secondRet) =
+            ep.validateThenExecuteTwice(
+                address(w), _packedOp(address(w), callData, sig), bytes32(0), callData
+            );
+        assertEq(vd, 0);
+        assertTrue(firstOk, "the validated execute must succeed");
         assertEq(w.offchainSigCount(1), 7);
 
         // Second execute with the SAME parameters must revert — the
-        // transient token was consumed by the first execute's
-        // `_consumeValidatedOwnerIndex` (one-shot semantics).
-        vm.prank(ENTRY_POINT_ADDR);
-        vm.expectRevert(PQSmartWallet.OwnerIndexMismatch.selector);
-        w.executeWithOffchainCount(1, 7, address(0xbeef), 0, "");
+        // transient credit was consumed by the first.
+        assertFalse(secondOk, "the credit is one-shot");
+        assertEq(
+            _selector(secondRet),
+            PQSmartWallet.OwnerIndexMismatch.selector,
+            "second execute must fail for lack of credit"
+        );
 
         // Counter wasn't bumped again (would have failed the monotonic
         // check anyway, but the revert happens before that gate).

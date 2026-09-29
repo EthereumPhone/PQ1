@@ -9,15 +9,28 @@ import {UserOperation06} from "account-abstraction/legacy/v06/UserOperation06.so
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
+import {MockEntryPoint06} from "./mocks/MockEntryPoint06.sol";
 
 /// @dev Stateful handler — Foundry fuzzer invokes these public methods
 ///      in random sequences. The invariants in the test contract are
 ///      checked after each handler call.
 contract WalletInvariantHandler is Test {
-    address constant ENTRY_POINT_ADDR = address(0x4337);
+    address internal ENTRY_POINT_ADDR;
+    MockEntryPoint06 public ep;
 
     PQSmartWallet public wallet;
     MockSPHINCSVerifier public c10;
+
+    /// ANTI-VACUITY GHOSTS. The execute phase is wrapped in try/catch and a
+    /// caught revert is "acceptable", so a handler that NEVER executes still
+    /// reports zero reverts and every invariant holds trivially. That is not
+    /// hypothetical: measured on forge 1.8.3 before this file paired the two
+    /// phases, `executeWithOffchainCount` succeeded 0 times in 273 attempts
+    /// while the suite reported `ok. 1 passed`. These counters exist so that
+    /// state is observable, and `test_handler_execute_path_is_live` fails on
+    /// it deterministically.
+    uint256 public execAttempts;
+    uint256 public execSuccesses;
 
     // Track maxima observed so we can assert monotonicity in the invariant.
     uint256 public maxBootstrapUses;
@@ -27,9 +40,11 @@ contract WalletInvariantHandler is Test {
     // Cached pre-state for invariant comparisons.
     bytes32 public initialImplSlotValue;
 
-    constructor(PQSmartWallet w, MockSPHINCSVerifier mock) {
+    constructor(PQSmartWallet w, MockSPHINCSVerifier mock, MockEntryPoint06 entryPoint) {
         wallet = w;
         c10 = mock;
+        ep = entryPoint;
+        ENTRY_POINT_ADDR = address(entryPoint);
         bytes32 IMPL_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
         initialImplSlotValue = vm.load(address(wallet), IMPL_SLOT);
     }
@@ -61,17 +76,19 @@ contract WalletInvariantHandler is Test {
         );
         UserOperation06 memory op = _packedOp(address(wallet), callData, wrappedSig);
 
-        vm.prank(ENTRY_POINT_ADDR);
-        uint256 result = wallet.validateUserOp(op, bytes32(0), 0);
-        if (result != 0) return;  // validation failed; skip execution
-
-        vm.deal(ENTRY_POINT_ADDR, value);
-        vm.prank(ENTRY_POINT_ADDR);
-        try wallet.executeWithOffchainCount(ownerIndex, newCount, target, value, data) {
-            // Success.
-            _bumpMonotonic(ownerIndex);
+        // ONE transaction: the validated-op credit is TRANSIENT, so a
+        // separately-pranked execute cannot see it and every execution would
+        // silently revert into the catch below.
+        vm.deal(address(ep), value);
+        execAttempts++;
+        try ep.validateThenExecute(address(wallet), op, bytes32(0), 0, callData) returns (uint256 result) {
+            if (result == 0) {
+                execSuccesses++;
+                _bumpMonotonic(ownerIndex);
+            }
         } catch {
-            // Execution-phase revert is acceptable.
+            // A validation rejection or an execution-phase revert is
+            // acceptable; the invariants must hold either way.
         }
     }
 
@@ -88,13 +105,8 @@ contract WalletInvariantHandler is Test {
         bytes memory callData = abi.encodeCall(wallet.addOwnerBytes, (ownerBytes));
         UserOperation06 memory op = _packedOp(address(wallet), callData, wrappedSig);
 
-        vm.prank(ENTRY_POINT_ADDR);
-        uint256 result = wallet.validateUserOp(op, bytes32(0), 0);
-        if (result != 0) return;
-
-        vm.prank(ENTRY_POINT_ADDR);
-        try wallet.addOwnerBytes(ownerBytes) {
-            _bumpMonotonic(0);
+        try ep.validateThenExecute(address(wallet), op, bytes32(0), 0, callData) returns (uint256 result) {
+            if (result == 0) _bumpMonotonic(0);
         } catch {}
     }
 
@@ -134,7 +146,8 @@ contract WalletInvariantHandler is Test {
 /// @notice Stateful invariant suite for PQSmartWallet.
 ///         Covers Claim 1, 2, and 3 monotonicity / structural invariants.
 contract PQSmartWalletInvariantsTest is StdInvariant, Test {
-    address constant ENTRY_POINT_ADDR = address(0x4337);
+    address internal ENTRY_POINT_ADDR;
+    MockEntryPoint06 internal ep;
     bytes32 internal constant IMPL_SLOT =
         0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
 
@@ -150,6 +163,8 @@ contract PQSmartWalletInvariantsTest is StdInvariant, Test {
     WalletInvariantHandler internal handler;
 
     function setUp() public {
+        ep = new MockEntryPoint06();
+        ENTRY_POINT_ADDR = address(ep);
         c10 = new MockSPHINCSVerifier();
         impl = new PQSmartWallet(IEntryPoint(ENTRY_POINT_ADDR), c10);
         factory = new PQSmartWalletFactory(address(impl), c10);
@@ -162,7 +177,7 @@ contract PQSmartWalletInvariantsTest is StdInvariant, Test {
             hex"aaaa"  // mock accepts anything when setValid(true)
         );
 
-        handler = new WalletInvariantHandler(wallet, c10);
+        handler = new WalletInvariantHandler(wallet, c10, ep);
         targetContract(address(handler));
     }
 
@@ -224,5 +239,28 @@ contract PQSmartWalletInvariantsTest is StdInvariant, Test {
     function invariant_bootstrapUses_capped() external view {
         assertTrue(wallet.bootstrapUses() <= wallet.MAX_BOOTSTRAP_USES(),
             "Claim 2/3 violation: bootstrap cap exceeded");
+    }
+
+    // --- Anti-vacuity: the fuzzed execute path must actually execute ---
+
+    /// A handler whose every execution reverts still reports zero reverts
+    /// (the revert is swallowed by its try/catch) and still satisfies every
+    /// invariant - trivially, because the state they constrain never moves.
+    /// That is exactly what happened on forge 1.8.3 before this file paired
+    /// validate and execute into one transaction: 0 successes in 273
+    /// attempts, suite green.
+    ///
+    /// Deterministic rather than an afterInvariant assertion, because an
+    /// individual fuzz run may legitimately contain no successful execute and
+    /// a campaign-level assertion would be flaky. Here the arguments are
+    /// known-good, so exactly one success is required.
+    function test_handler_execute_path_is_live() public {
+        uint256 before = handler.execSuccesses();
+        handler.handler_executeOffchainCount(1, 1, 0);
+        assertEq(
+            handler.execSuccesses(),
+            before + 1,
+            "invariant handler never executed successfully - the invariants above it are vacuous"
+        );
     }
 }

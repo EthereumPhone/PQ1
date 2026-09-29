@@ -533,6 +533,8 @@ jobs:
           python-version: '3.12'
       - name: install foundry (slither drives `forge build` for this project)
         uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: v1.8.3   # pinned; see the contracts job for why
       - name: install slither (pinned)
         run: pip install "slither-analyzer==0.11.6"
       # SAME restore as the contracts job, deliberately duplicated rather than
@@ -578,6 +580,14 @@ jobs:
         with:
           persist-credentials: false
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          # PINNED, not `stable`. `stable` floats, so the toolchain that
+          # compiles the frozen codehashes could change without a decision —
+          # the same hazard the lib-exact restore below exists to prevent.
+          # v1.8.3 verified on this tree: full suite green, and both
+          # PinnedCodehashesTest and DeployedBytecodeReproCheckTest still
+          # reproduce the on-chain Base Mainnet bytecode byte-for-byte.
+          version: v1.8.3
       # lib/ is gitignored and the deps are git-pinned by foundry.lock (NOT
       # submodules), so restore each at its EXACT locked rev. The codehash
       # freeze tests are lib-exact: an extra/missing lib changes the

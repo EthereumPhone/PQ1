@@ -9,6 +9,7 @@ import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
 import {PQMultiOwnable} from "../src/PQMultiOwnable.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
+import {MockEntryPoint06} from "./mocks/MockEntryPoint06.sol";
 
 /// @notice Regression suite for the multi-UserOp-per-bundle fix.
 ///
@@ -24,7 +25,12 @@ import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
 ///         order (validate all, then execute all) and assert the fixed
 ///         behaviour.
 contract PQMultiOpBundleTest is Test {
-    address constant ENTRY_POINT_ADDR = address(0x4337);
+    /// A real contract, because the validated-op credit is TRANSIENT and only
+    /// survives inside one transaction. Driving the two phases through `ep` is
+    /// what makes this file's "validate all, then execute all" claim true; two
+    /// separately pranked calls model a different (and impossible) ordering.
+    address internal ENTRY_POINT_ADDR;
+    MockEntryPoint06 internal ep;
 
     MockSPHINCSVerifier internal c10;
     PQSmartWallet internal impl;
@@ -36,6 +42,8 @@ contract PQMultiOpBundleTest is Test {
     bytes32 internal constant SLOT0_PK_ROOT = bytes32(uint256(0xdddd) << 240);
 
     function setUp() public {
+        ep = new MockEntryPoint06();
+        ENTRY_POINT_ADDR = address(ep);
         c10 = new MockSPHINCSVerifier();
         impl = new PQSmartWallet(IEntryPoint(ENTRY_POINT_ADDR), c10);
         factory = new PQSmartWalletFactory(address(impl), c10);
@@ -99,19 +107,23 @@ contract PQMultiOpBundleTest is Test {
         bytes memory cd0 = abi.encodeCall(w.executeWithOffchainCount, (1, 1, address(0xbeef), 0, ""));
         bytes memory cd1 = abi.encodeCall(w.executeWithOffchainCount, (1, 2, address(0xbeef), 0, ""));
 
-        // PHASE 1: validate both slot-1 ops.
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(w.validateUserOp(_op(address(w), cd0, 1), bytes32(0), 0), 0, "validate 0");
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(w.validateUserOp(_op(address(w), cd1, 1), bytes32(0), 0), 0, "validate 1");
+        // ONE bundle, real v0.6 order: validate BOTH, then execute BOTH.
+        UserOperation06[] memory ops = new UserOperation06[](2);
+        ops[0] = _op(address(w), cd0, 1);
+        ops[1] = _op(address(w), cd1, 1);
+        bytes32[] memory hashes = new bytes32[](2);
+        bytes[] memory execs = new bytes[](2);
+        execs[0] = cd0;
+        execs[1] = cd1;
+
+        (uint256[] memory vd, bool[] memory ok, ) =
+            ep.validateAllThenExecuteAll(address(w), ops, hashes, execs);
+
+        assertEq(vd[0], 0, "validate 0");
+        assertEq(vd[1], 0, "validate 1");
+        assertTrue(ok[0], "execute 0 must succeed");
+        assertTrue(ok[1], "execute 1 must succeed - two credits, two executes");
         assertEq(w.slotUses(1), 2, "each validation bumps slotUses once");
-
-        // PHASE 2: BOTH executes now succeed.
-        vm.prank(ENTRY_POINT_ADDR);
-        w.executeWithOffchainCount(1, 1, address(0xbeef), 0, "");
-        vm.prank(ENTRY_POINT_ADDR);
-        w.executeWithOffchainCount(1, 2, address(0xbeef), 0, "");
-
         assertEq(w.offchainSigCount(1), 2, "both offchain-count updates landed");
     }
 
@@ -124,28 +136,36 @@ contract PQMultiOpBundleTest is Test {
 
         // Register slot 2 (ownerIndex 2) so there is a victim to target.
         bytes memory slot2 = abi.encodePacked(bytes32(uint256(0x5555) << 240), bytes32(uint256(0x6666) << 240));
-        vm.prank(ENTRY_POINT_ADDR);
+        bytes memory addCd = abi.encodeCall(w.addOwnerBytes, (slot2));
         assertEq(
-            w.validateUserOp(_op(address(w), abi.encodeCall(w.addOwnerBytes, (slot2)), 0), bytes32(0), 0), 0
+            ep.validateThenExecute(address(w), _op(address(w), addCd, 0), bytes32(0), 0, addCd),
+            0
         );
-        vm.prank(ENTRY_POINT_ADDR);
-        w.addOwnerBytes(slot2);
 
         // Malicious: wrapper ownerIndex 1, calldata names ownerIndex 2 with a
         // poisoning offchain count. Rejected at validation (parity 1 != 2).
         bytes memory evilCd = abi.encodeCall(w.executeWithOffchainCount, (2, 9999, address(0xbeef), 0, ""));
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(
-            w.validateUserOp(_op(address(w), evilCd, 1), bytes32(0), 0), 1, "cross-index op rejected at validation"
-        );
-        assertEq(w.slotUses(1), 0, "rejected op did not consume slot 1's budget");
-
-        // The honest slot-2 op validates + executes normally.
         bytes memory goodCd = abi.encodeCall(w.executeWithOffchainCount, (2, 3, address(0xbeef), 0, ""));
-        vm.prank(ENTRY_POINT_ADDR);
-        assertEq(w.validateUserOp(_op(address(w), goodCd, 2), bytes32(0), 0), 0, "honest slot-2 validates");
-        vm.prank(ENTRY_POINT_ADDR);
-        w.executeWithOffchainCount(2, 3, address(0xbeef), 0, "");
+
+        // CO-BUNDLED, in one transaction — which is the only arrangement in
+        // which "steal a co-bundled credit" is even expressible. The evil op
+        // is validated alongside the honest one; only the honest op's calldata
+        // is executed, because a real EntryPoint executes the callData it
+        // validated, not attacker-chosen bytes.
+        UserOperation06[] memory ops = new UserOperation06[](2);
+        ops[0] = _op(address(w), evilCd, 1);   // wrapper 1, calldata names 2
+        ops[1] = _op(address(w), goodCd, 2);   // honest slot-2 op
+        bytes32[] memory hashes = new bytes32[](2);
+        bytes[] memory execs = new bytes[](1);
+        execs[0] = goodCd;
+
+        (uint256[] memory vd, bool[] memory ok, ) =
+            ep.validateAllThenExecuteAll(address(w), ops, hashes, execs);
+
+        assertEq(vd[0], 1, "cross-index op rejected at validation");
+        assertEq(vd[1], 0, "honest slot-2 validates");
+        assertEq(w.slotUses(1), 0, "rejected op did not consume slot 1's budget");
+        assertTrue(ok[0], "honest slot-2 execute succeeds");
         assertEq(w.offchainSigCount(2), 3, "slot 2 reflects honest value, not the attacker's 9999");
     }
 }
