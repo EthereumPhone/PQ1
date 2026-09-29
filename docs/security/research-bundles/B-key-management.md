@@ -633,6 +633,10 @@ pub enum UnwrapError {
     MalformedLength,
     /// R-MAC verification failed in constant time.
     RMacMismatch,
+    /// The decrypted padded plaintext does not re-encrypt to the
+    /// authenticated ciphertext (decryption fault / corruption), or a
+    /// receipt-bound copy out of the verified staging buffer failed.
+    RelationMismatch,
     /// Encrypted body length was not a multiple of 16 (ISO 7816-4 padded
     /// AES-CBC must be).
     BadCiphertextLen,
@@ -703,9 +707,11 @@ fn ct_eq_8(a: &[u8], b: &[u8]) -> bool {
 /// **F8 (corrected):** that R-MAC-mismatch path returns `Err(RMacMismatch)`
 /// but does NOT itself clear `session.active` (an earlier comment claimed it
 /// "kills the session" — it does not). The channel still fails CLOSED: no
-/// plaintext is ever released on the mismatch (the early sentinel reject plus
-/// the F-28 infective release gate XOR-garble half_E unless a fresh,
-/// independent R-MAC recompute matches), and the seed half is only ever read,
+/// plaintext is ever released on the mismatch (the fail-initialized R-MAC
+/// authentication receipt — published only after two independent full
+/// recomputations inside `verify_rmac_into` and re-checked by two
+/// independent volatile reads — never reaches the copy, counter advance, or
+/// `Ok` on a mismatch), and the seed half is only ever read,
 /// never sent, and always travels as R-ENC ciphertext on the bus. A desynced
 /// session is an availability concern, not a confidentiality/integrity one:
 /// the counter desync makes every SUBSEQUENT command error too, so the unlock
@@ -774,34 +780,54 @@ pub fn unwrap_response(
     // The MCV is the full 16-byte command CMAC produced by `wrap_apdu`
     // (`session.mcv`); it is NOT updated by `unwrap_response`.
     //
-    // FI-hardening (F-28, `tools/sca/README.md` §F-28). This R-MAC verify is
-    // the ONLY thing between a forged (attacker-supplied, wrong-R-MAC)
-    // response and the host releasing an attacker-chosen `half_E`. A plain
-    // `if !ct_eq_8(..) { return Err }` is single-fault-defeatable — the
-    // exhaustive `make scp03-fi` sweep found `[skip]` faults that release the
-    // plaintext (skip the reject branch, or a stuck-at that zeroes the
-    // computed MAC to match a forged all-zero R-MAC). Mirror `crypto.rs`'s C10
-    // verify-before-release gate (F-1/F-2):
+    // FI-hardening (F-28 rework, 2026-08-03 — `tools/sca/README.md` §F-28).
+    // This R-MAC verify is the ONLY thing between a forged
+    // (attacker-supplied, wrong-R-MAC) response and the host releasing
+    // attacker-influenced plaintext (a substituted SE050 entropy
+    // contribution / `half_E`). The authoritative gate is a fail-initialized
+    // authentication receipt: `verify_rmac_into` publishes `OK_SENTINEL`
+    // only after two independent full R-MAC recomputations (constant-time
+    // compare, `black_box`ed so LTO cannot fold the duplicate checks), and
+    // two independent volatile success checks — separated by `wait_random`
+    // — must pass below before ANY protected-response copy, counter
+    // advance, or `Ok` return, covering BOTH the empty-body (case 2) and
+    // full encrypted (case 3) paths. A skipped verifier call, a skipped
+    // store, or one faulted recomputation leaves `FAIL_SENTINEL`
+    // authoritative.
     //
-    //   * The CMAC is recomputed INSIDE the double-evaluated closure, so a
-    //     fault that corrupts one computation makes the two evaluations
-    //     disagree → `check_true_into_sentinel` fails closed. (Unlike the C10
-    //     gate, which computes `verify` once because `verify` is itself
-    //     fault-robust, the R-MAC equality is not — so we recompute it.)
-    //   * The verdict is the Hamming-distant `OK_SENTINEL`; a skip of the
-    //     reject branch can't synthesise that 32-bit magic.
-    //   * `core::hint::black_box` is load-bearing — without it LLVM CSEs the
-    //     two closure evaluations (and the two CMACs) into one, collapsing the
-    //     re-check back to a single skippable branch. See F-1.
-    //
-    // `wait_random()` immediately before defeats clock-aligned glitch bursts
-    // timed to the fixed-shape control flow.
+    // There is deliberately NO complementing infective mask here. The
+    // previous gate folded a mismatch into the released bytes as XOR-0xFF —
+    // a public bijection: a forging attacker who can form R-ENC ciphertext
+    // submits the *complement* of the desired payload and receives exactly
+    // those bytes (with attacker-chosen SW, advanced counter, and an `Ok`
+    // return) once a single fault skips an early rejection (the wave-17
+    // GPT-5.6 blocker). A mask that returns `Ok` cannot be the release
+    // authority; the receipt is.
     crate::fi::wait_random();
-    let rmac_ok = crate::fi::check_true_into_sentinel(|| {
-        let mac = cmac_aes128(&session.s_rmac, &[&session.mcv, body, sw]);
-        core::hint::black_box(ct_eq_8(&mac[..8], rmac_recv))
-    });
-    if rmac_ok != crate::fi::OK_SENTINEL {
+    let mut rmac_auth_receipt: u32 = crate::fi::FAIL_SENTINEL;
+    // SAFETY: unique stack receipt, fail-initialized so a skipped verifier
+    // call cannot synthesize success from stale stack state.
+    unsafe {
+        core::ptr::write_volatile(&mut rmac_auth_receipt, crate::fi::FAIL_SENTINEL);
+    }
+    crate::scp03_logic::verify_rmac_into(
+        &session.s_rmac,
+        &session.mcv,
+        body,
+        sw,
+        rmac_recv,
+        &mut rmac_auth_receipt,
+    );
+    // First volatile success check.
+    if unsafe { core::ptr::read_volatile(&rmac_auth_receipt) } != crate::fi::OK_SENTINEL {
+        #[cfg(feature = "debug-log")]
+        secure_log!("[SCP03] R-MAC MISMATCH");
+        return Err(UnwrapError::RMacMismatch);
+    }
+    crate::fi::wait_random();
+    // Second independent volatile success check — a single fault cannot
+    // defeat both.
+    if unsafe { core::ptr::read_volatile(&rmac_auth_receipt) } != crate::fi::OK_SENTINEL {
         #[cfg(feature = "debug-log")]
         secure_log!("[SCP03] R-MAC MISMATCH");
         return Err(UnwrapError::RMacMismatch);
@@ -834,6 +860,49 @@ pub fn unwrap_response(
     let icv = response_icv(session);
     aes128_cbc_decrypt(&session.s_enc, &icv, &mut plain[..body_end]);
 
+    // Decrypt-fidelity receipt (wave-18 GPT-5.6 blocker). The R-MAC gate
+    // above authenticates the CIPHERTEXT; it cannot see a fault that
+    // corrupts the decryption — a single skip of the per-block writeback
+    // inside `aes128_cbc_decrypt` leaves bus-visible ciphertext in `plain`
+    // (coordinator-reproduced: `Ok` + intact TLV header + SW + advanced
+    // counter, block bytes equal to the on-wire ciphertext). Bind the
+    // decrypted padded buffer back to the authenticated ciphertext:
+    // `verify_renc_relation_into` re-encrypts `plain` twice independently
+    // (CBC re-encryption is the identity on a faithful decrypt), each pass
+    // under an independently recomputed response ICV — sharing the caller's
+    // `icv` would let one faulted ICV computation make the decrypt and the
+    // check consistently wrong. `OK_SENTINEL` is published only when both
+    // passes match `body`. Two independent volatile checks, separated by
+    // `wait_random`, must pass before any depad, copy, counter advance, or
+    // `Ok`.
+    let mut renc_receipt: u32 = crate::fi::FAIL_SENTINEL;
+    // SAFETY: unique stack receipt, fail-initialized so a skipped verifier
+    // call cannot synthesize success from stale stack state.
+    unsafe {
+        core::ptr::write_volatile(&mut renc_receipt, crate::fi::FAIL_SENTINEL);
+    }
+    crate::scp03_logic::verify_renc_relation_into(
+        &session.s_enc,
+        &session.counter,
+        &plain[..body_end],
+        body,
+        &mut renc_receipt,
+    );
+    // First volatile success check.
+    if unsafe { core::ptr::read_volatile(&renc_receipt) } != crate::fi::OK_SENTINEL {
+        #[cfg(feature = "debug-log")]
+        secure_log!("[SCP03] R-ENC RELATION MISMATCH");
+        return Err(UnwrapError::RelationMismatch);
+    }
+    crate::fi::wait_random();
+    // Second independent volatile success check — a single fault cannot
+    // defeat both.
+    if unsafe { core::ptr::read_volatile(&renc_receipt) } != crate::fi::OK_SENTINEL {
+        #[cfg(feature = "debug-log")]
+        secure_log!("[SCP03] R-ENC RELATION MISMATCH");
+        return Err(UnwrapError::RelationMismatch);
+    }
+
     // ISO 7816-4 depad: scan back from end of last block for the `0x80`
     // sentinel.  GP Amd D §6.2.7 + GP Card Spec §B.2.3.
     let mut pad_pos = body_end;
@@ -861,31 +930,19 @@ pub fn unwrap_response(
         return Err(UnwrapError::Overflow);
     }
 
-    // F-28 infective release gate. The early sentinel gate above rejects a
-    // forged response in normal operation, but an exhaustive `make scp03-fi`
-    // sweep showed `check_true_into_sentinel`'s OWN verdict-selection branch is
-    // single-skip-defeatable (a skip flips its return to `OK_SENTINEL` for a
-    // false condition) — and that defeats ANY number of value-gates that read
-    // the now-corrupted verdict. So at the secret-release point we do NOT
-    // branch on the verdict: we fold a FRESH, INDEPENDENT R-MAC recompute
-    // branchlessly into the released bytes. The real plaintext is emitted only
-    // if this recompute matches; otherwise every byte is XOR-garbled. A forged
-    // response that reaches here (early gate FI-bypassed) therefore yields
-    // garbage, never the attacker's chosen `half_E`, and there is no clean
-    // branch a single skip can flip to "release". Reaching here at all costs
-    // the one fault, so this recompute + mask run unfaulted. (Folding `half_E`'s
-    // confidentiality into an arithmetic dependency is the standard "infective"
-    // FI countermeasure; it does not rely on the fragile sentinel branch.)
-    let mac_chk = cmac_aes128(&session.s_rmac, &[&session.mcv, body, sw]);
-    let mac_matches = ct_eq_8(&mac_chk[..8], rmac_recv);
-    // 0x00 when the R-MAC matches (release), 0xFF when it does not (garble) —
-    // branchless: `true as u8 = 1 → 0`, `false as u8 = 0 → 0xFF`.
-    let release_mask = (mac_matches as u8).wrapping_sub(1);
-    for (o, p) in out[..plaintext_len]
-        .iter_mut()
-        .zip(plain[..plaintext_len].iter())
-    {
-        *o = p ^ release_mask;
+    // The R-MAC receipt authenticated the ciphertext and the R-ENC relation
+    // receipt bound the plaintext to it, so the authenticated plaintext is
+    // copied out verbatim. The copy itself is receipt-bound
+    // (`rng_exact::copy_exact`: pointer publication, volatile byte copy with
+    // progress, and two independent read-back relations; it wipes the
+    // destination on any failure) so a skipped or shortened copy cannot
+    // release stale bytes behind an `Ok`. There is no complementing
+    // infective mask anywhere on this path: it returned `Ok` on a mismatch
+    // and its XOR-0xFF garble was invertible by the attacker.
+    if crate::rng_exact::copy_exact(&plain[..plaintext_len], &mut out[..plaintext_len]).is_err() {
+        #[cfg(feature = "debug-log")]
+        secure_log!("[SCP03] RELEASE COPY RECEIPT MISMATCH");
+        return Err(UnwrapError::RelationMismatch);
     }
     out[plaintext_len] = sw[0];
     out[plaintext_len + 1] = sw[1];
@@ -951,6 +1008,14 @@ const SCTR_HANDSHAKE_HELLO: u8 = 0x00;
 const SCTR_HANDSHAKE_FINISHED: u8 = 0x08;
 const SCTR_RECORD_FULL: u8 = 0x23; // Record type + full protection
 
+/// Infineon's presentation-layer reference accepts a received slave sequence
+/// only when it advances by 1..=DL_TRANS_REPEAT. `DL_TRANS_REPEAT` is 3 in
+/// `ifx_i2c_config.h`; a wider jump is not a valid recovery transition.
+const PRL_MAX_FORWARD_DELTA: u32 = 3;
+/// Renegotiate before a record sequence reaches the reference driver's nonce
+/// exhaustion threshold.
+const PRL_SEQUENCE_THRESHOLD: u32 = 0xFFFF_FFF0;
+
 /// Protocol version for pre-shared-secret mode.
 const PROTOCOL_VERSION: u8 = 0x01;
 
@@ -962,6 +1027,37 @@ const SESSION_KEY_LEN: usize = 40;
 
 /// Master random length.
 const RANDOM_LEN: usize = 32;
+
+/// Read a sequence value/complement pair through volatile accesses and bind it
+/// to an inclusive upper limit. Volatile reads are deliberate: without them,
+/// LTO can common-subexpression-eliminate the second FI check across
+/// `wait_random`, leaving one skippable machine-code relation.
+#[inline(always)]
+fn sequence_pair_at_most_volatile(
+    sequence: *const u32,
+    sequence_inv: *const u32,
+    upper_limit: u32,
+) -> bool {
+    let value = unsafe { core::ptr::read_volatile(sequence) };
+    let value_inv = unsafe { core::ptr::read_volatile(sequence_inv) };
+    (value ^ value_inv) == u32::MAX && value <= upper_limit
+}
+
+/// Read and validate a response-sequence window through volatile accesses so
+/// both source-level checks remain independent in the optimized artifact.
+#[inline(always)]
+fn response_sequence_window_volatile(
+    last_sequence: *const u32,
+    last_sequence_inv: *const u32,
+    received_sequence: *const u32,
+) -> bool {
+    let last = unsafe { core::ptr::read_volatile(last_sequence) };
+    let last_inv = unsafe { core::ptr::read_volatile(last_sequence_inv) };
+    let received = unsafe { core::ptr::read_volatile(received_sequence) };
+    (last ^ last_inv) == u32::MAX
+        && received > last
+        && received.wrapping_sub(last) <= PRL_MAX_FORWARD_DELTA
+}
 
 // ---------------------------------------------------------------------------
 // Error type
@@ -1014,8 +1110,13 @@ pub struct ShieldedConnection {
     dec_nonce_base: [u8; 4],
     /// Encryption message sequence counter.
     enc_seq: u32,
-    /// Decryption message sequence counter.
+    /// Complement binding for the next host→OPTIGA sequence number.
+    enc_seq_inv: u32,
+    /// Last authenticated OPTIGA→host sequence number.
     dec_seq: u32,
+    /// Complement binding for `dec_seq`; any torn or faulted publication is
+    /// rejected before a record can be authenticated.
+    dec_seq_inv: u32,
     /// Whether the shielded connection is active.
     pub active: bool,
     /// Platform Binding Secret. 64 bytes per OPTIGA Trust M SRM §
@@ -1030,6 +1131,139 @@ pub struct ShieldedConnection {
     pub pbs_loaded: bool,
 }
 
+/// Validate one OPTIGA→host response counter against the authenticated
+/// value/complement state and Infineon's bounded retransmission window.
+///
+/// The full relation is evaluated twice around an FI delay. The caller owns
+/// and double-checks the fail-initialized receipt, so neither an omitted call
+/// nor one skipped rejection can authorize a replay or an unbounded jump.
+#[inline(never)]
+#[export_name = "pqsigner_optiga_sequence_verify_into"]
+pub(crate) fn verify_response_sequence_into(
+    last_sequence: u32,
+    last_sequence_inv: u32,
+    received_sequence: u32,
+    receipt: &mut u32,
+) {
+    let last_sequence_snapshot = last_sequence;
+    let last_sequence_inv_snapshot = last_sequence_inv;
+    let received_sequence_snapshot = received_sequence;
+    unsafe {
+        core::ptr::write_volatile(receipt, crate::fi::FAIL_SENTINEL);
+    }
+    if !response_sequence_window_volatile(
+        core::ptr::addr_of!(last_sequence_snapshot),
+        core::ptr::addr_of!(last_sequence_inv_snapshot),
+        core::ptr::addr_of!(received_sequence_snapshot),
+    ) {
+        return;
+    }
+    crate::fi::wait_random();
+    if !response_sequence_window_volatile(
+        core::ptr::addr_of!(last_sequence_snapshot),
+        core::ptr::addr_of!(last_sequence_inv_snapshot),
+        core::ptr::addr_of!(received_sequence_snapshot),
+    ) {
+        return;
+    }
+    unsafe {
+        core::ptr::write_volatile(receipt, crate::fi::OK_SENTINEL);
+    }
+}
+
+/// Publish an authenticated response counter as a duplicated value/complement
+/// state transition. READY is represented by the caller-owned success receipt;
+/// a torn or omitted publication leaves that receipt failed.
+#[inline(never)]
+#[export_name = "pqsigner_optiga_sequence_commit_into"]
+pub(crate) fn commit_sequence_state_into(
+    sequence: u32,
+    destination: &mut u32,
+    destination_inv: &mut u32,
+    receipt: &mut u32,
+) {
+    unsafe {
+        core::ptr::write_volatile(receipt, crate::fi::FAIL_SENTINEL);
+    }
+    unsafe {
+        core::ptr::write_volatile(destination, sequence);
+        core::ptr::write_volatile(destination, sequence);
+        core::ptr::write_volatile(destination_inv, !sequence);
+        core::ptr::write_volatile(destination_inv, !sequence);
+    }
+    if unsafe { core::ptr::read_volatile(destination) } != sequence
+        || unsafe { core::ptr::read_volatile(destination_inv) } != !sequence
+    {
+        return;
+    }
+    crate::fi::wait_random();
+    if unsafe { core::ptr::read_volatile(destination) } != sequence
+        || unsafe { core::ptr::read_volatile(destination_inv) } != !sequence
+    {
+        return;
+    }
+    unsafe {
+        core::ptr::write_volatile(receipt, crate::fi::OK_SENTINEL);
+    }
+}
+
+/// Atomically reserve one host→OPTIGA CCM sequence number by publishing its
+/// successor before any ciphertext is released. A transport failure may leave
+/// a harmless gap, but a skipped increment can never reuse a nonce.
+#[inline(never)]
+#[export_name = "pqsigner_optiga_sequence_reserve_tx_into"]
+pub(crate) fn reserve_transmit_sequence_into(
+    current_sequence: u32,
+    current_sequence_inv: u32,
+    destination: &mut u32,
+    destination_inv: &mut u32,
+    receipt: &mut u32,
+) {
+    let current_sequence_snapshot = current_sequence;
+    let current_sequence_inv_snapshot = current_sequence_inv;
+    unsafe {
+        core::ptr::write_volatile(receipt, crate::fi::FAIL_SENTINEL);
+    }
+    if !sequence_pair_at_most_volatile(
+        core::ptr::addr_of!(current_sequence_snapshot),
+        core::ptr::addr_of!(current_sequence_inv_snapshot),
+        PRL_SEQUENCE_THRESHOLD,
+    ) {
+        return;
+    }
+    let next_sequence = current_sequence + 1;
+    unsafe {
+        core::ptr::write_volatile(destination, next_sequence);
+        core::ptr::write_volatile(destination, next_sequence);
+        core::ptr::write_volatile(destination_inv, !next_sequence);
+        core::ptr::write_volatile(destination_inv, !next_sequence);
+    }
+    if !sequence_pair_at_most_volatile(
+        core::ptr::addr_of!(current_sequence_snapshot),
+        core::ptr::addr_of!(current_sequence_inv_snapshot),
+        PRL_SEQUENCE_THRESHOLD,
+    )
+        || unsafe { core::ptr::read_volatile(destination) } != next_sequence
+        || unsafe { core::ptr::read_volatile(destination_inv) } != !next_sequence
+    {
+        return;
+    }
+    crate::fi::wait_random();
+    if !sequence_pair_at_most_volatile(
+        core::ptr::addr_of!(current_sequence_snapshot),
+        core::ptr::addr_of!(current_sequence_inv_snapshot),
+        PRL_SEQUENCE_THRESHOLD,
+    )
+        || unsafe { core::ptr::read_volatile(destination) } != next_sequence
+        || unsafe { core::ptr::read_volatile(destination_inv) } != !next_sequence
+    {
+        return;
+    }
+    unsafe {
+        core::ptr::write_volatile(receipt, crate::fi::OK_SENTINEL);
+    }
+}
+
 impl ShieldedConnection {
     pub const fn new() -> Self {
         Self {
@@ -1038,7 +1272,9 @@ impl ShieldedConnection {
             enc_nonce_base: [0; 4],
             dec_nonce_base: [0; 4],
             enc_seq: 0,
+            enc_seq_inv: !0,
             dec_seq: 0,
+            dec_seq_inv: !0,
             active: false,
             pbs: [0; 64],
             pbs_loaded: false,
@@ -1074,8 +1310,42 @@ impl ShieldedConnection {
         self.dec_nonce_base.zeroize();
         crate::fi::zeroize_barrier();
         self.enc_seq = 0;
+        self.enc_seq_inv = !0;
         self.dec_seq = 0;
+        self.dec_seq_inv = !0;
         self.active = false;
+    }
+
+    /// Construct a deterministic authenticated-record state for the host-only
+    /// protocol tests. This is absent from firmware builds.
+    #[cfg(test)]
+    pub(crate) fn activate_for_test(
+        &mut self,
+        key: [u8; 16],
+        nonce_base: [u8; 4],
+        next_master_sequence: u32,
+        last_slave_sequence: u32,
+    ) {
+        self.enc_key = key;
+        self.dec_key = key;
+        self.enc_nonce_base = nonce_base;
+        self.dec_nonce_base = nonce_base;
+        self.enc_seq = next_master_sequence;
+        self.enc_seq_inv = !next_master_sequence;
+        self.dec_seq = last_slave_sequence;
+        self.dec_seq_inv = !last_slave_sequence;
+        self.active = true;
+    }
+
+    /// Expose only the bound counter state needed by host protocol tests.
+    #[cfg(test)]
+    pub(crate) fn sequence_state_for_test(&self) -> (u32, u32, u32, u32) {
+        (
+            self.enc_seq,
+            self.enc_seq_inv,
+            self.dec_seq,
+            self.dec_seq_inv,
+        )
     }
 
     /// Derive session keys from the PBS and the chip-provided `random_S`.
@@ -1101,7 +1371,9 @@ impl ShieldedConnection {
         self.enc_nonce_base.copy_from_slice(&key_material[32..36]);
         self.dec_nonce_base.copy_from_slice(&key_material[36..40]);
         self.enc_seq = 0;
+        self.enc_seq_inv = !0;
         self.dec_seq = 0;
+        self.dec_seq_inv = !0;
 
         key_material.zeroize();
     }
@@ -1151,12 +1423,33 @@ impl ShieldedConnection {
             return Err(ShieldError::NotActive);
         }
 
-        // HIGH-9 fix: Infineon specifies a renegotiation threshold
-        // at `enc_seq >= 0xFFFFFFF0`. Beyond that the AEAD nonce
-        // (nonce_base || seq) would wrap and repeat — CCM keystream
-        // would be recovered. Force the connection closed so the
-        // caller triggers a fresh handshake.
-        if self.enc_seq >= 0xFFFF_FFF0 {
+        // Infineon's reference permits the next master sequence through
+        // 0xFFFFFFF0 and renegotiates once the next sequence would exceed that
+        // threshold. Beyond it the AEAD nonce approaches wrap/reuse. Force the
+        // connection closed so the caller triggers a fresh handshake.
+        if self.enc_seq > PRL_SEQUENCE_THRESHOLD {
+            self.active = false;
+            return Err(ShieldError::NotActive);
+        }
+
+        // The reference renegotiates before another transaction when the last
+        // authenticated slave counter has reached the threshold. Check the
+        // value/complement relation twice so a torn receive-state update cannot
+        // be bypassed by one omitted condition.
+        if !sequence_pair_at_most_volatile(
+            core::ptr::addr_of!(self.dec_seq),
+            core::ptr::addr_of!(self.dec_seq_inv),
+            PRL_SEQUENCE_THRESHOLD - 1,
+        ) {
+            self.active = false;
+            return Err(ShieldError::NotActive);
+        }
+        crate::fi::wait_random();
+        if !sequence_pair_at_most_volatile(
+            core::ptr::addr_of!(self.dec_seq),
+            core::ptr::addr_of!(self.dec_seq_inv),
+            PRL_SEQUENCE_THRESHOLD - 1,
+        ) {
             self.active = false;
             return Err(ShieldError::NotActive);
         }
@@ -1166,28 +1459,55 @@ impl ShieldedConnection {
             return Err(ShieldError::BufferOverflow);
         }
 
+        // Guard the internal scratch too: the caller's `out` check above does
+        // not prove that plaintext + tag fits this fixed staging buffer.
+        if plaintext.len() + CCM_TAG_LEN > 600 {
+            return Err(ShieldError::BufferOverflow);
+        }
+
+        // Reserve the successor before materializing or releasing ciphertext.
+        // If transmission later fails, a sequence gap is safe and is accepted
+        // by Infineon's bounded retry window; reusing a CCM nonce is not.
+        let sequence = self.enc_seq;
+        let mut sequence_reservation_receipt = crate::fi::FAIL_SENTINEL;
+        reserve_transmit_sequence_into(
+            sequence,
+            self.enc_seq_inv,
+            &mut self.enc_seq,
+            &mut self.enc_seq_inv,
+            &mut sequence_reservation_receipt,
+        );
+        if unsafe { core::ptr::read_volatile(&sequence_reservation_receipt) }
+            != crate::fi::OK_SENTINEL
+        {
+            self.active = false;
+            out[..out_len].zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::NotActive);
+        }
+        crate::fi::wait_random();
+        if unsafe { core::ptr::read_volatile(&sequence_reservation_receipt) }
+            != crate::fi::OK_SENTINEL
+        {
+            self.active = false;
+            out[..out_len].zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::NotActive);
+        }
+
         // Header: SCTR + SeqNum
         out[0] = SCTR_RECORD_FULL;
-        out[1] = (self.enc_seq >> 24) as u8;
-        out[2] = (self.enc_seq >> 16) as u8;
-        out[3] = (self.enc_seq >> 8) as u8;
-        out[4] = self.enc_seq as u8;
+        out[1] = (sequence >> 24) as u8;
+        out[2] = (sequence >> 16) as u8;
+        out[3] = (sequence >> 8) as u8;
+        out[4] = sequence as u8;
 
         // Build nonce and AAD
-        let nonce = Self::build_nonce(&self.enc_nonce_base, self.enc_seq);
-        let aad = Self::build_aad(SCTR_RECORD_FULL, self.enc_seq, plaintext.len() as u16);
+        let nonce = Self::build_nonce(&self.enc_nonce_base, sequence);
+        let aad = Self::build_aad(SCTR_RECORD_FULL, sequence, plaintext.len() as u16);
 
         // AES-128-CCM encrypt
         let mut ciphertext_and_tag = [0u8; 600];
-        // Guard the internal scratch too: the line-230 check validates the
-        // caller's `out`, but the CCM output (`plaintext.len()` + 8-byte tag)
-        // is staged here first, and a plaintext larger than this buffer would
-        // overrun it and panic. Only the dev-only protected-update path emits
-        // APDUs this large (all shipping shielded APDUs are small), but keep
-        // wrap_command total so it can never OOB-panic.
-        if plaintext.len() + CCM_TAG_LEN > ciphertext_and_tag.len() {
-            return Err(ShieldError::BufferOverflow);
-        }
         let ct_len = aes128_ccm_encrypt(
             &self.enc_key,
             &nonce,
@@ -1197,8 +1517,6 @@ impl ShieldedConnection {
         );
 
         out[SC_HEADER_LEN..SC_HEADER_LEN + ct_len].copy_from_slice(&ciphertext_and_tag[..ct_len]);
-
-        self.enc_seq += 1;
         Ok(out_len)
     }
 
@@ -1211,7 +1529,13 @@ impl ShieldedConnection {
         &mut self,
         input: &[u8],
         out: &mut [u8],
+        auth_receipt: &mut u32,
     ) -> Result<usize, ShieldError> {
+        unsafe {
+            core::ptr::write_volatile(auth_receipt, crate::fi::FAIL_SENTINEL);
+        }
+        out.fill(0);
+        crate::fi::zeroize_barrier();
         if !self.active {
             return Err(ShieldError::NotActive);
         }
@@ -1232,18 +1556,24 @@ impl ShieldedConnection {
             | ((input[3] as u32) << 8)
             | input[4] as u32;
 
-        // HIGH-10 fix: refuse replays. A MITM that captures a valid
-        // response frame could otherwise inject it again at a later
-        // point and short-circuit a fresh command. We expect each
-        // response to bump dec_seq by exactly 1; anything with a
-        // lower-or-equal seq is either a replay or a bug.
-        if seq < self.dec_seq {
+        // Bind the received counter to the last authenticated handshake or
+        // record state. Infineon's reference permits only a 1..=3 advance to
+        // account for bounded transport retransmission. A caller-owned receipt
+        // plus two checks makes an omitted verifier or one skipped rejection
+        // fail closed before CCM can expose plaintext.
+        let mut sequence_receipt = crate::fi::FAIL_SENTINEL;
+        verify_response_sequence_into(
+            self.dec_seq,
+            self.dec_seq_inv,
+            seq,
+            &mut sequence_receipt,
+        );
+        if unsafe { core::ptr::read_volatile(&sequence_receipt) } != crate::fi::OK_SENTINEL {
             return Err(ShieldError::DecryptFailed);
         }
-        // Threshold enforcement (symmetric with enc_seq).
-        if seq >= 0xFFFF_FFF0 {
-            self.active = false;
-            return Err(ShieldError::NotActive);
+        crate::fi::wait_random();
+        if unsafe { core::ptr::read_volatile(&sequence_receipt) } != crate::fi::OK_SENTINEL {
+            return Err(ShieldError::DecryptFailed);
         }
 
         let ct_and_tag = &input[SC_HEADER_LEN..];
@@ -1256,19 +1586,59 @@ impl ShieldedConnection {
         let nonce = Self::build_nonce(&self.dec_nonce_base, seq);
         let aad = Self::build_aad(SCTR_RECORD_FULL, seq, plaintext_len as u16);
 
-        let ok = aes128_ccm_decrypt(
+        // A caller-owned fail receipt makes an omitted decrypt/authentication
+        // call observable. Check it twice so one skipped rejection branch cannot
+        // release plaintext that was written before CCM authentication.
+        let mut ccm_receipt = crate::fi::FAIL_SENTINEL;
+        aes128_ccm_decrypt_into(
             &self.dec_key,
             &nonce,
             &aad,
             ct_and_tag,
             out,
+            &mut ccm_receipt,
         );
-
-        if !ok {
+        if unsafe { core::ptr::read_volatile(&ccm_receipt) } != crate::fi::OK_SENTINEL {
+            out[..plaintext_len].zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::DecryptFailed);
+        }
+        crate::fi::wait_random();
+        if unsafe { core::ptr::read_volatile(&ccm_receipt) } != crate::fi::OK_SENTINEL {
+            out[..plaintext_len].zeroize();
+            crate::fi::zeroize_barrier();
             return Err(ShieldError::DecryptFailed);
         }
 
-        self.dec_seq = seq.saturating_add(1);
+        // Publish the authenticated counter through a duplicated value/
+        // complement state update. If the helper call or one store is omitted,
+        // the fail receipt or the complement check prevents this record from
+        // being released and prevents stale state from authorizing a replay.
+        let mut sequence_commit_receipt = crate::fi::FAIL_SENTINEL;
+        commit_sequence_state_into(
+            seq,
+            &mut self.dec_seq,
+            &mut self.dec_seq_inv,
+            &mut sequence_commit_receipt,
+        );
+        if unsafe { core::ptr::read_volatile(&sequence_commit_receipt) }
+            != crate::fi::OK_SENTINEL
+        {
+            out[..plaintext_len].zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::DecryptFailed);
+        }
+        crate::fi::wait_random();
+        if unsafe { core::ptr::read_volatile(&sequence_commit_receipt) }
+            != crate::fi::OK_SENTINEL
+        {
+            out[..plaintext_len].zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::DecryptFailed);
+        }
+        unsafe {
+            core::ptr::write_volatile(auth_receipt, crate::fi::OK_SENTINEL);
+        }
         Ok(plaintext_len)
     }
 
@@ -1321,12 +1691,15 @@ impl ShieldedConnection {
         const SLAVE_HELLO_LEN: usize = 38;
 
         secure_log!("[OPTIGA/shield] MasterHello response n={}", n);
-        if n < SLAVE_HELLO_LEN {
+        if n != SLAVE_HELLO_LEN
+            || resp[0] != SCTR_HANDSHAKE_HELLO
+            || resp[1] != PROTOCOL_VERSION
+        {
             secure_log!(
-                "[OPTIGA/shield] SlaveHello too short ({} < {}), bytes=[{:02x}{:02x}{:02x}{:02x}...]",
+                "[OPTIGA/shield] SlaveHello malformed (n={} expected={}), bytes=[{:02x}{:02x}{:02x}{:02x}...]",
                 n, SLAVE_HELLO_LEN, resp[0], resp[1], resp[2], resp[3]
             );
-            // Truncated/garbled reply — a framing fault, not a PBS verdict.
+            // Wrong size/type/version is a framing fault, not a PBS verdict.
             return Err(ShieldError::HandshakeTransport);
         }
         let mut random_s = [0u8; RANDOM_LEN];
@@ -1387,8 +1760,9 @@ impl ShieldedConnection {
         // Step 5: Verify SlaveFinished.
         // Format: SCTR(0x08) | master_seq(4 BE) | ct(36) | MAC(8) = 49 B.
         // See `ifx_i2c_presentation_layer.c:559-607`.
-        if n2 < SC_HEADER_LEN + CCM_TAG_LEN {
-            // Short frame — framing fault, no PBS evidence.
+        const SLAVE_FINISHED_LEN: usize = SC_HEADER_LEN + 36 + CCM_TAG_LEN;
+        if n2 != SLAVE_FINISHED_LEN {
+            // Wrong-sized frame — framing fault, no PBS evidence.
             return Err(ShieldError::HandshakeTransport);
         }
         if resp2[0] != SCTR_HANDSHAKE_FINISHED {
@@ -1425,22 +1799,33 @@ impl ShieldedConnection {
         }
         let dec_aad = Self::build_aad(SCTR_HANDSHAKE_FINISHED, master_seq, slave_pt_len as u16);
 
-        let ok = aes128_ccm_decrypt(
+        let mut ccm_receipt = crate::fi::FAIL_SENTINEL;
+        aes128_ccm_decrypt_into(
             &self.dec_key,
             &dec_nonce,
             &dec_aad,
             slave_ct,
             &mut slave_plain,
+            &mut ccm_receipt,
         );
-        if !ok {
+        if unsafe { core::ptr::read_volatile(&ccm_receipt) } != crate::fi::OK_SENTINEL {
+            slave_plain.zeroize();
+            crate::fi::zeroize_barrier();
             secure_log!("[OPTIGA/shield] SlaveFinished decrypt FAILED");
             // CCM MAC failure under keys derived from the loaded PBS: the chip
             // holds a different PBS. THIS is the authoritative "wrong PBS".
             return Err(ShieldError::HandshakeRejected);
         }
+        crate::fi::wait_random();
+        if unsafe { core::ptr::read_volatile(&ccm_receipt) } != crate::fi::OK_SENTINEL {
+            slave_plain.zeroize();
+            crate::fi::zeroize_barrier();
+            secure_log!("[OPTIGA/shield] SlaveFinished decrypt receipt changed");
+            return Err(ShieldError::HandshakeRejected);
+        }
 
         // Plaintext of SlaveFinished must be `random_S (32) || master_seq (4 BE)`.
-        if slave_pt_len < 36 {
+        if slave_pt_len != 36 {
             // Authenticated (MAC passed) but the wrong shape — the chip is
             // speaking our session keys, so this is a chip/protocol fault, not
             // a transport one.
@@ -1464,14 +1849,77 @@ impl ShieldedConnection {
 
         // Session established. Subsequent protected records use the
         // master_sequence_number counter (bumped before each send), and
-        // the slave's responses carry their own slave_sequence_number we
-        // extract on the fly in `unwrap_response`. We initialise enc_seq
-        // = master_seq + 1 so the first `wrap_command` sends that value
-        // (we use-then-increment). dec_seq=0 lets any seq ≥ 0 through;
-        // the chip's slave_sequence_number monotonicity is what we rely
-        // on for replay protection.
-        self.enc_seq = master_seq.saturating_add(1);
-        self.dec_seq = 0;
+        // the slave's responses must advance from the authenticated
+        // `slave_seq` baseline by the reference driver's bounded 1..=3 window.
+        // Publish that baseline before `active=true`, with a caller-owned
+        // receipt so omitting the publication cannot open a replay window.
+        let mut sequence_commit_receipt = crate::fi::FAIL_SENTINEL;
+        commit_sequence_state_into(
+            slave_seq,
+            &mut self.dec_seq,
+            &mut self.dec_seq_inv,
+            &mut sequence_commit_receipt,
+        );
+        if unsafe { core::ptr::read_volatile(&sequence_commit_receipt) }
+            != crate::fi::OK_SENTINEL
+        {
+            finished_plain.zeroize();
+            slave_plain.zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::HandshakeRejected);
+        }
+        crate::fi::wait_random();
+        if unsafe { core::ptr::read_volatile(&sequence_commit_receipt) }
+            != crate::fi::OK_SENTINEL
+        {
+            finished_plain.zeroize();
+            slave_plain.zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::HandshakeRejected);
+        }
+
+        // `wrap_command` consumes the already-incremented master direction.
+        // Publish it through the same value/complement receipt before making
+        // the session active; an omitted baseline store must not permit nonce
+        // zero or a stale nonce to be used.
+        let next_master_sequence = match master_seq.checked_add(1) {
+            Some(sequence) if sequence <= PRL_SEQUENCE_THRESHOLD => sequence,
+            _ => {
+                finished_plain.zeroize();
+                slave_plain.zeroize();
+                crate::fi::zeroize_barrier();
+                return Err(ShieldError::HandshakeTransport);
+            }
+        };
+        unsafe {
+            core::ptr::write_volatile(
+                &mut sequence_commit_receipt,
+                crate::fi::FAIL_SENTINEL,
+            );
+        }
+        commit_sequence_state_into(
+            next_master_sequence,
+            &mut self.enc_seq,
+            &mut self.enc_seq_inv,
+            &mut sequence_commit_receipt,
+        );
+        if unsafe { core::ptr::read_volatile(&sequence_commit_receipt) }
+            != crate::fi::OK_SENTINEL
+        {
+            finished_plain.zeroize();
+            slave_plain.zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::HandshakeRejected);
+        }
+        crate::fi::wait_random();
+        if unsafe { core::ptr::read_volatile(&sequence_commit_receipt) }
+            != crate::fi::OK_SENTINEL
+        {
+            finished_plain.zeroize();
+            slave_plain.zeroize();
+            crate::fi::zeroize_barrier();
+            return Err(ShieldError::HandshakeRejected);
+        }
         self.active = true;
 
         finished_plain.zeroize();
@@ -1612,31 +2060,35 @@ fn aes128_ccm_encrypt(
     plaintext.len() + CCM_TAG_LEN
 }
 
-/// AES-128-CCM decrypt. Returns `true` if tag verification succeeds.
-/// Writes plaintext to `out[..ct_and_tag.len() - CCM_TAG_LEN]`.
-fn aes128_ccm_decrypt(
+/// Recompute and compare the received CCM tag without trusting state from the
+/// plaintext-decryption loop. The caller invokes this out-of-line operation
+/// twice, so one omitted call or one fault-shortened verification cannot
+/// authenticate a record.
+#[inline(never)]
+#[export_name = "pqsigner_optiga_ccm_tag_matches"]
+fn ccm_tag_matches(
     key: &[u8; 16],
     nonce: &[u8; CCM_NONCE_LEN],
     aad: &[u8],
     ct_and_tag: &[u8],
-    out: &mut [u8],
+    plaintext: &[u8],
 ) -> bool {
-    if ct_and_tag.len() < CCM_TAG_LEN {
+    use subtle::ConstantTimeEq;
+
+    if ct_and_tag.len() < CCM_TAG_LEN
+        || plaintext.len() != ct_and_tag.len() - CCM_TAG_LEN
+    {
         return false;
     }
 
     let ct_len = ct_and_tag.len() - CCM_TAG_LEN;
-    let ciphertext = &ct_and_tag[..ct_len];
     let received_enc_tag = &ct_and_tag[ct_len..];
-
     let cipher = Aes128::new(key.into());
 
-    // CTR decrypt: A_0 for tag, A_1.. for data
+    // Decrypt the received tag with A_0 independently of the plaintext pass.
     let mut a_block = [0u8; AES_BLOCK];
     a_block[0] = 6; // q - 1
     a_block[1..1 + CCM_NONCE_LEN].copy_from_slice(nonce);
-
-    // Decrypt tag with A_0
     set_counter(&mut a_block, 0);
     let mut s0 = a_block;
     let s0_block = aes::Block::from_mut_slice(&mut s0);
@@ -1646,7 +2098,73 @@ fn aes128_ccm_decrypt(
         received_tag[i] = received_enc_tag[i] ^ s0[i];
     }
 
-    // Decrypt ciphertext with A_1, A_2, ...
+    let expected_tag = ccm_cbc_mac(&cipher, nonce, aad, plaintext);
+    received_tag
+        .as_slice()
+        .ct_eq(expected_tag.as_slice())
+        .into()
+}
+
+/// Publish CCM authentication only after two independent full tag
+/// recomputations. The caller fail-initializes and double-checks `receipt`.
+#[inline(never)]
+#[export_name = "pqsigner_optiga_ccm_verify_into"]
+fn verify_ccm_tag_into(
+    key: &[u8; 16],
+    nonce: &[u8; CCM_NONCE_LEN],
+    aad: &[u8],
+    ct_and_tag: &[u8],
+    plaintext: &[u8],
+    receipt: &mut u32,
+) {
+    unsafe {
+        core::ptr::write_volatile(receipt, crate::fi::FAIL_SENTINEL);
+    }
+    if !ccm_tag_matches(key, nonce, aad, ct_and_tag, plaintext) {
+        return;
+    }
+    crate::fi::wait_random();
+    if !ccm_tag_matches(key, nonce, aad, ct_and_tag, plaintext) {
+        return;
+    }
+    unsafe {
+        core::ptr::write_volatile(receipt, crate::fi::OK_SENTINEL);
+    }
+}
+
+/// AES-128-CCM decrypt with caller-owned, fail-initialized authentication
+/// receipt. Plaintext may be materialized internally before its tag is known,
+/// but no caller accepts it until the receipt has passed two independent gates.
+/// Authentication failure wipes the materialized prefix before returning.
+#[inline(never)]
+#[export_name = "pqsigner_optiga_ccm_decrypt_into"]
+pub(crate) fn aes128_ccm_decrypt_into(
+    key: &[u8; 16],
+    nonce: &[u8; CCM_NONCE_LEN],
+    aad: &[u8],
+    ct_and_tag: &[u8],
+    out: &mut [u8],
+    auth_receipt: &mut u32,
+) {
+    unsafe {
+        core::ptr::write_volatile(auth_receipt, crate::fi::FAIL_SENTINEL);
+    }
+    if ct_and_tag.len() < CCM_TAG_LEN {
+        return;
+    }
+
+    let ct_len = ct_and_tag.len() - CCM_TAG_LEN;
+    if ct_len > out.len() {
+        return;
+    }
+    let ciphertext = &ct_and_tag[..ct_len];
+    let cipher = Aes128::new(key.into());
+
+    // CTR decrypt plaintext with A_1, A_2, ... . Authentication is performed
+    // afterward by two independent full CCM tag recomputations.
+    let mut a_block = [0u8; AES_BLOCK];
+    a_block[0] = 6; // q - 1
+    a_block[1..1 + CCM_NONCE_LEN].copy_from_slice(nonce);
     let mut counter: u64 = 1;
     let mut ct_offset = 0;
     while ct_offset < ct_len {
@@ -1663,15 +2181,36 @@ fn aes128_ccm_decrypt(
         counter += 1;
     }
 
-    // Recompute CBC-MAC over decrypted plaintext
-    let expected_tag = ccm_cbc_mac(&cipher, nonce, aad, &out[..ct_len]);
-
-    // Constant-time tag comparison
-    let mut diff: u8 = 0;
-    for i in 0..CCM_TAG_LEN {
-        diff |= received_tag[i] ^ expected_tag[i];
+    verify_ccm_tag_into(
+        key,
+        nonce,
+        aad,
+        ct_and_tag,
+        &out[..ct_len],
+        auth_receipt,
+    );
+    if unsafe { core::ptr::read_volatile(auth_receipt) } != crate::fi::OK_SENTINEL {
+        // If a fault skips the valid-path branch into this cleanup, poison the
+        // receipt before changing bytes that were covered by the successful
+        // tag. The caller's two receipt gates then reject the wiped plaintext.
+        unsafe {
+            core::ptr::write_volatile(auth_receipt, crate::fi::FAIL_SENTINEL);
+            core::ptr::write_volatile(auth_receipt, crate::fi::FAIL_SENTINEL);
+        }
+        out[..ct_len].zeroize();
+        crate::fi::zeroize_barrier();
     }
-    diff == 0
+}
+
+#[cfg(test)]
+pub(crate) fn ccm_encrypt_for_test(
+    key: &[u8; 16],
+    nonce: &[u8; CCM_NONCE_LEN],
+    aad: &[u8],
+    plaintext: &[u8],
+    out: &mut [u8],
+) -> usize {
+    aes128_ccm_encrypt(key, nonce, aad, plaintext, out)
 }
 
 /// Compute CCM CBC-MAC (authentication tag).
@@ -1806,7 +2345,7 @@ fn set_counter(a: &mut [u8; AES_BLOCK], counter: u64) {
 
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::flash_policy::{self, GenericSecurePage, GenericSecureQwAddr};
+use crate::flash_policy::{self, GenericNsPage, GenericSecurePage, GenericSecureQwAddr};
 use crate::hw::mmio::{Reg32, RoReg32};
 
 // ---------------------------------------------------------------------------
@@ -1828,7 +2367,8 @@ const FLASH_NS: u32 = 0x4002_2000;
 
 /// `FLASH_OPTR` offset (RM0456 §7.11) — RDP[7:0] in the low byte. And
 /// `FLASH_SECBOOTADD0R` offset (secure boot-address option register), confirmed
-/// by `tools/ob-configurator/src/main.rs:32` (`FLASH_S+0x4C`).
+/// as `FLASH_S+0x4C` by the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`,
+/// `FLASH_SECBOOTADD0R` addressOffset `0x4c`) and RM0456 §7.9.16.
 #[allow(dead_code)]
 const FLASH_OPTR_OFF: u32 = 0x40;
 #[allow(dead_code)]
@@ -1852,9 +2392,11 @@ pub use sphincs_tz_shared::lockdown::RdpLevel;
 ///
 /// NOTE (BOOT_LOCK/HDP1 follow-up): we check the RDP level and the boot
 /// *address* (`secboot_selects_fsbl`) — the reliable, code-confirmed signals.
-/// The `BOOT_LOCK` bit and `HDP1` polarity are doc-ambiguous
-/// (production-todo's `0x0C00_007C` vs the ob-configurator's `0x0018_0000`), so
-/// asserting them is a bench-confirmation follow-up (work-todo), not done here.
+/// `BOOT_LOCK` is bit 0 (RM0456 §7.9.16, pinned as
+/// `lockdown::SECBOOTADD0_BOOT_LOCK`); the apparent `0x0C00_007C` vs
+/// `0x0018_0000` contradiction was register-word vs CubeProgrammer field-value,
+/// not a disagreement about the bit (#214). `HDP1` polarity IS still
+/// doc-ambiguous, so asserting that remains a bench-confirmation follow-up.
 #[cfg(feature = "stm32u585")]
 #[allow(dead_code)]
 #[must_use]
@@ -2149,18 +2691,33 @@ pub unsafe fn write_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), 
 // which is why it lives behind the same feature the `nsc/mod.rs` ship fence
 // forces on only for `mode-production`.
 //
-// Register offsets: the option-byte programming keys + OPTSTRT/OBL_LAUNCH/
-// OPTLOCK bit positions come from `tools/ob-configurator/src/main.rs` (which
-// ran the OB-commit on the bench), but the SECSR/SECCR *offsets* there are
-// swapped — this code uses the RM0456-correct `secsr=0x24 / seccr=0x2C`
-// already bound in `REG` above. WRP1AR / SECWM offsets + the OEM-lock status
-// register are BENCH-CONFIRM (RM0456) items — see the #36 deferred runbook.
+// Register offsets and the OPTSTRT/OBL_LAUNCH/OPTLOCK bit positions come from
+// the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`) and RM0456; they are
+// mirrored as host-tested constants in `sphincs_tz_shared::lockdown`
+// (`FLASH_NSCR_OFF`, `FLASH_OPTSTRT`, …). The former `tools/ob-configurator`
+// is NOT the authority for them — it swapped the SECSR/SECCR offsets and has
+// been deleted (#37). `secsr=0x24 / seccr=0x2C` as bound in `REG` above is
+// SVD-correct. WRP1AR / SECWM offsets + the OEM-lock status register are
+// BENCH-CONFIRM (RM0456) items — see the #36 deferred runbook.
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ KNOWN DEFECT #268 — the three option-byte accesses below use `seccr`.   │
+// │ Per the SVD, `OPTSTRT` (17), `OBL_LAUNCH` (27) and `OPTLOCK` (30) exist │
+// │ ONLY in `FLASH_NSCR` (0x28); `FLASH_SECCR` (0x2C) implements none of    │
+// │ them. So the commit is inert, the OPTLOCK check can never fire, and     │
+// │ `program_rdp_level2_and_launch` returns Ok(()) after failing to burn.   │
+// │ NOT fixed here by deliberate decision: this is the irreversible RDP-2   │
+// │ path and wants an owner decision plus a sacrificial-silicon plan, not a │
+// │ drive-by edit. `REG.nscr` is already bound and correct for the fix.     │
+// │ Never executed — `rdp2-self-lock` is production-quarantined.            │
+// │ Guarded by `negative_optbyte_commit_defect_268_is_marked_or_fixed`.     │
+// └─────────────────────────────────────────────────────────────────────────┘
 // ===========================================================================
 
 /// Option-byte key register offset (RM0456; `FLASH_S+0x10`).
 #[cfg(feature = "rdp2-self-lock")]
 const OPTKEYR_OFF: u32 = 0x10;
-/// Option-byte unlock keys (GP/RM0456; from `tools/ob-configurator`).
+/// Option-byte unlock keys (RM0456 §7.9.2 `FLASH_OPTKEYR`).
 #[cfg(feature = "rdp2-self-lock")]
 const OPT_KEY1: u32 = 0x0819_2A3B;
 #[cfg(feature = "rdp2-self-lock")]
@@ -2182,6 +2739,8 @@ const RDP_LEVEL2: u32 = 0xCC;
 const SECWM1R1_OFF: u32 = 0x50;
 #[cfg(feature = "rdp2-self-lock")]
 const WRP1AR_OFF: u32 = 0x58;
+/// RM0456 §7.9.23 — bank-2 WRP area A. Bank-1 twin is `WRP1AR_OFF` (§7.9.19).
+const WRP2AR_OFF: u32 = 0x68;
 #[cfg(feature = "rdp2-self-lock")]
 const SECWM2R1_OFF: u32 = 0x60;
 
@@ -2215,6 +2774,20 @@ pub fn secwm2r1_raw() -> u32 {
 pub fn wrp1ar_raw() -> u32 {
     // SAFETY: as `optr_raw`.
     unsafe { RoReg32::new(FLASH + WRP1AR_OFF) }.read()
+}
+
+/// Raw `WRP2AR` (bank-2 FSBL-mirror write-protect span). **Address offset
+/// `0x68`**, RM0456 §7.9.23 "FLASH WPR2 area A address register" — the bank-2
+/// twin of `WRP1AR` at `0x58` (§7.9.19).
+///
+/// Added 2026-09-24: `verify_ship_profile` checked only bank 1, so the FSBL
+/// copy the frozen geometry puts in bank 2 was never verified write-protected
+/// before RDP-2 froze the option bytes for good.
+#[cfg(feature = "rdp2-self-lock")]
+#[must_use]
+pub fn wrp2ar_raw() -> u32 {
+    // SAFETY: as `optr_raw`.
+    unsafe { RoReg32::new(FLASH + WRP2AR_OFF) }.read()
 }
 
 /// Raw OEM-lock status. BENCH-CONFIRM register (FLASH_NSSR vs FLASH_OPTSR) —
@@ -2882,8 +3455,33 @@ fn clear_errors_ns() {
 /// Erases a non-secure-bank page. Caller must ensure the page is part
 /// of the inactive A/B slot.
 pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
-    assert!(page <= 127, "ns-bank page out of range");
-    let page = page as u32;
+    // SAFETY: forwarded contract. Bank 2 is the only bank with non-secure
+    // pages under the current geometry, so this stays the ordinary entry.
+    unsafe { erase_ns_page_in(pqsigner_geometry::Bank::Two, page) }
+}
+
+/// Erase one non-secure page in an EXPLICIT bank.
+///
+/// `erase_ns_page` used to set `BKER` unconditionally, i.e. always bank 2 —
+/// correct only while "non-secure page" and "bank-2 page" are the same claim.
+/// A geometry that puts an NS slot in bank 1 breaks that equivalence, and the
+/// failure is worse than the secure-side twin's: erasing the INACTIVE bank-1
+/// NS slot would target the bank-2 page of the same number, i.e. the NS slot
+/// the device is currently RUNNING FROM, in the middle of an update.
+///
+/// The bank now comes from a [`GenericNsPage`] proof, so the control-register
+/// write and the caller's intent cannot disagree.
+///
+/// # Safety
+/// Erases a non-secure page. Caller must ensure the page is part of the
+/// INACTIVE A/B slot.
+pub unsafe fn erase_ns_page_in(bank: pqsigner_geometry::Bank, page: u8) -> Result<(), ()> {
+    let proof = GenericNsPage::new_in(bank, page as u32).ok_or(())?;
+    let page = proof.get();
+    let bker = match proof.bank() {
+        pqsigner_geometry::Bank::One => 0,
+        pqsigner_geometry::Bank::Two => BKER,
+    };
 
     // NSCR is reached via the NS alias of the FLASH register block
     // (see `FLASH_NS` at top of file). The single-shot CR write matches
@@ -2893,7 +3491,9 @@ pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
         clear_errors_ns();
         unlock_ns();
 
-        let cr = PER | BKER | (page << PNB_SHIFT) | STRT;
+        // BKER comes from the proof (see `erase_ns_page_in`), not from the
+        // assumption that every NS page is in bank 2.
+        let cr = PER | bker | (page << PNB_SHIFT) | STRT;
         REG.nscr.write(cr);
 
         wait_bsy_ns();
@@ -3026,13 +3626,25 @@ pub unsafe fn write_ns_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(
 pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {
     // The proof constructor fails closed for page 127 and every out-of-range
     // value before the flash controller is unlocked or any MMIO write occurs.
-    let page = GenericSecurePage::new(page).ok_or(())?.get();
+    let proof = GenericSecurePage::new(page).ok_or(())?;
+    let page = proof.get();
+    // BKER selects the bank for a page erase. This used to be omitted
+    // entirely, i.e. hard-wired to bank 1 — correct only while every secure
+    // page lives in bank 1, and silently catastrophic under a geometry that
+    // puts a secure slot in bank 2: a bank-2 page number would erase the
+    // BANK-1 page of the same number (the manifests, slot A, or the
+    // per-device pages). The bank now comes from the proof, so the two cannot
+    // disagree.
+    let bker = match proof.bank() {
+        pqsigner_geometry::Bank::One => 0,
+        pqsigner_geometry::Bank::Two => BKER,
+    };
     cortex_m::interrupt::free(|_| {
         wait_bsy();
         clear_errors();
         unlock();
 
-        let cr = PER | (page << PNB_SHIFT);
+        let cr = PER | bker | (page << PNB_SHIFT);
         REG.seccr.write(cr);
         REG.seccr.write(cr | STRT);
 

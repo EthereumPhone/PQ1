@@ -871,7 +871,7 @@ Production contract — every shipping build must respect ALL. Pre-production ma
 7. **Per-chain caps monotonic, unresettable.** `bootstrapUses < 65,536`, `slotUses[i] + offchainSigCount[i] < 65,536`. No `reset*` or `increaseMax*` path. Exhausted chains stay frozen.
 8. **Stateless slot selection.** Companion supplies `(chain_id, slot_index, flags)` on every sign. No flash slot store, no recovery state machine in S-world. Slot keys re-derived on demand and cached in SRAM only.
 9. **Off-chain sig counter, combined cap.** Firmware tracks `local_offchain_count` + `last_userop_count` per slot in flash page 123 (log-structured, 16 B/increment, compaction). Refuses to sign past `MAX_OFFCHAIN_GAP = 100` unbacked sigs or past the combined cap. Post-restore, `CMD_SIGN_OFFCHAIN` for an unregistered slot is rejected — forces a Type 1 rotation via `CMD_SIGN_USEROP` first. The forced-blind steady Type-2 branch enforces the same registration prerequisite and cannot create registration through its tally write.
-10. **Verify-once-physically trust chain (owner decision 2026-07-21).** The device's entire post-sale trust story is: (a) ship at RDP-0 so anyone can verify flash + option bytes (including staged WRP) + OTP over SWD, connect-under-reset **before first power**, against the reproducible build; (b) the verified image contains an FSBL whose pages are WRP-protected and which measures the active firmware slots and renders the 8-word fingerprint at boot; (c) first field boot self-locks to RDP-2, which freezes the option bytes forever — WRP on the FSBL range becomes physically permanent, so **no firmware update can ever modify, unprotect, or bypass the measuring code**; (d) from then on the boot-time fingerprint is proof of what is installed — the user never has to trust a firmware update again. Consequences that bind every future change: no runtime write path (fw_update or otherwise) may touch the FSBL range; the WRP-set → RDP-2 ordering is mandatory (RDP-2 with unprotected FSBL pages permanently forfeits the guarantee for that die); the FSBL must own the display for its fingerprint window (a later fake screen is the accepted residual — the *boot-time* window is the anchor, keep it visually distinctive); and the shipping image must actually flash the FSBL in the slot layout (monolithic builds are bench-only). Currently OPEN gates before this invariant is claimable: FSBL geometry (Draft 1.1 pages 0..4), both-bank WRP/option-byte ceremony, non-monolithic shipping image, FI-hardened FSBL image verify (EF-swarm F15), silicon receipts.
+10. **Verify-once-physically trust chain (owner decision 2026-07-21).** The device's entire post-sale trust story is: (a) ship at RDP-0 so anyone can verify flash + option bytes (including staged WRP) + OTP over SWD, connect-under-reset **before first power**, against the reproducible build; (b) the verified image contains an FSBL whose pages are WRP-protected and which measures the active firmware slots and renders the 8-word fingerprint at boot; (c) first field boot self-locks to RDP-2, which freezes the option bytes forever — WRP on the FSBL range becomes physically permanent, so **no firmware update can ever modify, unprotect, or bypass the measuring code**; (d) from then on the boot-time fingerprint is proof of what is installed — the user never has to trust a firmware update again. Consequences that bind every future change: no runtime write path (fw_update or otherwise) may touch the FSBL range; the WRP-set → RDP-2 ordering is mandatory (RDP-2 with unprotected FSBL pages permanently forfeits the guarantee for that die); the FSBL must own the display for its fingerprint window (a later fake screen is the accepted residual — the *boot-time* window is the anchor, keep it visually distinctive); and the shipping image must actually flash the FSBL in the slot layout (monolithic builds are bench-only). Currently OPEN gates before this invariant is claimable: geometry MIGRATION (the frozen registry — pages 0..4, 40,960 B, `FSBL_MAX_LOAD_SPAN` 38,912 — landed as the `pqsigner-geometry` crate (FA-1.1) and is CI-pinned, but the bench **linker is still 32 KiB** and the image occupies pages 0..3, so the cutover is outstanding: issue #540. `make fsbl` reports the derived range, and adopting 40 KiB before the cutover would freeze page 4 while empty), both-bank WRP/option-byte ceremony, non-monolithic shipping image, FI-hardened FSBL image verify (EF-swarm F15), silicon receipts. **Geometry MEASUREMENT is closed** (2026-09-01, `scripts/check_fsbl_geometry.py`, run by `make fsbl`): the gate reads the physical LOAD span from the program headers rather than `size -B` text+data (which undercounts by any inter-segment gap — 28,704 vs 28,700 today), fails on more than one LOAD segment, on a start address that is not the boot base, and on a span that exceeds the region, and **derives the WRP page range from the image instead of assuming it**. Stack is bounded rather than closed: `-Z emit-stack-sizes` gives 50 frames totalling 10,372 B of 16,384 B (the tz-1 tripwire, #366, added two frames and 352 B of flash), and since no acyclic path can exceed the sum of all frames that is a genuine upper bound — subject to the stated caveats (no recursion, functions that emit no frame, interrupt frames on top). A call-graph worst case still needs `cargo-call-stack`.
 
 ## Pre-Production Caveats
 
@@ -881,13 +881,14 @@ No devices shipped, no funds on-chain — domain tags / parameters are still ren
 
 - **TZSC config (invariant #4):** regressed then fixed; enforcement **and** USB-coexistence **silicon-validated 2026-05-20** (`make gtzc-enforcement-hw` → 7/7 secure peripherals RAZ-fault on NS access; device still enumerates `1209:7051` over USB-C). `secure/src/sau.rs` wires `GTZC1_TZSC_SECCFGR{1,3}` (AHB2 AES/HASH/RNG/PKA/SAES + I2C1/2 SECURE; OTG stays NS). Only TAMP (in GTZC2) remains as a follow-up.
 - **Debug instrumentation may ship in this branch.** `debug-log` allowed on hardware, `secure_log!` in the wizard, NS pre-USB register dumps, DHCSR-gated semihosting prints in `hw::hash::init_clock`. CI must still gate production on `debug-log` / `e2e-test` / `mock-se` OFF.
+- **Pixel trusted-UI pilot (`ui-px`, owner decision 2026-09-22).** Under `ui-px` every sign dialog (Safe, single-UserOp, rotation, direct CoW, ERC-7730, off-chain, batch — port plan steps 1-3; `forced_blind` excepted) renders as PQ-UI design screens (`pqsigner-ui-px` crate, `secure/src/ui/px/`, `docs/ui/pixel-ui-pilot.md`) and arms the sign gesture (the two-button chord click — both down together, fires on release; hold-right is a no-op, hold-left declines; owner decision 2026-09-22 on the EVT) on the opening ask / `Confirm?` / returning ask per PQ-UI `DESIGN.md` § Input. **Scroll-to-end is ON (owner decision 2026-09-24, `PX_COMMIT_REQUIRES_SEEN_LAST = true`), superseding the 2026-09-22 decision to reverse it:** the chord arms only after the LAST screen has actually been painted, matching the legacy 16×4 dialogs and the 2026-06-26 gate. An ERC-20 transfer is 8 screens with the recipient on 3 and the amount on 4, so signing from the opening ask approved a destination and value that had never been displayed. `fsbl-tests/tests/paired_constants.rs` pins the two paths together. See `docs/security/HARDENING.md` §2.4. Do not re-litigate without new evidence. **Atlas in the NS slot (owner decision 2026-09-23, port plan § Flash):** the glyph atlas + marks (`nonsecure/assets/ui-px/atlas.pq1a`, 74 KB, NS feature `ui-px-atlas`) live at a fixed offset of the FSBL-measured NS flash slot, never in the secure image; the secure image pins their SHA-256 (`secure/src/ui/px/atlas_root.rs`, generated by `make ui-px-assets`) and `ui::px::assets` re-hashes the window before AND after every pixel dialog plus once more in the sign handler before release — a swapped glyph is a refusal, never a signature (a wrong font is a WYSIWYS input). Trailers are native screens (`tx/display/trailer_screens.rs`, one per proven trailer page, derived from the same page builders, per-slot + set proofs); no `Legacy` record exists on any pixel sign route. **Budget, re-measured 2026-09-24 (`make size-report-px`, and a monolithic link to get past the overflow):** the ship-shaped dual-SE image is 432,873 B without `ui-px` and 543,893 B with it (atlas already relocated) against the 466,944 B v6 secure slot — **76,949 B OVER, not the 9.2 KB this line said until today**; `ui-px` costs 111,020 B and the slot has 34,071 B of headroom, so the port's ≥ 40 KB-headroom gate is NOT met and the flash lever remains an open owner decision (`mode-production` + `rdp2-self-lock` are not even in that measurement: the S-2 fence blocks them). `ui-px` stays out of `make release`; the CI budget step is informational until the lever lands.
 - **Domain tags are sticky-but-renamable.** Tag `"sphincs-c6-v1"` is historical (was a different parameter set when written; now C10). Don't rename mid-bring-up (re-provisions every bench board); coordinated cleanup pre-launch is fine.
 
 When a task touches an invariant-adjacent subsystem (TZSC allowlist, gateway surface, SE provisioning, key derivation), respect the invariant. Pure bring-up wiring (clocks, GPIO, peripheral-init order) prioritises lighting up; note any regression here.
 
 ## Lifecycle
 
-Boot → legacy bench FSBL verify slots + render 8-word fingerprint on the NV3007 LCD (~3 s; see `docs/security/measured-boot.md`) → branch into active slot → SAU/GTZC → SAES self-test → SE attest → PIN entry (S-world trusted UI) → unlock both SEs → reconstruct entropy in S-SRAM → active signing window (120 s idle timeout, S-only TIM; NS pings do NOT reset it) → zeroize on lock/tamper/brownout/inactivity. Treating the FSBL as an immutable production trust root remains contingent on the approved geometry, WRP/option-byte ceremony, production link/resource gates, and silicon receipts.
+Boot → legacy bench FSBL verify slots + render 8-word fingerprint on the NV3007 LCD (~6.9 s on pq1: 2.9 s verify MEASURED + a 4 s fingerprint reading window, the latter a policy constant set to match the secure world's long-standing `measured_boot::WORDS_MS`; the 4 s hold and the new total are EXPECTED, not yet re-measured on silicon — see `docs/security/measured-boot.md`) → branch into active slot → SAU/GTZC → SAES self-test → SE attest → PIN entry (S-world trusted UI) → unlock both SEs → reconstruct entropy in S-SRAM → active signing window (120 s idle timeout, S-only TIM; NS pings do NOT reset it) → zeroize on lock/tamper/brownout/inactivity. Treating the FSBL as an immutable production trust root remains contingent on the approved geometry, WRP/option-byte ceremony, production link/resource gates, and silicon receipts.
 
 The FSBL fingerprint and the secure-world `measured_boot::run` screen show the SAME 8 words for the same active slot (both derived via `sphincs_tz_bip39::firmware_fingerprint_lines`). In the current bench implementation the FSBL row is the earlier measurement and the secure-world row is advisory; neither establishes production immutability. After the FSBL geometry/WRP/factory/silicon gates close, the FSBL row is intended to become the immutable trust root. Honest-row divergence is a strong defect/tamper signal.
 
@@ -1031,11 +1032,23 @@ cd contracts/smart-wallet && forge test -vv
 cargo test -p sphincs-tz-secure --tests --release
 ```
 
+**Board targets (`BOARD=`).** Every hardware target builds for one of two physical boards. `BOARD=iota2` (**default**) is the ST B-U585I-IOT02A dev kit, STM32U585AII6 / 169-pin — what every bench flow has always assumed. `BOARD=pq1` is the AL_A66_MB_V10 production board, STM32U585CIU6 / 48-pin UFQFPN, which **bonds only PA0–15, PB0–15 and PC13** (no port D/E/…, and no PB11). `BOARD` sets both the cargo feature and the probe-rs chip name (`STM32U585AIIx` / `STM32U585CIUx`) — e.g. `make test-key-speed BOARD=pq1`. The pin maps live one-per-board in `secure/src/board/{iota2,pq1}.rs` and drivers read constants from there rather than hard-coding a port base.
+
+**Naming a board is MANDATORY on every `stm32u585` build** — `secure/src/board/mod.rs` hard-errors when neither feature is set, and when both are. The earlier "opt-in to pq1, `board-iota2` is inert" model was retracted 2026-08-31: `#[cfg(feature = "board-pq1")] compile_error!` fences are *silent* when the feature is absent, so a recipe that omitted the board compiled the iota2 pin map with every pq1 fence quiet — which is how `build-hw-prodtest BOARD=pq1` came to put iota2 pins on pq1 silicon. `BOARD_FEATURE`/`CHIP` are `override`-derived from `BOARD` so they cannot be detached from each other, and a `FEATURES` board that disagrees with `BOARD` is a hard error.
+
+**Ported:** debug console UART (iota2 USART1/PA9 → pq1 USART2/PA2, AF7 both); the secure-element path (OPTIGA keeps I2C1/PB8/PB9/AF4, SE050 moves to its own **I2C4 on PB6/PB7 AF5** — `board::SE_I2C_BUSES` is the bus *set*, so `i2c_hw` keeps a single `pub fn init`; OPTIGA reset PE0 → PA15; new `hw::se_power` asserts pq1's `LDO2_EN` (PA8) + `SE1_EN` (PB5) before any bus traffic); buttons; USB (pq1 hands only PA11/PA12 to NS — never PA15/PB5/PB15, which are `SE_RST`/`SE1_EN`/`LCM_EN` there); the OPTIGA reset *pulse* (`reset_pin::hard_pulse`, because the live path `pin_diag::run` hardcoded PA4/PD5/PE0 and would have strobed pq1's display CS); the SCA scope trigger (PD2 → PB3); and the **NV3007 LCD** — `spi_hw` + `lcd_nv3007` now derive every pin, the peripheral base and the AF number from `board::LCD_*`. pq1's panel is SPI1 on **PA4 (CS) / PA5 (SCK) / PA7 (MOSI)**, non-contiguous, below pin 8 (so AF nibbles are in `AFRL`, not `AFRH`) and with **no MISO** — PA6, the MISO position, is `NC` on the board. DC/RST/TE/backlight are PB0/PB1/PB2/PB15; pq1 gets a real hardware reset pulse where iota2 uses `SWRESET` (`board::LCD_RST_IS_DRIVABLE`).
+
+`sau.rs` secures I2C4 (SECCFGR1 bit 16) on pq1, plus **UCPD1 (bit 19)** and **TIM2 (bit 0)** on both boards, under exact-equality `const assert!` arms. UCPD1 matters because it is a second handle on PA15/PB15 that `GPIOx_SECCFGR` does not cover; TIM2 because NS could otherwise clear `TIM2_CR1.CEN` and flat-line the production-mandatory consumption mask.
+
+The **consumption mask** is ported too: pq1 runs it on **TIM3_CH1 / PA6 / AF2** because every TIM2_CH1 pin is taken there (PA0 `LEFT KEY`, PA5 the LCD `SCK`, PA15 `SE_RST`), and `sau.rs` secures TIM3 alongside TIM2 so NS cannot stop either. A `selftest_pin_toggles()` samples `IDR` to catch an AF number that is right for the peripheral but wrong for the pin — it passed on pq1 silicon. **What that does NOT establish:** neither board drives a load from the mask pin (iota2's PA5 is unclaimed, pq1's PA6 is `NC`), and a randomised *duty* only modulates power across a resistive load, so the mask's actual dilution is unmeasured on both — see `evt-silicon-validation.md` §9. Production forces this feature, so pq1 can now *build* a shipping image while that security property remains unevidenced; treat the fence as satisfied-by-construction, not demonstrated.
+
+**Still iota2-only, each a loud `compile_error!` rather than a runtime trap:** `boot-pulse` (hardcodes PE13) and `pin-diag-boot` (sweeps the Arduino header and drives PA8 = pq1's SE rail enable). See `docs/hardware/evt-silicon-validation.md` §1–§2 for the verified as-built map. **Trap:** PA8 is the RIGHT button on iota2 and `LDO2_EN` — the enable for the rail powering *both* secure elements — on pq1.
+
 **`make help`** lists the runnable top-level targets (self-documented from the `Makefile`, so it never drifts); **`make -C contracts/verification help`** lists the FV / spec-assurance gates (`verify-*`). The root `Makefile` has ~160 targets total — `make help` surfaces the ones you actually run; read the file for the build/flash variants, fsbl, release packaging, and optiga-reset internals it doesn't surface.
 
 **HW probe-rs gotcha.** `probe-rs` does not implement semihosting `0x07 SYS_READC`. Any `ui-semihosting` PIN prompt on real silicon hangs in the polling loop with a storm of `Target wanted to run semihosting operation 0x7 ...` warnings. This hits `make e2e-hw` because the NS test driver still calls `CMD_REQUEST_UNLOCK` even when `e2e-test` pre-unlocks the secure side. QEMU is unaffected. Workarounds: `make test-key-speed` (no reads, prints `=== PASS ===`) or `make play-hw-display` (arrow keys via probe-rs `print` handshake).
 
-**Expected timings on hardware** (with `hw-sha256`, auto under `stm32u585`): first-sign ≤ 3 s (master keygen + slot keygen + 2 signs); Type-2-only on cached slot ≈ 1.1 s; second-chain first-sign with cached slot ≈ 2.5 s. Substantially higher = HASH peripheral isn't being used.
+**Timings on hardware — measured, not the old targets (#699).** On pq1, 2026-09-18, `make test-key-speed BOARD=pq1`, with `[S] hash: HW SHA-256 self-test PASS` in the same boot: first sign (type1 + slot keygen + type2) ≈ 14–17 s; Type-2 on a cached slot ≈ 6.4–7.2 s (C10 target-sum grinding spreads single runs by ±1 s or more). The older "first-sign ≤ 3 s / cached ≈ 1.1 s" figures do not match this silicon. Do **not** read a slow sign as "HASH peripheral unused" — first check the boot log for the self-test PASS line.
 
 **HW SHA-256 self-test.** `hw::hash::init_clock()` runs a `SHA-256("abc")` KAT. Look for `[S] hash: HW SHA-256 self-test PASS` early in boot — `FAIL — HALT` parks the CPU in `loop { wfe() }`.
 
@@ -1051,7 +1064,7 @@ cargo test -p sphincs-tz-secure --tests --release
 - **Hardening / accelerators (compose):** `saes-dhuk` (Tier-1 KDF) · `saes-self-test` · `tamp` (Trezor-port; log-only by itself) · `tamp-wipe` (production escalation — fires `tzic::trigger_intrusion_wipe` on a confirmed tamper; default-off for bench safety, **forced ON for shipping dual-SE images** by the `nsc/mod.rs` ship-blocker fence alongside `tzic-wipe`) · `consumption-mask` (TIM2 CH1 PWM on PA5; caller must call `randomize()` periodically) · `usb`.
 - **OPTIGA hardware counter:** `optiga-hw-counter` (E120 LUC bound to F1D0; immune to PBS extraction; **destructive on first provisioning** — rewrites F1D0 metadata).
 - **First-boot self-lock candidate (work-todo #36):** `rdp2-self-lock` (implies `bhk`; **production-only**, forced ON for `mode-production` by the `nsc/mod.rs` S-1-style fence, incompatible with every dev/test feature, requires `dual-se`). Owns the candidate on-device flow in `secure/src/first_boot/`: Phase A verifies the ship option-byte profile + blank per-device pages 123–127 then programs RDP=0xCC (irreversible), Phase B journals a resumable BHK first-write + transport→final rotation of SE050 SCP03/admin + OPTIGA PBS. Absent from every bench/QEMU build (behaviour OFF is byte-identical). Compile-check: `make build-rdp2-self-lock`. This is not production authority; the handoff/recovery/E140-order/silicon gates above remain open. Refs: `docs/provisioning/first-boot-provisioning.md` (candidate responsibility split + field error codes + silicon runbook).
-- **Dev / test (NEVER ship):** `debug-log` · `e2e-test` (fixed mnemonic + PIN, short-circuits every secure-side `confirm()`/`enter_pin()`) · `otp-hardcoded-master-key` (fixed ASCII OTP-master so re-flashed bench boards keep stable admin/SCP03/PBS bytes) · `ui-capture` (SHA-256 of every displayed frame).
+- **Dev / test (NEVER ship):** `debug-log` · `e2e-test` (fixed mnemonic + PIN, short-circuits secure-side `confirm()` **and**, since a8961636, `enter_pin()`, which returns the e2e PIN `00000000`. Before that fix a panel-less board wedged forever in the PendSV idle re-unlock ~120 s after unlock; the fix was validated free-running on pq1 silicon 2026-09-18 across three idle deadlines. Caveat, #692: on these images every PendSV retry goes through `gated_unlock`, so a persistent SE fault burns the whole 10-attempt page-124 budget before the 46a30658 retry guard can fire) · `otp-hardcoded-master-key` (fixed ASCII OTP-master so re-flashed bench boards keep stable admin/SCP03/PBS bytes) · `ui-capture` (SHA-256 of every displayed frame).
 
 CI must gate shipped firmware on `debug-log` / `e2e-test` / `mock-se` / `otp-hardcoded-master-key` / `ui-capture` OFF. The `compile_error!` fences in `nsc/mod.rs` and the `saes-self-test` runner enforce most of this.
 
@@ -1160,7 +1173,7 @@ Pure-logic primitives live in standalone workspace crates so host signers / benc
 | `fwmeasure/` | Host firmware measurement tool. |
 | `fw-manifest/` | Legacy v0x02/PQFW_V1 manifest + verify chain (bench only). Draft 1.1 proposes manifest-v6/`PQFW_V6` with a 121-byte signed preimage; it is neither implemented nor implementation-approved. |
 | `fwsign/` | Legacy bench release-signing CLI; production packaging is quarantined pending candidate approval and backend closure. |
-| `fsbl/` | Legacy bench bootloader. It is not yet an immutable production trust root. Draft 1.1 keeps a 40-KiB candidate envelope; the physical FLASH LOAD-span, WRP/option-byte ceremony, and independent RAM/worst-case-stack gates remain OPEN. |
+| `fsbl/` | Legacy bench bootloader. It is not yet an immutable production trust root. The frozen 40-KiB registry (pages 0..4) landed as `pqsigner-geometry`; this crate still links against the legacy 32-KiB region, cutover #540. Carries the tz-1 option-byte read-back tripwire (`optbytes.rs`): reads only, halts on a persistent mismatch. The physical FLASH LOAD-span gate is CLOSED and the stack is bounded (`scripts/check_fsbl_geometry.py`, run by `make fsbl`); the WRP/option-byte ceremony and a call-graph worst-case stack remain OPEN. |
 | `dbgen/` | Merkle-DB builder (ERC-20 / names / selectors / ERC-7730 descriptor roots). |
 | `xtask/` | Host workspace tooling — codegen, doc-checks, release packaging. |
 | `tools/webhid_test.html`, `tools/wallet_run_hw.py` | Browser companion + probe-rs arrow-key forwarder. |
@@ -1205,7 +1218,7 @@ multi-session approach, and as a second opinion on any claim you are about to ba
 | Model | How to invoke | Notes |
 |-------|---------------|-------|
 | **GPT-5.6** | `mcp__codex__codex` MCP tool — pass `prompt`, `cwd`, `sandbox: "read-only"`, `approval-policy: "never"` | Agent with repo access; reads files itself. Long reviews get backgrounded (>120 s) and notify on completion. |
-| **Kimi K3** | CLI: `export PATH="$HOME/.kimi-code/bin:$PATH"; kimi -p "<prompt>"` (run from the target repo) | **NOT an MCP.** `--auto` is INCOMPATIBLE with `-p` (hard error). Agent with repo access; verbose — redirect to a file and read the tail. Very long runs: use `run_in_background`. |
+| **Kimi K3** | CLI: `export PATH="$HOME/.kimi-code/bin:$PATH"; kimi -p "<prompt>"` (run from the target repo) | **NOT an MCP.** `--auto`, `--yolo`, and `--plan` are each INCOMPATIBLE with `-p` (hard error). Agent with repo access; verbose — redirect to a file and read the tail. Very long runs: use `run_in_background`. |
 
 **How to use them well** (learned 2026-07-19, when they jointly killed an unsound EasyCrypt reduction design
 before it cost multiple sessions):
@@ -1289,6 +1302,116 @@ Document your trust boundaries, your list of secrets, and where each secret is a
 There is no legitimate NSC call that returns the seed, the mnemonic, the SPHINCS+ secret key, or any derivative from which they can be recovered. If you find yourself writing one, stop and redesign.
 
 ---
+
+### 2.4 Trusted-display consent gate
+
+Two consent policies coexist, by path, since 2026-09-22:
+
+| Path | The sign gesture is armed… | Since |
+|---|---|---|
+| Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right / chord is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
+| Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`; every sign dialog since port step 3, 2026-09-23 — `forced_blind` excepted) | **only after the LAST screen has been painted** (scroll-to-end, `PX_COMMIT_REQUIRES_SEEN_LAST = true`), and then only on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) or the returning ask; **never on a detail** | owner decision **2026-09-24** (see the UPDATE below), superseding 2026-09-22 |
+
+**UPDATE 2026-09-23 (port plan step 3):** the pixel path now carries every
+sign dialog — Safe, every single-UserOp route, the slot-rotation consent,
+direct CoW, ERC-7730, the off-chain kinds (typed, `personal_sign`, RAW32) and
+each batch member plus the batch's final ask — so the row above applies to
+all of them under `ui-px`. `forced_blind` keeps its own ceremony; the legacy
+row still governs every build without `ui-px`.
+
+**UPDATE 2026-09-22 (later the same day, owner decision on the EVT):** on the
+pixel path the sign gesture is the **two-button chord click** — both buttons
+down together, the sign fires when both are released
+(`InputFsm` → `Gesture::ChordClick` → `FlowDriver` `Gesture::Chord` →
+`NavResult::Sign`) — not the design's 2 s hold-right, which is now a no-op
+everywhere on that path (hold-left still declines everywhere). Rationale:
+parity with the legacy dialog, whose `hw::buttons::wait_event` has always
+synthesised the two-button chord as the confirm. Residual accepted: the sign
+is an instantaneous gesture rather than a 2 s deliberate hold, so a squeeze
+on a commit-armed screen signs; a chord formed from the post-tap window (one
+side already up) never clicks, so a fast left-tap-then-right-tap cannot
+sign, and details remain unarmed. The `FihBool` gate and single
+`OK_SENTINEL` site are unchanged. PQ-UI `DESIGN.md` § Input (vendored) still
+describes hold-right; the device deviates here and in `TAP_MAX_MS` (500 ms).
+
+**SUPERSEDED 2026-09-24 — see the UPDATE below. The paragraph is kept because
+the mitigations it lists are still real, and because the reasoning that was
+accepted and then reversed is worth preserving.** ~~The pixel path
+intentionally re-opens the class the 2026-06-26 fix closed for that path only:
+a user can sign from the opening ask without paging through the details.~~
+Mitigations the design supplies: declining is armed on every
+screen (hold-left), the `Confirm?` early exit sits after five detail screens,
+the returning ask is the demo's canonical hold point, and every value the
+legacy pages showed is present in the transcript (host fact differential in
+`safe_screens_render_pure_tests.rs`). The arming flag is a `FihBool`
+re-derived from the record's `commit` byte (double read) on every screen
+change; the `OK_SENTINEL` is minted at exactly one site.
+
+**UPDATE 2026-09-24 — REVERSED, by owner decision: the gate is ON.**
+`secure/src/ui/px/confirm_px.rs::PX_COMMIT_REQUIRES_SEEN_LAST` is now `true`.
+Owner, asked directly whether the pixel path should still require paging past
+the recipient and the amount: *"all screens should be viewed before the user
+can sign."*
+
+The concrete case that decided it: an ERC-20 transfer is EIGHT screens
+(`tx::display::erc20_known`). The opening screen says "Send USDC"; the
+RECIPIENT is screen 3 and the AMOUNT is screen 4. With the gate off, one chord
+click on the opening ask approved a transfer whose destination and value had
+never been displayed. The mitigations listed above (decline armed everywhere,
+the `Confirm?` early exit after five details, the values present in the
+transcript) are real but none of them puts the recipient in front of the user.
+
+The evidence is a real paint, not an index: `FlowDriver::mark_rendered` is
+called by the presenter immediately after `build_and_present` (`px/lcd.rs`) and
+after `text::present` (`confirm_px.rs`), and sets `seen_last` only when
+`cur + 1 == count` — the same "evidence of display, not merely an index
+assignment" rule `confirm_core.rs` states for the legacy path. As this section
+already noted, the loop maintains `seen_last` either way, so the constant was
+the only change needed.
+
+The two paths now AGREE, and `fsbl-tests/tests/paired_constants.rs` pins them
+so they cannot drift apart silently again.
+
+RESIDUAL, not closed by this change: on the legacy path `seen_last` is a
+`FihBool` (complement pair + double read); on the pixel path it is a plain
+`bool` feeding the `FihBool` arming flag. A stuck-at fault on the pixel
+`seen_last` would defeat scroll-to-end without defeating arming. Worth
+hardening; tracked separately.
+
+Do not re-litigate without new evidence; record any change here and in
+`CLAUDE.md` Pre-Production Caveats.
+
+**Device input model (frozen 2026-09-23, port plan step 1).** The
+device's gesture grammar on the pixel path is this table; the conformance
+oracle is the vendored PQ-UI `handoff/spec/gestures.json` (an 80-row executed
+truth table) + `traces.json`, and the deliberate deviations from it are the
+single list `tools/pq-ui/PORT_DEVIATIONS.toml`, machine-checked against
+`handoff/spec/motion.json` by `make pq-ui-port-diff` (an unrecorded drift is
+a red build).
+
+| Constant (`pqsigner-ui-px`) | Device | Reference | Note |
+|---|---|---|---|
+| `DEBOUNCE_MS` (`input.rs`) | 25 | — | SysTick ISR lockout per side, first edge exact; device-only |
+| `TAP_MAX_MS` (`motion.rs`) | **500** | 250 | recorded deviation (EVT #1 2026-09-22: deliberate presses run 250–400 ms) |
+| `DOUBLE_TAP_MS` | 250 | 250 | entry contexts only |
+| `CHORD_MS` | 150 | 150 | the other side within this = the chord |
+| `HOLD_COMMIT_MS` | 2000 | 2000 | hold-left decline fires here |
+| `HOLD_SNAPBACK_MS` | 200 | 200 | early-release drain |
+| `PRESS_FEEDBACK_MS` | 120 | 120 | chevron nudge |
+
+| Screen kind | tap L / R | hold-left | hold-right | chord click (both down, fires on release) |
+|---|---|---|---|---|
+| Hero (opening / returning ask), `Confirm?` | navigate | decline | **no-op** (reference: sign) | **sign** (reference: unbound) |
+| Detail / Value | navigate, page-turn | decline | no-op | ignored (never armed) |
+| Status / film / ending | **input-dead**: edges are ignored while the film plays and its result holds; the inactivity deadline and idle wipe stay enforced | | | |
+
+Input during a transit retargets the springs and is never dropped. The film
+(`ui::px::lcd::film_*`) runs around the signer's FI chain, paced by its opaque
+`fn(u8)` progress hook, and cannot change any decision: by the time it
+starts, the `OK_SENTINEL` has been minted and re-proved. The upstream
+catalogue (`handoff/catalog/actions/{hold-right-sign,unbound-gestures,
+tap-navigate}.md`) still describes the reference grammar; a device-deviation
+note for those pages is proposed upstream (see `tools/pq-ui/UPSTREAM.txt`).
 
 ## 3. SE050 Configuration
 
@@ -1608,7 +1731,9 @@ Firmware update is its own project, outside the scope of this document, but note
 The on-device ERC-7730 clear-signing renderer walks a Merkle-verified
 descriptor's `FormatHeader` field list, evaluates each field's
 `Visibility` rule (`Always` / `Never` / `Optional` / `IfNotIn` /
-`MustMatch`), and dispatches to one of fourteen formatters. Two
+`MustMatch`), and dispatches across fifteen wire operations. Enrolled nested
+calldata uses the proof-set child path; encrypted operands and unenrolled
+calldata hard-refuse. Two
 sub-questions about timing channels:
 
 1. **Are visibility-rule evaluation paths secret-dependent?** No.
@@ -1618,30 +1743,31 @@ sub-questions about timing channels:
    instruction trace is a function of the descriptor + the inbound tx
    bytes (`(chain_id, to_address, calldata)`), both of which the
    attacker already knows. There is no secret-dependent branch in the
-   rule evaluator, the path walker, or any of the fourteen
-   formatters. → No `subtle::ConstantTimeEq` or branch-balanced
+   rule evaluator, the path walker, or any renderer route. → No
+   `subtle::ConstantTimeEq` or branch-balanced
    rewrite is required for this surface.
 
-2. **Stack-budget defence.** The walker recurses for nested calldata
-   (capped at depth 4 in the renderer, depth 8 in the walker proper
-   — see `pqsigner_erc7730::walker::MAX_NESTING`). Both
+2. **Stack-budget defence.** Nested calldata is limited to one child level;
+   a child format containing another calldata field hard-refuses.
+   `MAX_NESTED_DEPTH = 8` bounds nested EIP-712 struct descent and
+   `pqsigner_erc7730::ir::MAX_NESTING = 8` bounds nested EIP-712 validation
+   and path-program steps. Both
    `render_erc7730_pages` and `render_erc7730_eip712_pages` write a
    `STACK_CANARY = 0xDEAD_BEEF` to a stack-resident `u32` at entry and
    `assert!`-check it at exit (volatile read/write so LLVM cannot
    prove the value dead). A hostile descriptor that somehow defeats
    the depth cap and recurses unbounded smashes the canary →
    `assert!` panic → secure-world panic handler routes through
-   `secure_log!` + halt. Belt-and-braces against a defeated depth cap;
-   the cap itself is the primary defence.
+   `secure_log!` + halt. This is a belt-and-braces tripwire behind the
+   independent structural bounds; those bounds are the primary defence.
 
 3. **What this does NOT defend.** Stack canary is a single-fault
    detection mechanism. A multi-fault attack that simultaneously
    overflows the stack AND glitches the assert's compare instruction
-   bypasses. Defence in depth: the depth cap is checked separately
-   inside the walker (`pqsigner_erc7730::walker::resolve_program`),
-   and the `Pages` buffer's `MAX_PAGES = 31` bound caps the page-emit
-   side independently — neither path can grow without bound even if
-   the canary is defeated.
+   bypasses. Defence in depth: IR validation and the renderer independently
+   enforce the path, EIP-712, and one-child calldata limits, while the `Pages`
+   buffer's `MAX_PAGES = 31` bound caps page emission — neither path can grow
+   without bound even if the canary is defeated.
 
 ---
 
@@ -3147,7 +3273,7 @@ use crate::optiga::OptigaTrustM;
 use crate::se050::Se050;
 use crate::secure_element::{SeError, UnlockError, WalletStore};
 use subtle::ConstantTimeEq;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 /// XOR two 32-byte arrays. Inherently constant-time.
 fn xor_32(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
@@ -3206,10 +3332,9 @@ impl DualSecureElement {
     /// reconstruct the seed by XOR. Mixing three sources means any single
     /// unbroken source preserves entropy.
     ///
-    /// Open-coded (not via `rng_strong::fill`) to avoid the re-entrancy
-    /// that would arise from calling `WalletStore::random` on the global
-    /// SE while we already hold `&mut self`; direct field borrows of
-    /// `self.optiga` / `self.se050` are the clean path.
+    /// Uses the explicit-handle `rng_strong::fill_with_store` path so holding
+    /// `&mut self` never re-enters the global SE singleton. That path obtains
+    /// and validates the two chip streams separately before folding either.
     ///
     /// Both-or-fail (finding F1): each SE's `random()` contribution is
     /// mandatory — a failed read aborts provisioning rather than being
@@ -3224,43 +3349,44 @@ impl DualSecureElement {
         // `half_o` = the OPTIGA-side half in both the real and decoy
         // splits (the SE050 half is `entropy XOR half_o`).
         let mut half_o = [0u8; 32];
-        if crate::rng::fill(&mut half_o).is_err() {
-            secure_log!("[DUAL/prov] rng::fill FAILED");
-            return Err(SeError::InternalError);
-        }
-        let mut se_buf = [0u8; 32];
-        self.optiga.random(&mut se_buf).map_err(|_| {
-            secure_log!("[DUAL/prov] optiga.random FAILED — refusing degraded split");
-            se_buf.zeroize();
-            half_o.zeroize();
-            SeError::InternalError
-        })?;
-        for i in 0..32 {
-            half_o[i] ^= se_buf[i];
-        }
-        se_buf.zeroize();
-        crate::fi::wait_random();
-        self.se050.random(&mut se_buf).map_err(|_| {
-            secure_log!("[DUAL/prov] se050.random FAILED — refusing degraded split");
-            se_buf.zeroize();
-            half_o.zeroize();
-            SeError::InternalError
-        })?;
-        for i in 0..32 {
-            half_o[i] ^= se_buf[i];
-        }
-        se_buf.zeroize();
-        crate::fi::zeroize_barrier();
-        let mut acc: u8 = 0;
-        for &b in half_o.iter() {
-            acc |= b;
-        }
-        if acc == 0 {
-            secure_log!("[DUAL/prov] half_o stuck at zero — FI suspected");
+        if crate::rng_strong::fill_with_store(&mut half_o, self).is_err() {
+            secure_log!(
+                "[DUAL/prov] strict STM32+OPTIGA+SE050 draw FAILED — refusing degraded split"
+            );
             half_o.zeroize();
             return Err(SeError::InternalError);
         }
         Ok(half_o)
+    }
+
+    /// Wipe the OPTIGA side of a dual-SE store, supplying the legacy E120
+    /// reset path with a strict three-source transient authorization value.
+    /// A failed source skips only that optional counter reset; the underlying
+    /// OPTIGA wipe still runs without a weaker replacement secret.
+    pub(crate) fn reset_optiga_for_admin(&mut self) -> Result<(), SeError> {
+        #[cfg(all(feature = "optiga-hw-counter", not(feature = "optiga-lock-operational")))]
+        let result = {
+            let mut transient_secret = Zeroizing::new([0u8; 32]);
+            let result = if crate::rng_strong::fill_with_store(&mut *transient_secret, self)
+                .is_ok()
+            {
+                self.optiga
+                    .factory_reset_with_transient_secret(&mut *transient_secret)
+                    .map_err(|_| SeError::InternalError)
+            } else {
+                secure_log!(
+                    "[DUAL] strict transient-auth RNG failed — skipping optional \
+                     OPTIGA E120 reset; continuing best-effort wipe"
+                );
+                self.optiga.factory_reset_admin()
+            };
+            transient_secret.zeroize();
+            crate::fi::zeroize_barrier();
+            result
+        };
+        #[cfg(not(all(feature = "optiga-hw-counter", not(feature = "optiga-lock-operational"))))]
+        let result = self.optiga.factory_reset_admin();
+        result
     }
 }
 
@@ -3279,47 +3405,74 @@ impl WalletStore for DualSecureElement {
     ) -> Result<(), SeError> {
         secure_log!("[DUAL/prov] start");
 
-        let mut half_o = self.generate_split_half()?;
-        secure_log!("[DUAL/prov] rng OK (3-source XOR mix), calling optiga.provision");
-        let mut half_e = xor_32(entropy, &half_o);
+        // Keep every reconstructing split-half copy in an auto-wiping wrapper.
+        // This closure is intentional: all four wrappers drop before the
+        // barrier below on success, either SE provisioning error, or either
+        // optional ML-KEM sealing error. Returning directly from one of those
+        // branches must never leave a raw half live on the stack.
+        let provision_result = (|| -> Result<(), SeError> {
+            let half_o = Zeroizing::new(self.generate_split_half()?);
+            secure_log!("[DUAL/prov] rng OK (3-source XOR mix), calling optiga.provision");
+            let half_e = Zeroizing::new(xor_32(entropy, &half_o));
 
-        // Under the ML-KEM hybrid inner wrap (#28), seal each half BEFORE it
-        // crosses I²C: the SE stores the 32-byte AES-GCM ciphertext (object
-        // size unchanged), and the 1568-byte ML-KEM ct + 16-byte tag go to the
-        // ct-store. Without the feature the raw half is stored — the validated
-        // direct-half flow, byte-for-byte. (`[u8; 32]` is Copy, so the
-        // non-wrapped arm just aliases the halves; all copies are zeroized below.)
-        #[cfg(feature = "mlkem-inner-wrap")]
-        let (mut se_half_o, mut se_half_e) = (
-            crate::pq_wrap::seal_half_for_se(crate::pq_wrap::HalfId::OptigaHalfO, 0, &half_o)
-                .map_err(|_| SeError::InternalError)?,
-            crate::pq_wrap::seal_half_for_se(crate::pq_wrap::HalfId::Se050HalfE, 0, &half_e)
-                .map_err(|_| SeError::InternalError)?,
-        );
-        #[cfg(not(feature = "mlkem-inner-wrap"))]
-        let (mut se_half_o, mut se_half_e) = (half_o, half_e);
+            // Under the ML-KEM hybrid inner wrap (#28), seal each half BEFORE it
+            // crosses I²C: the SE stores the 32-byte AES-GCM ciphertext (object
+            // size unchanged), and the 1568-byte ML-KEM ct + 16-byte tag go to
+            // the ct-store. Without the feature the direct-half flow remains
+            // byte-for-byte identical; the two Copy aliases are also Zeroizing.
+            #[cfg(feature = "mlkem-inner-wrap")]
+            let (se_half_o, se_half_e) = (
+                Zeroizing::new(
+                    crate::pq_wrap::seal_half_for_se(
+                        crate::pq_wrap::HalfId::OptigaHalfO,
+                        0,
+                        &half_o,
+                    )
+                    .map_err(|_| SeError::InternalError)?,
+                ),
+                Zeroizing::new(
+                    crate::pq_wrap::seal_half_for_se(
+                        crate::pq_wrap::HalfId::Se050HalfE,
+                        0,
+                        &half_e,
+                    )
+                    .map_err(|_| SeError::InternalError)?,
+                ),
+            );
+            #[cfg(not(feature = "mlkem-inner-wrap"))]
+            let (se_half_o, se_half_e) =
+                (Zeroizing::new(*half_o), Zeroizing::new(*half_e));
 
-        // Both SEs get the same master_secret (derived from full entropy).
-        // This lets us cross-verify on unlock.
-        //
-        // OPTIGA Trust M stores its half-object + master_secret behind the HMAC
-        // auth reference PIN gate; SE050 stores its half-object behind hardware
-        // UserID PIN gating. The VK and bootstrap VK are identical on both chips.
-        if let Err(e) = self.optiga.provision(&se_half_o, master_secret, vk, bootstrap_vk, pin) {
-            secure_log!("[DUAL/prov] optiga.provision FAILED: {:?}", e);
-            return Err(e);
-        }
-        secure_log!("[DUAL/prov] optiga OK, calling se050.provision");
-        if let Err(e) = self.se050.provision(&se_half_e, master_secret, vk, bootstrap_vk, pin) {
-            secure_log!("[DUAL/prov] se050.provision FAILED: {:?}", e);
-            return Err(e);
-        }
+            // Both SEs get the same master_secret (derived from full entropy).
+            // This lets us cross-verify on unlock.
+            //
+            // OPTIGA Trust M stores its half-object + master_secret behind the
+            // HMAC auth reference PIN gate; SE050 stores its half-object behind
+            // hardware UserID PIN gating. The VK and bootstrap VK are identical
+            // on both chips.
+            if let Err(e) =
+                self.optiga
+                    .provision(&se_half_o, master_secret, vk, bootstrap_vk, pin)
+            {
+                secure_log!("[DUAL/prov] optiga.provision FAILED: {:?}", e);
+                return Err(e);
+            }
+            secure_log!("[DUAL/prov] optiga OK, calling se050.provision");
+            if let Err(e) =
+                self.se050
+                    .provision(&se_half_e, master_secret, vk, bootstrap_vk, pin)
+            {
+                secure_log!("[DUAL/prov] se050.provision FAILED: {:?}", e);
+                return Err(e);
+            }
+            Ok(())
+        })();
 
-        half_o.zeroize();
-        half_e.zeroize();
-        se_half_o.zeroize();
-        se_half_e.zeroize();
+        // The closure's Zeroizing locals have dropped on every exit. Keep an
+        // explicit compiler barrier at the security boundary before exposing
+        // its Result to the caller.
         crate::fi::zeroize_barrier();
+        provision_result?;
 
         secure_log!("[DUAL] Provisioned: entropy XOR-split across OPTIGA Trust M + SE050");
         Ok(())
@@ -3661,17 +3814,16 @@ impl WalletStore for DualSecureElement {
         }
     }
 
-    /// Pull random bytes from both SEs and XOR-mix them in-place. The
-    /// per-source bytes never leave this function — only the XOR is
-    /// returned to the caller. `hw::rng_strong::fill` further folds
-    /// this in with the STM32 TRNG before any cryptographic use, so
-    /// the final output is `STM32 ⊕ OPTIGA ⊕ SE050`.
+    /// Legacy combined-SE helper for non-key protocol callers. Pull random
+    /// bytes from both SEs and XOR-mix them in-place; per-source bytes never
+    /// leave this function. Security-critical entropy does not use this
+    /// already-combined result: `rng_strong` calls `random_optiga` and
+    /// `random_se050` separately and verifies each contribution.
     ///
     /// **Strict (both-or-fail).** Both OPTIGA and SE050 MUST contribute.
     /// If either chip fails to provide entropy we return `Err` — the
-    /// caller (`rng_strong::fill`) propagates that and the signing call
-    /// aborts. Degrading to a single SE under EMFI / I2C glitching on
-    /// one of the two buses would let an attacker reduce entropy to
+    /// caller propagates that. Degrading to a single SE under EMFI / I2C
+    /// glitching on one of the two buses would let an attacker reduce entropy to
     /// effectively two sources (STM32 + one SE) without anything
     /// noticing; refusing the call is the loud failure mode.
     fn random(&mut self, buf: &mut [u8]) -> Result<(), SeError> {
@@ -3704,6 +3856,18 @@ impl WalletStore for DualSecureElement {
         Ok(())
     }
 
+    fn random_optiga(&mut self, buf: &mut [u8]) -> Result<(), SeError> {
+        self.optiga
+            .random(buf)
+            .map_err(|_| SeError::InternalError)
+    }
+
+    fn random_se050(&mut self, buf: &mut [u8]) -> Result<(), SeError> {
+        self.se050
+            .random(buf)
+            .map_err(|_| SeError::InternalError)
+    }
+
     /// Wipe both SEs via their admin recovery paths and clear SRAM caches.
     ///
     /// OPTIGA: `optiga.factory_reset()` overwrites every user OID through
@@ -3718,7 +3882,7 @@ impl WalletStore for DualSecureElement {
     /// A best-effort attempt is made on each backend — if one fails we
     /// still try the other and wipe SRAM state.
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
-        let optiga_result = self.optiga.factory_reset_admin();
+        let optiga_result = self.reset_optiga_for_admin();
         let se050_result = self.se050.factory_reset_admin();
 
         self.zeroize_caches();
@@ -3805,7 +3969,7 @@ impl DualSecureElement {
         secure_log!("[DUAL-E2E-ADMIN] step 1: pre-clean");
 
         // OPTIGA: Conf(E140) wipe. Idempotent on blank chips.
-        if let Err(e) = self.optiga.factory_reset() {
+        if let Err(e) = self.reset_optiga_for_admin() {
             secure_log!("[DUAL-E2E-ADMIN] step 1: OPTIGA factory_reset error {:?} (continuing)", e);
         }
 
@@ -4049,7 +4213,7 @@ impl DualSecureElement {
                 secure_log!("[DUAL-MULTI] boot state: probe unlock FAILED → fresh provisioning");
             }
 
-            if let Err(e) = self.optiga.factory_reset() {
+            if let Err(e) = self.reset_optiga_for_admin() {
                 secure_log!("[DUAL-MULTI] pre-clean: OPTIGA factory_reset error {:?} (continuing)", e);
             }
 
@@ -4175,6 +4339,7 @@ mod cmd_is_unlocked;
 mod cmd_lock;
 mod cmd_offchain_status;
 mod cmd_offchain_sync;
+mod cmd_pin_attempt_log;
 mod cmd_request_unlock;
 mod cmd_sign_offchain;
 mod cmd_sign_userop;
@@ -4209,6 +4374,27 @@ mod ptr_validate;
 mod sig_wrapper;
 mod state;
 mod trailer;
+
+// Coldcard-class configuration fence: a production claim is valid only when
+// the hardware platform and the complete three-source entropy backend are
+// selected by value. In particular, `mode-production` without `stm32u585`
+// would compile `rng.rs`'s QEMU `/dev/urandom` backend; checking only that an
+// RNG-related macro/feature exists is not sufficient evidence of its value.
+#[cfg(all(
+    feature = "mode-production",
+    any(
+        not(feature = "stm32u585"),
+        not(feature = "dual-se"),
+        not(feature = "optiga-trust-m"),
+        not(feature = "se050"),
+    ),
+))]
+compile_error!(
+    "PRODUCTION_ENTROPY_BACKENDS_REQUIRED: mode-production requires the \
+     stm32u585 hardware TRNG plus dual-se (OPTIGA Trust M + SE050). Refusing \
+     a production-declared image that could select host randomness or omit a \
+     mandatory hardware entropy source."
+);
 
 // Refuse to build hardware images that also enable any of the dev-only
 // features. `debug-log` and `ui-semihosting` leak secure-world state via
@@ -4499,6 +4685,21 @@ compile_error!(
         feature = "duress-provision-e2e",
         feature = "pin-gate-e2e",
         feature = "dual-se-multi-unlock-e2e",
+        // Added 2026-09-24 with the ui-px-evt merge. `se-lcd-diag` replaces
+        // normal boot, is terminal, and performs the SAME OPTIGA E140
+        // pairing write a first boot performs — squarely this fence's
+        // subject. `dev-dfu` is worse than destructive: two buttons at
+        // power-up clear nSWBOOT0/nBOOT0 and drop the part into the ROM
+        // USB-DFU bootloader, i.e. a physical-access firmware-replacement
+        // path that bypasses the FSBL measured-boot chain of invariant #10.
+        // Both were in the Makefile's PROD_FORBIDDEN and NOTHING else: a
+        // direct `cargo build --features dev-dfu,mode-production` was
+        // accepted, because the denylist is a Makefile-only barrier.
+        feature = "se-lcd-diag",
+        feature = "dev-dfu",
+        // Frame-time overlay: prints render/blit timings over the trusted
+        // display. Not destructive, but it paints over consent screens.
+        feature = "ui-px-frametime",
     )
 ))]
 compile_error!(
@@ -4518,18 +4719,27 @@ compile_error!(
      circuits boot into a firmware anti-rollback test — never a shipping image."
 );
 
-// Firmware-rollback backend quarantine. The current hardware implementation
-// treats one ECC-protected OTP quad-word as a reusable per-bit tally, but
+// Firmware-rollback backend quarantine. The legacy hardware implementation
+// treated one ECC-protected OTP quad-word as a reusable per-bit tally, but
 // STM32U585 user OTP permits only one program operation per 128-bit QW.
-// Draft 1.1 is the current research candidate for replacement interfaces and
-// deliberately leaves approval plus physical journal/ECC/OTP/resource gates
-// open. It is not implementation authority.
+// FA-1.5 (Draft 1.1 §14 L4375) removed that runtime floor writer from
+// `cmd_fw_commit` (the handler now refuses fail-closed; no epoch-bump
+// success path exists in any build). Draft 1.1 remains the research
+// candidate for replacement interfaces and deliberately leaves approval
+// plus physical journal/ECC/OTP/resource gates open. It is not
+// implementation authority.
 //
 // Shipping builds are blocked unconditionally. Bench images must carry a
 // conspicuous no-behaviour-change opt-in (normally inherited from debug-log,
 // mock-se, e2e-test, or otp-hardcoded-master-key). Factory provisioning is
 // blocked separately because its entry and completion receipts reprogram the
 // same OTP QW and therefore cannot complete on this MCU.
+//
+// CARVE-OUT (issue #541; see `secure/build.rs` for the full statement):
+// the named §5 warning-build measurement profile links conservative
+// reservation stubs that fail closed at runtime and has NO reachable
+// epoch-bump success path — it is explicitly not a target of this
+// quarantine.
 #[cfg(all(feature = "mode-production", feature = "stm32u585"))]
 compile_error!(
     "FW_ROLLBACK_PRODUCTION_BLOCKED: the legacy firmware rollback path \
@@ -4803,8 +5013,12 @@ compile_error!(
      MEDIUM-3). Without it the SPHINCS+C10 keygen/sign window runs with an \
      undiluted power signature, exposing the WOTS/FORS secrets to a bench \
      CPA/DPA attacker. Enable `consumption-mask` (it implies `stm32u585`; its \
-     TIM2-CH1 PWM mask runs on PA5, which no other driver claims), or build a \
-     non-shipping test image with `e2e-test` / `dev-testkey`."
+     TIM2-CH1 PWM mask runs on PA5 — free on iota2, but SPI1_SCK, the LCD \
+     clock, on pq1 — where the mask now runs on TIM3_CH1/PA6 instead; see the \
+     module header in hw/consumption_mask.rs for what that does and does NOT \
+     establish, since neither board drives a load from the mask pin and its \
+     effectiveness is unmeasured), or build a non-shipping test image with \
+     `e2e-test` / `dev-testkey`."
 );
 
 // MEDIUM-1 ship-blocker (audit tz-tamper 20260611): a production hardware
@@ -4952,6 +5166,22 @@ compile_error!(
      Phase A/B `ui-lcd`+`ui-noop` pairing is no longer valid.)"
 );
 
+// Four `ui-oled-bench` mutual-exclusion fences stood here (vs `ui-capture`,
+// `ui-lcd`, `ui-semihosting`, `ui-noop`) until 2026-09-23. They died with the
+// backend, not with the rule: the "exactly one UI backend" requirement is
+// still enforced below, and `ui-lcd`/`ui-semihosting`/`ui-noop` remain
+// mutually exclusive through their own fences.
+//
+// `ui-px-evt` added a fifth, `ui-px` vs `ui-oled-bench`; it went the same way
+// for the same reason. His PRODUCTION fence below is kept — it is about the
+// trusted display, not about the dead bench backend.
+
+#[cfg(all(feature = "mode-production", feature = "ui-px", not(feature = "ui-lcd")))]
+compile_error!(
+    "`ui-px` in a `mode-production` image requires the physical NV3007 (`ui-lcd`): \
+     the text presenter is a QEMU / bench aid, not a trusted display."
+);
+
 // At least one UI backend must be selected when targeting actual hardware
 // or QEMU. (Pure `cargo test -p sphincs-tz-secure --tests` builds run on
 // the host with neither stm32u585 nor any UI backend — those are exempt
@@ -4966,8 +5196,9 @@ compile_error!(
     ))
 ))]
 compile_error!(
-    "Exactly one UI backend must be selected: `ui-semihosting`, `ui-noop`, \
-     or `ui-lcd`. (`ui-capture` composes with any backend.)"
+    "Exactly one UI backend must be selected: `ui-semihosting`, `ui-noop` or \
+     `ui-lcd`. (`ui-capture` composes with any backend.) The bench-only \
+     `ui-oled-bench` SSD1306 backend was removed 2026-09-23."
 );
 
 // ---------------------------------------------------------------------------
@@ -5090,6 +5321,231 @@ pub(super) const SIGN_SNAP_BUF_LEN: usize =
 /// then wiped) inside a single handler invocation, under the non-reentrant
 /// dispatcher — never aliased across handlers.
 pub(super) static mut SIGN_SNAP_BUF: [u8; SIGN_SNAP_BUF_LEN] = [0u8; SIGN_SNAP_BUF_LEN];
+
+/// The pixel-UI screen transcript (`ui-px`) is NOT a static of its own: it
+/// overlays the tail of [`SIGN_SNAP_BUF`] that the single-sign handler never
+/// fills (its snapshot maximum is well below the batch maximum the buffer is
+/// sized for). Costing ~10 KB of BSS instead collided with the batch
+/// handler's stack on QEMU's 128 KB SRAM — the exact BSS-vs-stack class the
+/// shared buffer exists to prevent. The single handler splits its snapshot
+/// off the front of the buffer and hands the remainder here.
+#[cfg(feature = "ui-px")]
+const _: () = assert!(core::mem::align_of::<pqsigner_ui_px::Screens>() == 1);
+
+/// View a scratch byte region as the screen transcript (no copy). `None`
+/// when the region is too small.
+#[cfg(feature = "ui-px")]
+fn px_screens_view(scratch: &mut [u8]) -> Option<&mut pqsigner_ui_px::Screens> {
+    if scratch.len() < pqsigner_ui_px::SCREENS_BYTES {
+        return None;
+    }
+    let p = scratch.as_mut_ptr().cast::<pqsigner_ui_px::Screens>();
+    // SAFETY: `Screens` is `#[repr(C)]`, alignment 1 (asserted above), made
+    // only of `u8` arrays so every bit pattern is a valid value, and the
+    // region is at least `SCREENS_BYTES` long. The unique `&mut [u8]` borrow
+    // is reborrowed for the returned lifetime, so no other reference to those
+    // bytes is live meanwhile.
+    Some(unsafe { &mut *p })
+}
+
+/// Confirm a sign request through the pixel UI: build the screen transcript
+/// from the SAME verified inputs the legacy pages were built from, bind it
+/// to the already-proven `pages`, and run the design's confirm loop.
+///
+/// The legacy `pages` stay the proof substrate: every dispatcher / trailer
+/// `*_proof` has already run over them. The lift (`tx::display::px_lift`)
+/// re-emits the route body (Safe, a single-UserOp family, or the rotation
+/// consent) AND the handler's trailers as design screens (twice,
+/// hash-compared; every trailer screen derived from the same page builder as
+/// its proven page), appends the returning hero and the design's `Confirm?`,
+/// and proves the assembly — no `Legacy` record anywhere — before anything
+/// is shown. Any failure is a refusal — never a fall-back to the page
+/// dialog.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    inputs: &crate::tx::display::px_lift::ContentInputs<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    use crate::tx::display::px_lift;
+    let screens = px_screens_view(scratch).ok_or("px scratch")?;
+    let receipt = px_lift::emit_content(screens, inputs).map_err(|()| "px body")?;
+    let body_len = receipt.body.legacy_pages;
+    px_lift::append_returning_hero(screens).map_err(|()| "px hero")?;
+    let confirm_at = px_lift::insert_confirm(screens, &receipt.family).map_err(|()| "px confirm")?;
+    crate::fi::scrub_sentinel_register();
+    let verdict =
+        px_lift::transcript_proof(screens, pages, &inputs.body, body_len, &receipt, inputs.trailers, confirm_at);
+    crate::fi::scrub_sentinel_register();
+    if verdict != crate::fi::OK_SENTINEL {
+        return Err("px transcript");
+    }
+    // The glyph atlas is a WYSIWYS input that lives in the NS slot: prove it
+    // against the pinned root right before the dialog paints with it, and
+    // again after the user's answer — a swap during the dialog is a refusal.
+    #[cfg(feature = "ui-lcd")]
+    let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| "px atlas")?;
+    #[cfg(not(feature = "ui-lcd"))]
+    let atlas = ();
+    // The endings (decline resolve, signing film) wear this family's disc
+    // and captions.
+    #[cfg(feature = "ui-lcd")]
+    crate::ui::px::lcd::set_film_look(receipt.family.look, receipt.family.signed, receipt.family.declined);
+    let out = crate::ui::px::confirm_screens_checked(screens, &atlas);
+    // The transcript holds no secret, but leave nothing stale behind.
+    screens.volatile_poison_and_reset();
+    #[cfg(feature = "ui-lcd")]
+    {
+        drop(atlas);
+        crate::fi::scrub_sentinel_register();
+        if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+            return Err("px atlas changed");
+        }
+        crate::fi::scrub_sentinel_register();
+    }
+    Ok(out)
+}
+
+/// A pixel consent outside the sign path (port step 4: the firmware
+/// update's two consents). `build` writes the transcript into the shared
+/// snapshot buffer — free here: no sign handler is running under the
+/// non-reentrant dispatcher — the design's flow rules are checked
+/// (`check::check_flow`), and the dialog runs against a freshly verified
+/// atlas that is re-proven after the answer. `Err` = the pixel path cannot
+/// run (no verified atlas, a transcript error): the caller shows its page
+/// dialog instead, whose glyphs are secure-resident — a broken NS atlas
+/// must never make the firmware update, the way to repair it, unreachable.
+#[cfg(feature = "ui-px")]
+pub(crate) fn px_confirm_plain(
+    build: impl FnOnce(&mut pqsigner_ui_px::Screens) -> Result<(), ()>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    #[cfg(feature = "ui-lcd")]
+    let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| "px atlas")?;
+    #[cfg(not(feature = "ui-lcd"))]
+    let atlas = ();
+    // SAFETY: single-threaded dispatcher; only sign handlers borrow the
+    // shared snapshot buffer and none is in flight during this handler, so
+    // this is the unique reference for the duration of the dialog.
+    let buf = unsafe { &mut *core::ptr::addr_of_mut!(SIGN_SNAP_BUF) };
+    let screens = px_screens_view(buf).ok_or("px scratch")?;
+    if build(screens).is_err() || pqsigner_ui_px::check::check_flow(screens).is_err() {
+        screens.volatile_poison_and_reset();
+        return Err("px transcript");
+    }
+    // No film plays on these consents (nothing is signed); the handler's own
+    // status (CANCELED, …) follows the answer.
+    let out = crate::ui::px::confirm_screens_checked(screens, &atlas);
+    screens.volatile_poison_and_reset();
+    #[cfg(feature = "ui-lcd")]
+    {
+        drop(atlas);
+        crate::fi::scrub_sentinel_register();
+        if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+            // The answer was given against glyphs that changed: refuse.
+            return Ok((crate::ui::confirm::ConfirmResult::Cancelled, crate::fi::FAIL_SENTINEL));
+        }
+        crate::fi::scrub_sentinel_register();
+    }
+    Ok(out)
+}
+
+/// The Safe route (`px_confirm` over the Safe body).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_safe(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    tx_chain_id: u64,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    resolver: &crate::names::NameResolver<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let meta = crate::tx::display::safe_route_meta(tx_chain_id, safe_v1, safe_exec, erc20);
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Safe {
+            safe_v1,
+            safe_exec,
+            cow,
+            erc20: meta,
+            resolver,
+        },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// A single-UserOp route (value / contract call, ERC-20, typed call, blind).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_userop(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    body: crate::tx::display::userop_screens::UserOpInputs<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::UserOp(body),
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// A direct CoW Swap order (no Safe context).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_cow(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    v3: &crate::tx::eip712::cowswap::VerifiedCowswapV3,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Cow { v3 },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// An authenticated ERC-7730 render: the body is the proven page range
+/// before the handler's trailers.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_erc7730(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    family: crate::tx::display::userop_screens::Family,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let tail = crate::tx::display::expected_trailer_count(facts);
+    let body_len = pages.len.checked_sub(tail).ok_or("px body")?;
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Erc7730 {
+            pages,
+            start: 0,
+            body_len,
+            chain_id,
+            family,
+        },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// The slot-rotation consent.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_rotation(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    slot_index: u32,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Rotation { chain_id, slot_index },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
 
 /// HIGH-7 guard: depth counter incremented on handler entry,
 /// decremented on exit. SysTick refuses to wipe when depth > 0 so
@@ -5271,9 +5727,14 @@ pub unsafe fn gated_unlock(
         crate::fi::wait_random();
         let pre_count_b = crate::hw::flash::pin_attempts_read();
         if pre_count_a != pre_count_b {
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::CounterUnstable,
+                pre_count_a,
+            );
             return Err(UnlockError::PinLocked);
         }
         let pre_count = pre_count_a;
+        crate::pin_attempt_log::note_precharge(pre_count);
 
         // Affirmative "allowed to proceed" — Hamming-distant sentinel
         // returned only on a clean `pre_count < MAX_ATTEMPTS`. The
@@ -5282,6 +5743,11 @@ pub unsafe fn gated_unlock(
             || pre_count < sphincs_tz_shared::MAX_ATTEMPTS,
         );
         if allowed != crate::fi::OK_SENTINEL {
+            // Short-circuit at MAX: nothing burned, nothing wiped here.
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
+                pre_count,
+            );
             return Err(UnlockError::PinLocked);
         }
 
@@ -5312,6 +5778,10 @@ pub unsafe fn gated_unlock(
                 && unsafe { crate::hw::flash::pin_attempts_read() } == pre_count + 1
         });
         if bumped != crate::fi::OK_SENTINEL {
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::PrechargeFailed,
+                pre_count,
+            );
             // Flash write fault (PROGERR / readback mismatch), a faulted or
             // skipped bump, or the counter did not advance by exactly one.
             // Refuse without ever calling the SE driver.
@@ -5421,18 +5891,42 @@ pub unsafe fn gated_unlock(
                 let reset_ok =
                     crate::fi::check_true_into_sentinel(|| reset_result.is_ok());
                 if reset_ok != crate::fi::OK_SENTINEL {
+                    // The PIN was CORRECT but the counter stayed charged.
+                    // Repeat this and the budget walks to a lockout with the
+                    // user doing nothing wrong — the self-brick the comment
+                    // above describes, now visible instead of silent (#715).
+                    crate::pin_attempt_log::record_outcome(
+                        crate::pin_attempt_log::AttemptReason::OkResetFailed,
+                    );
                     return Err(UnlockError::InternalError);
                 }
             }
+            crate::pin_attempt_log::record_outcome(
+                crate::pin_attempt_log::AttemptReason::OkReset,
+            );
             Ok(master)
         }
         Ok(_) => {
             // FI inconsistency between the two reads of `result.is_ok()` (or a
             // glitched `verdict`) — refuse without resetting the MCU counter.
             // Counter stays bumped from the pre-commit above.
+            crate::pin_attempt_log::record_outcome(
+                crate::pin_attempt_log::AttemptReason::NoVerdict,
+            );
             Err(UnlockError::InternalError)
         }
-        Err(e) => Err(e),
+        Err(e) => {
+            // A real chip-side verdict is what the budget exists for; anything
+            // else burned an attempt without judging the PIN.
+            crate::pin_attempt_log::record_outcome(match e {
+                UnlockError::PinIncorrect => {
+                    crate::pin_attempt_log::AttemptReason::PinIncorrect
+                }
+                UnlockError::PinLocked => crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
+                _ => crate::pin_attempt_log::AttemptReason::NoVerdict,
+            });
+            Err(e)
+        }
     }
 }
 
@@ -5628,6 +6122,13 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_LOCK => cmd_lock::run(),
         #[cfg(feature = "e2e-test")]
         sphincs_tz_shared::CMD_TEST_PIN_LOCKOUT => cmd_test_pin_lockout::run(),
+        // PRESENT IN PRODUCTION, deliberately: its whole purpose is explaining
+        // a lockout on a shipped unit, and shipping images carry no debug-log.
+        // Read-only, no secret material — see the disclosure note in
+        // `crate::pin_attempt_log`. Placed ABOVE the prodtest block so it is
+        // not mistaken for a prodtest-gated command.
+        sphincs_tz_shared::CMD_GET_PIN_ATTEMPT_LOG => cmd_pin_attempt_log::run(args),
+
         // Prodtest commands — only present in the `prodtest` build
         // profile, never in production firmware.
         #[cfg(feature = "prodtest")]
@@ -5666,6 +6167,12 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         sphincs_tz_shared::CMD_PRODTEST_BUTTON_TEST => {
             prodtest::cmd_button_test_run(args)
         }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_RGB_TEST => prodtest::cmd_rgb_test_run(args),
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_RGB_OSD => prodtest::cmd_rgb_osd_run(args),
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_RNG_CONFIG => prodtest::cmd_rng_config_run(args),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -5838,6 +6345,19 @@ pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
 // Prodtest CMSE veneers (`prodtest` feature)
 // ---------------------------------------------------------------------------
 
+/// CMD_GET_PIN_ATTEMPT_LOG (4) — why each PIN attempt was consumed (#715).
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { cmd_pin_attempt_log::run(&args) };
+    secure_log!("[NSC] get_pin_attempt_log -> {}", r);
+    r
+}
+
 /// CMD_PRODTEST_GET_ID (100) — read STM32 UID + firmware version.
 #[cfg(feature = "prodtest")]
 #[no_mangle]
@@ -5979,6 +6499,51 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_button_test(out_ptr: u32) -> u
     };
     let r = unsafe { prodtest::cmd_button_test_run(&args) };
     secure_log!("[NSC] prodtest_button_test -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_RGB_TEST (110) — light the 9 RGB LEDs and report the AW21036's
+/// identity, a bus scan and an ACK tally. `in_ptr` is 6 bytes
+/// `[r, g, b, gcc, en, reserved]`; `out_ptr` is 24 bytes.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: in_ptr,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_rgb_test_run(&args) };
+    secure_log!("[NSC] prodtest_rgb_test -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_RNG_CONFIG (112) — TRNG certified-configuration receipt.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rng_config(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_rng_config_run(&args) };
+    secure_log!("[NSC] prodtest_rng_config -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_RGB_OSD (111) — per-channel open/short detection. `in_ptr` is
+/// 4 bytes `[gcc, en, reserved, reserved]`; `out_ptr` is 24 bytes.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_osd(in_ptr: u32, out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: in_ptr,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_rgb_osd_run(&args) };
+    secure_log!("[NSC] prodtest_rgb_osd -> {}", r);
     r
 }
 

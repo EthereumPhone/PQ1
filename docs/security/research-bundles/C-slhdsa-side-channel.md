@@ -182,10 +182,43 @@ const CFI_STEP_VERIFY_GATE: u32 = 0x17_60_79BD;
 /// no runtime enum can fault a forced request into the ordinary charge path.
 struct VerifiedRateCharge(u32);
 
+/// Build the `(first_half, second_half)` progress pair for `$sink` (#759).
+///
+/// The FI countermeasure signs TWICE, so a single callback handed to both
+/// signs ramps 0..100 and then 0..100 again — on the text route
+/// `ui::show_progress` renders a real percentage, so the bar counts to 100,
+/// drops to 0 and climbs again, which on a trusted display reads as a
+/// failed-and-retrying operation. Handing `|_| {}` to the second sign instead
+/// freezes the pixel signing film for seconds, which reads as a hang. The
+/// phases are therefore SCALED: sign A into 0..=50, sign B into 50..=100.
+///
+/// It is a macro rather than a function because
+/// `SigningKey::sign_with_shuffle` takes `progress: fn(u8)` — a bare pointer,
+/// deliberately: its own doc records that the arrow type is already the limit
+/// of what the Aeneas Lean extraction can represent, which is why that method
+/// is `#[cfg(not(lean_extract))]`. Widening it to `impl Fn(u8)` would push an
+/// active FV boundary further, and a capturing closure cannot coerce to
+/// `fn(u8)`. Expanding two `fn` items per call site keeps the scaling
+/// compile-time and STATELESS — an earlier attempt routed the sink through a
+/// `static mut` and raced under the host test harness, which runs tests on
+/// parallel threads even though the device is single-threaded.
+#[macro_export]
+macro_rules! progress_halves {
+    ($sink:path) => {{
+        fn first_half(pct: u8) {
+            $sink(pct / 2);
+        }
+        fn second_half(pct: u8) {
+            $sink(50 + pct / 2);
+        }
+        (first_half as fn(u8), second_half as fn(u8))
+    }};
+}
+
 pub fn c10_sign_verified_with_progress(
     sk: &sphincs_c10::SigningKey,
     msg_hash: &[u8; 32],
-    progress: fn(u8),
+    progress: (fn(u8), fn(u8)),
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
     #[cfg(not(test))]
     {
@@ -212,7 +245,7 @@ pub fn c10_sign_verified_with_progress(
 pub(crate) fn c10_sign_verified_forced_with_progress(
     sk: &sphincs_c10::SigningKey,
     msg_hash: &[u8; 32],
-    progress: fn(u8),
+    progress: (fn(u8), fn(u8)),
     rate_receipt: &crate::sign_rate::ForcedRateReceipt,
     request_digest: &[u8; 32],
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
@@ -238,7 +271,7 @@ pub(crate) fn c10_sign_verified_forced_with_progress(
 fn c10_sign_verified_with_progress_inner(
     sk: &sphincs_c10::SigningKey,
     msg_hash: &[u8; 32],
-    progress: fn(u8),
+    progress: (fn(u8), fn(u8)),
     verified_rate_charge: VerifiedRateCharge,
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
     use subtle::ConstantTimeEq;
@@ -303,7 +336,7 @@ fn c10_sign_verified_with_progress_inner(
     //
     // **Non-deterministic OptRand (work-todo #18 / Trezor parity).**
     // We draw a fresh 16-byte randomiser per signing call via
-    // `hw::rng_strong::fill` (STM32 TRNG ⊕ OPTIGA TRNG ⊕ SE050 TRNG,
+    // `rng_strong::fill` (STM32 TRNG ⊕ OPTIGA TRNG ⊕ SE050 TRNG,
     // 3-source XOR mirroring Trezor's `rng_fill_buffer_strong`).
     // Defends against:
     //   - the deterministic-PRF-tree class (Genêt TCHES 2023): adding
@@ -327,9 +360,9 @@ fn c10_sign_verified_with_progress_inner(
     // per sign would still be cryptographically sound but would
     // produce divergent sigs, breaking the byte-equality FI gate.
     //
-    // Under `mock-se` (no SE backend) the strong-RNG falls through to
-    // STM32 TRNG only. Under any real-SE feature flag the active
-    // backend's `random()` is XOR-mixed in.
+    // Under `mock-se` (QEMU/dev only) the strong-RNG uses the platform source.
+    // Hardware production is compile-fenced to both source-specific SE calls;
+    // either missing/failing/non-contributing chip aborts the signature.
     let mut opt_rand_buf = [0u8; sphincs_c10::params::N];
     #[cfg(not(test))]
     if crate::rng_strong::fill(&mut opt_rand_buf).is_err() {
@@ -445,10 +478,15 @@ fn c10_sign_verified_with_progress_inner(
     crate::fi::zeroize_barrier();
     cfi.bump(CFI_STEP_SHUFFLE);
 
-    let sig_a = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_a, progress);
+    let sig_a = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_a, progress.0);
     cfi.bump(CFI_STEP_SIGN_A);
     crate::fi::wait_random();
-    let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_b, |_| {});
+    // The SECOND HALF of the same ramp (#759), so the film keeps moving on the
+    // pixel route and the percentage continues upward on the text route rather
+    // than restarting at 0. Like `sign_a`'s it returns unit, captures nothing
+    // and receives only a percentage, so it cannot touch the CFI chain, the
+    // compare, or the verify-before-release gates below.
+    let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_b, progress.1);
     cfi.bump(CFI_STEP_SIGN_B);
 
     // Constant-time comparison of the 4008-byte signatures.
@@ -623,6 +661,18 @@ pub fn provision_from_mnemonic(
 /// generation is feature-gated in one place. Returns `Err` (rather than
 /// panicking) so the caller can roll back the real wallet atomically.
 #[cfg(feature = "duress-pin")]
+fn fill_strong_with_store<const N: usize>(
+    store: &mut impl crate::secure_element::WalletStore,
+    out: &mut [u8; N],
+) -> Result<(), crate::secure_element::SeError> {
+    // Calling the global entry point while `store` is already borrowed would
+    // alias the backend. The explicit-handle API executes the same mandatory
+    // STM32 + OPTIGA + SE050 composition without re-entering the global.
+    crate::rng_strong::fill_with_store(out, store)
+        .map_err(|()| crate::secure_element::SeError::InternalError)
+}
+
+#[cfg(feature = "duress-pin")]
 fn provision_duress_wallet(
     store: &mut impl crate::secure_element::WalletStore,
     duress_pin: Option<&[u8; 8]>,
@@ -631,15 +681,7 @@ fn provision_duress_wallet(
     // (OPTIGA ⊕ SE050 via the store) — same multi-source quality as the
     // real seed path, no re-entrancy (we are not inside a store method).
     let mut decoy_entropy = [0u8; 32];
-    crate::rng::fill(&mut decoy_entropy)
-        .map_err(|_| crate::secure_element::SeError::InternalError)?;
-    let mut se_buf = [0u8; 32];
-    if store.random(&mut se_buf).is_ok() {
-        for i in 0..32 {
-            decoy_entropy[i] ^= se_buf[i];
-        }
-    }
-    se_buf.zeroize();
+    fill_strong_with_store(store, &mut decoy_entropy)?;
 
     // Resolve the duress PIN: user-chosen, or a fresh random 8 bytes when
     // declined (never entered by anyone → unguessable; the chip can't
@@ -648,8 +690,11 @@ fn provision_duress_wallet(
     let mut actual_duress_pin: [u8; 8] = match duress_pin {
         Some(p) => *p,
         None => {
-            crate::rng::fill(&mut random_pin)
-                .map_err(|_| crate::secure_element::SeError::InternalError)?;
+            if let Err(e) = fill_strong_with_store(store, &mut random_pin) {
+                decoy_entropy.zeroize();
+                crate::fi::zeroize_barrier();
+                return Err(e);
+            }
             random_pin
         }
     };
@@ -904,6 +949,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // slice below (with `total_len <= SNAP_LEN`, checked at the header
     // length gate above) can never overrun.
     const _: () = assert!(SNAP_LEN <= super::SIGN_SNAP_BUF_LEN);
+    // `ui-px`: the screen transcript overlays the buffer beyond SNAP_LEN.
+    #[cfg(feature = "ui-px")]
+    const _: () = assert!(super::SIGN_SNAP_BUF_LEN - SNAP_LEN >= pqsigner_ui_px::SCREENS_BYTES);
     // M1 fix: wipe any leftover payload from the PREVIOUS sign before
     // we fill it with this request.
     {
@@ -912,7 +960,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             *b = 0;
         }
     }
-    let snap_full = &mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF);
+    // The pixel UI (`ui-px`) overlays its screen transcript on the tail of the
+    // shared buffer beyond this handler's own snapshot maximum — disjoint
+    // bytes, split once here so no two live borrows overlap.
+    let (snap_full, px_scratch) =
+        (&mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF)).split_at_mut(SNAP_LEN);
     let snap = &mut snap_full[..total_len];
     for i in 0..total_len {
         snap[i] = core::ptr::read_volatile(payload_ptr.add(i));
@@ -2178,10 +2230,58 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             ui::show_status("Sign refused", "gas conflict");
             return NscStatus::InternalError as u32;
         }
-        let (cr, cr_verdict) = confirm_checked(rotate_pages.as_slice());
+        // Pixel trusted UI (`ui-px`): the rotation consent is re-emitted as
+        // design screens (rotation body + the signer / lane / gas trailer
+        // twins), bound to the proven `rotate_pages` by the same lift proof.
+        let px_rotation_facts = crate::tx::display::TrailerFacts {
+            tx: &tx_for_display,
+            legacy_fee_required: false,
+            paymaster_and_data_hash: &paymaster_and_data_hash,
+            account_index,
+            sender: &sender,
+            target: &to_address,
+            nonce: &nonce,
+            call_gas: &call_gas_limit,
+            verification_gas: &verification_gas_limit,
+            pre_verification_gas: &pre_verification_gas,
+            fingerprint: crate::tx::display::erc8213::Kind::CalldataDigest(
+                pqsigner_tx_core::erc8213::calldata_digest(inner_data),
+            ),
+            deployment: None,
+            set: crate::tx::display::TrailerSet::Rotation,
+            fingerprint2: None,
+            offchain: None,
+        };
+        let px_rotation = px_route_rotation(px_scratch, &rotate_pages, chain_id, slot_index, &px_rotation_facts);
+        #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+        let px_rotation_route = px_rotation.is_some();
+        let (cr, cr_verdict) = match px_rotation {
+            Some(Ok(r)) => r,
+            Some(Err(reason)) => {
+                ui::show_status("Sign refused", reason);
+                return NscStatus::InternalError as u32;
+            }
+            None => confirm_checked(rotate_pages.as_slice()),
+        };
         match cr {
-            ConfirmResult::Confirmed => {}
+            ConfirmResult::Confirmed => {
+                #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+                if px_rotation_route {
+                    crate::fi::scrub_sentinel_register();
+                    if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+                        super::zeroize_sensitive_state();
+                        ui::show_status("Sign refused", "px atlas");
+                        return NscStatus::InternalError as u32;
+                    }
+                    crate::fi::scrub_sentinel_register();
+                }
+            }
             ConfirmResult::Cancelled => {
+                #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+                if px_rotation_route {
+                    crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Declined);
+                    return NscStatus::UserRejected as u32;
+                }
                 ui::show_status("Cancelled", "");
                 return NscStatus::UserRejected as u32;
             }
@@ -2562,10 +2662,81 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign refused", "deploy changed");
         return NscStatus::InternalError as u32;
     }
-    let (cr, cr_verdict) = confirm_checked(pages.as_slice());
+    // Pixel trusted UI (`ui-px`): the proven `pages` stay the proof
+    // substrate; the Safe route and every single-UserOp route are re-emitted
+    // as design screens, bound to them by `px_lift::transcript_proof`, and
+    // confirmed through the design's grammar. The structured routes still to
+    // be ported (direct CoW, ERC-7730) — and every build without `ui-px` —
+    // keep the page dialog.
+    // The facts every trailer page above was painted from, for the pixel
+    // route's native trailer twins (`tx::display::trailer_screens`): the
+    // same values, never the pages and never companion bytes.
+    let px_trailer_facts = crate::tx::display::TrailerFacts {
+        tx: &tx_for_display,
+        legacy_fee_required: legacy_fee_pages_required,
+        paymaster_and_data_hash: &paymaster_and_data_hash,
+        account_index,
+        sender: &sender,
+        target: &to_address,
+        nonce: &type2_nonce,
+        call_gas: &call_gas_limit,
+        verification_gas: &verification_gas_limit,
+        pre_verification_gas: &pre_verification_gas,
+        fingerprint: fingerprint_kind,
+        deployment: Some(&deployment_context),
+        set: crate::tx::display::TrailerSet::Sign,
+        fingerprint2: None,
+        offchain: None,
+    };
+    let px_decision = px_route_confirm(
+        px_scratch,
+        &pages,
+        chain_id,
+        safe_v1_verified.as_ref(),
+        safe_exec_verified.as_ref(),
+        cow_order_verified.as_ref(),
+        chain_verified_meta.as_ref(),
+        &resolver,
+        &px_trailer_facts,
+        &tx_for_display,
+        inner_data,
+        selector_verified.as_ref(),
+        erc7730_verified.is_some(),
+    );
+    // Whether the pixel UI owns this confirmation (and therefore its ending).
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    let px_route = px_decision.is_some();
+    let (cr, cr_verdict) = match px_decision {
+        Some(Ok(r)) => r,
+        Some(Err(reason)) => {
+            ui::show_status("Sign refused", reason);
+            return NscStatus::InternalError as u32;
+        }
+        None => confirm_checked(pages.as_slice()),
+    };
     match cr {
-        ConfirmResult::Confirmed => {}
+        ConfirmResult::Confirmed => {
+            // Second, spatially separate re-proof of the NS-resident glyph
+            // atlas the pixel dialog just painted with (the first sits in
+            // `px_confirm_safe`): the handler does not trust the returned
+            // tuple alone, same A/B shape as the dispatch final gates.
+            #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+            if px_route {
+                crate::fi::scrub_sentinel_register();
+                if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+                    super::zeroize_sensitive_state();
+                    ui::show_status("Sign refused", "px atlas");
+                    return NscStatus::InternalError as u32;
+                }
+                crate::fi::scrub_sentinel_register();
+            }
+        }
         ConfirmResult::Cancelled => {
+            #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+            if px_route {
+                crate::ui::px::lcd::show_ending(pqsigner_ui_px::scene::Ending::Declined);
+                return NscStatus::UserRejected as u32;
+            }
             ui::show_status("Cancelled", "");
             return NscStatus::UserRejected as u32;
         }
@@ -2903,7 +3074,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             let factory_sig = match crate::crypto::c10_sign_verified_with_progress(
                 &c10_sk,
                 &factory_digest,
-                c10_sign_progress_bootstrap,
+                crate::progress_halves!(c10_sign_progress_bootstrap),
             ) {
                 Ok(s) => s,
                 Err(_) => {
@@ -3029,7 +3200,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             let bootstrap_sig = match crate::crypto::c10_sign_verified_with_progress(
                 &c10_sk,
                 &t1_digest,
-                c10_sign_progress_bootstrap,
+                crate::progress_halves!(c10_sign_progress_bootstrap),
             ) {
                 Ok(s) => s,
                 Err(_) => {
@@ -3125,6 +3296,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     let t2_digest = compute_sphincs_digest_v06(&t2_params, &t2_call_digest);
 
+    // The pixel route plays the qubit loading film around the sign (started
+    // here, paced by the signer's opaque progress hook, landed at the
+    // post-release site below); every other route keeps the progress text.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_route {
+        crate::ui::px::lcd::film_start();
+    } else {
+        ui::show_progress("Slot C10 sign", 0);
+    }
+    #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
     ui::show_progress("Slot C10 sign", 0);
     let t2_sig = {
         // SAFETY: category 5 — read-only borrow of `static mut
@@ -3143,7 +3324,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         match crate::crypto::c10_sign_verified_with_progress(
             slot_ref,
             &t2_digest,
-            c10_sign_progress_slot,
+            crate::progress_halves!(c10_sign_progress_slot),
         ) {
             Ok(s) => s,
             Err(_) => {
@@ -3323,9 +3504,24 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     crate::timeout::reset_activity();
-    ui::show_status("Signed", "");
-    for _ in 0..3_000_000u32 {
-        cortex_m::asm::nop();
+    // The pixel route lands the film: the current orbit turn completes,
+    // the pair spirals in, the flash, the check, then the design's
+    // RESULT_HOLD_MS — the film's own hold replaces the legacy spin below.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_route {
+        crate::ui::px::lcd::film_resolve(pqsigner_ui_px::scene::Ending::Signed);
+    } else {
+        ui::show_status("Signed", "");
+        for _ in 0..3_000_000u32 {
+            cortex_m::asm::nop();
+        }
+    }
+    #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
+    {
+        ui::show_status("Signed", "");
+        for _ in 0..3_000_000u32 {
+            cortex_m::asm::nop();
+        }
     }
     ui::show_status("PQSigner OS", "Ready");
 
@@ -3377,10 +3573,23 @@ fn add_one_to_be_u256(v: &mut [u8; 32]) {
 }
 
 fn c10_sign_progress_bootstrap(percent: u8) {
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if crate::ui::px::lcd::film_live() {
+        crate::ui::px::lcd::film_tick(percent);
+        return;
+    }
     crate::ui::show_progress("C10 sign", percent);
 }
 
 fn c10_sign_progress_slot(percent: u8) {
+    // On the pixel route the signer's progress hook paces the film (one
+    // frame at most per period); the pose is a pure function of the S-only
+    // clock, never of `percent`.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if crate::ui::px::lcd::film_live() {
+        crate::ui::px::lcd::film_tick(percent);
+        return;
+    }
     crate::ui::show_progress("Slot C10 sign", percent);
 }
 
@@ -3396,6 +3605,103 @@ fn u128_saturating_from_u256(bytes: &[u8; 32]) -> u128 {
     u128::from_be_bytes(buf)
 }
 
+/// Route a sign confirmation through the pixel UI when `ui-px` is on.
+/// `None` means "use the page dialog" (the feature is off);
+/// `Some(Err(reason))` is a refusal, never a fall-back.
+///
+/// The precedence is `dispatch::pick_sign_pages_inner`'s: a verified Safe
+/// context wins (the Safe surface, CoW-wrapped or not), then a direct CoW
+/// order (its page painter re-run binds the body), then an authenticated
+/// ERC-7730 render (laid out from the proven page range itself), and
+/// everything below them is a single-UserOp route whose body the lift binds
+/// by re-running its page painter.
+#[cfg(feature = "ui-px")]
+#[allow(clippy::too_many_arguments)]
+fn px_route_confirm(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    resolver: &crate::names::NameResolver<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+    tx: &crate::tx::eip1559::Eip1559Tx,
+    inner_data: &[u8],
+    selector: Option<&crate::selectors::SelectorMeta<'_>>,
+    erc7730_present: bool,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    if safe_v1.is_some() || safe_exec.is_some() {
+        return Some(super::px_confirm_safe(scratch, pages, chain_id, safe_v1, safe_exec, cow, erc20, resolver, facts));
+    }
+    if let Some(v3) = cow {
+        return Some(super::px_confirm_cow(scratch, pages, v3, facts));
+    }
+    if erc7730_present {
+        let target = tx.to.unwrap_or([0u8; 20]);
+        let family = crate::tx::display::erc7730_screens::family(
+            crate::tx::display::erc7730_screens::Surface::Contract,
+            &target,
+        );
+        return Some(super::px_confirm_erc7730(scratch, pages, chain_id, family, facts));
+    }
+    let body = crate::tx::display::userop_screens::UserOpInputs {
+        tx,
+        inner_data,
+        erc20,
+        selector,
+        resolver,
+    };
+    Some(super::px_confirm_userop(scratch, pages, body, facts))
+}
+
+/// Route the slot-rotation consent through the pixel UI when `ui-px` is on
+/// (`None` = the page dialog).
+#[cfg(feature = "ui-px")]
+fn px_route_rotation(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    slot_index: u32,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    Some(super::px_confirm_rotation(scratch, pages, chain_id, slot_index, facts))
+}
+
+#[cfg(not(feature = "ui-px"))]
+#[inline(always)]
+fn px_route_rotation(
+    _scratch: &mut [u8],
+    _pages: &crate::tx::display::Pages,
+    _chain_id: u64,
+    _slot_index: u32,
+    _facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    None
+}
+
+#[cfg(not(feature = "ui-px"))]
+#[inline(always)]
+#[allow(clippy::too_many_arguments)]
+fn px_route_confirm(
+    _scratch: &mut [u8],
+    _pages: &crate::tx::display::Pages,
+    _chain_id: u64,
+    _safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    _safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    _cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    _erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    _resolver: &crate::names::NameResolver<'_>,
+    _facts: &crate::tx::display::TrailerFacts<'_>,
+    _tx: &crate::tx::eip1559::Eip1559Tx,
+    _inner_data: &[u8],
+    _selector: Option<&crate::selectors::SelectorMeta<'_>>,
+    _erc7730_present: bool,
+) -> Option<Result<(crate::ui::confirm::ConfirmResult, u32), &'static str>> {
+    None
+}
+
 ```
 
 
@@ -3409,6 +3715,9 @@ edition.workspace = true
 
 [dependencies]
 sphincs-tz-shared = { workspace = true }
+# Shared STM32U585 drivers (typed MMIO + HASH). `debug-log` mirrors this
+# crate's own flag so the semihosting diagnostics keep working here.
+pqsigner-hw = { workspace = true }
 sphincs-tz-bip39  = { workspace = true, features = ["full-wordlist"] }
 fw-manifest       = { workspace = true }
 # Frozen §5 flash-geometry registry (Draft 1.1, post-errata-4): the single
@@ -3454,6 +3763,10 @@ pqsigner-tx       = { workspace = true }
 # rendering layer lives in `secure/src/tx/display/erc7730/` and
 # depends on this crate.
 pqsigner-erc7730  = { workspace = true }
+# Pixel trusted-UI substrate (Screen transcript, tier fitter, motion, input,
+# rasteriser). Always linked so the host test mounts see it; the `ui-px`
+# feature switches the firmware wiring on.
+pqsigner-ui-px = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c10 = { workspace = true }
@@ -3584,14 +3897,81 @@ legacy-fw-rollback-unsafe = []
 # temporary: the first reviewed `erc8176-verified` root rotation MUST remove
 # `erc7730-dev-unattested` from these aliases in the same change, because the
 # generated verified-root fence intentionally rejects a stale warning feature.
-debug-log = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested"]
+debug-log = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested", "pqsigner-hw/debug-log"]
 mock-se = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested"]
 ui-semihosting = []
 ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger)
+# Pixel trusted UI (PQ-UI design system port, pilot = the Safe sign flow).
+# Additive over the backend axis: with `ui-lcd` the strip rasteriser paints
+# the panel; with `ui-semihosting` the screens print as text for QEMU e2e.
+# Mutually exclusive with `ui-oled-bench` (16x4-only bench backend).
+ui-px = []
+# `ui-px` at SPI ÷4 = 40 MHz (production board without the dev kit's LED on SCK).
+ui-px-spi40 = ["ui-px", "ui-lcd"]
+# Bench-only: overlay the previous frame's render / blit / period (ms) in the
+# top-left of every pixel-UI frame (DWT cycle counter). NEVER ship.
+ui-px-frametime = ["ui-px", "ui-lcd"]
 # Real STM32U585 hardware target (vs QEMU mps2-an505). Pulls in `hw-sha256`
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.
 stm32u585 = ["sphincs-tz-shared/stm32u585", "hw-sha256"]
+
+# ---------------------------------------------------------------------------
+# Board axis — which physical board an `stm32u585` image targets.
+#
+# `secure/src/board/` holds one pin/peripheral map per board and re-exports
+# the selected one, so drivers name a constant instead of a port base.
+#
+#   board-iota2  ST B-U585I-IOT02A dev board, STM32U585AII6 (169-pin BGA).
+#   board-pq1    AL_A66_MB_V10 production board, STM32U585CIU6 (48-pin
+#                UFQFPN — only PA0-15, PB0-15 and PC13 are bonded).
+#
+# Naming a board is MANDATORY on every `stm32u585` build: `secure/src/board/
+# mod.rs` hard-errors if neither feature is set, and if both are.
+#
+# This used to read "selection is *opt-in to pq1* ... `board-iota2` therefore
+# carries no implications". That model was retracted in a15561b4 and the text
+# is preserved here only as a warning, because the belief it encoded is what
+# caused the bug: `#[cfg(feature = "board-pq1")] compile_error!` fences are
+# SILENT when the feature is absent, so a recipe that omitted the board did not
+# fail — it compiled the iota2 pin map and every pq1 fence went quiet. That is
+# how `build-hw-prodtest BOARD=pq1` came to compile iota2 pins onto pq1
+# silicon. `board-iota2` is load-bearing; treating it as inert is what let
+# seven build sites drift.
+#
+# Use `make <target> BOARD=pq1`, which sets the feature and the probe-rs chip
+# name together with `override`, so neither can be detached from the other.
+board-iota2 = []
+board-pq1 = []
+
+# Bench-only, read-only secure-element address probe (`hw::se_i2c_probe`).
+# Answers "does the chip at this address ACK?" and nothing else: every probe
+# is a zero-data-byte transfer, so no payload reaches either part. Exists
+# because on a production board the OPTIGA is virgin and its lifecycle
+# transitions are irreversible — this is the one SE check that is safe to run
+# on hardware you cannot replace. NEVER SHIP: it is a diagnostic, and it is
+# listed in the Makefile's PROD_FORBIDDEN.
+se-i2c-probe = []
+
+# LCD-only secure-element diagnostic for a probe-less board (EVT over DFU):
+# after the panel is up, runs TRNG / SE050 init+random / OPTIGA init+pair+
+# shield+random / rng_strong one step at a time, shows each result on the
+# LCD, then cycles the summary forever. Never reaches the wizard. Performs
+# the SAME SE writes the normal first boot performs (OPTIGA E140 pairing),
+# nothing more. NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
+se-lcd-diag = []
+
+# Bench: hold BOTH buttons while powering up → firmware clears nSWBOOT0/nBOOT0
+# and reloads option bytes, so the chip comes back in the ROM USB-DFU
+# bootloader without a probe or an SBU cable (`hw::dev_dfu`, checked right
+# after `rcc::init`, before any UI/SE/USB code). Pair with
+# `tools/evt-dev-flash.sh`, which restores the boot option bits.
+# NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
+dev-dfu = []
+
+# `ui-oled-bench` (bench-only SSD1306 over bit-banged I2C) was REMOVED
+# 2026-09-23: real NV3007 panels exist now, so the stand-in is not needed.
+# It was the last consumer of `embedded-graphics` outside `ui-lcd`.
 # Route every SHA-256 call in the signing crates through the STM32U585 HASH
 # peripheral (the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`).
 # Without this feature the signing crates use software `sha2::Sha256` — what
@@ -3882,6 +4262,11 @@ ui-lcd = ["spi1-arduino", "gpio-buttons", "dep:embedded-graphics"]
 # (green→red→blue fill loop) to validate the NV3007 wiring + init sequence on
 # real silicon. Pulls in `ui-lcd` (→ `spi1-arduino`). Build via `make lcd-test-hw`.
 lcd-test = ["ui-lcd"]
+# `aw99703-ovp-low` and `aw99703-full-brightness` were #705 bench experiments,
+# REMOVED 2026-09-23 once they had answered their question. Owner decision: keep
+# the shipping OVP at `OVPSEL=001` and the shipping brightness at 0x5FF. Both
+# are recoverable from git (`27f38683`, `0a7ceef4`) if the ODM envelope ever
+# reopens the question; the measurements they produced are recorded on #705.
 # Animated splash-screen preview. Short-circuits `main()` into
 # `ui::splash_test::run`, which ports the three `assets/splash-1{6,7,8}-*.html`
 # revisions (hyperspace / horizon / nebula) to no_std and cycles them on the
@@ -4092,6 +4477,29 @@ se050-scp03-allow-factory-fallback = ["se050-derived-scp03"]
 # the forbidden rotate⊕fallback compile_error: the rotation tool legitimately
 # needs the fallback; only the runtime-signing image must omit it.)
 se050-rotate-scp03 = ["se050-derived-scp03", "se050-scp03-allow-factory-fallback"]
+# Which SE050 VARIANT is fitted, and therefore which published factory SCP03
+# keyset `scp03_logic::PLATFORM_*` must present. OFF = SE050E2 / OEF `0xA921`
+# (the default, because every board we physically have is an E2: the
+# `AL_A66_MB_V10` pq1 board per its schematic, and the OM-SE050ARD-E bench
+# shield). ON = SE050C2 / OEF `0xA201` (`SE050C2HQ1/Z01SDZ`).
+#
+# Getting this wrong is NOT subtle and NOT dangerous — it fails closed with
+# `[SCP03] Card cryptogram MISMATCH` on every `establish()`, because the static
+# keys simply don't match the chip. It is, however, easy to misdiagnose: the
+# `admin_factory_reset` recovery path needs SCP03 too, so a wrong keyset locks
+# the door and the key in the same motion (observed on pq1 silicon 2026-09-17,
+# 11 consecutive mismatches ending in a provisioning panic).
+#
+# Only affects builds that use the PUBLISHED keys, i.e. those WITHOUT
+# `se050-derived-scp03`: every bench HW target (`se050-stress`,
+# `pin-gate-hw-*`, any `e2e-test` image). Shipping builds derive per-device
+# keys and are unaffected by this flag — EXCEPT the rotation tooling
+# (`se050-rotate-scp03`), which must open a factory-key session against a
+# still-factory chip and therefore must name the correct part.
+#
+# A C2 on a plain OM-SE050ARD dev kit is a third case: it presents the separate
+# A375 "Development Board" keyset (ENC `35C25645…`), which is not encoded here.
+se050-part-c2 = []
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.
 se050-admin-wipe-e2e = ["se050"]  # Admin-auth wipe roundtrip test on isolated OID range. Use `make se050-admin-wipe-e2e`.
@@ -4239,6 +4647,9 @@ png = "0.17"
 # `pqsigner_sha256_*` externs. Instead build.rs requires the caller
 # to supply a precomputed 32-byte pubkey file via FSBL_VENDOR_PUBKEY;
 # `make dev-pubkey-fixture` generates one for dev builds.
+# Also pins the NS-resident pixel-UI atlas: `validate_ui_px_assets`
+# recomputes sha256(nonsecure/assets/ui-px/atlas.pq1a) and refuses a stale
+# `src/ui/px/atlas_root.rs`.
 sha2        = "0.10"
 
 [dev-dependencies]
