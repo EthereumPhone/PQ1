@@ -146,7 +146,15 @@ const ISR_RNGEIF: u32 = 1 << 3;
 // AHB2RSTR2 at 0x68). Verified against `stm32u5-0.16.0/src/stm32u585/rcc.rs`
 // lines 172/177.
 // ---------------------------------------------------------------------------
-const RCC: u32 = 0x4602_0C00;
+// SECURE alias (0x5602_xxxx), not the NS one (0x4602_xxxx), and that choice is
+// load-bearing: RM0456 §"SHSI" — "The SHSI configuration and status bits are
+// secured when the SAES is configured as secure." `sau.rs` marks SAES SECURE in
+// `GTZC1_TZSC_SECCFGR3` bit 15, so SHSION/SHSIRDY (CR bits 14/15) are
+// secure-only. Written through the NS alias the enable is silently dropped,
+// SHSIRDY never rises and `init()` fails `ShsiTimeout` — measured on pq1
+// silicon 2026-09-21 on both a bare board and a sealed EVT unit, i.e. the whole
+// DHUK/Tier-1 path was dead from the moment TZSC started securing SAES.
+const RCC: u32 = 0x5602_0C00;
 
 const RCC_CR_SHSION: u32 = 1 << 14;
 const RCC_CR_SHSIRDY: u32 = 1 << 15;
@@ -365,10 +373,33 @@ pub fn self_test() -> Result<(), SaesError> {
         crate::hw::uart::flush();
     }
 
-    // RDP1 boot diagnostic: write fingerprint to OLED so the user can
-    // read it visually even at RDP ≥ 1 where neither SWD nor (hopefully
-    // not) UART work. The caller is responsible for `ui::init()`.
-    #[cfg(feature = "ui-lcd")]
+    // RDP1 boot diagnostic: write the fingerprint to the LCD so it can be read
+    // visually at RDP >= 1, where neither SWD nor (hopefully) UART work. The
+    // caller is responsible for `ui::init()`.
+    //
+    // RE-GATED 2026-09-23. This was `ui-lcd` alone, which is in
+    // `RELEASE_FEATURES` — and `self_test()` is reached in a PRODUCTION build
+    // via `first_boot::run_post_lock_provisioning` (main.rs, gated
+    // `rdp2-self-lock + dual-se`, both shipping) -> `state.rs` ->
+    // `mod.rs::saes_alive()`. So a shipping unit would have drawn this during
+    // the first-boot ceremony.
+    //
+    // Two harms, neither of which is key disclosure — DHUK is hardware-held
+    // and the Tier-1 KDF is `cmac_dhuk`, a different computation:
+    //
+    //   1. It lands on row 3 of the measured-boot fingerprint grid. `run()`
+    //      clears only before painting the words, so the 8-word screen is
+    //      still up when this draws over it — corrupting the invariant #10
+    //      trust anchor during the one ceremony the user is told to watch.
+    //   2. It publishes a stable per-die value derived from DHUK, which is a
+    //      linkable device identifier and a known-plaintext/ciphertext pair
+    //      under the hardware key.
+    //
+    // `saes-self-test` is the harness that actually consumes this line
+    // (`main.rs` deliberately does not overwrite row 3 there) and is NOT in
+    // `RELEASE_FEATURES`. Prodtest is unaffected: it computes its own DHUK
+    // block via `encrypt_ecb_block` and returns it over the gateway.
+    #[cfg(all(feature = "saes-self-test", feature = "ui-lcd"))]
     {
         const HEX: &[u8; 16] = b"0123456789abcdef";
         let mut buf = [0u8; 16];

@@ -81,6 +81,18 @@ pub enum FirstBootError {
     /// A per-device flash page (123..=127) is not blank at ship — a planted
     /// journal/salt, or a used bench part.
     PerDevicePageNotBlank = 0x080B,
+    /// Ship-profile: `WRP2A` does not write-protect the BANK-2 FSBL mirror
+    /// (`ObField::Wrp2a`). Added 2026-09-24 — the profile previously did not
+    /// even receive `WRP2AR`, so the mirror the frozen geometry requires in
+    /// both banks was never verified before the RDP-2 burn made it permanent.
+    ObWrp2aMismatch = 0x080C,
+    /// Ship-profile: `FLASH_OPTR.SWAP_BANK` is set (`ObField::SwapBank`).
+    /// Added 2026-09-24. RM0456 §7.6.2 excepts this bit from the RDP-2 freeze,
+    /// so it is the one OPTR field that can still move on a locked die.
+    ObSwapBankSet = 0x080D,
+    /// Ship-profile: `SECBOOTADD0R.BOOT_LOCK` is clear where the profile
+    /// requires it (`ObField::BootLock`). Added 2026-09-24.
+    ObBootLockClear = 0x080E,
 
     // Phase B (post-lock) — RMA / retry.
     /// OTP master is blank — the factory must burn it; first boot must not.
@@ -144,6 +156,9 @@ pub const fn ob_field_code(f: sphincs_tz_shared::lockdown::ObField) -> FirstBoot
         F::Secwm2 => FirstBootError::ObSecwm2Mismatch,
         F::SecBootAdd0 => FirstBootError::ObSecBootAdd0Mismatch,
         F::Wrp1a => FirstBootError::ObWrp1aMismatch,
+        F::Wrp2a => FirstBootError::ObWrp2aMismatch,
+        F::SwapBank => FirstBootError::ObSwapBankSet,
+        F::BootLock => FirstBootError::ObBootLockClear,
         F::OemLock => FirstBootError::ObOemLockPresentOrUnpinned,
     }
 }

@@ -30,5 +30,12 @@
 //! host-side cargo-test pass and are documented in
 //! Hardware-only coverage gaps remain tracked in `docs/archive/work-todo-retired-2026-07-19.md`.
 
+// #723: `hw/tamp_reason.rs` is the pure half of the TAMP driver, mounted here
+// so its decode is exercised against the REAL function. `mod hw;` is
+// `#[cfg(not(test))]` in main.rs, so this `#[path]` mount is the only route.
+#[cfg(test)]
+#[path = "../hw/tamp_reason.rs"]
+mod tamp_reason;
+
 #[cfg(test)]
 mod pure_tests;

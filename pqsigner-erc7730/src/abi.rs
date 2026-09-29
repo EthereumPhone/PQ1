@@ -1,12 +1,12 @@
-//! ABI-decoded value tree consumed by the ERC-7730 path-bytecode walker.
+//! ABI value leaf type + frozen container-field indices for ERC-7730.
 //!
-//! The walker is deliberately decoupled from any concrete ABI-decoder
-//! implementation. The secure-world caller builds an `AbiNode` tree on
-//! the stack (typically from `secure::tx::typed_call::abi::walk_shape`)
-//! and hands it to the walker; tests build the same tree by hand. The
-//! tree is borrowed throughout — the walker allocates nothing and the
-//! returned `AbiValue` carries references back into the caller's
-//! buffers.
+//! `AbiValue` is the leaf the display layer picks a formatter from; the
+//! visibility evaluator (`render/visibility.rs`) takes it as its
+//! (optional) already-walked value. The live path-resolution walker is
+//! `display/render::resolve` — the Phase-3 `AbiView`/`AbiNode` interpreter
+//! that used to live here was removed from the live path 2026-07 (review
+//! 5.4) and the dead types were pruned 2026-08; nothing outside this file
+//! referenced them.
 //!
 //! ## Field indexing convention
 //!
@@ -23,12 +23,8 @@
 //!   the first two bytes (big-endian) of `keccak256(name)`.
 //!
 //! Both cases collapse to the same wire shape: a `u16` lookup key. The
-//! caller decides which convention to use when building each `Struct`'s
-//! `AbiField::idx` list — positional for `#`-rooted structs that
-//! mirror the format-key parameter list, keccak-prefix for `@`-rooted
-//! containers. The walker simply linear-scans for a matching `idx`.
-
-use crate::ir::IrError;
+//! [`container_field`] constants below are the frozen keccak-prefix
+//! indices for the well-known envelope fields.
 
 /// Where a path resolves to once the walker has chased every opcode.
 /// The display layer uses this enum to pick the formatter.
@@ -41,120 +37,6 @@ pub enum AbiValue<'a> {
     BytesN { width: u8, bytes: &'a [u8] },
     Bytes(&'a [u8]),
     String(&'a [u8]),
-}
-
-/// Internal node in the caller-supplied ABI tree. Mirrors `AbiValue`
-/// plus the compound variants (`Struct`, `Array`) that the walker
-/// descends into.
-#[derive(Clone, Copy, Debug)]
-pub enum AbiNode<'a> {
-    Uint { bits: u16, be32: &'a [u8; 32] },
-    Int { bits: u16, be32: &'a [u8; 32] },
-    Address(&'a [u8; 20]),
-    Bool(bool),
-    BytesN { width: u8, bytes: &'a [u8] },
-    Bytes(&'a [u8]),
-    String(&'a [u8]),
-    /// Struct / tuple. Fields are looked up by `idx`. The order in
-    /// the slice does not matter for lookup; storing them in `idx`
-    /// order is just convention. Pass `&[]` for an empty struct.
-    Struct(&'a [AbiField<'a>]),
-    /// Array. Elements are addressed by 0-based position.
-    Array(&'a [AbiNode<'a>]),
-}
-
-/// One field of an `AbiNode::Struct`. `idx` is the walker lookup key —
-/// see the module comment for the dual indexing convention.
-#[derive(Clone, Copy, Debug)]
-pub struct AbiField<'a> {
-    pub idx: u16,
-    pub node: AbiNode<'a>,
-}
-
-impl<'a> AbiNode<'a> {
-    /// Convert a leaf node into the public `AbiValue`. Returns
-    /// `IrError::BadField` for compound nodes (struct / array) — those
-    /// must be descended into before the walker finishes.
-    pub fn into_value(self) -> Result<AbiValue<'a>, IrError> {
-        match self {
-            AbiNode::Uint { bits, be32 } => Ok(AbiValue::Uint { bits, be32 }),
-            AbiNode::Int { bits, be32 } => Ok(AbiValue::Int { bits, be32 }),
-            AbiNode::Address(a) => Ok(AbiValue::Address(a)),
-            AbiNode::Bool(b) => Ok(AbiValue::Bool(b)),
-            AbiNode::BytesN { width, bytes } => {
-                Ok(AbiValue::BytesN { width, bytes })
-            }
-            AbiNode::Bytes(b) => Ok(AbiValue::Bytes(b)),
-            AbiNode::String(s) => Ok(AbiValue::String(s)),
-            AbiNode::Struct(_) | AbiNode::Array(_) => Err(IrError::BadField),
-        }
-    }
-
-    /// Descend one struct field by its `u16` index (positional or
-    /// keccak-prefix per the module comment). Returns `BadField` if
-    /// `self` is not a struct or the index is not present.
-    pub fn descend_field(&self, idx: u16) -> Result<AbiNode<'a>, IrError> {
-        match self {
-            AbiNode::Struct(fields) => fields
-                .iter()
-                .find(|f| f.idx == idx)
-                .map(|f| f.node)
-                .ok_or(IrError::BadField),
-            _ => Err(IrError::BadField),
-        }
-    }
-
-    /// Descend one array element by 0-based index. Returns `BadField`
-    /// if `self` is not an array or the index is out of range.
-    pub fn descend_array_idx(&self, idx: u32) -> Result<AbiNode<'a>, IrError> {
-        match self {
-            AbiNode::Array(elems) => elems
-                .get(idx as usize)
-                .copied()
-                .ok_or(IrError::BadField),
-            _ => Err(IrError::BadField),
-        }
-    }
-
-    /// Descend the last element of an array.
-    pub fn descend_array_last(&self) -> Result<AbiNode<'a>, IrError> {
-        match self {
-            AbiNode::Array(elems) => elems
-                .last()
-                .copied()
-                .ok_or(IrError::BadField),
-            _ => Err(IrError::BadField),
-        }
-    }
-}
-
-/// Caller-supplied view of one ABI-decoded payload (a calldata body
-/// after the 4-byte selector, or an EIP-712 typed-data message). For
-/// the seed corpus this is always a `Struct` at the top level.
-#[derive(Clone, Copy, Debug)]
-pub struct AbiView<'a> {
-    pub root: AbiNode<'a>,
-}
-
-impl<'a> AbiView<'a> {
-    pub fn new(root: AbiNode<'a>) -> Self {
-        AbiView { root }
-    }
-}
-
-/// Caller-supplied view of the transaction envelope (the `@` root).
-/// Field indices follow the keccak-prefix convention — see the module
-/// comment. Constants for the well-known envelope fields are in
-/// [`container_field`].
-#[derive(Clone, Copy, Debug)]
-pub struct ContainerView<'a> {
-    pub root: AbiNode<'a>,
-}
-
-impl<'a> ContainerView<'a> {
-    pub fn new(root: AbiNode<'a>) -> Self {
-        ContainerView { root }
-    }
 }
 
 /// Pre-computed `keccak256(name)[..2]` field indices for the
@@ -175,4 +57,83 @@ pub mod container_field {
     pub const CHAIN_ID: u16 = 0x8ED9;
     /// `@.nonce` — EIP-1559 / AA nonce (32 B uint).
     pub const NONCE: u16 = 0x7AB1;
+}
+
+#[cfg(test)]
+mod tests {
+    //! These tests pin only the LIVE surface of this module: the frozen
+    //! `container_field` wire constants (consumed by `ir.rs`,
+    //! `display/render/*`, and re-exported to the secure world) and the
+    //! `AbiValue` discrimination the display layer's formatter choice
+    //! relies on. The retired Phase-3 interpreter tests were removed with
+    //! the code 2026-08; the live rendering path is covered by the
+    //! display/render suites and the Miri leg.
+    use super::*;
+
+    static WORD_A: [u8; 32] = [0xAA; 32];
+    static ADDR_A: [u8; 20] = [0x42; 20];
+    static ADDR_B: [u8; 20] = [0x24; 20];
+
+    #[test]
+    fn container_field_constants_are_frozen_wire_values() {
+        // Host emitter (`dbgen::erc7730`) and this walker MUST agree on these
+        // — they are `keccak256(name)[..2]` and drift silently mis-resolves
+        // envelope fields. Pin the exact values; dbgen's roundtrip test
+        // re-derives them from live keccak256.
+        assert_eq!(container_field::VALUE, 0x81AF);
+        assert_eq!(container_field::TO, 0x1B56);
+        assert_eq!(container_field::FROM, 0x45A9);
+        assert_eq!(container_field::CHAIN_ID, 0x8ED9);
+        assert_eq!(container_field::NONCE, 0x7AB1);
+        let all = [
+            container_field::VALUE,
+            container_field::TO,
+            container_field::FROM,
+            container_field::CHAIN_ID,
+            container_field::NONCE,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in &all[i + 1..] {
+                assert_ne!(a, b, "envelope field indices must be collision-free");
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // AbiValue discrimination — the display layer picks the formatter from
+    // the variant, so mis-tagged values must never compare equal.
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn abi_value_variants_are_not_interchangeable() {
+        assert_ne!(
+            AbiValue::Uint { bits: 256, be32: &WORD_A },
+            AbiValue::Int { bits: 256, be32: &WORD_A },
+            "same bits + word but different signedness must differ",
+        );
+        assert_ne!(
+            AbiValue::Bytes(b"x"),
+            AbiValue::String(b"x"),
+            "same bytes but different type must differ",
+        );
+        assert_ne!(AbiValue::Bool(true), AbiValue::Bool(false));
+        assert_ne!(
+            AbiValue::BytesN { width: 1, bytes: b"\xaa" },
+            AbiValue::BytesN { width: 2, bytes: b"\xaa" },
+            "width is part of the value identity",
+        );
+        assert_ne!(AbiValue::Address(&ADDR_A), AbiValue::Address(&ADDR_B));
+        assert_ne!(
+            AbiValue::Uint { bits: 8, be32: &WORD_A },
+            AbiValue::Uint { bits: 16, be32: &WORD_A },
+        );
+    }
+
+    #[test]
+    fn debug_impls_render_all_public_types() {
+        // The error paths in consumers format these with {n:?}; keep a
+        // direct smoke test so the derives stay honest.
+        let _ = std::format!("{:?}", AbiValue::Uint { bits: 8, be32: &WORD_A });
+        let _ = std::format!("{:?}", AbiValue::Bool(false));
+    }
 }

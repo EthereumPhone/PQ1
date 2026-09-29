@@ -87,7 +87,74 @@
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-use sha2::{Digest, Sha256};
+use sha::{Digest, Sha256};
+
+// ---------------------------------------------------------------------------
+// SHA-256 backend
+// ---------------------------------------------------------------------------
+//
+// Default: the software `sha2` implementation, which is what host tools
+// (`fwsign`, `fwmeasure`, `xtask`) must keep — they have no STM32 HASH
+// peripheral.
+//
+// `hw-sha256`: route through the three `pqsigner_sha256_*` symbols the linked
+// binary supplies, exactly as `sphincs-c10` already does. This exists so the
+// FSBL can drop the software implementation entirely: `sha2::compress256` is
+// 7,202 B, 23.4% of the FSBL image, and it survives unless EVERY consumer in
+// the cone moves — this crate, `fsbl/src/verify.rs`, and `sphincs-c10`.
+//
+// The hooks share one global engine and this crate is `no_std` and
+// single-threaded, so no caller interleaves two hash sessions.
+mod sha {
+    #[cfg(not(feature = "hw-sha256"))]
+    pub use sha2::{Digest, Sha256};
+
+    #[cfg(feature = "hw-sha256")]
+    extern "C" {
+        fn pqsigner_sha256_init();
+        fn pqsigner_sha256_update(ptr: *const u8, len: usize);
+        fn pqsigner_sha256_final(out: *mut u8);
+    }
+
+    #[cfg(feature = "hw-sha256")]
+    pub trait Digest: Sized {
+        fn new() -> Self;
+        fn update(&mut self, data: impl AsRef<[u8]>);
+        fn finalize(self) -> [u8; 32];
+        fn digest(data: impl AsRef<[u8]>) -> [u8; 32] {
+            let mut h = Self::new();
+            h.update(data);
+            h.finalize()
+        }
+    }
+
+    #[cfg(feature = "hw-sha256")]
+    pub struct Sha256;
+
+    #[cfg(feature = "hw-sha256")]
+    impl Digest for Sha256 {
+        fn new() -> Self {
+            // SAFETY: FFI to the binary-supplied hook. Takes no arguments and
+            // returns nothing; the implementation initialises the global
+            // engine.
+            unsafe { pqsigner_sha256_init() };
+            Self
+        }
+        fn update(&mut self, data: impl AsRef<[u8]>) {
+            let b = data.as_ref();
+            // SAFETY: `b.as_ptr()` is valid for `b.len()` bytes for the
+            // duration of the call; the hook only reads `[ptr, ptr+len)`.
+            unsafe { pqsigner_sha256_update(b.as_ptr(), b.len()) };
+        }
+        fn finalize(self) -> [u8; 32] {
+            let mut out = [0u8; 32];
+            // SAFETY: `out` is 32 bytes on this frame and lives past the
+            // call; the hook writes exactly the digest size.
+            unsafe { pqsigner_sha256_final(out.as_mut_ptr()) };
+            out
+        }
+    }
+}
 pub use sphincs_c10::params::{SIGNATURE_LEN, VERIFYING_KEY_LEN};
 
 /// Manifest-v6 pure format core (Draft 1.1 §6.1/§6.2, flag day).

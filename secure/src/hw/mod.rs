@@ -96,10 +96,16 @@ pub mod boot_pulse;
 // callsites elsewhere in the crate stay buildable on every config.
 pub mod sca_trigger;
 
-/// Minimal USART1 driver routed to the B-U585I-IOT02A ST-LINK VCP
-/// (PA9 TX). Used under `uart-console` for diagnostic output from
-/// builds that can't rely on semihosting — specifically the RDP1
-/// SAES self-test target.
+/// Minimal console USART driver, board-parameterised via `board::CONSOLE_*`:
+/// **`iota2` = USART1 on PA9 AF7** (routed to the dev kit's on-board ST-LINK
+/// VCP), **`pq1` = USART2 on PA2 AF7** (the `J211` debug-UART pad; that board
+/// has no on-board debugger, so the VCP comes from an external STLINK-V3SET
+/// or a 3.3 V dongle).
+///
+/// Used under `uart-console` for diagnostic output from builds that can't rely
+/// on semihosting — the RDP1 SAES self-test target, and (via
+/// `crate::uart_log`) every `secure_log!` site, which is the only way to
+/// observe a secure world that halts on a board with no panel and no debugger.
 #[cfg(feature = "uart-console")]
 pub mod uart;
 
@@ -123,6 +129,11 @@ pub mod i2c2_probe;
 #[cfg(feature = "gpio-buttons")]
 pub mod buttons;
 
+/// Bench: both buttons held at power-up → re-enter the ROM USB-DFU
+/// bootloader by clearing nSWBOOT0/nBOOT0 (no probe, no SBU cable).
+#[cfg(all(feature = "dev-dfu", feature = "stm32u585"))]
+pub mod dev_dfu;
+
 /// NV3007 SPI LCD driver for the ZT165M017AT module (142×428 TFT,
 /// RGB565, 4-line SPI). Phase A: byte-level command/data primitives
 /// + the production init sequence + set_window + fill_color +
@@ -131,8 +142,49 @@ pub mod buttons;
 #[cfg(feature = "ui-lcd")]
 pub mod lcd_nv3007;
 
+/// AW99703 backlight boost driver on pq1 (I2C2 @0x36, bit-banged PB13/PB14).
+/// `LCM_EN` alone leaves the chip in Standby; this writes the mode register.
+#[cfg(all(feature = "stm32u585", feature = "ui-lcd", feature = "board-pq1"))]
+pub mod aw99703;
+
 /// Independent watchdog (IWDG) — USB-path hang detection. Behind the
 /// `iwdg` feature (which implies `stm32u585`); compiles to no-op stubs
 /// otherwise, so call sites in `main` stay cfg-free. The off-build's
 /// `init` never starts the watchdog, so test builds can't self-reset.
 pub mod iwdg;
+
+/// Secure-element supply + enable lines. No-op on boards where the SE rail
+/// is unconditionally live (`iota2`); on `pq1` it asserts `LDO2_EN` (PA8),
+/// without which **both** secure elements are unpowered and every I2C
+/// transaction fails in a way that looks like a bus fault. Must run before
+/// `i2c_hw::init`.
+#[cfg(all(feature = "stm32u585", any(feature = "se050", feature = "optiga-trust-m")))]
+pub mod se_power;
+
+/// Non-destructive secure-element address probe (`se-i2c-probe`). Zero data
+/// bytes reach either chip — see the module header before extending it.
+/// Bench diagnostic only; in `PROD_FORBIDDEN`.
+#[cfg(all(
+    feature = "se-i2c-probe",
+    feature = "stm32u585",
+    any(feature = "se050", feature = "optiga-trust-m")
+))]
+pub mod se_i2c_probe;
+
+/// Bit-banged I2C master for the `pq1` auxiliary bus (I2C2, PB13/PB14) shared
+/// by the two LED-driver ICs. Pin-generic, so the AW21036 and (once merged)
+/// the AW99703 backlight share one transport instead of a copy each.
+/// **LED brightness only** — never secure-element traffic.
+///
+/// This is the only bit-banged I2C left: `soft_i2c`, which served the bench
+/// OLED, was deleted 2026-09-23 with that backend. Modules whose comments cite
+/// "the reasoning in `soft_i2c`" mean the display-only / never-SE-traffic rule
+/// recorded here, which is unchanged.
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+pub mod soft_i2c_aux;
+
+/// AW21036 RGB LED driver — the `pq1` board's 9 RGB LEDs on channels 1..27.
+/// Self-identifying (`VER` reads `0xA8`), so a failure localizes to the bus,
+/// the part, or the `RGB_EN` line rather than "the LEDs are dark".
+#[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+pub mod aw21036;

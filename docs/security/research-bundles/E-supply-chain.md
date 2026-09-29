@@ -155,7 +155,7 @@ Production contract — every shipping build must respect ALL. Pre-production ma
 7. **Per-chain caps monotonic, unresettable.** `bootstrapUses < 65,536`, `slotUses[i] + offchainSigCount[i] < 65,536`. No `reset*` or `increaseMax*` path. Exhausted chains stay frozen.
 8. **Stateless slot selection.** Companion supplies `(chain_id, slot_index, flags)` on every sign. No flash slot store, no recovery state machine in S-world. Slot keys re-derived on demand and cached in SRAM only.
 9. **Off-chain sig counter, combined cap.** Firmware tracks `local_offchain_count` + `last_userop_count` per slot in flash page 123 (log-structured, 16 B/increment, compaction). Refuses to sign past `MAX_OFFCHAIN_GAP = 100` unbacked sigs or past the combined cap. Post-restore, `CMD_SIGN_OFFCHAIN` for an unregistered slot is rejected — forces a Type 1 rotation via `CMD_SIGN_USEROP` first. The forced-blind steady Type-2 branch enforces the same registration prerequisite and cannot create registration through its tally write.
-10. **Verify-once-physically trust chain (owner decision 2026-07-21).** The device's entire post-sale trust story is: (a) ship at RDP-0 so anyone can verify flash + option bytes (including staged WRP) + OTP over SWD, connect-under-reset **before first power**, against the reproducible build; (b) the verified image contains an FSBL whose pages are WRP-protected and which measures the active firmware slots and renders the 8-word fingerprint at boot; (c) first field boot self-locks to RDP-2, which freezes the option bytes forever — WRP on the FSBL range becomes physically permanent, so **no firmware update can ever modify, unprotect, or bypass the measuring code**; (d) from then on the boot-time fingerprint is proof of what is installed — the user never has to trust a firmware update again. Consequences that bind every future change: no runtime write path (fw_update or otherwise) may touch the FSBL range; the WRP-set → RDP-2 ordering is mandatory (RDP-2 with unprotected FSBL pages permanently forfeits the guarantee for that die); the FSBL must own the display for its fingerprint window (a later fake screen is the accepted residual — the *boot-time* window is the anchor, keep it visually distinctive); and the shipping image must actually flash the FSBL in the slot layout (monolithic builds are bench-only). Currently OPEN gates before this invariant is claimable: FSBL geometry (Draft 1.1 pages 0..4), both-bank WRP/option-byte ceremony, non-monolithic shipping image, FI-hardened FSBL image verify (EF-swarm F15), silicon receipts.
+10. **Verify-once-physically trust chain (owner decision 2026-07-21).** The device's entire post-sale trust story is: (a) ship at RDP-0 so anyone can verify flash + option bytes (including staged WRP) + OTP over SWD, connect-under-reset **before first power**, against the reproducible build; (b) the verified image contains an FSBL whose pages are WRP-protected and which measures the active firmware slots and renders the 8-word fingerprint at boot; (c) first field boot self-locks to RDP-2, which freezes the option bytes forever — WRP on the FSBL range becomes physically permanent, so **no firmware update can ever modify, unprotect, or bypass the measuring code**; (d) from then on the boot-time fingerprint is proof of what is installed — the user never has to trust a firmware update again. Consequences that bind every future change: no runtime write path (fw_update or otherwise) may touch the FSBL range; the WRP-set → RDP-2 ordering is mandatory (RDP-2 with unprotected FSBL pages permanently forfeits the guarantee for that die); the FSBL must own the display for its fingerprint window (a later fake screen is the accepted residual — the *boot-time* window is the anchor, keep it visually distinctive); and the shipping image must actually flash the FSBL in the slot layout (monolithic builds are bench-only). Currently OPEN gates before this invariant is claimable: geometry MIGRATION (the frozen registry — pages 0..4, 40,960 B, `FSBL_MAX_LOAD_SPAN` 38,912 — landed as the `pqsigner-geometry` crate (FA-1.1) and is CI-pinned, but the bench **linker is still 32 KiB** and the image occupies pages 0..3, so the cutover is outstanding: issue #540. `make fsbl` reports the derived range, and adopting 40 KiB before the cutover would freeze page 4 while empty), both-bank WRP/option-byte ceremony, non-monolithic shipping image, FI-hardened FSBL image verify (EF-swarm F15), silicon receipts. **Geometry MEASUREMENT is closed** (2026-09-01, `scripts/check_fsbl_geometry.py`, run by `make fsbl`): the gate reads the physical LOAD span from the program headers rather than `size -B` text+data (which undercounts by any inter-segment gap — 28,704 vs 28,700 today), fails on more than one LOAD segment, on a start address that is not the boot base, and on a span that exceeds the region, and **derives the WRP page range from the image instead of assuming it**. Stack is bounded rather than closed: `-Z emit-stack-sizes` gives 50 frames totalling 10,372 B of 16,384 B (the tz-1 tripwire, #366, added two frames and 352 B of flash), and since no acyclic path can exceed the sum of all frames that is a genuine upper bound — subject to the stated caveats (no recursion, functions that emit no frame, interrupt frames on top). A call-graph worst case still needs `cargo-call-stack`.
 
 ## Pre-Production Caveats
 
@@ -165,13 +165,14 @@ No devices shipped, no funds on-chain — domain tags / parameters are still ren
 
 - **TZSC config (invariant #4):** regressed then fixed; enforcement **and** USB-coexistence **silicon-validated 2026-05-20** (`make gtzc-enforcement-hw` → 7/7 secure peripherals RAZ-fault on NS access; device still enumerates `1209:7051` over USB-C). `secure/src/sau.rs` wires `GTZC1_TZSC_SECCFGR{1,3}` (AHB2 AES/HASH/RNG/PKA/SAES + I2C1/2 SECURE; OTG stays NS). Only TAMP (in GTZC2) remains as a follow-up.
 - **Debug instrumentation may ship in this branch.** `debug-log` allowed on hardware, `secure_log!` in the wizard, NS pre-USB register dumps, DHCSR-gated semihosting prints in `hw::hash::init_clock`. CI must still gate production on `debug-log` / `e2e-test` / `mock-se` OFF.
+- **Pixel trusted-UI pilot (`ui-px`, owner decision 2026-09-22).** Under `ui-px` every sign dialog (Safe, single-UserOp, rotation, direct CoW, ERC-7730, off-chain, batch — port plan steps 1-3; `forced_blind` excepted) renders as PQ-UI design screens (`pqsigner-ui-px` crate, `secure/src/ui/px/`, `docs/ui/pixel-ui-pilot.md`) and arms the sign gesture (the two-button chord click — both down together, fires on release; hold-right is a no-op, hold-left declines; owner decision 2026-09-22 on the EVT) on the opening ask / `Confirm?` / returning ask per PQ-UI `DESIGN.md` § Input. **Scroll-to-end is ON (owner decision 2026-09-24, `PX_COMMIT_REQUIRES_SEEN_LAST = true`), superseding the 2026-09-22 decision to reverse it:** the chord arms only after the LAST screen has actually been painted, matching the legacy 16×4 dialogs and the 2026-06-26 gate. An ERC-20 transfer is 8 screens with the recipient on 3 and the amount on 4, so signing from the opening ask approved a destination and value that had never been displayed. `fsbl-tests/tests/paired_constants.rs` pins the two paths together. See `docs/security/HARDENING.md` §2.4. Do not re-litigate without new evidence. **Atlas in the NS slot (owner decision 2026-09-23, port plan § Flash):** the glyph atlas + marks (`nonsecure/assets/ui-px/atlas.pq1a`, 74 KB, NS feature `ui-px-atlas`) live at a fixed offset of the FSBL-measured NS flash slot, never in the secure image; the secure image pins their SHA-256 (`secure/src/ui/px/atlas_root.rs`, generated by `make ui-px-assets`) and `ui::px::assets` re-hashes the window before AND after every pixel dialog plus once more in the sign handler before release — a swapped glyph is a refusal, never a signature (a wrong font is a WYSIWYS input). Trailers are native screens (`tx/display/trailer_screens.rs`, one per proven trailer page, derived from the same page builders, per-slot + set proofs); no `Legacy` record exists on any pixel sign route. **Budget, re-measured 2026-09-24 (`make size-report-px`, and a monolithic link to get past the overflow):** the ship-shaped dual-SE image is 432,873 B without `ui-px` and 543,893 B with it (atlas already relocated) against the 466,944 B v6 secure slot — **76,949 B OVER, not the 9.2 KB this line said until today**; `ui-px` costs 111,020 B and the slot has 34,071 B of headroom, so the port's ≥ 40 KB-headroom gate is NOT met and the flash lever remains an open owner decision (`mode-production` + `rdp2-self-lock` are not even in that measurement: the S-2 fence blocks them). `ui-px` stays out of `make release`; the CI budget step is informational until the lever lands.
 - **Domain tags are sticky-but-renamable.** Tag `"sphincs-c6-v1"` is historical (was a different parameter set when written; now C10). Don't rename mid-bring-up (re-provisions every bench board); coordinated cleanup pre-launch is fine.
 
 When a task touches an invariant-adjacent subsystem (TZSC allowlist, gateway surface, SE provisioning, key derivation), respect the invariant. Pure bring-up wiring (clocks, GPIO, peripheral-init order) prioritises lighting up; note any regression here.
 
 ## Lifecycle
 
-Boot → legacy bench FSBL verify slots + render 8-word fingerprint on the NV3007 LCD (~3 s; see `docs/security/measured-boot.md`) → branch into active slot → SAU/GTZC → SAES self-test → SE attest → PIN entry (S-world trusted UI) → unlock both SEs → reconstruct entropy in S-SRAM → active signing window (120 s idle timeout, S-only TIM; NS pings do NOT reset it) → zeroize on lock/tamper/brownout/inactivity. Treating the FSBL as an immutable production trust root remains contingent on the approved geometry, WRP/option-byte ceremony, production link/resource gates, and silicon receipts.
+Boot → legacy bench FSBL verify slots + render 8-word fingerprint on the NV3007 LCD (~6.9 s on pq1: 2.9 s verify MEASURED + a 4 s fingerprint reading window, the latter a policy constant set to match the secure world's long-standing `measured_boot::WORDS_MS`; the 4 s hold and the new total are EXPECTED, not yet re-measured on silicon — see `docs/security/measured-boot.md`) → branch into active slot → SAU/GTZC → SAES self-test → SE attest → PIN entry (S-world trusted UI) → unlock both SEs → reconstruct entropy in S-SRAM → active signing window (120 s idle timeout, S-only TIM; NS pings do NOT reset it) → zeroize on lock/tamper/brownout/inactivity. Treating the FSBL as an immutable production trust root remains contingent on the approved geometry, WRP/option-byte ceremony, production link/resource gates, and silicon receipts.
 
 The FSBL fingerprint and the secure-world `measured_boot::run` screen show the SAME 8 words for the same active slot (both derived via `sphincs_tz_bip39::firmware_fingerprint_lines`). In the current bench implementation the FSBL row is the earlier measurement and the secure-world row is advisory; neither establishes production immutability. After the FSBL geometry/WRP/factory/silicon gates close, the FSBL row is intended to become the immutable trust root. Honest-row divergence is a strong defect/tamper signal.
 
@@ -315,11 +316,23 @@ cd contracts/smart-wallet && forge test -vv
 cargo test -p sphincs-tz-secure --tests --release
 ```
 
+**Board targets (`BOARD=`).** Every hardware target builds for one of two physical boards. `BOARD=iota2` (**default**) is the ST B-U585I-IOT02A dev kit, STM32U585AII6 / 169-pin — what every bench flow has always assumed. `BOARD=pq1` is the AL_A66_MB_V10 production board, STM32U585CIU6 / 48-pin UFQFPN, which **bonds only PA0–15, PB0–15 and PC13** (no port D/E/…, and no PB11). `BOARD` sets both the cargo feature and the probe-rs chip name (`STM32U585AIIx` / `STM32U585CIUx`) — e.g. `make test-key-speed BOARD=pq1`. The pin maps live one-per-board in `secure/src/board/{iota2,pq1}.rs` and drivers read constants from there rather than hard-coding a port base.
+
+**Naming a board is MANDATORY on every `stm32u585` build** — `secure/src/board/mod.rs` hard-errors when neither feature is set, and when both are. The earlier "opt-in to pq1, `board-iota2` is inert" model was retracted 2026-08-31: `#[cfg(feature = "board-pq1")] compile_error!` fences are *silent* when the feature is absent, so a recipe that omitted the board compiled the iota2 pin map with every pq1 fence quiet — which is how `build-hw-prodtest BOARD=pq1` came to put iota2 pins on pq1 silicon. `BOARD_FEATURE`/`CHIP` are `override`-derived from `BOARD` so they cannot be detached from each other, and a `FEATURES` board that disagrees with `BOARD` is a hard error.
+
+**Ported:** debug console UART (iota2 USART1/PA9 → pq1 USART2/PA2, AF7 both); the secure-element path (OPTIGA keeps I2C1/PB8/PB9/AF4, SE050 moves to its own **I2C4 on PB6/PB7 AF5** — `board::SE_I2C_BUSES` is the bus *set*, so `i2c_hw` keeps a single `pub fn init`; OPTIGA reset PE0 → PA15; new `hw::se_power` asserts pq1's `LDO2_EN` (PA8) + `SE1_EN` (PB5) before any bus traffic); buttons; USB (pq1 hands only PA11/PA12 to NS — never PA15/PB5/PB15, which are `SE_RST`/`SE1_EN`/`LCM_EN` there); the OPTIGA reset *pulse* (`reset_pin::hard_pulse`, because the live path `pin_diag::run` hardcoded PA4/PD5/PE0 and would have strobed pq1's display CS); the SCA scope trigger (PD2 → PB3); and the **NV3007 LCD** — `spi_hw` + `lcd_nv3007` now derive every pin, the peripheral base and the AF number from `board::LCD_*`. pq1's panel is SPI1 on **PA4 (CS) / PA5 (SCK) / PA7 (MOSI)**, non-contiguous, below pin 8 (so AF nibbles are in `AFRL`, not `AFRH`) and with **no MISO** — PA6, the MISO position, is `NC` on the board. DC/RST/TE/backlight are PB0/PB1/PB2/PB15; pq1 gets a real hardware reset pulse where iota2 uses `SWRESET` (`board::LCD_RST_IS_DRIVABLE`).
+
+`sau.rs` secures I2C4 (SECCFGR1 bit 16) on pq1, plus **UCPD1 (bit 19)** and **TIM2 (bit 0)** on both boards, under exact-equality `const assert!` arms. UCPD1 matters because it is a second handle on PA15/PB15 that `GPIOx_SECCFGR` does not cover; TIM2 because NS could otherwise clear `TIM2_CR1.CEN` and flat-line the production-mandatory consumption mask.
+
+The **consumption mask** is ported too: pq1 runs it on **TIM3_CH1 / PA6 / AF2** because every TIM2_CH1 pin is taken there (PA0 `LEFT KEY`, PA5 the LCD `SCK`, PA15 `SE_RST`), and `sau.rs` secures TIM3 alongside TIM2 so NS cannot stop either. A `selftest_pin_toggles()` samples `IDR` to catch an AF number that is right for the peripheral but wrong for the pin — it passed on pq1 silicon. **What that does NOT establish:** neither board drives a load from the mask pin (iota2's PA5 is unclaimed, pq1's PA6 is `NC`), and a randomised *duty* only modulates power across a resistive load, so the mask's actual dilution is unmeasured on both — see `evt-silicon-validation.md` §9. Production forces this feature, so pq1 can now *build* a shipping image while that security property remains unevidenced; treat the fence as satisfied-by-construction, not demonstrated.
+
+**Still iota2-only, each a loud `compile_error!` rather than a runtime trap:** `boot-pulse` (hardcodes PE13) and `pin-diag-boot` (sweeps the Arduino header and drives PA8 = pq1's SE rail enable). See `docs/hardware/evt-silicon-validation.md` §1–§2 for the verified as-built map. **Trap:** PA8 is the RIGHT button on iota2 and `LDO2_EN` — the enable for the rail powering *both* secure elements — on pq1.
+
 **`make help`** lists the runnable top-level targets (self-documented from the `Makefile`, so it never drifts); **`make -C contracts/verification help`** lists the FV / spec-assurance gates (`verify-*`). The root `Makefile` has ~160 targets total — `make help` surfaces the ones you actually run; read the file for the build/flash variants, fsbl, release packaging, and optiga-reset internals it doesn't surface.
 
 **HW probe-rs gotcha.** `probe-rs` does not implement semihosting `0x07 SYS_READC`. Any `ui-semihosting` PIN prompt on real silicon hangs in the polling loop with a storm of `Target wanted to run semihosting operation 0x7 ...` warnings. This hits `make e2e-hw` because the NS test driver still calls `CMD_REQUEST_UNLOCK` even when `e2e-test` pre-unlocks the secure side. QEMU is unaffected. Workarounds: `make test-key-speed` (no reads, prints `=== PASS ===`) or `make play-hw-display` (arrow keys via probe-rs `print` handshake).
 
-**Expected timings on hardware** (with `hw-sha256`, auto under `stm32u585`): first-sign ≤ 3 s (master keygen + slot keygen + 2 signs); Type-2-only on cached slot ≈ 1.1 s; second-chain first-sign with cached slot ≈ 2.5 s. Substantially higher = HASH peripheral isn't being used.
+**Timings on hardware — measured, not the old targets (#699).** On pq1, 2026-09-18, `make test-key-speed BOARD=pq1`, with `[S] hash: HW SHA-256 self-test PASS` in the same boot: first sign (type1 + slot keygen + type2) ≈ 14–17 s; Type-2 on a cached slot ≈ 6.4–7.2 s (C10 target-sum grinding spreads single runs by ±1 s or more). The older "first-sign ≤ 3 s / cached ≈ 1.1 s" figures do not match this silicon. Do **not** read a slow sign as "HASH peripheral unused" — first check the boot log for the self-test PASS line.
 
 **HW SHA-256 self-test.** `hw::hash::init_clock()` runs a `SHA-256("abc")` KAT. Look for `[S] hash: HW SHA-256 self-test PASS` early in boot — `FAIL — HALT` parks the CPU in `loop { wfe() }`.
 
@@ -335,7 +348,7 @@ cargo test -p sphincs-tz-secure --tests --release
 - **Hardening / accelerators (compose):** `saes-dhuk` (Tier-1 KDF) · `saes-self-test` · `tamp` (Trezor-port; log-only by itself) · `tamp-wipe` (production escalation — fires `tzic::trigger_intrusion_wipe` on a confirmed tamper; default-off for bench safety, **forced ON for shipping dual-SE images** by the `nsc/mod.rs` ship-blocker fence alongside `tzic-wipe`) · `consumption-mask` (TIM2 CH1 PWM on PA5; caller must call `randomize()` periodically) · `usb`.
 - **OPTIGA hardware counter:** `optiga-hw-counter` (E120 LUC bound to F1D0; immune to PBS extraction; **destructive on first provisioning** — rewrites F1D0 metadata).
 - **First-boot self-lock candidate (work-todo #36):** `rdp2-self-lock` (implies `bhk`; **production-only**, forced ON for `mode-production` by the `nsc/mod.rs` S-1-style fence, incompatible with every dev/test feature, requires `dual-se`). Owns the candidate on-device flow in `secure/src/first_boot/`: Phase A verifies the ship option-byte profile + blank per-device pages 123–127 then programs RDP=0xCC (irreversible), Phase B journals a resumable BHK first-write + transport→final rotation of SE050 SCP03/admin + OPTIGA PBS. Absent from every bench/QEMU build (behaviour OFF is byte-identical). Compile-check: `make build-rdp2-self-lock`. This is not production authority; the handoff/recovery/E140-order/silicon gates above remain open. Refs: `docs/provisioning/first-boot-provisioning.md` (candidate responsibility split + field error codes + silicon runbook).
-- **Dev / test (NEVER ship):** `debug-log` · `e2e-test` (fixed mnemonic + PIN, short-circuits every secure-side `confirm()`/`enter_pin()`) · `otp-hardcoded-master-key` (fixed ASCII OTP-master so re-flashed bench boards keep stable admin/SCP03/PBS bytes) · `ui-capture` (SHA-256 of every displayed frame).
+- **Dev / test (NEVER ship):** `debug-log` · `e2e-test` (fixed mnemonic + PIN, short-circuits secure-side `confirm()` **and**, since a8961636, `enter_pin()`, which returns the e2e PIN `00000000`. Before that fix a panel-less board wedged forever in the PendSV idle re-unlock ~120 s after unlock; the fix was validated free-running on pq1 silicon 2026-09-18 across three idle deadlines. Caveat, #692: on these images every PendSV retry goes through `gated_unlock`, so a persistent SE fault burns the whole 10-attempt page-124 budget before the 46a30658 retry guard can fire) · `otp-hardcoded-master-key` (fixed ASCII OTP-master so re-flashed bench boards keep stable admin/SCP03/PBS bytes) · `ui-capture` (SHA-256 of every displayed frame).
 
 CI must gate shipped firmware on `debug-log` / `e2e-test` / `mock-se` / `otp-hardcoded-master-key` / `ui-capture` OFF. The `compile_error!` fences in `nsc/mod.rs` and the `saes-self-test` runner enforce most of this.
 
@@ -444,7 +457,7 @@ Pure-logic primitives live in standalone workspace crates so host signers / benc
 | `fwmeasure/` | Host firmware measurement tool. |
 | `fw-manifest/` | Legacy v0x02/PQFW_V1 manifest + verify chain (bench only). Draft 1.1 proposes manifest-v6/`PQFW_V6` with a 121-byte signed preimage; it is neither implemented nor implementation-approved. |
 | `fwsign/` | Legacy bench release-signing CLI; production packaging is quarantined pending candidate approval and backend closure. |
-| `fsbl/` | Legacy bench bootloader. It is not yet an immutable production trust root. Draft 1.1 keeps a 40-KiB candidate envelope; the physical FLASH LOAD-span, WRP/option-byte ceremony, and independent RAM/worst-case-stack gates remain OPEN. |
+| `fsbl/` | Legacy bench bootloader. It is not yet an immutable production trust root. The frozen 40-KiB registry (pages 0..4) landed as `pqsigner-geometry`; this crate still links against the legacy 32-KiB region, cutover #540. Carries the tz-1 option-byte read-back tripwire (`optbytes.rs`): reads only, halts on a persistent mismatch. The physical FLASH LOAD-span gate is CLOSED and the stack is bounded (`scripts/check_fsbl_geometry.py`, run by `make fsbl`); the WRP/option-byte ceremony and a call-graph worst-case stack remain OPEN. |
 | `dbgen/` | Merkle-DB builder (ERC-20 / names / selectors / ERC-7730 descriptor roots). |
 | `xtask/` | Host workspace tooling — codegen, doc-checks, release packaging. |
 | `tools/webhid_test.html`, `tools/wallet_run_hw.py` | Browser companion + probe-rs arrow-key forwarder. |
@@ -489,7 +502,7 @@ multi-session approach, and as a second opinion on any claim you are about to ba
 | Model | How to invoke | Notes |
 |-------|---------------|-------|
 | **GPT-5.6** | `mcp__codex__codex` MCP tool — pass `prompt`, `cwd`, `sandbox: "read-only"`, `approval-policy: "never"` | Agent with repo access; reads files itself. Long reviews get backgrounded (>120 s) and notify on completion. |
-| **Kimi K3** | CLI: `export PATH="$HOME/.kimi-code/bin:$PATH"; kimi -p "<prompt>"` (run from the target repo) | **NOT an MCP.** `--auto` is INCOMPATIBLE with `-p` (hard error). Agent with repo access; verbose — redirect to a file and read the tail. Very long runs: use `run_in_background`. |
+| **Kimi K3** | CLI: `export PATH="$HOME/.kimi-code/bin:$PATH"; kimi -p "<prompt>"` (run from the target repo) | **NOT an MCP.** `--auto`, `--yolo`, and `--plan` are each INCOMPATIBLE with `-p` (hard error). Agent with repo access; verbose — redirect to a file and read the tail. Very long runs: use `run_in_background`. |
 
 **How to use them well** (learned 2026-07-19, when they jointly killed an unsound EasyCrypt reduction design
 before it cost multiple sessions):
@@ -573,6 +586,116 @@ Document your trust boundaries, your list of secrets, and where each secret is a
 There is no legitimate NSC call that returns the seed, the mnemonic, the SPHINCS+ secret key, or any derivative from which they can be recovered. If you find yourself writing one, stop and redesign.
 
 ---
+
+### 2.4 Trusted-display consent gate
+
+Two consent policies coexist, by path, since 2026-09-22:
+
+| Path | The sign gesture is armed… | Since |
+|---|---|---|
+| Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right / chord is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
+| Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`; every sign dialog since port step 3, 2026-09-23 — `forced_blind` excepted) | **only after the LAST screen has been painted** (scroll-to-end, `PX_COMMIT_REQUIRES_SEEN_LAST = true`), and then only on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) or the returning ask; **never on a detail** | owner decision **2026-09-24** (see the UPDATE below), superseding 2026-09-22 |
+
+**UPDATE 2026-09-23 (port plan step 3):** the pixel path now carries every
+sign dialog — Safe, every single-UserOp route, the slot-rotation consent,
+direct CoW, ERC-7730, the off-chain kinds (typed, `personal_sign`, RAW32) and
+each batch member plus the batch's final ask — so the row above applies to
+all of them under `ui-px`. `forced_blind` keeps its own ceremony; the legacy
+row still governs every build without `ui-px`.
+
+**UPDATE 2026-09-22 (later the same day, owner decision on the EVT):** on the
+pixel path the sign gesture is the **two-button chord click** — both buttons
+down together, the sign fires when both are released
+(`InputFsm` → `Gesture::ChordClick` → `FlowDriver` `Gesture::Chord` →
+`NavResult::Sign`) — not the design's 2 s hold-right, which is now a no-op
+everywhere on that path (hold-left still declines everywhere). Rationale:
+parity with the legacy dialog, whose `hw::buttons::wait_event` has always
+synthesised the two-button chord as the confirm. Residual accepted: the sign
+is an instantaneous gesture rather than a 2 s deliberate hold, so a squeeze
+on a commit-armed screen signs; a chord formed from the post-tap window (one
+side already up) never clicks, so a fast left-tap-then-right-tap cannot
+sign, and details remain unarmed. The `FihBool` gate and single
+`OK_SENTINEL` site are unchanged. PQ-UI `DESIGN.md` § Input (vendored) still
+describes hold-right; the device deviates here and in `TAP_MAX_MS` (500 ms).
+
+**SUPERSEDED 2026-09-24 — see the UPDATE below. The paragraph is kept because
+the mitigations it lists are still real, and because the reasoning that was
+accepted and then reversed is worth preserving.** ~~The pixel path
+intentionally re-opens the class the 2026-06-26 fix closed for that path only:
+a user can sign from the opening ask without paging through the details.~~
+Mitigations the design supplies: declining is armed on every
+screen (hold-left), the `Confirm?` early exit sits after five detail screens,
+the returning ask is the demo's canonical hold point, and every value the
+legacy pages showed is present in the transcript (host fact differential in
+`safe_screens_render_pure_tests.rs`). The arming flag is a `FihBool`
+re-derived from the record's `commit` byte (double read) on every screen
+change; the `OK_SENTINEL` is minted at exactly one site.
+
+**UPDATE 2026-09-24 — REVERSED, by owner decision: the gate is ON.**
+`secure/src/ui/px/confirm_px.rs::PX_COMMIT_REQUIRES_SEEN_LAST` is now `true`.
+Owner, asked directly whether the pixel path should still require paging past
+the recipient and the amount: *"all screens should be viewed before the user
+can sign."*
+
+The concrete case that decided it: an ERC-20 transfer is EIGHT screens
+(`tx::display::erc20_known`). The opening screen says "Send USDC"; the
+RECIPIENT is screen 3 and the AMOUNT is screen 4. With the gate off, one chord
+click on the opening ask approved a transfer whose destination and value had
+never been displayed. The mitigations listed above (decline armed everywhere,
+the `Confirm?` early exit after five details, the values present in the
+transcript) are real but none of them puts the recipient in front of the user.
+
+The evidence is a real paint, not an index: `FlowDriver::mark_rendered` is
+called by the presenter immediately after `build_and_present` (`px/lcd.rs`) and
+after `text::present` (`confirm_px.rs`), and sets `seen_last` only when
+`cur + 1 == count` — the same "evidence of display, not merely an index
+assignment" rule `confirm_core.rs` states for the legacy path. As this section
+already noted, the loop maintains `seen_last` either way, so the constant was
+the only change needed.
+
+The two paths now AGREE, and `fsbl-tests/tests/paired_constants.rs` pins them
+so they cannot drift apart silently again.
+
+RESIDUAL, not closed by this change: on the legacy path `seen_last` is a
+`FihBool` (complement pair + double read); on the pixel path it is a plain
+`bool` feeding the `FihBool` arming flag. A stuck-at fault on the pixel
+`seen_last` would defeat scroll-to-end without defeating arming. Worth
+hardening; tracked separately.
+
+Do not re-litigate without new evidence; record any change here and in
+`CLAUDE.md` Pre-Production Caveats.
+
+**Device input model (frozen 2026-09-23, port plan step 1).** The
+device's gesture grammar on the pixel path is this table; the conformance
+oracle is the vendored PQ-UI `handoff/spec/gestures.json` (an 80-row executed
+truth table) + `traces.json`, and the deliberate deviations from it are the
+single list `tools/pq-ui/PORT_DEVIATIONS.toml`, machine-checked against
+`handoff/spec/motion.json` by `make pq-ui-port-diff` (an unrecorded drift is
+a red build).
+
+| Constant (`pqsigner-ui-px`) | Device | Reference | Note |
+|---|---|---|---|
+| `DEBOUNCE_MS` (`input.rs`) | 25 | — | SysTick ISR lockout per side, first edge exact; device-only |
+| `TAP_MAX_MS` (`motion.rs`) | **500** | 250 | recorded deviation (EVT #1 2026-09-22: deliberate presses run 250–400 ms) |
+| `DOUBLE_TAP_MS` | 250 | 250 | entry contexts only |
+| `CHORD_MS` | 150 | 150 | the other side within this = the chord |
+| `HOLD_COMMIT_MS` | 2000 | 2000 | hold-left decline fires here |
+| `HOLD_SNAPBACK_MS` | 200 | 200 | early-release drain |
+| `PRESS_FEEDBACK_MS` | 120 | 120 | chevron nudge |
+
+| Screen kind | tap L / R | hold-left | hold-right | chord click (both down, fires on release) |
+|---|---|---|---|---|
+| Hero (opening / returning ask), `Confirm?` | navigate | decline | **no-op** (reference: sign) | **sign** (reference: unbound) |
+| Detail / Value | navigate, page-turn | decline | no-op | ignored (never armed) |
+| Status / film / ending | **input-dead**: edges are ignored while the film plays and its result holds; the inactivity deadline and idle wipe stay enforced | | | |
+
+Input during a transit retargets the springs and is never dropped. The film
+(`ui::px::lcd::film_*`) runs around the signer's FI chain, paced by its opaque
+`fn(u8)` progress hook, and cannot change any decision: by the time it
+starts, the `OK_SENTINEL` has been minted and re-proved. The upstream
+catalogue (`handoff/catalog/actions/{hold-right-sign,unbound-gestures,
+tap-navigate}.md`) still describes the reference grammar; a device-deviation
+note for those pages is proposed upstream (see `tools/pq-ui/UPSTREAM.txt`).
 
 ## 3. SE050 Configuration
 
@@ -892,7 +1015,9 @@ Firmware update is its own project, outside the scope of this document, but note
 The on-device ERC-7730 clear-signing renderer walks a Merkle-verified
 descriptor's `FormatHeader` field list, evaluates each field's
 `Visibility` rule (`Always` / `Never` / `Optional` / `IfNotIn` /
-`MustMatch`), and dispatches to one of fourteen formatters. Two
+`MustMatch`), and dispatches across fifteen wire operations. Enrolled nested
+calldata uses the proof-set child path; encrypted operands and unenrolled
+calldata hard-refuse. Two
 sub-questions about timing channels:
 
 1. **Are visibility-rule evaluation paths secret-dependent?** No.
@@ -902,30 +1027,31 @@ sub-questions about timing channels:
    instruction trace is a function of the descriptor + the inbound tx
    bytes (`(chain_id, to_address, calldata)`), both of which the
    attacker already knows. There is no secret-dependent branch in the
-   rule evaluator, the path walker, or any of the fourteen
-   formatters. → No `subtle::ConstantTimeEq` or branch-balanced
+   rule evaluator, the path walker, or any renderer route. → No
+   `subtle::ConstantTimeEq` or branch-balanced
    rewrite is required for this surface.
 
-2. **Stack-budget defence.** The walker recurses for nested calldata
-   (capped at depth 4 in the renderer, depth 8 in the walker proper
-   — see `pqsigner_erc7730::walker::MAX_NESTING`). Both
+2. **Stack-budget defence.** Nested calldata is limited to one child level;
+   a child format containing another calldata field hard-refuses.
+   `MAX_NESTED_DEPTH = 8` bounds nested EIP-712 struct descent and
+   `pqsigner_erc7730::ir::MAX_NESTING = 8` bounds nested EIP-712 validation
+   and path-program steps. Both
    `render_erc7730_pages` and `render_erc7730_eip712_pages` write a
    `STACK_CANARY = 0xDEAD_BEEF` to a stack-resident `u32` at entry and
    `assert!`-check it at exit (volatile read/write so LLVM cannot
    prove the value dead). A hostile descriptor that somehow defeats
    the depth cap and recurses unbounded smashes the canary →
    `assert!` panic → secure-world panic handler routes through
-   `secure_log!` + halt. Belt-and-braces against a defeated depth cap;
-   the cap itself is the primary defence.
+   `secure_log!` + halt. This is a belt-and-braces tripwire behind the
+   independent structural bounds; those bounds are the primary defence.
 
 3. **What this does NOT defend.** Stack canary is a single-fault
    detection mechanism. A multi-fault attack that simultaneously
    overflows the stack AND glitches the assert's compare instruction
-   bypasses. Defence in depth: the depth cap is checked separately
-   inside the walker (`pqsigner_erc7730::walker::resolve_program`),
-   and the `Pages` buffer's `MAX_PAGES = 31` bound caps the page-emit
-   side independently — neither path can grow without bound even if
-   the canary is defeated.
+   bypasses. Defence in depth: IR validation and the renderer independently
+   enforce the path, EIP-712, and one-child calldata limits, while the `Pages`
+   buffer's `MAX_PAGES = 31` bound caps page emission — neither path can grow
+   without bound even if the canary is defeated.
 
 ---
 

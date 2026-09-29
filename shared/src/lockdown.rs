@@ -34,12 +34,35 @@ pub const fn rdp_level_from_byte(rdp: u8) -> RdpLevel {
     }
 }
 
-/// The `SECBOOTADD0R` address field is `boot_address >> 7`, stored RIGHT-ALIGNED
-/// in the low bits (confirmed by `tools/ob-configurator` writing the bare
-/// `0x0018_0000` = `0x0C00_0000 >> 7` for the FSBL boot address, with no shift).
-/// The field occupies bits `[24:0]`; the high bits `[31:25]` hold control flags
-/// (an eventual `BOOT_LOCK` / reserved).
-const SECBOOTADD0_ADDR_MASK: u32 = 0x01FF_FFFF;
+/// `SECBOOTADD0R` layout, per **RM0456 §7.9.16** (offset `0x4C`, ST production
+/// value **`0x0C00_007C`**): `SECBOOTADD0[24:9]` occupies bits `[31:16]` and
+/// `SECBOOTADD0[8:0]` bits `[15:7]` — i.e. the 25-bit address field sits at
+/// bits `[31:7]` — with **`BOOT_LOCK` at bit 0** and bits `[6:1]` reserved.
+/// The boot address is therefore `field << 7`, so the register reconstructs it
+/// as `reg & !0x7F`.
+///
+/// The previous code masked the LOW 25 bits and compared them to
+/// `boot_addr >> 7`, which can never match real silicon: this board reads
+/// `0x0C00_007C` (the ST production value), whose low bits are `0x7C`. That
+/// mismatch halted the FSBL tz-1 tripwire on every boot and would have halted
+/// first-boot Phase A before the RDP-2 burn. The archived work-todo flagged the
+/// exact contradiction ("`0x0C00_007C` vs the ob-configurator's `0x0018_0000`
+/// for the same boot address") and deferred it as unconfirmed; RM0456 plus a
+/// bench read now confirm it.
+///
+/// NOTE on the two encodings, because conflating them is the whole bug:
+/// `0x0C00_007C` is the REGISTER word (address in bits `[31:7]`), while
+/// `0x0018_0000` is CubeProgrammer's OPTION-BYTE FIELD value (`addr >> 7`).
+/// Both describe boot address `0x0C00_0000`. Bench boards boot correctly
+/// because every Makefile recipe programs option bytes via
+/// `STM32_Programmer_CLI --optionbytes SECBOOTADD0=0x180000`, which takes the
+/// field form and encodes for us. Writing the field value straight to the
+/// register selects `0x0018_0000` instead — the defect that
+/// `tools/ob-configurator` carried until it was deleted (issue #37).
+const SECBOOTADD0_ADDR_SHIFT_MASK: u32 = 0xFFFF_FF80;
+/// `BOOT_LOCK` — bit 0 (RM0456 §7.9.16). Pinned here so the deferred
+/// BOOT_LOCK assertion has a confirmed bit to build on.
+pub const SECBOOTADD0_BOOT_LOCK: u32 = 1 << 0;
 
 /// Does the `SECBOOTADD0R` register value select `expected_boot_addr` as the
 /// secure boot entry? A target shipping image must select the approved FSBL
@@ -50,7 +73,97 @@ const SECBOOTADD0_ADDR_MASK: u32 = 0x01FF_FFFF;
 /// doc-ambiguous) does not read as a wrong address.
 #[must_use]
 pub const fn secboot_selects(secbootadd0r: u32, expected_boot_addr: u32) -> bool {
-    (secbootadd0r & SECBOOTADD0_ADDR_MASK) == (expected_boot_addr >> 7)
+    // Reconstruct the address from bits [31:7]; BOOT_LOCK (bit 0) and the
+    // reserved bits [6:1] are deliberately ignored here, so SETTING BOOT_LOCK
+    // never reads as "wrong boot address".
+    (secbootadd0r & SECBOOTADD0_ADDR_SHIFT_MASK) == expected_boot_addr
+}
+
+/// Is `BOOT_LOCK` SET in `SECBOOTADD0R`?
+///
+/// Deliberately separate from [`secboot_selects`], which masks bit 0 out so
+/// that setting `BOOT_LOCK` never reads as a wrong address. That masking is
+/// correct for the ADDRESS question and was never meant to answer the LOCK
+/// question — but until 2026-09-24 nothing asked the lock question at all, so
+/// a unit could be verified and then frozen at RDP-2 with `BOOT_LOCK` clear.
+///
+/// Why it matters: with `BOOT_LOCK` set, RM0456 §7.4.2 forbids modifying
+/// `SECBOOTADD0` and — together with `TZEN` — forbids modifying `SWAP_BANK`,
+/// which is otherwise EXCEPTED from the RDP-2 freeze (§7.6.2). `BOOT_LOCK` is
+/// therefore what makes the boot selection and the bank mapping permanent.
+#[must_use]
+pub const fn boot_lock_set(secbootadd0r: u32) -> bool {
+    secbootadd0r & SECBOOTADD0_BOOT_LOCK != 0
+}
+
+// ===========================================================================
+// Option-byte CONTROL registers — which register carries which command bit.
+//
+// This block exists because its absence was a live defect class. Everything
+// host-testable here previously covered only the option-byte VALUE registers
+// (`OPTR`, `SECWM*R1`, `SECBOOTADD0R`), so nothing in the workspace pinned
+// *which control register* a commit must be written to. Three separate places
+// then reached for the wrong one, and none was caught:
+//
+//   1. `tools/ob-configurator` declared `SECCR1 = FLASH_S + 0x24` and
+//      `SECSR = FLASH_S + 0x2C` — inverted — and wrote its commit bits there.
+//      Deleted (#37).
+//   2. `secure/src/hw/flash.rs`'s `program_rdp_level2_and_launch` writes
+//      `OPTSTRT` / `OBL_LAUNCH` and reads `OPTLOCK` from `SECCR`, which has
+//      none of those bits, so the irreversible RDP-2 burn cannot commit yet
+//      returns `Ok(())`. Reported, NOT fixed here (#268) — it sits next to an
+//      irreversible operation and wants an owner decision plus a sacrificial
+//      -silicon plan, so this module only supplies the facts to fix it against.
+//   3. The `flash.rs` provenance comments cited (1) as their authority.
+//
+// Enumerated from the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`,
+// 2026-09-16), listing EVERY field of each register rather than probing for
+// expected names — probing is what hid this. Note the SVD prefixes register
+// names (`FLASH_SECCR`, not `SECCR`); searching the bare name returns nothing
+// and reads as absence.
+//
+// The split is coherent, not an SVD gap: option bytes are global to the
+// device, so their control bits live in the NON-SECURE control register, while
+// `SECCR` carries the secure-only error/invalidate bits instead.
+// ===========================================================================
+
+/// `FLASH_NSSR` offset — non-secure status (adds `OPTWERR` bit 13 and the
+/// OEM-lock status bits, which `SECSR` does not carry).
+pub const FLASH_NSSR_OFF: u32 = 0x20;
+/// `FLASH_SECSR` offset — secure status. Error flags plus read-only `BSY`
+/// (bit 16) and `WDW` (bit 17). Carries NO command bits.
+pub const FLASH_SECSR_OFF: u32 = 0x24;
+/// `FLASH_NSCR` offset — non-secure control. **This is the register that owns
+/// every option-byte command bit** ([`FLASH_OPTSTRT`], [`FLASH_OBL_LAUNCH`],
+/// [`FLASH_OPTLOCK`]).
+pub const FLASH_NSCR_OFF: u32 = 0x28;
+/// `FLASH_SECCR` offset — secure control. Has `STRT` (16), `RDERRIE` (26),
+/// `INV` (29) and `LOCK` (31), and **none** of the option-byte command bits.
+pub const FLASH_SECCR_OFF: u32 = 0x2C;
+
+/// `OPTSTRT` — commit staged option bytes. `FLASH_NSCR` bit 17 ONLY.
+pub const FLASH_OPTSTRT: u32 = 1 << 17;
+/// `OBL_LAUNCH` — reload option bytes (triggers a system reset).
+/// `FLASH_NSCR` bit 27 ONLY.
+pub const FLASH_OBL_LAUNCH: u32 = 1 << 27;
+/// `OPTLOCK` — cleared by the `OPTKEYR` key sequence. `FLASH_NSCR` bit 30 ONLY.
+pub const FLASH_OPTLOCK: u32 = 1 << 30;
+/// `BSY` — bit 16 of both status registers, read-only in each.
+pub const FLASH_SR_BSY: u32 = 1 << 16;
+
+/// Does `reg_off` name the register that option-byte commands must be written
+/// to? Exactly one offset qualifies, so a driver can assert its own binding.
+#[must_use]
+pub const fn is_optbyte_command_register(reg_off: u32) -> bool {
+    reg_off == FLASH_NSCR_OFF
+}
+
+/// Can `bits` legally be written to `FLASH_SECCR`? The option-byte command
+/// bits cannot: `SECCR` does not implement bit 17, 27 or 30, so such a write
+/// is silently inert — it neither commits nor errors.
+#[must_use]
+pub const fn seccr_accepts(bits: u32) -> bool {
+    (bits & (FLASH_OPTSTRT | FLASH_OBL_LAUNCH | FLASH_OPTLOCK)) == 0
 }
 
 // ===========================================================================
@@ -65,10 +178,16 @@ pub const fn secboot_selects(secbootadd0r: u32, expected_boot_addr: u32) -> bool
 // the published profile and the on-device check can never diverge.
 //
 // Register layout confidence (STM32U585, RM0456 §7.11):
-//   CONFIRMED (code-cross-checked): TZEN=bit31 of FLASH_OPTR; RDP=OPTR[7:0];
-//     SECWM1R1 all-secure = 0x007F_0000 and SECWM2R1 all-NS = 0x0000_007F
-//     (tools/ob-configurator/src/main.rs:104-114); SECBOOTADD0 via
-//     `secboot_selects`.
+//   CONFIRMED (RM0456 + bench read, 2026-09-16): TZEN=bit31 of FLASH_OPTR;
+//     RDP=OPTR[7:0]; SECWM*R1 PSTRT=[6:0]/PEND=[22:16] compared as FIELDS (the
+//     registers read back with reserved bits set — this board reads
+//     0xFFFFFF80 / 0xFF80FFFF); SECBOOTADD0 address field at bits [31:7] with
+//     BOOT_LOCK at bit 0 (RM0456 7.9.16, ST production value 0x0C00_007C).
+//     Provenance is the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`)
+//     plus RM0456 and a bench read — NOT the former `tools/ob-configurator`,
+//     which encoded SECBOOTADD0 wrongly (see `secboot_selects`), swapped the
+//     SECSR/SECCR offsets, and was once mis-cited here as confirmation for the
+//     watermark word compares. It was deleted rather than repaired (#37).
 //   BENCH-CONFIRM (exact bit positions are an RM0456 pin — see the #36
 //     deferred silicon-validation runbook): BOR_LEV field, WRP1A page span,
 //     and the OEM1/OEM2 key-lock status bits. These live behind the single
@@ -80,14 +199,61 @@ pub const fn secboot_selects(secbootadd0r: u32, expected_boot_addr: u32) -> bool
 /// profile (secure world is mandatory).
 pub const OPTR_TZEN: u32 = 1 << 31;
 
+/// `FLASH_OPTR.SWAP_BANK` — **bit 20** (RM0456 §7.9.11, "Bit 20 SWAP_BANK:
+/// Swap banks. 0: Bank 1 and bank 2 addresses not swapped").
+///
+/// Load-bearing for the ship profile because RM0456 §7.6.2 EXCEPTS
+/// `SWAP_BANK` from the RDP-2 option-byte freeze: every other option byte is
+/// frozen at Level 2, this one is not. §7.4.2 closes that hole only when
+/// `TZEN` AND `BOOT_LOCK` are both set — hence [`boot_lock_set`] below is a
+/// prerequisite for trusting the bank mapping, not an independent nicety.
+///
+/// A swapped unit maps bank 2 at the lower address range, so every absolute
+/// slot/manifest/per-device address the FSBL and the updater compute would
+/// land in the wrong physical bank while the security ATTRIBUTES stay with
+/// their physical bank (§7.5.8).
+pub const OPTR_SWAP_BANK: u32 = 1 << 20;
+
+/// Is `SWAP_BANK` clear (banks NOT swapped)? Host-testable in both
+/// directions: a set bit is always "not clear".
+#[must_use]
+pub const fn swap_bank_clear(optr: u32) -> bool {
+    optr & OPTR_SWAP_BANK == 0
+}
+
 /// Expected `FLASH_OPTR.RDP` byte in the *ship* state (RDP Level 0). The
 /// first-boot flow only programs `0xCC` (Level 2) after this verifies.
 pub const SHIP_RDP_BYTE: u8 = 0xAA;
 
-/// `SECWM1R1` value that marks all of bank 1 secure (`PSTRT=0, PEND=0x7F`).
+/// Expected `FLASH_OPTR.RDP` byte once the device has locked ITSELF (Level 2).
+/// Pairs with [`SHIP_RDP_BYTE`]: those are the only two RDP bytes a genuine
+/// unit may present, and which one is expected depends on the lifecycle phase
+/// (see [`phase_profile`]).
+pub const LOCKED_RDP_BYTE: u8 = 0xCC;
+
+/// `SECWM1R1` FIELD values that mark all of bank 1 secure (`PSTRT=0, PEND=0x7F`).
+/// This is what a programmer WRITES, NOT what the register reads back: `SECWM1R1`/`SECWM2R1` are option-byte shadow registers
+/// whose unprogrammed bits read as 1s (SVD reset value `0xFF00FF00`). A correctly
+/// configured pq1 board reads `0xFFFFFF80` / `0xFF80FFFF`. Compare FIELDS, never
+/// the whole word — see [`secwm_bank1_all_secure`].
 pub const SECWM1_ALL_SECURE: u32 = 0x007F_0000;
-/// `SECWM2R1` value that marks all of bank 2 non-secure (`PSTRT=0x7F > PEND=0`).
+/// `SECWM2R1` field values that mark all of bank 2 non-secure (`PSTRT=0x7F > PEND=0`).
 pub const SECWM2_ALL_NS: u32 = 0x0000_007F;
+
+/// `PSTRT` occupies bits `[6:0]` and `PEND` bits `[22:16]` of both `SECWM*R1`
+/// registers (SVD `FLASH_SECWM1R1`/`FLASH_SECWM2R1`). Every other bit is
+/// reserved and reads back as 1 on real silicon.
+const SECWM_PSTRT_MASK: u32 = 0x7F;
+const SECWM_PEND_SHIFT: u32 = 16;
+
+/// Extract `(PSTRT, PEND)` from a raw `SECWM*R1` read.
+#[must_use]
+pub const fn secwm_fields(secwmr1: u32) -> (u32, u32) {
+    (
+        secwmr1 & SECWM_PSTRT_MASK,
+        (secwmr1 >> SECWM_PEND_SHIFT) & SECWM_PSTRT_MASK,
+    )
+}
 
 /// BENCH-CONFIRM (RM0456): `FLASH_OPTR.BOR_LEV` field position. Best-effort
 /// per RM0456; pin against silicon in the #36 runbook before this field is
@@ -133,6 +299,15 @@ pub enum ObField {
     Secwm2,
     SecBootAdd0,
     Wrp1a,
+    /// Bank-2 FSBL-mirror write protection (`WRP2AR`). Added 2026-09-24: the
+    /// profile checked only bank 1, so the mirror the frozen geometry requires
+    /// in BOTH banks was never verified.
+    Wrp2a,
+    /// `FLASH_OPTR.SWAP_BANK` is set. Added 2026-09-24.
+    SwapBank,
+    /// `SECBOOTADD0R.BOOT_LOCK` is clear where the profile requires it.
+    /// Added 2026-09-24.
+    BootLock,
     OemLock,
 }
 
@@ -146,13 +321,54 @@ pub struct ShipProfile {
     pub boot_addr: u32,
     /// Expected `FLASH_OPTR.RDP` byte at ship (Level 0).
     pub rdp_byte: u8,
+    /// Must `SECBOOTADD0R.BOOT_LOCK` be SET for this phase?
+    ///
+    /// **Currently `false` in both shipped profiles, deliberately.** Draft 1.2
+    /// §3 stages `BOOT_LOCK` at the FACTORY (first boot writes only the RDP
+    /// byte), which would make this `true` for both phases — but that is an
+    /// unratified draft, and no bench unit carries `BOOT_LOCK` today, so
+    /// asserting it now would halt every genuine board. The PREDICATE
+    /// ([`boot_lock_set`]) and this switch exist so the requirement is
+    /// expressible and testable in both directions; flipping them is one edit
+    /// in the commit that ratifies the factory sequence.
+    pub require_boot_lock: bool,
 }
 
 /// The STM32U585 ship profile (RDP-0, TZEN=1, all-bank-1-secure, FSBL boot).
 pub const SHIP_PROFILE_U585: ShipProfile = ShipProfile {
     boot_addr: 0x0C00_0000,
     rdp_byte: SHIP_RDP_BYTE,
+    // See `ShipProfile::require_boot_lock`: OFF until the factory sequence is
+    // ratified. Draft 1.2 stages BOOT_LOCK at the factory for BOTH phases.
+    require_boot_lock: false,
 };
+
+/// The same profile AFTER the first-boot lock ceremony: identical boot address,
+/// `RDP = 0xCC`. Draft 1.2 §3 row 2 requires the every-boot read-back to compare
+/// against the *phase-appropriate* profile, so a locked unit presenting the ship
+/// byte — or a ship unit presenting `0xCC` — is a mismatch in both directions.
+pub const LOCKED_PROFILE_U585: ShipProfile = ShipProfile {
+    boot_addr: 0x0C00_0000,
+    rdp_byte: LOCKED_RDP_BYTE,
+    // See `ShipProfile::require_boot_lock`: OFF until the factory sequence is
+    // ratified. Draft 1.2 stages BOOT_LOCK at the factory for BOTH phases.
+    require_boot_lock: false,
+};
+
+/// Pick the phase-appropriate profile from the live `FLASH_OPTR`.
+///
+/// `RDP == 0xCC` selects the locked profile. EVERY other byte selects the
+/// pre-ceremony ship profile (`0xAA`), including an erased or garbage byte,
+/// which [`rdp_level_from_byte`] maps to Level 1. That is the fail-closed
+/// direction: a tampered RDP byte is compared against `0xAA`, mismatches, and
+/// surfaces as [`ObField::Rdp`] instead of selecting a profile that accepts it.
+#[must_use]
+pub const fn phase_profile(optr: u32) -> &'static ShipProfile {
+    match rdp_level_from_byte((optr & 0xFF) as u8) {
+        RdpLevel::L2 => &LOCKED_PROFILE_U585,
+        _ => &SHIP_PROFILE_U585,
+    }
+}
 
 /// Verify `FLASH_OPTR` matches the ship profile's TZEN + RDP fields.
 ///
@@ -169,19 +385,39 @@ pub const fn optr_matches_ship(optr: u32, p: &ShipProfile) -> Result<(), ObField
     if (optr & 0xFF) as u8 != p.rdp_byte {
         return Err(ObField::Rdp);
     }
+    // SWAP_BANK, added 2026-09-24. RM0456 §7.6.2 EXCEPTS this bit from the
+    // RDP-2 option-byte freeze, so unlike every other OPTR field it can still
+    // move on a locked die unless TZEN+BOOT_LOCK forbid it (§7.4.2). A swapped
+    // unit puts bank 2 at the lower address range while security attributes
+    // stay with their PHYSICAL bank (§7.5.8) — every absolute slot, manifest
+    // and per-device address would resolve into the wrong bank.
+    if !swap_bank_clear(optr) {
+        return Err(ObField::SwapBank);
+    }
     Ok(())
 }
 
-/// Is `secwm1r1` the "all bank 1 secure" value?
+/// Does `secwm1r1` mark all of bank 1 secure (`PSTRT=0, PEND=0x7F`)?
+///
+/// FIELD compare, not word compare. The previous `secwm1r1 == SECWM1_ALL_SECURE`
+/// form could never match real silicon — the reserved bits read as 1s — so it
+/// halted every boot that consulted it (the FSBL tz-1 tripwire) and would have
+/// halted first-boot Phase A before the RDP-2 burn on every genuine unit.
+/// Measured on pq1 (die 002f0023-30465002-2033314c): raw `0xFFFFFF80`, fields
+/// `PSTRT=0, PEND=0x7F`, matching CubeProgrammer's own decode.
 #[must_use]
 pub const fn secwm_bank1_all_secure(secwm1r1: u32) -> bool {
-    secwm1r1 == SECWM1_ALL_SECURE
+    let (pstrt, pend) = secwm_fields(secwm1r1);
+    pstrt == 0 && pend == 0x7F
 }
 
-/// Is `secwm2r1` the "all bank 2 non-secure" value?
+/// Does `secwm2r1` leave all of bank 2 non-secure (`PSTRT > PEND`, the
+/// watermark-disabled encoding)? Field compare, same reasoning as above;
+/// measured raw `0xFF80FFFF` => `PSTRT=0x7F, PEND=0`.
 #[must_use]
 pub const fn secwm_bank2_all_ns(secwm2r1: u32) -> bool {
-    secwm2r1 == SECWM2_ALL_NS
+    let (pstrt, pend) = secwm_fields(secwm2r1);
+    pstrt > pend
 }
 
 /// Does the WRP1A option register lock (write-protect) FSBL pages 0..=3?
@@ -212,10 +448,42 @@ pub const WRP1A_MASK_PINNED: bool = false;
 /// layout (`UNLOCK==0 && STRT==0 && END>=3`), independent of the silicon pin.
 #[must_use]
 pub const fn wrp1a_covers_fsbl_bits(wrp1ar: u32) -> bool {
-    let unlock = (wrp1ar >> 31) & 1;
-    let strt = wrp1ar & 0x7F;
-    let end = (wrp1ar >> 16) & 0x7F;
-    unlock == 0 && strt == 0 && end >= 3
+    wrp_covers_fsbl_bits(wrp1ar, FSBL_LAST_PAGE_LEGACY)
+}
+
+/// Last FSBL page under the LEGACY bench layout (32 KiB, pages 0..=3). This is
+/// what the live `fsbl/memory-stm32u585.x` links today.
+pub const FSBL_LAST_PAGE_LEGACY: u32 = 3;
+
+/// Last FSBL page under the FROZEN geometry registry — `pqsigner_geometry`
+/// `FSBL_SPAN = 5 * PAGE_SIZE`, i.e. pages 0..=4. A SHIPPING unit uses this;
+/// the #540 cutover is a prerequisite for shipping.
+///
+/// The distinction is the point: until 2026-09-24 the predicate hard-coded
+/// `end >= 3`, so a WRP range covering only pages 0..=3 satisfied the one
+/// check invariant #10 hangs on — leaving **page 4 of the FSBL unprotected**
+/// under the geometry the product is supposed to ship with, permanently, from
+/// the moment RDP-2 lands.
+pub const FSBL_LAST_PAGE_FROZEN: u32 = 4;
+
+/// Raw "this WRP area write-protects FSBL pages `0..=last_page`" compare over
+/// the BENCH-CONFIRM layout (`UNLOCK==0 && STRT==0 && END>=last_page`),
+/// independent of the silicon pin. Used for BOTH banks — the frozen registry
+/// puts an FSBL copy in each.
+#[must_use]
+pub const fn wrp_covers_fsbl_bits(wrpar: u32, last_page: u32) -> bool {
+    let unlock = (wrpar >> 31) & 1;
+    let strt = wrpar & 0x7F;
+    let end = (wrpar >> 16) & 0x7F;
+    unlock == 0 && strt == 0 && end >= last_page
+}
+
+/// Pin-gated wrapper over [`wrp_covers_fsbl_bits`] for an arbitrary bank/area.
+/// Fails CLOSED while [`WRP1A_MASK_PINNED`] is `false`, exactly like
+/// [`wrp1a_covers_fsbl`].
+#[must_use]
+pub const fn wrp_covers_fsbl(wrpar: u32, last_page: u32) -> bool {
+    WRP1A_MASK_PINNED && wrp_covers_fsbl_bits(wrpar, last_page)
 }
 
 /// Does WRP1A confirm-verifiably write-protect the FSBL pages? **Fail-closed**
@@ -269,6 +537,7 @@ pub const fn verify_ship_profile(
     secwm2r1: u32,
     secbootadd0r: u32,
     wrp1ar: u32,
+    wrp2ar: u32,
     oem_status: u32,
     p: &ShipProfile,
 ) -> Result<(), ObField> {
@@ -284,8 +553,24 @@ pub const fn verify_ship_profile(
     if !secboot_selects(secbootadd0r, p.boot_addr) {
         return Err(ObField::SecBootAdd0);
     }
-    if !wrp1a_covers_fsbl(wrp1ar) {
+    // BOOT_LOCK, added 2026-09-24. Only asserted where the profile asks for it
+    // (see `ShipProfile::require_boot_lock`, currently `false` in both shipped
+    // profiles). Ordered before WRP because a clear BOOT_LOCK also leaves
+    // SECBOOTADD0 and SWAP_BANK mutable at RDP-2 (RM0456 §7.4.2), which makes
+    // every later check's subject movable.
+    if p.require_boot_lock && !boot_lock_set(secbootadd0r) {
+        return Err(ObField::BootLock);
+    }
+    if !wrp_covers_fsbl(wrp1ar, FSBL_LAST_PAGE_FROZEN) {
         return Err(ObField::Wrp1a);
+    }
+    // WRP2A, added 2026-09-24. The frozen registry puts an FSBL copy in BOTH
+    // banks (`FSBL_SPAN` applies to "bank pages 0-4, in both banks"), and
+    // RM0456 §7.6.1 gives each bank its own two WRP areas — so protecting only
+    // bank 1 leaves the bank-2 mirror writable. Before this, the profile did
+    // not even RECEIVE `wrp2ar`.
+    if !wrp_covers_fsbl(wrp2ar, FSBL_LAST_PAGE_FROZEN) {
+        return Err(ObField::Wrp2a);
     }
     if !oem_locks_absent(oem_status) {
         return Err(ObField::OemLock);
@@ -293,9 +578,194 @@ pub const fn verify_ship_profile(
     Ok(())
 }
 
+/// Verify ONLY the option-byte fields whose register layout is CONFIRMED:
+/// `TZEN`, `RDP` (against the caller's phase profile), both secure watermarks,
+/// and the secure boot address.
+///
+/// Deliberately WEAKER than [`verify_ship_profile`], and not a substitute for
+/// it. It omits the two pin-gated predicates ([`wrp1a_covers_fsbl`],
+/// [`oem_locks_absent`]) which fail CLOSED while [`WRP1A_MASK_PINNED`] /
+/// [`OEM_LOCK_MASK_PINNED`] are `false`.
+///
+/// Why the split exists. First-boot Phase A MUST keep calling
+/// `verify_ship_profile`: it gates an irreversible RDP-2 burn, where "cannot
+/// confirm WRP is set" must halt. The every-boot FSBL tripwire (tz-1) cannot
+/// use that verdict — a fail-closed `WRP1A` arm would halt every genuine board,
+/// since bench units carry no WRP at all and no unit has a pinned layout yet —
+/// so it checks this confirmed subset instead.
+///
+/// The limit, stated plainly: a unit whose WRP was cleared before RDP-2 PASSES
+/// this subset. Closing [`WRP1A_MASK_PINNED`] (issue #46) is what buys that
+/// detection; until then the tripwire covers TZEN / RDP / watermarks / boot
+/// address only.
+#[must_use]
+pub const fn verify_confirmed_fields(
+    optr: u32,
+    secwm1r1: u32,
+    secwm2r1: u32,
+    secbootadd0r: u32,
+    p: &ShipProfile,
+) -> Result<(), ObField> {
+    if let Err(f) = optr_matches_ship(optr, p) {
+        return Err(f);
+    }
+    if !secwm_bank1_all_secure(secwm1r1) {
+        return Err(ObField::Secwm1);
+    }
+    if !secwm_bank2_all_ns(secwm2r1) {
+        return Err(ObField::Secwm2);
+    }
+    if !secboot_selects(secbootadd0r, p.boot_addr) {
+        return Err(ObField::SecBootAdd0);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A well-formed LOCKED-state OPTR: TZEN set, RDP=0xCC.
+    const GOOD_OPTR_LOCKED: u32 = OPTR_TZEN | 0xCC;
+    /// The `SECBOOTADD0R` value that selects the FSBL base.
+    /// RM0456 7.9.16 ST production value: address field in bits [31:7]
+    /// (0x0C00_0000 >> 7 = 0x180000), BOOT_LOCK clear, reserved bits [6:1] set.
+    /// The old fixture held the bare shifted value, which no STM32U585 reads.
+    const GOOD_SECBOOT: u32 = 0x0C00_007C;
+    /// RM0456 7.9.17 ST production value. "Reserved bits are read as 1", which
+    /// is why the watermark predicates compare FIELDS, never the whole word.
+    const ST_SECWM1_PRODUCTION: u32 = 0xFFFF_FF80;
+    /// This board's configured bank-2 value: watermark DISABLED (PSTRT > PEND).
+    /// RM0456 7.9.21's production default is 0xFFFF_FF80; we deliberately
+    /// program bank 2 the other way, and both must satisfy the predicate.
+    const PQ1_SECWM2_CONFIGURED: u32 = 0xFF80_FFFF;
+
+    #[test]
+    fn phase_profile_tracks_the_rdp_byte() {
+        assert_eq!(phase_profile(GOOD_OPTR).rdp_byte, SHIP_RDP_BYTE);
+        assert_eq!(phase_profile(GOOD_OPTR_LOCKED).rdp_byte, LOCKED_RDP_BYTE);
+        // Only 0xCC may select the locked profile; every other byte (erased,
+        // garbage, 0x55) selects the ship profile so the compare fails closed.
+        for b in 0u16..=255 {
+            let b = b as u8;
+            assert_eq!(
+                phase_profile(OPTR_TZEN | u32::from(b)).rdp_byte == LOCKED_RDP_BYTE,
+                b == LOCKED_RDP_BYTE,
+                "only 0xCC may select the locked profile (byte {b:#04x})"
+            );
+        }
+    }
+
+    #[test]
+    fn confirmed_subset_accepts_both_phases_and_rejects_cross_phase() {
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &SHIP_PROFILE_U585
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR_LOCKED,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &LOCKED_PROFILE_U585
+            ),
+            Ok(())
+        );
+        // Cross-phase mismatches must be caught in BOTH directions.
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &LOCKED_PROFILE_U585
+            ),
+            Err(ObField::Rdp)
+        );
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR_LOCKED,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &SHIP_PROFILE_U585
+            ),
+            Err(ObField::Rdp)
+        );
+    }
+
+    #[test]
+    fn confirmed_subset_rejects_each_confirmed_field() {
+        let chk = |optr, w1, w2, sb| verify_confirmed_fields(optr, w1, w2, sb, &SHIP_PROFILE_U585);
+        assert_eq!(
+            chk(
+                GOOD_OPTR & !OPTR_TZEN,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT
+            ),
+            Err(ObField::Tzen)
+        );
+        assert_eq!(
+            chk(GOOD_OPTR, 0, SECWM2_ALL_NS, GOOD_SECBOOT),
+            Err(ObField::Secwm1)
+        );
+        assert_eq!(
+            chk(GOOD_OPTR, SECWM1_ALL_SECURE, 0, GOOD_SECBOOT),
+            Err(ObField::Secwm2)
+        );
+        assert_eq!(
+            chk(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, 0),
+            Err(ObField::SecBootAdd0)
+        );
+    }
+
+    /// The load-bearing DIFFERENCE between the two comparators, pinned in both
+    /// directions so neither can drift into the other: the confirmed subset
+    /// ignores WRP1A / OEM locks by design, while the full ship-profile check
+    /// still fails closed on them today.
+    #[test]
+    fn confirmed_subset_ignores_unpinned_fields_but_full_check_does_not() {
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &SHIP_PROFILE_U585
+            ),
+            Ok(()),
+            "the subset must not depend on WRP1A / OEM state"
+        );
+        assert_eq!(
+            verify_ship_profile(
+                GOOD_OPTR,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                GOOD_WRP1A, GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585
+            ),
+            Err(ObField::Wrp1a),
+            "full check fails closed while WRP1A_MASK_PINNED is false"
+        );
+        // The CONSTANT is the thing under test: tz-1's reduced scope is only
+        // justified while the WRP1A layout is unpinned, so this trips the day
+        // the pin flips. clippy flags asserting on a constant; that is the point.
+        #[allow(clippy::assertions_on_constants)]
+        {
+            assert!(
+                !WRP1A_MASK_PINNED,
+                "WRP1A_MASK_PINNED flipped — revisit tz-1's scope and this control"
+            );
+        }
+    }
 
     /// Legacy bench FSBL base; the target shipping entry remains gated by the
     /// production geometry, WRP/option-byte ceremony, and silicon receipts.
@@ -323,13 +793,25 @@ mod tests {
 
     #[test]
     fn secboot_selects_fsbl_base_and_tolerates_control_bits() {
-        // The value tools/ob-configurator programs (0x0C00_0000 >> 7 = 0x180000).
-        assert_eq!(FSBL_BASE >> 7, 0x0018_0000);
-        assert!(secboot_selects(0x0018_0000, FSBL_BASE), "FSBL base must pass");
-        // Setting high control bits (e.g. an eventual BOOT_LOCK in [31:25]) must
-        // NOT flip the address check to "wrong address".
-        assert!(secboot_selects(0x0018_0000 | (1 << 31), FSBL_BASE), "BOOT_LOCK bit tolerated");
-        assert!(secboot_selects(0x0018_0000 | (1 << 25), FSBL_BASE), "high control bit tolerated");
+        // RM0456 7.9.16 ST production value, and what this board actually
+        // reads: address field in bits [31:7], BOOT_LOCK at bit 0.
+        const ST_PRODUCTION: u32 = 0x0C00_007C;
+        assert!(
+            secboot_selects(ST_PRODUCTION, FSBL_BASE),
+            "the ST production value must select the FSBL base (regression: low-mask compare)"
+        );
+        // BOOT_LOCK set must NOT read as a wrong address.
+        assert!(
+            secboot_selects(FSBL_BASE | SECBOOTADD0_BOOT_LOCK, FSBL_BASE),
+            "BOOT_LOCK tolerated"
+        );
+        // Reserved bits [6:1] likewise.
+        assert!(secboot_selects(FSBL_BASE | 0x7E, FSBL_BASE), "reserved bits tolerated");
+        // The OLD encoding must now FAIL — it addressed 0x0018_0000 << 7.
+        assert!(
+            !secboot_selects(0x0018_0000, FSBL_BASE),
+            "the bare shifted value is NOT a valid SECBOOTADD0R word"
+        );
         // A redirected / erased / off-by-one boot address must FAIL (the SL2
         // boot-redirect signal).
         assert!(!secboot_selects(0x0000_0000, FSBL_BASE), "erased/zero must fail");
@@ -346,6 +828,10 @@ mod tests {
     const GOOD_OPTR: u32 = OPTR_TZEN | (0x3 << BOR_LEV_SHIFT) | (SHIP_RDP_BYTE as u32);
     /// WRP1A locking pages 0..=3: UNLOCK=0, STRT=0, END=3.
     const GOOD_WRP1A: u32 = (3 << 16) | 0;
+    /// A WRP area covering FSBL pages 0..=4 — what the FROZEN geometry needs,
+    /// and what `verify_ship_profile` now demands of BOTH banks. `GOOD_WRP1A`
+    /// (END=3) deliberately does NOT satisfy it: that gap is the defect.
+    const GOOD_WRP_FROZEN: u32 = (4 << 16) | 0;
 
     #[test]
     fn optr_ship_requires_tzen_and_rdp0() {
@@ -363,13 +849,102 @@ mod tests {
         assert_eq!(optr_matches_ship(optr_l1, &SHIP_PROFILE_U585), Err(ObField::Rdp));
     }
 
+    /// The guard whose absence let three separate places write option-byte
+    /// command bits to the wrong FLASH register (see the block comment above
+    /// `FLASH_NSSR_OFF`). Enumerated from the vendor SVD 2026-09-16 by listing
+    /// EVERY field of each register — probing for expected names is what hid
+    /// this, since the SVD prefixes them (`FLASH_SECCR`, not `SECCR`).
+    #[test]
+    fn optbyte_command_bits_live_only_in_nscr() {
+        // Offsets, straight from the SVD's addressOffset fields.
+        assert_eq!(FLASH_NSSR_OFF, 0x20, "FLASH_NSSR");
+        assert_eq!(FLASH_SECSR_OFF, 0x24, "FLASH_SECSR");
+        assert_eq!(FLASH_NSCR_OFF, 0x28, "FLASH_NSCR");
+        assert_eq!(FLASH_SECCR_OFF, 0x2C, "FLASH_SECCR");
+        // Command bit positions.
+        assert_eq!(FLASH_OPTSTRT, 1 << 17, "OPTSTRT is NSCR bit 17");
+        assert_eq!(FLASH_OBL_LAUNCH, 1 << 27, "OBL_LAUNCH is NSCR bit 27");
+        assert_eq!(FLASH_OPTLOCK, 1 << 30, "OPTLOCK is NSCR bit 30");
+        assert_eq!(FLASH_SR_BSY, 1 << 16, "BSY is bit 16 of both status regs");
+
+        // Exactly ONE register may receive an option-byte command. The
+        // control/status registers are adjacent (0x20/0x24/0x28/0x2C), which
+        // is why an off-by-one-register bug is easy to write and invisible.
+        assert!(is_optbyte_command_register(FLASH_NSCR_OFF));
+        for off in [
+            FLASH_NSSR_OFF,
+            FLASH_SECSR_OFF,
+            FLASH_SECCR_OFF,
+            0x0C, // SECKEYR
+            0x10, // OPTKEYR
+            0x40, // OPTR
+            0x4C, // SECBOOTADD0R
+        ] {
+            assert!(
+                !is_optbyte_command_register(off),
+                "only FLASH_NSCR (0x28) owns the option-byte command bits; \
+                 offset {off:#04X} must not qualify"
+            );
+        }
+
+        // Two-sided. SECCR silently ignores each command bit — no commit, no
+        // error — which is exactly why the #268 defect reports success.
+        assert!(!seccr_accepts(FLASH_OPTSTRT), "SECCR has no bit 17");
+        assert!(!seccr_accepts(FLASH_OBL_LAUNCH), "SECCR has no bit 27");
+        assert!(!seccr_accepts(FLASH_OPTLOCK), "SECCR has no bit 30");
+        assert!(
+            !seccr_accepts(FLASH_OPTSTRT | (1 << 16)),
+            "a write mixing STRT with OPTSTRT is still not acceptable to SECCR"
+        );
+        // ...but it does implement STRT (16) and LOCK (31), so those pass.
+        assert!(seccr_accepts(1 << 16), "SECCR implements STRT");
+        assert!(seccr_accepts(1 << 31), "SECCR implements LOCK");
+        assert!(seccr_accepts(0), "a no-op write is trivially acceptable");
+    }
+
     #[test]
     fn secwm_window_exact_match() {
+        // MEASURED silicon values are the positive case. The old test only ever
+        // fed in the idealised constants, so it stayed green while the
+        // predicate could not match any real board (reserved bits read as 1s).
+        const PQ1_SECWM1_RAW: u32 = 0xFFFF_FF80; // PSTRT=0,    PEND=0x7F
+        const PQ1_SECWM2_RAW: u32 = 0xFF80_FFFF; // PSTRT=0x7F, PEND=0
+        assert_eq!(secwm_fields(PQ1_SECWM1_RAW), (0, 0x7F));
+        assert_eq!(secwm_fields(PQ1_SECWM2_RAW), (0x7F, 0));
+        assert!(
+            secwm_bank1_all_secure(PQ1_SECWM1_RAW),
+            "a correctly configured board must PASS (regression: word compare)"
+        );
+        assert!(
+            secwm_bank2_all_ns(PQ1_SECWM2_RAW),
+            "watermark-disabled bank 2 must PASS (regression: word compare)"
+        );
+        // The written field values must also pass, so whatever programs the
+        // watermarks and this reader cannot disagree.
         assert!(secwm_bank1_all_secure(SECWM1_ALL_SECURE));
-        assert!(!secwm_bank1_all_secure(SECWM1_ALL_SECURE | 1), "any deviation fails");
-        assert!(!secwm_bank1_all_secure(0), "erased fails");
         assert!(secwm_bank2_all_ns(SECWM2_ALL_NS));
-        assert!(!secwm_bank2_all_ns(SECWM2_ALL_NS ^ 0x0001_0000), "partial-secure bank2 fails");
+        // RM0456 production values (7.9.17 / 7.9.21) must pass too.
+        assert!(
+            secwm_bank1_all_secure(ST_SECWM1_PRODUCTION),
+            "RM0456 7.9.17 ST production value must pass"
+        );
+        assert!(
+            secwm_bank2_all_ns(PQ1_SECWM2_CONFIGURED),
+            "watermark-disabled bank 2 as configured on pq1 must pass"
+        );
+        // Two-sided: genuinely wrong spans must still FAIL.
+        assert!(
+            !secwm_bank1_all_secure(0xFFFF_FF81),
+            "PSTRT=1 leaves page 0 non-secure"
+        );
+        assert!(
+            !secwm_bank1_all_secure(0xFFFE_FF80),
+            "PEND=0x7E leaves the last page non-secure"
+        );
+        assert!(
+            !secwm_bank2_all_ns(0x007F_0000),
+            "PSTRT=0 <= PEND=0x7F would mark bank 2 SECURE"
+        );
     }
 
     #[test]
@@ -416,7 +991,7 @@ mod tests {
         assert_eq!(
             verify_ship_profile(
                 GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
-                FSBL_BASE >> 7, GOOD_WRP1A, 0, &SHIP_PROFILE_U585,
+                GOOD_SECBOOT, GOOD_WRP1A, GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585,
             ),
             if !WRP1A_MASK_PINNED {
                 Err(ObField::Wrp1a)
@@ -428,31 +1003,154 @@ mod tests {
         );
         // Each corruption surfaces its own field, in fundamental-first order.
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR & !OPTR_TZEN, SECWM1_ALL_SECURE, SECWM2_ALL_NS, FSBL_BASE >> 7, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR & !OPTR_TZEN, SECWM1_ALL_SECURE, SECWM2_ALL_NS, GOOD_SECBOOT, GOOD_WRP1A, GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585),
             Err(ObField::Tzen)
         );
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, 0, SECWM2_ALL_NS, FSBL_BASE >> 7, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, 0, SECWM2_ALL_NS, GOOD_SECBOOT, GOOD_WRP1A, GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585),
             Err(ObField::Secwm1)
         );
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, 0, FSBL_BASE >> 7, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, 0, GOOD_SECBOOT, GOOD_WRP1A, GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585),
             Err(ObField::Secwm2)
         );
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, 0, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, 0, GOOD_WRP1A, GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585),
             Err(ObField::SecBootAdd0)
         );
         // A removable WRP (UNLOCK=1) fails the WRP1A gate regardless of the pin.
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, FSBL_BASE >> 7, GOOD_WRP1A | (1 << 31), 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, GOOD_SECBOOT, GOOD_WRP1A | (1 << 31), GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585),
             Err(ObField::Wrp1a)
         );
         // An OEM key present reaches the OEM gate only once WRP1A is pinned;
         // while WRP1A is unpinned the fail-closed WRP1A gate reports first.
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, FSBL_BASE >> 7, GOOD_WRP1A, OEM2LOCK, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, GOOD_SECBOOT, GOOD_WRP1A, GOOD_WRP_FROZEN, OEM2LOCK, &SHIP_PROFILE_U585),
             if WRP1A_MASK_PINNED { Err(ObField::OemLock) } else { Err(ObField::Wrp1a) },
         );
     }
+    /// The four profile gaps closed on 2026-09-24, each with the failing
+    /// direction AND the passing direction. Before this, a unit could be
+    /// verified and then frozen at RDP-2 with any of them wrong.
+    #[test]
+    fn profile_closes_the_2026_09_24_gaps() {
+        // --- SWAP_BANK (RM0456 §7.6.2 excepts it from the RDP-2 freeze) ---
+        assert!(swap_bank_clear(GOOD_OPTR), "control: the good OPTR is unswapped");
+        assert!(!swap_bank_clear(GOOD_OPTR | OPTR_SWAP_BANK), "a set bit is not clear");
+        assert_eq!(
+            verify_ship_profile(
+                GOOD_OPTR | OPTR_SWAP_BANK, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, GOOD_WRP_FROZEN, GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585,
+            ),
+            Err(ObField::SwapBank),
+            "a swapped unit must be rejected: attributes follow the PHYSICAL bank \
+             (§7.5.8) while every absolute address would resolve into the other one"
+        );
+
+        // --- BOOT_LOCK ---
+        assert!(!boot_lock_set(GOOD_SECBOOT), "control: bench SECBOOTADD0 has no BOOT_LOCK");
+        assert!(boot_lock_set(GOOD_SECBOOT | SECBOOTADD0_BOOT_LOCK), "set bit reads as set");
+        // Still accepted by the ADDRESS predicate, which is the point of masking bit 0.
+        assert!(
+            secboot_selects(GOOD_SECBOOT | SECBOOTADD0_BOOT_LOCK, 0x0C00_0000),
+            "setting BOOT_LOCK must never read as a wrong boot address"
+        );
+        // The shipped profiles do not require it yet — that is deliberate and pinned.
+        assert!(!SHIP_PROFILE_U585.require_boot_lock);
+        assert!(!LOCKED_PROFILE_U585.require_boot_lock);
+        // But when a profile DOES require it, a clear bit is rejected.
+        let strict = ShipProfile { require_boot_lock: true, ..SHIP_PROFILE_U585 };
+        assert_eq!(
+            verify_ship_profile(
+                GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, GOOD_WRP_FROZEN, GOOD_WRP_FROZEN, 0, &strict,
+            ),
+            Err(ObField::BootLock),
+            "a profile requiring BOOT_LOCK must reject a unit without it"
+        );
+
+        // --- WRP2A: the bank-2 FSBL mirror ---
+        // Pin-independent direction: a REMOVABLE (UNLOCK=1) bank-2 WRP fails.
+        assert!(!wrp_covers_fsbl(GOOD_WRP_FROZEN | (1 << 31), FSBL_LAST_PAGE_FROZEN));
+        assert_eq!(
+            verify_ship_profile(
+                GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, GOOD_SECBOOT,
+                GOOD_WRP_FROZEN, GOOD_WRP_FROZEN | (1 << 31), 0, &SHIP_PROFILE_U585,
+            ),
+            if WRP1A_MASK_PINNED { Err(ObField::Wrp2a) } else { Err(ObField::Wrp1a) },
+            "a removable bank-2 WRP must be caught once bank 1 stops failing closed"
+        );
+
+        // --- the page-4 gap itself ---
+        assert!(
+            wrp_covers_fsbl_bits(GOOD_WRP1A, FSBL_LAST_PAGE_LEGACY),
+            "END=3 covers the LEGACY 32 KiB FSBL (pages 0..=3)"
+        );
+        assert!(
+            !wrp_covers_fsbl_bits(GOOD_WRP1A, FSBL_LAST_PAGE_FROZEN),
+            "END=3 does NOT cover the FROZEN FSBL (pages 0..=4) — this was the defect: \
+             the predicate hard-coded `end >= 3`, so page 4 could ship unprotected \
+             and RDP-2 would make that permanent"
+        );
+        assert!(wrp_covers_fsbl_bits(GOOD_WRP_FROZEN, FSBL_LAST_PAGE_FROZEN));
+        assert_eq!(FSBL_LAST_PAGE_FROZEN, 4, "pqsigner_geometry FSBL_SPAN = 5 pages, 0..=4");
+        assert_eq!(FSBL_LAST_PAGE_LEGACY, 3);
+    }
+
+    /// The EVERY-BOOT tripwire catches a bank swap — including after RDP-2.
+    ///
+    /// This is the most valuable consequence of adding SWAP_BANK to
+    /// `optr_matches_ship`, and it is easy to lose by "simplifying" the
+    /// tripwire's subset later, so it is pinned here rather than left implicit.
+    ///
+    /// Why this specific pairing matters: RM0456 §7.6.2 freezes the option
+    /// bytes at RDP-2 but EXCEPTS `SWAP_BANK`, and §7.4.2 closes that only when
+    /// `TZEN` and `BOOT_LOCK` are both set — and `BOOT_LOCK` is not asserted by
+    /// either shipped profile yet (`ShipProfile::require_boot_lock == false`).
+    /// So on a locked unit today, `SWAP_BANK` is the one option byte an
+    /// attacker with option-byte access could still move, and the FSBL's
+    /// every-boot pass is the only thing that would notice.
+    #[test]
+    fn the_every_boot_tripwire_catches_a_post_lock_bank_swap() {
+        // A well-formed LOCKED unit passes the confirmed subset.
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR_LOCKED, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &LOCKED_PROFILE_U585,
+            ),
+            Ok(()),
+            "control: an honest locked unit must NOT halt every boot"
+        );
+        // The same unit with the banks swapped is rejected.
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR_LOCKED | OPTR_SWAP_BANK, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &LOCKED_PROFILE_U585,
+            ),
+            Err(ObField::SwapBank),
+            "a post-RDP-2 bank swap must be caught on every boot: it is the ONE \
+             option byte §7.6.2 leaves mutable at Level 2, and BOOT_LOCK — which \
+             §7.4.2 would use to close it — is not asserted by either profile yet"
+        );
+        // And in the pre-lock phase too, against the ship profile.
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR | OPTR_SWAP_BANK, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &SHIP_PROFILE_U585,
+            ),
+            Err(ObField::SwapBank),
+        );
+        // The tripwire's documented scope is otherwise unchanged: it still does
+        // NOT cover WRP (that is the `verify_ship_profile` / #46 story).
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &SHIP_PROFILE_U585,
+            ),
+            Ok(()),
+            "adding SWAP_BANK must not have widened the subset into WRP territory"
+        );
+    }
+
 }

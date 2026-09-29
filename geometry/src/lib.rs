@@ -20,6 +20,25 @@ pub const PAGE_SIZE: u32 = 0x2000;
 pub const BANK1_BASE: u32 = 0x0C00_0000;
 /// Bank-2 base address.
 pub const BANK2_BASE: u32 = 0x0810_0000;
+
+/// Bank-2 base through the **SECURE** alias.
+///
+/// [`BANK2_BASE`] is the NON-SECURE alias, which is the right answer only
+/// while every bank-2 page is non-secure — true under this registry, where
+/// bank 2 holds the FSBL mirror and both NS slots. It stops being true the
+/// moment a secure watermark covers part of bank 2 (RM0456 §7.5.2 allows one
+/// secure area per bank), and a secure-state read of a secure page through the
+/// NS alias returns ZEROS rather than faulting: that is precisely how the FSBL
+/// silently halted on 2026-09-16 hashing 7,488 zero bytes.
+///
+/// So [`page_addr`] is correct today and would be quietly wrong under such a
+/// geometry. [`page_addr_secure`] exists so the distinction is explicit
+/// instead of implied by a base constant's name.
+///
+/// Derivation, not a magic number: bank 1 is 1 MiB
+/// (`PAGES_PER_BANK * PAGE_SIZE`), and the secure aliases are contiguous, so
+/// bank 2's secure base is bank 1's plus one bank.
+pub const BANK2_SECURE_BASE: u32 = BANK1_BASE + PAGES_PER_BANK as u32 * PAGE_SIZE;
 /// Pages per bank.
 pub const PAGES_PER_BANK: u8 = 128;
 
@@ -122,6 +141,21 @@ pub const REGISTRY: [Row; 16] = [
 /// above [`PAGES_PER_BANK`] simply address past the bank.
 pub const fn page_addr(bank: Bank, page: u8) -> u32 {
     bank.base() + page as u32 * PAGE_SIZE
+}
+
+/// Start address of a page through the SECURE alias.
+///
+/// Use this wherever the accessing code is in the secure state AND the page is
+/// covered by a secure watermark. [`page_addr`] answers the other case (bank 1
+/// is already the secure alias; bank 2's is the NS one). Reading a secure page
+/// through the NS alias from secure state returns zeros, silently.
+#[must_use]
+pub const fn page_addr_secure(bank: Bank, page: u8) -> u32 {
+    let base = match bank {
+        Bank::One => BANK1_BASE,
+        Bank::Two => BANK2_SECURE_BASE,
+    };
+    base + page as u32 * PAGE_SIZE
 }
 
 /// End-exclusive address of a page.

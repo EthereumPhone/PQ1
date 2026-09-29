@@ -1,0 +1,30 @@
+[package]
+name = "pqsigner-hw"
+version = "0.1.0"
+edition.workspace = true
+description = "STM32U585 peripheral drivers shared by the secure world and the FSBL — typed MMIO plus the HASH (SHA-256) accelerator."
+
+# WHY THIS CRATE EXISTS. The HASH driver was secure-world-only until the FSBL
+# needed it too: `sha2::sha256::compress256` is 7,202 B, 23.4% of a 32 KiB FSBL
+# image with 2,048 B free, and it only leaves the binary if every SHA-256
+# consumer moves onto the peripheral (#758 option (d), measured at -8,568 B).
+#
+# The alternative was a second copy of a 400-line security-critical driver in
+# `fsbl/`. This tree keeps finding two-drifting-copies defects — the 10 s vs 4 s
+# fingerprint hold, the FSBL/secure manifest addresses — so a second copy of the
+# thing that measures the firmware was not acceptable.
+
+[dependencies]
+cortex-m = { workspace = true }
+
+[features]
+default = []
+# Emit semihosting diagnostics from the HASH timeout paths. Gated because the
+# FSBL has no semihosting and every byte counts there. `hprintln!` without a
+# debugger issues a BKPT that HardFaults on real silicon, so even when enabled
+# the calls go through a DHCSR.C_DEBUGEN probe.
+debug-log = ["dep:cortex-m-semihosting"]
+
+[dependencies.cortex-m-semihosting]
+workspace = true
+optional = true

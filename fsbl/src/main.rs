@@ -38,8 +38,13 @@
 //! ## Non-goals for this first cut
 //!
 //! * **HASH peripheral acceleration.** We use `sha2::Sha256` in
-//!   software. At 16 MHz this is ~200 ms per 512 KB image, ~400 ms
-//!   total, which is an acceptable boot delay.
+//!   software. MEASURED on pq1 at HSI16: **1.167 s** for the 385,568 B
+//!   secure image and 0.023 s for the 7,488 B NS image (4.67 s / 0.09 s
+//!   before the clock switch). Porting the HASH peripheral would save
+//!   ~1.5 s of a boot that measured 12.932 s at the old 10 s fingerprint
+//!   hold; the hold is 4 s since 2026-09-24, so the expected boot is
+//!   ~6.93 s. Still 1-2 KB in a WRP-frozen range. See `crate::marker` for
+//!   the full budget.
 //! * **LCD error screen.** On catastrophic failure FSBL halts silently.
 //! * **Reviewed probation/rollback.** The legacy `TRIED` logic is not a
 //!   production safety net. Draft 1.1 proposes typed
@@ -73,14 +78,27 @@ use panic_halt as _;
 use cortex_m_rt::entry;
 use fw_manifest::{ManifestRef, TRY_ONCE_COMMITTED, TRY_ONCE_TRIED};
 
+/// AW99703 backlight driver (#705). pq1 only — iota2's backlight is
+/// hard-wired, so the module compiles to nothing there.
+#[cfg(feature = "board-pq1")]
+mod aw99703;
+mod board;
 mod boot_state;
 mod branch;
+mod clock;
 mod fi;
 mod glyphs;
+#[cfg(feature = "hw-sha256")]
+mod hash;
+mod sha;
 mod manifest;
+#[cfg(feature = "stage-marker")]
+mod marker;
 mod nv3007;
+mod optbytes;
 mod otp;
 mod render;
+mod sau;
 mod slot;
 mod vendor_pubkey;
 mod verify;
@@ -102,6 +120,51 @@ fn main() -> ! {
     #[cfg(feature = "lcd-test")]
     nv3007::lcd_test_loop();
 
+    // Raise SYSCLK from the 4 MHz MSIS reset clock to HSI16 before anything
+    // else. This is the first thing in the boot because it must happen before
+    // any cycle-counted delay is calibrated and before the DWT timestamps
+    // below, so the whole boot is measured in ONE clock domain.
+    //
+    // Bounded and fail-safe by construction: on failure the part stays on
+    // MSIS, and `clock::achieved_hz()` reads that back from `CFGR1.SWS` so
+    // `nv3007::delay_ms` scales to the real clock — a clock that does not come
+    // up costs boot time rather than under-satisfying an NV3007 vendor
+    // minimum. See `clock` for why 16 MHz needs no VOS or flash-latency work,
+    // and why this module holds no state.
+    clock::init();
+
+    // HASH peripheral, BEFORE anything hashes. Enables its clock, makes it a
+    // secure peripheral in GTZC (it is NONSECURE after reset — RM0456 Rev 7
+    // Table 4 + §3.5; the secure world only gets away without this because
+    // `sau.rs` runs first), and runs the SHA-256("abc") known-answer test,
+    // halting on mismatch.
+    //
+    // It must be called, not merely linked: with no caller the whole
+    // bring-up — clock enable, GTZC bit and KAT — is dead-stripped, leaving
+    // `pqsigner_sha256_*` talking to an unclocked, nonsecure peripheral. That
+    // exact mistake produced a 22,052 B image that looked like a better
+    // result than the correct one.
+    #[cfg(feature = "hw-sha256")]
+    // SAFETY: boot-time, single-threaded, before any SHA-256 call, TZEN = 1
+    // by construction (this is the secure boot image).
+    unsafe {
+        hash::init();
+    }
+
+    // Bench diagnostic (`stage-marker`): prove the FSBL executes at all. It
+    // halts silently on rejection and has no logging, so this is the only
+    // evidence available for the silent-rejection bug.
+    //
+    // Start the cycle counter after the clock switch so every stage below
+    // carries a timestamp in the same domain. `MainEntered`'s own value
+    // excludes whatever ran before this point (reset vector, `cortex_m_rt`
+    // pre-main init, and the clock switch itself) — small, but it means the
+    // table measures from here, not from reset.
+    #[cfg(feature = "stage-marker")]
+    marker::init_cycle_counter();
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::MainEntered, clock::achieved_hz());
+
     // Borrow both manifest pages directly from memory-mapped flash — NO RAM
     // copy. Copying both into stack-local `[u8; MANIFEST_SIZE]` (8 KB each)
     // buffers held 16 KB live across the multi-KB-stack SPHINCS+C10 verify and
@@ -111,15 +174,34 @@ fn main() -> ! {
     // The pages are stable, readable flash throughout boot (verify_images
     // already streams the image regions straight from flash), so borrowing
     // them costs no stack. See `manifest::at`.
+    // Make the bank-2 NS alias readable by the core BEFORE any admission step
+    // touches it. Without this, `verify_images` hashes ZEROS for the NS image
+    // (secure access to an NS-watermarked page reads as zero with the SAU
+    // disabled), every candidate is rejected, and the FSBL halts silently.
+    // Measured root cause of the 2026-09-16 boot-proof failure; see sau.rs.
+    sau::init();
+
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::SauConfigured, 0);
+
     let m_a = manifest::at(Slot::A);
     let m_b = manifest::at(Slot::B);
 
     let floor = otp::rollback_floor();
 
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::FloorRead, floor);
+
     // Check each manifest through the full verify chain. A candidate
     // is `Some(&ManifestRef)` if it passes every step.
     let valid_a = filter_valid(&m_a, floor);
     let valid_b = filter_valid(&m_b, floor);
+
+    #[cfg(feature = "stage-marker")]
+    marker::record(
+        marker::Stage::SlotAAdmitted,
+        valid_a.map_or(0, ManifestRef::fw_version),
+    );
 
     // Check image hashes. A manifest can pass signature verification
     // but still fail if the actual slot contents were torn. On success
@@ -129,26 +211,104 @@ fn main() -> ! {
     let img_ok_a = valid_a.and_then(|m| verify::verify_images(Slot::A, m).map(|d| (m, d)));
     let img_ok_b = valid_b.and_then(|m| verify::verify_images(Slot::B, m).map(|d| (m, d)));
 
+    #[cfg(feature = "stage-marker")]
+    marker::record(
+        marker::Stage::SlotAImagesOk,
+        u32::from(img_ok_a.is_some()),
+    );
+
     let Some((slot, secure_digest)) = pick_slot(img_ok_a, img_ok_b) else {
         halt();
     };
+
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::SlotPicked, slot as u32);
+
+    // tz-1 (#366; KEEP decided 2026-07-23; Draft 1.2 §3 row 2): read the option
+    // bytes back before the slot branch and halt on a PERSISTENT mismatch —
+    // never write one (Draft 1.2 §1 C1). Scope is the CONFIRMED subset (TZEN /
+    // phase-appropriate RDP / both watermarks / secure boot address); `WRP1A`
+    // and the OEM locks stay read-only-advisory while their layouts are
+    // unpinned, because a fail-closed arm there would halt every genuine board.
+    // Placed before the fingerprint render so a tripped board shows nothing at
+    // all rather than words implying a good boot. See `optbytes` for the
+    // single-fault trade-off this accepts.
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::Tz1Entering, 0);
+    #[cfg(feature = "stage-marker")]
+    {
+        // Record the verdict BEFORE acting on it: a halt here is invisible
+        // otherwise, and mistaking a tz-1 rejection for an LCD stall already
+        // cost one wrong diagnosis.
+        let ok = optbytes::persistent_confirmed_match();
+        marker::record(marker::Stage::Tz1Verdict, u32::from(ok));
+        if !ok {
+            halt();
+        }
+    }
+    #[cfg(not(feature = "stage-marker"))]
+    if !optbytes::persistent_confirmed_match() {
+        halt();
+    }
 
     // Render the 8-BIP-39-word firmware fingerprint on the LCD before
     // branching. This is the trust root for the "subsequent updates
     // can't fake the words" property: the slot we are about to enter
     // never gets to display anything before the user has already seen
     // FSBL's verdict for THESE bytes. See `docs/security/measured-boot.md`.
-    render::render_fingerprint(&secure_digest);
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::RenderEntered, 0);
+
+    // #705 RECOVERABLE FAIL-CLOSED. The verdict is a control input, not a
+    // diagnostic: if any SPI transfer timed out, the words on the panel are
+    // incomplete or absent, and handing off anyway would let the FIRST screen
+    // the user ever sees come from the updatable firmware this stage exists to
+    // check — the forged-fingerprint hole invariant #10 closes.
+    //
+    // Refuse instead. `halt()` is the same primitive the option-byte tripwire
+    // uses, and it is `-> !`, so the type system forbids falling through to
+    // `into_slot` even if this `if` were ever edited wrong.
+    //
+    // RECOVERABLE means exactly this: nothing here writes flash, OTP, option
+    // bytes, the boot-state page or the marker page, so a transient fault
+    // blocks ONE boot and a power-cycle retries from an identical state. It is
+    // deliberately NOT a latch — a permanent brick from a marginal pull-up or
+    // an aging part would be worse than the plain halt this policy replaced,
+    // and unfixable once the RDP-2 self-lock freezes this code.
+    //
+    // ACCEPTED RESIDUAL, stated here because this is where it bites: the
+    // signalling channel IS the thing that failed. A user facing a dark, silent
+    // device cannot tell this refusal from a flat battery or a dead unit. No
+    // other channel exists at this point — the RGB driver shares both the I2C
+    // bus and the display connector, so it is dark in common mode with the most
+    // likely failure. The policy prevents a forged fingerprint; it cannot
+    // explain itself.
+    let display_verdict = render::render_fingerprint(&secure_digest);
+    if display_verdict != fi::OK_SENTINEL {
+        #[cfg(feature = "stage-marker")]
+        marker::record(marker::Stage::RenderFlushed, u32::MAX);
+        halt();
+    }
 
     // SAFETY: we verified the slot's manifest signature and image
     // hash. Branching is the last thing FSBL does; control passes to
     // the slot's reset handler.
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::Branching, 0);
+
     unsafe { branch::into_slot(slot) }
 }
 
 /// Run the full manifest verify chain. Returns Some iff all steps
-/// pass. The `fpr` and `signature` checks dominate runtime — they
-/// take a few ms each at 16 MHz with software SHA-256.
+/// pass. The `fpr` and `signature` checks dominate runtime: the whole chain
+/// (CRC + digest + fpr + C10 signature + rollback) is **0.375 s** MEASURED on
+/// pq1 at HSI16 (`stage-marker` DWT timestamps); it was 1.50 s on the 4 MHz
+/// reset clock.
+///
+/// This comment previously said "a few ms each", then "~10 ms each" after I
+/// rescaled it for the 4 MHz clock without questioning whether the original
+/// was ever credible. It was not — a software SPHINCS+C10 verify at 4 MHz
+/// cannot be milliseconds. Do not re-derive a figure here by scaling; measure.
 ///
 /// F-7 defense-in-depth hardening (matches secure-world's `verify_manifest`):
 /// the `verify_signature` call is wrapped in `fi::check_true_into_sentinel`,

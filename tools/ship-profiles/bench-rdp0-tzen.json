@@ -1,0 +1,31 @@
+{
+  "name": "bench-rdp0-tzen",
+  "description": "Current bench state: RDP-0, TZEN=1, bank-1 secure, WRP OFF. Not a ship profile.",
+  "status": "bench — describes how a development board should look while we are still reflashing it",
+  "option_bytes": {
+    "RDP": "0xAA",
+    "TZEN": "0x1",
+    "SWAP_BANK": "0x0",
+    "nSWBOOT0": "0x1",
+    "SECBOOTADD0": "0x180000",
+    "BOOT_LOCK": "0x0",
+    "SECWM1_PSTRT": "0x0",
+    "SECWM1_PEND": "0x7F",
+    "HDP1EN": "0x0",
+    "WRP1A_PSTRT": "0x7F",
+    "WRP1A_PEND": "0x0",
+    "WRP1B_PSTRT": "0x7F",
+    "WRP1B_PEND": "0x0",
+    "SECWM2_PSTRT": "0x7F",
+    "SECWM2_PEND": "0x0",
+    "HDP2EN": "0x0"
+  },
+  "notes": [
+    "WRP1A/1B are DISABLED here, and the encoding is the reason the fields look odd:",
+    "on STM32U5 a WRP area is off when PSTRT > PEND. 0x7F > 0x0 is 'no protection',",
+    "NOT 'protect pages 0x7F..0x0'. A profile that wrote 0x0/0x0 would silently mean",
+    "'protect page 0', which is the opposite of what a bench board wants.",
+    "SECWM1 covers the whole of bank 1 (pages 0..0x7F) because the monolithic bench",
+    "image is secure-world-only. SECWM2 is off (0x7F > 0x0) so bank 2 stays non-secure."
+  ]
+}

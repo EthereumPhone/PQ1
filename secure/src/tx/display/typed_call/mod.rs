@@ -37,6 +37,10 @@ use crate::tx::typed_call::parser::{parse_text_sig, ParsedSig, TypeId, TypeRef};
 /// budget caps us at 6 — anything past that falls back to BLIND SIGN.
 const MAX_TYPED_ARGS_RENDERED: usize = 6;
 
+/// The pixel-UI twin of this painter (`ui-px`, port step 2).
+#[cfg(any(test, feature = "ui-px"))]
+pub(crate) mod screens;
+
 /// Try to render a Phase 2 typed-args display. Returns `None` on any
 /// parse / shape / cap failure ⇒ caller falls back to
 /// `render_blind_sign_pages`.

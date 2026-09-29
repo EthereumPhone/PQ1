@@ -36,6 +36,17 @@ macro_rules! secure_log {
             if $crate::ARCH.dhcsr.read() & 1 != 0 {
                 cortex_m_semihosting::hprintln!($($arg)*);
             }
+            // Additionally mirror to the debug USART when `uart-console` is
+            // on. This is the ONLY channel that works with no debugger
+            // attached and independently of RDP level, which is what makes a
+            // silent secure world diagnosable on a board with no panel (pq1).
+            // Deliberately not `else`: with a probe attached both channels
+            // carry the same line, so a capture is never missing output just
+            // because someone was also using semihosting.
+            #[cfg(feature = "uart-console")]
+            {
+                $crate::uart_log::println(format_args!($($arg)*));
+            }
         }
         #[cfg(not(feature = "stm32u585"))]
         {
@@ -61,7 +72,9 @@ mod tx;
 // AES-256 vectors. No hardware deps.
 mod cmac;
 // Pure-logic SE050 SCP03 primitives (AES-128 ECB/CBC, CMAC-AES-128, the
-// GP `PUT KEY` APDU builder, KCV, OEF-`0xA201` (SE050C2) factory key constants).
+// GP `PUT KEY` APDU builder, KCV, and the published factory key constants for
+// the fitted SE050 variant — E2/`0xA921` by default, C2/`0xA201` under
+// `se050-part-c2`).
 // Always compiled — `se050::scp03` (which is `feature="se050"` /
 // `not(test)`-gated) imports from here, and the host test build runs the
 // NIST FIPS 197 / SP 800-38B vectors + the GP layout assertions.
@@ -82,6 +95,9 @@ mod first_boot;
 // erases. The STM32 driver consumes its validated address/page capabilities;
 // page 127 remains exclusively owned by the first-boot journal.
 mod flash_policy;
+/// Why each PIN attempt was consumed (#715). RAM-resident, read-only over the
+/// gateway; no secret material. Pure ring logic, host-tested.
+mod pin_attempt_log;
 
 // Pure classification of the device-master-key OTP region (Virgin / Partial /
 // Complete, per quad-word). Free of MMIO so the D4 rule — an interrupted
@@ -99,6 +115,11 @@ mod die_id;
 // compiles only the pure logic on x86_64.
 #[cfg(not(test))]
 mod boot_ns;
+/// Board pin / peripheral map — which physical board this image targets.
+/// Selected by the `board-pq1` feature; absent it, the B-U585I-IOT02A dev
+/// board. STM32-only: every constant is an MCU address or pin number.
+#[cfg(feature = "stm32u585")]
+mod board;
 mod crypto;
 mod fi;
 mod fih;
@@ -106,6 +127,11 @@ mod fih;
 // busy-spinning `cortex_m_semihosting` write path that hangs `make e2e`.
 #[cfg(not(test))]
 mod shio;
+// `core::fmt` sink over the board's debug USART, so `secure_log!` reaches a
+// wire that works without a debugger and at any RDP level. Bench only —
+// `uart-console` is in PROD_FORBIDDEN and the nsc/mod.rs release fence.
+#[cfg(all(feature = "uart-console", not(test)))]
+mod uart_log;
 mod sign_rate;
 #[cfg(test)]
 mod fuzz_props;
@@ -123,7 +149,6 @@ mod host_rng;
 // `hw` retains its own feature gate, so QEMU still only sees `mmio`.
 #[cfg(not(test))]
 mod hw;
-#[cfg(not(test))]
 mod reset_cause;
 /// Firmware-update state machine. Built on the STM32U585 hardware path
 /// because it uses the bank-2 flash primitives in `hw::flash` that only
@@ -155,9 +180,57 @@ mod rng_exact;
 // fresh-block-per-chunk discipline) is compiled and exercised by the
 // host test suite.
 mod rng_strong_fold;
+// Pure xorshift32 PRNG + reseed windowing used by `hw::consumption_mask` —
+// kept OUT of that target-only MMIO driver (same pattern as rng_strong_fold)
+// so the static-mut state protocol is compiled and exercised by the host
+// test suite (and the Miri leg).
+mod consumption_mask_prng;
 mod pin;
-#[cfg(all(feature = "stm32u585", feature = "optiga-trust-m", not(test)))]
+// `pin_diag` hardcodes the iota2 pin map (PA4/PD5/PE0 + the Arduino-header
+// sweep) and reads no board constant, so it is compiled out on pq1 entirely
+// rather than left as a runtime trap. pq1's OPTIGA reset goes through
+// `optiga::reset_pin::hard_pulse`, which derives its pin from
+// `board::OPTIGA_RST`. See the BOARD-SPLIT note at its former call site in
+// `optiga/mod.rs`.
+#[cfg(all(
+    feature = "stm32u585",
+    feature = "optiga-trust-m",
+    not(feature = "board-pq1"),
+    not(test)
+))]
 mod pin_diag;
+
+// `pin-diag-boot` runs `pin_diag::header_sweep`, which pulses every plausible
+// Arduino-header pin to identify which STM32 pad a jumper is physically on.
+// That is a dev-board procedure with no pq1 counterpart — and it is not merely
+// meaningless there, it is destructive: the sweep drives PA8, which on pq1 is
+// `LDO2_EN`, the supply enable for BOTH secure elements. A silent compile-out
+// would leave a bench user wondering why their sweep printed nothing, so this
+// is a loud refusal instead.
+// `boot-pulse` marks boot progress by toggling PE13 — Arduino D13 on the dev
+// board. `hw/boot_pulse.rs` hardcodes `GPIOE_BASE`/pin 13 and reads no board
+// constant (the same shape as `pin_diag` and, until this commit, `sca_trigger`).
+// Port E is not bonded on pq1's 48-pin package, so there the writes land on an
+// unimplemented port and the feature silently does nothing — a scope hunting a
+// boot marker that can never appear. pq1's only unclaimed pins (PA6, PA10,
+// PC13, PB4) are all `NC` on the board per the vendor pin table, so there is no
+// drop-in replacement to point it at either; picking one is a hardware call.
+#[cfg(all(feature = "boot-pulse", feature = "board-pq1"))]
+compile_error!(
+    "`boot-pulse` is iota2-only: hw/boot_pulse.rs hardcodes PE13 (Arduino D13) \
+     and port E is not bonded on pq1's 48-pin package, so it would toggle an \
+     unimplemented port and produce no edge at all. pq1's free pins (PA6, PA10, \
+     PC13, PB4) are all NC on the board, so there is no equivalent marker pin — \
+     choosing one is a hardware decision. Build boot-pulse with BOARD=iota2."
+);
+
+#[cfg(all(feature = "pin-diag-boot", feature = "board-pq1"))]
+compile_error!(
+    "`pin-diag-boot` is an iota2-only diagnostic: it sweeps the Arduino header, \
+     which pq1 does not have, and it drives PA8 — the SE rail enable (LDO2_EN) \
+     on that board — which would cut power to both secure elements mid-sweep. \
+     Build the sweep with BOARD=iota2, or scope pq1's reset directly (PA15)."
+);
 #[cfg(not(test))]
 mod sau;
 mod secure_element;
@@ -180,7 +253,26 @@ mod timeout;
 mod optiga;
 #[cfg(all(feature = "dual-se", not(test)))]
 mod dual_se;
-#[cfg(not(test))]
+// The secure world's "OS Fingerprint" screen. OWNER DECISION 2026-09-28: keep
+// it in debug builds, gate it out of release.
+//
+// It renders the SAME eight words, from the same digest, through the same
+// `sphincs_tz_bip39::firmware_fingerprint_lines`, as the screen the FSBL has
+// already shown moments earlier. CLAUDE.md is explicit that the FSBL row is
+// the measurement and the secure-world row is ADVISORY — invariant #10 anchors
+// on the FSBL, whose pages WRP freezes, not on a screen painted by the image
+// being measured. A slot that lies about itself can paint anything here.
+//
+// So in a shipping image it costs boot time and flash to re-state a claim the
+// trust root already made, from a less trustworthy position.
+//
+// WHAT IS LOST, stated rather than implied: the two-row cross-check. CLAUDE.md
+// calls honest-row divergence "a strong defect/tamper signal", and with this
+// gated there is one row, so that signal is gone from release images. It is
+// retained in every debug build, which is where the FSBL-vs-secure comparison
+// is actually performed during bring-up. The `fsbl-tests/tests/paired_constants.rs`
+// pin that keeps the two dwell times equal stays meaningful for those builds.
+#[cfg(all(not(test), not(feature = "mode-production")))]
 mod measured_boot;
 // ML-KEM-1024 hybrid inner-wrap firmware adapter (binds pqsigner-pq-seal to the
 // device key hierarchy + the TRNG). Compiled under the self-test feature OR
@@ -196,6 +288,14 @@ mod ui;
 /// on success / structured failure. See module docs.
 #[cfg(feature = "factory-provisioning")]
 mod factory_provisioning;
+
+/// Pure step/error/format surface of the factory ceremony. Mounted under
+/// `test` as well as the feature, because `factory_provisioning` itself
+/// cannot compile host-side (it reaches `crate::hw` / `crate::ui`, both
+/// `#[cfg(not(test))]`) and its display logic had therefore never been
+/// tested (#723).
+#[cfg(any(feature = "factory-provisioning", test))]
+mod factory_ui;
 
 /// Masked-SHA-256 overhead bench (`bench-masked-sha` feature). Runs
 /// once at boot, measures the first-order-masked gate cost vs the HASH
@@ -307,6 +407,18 @@ mod main_sau_pure_tests;
 // `reports/tests/secure-fi-pin-rng.md` for the inventory.
 #[cfg(test)]
 mod secure_fi_pin_rng_pure_tests;
+
+// ── Host-side crash/fault matrix for the PIN-lockout wallet wipe ──
+//
+// NOTE (2026-09-01): the lockout-wipe FI suite this paragraph described is NOT
+// in the tree. `mod secure_lockout_wipe_fi_pure_tests;` was removed in e537e7cf
+// because its file is untracked and its `WipeFault` / `inject_wipe_fault`
+// dependency lives in another session's uncommitted `secure_element.rs`, so the
+// branch could not build from a clean checkout. The 19 tests it contained are
+// therefore NOT running. The description was left behind pointing at coverage
+// that does not exist; it is replaced by this note rather than deleted so the
+// gap stays visible. Restore the `mod` line in the commit that lands the file
+// and its dependency together.
 
 // ── Test-only re-includes for the `secure-nsc-core` slice ──
 //
@@ -421,6 +533,12 @@ mod se050_under_test;
 #[cfg(test)]
 mod ui_under_test;
 
+// Port step 4: the pure status → pixel-screen map (`ui::px::status_map`),
+// host-tested on its own (the production `ui` tree is `cfg(not(test))`).
+#[cfg(test)]
+#[path = "ui/px/status_map.rs"]
+mod ui_px_status_map;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
@@ -450,6 +568,10 @@ struct ArchRegs {
     /// DHCSR.C_DEBUGEN — read-only from our point of view; we never write
     /// it (writes require an unlock key the firmware doesn't possess).
     dhcsr: hw::mmio::RoReg32,
+    /// SCB_SHPR3 — system-handler priorities for PendSV [23:16] and
+    /// SysTick [31:24]. Reset value is 0, i.e. both at the HIGHEST priority
+    /// and therefore mutually non-preempting (#729).
+    shpr3: hw::mmio::Reg32,
 }
 
 // SAFETY: each address is a real, 4-byte-aligned ARMv8-M architectural
@@ -467,6 +589,7 @@ const ARCH: ArchRegs = unsafe {
         dwt_ctrl: hw::mmio::Reg32::new(0xE000_1000),
         dwt_cyccnt: hw::mmio::Reg32::new(0xE000_1004),
         dhcsr: hw::mmio::RoReg32::new(0xE000_EDF0),
+        shpr3: hw::mmio::Reg32::new(0xE000_ED20),
     }
 };
 
@@ -741,6 +864,30 @@ fn setup_systick() {
     let reload = unsafe { SYSTICK_RELOAD };
     #[cfg(not(feature = "stm32u585"))]
     let reload = SYSTICK_RELOAD;
+    // #729: give PendSV the LOWEST priority and SysTick the highest, BEFORE
+    // SysTick is enabled and before anything can pend PendSV.
+    //
+    // Two comments in this file have long asserted that "PendSV has the lowest
+    // priority so it won't block SysTick" — but nothing ever programmed it.
+    // SHPR3 resets to 0, so both sat at priority 0, and an exception cannot
+    // preempt another of EQUAL priority. SysTick therefore could not interrupt
+    // an active PendSV: while a PendSV-driven PIN prompt blocked in
+    // `enter_pin()`, the tick froze, `timeout::is_idle()` never became true,
+    // `wait_button` never returned `None`, and the re-unlock loop never reached
+    // its second iteration — so PENDSV_MAX_REUNLOCK_ATTEMPTS could not fire in
+    // the scenario it was written for. The IWDG is fed from the same tick path
+    // (`iwdg::systick_watch_and_kick`), so the stall also starved the watchdog.
+    //
+    // STM32U585 implements 4 priority bits (`__NVIC_PRIO_BITS = 4`), held in
+    // the UPPER bits of each byte. 0xFF is the lowest priority for any
+    // implemented width, so it stays correct if that ever changes; 0x00 is the
+    // highest. Bits [15:0] (DebugMonitor) are preserved.
+    const SHPR3_PENDSV_LOWEST: u32 = 0xFF << 16;
+    const SHPR3_SYSTICK_HIGHEST: u32 = 0x00 << 24;
+    ARCH.shpr3
+        .modify(|v| (v & 0x0000_FFFF) | SHPR3_PENDSV_LOWEST | SHPR3_SYSTICK_HIGHEST);
+    cortex_m::asm::dsb();
+
     ARCH.syst_rvr.write(reload);
     ARCH.syst_cvr.write(0);
     ARCH.syst_csr.write(0x07);
@@ -881,6 +1028,139 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
     }
 }
 
+/// `se-lcd-diag`: step through every secure-element dependency of the
+/// first-boot wizard and show each result on the LCD, for a board with no
+/// debug probe. Each step is shown for ~3 s; afterwards the summary cycles
+/// forever. Terminal by design — the wizard is never reached.
+#[cfg(all(feature = "se-lcd-diag", feature = "dual-se", feature = "stm32u585"))]
+fn se_lcd_diag() -> ! {
+    use core::fmt::Write;
+    struct Line {
+        buf: [u8; ui::DISPLAY_COLS],
+        len: usize,
+    }
+    impl Line {
+        const fn new() -> Self {
+            Self { buf: [b' '; ui::DISPLAY_COLS], len: 0 }
+        }
+        fn as_str(&self) -> &str {
+            core::str::from_utf8(&self.buf[..self.len]).unwrap_or("?")
+        }
+    }
+    impl Write for Line {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            for &b in s.as_bytes() {
+                if self.len >= self.buf.len() {
+                    break;
+                }
+                self.buf[self.len] = if b.is_ascii_graphic() || b == b' ' { b } else { b'?' };
+                self.len += 1;
+            }
+            Ok(())
+        }
+    }
+    fn pause() {
+        cortex_m::asm::delay(480_000_000); // ~3 s at 160 MHz
+    }
+    fn show(step: &str, res: &Line) {
+        ui::show_status(step, res.as_str());
+        pause();
+    }
+    fn fmt_res<E: core::fmt::Debug>(r: &Result<(), E>) -> Line {
+        let mut l = Line::new();
+        match r {
+            Ok(()) => {
+                let _ = l.write_str("OK");
+            }
+            Err(e) => {
+                let _ = write!(l, "E:{:?}", e);
+            }
+        }
+        l
+    }
+
+    const N: usize = 8;
+    let names: [&str; N] = [
+        "1 TRNG",
+        "2 SE050 init",
+        "3 SE050 rand",
+        "4 OPT init",
+        "5 OPT pair",
+        "6 OPT shield",
+        "7 OPT rand",
+        "8 rng_strong",
+    ];
+    let mut res: [Line; N] = [
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+        Line::new(),
+    ];
+
+    ui::show_status("SE DIAG", "starting");
+    pause();
+
+    // 1. platform TRNG
+    {
+        let mut b = [0u8; 32];
+        let r = rng::fill(&mut b);
+        let nz = b.iter().any(|&x| x != 0);
+        let mut l = Line::new();
+        let _ = match (r, nz) {
+            (Ok(()), true) => l.write_str("OK"),
+            (Ok(()), false) => l.write_str("E:all-zero"),
+            (Err(()), _) => l.write_str("E:fill"),
+        };
+        res[0] = l;
+        show(names[0], &res[0]);
+    }
+    // SAFETY: single-threaded boot; nothing else touches `SE` before the
+    // terminal loop below, and this function never returns.
+    let se = unsafe { &mut *core::ptr::addr_of_mut!(SE) };
+    // 2/3. SE050
+    res[1] = fmt_res(&se.se050.init());
+    show(names[1], &res[1]);
+    {
+        let mut b = [0u8; 16];
+        res[2] = fmt_res(&se.se050.random(&mut b));
+        show(names[2], &res[2]);
+    }
+    // 4..7. OPTIGA
+    res[3] = fmt_res(&se.optiga.init());
+    show(names[3], &res[3]);
+    res[4] = fmt_res(&se.optiga.pair_for_first_boot());
+    show(names[4], &res[4]);
+    res[5] = fmt_res(&se.optiga.ensure_shield());
+    show(names[5], &res[5]);
+    {
+        let mut b = [0u8; 16];
+        res[6] = fmt_res(&se.optiga.random(&mut b));
+        show(names[6], &res[6]);
+    }
+    // 8. the composite the wizard actually uses
+    {
+        let mut b = [0u8; 32];
+        res[7] = fmt_res(&rng_strong::fill(&mut b));
+        show(names[7], &res[7]);
+    }
+    // Summary, cycling forever: two steps per screen.
+    let mut i = 0usize;
+    loop {
+        let mut a = Line::new();
+        let mut b = Line::new();
+        let _ = write!(a, "{}:{}", &names[i][..1], res[i].as_str());
+        let j = (i + 1) % N;
+        let _ = write!(b, "{}:{}", &names[j][..1], res[j].as_str());
+        ui::show_status(a.as_str(), b.as_str());
+        pause();
+        i = (i + 2) % N;
+    }
+}
+
 #[cfg(not(test))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
@@ -912,6 +1192,20 @@ fn main() -> ! {
     unsafe {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
+        // `dev-dfu`: both buttons held at power-up → ROM USB-DFU bootloader.
+        // Deliberately the first thing after the clocks — see hw/dev_dfu.rs.
+        #[cfg(feature = "dev-dfu")]
+        hw::dev_dfu::check_and_enter();
+        // Bring the debug USART up immediately after the clock tree, so every
+        // `secure_log!` from here on reaches the wire. It MUST be after
+        // `rcc::init` — `hw::uart::init` programs `board::CONSOLE_BRR`, which
+        // assumes PCLK = 160 MHz, so an earlier call would transmit at the
+        // wrong baud and read as line noise. Logs emitted before this point
+        // are simply not carried; that is the accepted cost of one correct
+        // divisor over a garbled prologue.
+        #[cfg(feature = "uart-console")]
+        uart_log::init();
+        secure_log!("[S] uart console up @ {} MHz", mhz);
         // Report the die identity (work-todo A4a / HW-ASSUME-REV-U). Report
         // only, never a fault: a rev X/W part is good silicon that the STM32U5
         // SESIP certificate (SESIP-2400133-01 / TN1545 Rev 3, which pins
@@ -1119,7 +1413,12 @@ fn main() -> ! {
     #[cfg(all(feature = "stm32u585", feature = "consumption-mask"))]
     {
         hw::consumption_mask::init();
-        secure_log!("[S] Consumption mask initialised (TIM2 CH1 PWM on PA5)");
+        secure_log!(
+            "[S] Consumption mask initialised (timer 0x{:08x} CH1 PWM on port 0x{:08x} pin {})",
+            crate::board::MASK_TIM_BASE,
+            crate::board::MASK_PWM_PORT,
+            crate::board::MASK_PWM_PIN
+        );
     }
     #[cfg(all(feature = "ui-lcd", not(feature = "se050")))]
     {
@@ -1229,10 +1528,26 @@ fn main() -> ! {
             }
             match hw::bhk::load_and_lock() {
                 Ok(()) => {
-                    secure_log!("[S] BHK loaded + BHKLOCK set");
+                    // Ok now MEANS the active SAES Bhk key is the one flash
+                    // holds — load_and_lock verifies it rather than assuming
+                    // the register writes landed (#712).
+                    secure_log!("[S] BHK verified active + BHKLOCK set");
                 }
                 Err(e) => {
-                    secure_log!("[S] BHK load FAIL: {:?} — BHK derivations will error", e);
+                    // Production: a mismatch means the key the SAES Bhk path
+                    // will use is NOT this device's key, so every SE050
+                    // credential derived from it is wrong. That is lifecycle
+                    // damage or tamper, not something to log and carry on
+                    // with — the same reasoning as the missing-BHK panic
+                    // above. A power cycle resets the backup domain and is
+                    // the operator remedy the fault screen already gives.
+                    #[cfg(feature = "rdp2-self-lock")]
+                    panic!("BHK not verified active after ALL_DONE: {:?}", e);
+                    // Bench builds keep the old non-fatal behaviour so a
+                    // board without a provisioned BHK still boots for
+                    // unrelated work.
+                    #[cfg(not(feature = "rdp2-self-lock"))]
+                    secure_log!("[S] BHK load FAIL: {:?} — BHK derivations will be wrong", e);
                 }
             }
         } else {
@@ -1240,13 +1555,65 @@ fn main() -> ! {
         }
     }
 
-    // Initialize I2C1 for SE050 and/or OPTIGA Trust M BEFORE any SE operations.
-    // Both chips share I2C1 (SE050 at 0x48, OPTIGA at 0x30). No address conflict.
-    // Must come after rcc::init() (clocks) and sau::init() (peripherals).
+    // Power the secure elements, THEN bring up their I2C buses, BEFORE any
+    // SE operation. Must come after rcc::init() (clocks — the settle delays
+    // and TIMINGR both assume 160 MHz) and sau::init() (peripheral security).
+    //
+    // The power step is a no-op on boards whose SE rail is unconditionally
+    // live (`iota2`). On `pq1` it is mandatory: PA8 (`LDO2_EN`) gates the
+    // only supply either chip has, and it is held off at reset by a 10 kΩ
+    // pull-down, so skipping it makes every subsequent I2C transaction fail
+    // in a way that looks like a bus fault rather than a power fault.
+    // No `unsafe` block: both `se_power::init` and `i2c_hw::init` are safe
+    // functions that encapsulate their own MMIO — the block that used to sit
+    // here wrapped nothing unsafe.
     #[cfg(all(feature = "stm32u585", any(feature = "se050", feature = "optiga-trust-m")))]
-    unsafe {
+    {
+        let se_power = hw::se_power::init();
+        if se_power.all_asserted() {
+            secure_log!("[S] SE power/enable lines asserted: {:?}", se_power);
+        } else {
+            // A false read-back means the write did not land — most likely
+            // an unclocked GPIO port, which drops writes silently on this
+            // silicon. Loud, because everything downstream will now fail
+            // for a reason that points at the wrong subsystem.
+            secure_log!(
+                "[S] SE power/enable READ-BACK FAILED: {:?} — both SEs may be unpowered",
+                se_power
+            );
+        }
+
         hw::i2c_hw::init();
-        secure_log!("[S] I2C1 initialized (PB8/PB9, 400 kHz)");
+        for bus in board::SE_I2C_BUSES {
+            secure_log!("[S] SE bus initialized: {} @ 400 kHz", bus.name);
+        }
+
+        // Bench diagnostic: address-probe each secure element before
+        // anything else touches the buses, so the probe is the first
+        // transaction either chip ever sees. Zero data bytes — safe on a
+        // virgin OPTIGA. Absent from every build without `se-i2c-probe`.
+        //
+        // TERMINAL BY DESIGN. It exits via `SYS_EXIT` instead of returning,
+        // because everything after this point in boot — `ui::init`, the
+        // wizard, SE attest/unlock, and under `e2e-test` the fixed-mnemonic
+        // auto-provisioning — WRITES to the secure elements. On a virgin
+        // OPTIGA those writes are irreversible. Letting boot continue would
+        // make the "non-destructive probe" target destructive a few hundred
+        // milliseconds after it printed PASS, which is precisely the trap
+        // this feature exists to avoid. Do not turn this into a plain call.
+        #[cfg(feature = "se-i2c-probe")]
+        {
+            let ok = hw::se_i2c_probe::run();
+            secure_log!("[S][se-probe] halting — this build never touches the SEs again");
+            cortex_m_semihosting::debug::exit(if ok {
+                cortex_m_semihosting::debug::EXIT_SUCCESS
+            } else {
+                cortex_m_semihosting::debug::EXIT_FAILURE
+            });
+            loop {
+                cortex_m::asm::wfe();
+            }
+        }
     }
 
     ui::init();
@@ -1263,6 +1630,10 @@ fn main() -> ! {
     first_boot::run_pre_lock_and_maybe_lock();
 
     ui::splash();
+
+    // Probe-less SE diagnostic on the LCD (feature `se-lcd-diag`). Terminal.
+    #[cfg(all(feature = "se-lcd-diag", feature = "dual-se", feature = "stm32u585"))]
+    se_lcd_diag();
 
     // Start SysTick early on real hardware so measured_boot can use
     // timeout::now() for its 4-second auto-dismiss timer. On QEMU the
@@ -1295,8 +1666,10 @@ fn main() -> ! {
         //   Right short = +1 digit, Left short = -1 digit,
         //   Right long  = next position / confirm at the last,
         //   Left long   = previous position / cancel at the first.
-        // Needs physical buttons on the gpio-buttons pins (LEFT=PC1/D8,
-        // RIGHT=PA8/D9). Loops so it can be re-tested.
+        // Needs physical buttons on whichever pins the board map names
+        // (`board::BTN_LEFT_*` / `BTN_RIGHT_*` — iota2: PC1/PA8 on the CN13
+        // jumpers; pq1: PA0/PA1 on solder pads J203/J205). Loops so it can
+        // be re-tested.
         secure_log!("[LCD-UI] interactive PIN: L/R short=-/+digit, R-long=next/ok, L-long=prev/cancel");
         loop {
             match ui::pin_entry::enter_pin() {
@@ -1374,7 +1747,7 @@ fn main() -> ! {
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.
     // Skipped in automated e2e tests which need non-interactive boot.
-    #[cfg(not(feature = "e2e-test"))]
+    #[cfg(all(not(feature = "e2e-test"), not(feature = "mode-production")))]
     measured_boot::run();
 
     // work-todo #36 — Phase B (post-lock provisioning). After the RDP-2
@@ -3759,6 +4132,34 @@ fn main() -> ! {
 
             loop {
                 ui::show_status("Enter PIN", "to unlock");
+
+                // #728: reset the inactivity timer for THIS prompt.
+                //
+                // `enter_pin()` samples `timeout::is_idle()` BEFORE waiting and
+                // only resets after a button event (`pin_entry.rs:112`). Without
+                // the line below, a deadline that has already passed when boot
+                // reaches here makes every iteration return `IdleWipe`
+                // immediately -> "Locked" -> `continue` -> re-prompt, forever.
+                // Observed on pq1 silicon: the panel flickers Enter-PIN/Locked
+                // and the operator must enter the PIN twice. No attempt is
+                // consumed (no PIN is submitted), so it does not walk toward the
+                // 10-attempt wipe — it just looks broken, on the first thing a
+                // user ever does with the device.
+                //
+                // The boundary is LOCKED vs UNLOCKED, not NS-reachable vs
+                // boot-only. Resetting while LOCKED arms an input window; there
+                // is no session to extend and no secret that idling out would
+                // protect. Resetting while UNLOCKED would prolong a live
+                // signing session, which is what X17-UI3 / HIGH-13 forbids
+                // `enter_pin()` from doing unconditionally.
+                //
+                // `cmd_request_unlock.rs` is the precedent: it returns Ok
+                // immediately when already unlocked (so a companion cannot spam
+                // prompts) and resets activity only on the locked path, for
+                // exactly this reason (#713). The PendSV re-unlock loop below
+                // does the same, bounded by PENDSV_MAX_REUNLOCK_ATTEMPTS.
+                timeout::reset_activity();
+
                 let mut pin = match enter_pin() {
                     PinEntryResult::Pin(p) => p,
                     PinEntryResult::Cancelled | PinEntryResult::IdleWipe => {
@@ -3785,6 +4186,8 @@ fn main() -> ! {
                     Ok(master) => {
                         let unlocked = nsc::unlock_after_verified_pin(master);
                         if unlocked == crate::fi::OK_SENTINEL {
+                            #[cfg(feature = "ui-px")]
+                            ui::show_status("Unlocked", "");
                             ui::show_status("PQSigner OS", "Ready");
                             secure_log!("[S] PIN verified — unlocked");
                             break;
@@ -3793,8 +4196,13 @@ fn main() -> ! {
                         secure_log!("[S] PIN verified but forced-attempt arm failed closed");
                     }
                     Err(secure_element::UnlockError::PinLocked) => {
-                        ui::show_status("PIN locked", "factory reset");
-                        secure_log!("[S] PIN locked out");
+                        // Same correction as the PendSV arm (#715): this is
+                        // also reached as a short-circuit when the counter is
+                        // already at MAX, where nothing was wiped. The real
+                        // wipe path prints its own WIPING / WALLET WIPED
+                        // screens, so a reset claimed here would be false.
+                        ui::show_status("PIN locked", "power cycle");
+                        secure_log!("[S] PIN locked out (no wipe performed on this path)");
                         break;
                     }
                     Err(secure_element::UnlockError::PinIncorrect) => {
@@ -3812,13 +4220,25 @@ fn main() -> ! {
         }
     }
 
-    // Initialize USB OTG FS hardware (clocks, GPIO, UCPD) when targeting
-    // real hardware with USB enabled.  Must run after rcc::init() and
-    // sau::init() (GTZC has marked USB OTG as NS by this point).
+    // Initialize USB OTG FS hardware when targeting real hardware with USB
+    // enabled.  Must run after rcc::init() and sau::init() (GTZC has marked
+    // USB OTG as NS by this point).
+    //
+    // WHAT gets initialized is board-dependent, so the log line is too: iota2
+    // additionally brings up UCPD1 CC detection and the TCPP03-M20 enable,
+    // neither of which exists on pq1 (no CC line reaches the MCU there, and
+    // port protection is an AW35602 strapped on-board). See `hw::usb_hw::init`.
     #[cfg(all(feature = "stm32u585", feature = "usb"))]
     unsafe {
         hw::usb_hw::init();
-        secure_log!("[S] USB OTG FS hardware initialized (GPIO, UCPD, VDDUSB)");
+        secure_log!(
+            "[S] USB OTG FS hardware initialized ({})",
+            if cfg!(feature = "board-pq1") {
+                "GPIO, VDDUSB"
+            } else {
+                "GPIO, UCPD, TCPP03, VDDUSB"
+            }
+        );
     }
 
     // The mailbox transport (QEMU) needs its CMD/RESULT/DONE words
@@ -3870,6 +4290,10 @@ fn SysTick() {
     let mut tick_health = crate::fi::FAIL_SENTINEL;
     let mut tick_cfi = crate::fi::FAIL_SENTINEL;
     timeout::tick_verified(&mut tick_health, &mut tick_cfi);
+    // Pixel trusted UI: record button edges with their exact millisecond
+    // while a flow is live (two IDR reads; no-op otherwise).
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    crate::ui::px::lcd::systick_sample();
     // SAFETY: these are valid stack locals. Independent volatile reads keep
     // the watchdog decision tied to what the helper actually published.
     let tick_health = unsafe { core::ptr::read_volatile(&tick_health) };
@@ -3927,7 +4351,9 @@ fn SysTick() {
         nsc::zeroize_sensitive_state();
 
         // Trigger PendSV to run the re-unlock flow outside the ISR.
-        // PendSV has the lowest priority so it won't block SysTick.
+        // PendSV runs at the lowest priority so it cannot block SysTick.
+        // Programmed in `setup_systick` via SHPR3 — this used to be asserted
+        // here and never configured, which is #729.
         // PendSV drives the PIN entry screen directly — no intermediate
         // "(idle wipe)" status page, which could otherwise get stuck
         // visible if PendSV is delayed.
@@ -3997,10 +4423,61 @@ unsafe fn DefaultHandler(irqn: i16) {
 #[cfg(all(not(test), feature = "stm32u585"))]
 static mut PENDSV_IN_FLIGHT: u32 = 0;
 
+/// Hard cap on re-unlock attempts within a single PendSV entry.
+///
+/// WHY THIS EXISTS: every pass through the re-unlock loop below can burn one
+/// page-124 pre-commit attempt — the `Err(_)` arm's own comment says so
+/// explicitly ("still burned (fail-closed)") — and `PinIncorrect` burns one
+/// by definition. Those two arms `continue`, so the loop's only exits are
+/// success and `PinLocked`.
+///
+/// Before the `e2e-test` fast-path landed in `ui::pin_entry::enter_pin`, that
+/// loop was throttled by `enter_pin` blocking until the inactivity deadline
+/// (~120 s per pass), so exhausting the 10-attempt budget took ~20 minutes of
+/// wall clock. With a non-blocking `enter_pin` the same loop can consume the
+/// whole three-way budget (MCU page 124 + OPTIGA E120 + SE050 UserID) in
+/// seconds and trip the 10-wrong-PIN wipe. Bounding the retries removes that
+/// amplification.
+///
+/// 12 > `MAX_ATTEMPTS` (10) on purpose: the SE-side lockout should still be
+/// what stops a genuine wrong-PIN sequence, so this cap only catches a
+/// *runaway* (e.g. a transport/session error that never becomes a PIN
+/// verdict). On exhaustion the handler returns to the non-secure world with
+/// the device locked, which keeps NS scheduled and USB alive.
+#[cfg(all(not(test), feature = "stm32u585"))]
+const PENDSV_MAX_REUNLOCK_ATTEMPTS: u32 = 12;
+
+/// Consecutive re-unlock passes that produced **no PIN verdict** before this
+/// loop gives up — transport/session/FI-gate failures, not wrong PINs.
+///
+/// WHY THIS IS SEPARATE FROM THE CAP ABOVE, AND MUCH SMALLER: the `Err(_)` arm
+/// burns a page-124 attempt even though the PIN was never judged (fail-closed,
+/// so an attacker cannot probe for free by inducing errors). With only the
+/// 12-pass cap — deliberately set ABOVE `MAX_ATTEMPTS` so it never preempts a
+/// genuine wrong-PIN lockout — a repeating fault therefore consumed the user's
+/// entire 10-attempt budget and tripped the lockout with no user error at all.
+///
+/// Observed on pq1 silicon 2026-09-21 (#715): the operator entered the CORRECT
+/// PIN once and was shown "PIN locked". Counting *verdictless* failures
+/// separately keeps both properties: a real wrong-PIN sequence still runs to
+/// the SE/page-124 lockout untouched, while a runaway stops after three burns
+/// and leaves the budget intact.
+#[cfg(all(not(test), feature = "stm32u585"))]
+const PENDSV_MAX_NO_VERDICT_FAILURES: u32 = 3;
+
+#[cfg(all(not(test), feature = "stm32u585"))]
+const _: () = assert!(
+    PENDSV_MAX_NO_VERDICT_FAILURES < sphincs_tz_shared::MAX_ATTEMPTS as u32,
+    "a verdictless runaway must give up well before it can exhaust the PIN budget"
+);
+
 /// PendSV handler — runs the PIN re-unlock flow after an idle wipe.
 ///
 /// Triggered by SysTick when it detects idle timeout. Runs at the lowest
 /// exception priority so it doesn't block SysTick ticks or CMSE veneers.
+/// That ordering is established by the SHPR3 write in `setup_systick`; before
+/// #729 it was only claimed in comments, so SysTick could not preempt an
+/// active PendSV and this loop's runaway guard could never advance.
 /// The blocking PIN entry UI is safe here.
 ///
 /// HIGH-8 partial fix: add a re-entry guard — SysTick can re-pend
@@ -4030,7 +4507,45 @@ fn PendSV() {
         use ui::pin_entry::{enter_pin, PinEntryResult};
         use zeroize::Zeroize;
 
+        let mut attempts: u32 = 0;
+        // Consecutive failures that never reached a chip-side PIN compare.
+        let mut no_verdict: u32 = 0;
+
+        // Port step 4: the idle lock is the padlock shutting (the page
+        // path goes straight to the PIN prompt).
+        #[cfg(feature = "ui-px")]
+        ui::show_status("Locked", "");
+
         loop {
+            attempts += 1;
+            if attempts > PENDSV_MAX_REUNLOCK_ATTEMPTS {
+                // Runaway guard, not a lockout: the SE/page-124 budget is
+                // still the authority on wrong PINs. Returning leaves the
+                // device LOCKED but keeps the non-secure world scheduled,
+                // so USB stays alive instead of the CPU spinning here.
+                ui::show_status("Locked", "retry later");
+                secure_log!(
+                    "[S] PendSV re-unlock aborted after {} attempts (runaway guard)",
+                    PENDSV_MAX_REUNLOCK_ATTEMPTS
+                );
+                break;
+            }
+
+            // The #729 attempt counter that used to render here (`to unlock
+            // NN/12`, dev images only) was REMOVED 2026-09-23. It existed to
+            // make "does the tick advance inside a PendSV-driven prompt?"
+            // observable, which it did: #729 is closed on a measured 120 s
+            // cadence, 01/12 -> 02/12 -> 03/12, two independent observers.
+            //
+            // Removed rather than left in because this is the PIN entry
+            // dialog — a trusted-path screen. Diagnostic text that varies
+            // between boots there habituates the reader to unexpected content
+            // on exactly the screen where unexpected content is the attack.
+            // That the images are dev-only does not help: the people being
+            // trained are the ones who would have to notice a fake.
+            //
+            // Recoverable verbatim from `db524a12` if the re-unlock loop ever
+            // needs observing again.
             ui::show_status("Enter PIN", "to unlock");
 
             timeout::reset_activity();
@@ -4060,6 +4575,8 @@ fn PendSV() {
                     let unlocked = nsc::unlock_after_verified_pin(master);
                     if unlocked == crate::fi::OK_SENTINEL {
                         timeout::reset_activity();
+                        #[cfg(feature = "ui-px")]
+                        ui::show_status("Unlocked", "");
                         ui::show_status("PQSigner OS", "Ready");
                         secure_log!("[S] Re-unlocked after idle wipe");
                         break;
@@ -4068,11 +4585,22 @@ fn PendSV() {
                     secure_log!("[S] PIN verified but forced-attempt arm failed closed");
                 }
                 Err(secure_element::UnlockError::PinLocked) => {
-                    ui::show_status("PIN locked", "factory reset");
-                    secure_log!("[S] PIN locked out");
+                    // Do NOT say "factory reset" here. This arm is also
+                    // reached as a pure short-circuit when the counter is
+                    // already at MAX, in which case nothing was wiped — and
+                    // the real wipe path prints its own "WIPING" /
+                    // "WALLET WIPED" screens. Claiming a reset that did not
+                    // happen sends the user hunting for a seed phrase they
+                    // did not need (#715).
+                    ui::show_status("PIN locked", "power cycle");
+                    secure_log!("[S] PIN locked out (no wipe performed on this path)");
                     break;
                 }
                 Err(secure_element::UnlockError::PinIncorrect) => {
+                    // A real verdict: the chip judged the PIN. This is what
+                    // the attempt budget is FOR, so the runaway counter
+                    // resets.
+                    no_verdict = 0;
                     ui::show_status("Wrong PIN", "try again");
                     secure_log!("[S] Wrong PIN on re-unlock");
                 }
@@ -4082,6 +4610,19 @@ fn PendSV() {
                     // gate). The page-124 pre-commit attempt is still
                     // burned (fail-closed), but the PIN was never judged
                     // — don't render it as "Wrong PIN".
+                    no_verdict += 1;
+                    if no_verdict >= PENDSV_MAX_NO_VERDICT_FAILURES {
+                        // Stop before this fault eats the PIN budget. The
+                        // device stays locked and NS stays scheduled, so USB
+                        // remains alive and the state is diagnosable.
+                        ui::show_status("SE fault", "power cycle");
+                        secure_log!(
+                            "[S] Re-unlock abandoned after {} verdictless failures — \
+                             budget preserved",
+                            no_verdict
+                        );
+                        break;
+                    }
                     ui::show_status("Unlock error", "try again");
                     secure_log!("[S] Re-unlock failed: internal/SE error (not a PIN mismatch)");
                 }

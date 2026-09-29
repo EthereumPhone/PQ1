@@ -1,13 +1,14 @@
-//! Bare-metal I2C1 master driver for STM32U585.
+//! Bare-metal I2C master driver for the SE050 on STM32U585.
 //!
 //! Provides blocking `write` and `read` operations to communicate with
 //! the SE050 at I2C slave address 0x48.
 //!
-//! Register base imported from `hw::i2c_hw`; the offsets are bound once
-//! into typed [`Reg32`] / [`RoReg32`] handles so individual touches in
-//! the transfer loops are safe.
+//! The register base comes from `crate::board`, so which physical bus
+//! this driver talks on is a board fact rather than a literal here; the
+//! offsets are bound once into typed [`Reg32`] / [`RoReg32`] handles so
+//! individual touches in the transfer loops are safe.
 
-use crate::hw::i2c_hw::I2C1;
+use crate::board::SE050_I2C_BASE as I2C_BASE;
 use crate::hw::mmio::{Reg32, RoReg32};
 
 /// SE050 I2C slave address (7-bit, matching OM-SE050ARD default).
@@ -43,18 +44,21 @@ struct I2cRegs {
 }
 
 // SAFETY: each address below is a real, 4-byte-aligned MMIO register on
-// I2C1 (base 0x5000_5400, secure alias) exclusively owned by the SE
-// drivers. The secure world is single-threaded and non-preemptive —
-// the OPTIGA and SE050 drivers share I2C1 sequentially, never racing.
+// the I2C peripheral `crate::board` assigns to the SE050 (secure alias),
+// exclusively owned by the SE drivers. The secure world is single-threaded
+// and non-preemptive, so even where a board puts both chips on ONE bus
+// (`iota2`: OPTIGA and SE050 both on I2C1) the two drivers use it
+// sequentially and never race; where a board gives them separate buses
+// (`pq1`: this driver drives I2C4 on PB6/PB7) they cannot interfere at all.
 // After this one-time construction every register touch below is via
 // safe `.read()` / `.write()` methods.
 const REG: I2cRegs = unsafe {
     I2cRegs {
-        cr2: Reg32::new(I2C1 + 0x04),
-        isr: RoReg32::new(I2C1 + 0x18),
-        icr: Reg32::new(I2C1 + 0x1C),
-        rxdr: RoReg32::new(I2C1 + 0x24),
-        txdr: Reg32::new(I2C1 + 0x28),
+        cr2: Reg32::new(I2C_BASE + 0x04),
+        isr: RoReg32::new(I2C_BASE + 0x18),
+        icr: Reg32::new(I2C_BASE + 0x1C),
+        rxdr: RoReg32::new(I2C_BASE + 0x24),
+        txdr: Reg32::new(I2C_BASE + 0x28),
     }
 };
 
@@ -87,6 +91,37 @@ fn wait_flag(mask: u32) -> Result<u32, I2cError> {
         let isr = REG.isr.read();
         if isr & ISR_NACKF != 0 {
             REG.icr.write(ICR_NACKCF);
+            // Drain the STOP that AUTOEND generates after a NACK and clear
+            // STOPF before handing the error up. Mirrors `optiga/i2c.rs`,
+            // which has always done this and is proven on this silicon.
+            //
+            // Clearing NACKF alone leaves the peripheral holding a stale
+            // STOPF and an unfinished transfer; the next `configure_transfer`
+            // then writes CR2 with START on top of it, so ONE bad exchange
+            // wedges the bus permanently. `t1oi2c::read_frame`'s SOF poll
+            // deliberately TOLERATES `Err(Nack)` and retries up to
+            // MAX_READ_RETRIES (1000) times, so a single slow applet-select
+            // turns into a flood of them.
+            //
+            // Why this stayed invisible until pq1: on `iota2` BOTH secure
+            // elements share I2C1 (`board::{OPTIGA,SE050}_I2C_BASE` are both
+            // `I2C1_S`), so the OPTIGA driver's correct recovery incidentally
+            // cleaned up after this one. `pq1` moves SE050 to its own I2C4 —
+            // nothing else touches that peripheral, so nothing cleans up.
+            //
+            // Silicon 2026-09-17 (pq1): the first `interface_reset` returned a
+            // valid frame (`NAD=a5 PCB=ef CRC_OK=true`), then every subsequent
+            // one failed `after 20 attempts: Some(I2c(Nack))` while OPTIGA on
+            // I2C1 kept working all run. Provisioning then refused a degraded
+            // entropy split (invariant #1) and panicked at crypto.rs:458.
+            let mut s = TIMEOUT_LOOPS;
+            while REG.isr.read() & ISR_STOPF == 0 {
+                s -= 1;
+                if s == 0 {
+                    break;
+                }
+            }
+            REG.icr.write(ICR_STOPCF);
             return Err(I2cError::Nack);
         }
         if isr & ISR_BERR != 0 {

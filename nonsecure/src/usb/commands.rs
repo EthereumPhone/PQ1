@@ -282,6 +282,7 @@ impl CommandRouter {
         match ins {
             INS_V2_GET_DEVICE_INFO => return self.cmd_get_device_info(),
             INS_V2_GET_STATUS => return self.cmd_get_status(),
+            INS_V2_GET_PIN_ATTEMPT_LOG => return self.cmd_get_pin_attempt_log(),
             INS_V2_UNLOCK => return self.cmd_unlock(),
             INS_V2_LOCK => return self.cmd_lock(),
             INS_V2_GET_WALLET_ADDRESS => return self.cmd_get_wallet_address(data),
@@ -332,6 +333,12 @@ impl CommandRouter {
             INS_V2_PRODTEST_USB_LOOPBACK => return self.cmd_prodtest_usb_loopback(data),
             #[cfg(feature = "prodtest")]
             INS_V2_PRODTEST_BUTTON_TEST => return self.cmd_prodtest_button_test(),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_RGB_TEST => return self.cmd_prodtest_rgb_test(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_RGB_OSD => return self.cmd_prodtest_rgb_osd(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_RNG_CONFIG => return self.cmd_prodtest_rng_config(),
 
             _ => {}
         }
@@ -467,6 +474,23 @@ impl CommandRouter {
         Response {
             ptr: RESP_BUF.as_ptr(),
             len: 4,
+        }
+    }
+
+    /// 0x03 GET_PIN_ATTEMPT_LOG — why each PIN attempt was consumed (#715).
+    /// Read-only; no secret material (see `secure/src/pin_attempt_log.rs`).
+    unsafe fn cmd_get_pin_attempt_log(&self) -> Response {
+        let mut out = [0u8; PIN_ATTEMPT_LOG_LEN];
+        let status = nsc_api::get_pin_attempt_log(&mut out);
+        if status != 0 {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+        RESP_BUF[..PIN_ATTEMPT_LOG_LEN].copy_from_slice(&out);
+        RESP_BUF[PIN_ATTEMPT_LOG_LEN] = (SW_OK >> 8) as u8;
+        RESP_BUF[PIN_ATTEMPT_LOG_LEN + 1] = (SW_OK & 0xFF) as u8;
+        Response {
+            ptr: RESP_BUF.as_ptr(),
+            len: PIN_ATTEMPT_LOG_LEN + 2,
         }
     }
 
@@ -1110,6 +1134,40 @@ impl CommandRouter {
         let status = nsc_api::prodtest_button_test(&mut out);
         RESP_BUF[..4].copy_from_slice(&out);
         self.prodtest_finalize(4, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_rgb_test(&self, data: &[u8]) -> Response {
+        if data.len() != PRODTEST_RGB_IN_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let mut req = [0u8; PRODTEST_RGB_IN_LEN];
+        req.copy_from_slice(data);
+        let mut out = [0u8; PRODTEST_RGB_OUT_LEN];
+        let status = nsc_api::prodtest_rgb_test(&req, &mut out);
+        RESP_BUF[..PRODTEST_RGB_OUT_LEN].copy_from_slice(&out);
+        self.prodtest_finalize(PRODTEST_RGB_OUT_LEN, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_rng_config(&self) -> Response {
+        let mut out = [0u8; PRODTEST_RNG_CONFIG_LEN];
+        let status = nsc_api::prodtest_rng_config(&mut out);
+        RESP_BUF[..PRODTEST_RNG_CONFIG_LEN].copy_from_slice(&out);
+        self.prodtest_finalize(PRODTEST_RNG_CONFIG_LEN, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_rgb_osd(&self, data: &[u8]) -> Response {
+        if data.len() != PRODTEST_RGB_OSD_IN_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let mut req = [0u8; PRODTEST_RGB_OSD_IN_LEN];
+        req.copy_from_slice(data);
+        let mut out = [0u8; PRODTEST_RGB_OSD_OUT_LEN];
+        let status = nsc_api::prodtest_rgb_osd(&req, &mut out);
+        RESP_BUF[..PRODTEST_RGB_OSD_OUT_LEN].copy_from_slice(&out);
+        self.prodtest_finalize(PRODTEST_RGB_OSD_OUT_LEN, status)
     }
 
     // ===================================================================

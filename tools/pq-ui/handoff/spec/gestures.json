@@ -1,0 +1,1250 @@
+{
+ "bench_keymap_BENCH_ONLY": "  -> / d          right tap   forward one screen / PIN digit +1\n  <- / a          left tap    back one screen / PIN digit -1\n  space / e       both        PIN: ENTER the digit (or a + d together); the 8th checks\n  D (or d d)      right 2x    PIN: NEXT (the cursor forward over entered digits)\n  A (or a a)      left 2x     PIN: BACK (the cursor to the previous digit)\n  hold s / enter  right hold  sign / commit (armed screens only)\n  hold x / bksp   left hold   decline from anywhere -> DECLINED / PIN: cancel\n  y               the host    the work succeeded: the loading film lands the check\n  n               the host    the work failed: … lands the X (a flow with a failure film)\n  r               restart after an ending\n  q / Ctrl-C      quit",
+ "ending_is_input_dead": {
+  "gestures_tested": 8,
+  "note": "every gesture was applied while an ending was playing; none armed, none moved",
+  "verified": true
+ },
+ "rule": "a press <= TAP_MAX_MS is a tap and fires on RELEASE; a hold fires only when the fill completes at HOLD_COMMIT_MS from press-down; an early release snaps back and does nothing. Status screens accept no input.",
+ "schema_version": 1,
+ "tokens": {
+  "CHORD_MS": {
+   "comment": "both buttons: a press on one side within this of the other",
+   "frames_14": 2.1,
+   "reader_count": 5,
+   "readers": [
+    "pq1/driver.py:376",
+    "pq1/driver.py:395",
+    "screens/pin/pin_entering.py:35",
+    "screens/pin/pin_entering.py:68",
+    "screens/pin/pin_entering.py:173"
+   ],
+   "scope": "device",
+   "source": "pq1/motion.py:169",
+   "under_two_frames": false,
+   "unit": "ms",
+   "value": 150
+  },
+  "DOUBLE_TAP_MS": {
+   "comment": "second press within this converts a tap (entry contexts only)",
+   "frames_14": 3.5,
+   "reader_count": 5,
+   "readers": [
+    "pq1/driver.py:378",
+    "pq1/driver.py:405",
+    "screens/pin/pin_entering.py:36",
+    "screens/pin/pin_entering.py:68",
+    "screens/pin/pin_entering.py:173"
+   ],
+   "scope": "device",
+   "source": "pq1/motion.py:168",
+   "under_two_frames": false,
+   "unit": "ms",
+   "value": 250
+  },
+  "HOLD_COMMIT_MS": {
+   "comment": "linear progress fill; the hold action fires ONLY at",
+   "frames_14": 28.0,
+   "reader_count": 17,
+   "readers": [
+    "pq1/driver.py:16",
+    "pq1/driver.py:506",
+    "pq1/driver.py:512",
+    "pq1/flow.py:20",
+    "pq1/flow.py:32",
+    "pq1/flow.py:264",
+    "pq1/flow.py:270",
+    "pq1/flow.py:375"
+   ],
+   "scope": "device",
+   "source": "pq1/motion.py:171",
+   "under_two_frames": false,
+   "unit": "ms",
+   "value": 2000
+  },
+  "HOLD_SNAPBACK_MS": {
+   "comment": "ease-out snap-back when a hold is released early",
+   "frames_14": 2.8,
+   "reader_count": 7,
+   "readers": [
+    "pq1/flow.py:32",
+    "pq1/flow.py:253",
+    "pq1/flow.py:333",
+    "pq1/motion.py:186",
+    "pq1/motion.py:195",
+    "screens/confirm/hold_to_confirm.py:46",
+    "screens/confirm/hold_to_confirm.py:103"
+   ],
+   "scope": "device",
+   "source": "pq1/motion.py:173",
+   "under_two_frames": false,
+   "unit": "ms",
+   "value": 200
+  },
+  "PRESS_FEEDBACK_MS": {
+   "comment": "press-down acknowledgment nudge on the pressed-side chevron",
+   "do_not_port": false,
+   "frames_14": 1.7,
+   "reader_count": 1,
+   "readers": [
+    "pq1/driver.py:32"
+   ],
+   "scope": "spec-only",
+   "scope_reason": "the press-down chevron nudge: specified in DESIGN.md § Input, rendered by nothing in the Python — the port implements it from the spec",
+   "source": "pq1/motion.py:166",
+   "under_two_frames": true,
+   "unit": "ms",
+   "value": 120
+  },
+  "TAP_MAX_MS": {
+   "comment": "released under this = tap; held past it = hold begins",
+   "frames_14": 3.5,
+   "reader_count": 9,
+   "readers": [
+    "pq1/driver.py:16",
+    "pq1/driver.py:246",
+    "pq1/driver.py:256",
+    "pq1/driver.py:435",
+    "pq1/flow.py:254",
+    "pq1/motion.py:181",
+    "pq1/motion.py:190",
+    "pq1/motion.py:201"
+   ],
+   "scope": "device",
+   "source": "pq1/motion.py:167",
+   "under_two_frames": false,
+   "unit": "ms",
+   "value": 250
+  }
+ },
+ "truth_table": [
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "hero — the ask (flow has details)",
+   "flow": "send_token",
+   "from": "SEND (hero, p1)",
+   "gesture": "tap left",
+   "result": "enter",
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "hero — the ask (flow has details)",
+   "flow": "send_token",
+   "from": "SEND (hero, p1)",
+   "gesture": "tap right",
+   "result": "enter",
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "hero — the ask (flow has details)",
+   "flow": "send_token",
+   "from": "SEND (hero, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "DECLINED (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "hero — the ask (flow has details)",
+   "flow": "send_token",
+   "from": "SEND (hero, p1)",
+   "gesture": "hold right",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "hero — the ask (flow has details)",
+   "flow": "send_token",
+   "from": "SEND (hero, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "SEND (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "hero — the ask (flow has details)",
+   "flow": "send_token",
+   "from": "SEND (hero, p1)",
+   "gesture": "both buttons (chord)",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TO (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "hero — the ask (flow has details)",
+   "flow": "send_token",
+   "from": "SEND (hero, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "navigating",
+   "to": "SEND (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "hero — the ask (flow has details)",
+   "flow": "send_token",
+   "from": "SEND (hero, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TO (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "hero — an intro (band_chev, commit False)",
+   "flow": "erc7730/swap",
+   "from": "ERC7730 (hero, p1)",
+   "gesture": "tap left",
+   "result": "enter",
+   "state_after": "navigating",
+   "to": "SIGN (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "hero — an intro (band_chev, commit False)",
+   "flow": "erc7730/swap",
+   "from": "ERC7730 (hero, p1)",
+   "gesture": "tap right",
+   "result": "enter",
+   "state_after": "navigating",
+   "to": "SIGN (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "hero — an intro (band_chev, commit False)",
+   "flow": "erc7730/swap",
+   "from": "ERC7730 (hero, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "DECLINED (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "hero — an intro (band_chev, commit False)",
+   "flow": "erc7730/swap",
+   "from": "ERC7730 (hero, p1)",
+   "gesture": "hold right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "ERC7730 (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "hero — an intro (band_chev, commit False)",
+   "flow": "erc7730/swap",
+   "from": "ERC7730 (hero, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "ERC7730 (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "hero — an intro (band_chev, commit False)",
+   "flow": "erc7730/swap",
+   "from": "ERC7730 (hero, p1)",
+   "gesture": "both buttons (chord)",
+   "result": null,
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "hero — an intro (band_chev, commit False)",
+   "flow": "erc7730/swap",
+   "from": "ERC7730 (hero, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "hero — an intro (band_chev, commit False)",
+   "flow": "erc7730/swap",
+   "from": "ERC7730 (hero, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — first of the section",
+   "flow": "send_token",
+   "from": "NETWORK (detail, p1)",
+   "gesture": "tap left",
+   "result": "back",
+   "state_after": "navigating",
+   "to": "SEND (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — first of the section",
+   "flow": "send_token",
+   "from": "NETWORK (detail, p1)",
+   "gesture": "tap right",
+   "result": "forward",
+   "state_after": "navigating",
+   "to": "TO (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — first of the section",
+   "flow": "send_token",
+   "from": "NETWORK (detail, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "DECLINED (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — first of the section",
+   "flow": "send_token",
+   "from": "NETWORK (detail, p1)",
+   "gesture": "hold right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — first of the section",
+   "flow": "send_token",
+   "from": "NETWORK (detail, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — first of the section",
+   "flow": "send_token",
+   "from": "NETWORK (detail, p1)",
+   "gesture": "both buttons (chord)",
+   "result": null,
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — first of the section",
+   "flow": "send_token",
+   "from": "NETWORK (detail, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — first of the section",
+   "flow": "send_token",
+   "from": "NETWORK (detail, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "VALUE (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — middle",
+   "flow": "send_token",
+   "from": "TO (detail, p1)",
+   "gesture": "tap left",
+   "result": "back",
+   "state_after": "navigating",
+   "to": "NETWORK (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — middle",
+   "flow": "send_token",
+   "from": "TO (detail, p1)",
+   "gesture": "tap right",
+   "result": "forward",
+   "state_after": "navigating",
+   "to": "VALUE (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — middle",
+   "flow": "send_token",
+   "from": "TO (detail, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "DECLINED (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — middle",
+   "flow": "send_token",
+   "from": "TO (detail, p1)",
+   "gesture": "hold right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TO (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — middle",
+   "flow": "send_token",
+   "from": "TO (detail, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "TO (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — middle",
+   "flow": "send_token",
+   "from": "TO (detail, p1)",
+   "gesture": "both buttons (chord)",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TO (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — middle",
+   "flow": "send_token",
+   "from": "TO (detail, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "navigating",
+   "to": "SEND (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — middle",
+   "flow": "send_token",
+   "from": "TO (detail, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "MAX FEE (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — paged, on page 1",
+   "flow": "eip1271/personal_counterfactual_hash",
+   "from": "HASH (detail, p1)",
+   "gesture": "tap left",
+   "result": "back",
+   "state_after": "navigating",
+   "to": "CONFIRM? (confirm, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — paged, on page 1",
+   "flow": "eip1271/personal_counterfactual_hash",
+   "from": "HASH (detail, p1)",
+   "gesture": "tap right",
+   "result": "page",
+   "state_after": "navigating",
+   "to": "HASH (detail, p2)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — paged, on page 1",
+   "flow": "eip1271/personal_counterfactual_hash",
+   "from": "HASH (detail, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "DECLINED (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — paged, on page 1",
+   "flow": "eip1271/personal_counterfactual_hash",
+   "from": "HASH (detail, p1)",
+   "gesture": "hold right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "HASH (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — paged, on page 1",
+   "flow": "eip1271/personal_counterfactual_hash",
+   "from": "HASH (detail, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "HASH (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — paged, on page 1",
+   "flow": "eip1271/personal_counterfactual_hash",
+   "from": "HASH (detail, p1)",
+   "gesture": "both buttons (chord)",
+   "result": null,
+   "state_after": "navigating",
+   "to": "HASH (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — paged, on page 1",
+   "flow": "eip1271/personal_counterfactual_hash",
+   "from": "HASH (detail, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "navigating",
+   "to": "SIGNER (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "detail — paged, on page 1",
+   "flow": "eip1271/personal_counterfactual_hash",
+   "from": "HASH (detail, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "DETAILS (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "value — full-width text",
+   "flow": "fingerprint/safe_tx_hash_fingerprint",
+   "from": "HASH (value, p1)",
+   "gesture": "tap left",
+   "result": "back",
+   "state_after": "navigating",
+   "to": "SAFE TX HASH FINGERPRINT (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "value — full-width text",
+   "flow": "fingerprint/safe_tx_hash_fingerprint",
+   "from": "HASH (value, p1)",
+   "gesture": "tap right",
+   "result": "forward",
+   "state_after": "navigating",
+   "to": "SAFE TX HASH FINGERPRINT (hero, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "value — full-width text",
+   "flow": "fingerprint/safe_tx_hash_fingerprint",
+   "from": "HASH (value, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "DECLINED (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "value — full-width text",
+   "flow": "fingerprint/safe_tx_hash_fingerprint",
+   "from": "HASH (value, p1)",
+   "gesture": "hold right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "HASH (value, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "value — full-width text",
+   "flow": "fingerprint/safe_tx_hash_fingerprint",
+   "from": "HASH (value, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "HASH (value, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "value — full-width text",
+   "flow": "fingerprint/safe_tx_hash_fingerprint",
+   "from": "HASH (value, p1)",
+   "gesture": "both buttons (chord)",
+   "result": null,
+   "state_after": "navigating",
+   "to": "HASH (value, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "value — full-width text",
+   "flow": "fingerprint/safe_tx_hash_fingerprint",
+   "from": "HASH (value, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "navigating",
+   "to": "HASH (value, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward"
+   ],
+   "context": "value — full-width text",
+   "flow": "fingerprint/safe_tx_hash_fingerprint",
+   "from": "HASH (value, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "HASH (value, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "confirm — the mid-flow Confirm?",
+   "flow": "blind/unknown_call",
+   "from": "CONFIRM? (confirm, p1)",
+   "gesture": "tap left",
+   "result": "back",
+   "state_after": "navigating",
+   "to": "AMOUNT (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "confirm — the mid-flow Confirm?",
+   "flow": "blind/unknown_call",
+   "from": "CONFIRM? (confirm, p1)",
+   "gesture": "tap right",
+   "result": "forward",
+   "state_after": "navigating",
+   "to": "DATA HASH (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "confirm — the mid-flow Confirm?",
+   "flow": "blind/unknown_call",
+   "from": "CONFIRM? (confirm, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "DECLINED (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "confirm — the mid-flow Confirm?",
+   "flow": "blind/unknown_call",
+   "from": "CONFIRM? (confirm, p1)",
+   "gesture": "hold right",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "CONFIRMED (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "confirm — the mid-flow Confirm?",
+   "flow": "blind/unknown_call",
+   "from": "CONFIRM? (confirm, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "CONFIRM? (confirm, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "confirm — the mid-flow Confirm?",
+   "flow": "blind/unknown_call",
+   "from": "CONFIRM? (confirm, p1)",
+   "gesture": "both buttons (chord)",
+   "result": null,
+   "state_after": "navigating",
+   "to": "CONFIRM? (confirm, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "confirm — the mid-flow Confirm?",
+   "flow": "blind/unknown_call",
+   "from": "CONFIRM? (confirm, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TO (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "decline",
+    "forward",
+    "sign"
+   ],
+   "context": "confirm — the mid-flow Confirm?",
+   "flow": "blind/unknown_call",
+   "from": "CONFIRM? (confirm, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "MAX FEE (detail, p1)"
+  },
+  {
+   "armed_before": [
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, empty",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "tap left",
+   "result": "tick",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, empty",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "tap right",
+   "result": "tick",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, empty",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, empty",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "hold right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, empty",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, empty",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "both buttons (chord)",
+   "result": "enter",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, empty",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, empty",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, 3 digits entered",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "tap left",
+   "result": "tick",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, 3 digits entered",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "tap right",
+   "result": "tick",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, 3 digits entered",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "hold left",
+   "result": "fired",
+   "state_after": "resolving",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, 3 digits entered",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "hold right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, 3 digits entered",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": "snapback",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, 3 digits entered",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "both buttons (chord)",
+   "result": "enter",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, 3 digits entered",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "double press left",
+   "result": "back",
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [
+    "back",
+    "cancel",
+    "dec",
+    "enter",
+    "inc"
+   ],
+   "context": "entry — PIN row, 3 digits entered",
+   "flow": "pin/unlock",
+   "from": "TRY 1 (status, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "navigating",
+   "to": "TRY 1 (status, p1)"
+  },
+  {
+   "armed_before": [],
+   "context": "status — during an ending (input-dead)",
+   "flow": "send_token",
+   "from": "SUCCESSFUL (status, p1)",
+   "gesture": "tap left",
+   "result": null,
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  },
+  {
+   "armed_before": [],
+   "context": "status — during an ending (input-dead)",
+   "flow": "send_token",
+   "from": "SUCCESSFUL (status, p1)",
+   "gesture": "tap right",
+   "result": null,
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  },
+  {
+   "armed_before": [],
+   "context": "status — during an ending (input-dead)",
+   "flow": "send_token",
+   "from": "SUCCESSFUL (status, p1)",
+   "gesture": "hold left",
+   "result": null,
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  },
+  {
+   "armed_before": [],
+   "context": "status — during an ending (input-dead)",
+   "flow": "send_token",
+   "from": "SUCCESSFUL (status, p1)",
+   "gesture": "hold right",
+   "result": null,
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  },
+  {
+   "armed_before": [],
+   "context": "status — during an ending (input-dead)",
+   "flow": "send_token",
+   "from": "SUCCESSFUL (status, p1)",
+   "gesture": "release a hold early (1000 ms)",
+   "result": null,
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  },
+  {
+   "armed_before": [],
+   "context": "status — during an ending (input-dead)",
+   "flow": "send_token",
+   "from": "SUCCESSFUL (status, p1)",
+   "gesture": "both buttons (chord)",
+   "result": null,
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  },
+  {
+   "armed_before": [],
+   "context": "status — during an ending (input-dead)",
+   "flow": "send_token",
+   "from": "SUCCESSFUL (status, p1)",
+   "gesture": "double press left",
+   "result": null,
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  },
+  {
+   "armed_before": [],
+   "context": "status — during an ending (input-dead)",
+   "flow": "send_token",
+   "from": "SUCCESSFUL (status, p1)",
+   "gesture": "double press right",
+   "result": null,
+   "state_after": "resolving",
+   "to": "SUCCESSFUL (status, p1)"
+  }
+ ]
+}

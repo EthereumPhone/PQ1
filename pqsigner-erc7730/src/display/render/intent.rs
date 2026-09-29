@@ -19,6 +19,7 @@ use super::super::primitives::write_line;
 use crate::ir::{Erc7730Ir, FormatHeader};
 
 use super::formatters::write_line_bytes;
+use super::super::INTENT_EXTENT_MASK;
 use super::{Page, Pages};
 use crate::render::RenderErr;
 
@@ -53,10 +54,17 @@ pub(super) fn render_intent_banner(
         write_line(pages.row_mut(warn, 1), "Unattested");
         write_line(pages.row_mut(warn, 2), "descriptor");
         write_line(pages.row_mut(warn, 3), "> next");
+        pages.mark_nav(warn, 3);
     }
 
     let p = pages.push_blank().map_err(|_| RenderErr::PageBudget)?;
-    pages.buf[p] = build_intent_page(ir, format, derived_intent);
+    let (page, extent) = build_intent_page(ir, format, derived_intent);
+    pages.buf[p] = page;
+    // `build_intent_page` returns a bare `Page`, so both declarations it owes
+    // the consumer are made where the page joins `pages`: the chrome it wrote
+    // to row 3, and how far its intent text runs.
+    pages.mark_nav(p, 3);
+    extent.declare(pages, p);
     Ok(p)
 }
 
@@ -76,15 +84,53 @@ pub(super) fn repaint_intent_banner(
     if pages.as_slice().len() <= intent_page {
         return Err(RenderErr::Reject("7730 missing intent page"));
     }
-    pages.buf[intent_page] = build_intent_page(ir, format, Some(derived_intent));
+    let (page, extent) = build_intent_page(ir, format, Some(derived_intent));
+    pages.buf[intent_page] = page;
+    pages.mark_nav(intent_page, 3);
+    // A repaint replaces the title, so it can change the extent — an
+    // interpolated intent is a different length from the static one. Re-declare
+    // rather than inherit: `push_blank` cleared the byte for the FIRST paint,
+    // and nothing clears it again here.
+    pages.nav[intent_page] &= !INTENT_EXTENT_MASK;
+    extent.declare(pages, intent_page);
     Ok(())
+}
+
+/// How far the intent text runs on the page `build_intent_page` just built.
+/// Returned rather than re-derived, so the declaration and the layout come
+/// from the same branch and cannot drift apart.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum IntentExtent {
+    /// Row 0 holds the whole intent; row 1 holds the owner.
+    CompleteOnRow0,
+    /// Rows 0 and 1 are one unbroken string; the owner was dropped for space.
+    ContinuesOnRow1,
+}
+
+impl IntentExtent {
+    /// How many rows the intent text occupies, matching
+    /// [`Pages::intent_rows`].
+    pub(super) fn rows(self) -> usize {
+        match self {
+            IntentExtent::CompleteOnRow0 => 1,
+            IntentExtent::ContinuesOnRow1 => 2,
+        }
+    }
+
+    /// Record this extent for `page` on the transcript it was just written to.
+    pub(super) fn declare(self, pages: &mut Pages, page: usize) {
+        match self {
+            IntentExtent::CompleteOnRow0 => pages.mark_intent_complete(page),
+            IntentExtent::ContinuesOnRow1 => pages.mark_intent_continues(page),
+        }
+    }
 }
 
 pub(super) fn build_intent_page(
     ir: &Erc7730Ir<'_>,
     format: &FormatHeader<'_>,
     derived_intent: Option<&[u8]>,
-) -> Page {
+) -> (Page, IntentExtent) {
     // The intent is the descriptor author's single most important string (the
     // flow title). The confirm page + the field pages already establish this is
     // a signing flow, so we DROP the old "Sign: " prefix — which left only 10
@@ -108,6 +154,28 @@ pub(super) fn build_intent_page(
     let r0_take = intent.len().min(W);
     page[0][..r0_take].copy_from_slice(&intent[..r0_take]);
 
+    // `> W`. At EXACTLY W the two layouts ARE indistinguishable from the
+    // finished page alone — row 0 is full either way — but the fix for that is
+    // NOT to bend the layout until the consumer's guess happens to be right.
+    //
+    // It was, briefly (95d7831a used `>= W`), and that silently DELETED the
+    // owner line from a 16-character-intent page. The owner is anti-spoof
+    // material: it is how the user tells LidoDAO's descriptor from a lookalike.
+    // `dbgen`'s upstream conformance test pinned exactly that transcript and
+    // went red ("Claim Withdrawal" is 16 characters), which is how the loss was
+    // caught. The legacy 16x4 page is a shipping surface in its own right under
+    // `ui-lcd`; degrading it to simplify a pixel-adapter inference was the
+    // wrong trade.
+    //
+    // The ambiguity is resolved where it belongs: the renderer DECLARES how far
+    // the intent runs (`mark_intent_complete` / `mark_intent_continues`) and no
+    // consumer infers it from the bytes. See [`Pages::intent_rows`].
+    let extent = if intent.len() > W {
+        IntentExtent::ContinuesOnRow1
+    } else {
+        IntentExtent::CompleteOnRow0
+    };
+
     if intent.len() > W {
         let end = intent.len().min(2 * W);
         let take = end - W;
@@ -123,7 +191,7 @@ pub(super) fn build_intent_page(
         write_line_bytes(&mut page[2], ir.contract_name);
     }
     write_line(&mut page[3], "> next");
-    page
+    (page, extent)
 }
 
 /// Exact full-page comparison used for the post-publication receipt and again

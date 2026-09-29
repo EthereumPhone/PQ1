@@ -18,6 +18,10 @@ struct RngRegs {
     cr: Reg32,
     sr: Reg32,
     dr: RoReg32,
+    /// Noise source control (offset 0x0C). Present on U575/U585; the parts
+    /// without it (U535/U545) are also the ones with a different HTCR value.
+    nscr: Reg32,
+    htcr: Reg32,
 }
 
 // SAFETY: each address is a real, 4-byte-aligned MMIO register owned by the
@@ -28,11 +32,33 @@ const REG: RngRegs = unsafe {
         cr: Reg32::new(RNG + 0x00),
         sr: Reg32::new(RNG + 0x04),
         dr: RoReg32::new(RNG + 0x08),
+        nscr: Reg32::new(RNG + 0x0C),
+        htcr: Reg32::new(RNG + 0x10),
     }
 };
 
 // CR bits
 const RNGEN: u32 = 1 << 2;
+// CONFIGLOCK (bit 31). RM0456 §48.7.1: with it set, writes to RNG_NSCR,
+// RNG_HTCR and RNG_CR bits [29:4] are ignored until the next RNG reset, and it
+// can only be cleared by resetting the peripheral.
+//
+// Two reasons this is set rather than left clear, beyond matching the ESV
+// certificate (E11 Table 2 gives RNG_CR = 0x80F00DXX):
+//
+//  1. RM0456 §48.3.4: "When the RNG peripheral is reset through RCC (hardware
+//     reset), the RNG configuration for optimal randomness is lost ... Software
+//     reset with CONFIGLOCK set PRESERVES the RNG configuration." Our
+//     seed-error recovery is exactly such a software reset.
+//  2. It stops any later code — including a compromised path — from silently
+//     re-pointing the noise source. The entropy configuration becomes
+//     immutable for the life of the power cycle.
+//
+// It does NOT interfere with recovery: CONDRST is bit 30 and RNGEN is bit 2,
+// both outside the locked [29:4] window, so the conditioning soft reset and
+// enable/disable still work. Set LAST, after every read-back has passed, so a
+// partially-failed init can never lock a wrong configuration in place.
+const CONFIGLOCK: u32 = 1 << 31;
 // CONDRST lives at bit 30 on STM32U5, not bit 6 (bit 6 is part of CONFIG1).
 const CONDRST: u32 = 1 << 30;
 
@@ -47,10 +73,53 @@ const ERROR_FLAGS: u32 = SEIS | SECS | CEIS | CECS;
 /// Bounded polling budget for conditioning reset and data-ready waits.
 const POLL_LIMIT: u32 = 1_000_000;
 
-// NIST-compliant default CR config for STM32U5 (from ST's LL driver —
-// CONFIG3=0x0F, CONFIG1=0x34, NISTC=0). Using the wrong CR layout here is
-// what caused the first-boot wizard to see `rng::fill FAILED`.
+// RNG_CR — ST's AN4230 value for THIS part.
+//
+// `stm32u585xx.h` (CMSIS 1.4.x) ships the per-product AN4230 values under the
+// heading "RNG Nist Compliance Values", and ST's own HAL writes them with the
+// comment "Recommended value for NIST compliance, refer to application note
+// AN4230" (`stm32u5xx_hal_rng.c`). They are:
+//
+//     RNG_CR   0x00F00D00      <- this constant, already correct
+//     RNG_HTCR 0xA2B0          <- see below
+//     RNG_NSCR 0x17CBB         <- see below
+//
+// Field decode (bit positions from the same header, NOT guessed): CONFIG1
+// (25:20) = 0x0F, CONFIG2 (15:13) = 0x0, CONFIG3 (11:8) = 0xD, NISTC (bit 12)
+// = 0, CED (bit 5) = 0, CLKDIV = 0 — with rng_clk = 48 MHz from HSI48, which
+// is RM0456 §48.6.2's validation condition.
+//
+// An earlier comment here called it "CONFIG3=0x0F, CONFIG1=0x34"; the value
+// never said that. Using the wrong CR layout here is what caused the
+// first-boot wizard to see `rng::fill FAILED`.
 const RNG_CR_NIST_DEFAULT: u32 = 0x00F0_0D00;
+
+// RNG_HTCR — health-test config, AN4230 value for U575/U585 (#704).
+//
+// This was `0xAAC7`, taken from RM0456 Table 464's generic configuration-C row
+// on the strength of note 4 ("can be fixed in the RNG driver, it does not
+// depend upon the STM32 product"). That note does not hold across this family:
+// `0xAAC7` is what `stm32u535xx.h` / `stm32u545xx.h` define — the two parts
+// that have **no RNG_NSCR register at all** — while U575/U585, which do have
+// one, define `0xA2B0`. The health-test thresholds are matched to the noise
+// source, so borrowing the value from a part with different noise hardware
+// runs our health tests against thresholds meant for a different topology.
+//
+// The driver previously never wrote HTCR at all, so the CR bits ran against
+// the RESET thresholds (0x0000_72AC, §48.7.5). On pq1 that surfaced as a
+// latched seed error (SR=0x41) before the first draw after nearly every idle
+// gap (#698). HTCR is only taken into account while CONDRST=1 (§48.7.5), so it
+// is written inside the conditioning-reset window in `init_locked`.
+const RNG_HTCR_AN4230: u32 = 0x0000_A2B0;
+
+// RNG_NSCR — noise source control, AN4230 value for U575/U585 (#704).
+//
+// Never written before: the register was not even mapped, so the noise source
+// ran at its reset value rather than ST's validated one. NSCR's `EN_OSC1..6`
+// fields select which noise oscillators run, so this is not a cosmetic
+// difference — it is *which* entropy hardware is enabled. Like HTCR it is only
+// taken into account while CONDRST=1.
+const RNG_NSCR_AN4230: u32 = 0x0001_7CBB;
 
 /// Last accepted 32-bit word for a continuous repetition test. Zero is the
 /// initial sentinel and cannot collide with a valid observation because an
@@ -424,14 +493,61 @@ fn read_healthy_word_into(word_out: &mut u32, read_receipt: &mut u32) {
 fn init_locked() -> Result<(), ()> {
     // 1. Enter config mode with the NIST-compliant CR value.
     REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);
+    // 1b. Health-test thresholds matching the CR configuration. Must happen
+    //     while CONDRST=1 or the write is ignored; read back and fail closed
+    //     if it did not take (e.g. CONFIGLOCK set, or a wrong register map).
+    // Order matches ST's HAL (`stm32u5xx_hal_rng.c`): CR|CONDRST, then HTCR,
+    // then NSCR, then clear CONDRST.
+    let htcr_before = REG.htcr.read();
+    REG.htcr.write(RNG_HTCR_AN4230);
+    let htcr_after = REG.htcr.read();
+    secure_log!(
+        "[S] rng: HTCR 0x{:08x} -> 0x{:08x} (AN4230 U585 wants 0x{:08x})",
+        htcr_before,
+        htcr_after,
+        RNG_HTCR_AN4230
+    );
+    // Only consumed by `secure_log!`, which is empty without `debug-log`.
+    let _ = htcr_before;
+    if htcr_after != RNG_HTCR_AN4230 {
+        return Err(());
+    }
+    // 1c. Noise source control. Same CONDRST-window rule and the same
+    //     fail-closed read-back: a silently-ignored NSCR write would leave the
+    //     noise oscillators at reset while everything downstream assumed ST's
+    //     validated set.
+    let nscr_before = REG.nscr.read();
+    REG.nscr.write(RNG_NSCR_AN4230);
+    let nscr_after = REG.nscr.read();
+    secure_log!(
+        "[S] rng: NSCR 0x{:08x} -> 0x{:08x} (AN4230 U585 wants 0x{:08x})",
+        nscr_before,
+        nscr_after,
+        RNG_NSCR_AN4230
+    );
+    let _ = nscr_before;
+    if nscr_after != RNG_NSCR_AN4230 {
+        return Err(());
+    }
     // 2. Leave config mode (clear CONDRST) while keeping the config bits.
     REG.cr.write(RNG_CR_NIST_DEFAULT);
     wait_for_conditioning_reset()?;
     // 3. Clear any latched seed / clock error interrupts from pre-init.
     let sr = REG.sr.read();
     REG.sr.write(sr & !(SEIS | CEIS));
-    // 4. Enable the RNG.
-    REG.cr.write(RNG_CR_NIST_DEFAULT | RNGEN);
+    // 4. Enable the RNG and lock the configuration. E11 Table 2's CR is
+    //    0x80F00DXX, where the low byte is application-dependent (bit 2 = RNGEN
+    //    when the peripheral is needed). Locking last means the values just
+    //    read back are the ones being frozen.
+    REG.cr.write(RNG_CR_NIST_DEFAULT | RNGEN | CONFIGLOCK);
+    let cr_locked = REG.cr.read();
+    secure_log!("[S] rng: CR after lock = 0x{:08x}", cr_locked);
+    if cr_locked & CONFIGLOCK == 0 {
+        // On a re-init the bit is already set and this is a no-op; if it reads
+        // clear here the lock did not take, so the noise configuration is still
+        // mutable and we are not in the certified configuration.
+        return Err(());
+    }
 
     // 5. Wait for one fully checked random number and discard it. Using the
     // same read path pins the post-warm-up SEIS/SECS/CEIS/CECS assertion and

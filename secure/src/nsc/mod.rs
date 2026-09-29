@@ -42,6 +42,7 @@ mod cmd_is_unlocked;
 mod cmd_lock;
 mod cmd_offchain_status;
 mod cmd_offchain_sync;
+mod cmd_pin_attempt_log;
 mod cmd_request_unlock;
 mod cmd_sign_offchain;
 mod cmd_sign_userop;
@@ -387,6 +388,21 @@ compile_error!(
         feature = "duress-provision-e2e",
         feature = "pin-gate-e2e",
         feature = "dual-se-multi-unlock-e2e",
+        // Added 2026-09-24 with the ui-px-evt merge. `se-lcd-diag` replaces
+        // normal boot, is terminal, and performs the SAME OPTIGA E140
+        // pairing write a first boot performs — squarely this fence's
+        // subject. `dev-dfu` is worse than destructive: two buttons at
+        // power-up clear nSWBOOT0/nBOOT0 and drop the part into the ROM
+        // USB-DFU bootloader, i.e. a physical-access firmware-replacement
+        // path that bypasses the FSBL measured-boot chain of invariant #10.
+        // Both were in the Makefile's PROD_FORBIDDEN and NOTHING else: a
+        // direct `cargo build --features dev-dfu,mode-production` was
+        // accepted, because the denylist is a Makefile-only barrier.
+        feature = "se-lcd-diag",
+        feature = "dev-dfu",
+        // Frame-time overlay: prints render/blit timings over the trusted
+        // display. Not destructive, but it paints over consent screens.
+        feature = "ui-px-frametime",
     )
 ))]
 compile_error!(
@@ -700,8 +716,12 @@ compile_error!(
      MEDIUM-3). Without it the SPHINCS+C10 keygen/sign window runs with an \
      undiluted power signature, exposing the WOTS/FORS secrets to a bench \
      CPA/DPA attacker. Enable `consumption-mask` (it implies `stm32u585`; its \
-     TIM2-CH1 PWM mask runs on PA5, which no other driver claims), or build a \
-     non-shipping test image with `e2e-test` / `dev-testkey`."
+     TIM2-CH1 PWM mask runs on PA5 — free on iota2, but SPI1_SCK, the LCD \
+     clock, on pq1 — where the mask now runs on TIM3_CH1/PA6 instead; see the \
+     module header in hw/consumption_mask.rs for what that does and does NOT \
+     establish, since neither board drives a load from the mask pin and its \
+     effectiveness is unmeasured), or build a non-shipping test image with \
+     `e2e-test` / `dev-testkey`."
 );
 
 // MEDIUM-1 ship-blocker (audit tz-tamper 20260611): a production hardware
@@ -849,6 +869,22 @@ compile_error!(
      Phase A/B `ui-lcd`+`ui-noop` pairing is no longer valid.)"
 );
 
+// Four `ui-oled-bench` mutual-exclusion fences stood here (vs `ui-capture`,
+// `ui-lcd`, `ui-semihosting`, `ui-noop`) until 2026-09-23. They died with the
+// backend, not with the rule: the "exactly one UI backend" requirement is
+// still enforced below, and `ui-lcd`/`ui-semihosting`/`ui-noop` remain
+// mutually exclusive through their own fences.
+//
+// `ui-px-evt` added a fifth, `ui-px` vs `ui-oled-bench`; it went the same way
+// for the same reason. His PRODUCTION fence below is kept — it is about the
+// trusted display, not about the dead bench backend.
+
+#[cfg(all(feature = "mode-production", feature = "ui-px", not(feature = "ui-lcd")))]
+compile_error!(
+    "`ui-px` in a `mode-production` image requires the physical NV3007 (`ui-lcd`): \
+     the text presenter is a QEMU / bench aid, not a trusted display."
+);
+
 // At least one UI backend must be selected when targeting actual hardware
 // or QEMU. (Pure `cargo test -p sphincs-tz-secure --tests` builds run on
 // the host with neither stm32u585 nor any UI backend — those are exempt
@@ -863,8 +899,9 @@ compile_error!(
     ))
 ))]
 compile_error!(
-    "Exactly one UI backend must be selected: `ui-semihosting`, `ui-noop`, \
-     or `ui-lcd`. (`ui-capture` composes with any backend.)"
+    "Exactly one UI backend must be selected: `ui-semihosting`, `ui-noop` or \
+     `ui-lcd`. (`ui-capture` composes with any backend.) The bench-only \
+     `ui-oled-bench` SSD1306 backend was removed 2026-09-23."
 );
 
 // ---------------------------------------------------------------------------
@@ -987,6 +1024,231 @@ pub(super) const SIGN_SNAP_BUF_LEN: usize =
 /// then wiped) inside a single handler invocation, under the non-reentrant
 /// dispatcher — never aliased across handlers.
 pub(super) static mut SIGN_SNAP_BUF: [u8; SIGN_SNAP_BUF_LEN] = [0u8; SIGN_SNAP_BUF_LEN];
+
+/// The pixel-UI screen transcript (`ui-px`) is NOT a static of its own: it
+/// overlays the tail of [`SIGN_SNAP_BUF`] that the single-sign handler never
+/// fills (its snapshot maximum is well below the batch maximum the buffer is
+/// sized for). Costing ~10 KB of BSS instead collided with the batch
+/// handler's stack on QEMU's 128 KB SRAM — the exact BSS-vs-stack class the
+/// shared buffer exists to prevent. The single handler splits its snapshot
+/// off the front of the buffer and hands the remainder here.
+#[cfg(feature = "ui-px")]
+const _: () = assert!(core::mem::align_of::<pqsigner_ui_px::Screens>() == 1);
+
+/// View a scratch byte region as the screen transcript (no copy). `None`
+/// when the region is too small.
+#[cfg(feature = "ui-px")]
+fn px_screens_view(scratch: &mut [u8]) -> Option<&mut pqsigner_ui_px::Screens> {
+    if scratch.len() < pqsigner_ui_px::SCREENS_BYTES {
+        return None;
+    }
+    let p = scratch.as_mut_ptr().cast::<pqsigner_ui_px::Screens>();
+    // SAFETY: `Screens` is `#[repr(C)]`, alignment 1 (asserted above), made
+    // only of `u8` arrays so every bit pattern is a valid value, and the
+    // region is at least `SCREENS_BYTES` long. The unique `&mut [u8]` borrow
+    // is reborrowed for the returned lifetime, so no other reference to those
+    // bytes is live meanwhile.
+    Some(unsafe { &mut *p })
+}
+
+/// Confirm a sign request through the pixel UI: build the screen transcript
+/// from the SAME verified inputs the legacy pages were built from, bind it
+/// to the already-proven `pages`, and run the design's confirm loop.
+///
+/// The legacy `pages` stay the proof substrate: every dispatcher / trailer
+/// `*_proof` has already run over them. The lift (`tx::display::px_lift`)
+/// re-emits the route body (Safe, a single-UserOp family, or the rotation
+/// consent) AND the handler's trailers as design screens (twice,
+/// hash-compared; every trailer screen derived from the same page builder as
+/// its proven page), appends the returning hero and the design's `Confirm?`,
+/// and proves the assembly — no `Legacy` record anywhere — before anything
+/// is shown. Any failure is a refusal — never a fall-back to the page
+/// dialog.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    inputs: &crate::tx::display::px_lift::ContentInputs<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    use crate::tx::display::px_lift;
+    let screens = px_screens_view(scratch).ok_or("px scratch")?;
+    let receipt = px_lift::emit_content(screens, inputs).map_err(|()| "px body")?;
+    let body_len = receipt.body.legacy_pages;
+    px_lift::append_returning_hero(screens).map_err(|()| "px hero")?;
+    let confirm_at = px_lift::insert_confirm(screens, &receipt.family).map_err(|()| "px confirm")?;
+    crate::fi::scrub_sentinel_register();
+    let verdict =
+        px_lift::transcript_proof(screens, pages, &inputs.body, body_len, &receipt, inputs.trailers, confirm_at);
+    crate::fi::scrub_sentinel_register();
+    if verdict != crate::fi::OK_SENTINEL {
+        return Err("px transcript");
+    }
+    // The glyph atlas is a WYSIWYS input that lives in the NS slot: prove it
+    // against the pinned root right before the dialog paints with it, and
+    // again after the user's answer — a swap during the dialog is a refusal.
+    #[cfg(feature = "ui-lcd")]
+    let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| "px atlas")?;
+    #[cfg(not(feature = "ui-lcd"))]
+    let atlas = ();
+    // The endings (decline resolve, signing film) wear this family's disc
+    // and captions.
+    #[cfg(feature = "ui-lcd")]
+    crate::ui::px::lcd::set_film_look(receipt.family.look, receipt.family.signed, receipt.family.declined);
+    let out = crate::ui::px::confirm_screens_checked(screens, &atlas);
+    // The transcript holds no secret, but leave nothing stale behind.
+    screens.volatile_poison_and_reset();
+    #[cfg(feature = "ui-lcd")]
+    {
+        drop(atlas);
+        crate::fi::scrub_sentinel_register();
+        if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+            return Err("px atlas changed");
+        }
+        crate::fi::scrub_sentinel_register();
+    }
+    Ok(out)
+}
+
+/// A pixel consent outside the sign path (port step 4: the firmware
+/// update's two consents). `build` writes the transcript into the shared
+/// snapshot buffer — free here: no sign handler is running under the
+/// non-reentrant dispatcher — the design's flow rules are checked
+/// (`check::check_flow`), and the dialog runs against a freshly verified
+/// atlas that is re-proven after the answer. `Err` = the pixel path cannot
+/// run (no verified atlas, a transcript error): the caller shows its page
+/// dialog instead, whose glyphs are secure-resident — a broken NS atlas
+/// must never make the firmware update, the way to repair it, unreachable.
+#[cfg(feature = "ui-px")]
+pub(crate) fn px_confirm_plain(
+    build: impl FnOnce(&mut pqsigner_ui_px::Screens) -> Result<(), ()>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    #[cfg(feature = "ui-lcd")]
+    let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| "px atlas")?;
+    #[cfg(not(feature = "ui-lcd"))]
+    let atlas = ();
+    // SAFETY: single-threaded dispatcher; only sign handlers borrow the
+    // shared snapshot buffer and none is in flight during this handler, so
+    // this is the unique reference for the duration of the dialog.
+    let buf = unsafe { &mut *core::ptr::addr_of_mut!(SIGN_SNAP_BUF) };
+    let screens = px_screens_view(buf).ok_or("px scratch")?;
+    if build(screens).is_err() || pqsigner_ui_px::check::check_flow(screens).is_err() {
+        screens.volatile_poison_and_reset();
+        return Err("px transcript");
+    }
+    // No film plays on these consents (nothing is signed); the handler's own
+    // status (CANCELED, …) follows the answer.
+    let out = crate::ui::px::confirm_screens_checked(screens, &atlas);
+    screens.volatile_poison_and_reset();
+    #[cfg(feature = "ui-lcd")]
+    {
+        drop(atlas);
+        crate::fi::scrub_sentinel_register();
+        if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {
+            // The answer was given against glyphs that changed: refuse.
+            return Ok((crate::ui::confirm::ConfirmResult::Cancelled, crate::fi::FAIL_SENTINEL));
+        }
+        crate::fi::scrub_sentinel_register();
+    }
+    Ok(out)
+}
+
+/// The Safe route (`px_confirm` over the Safe body).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_safe(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    tx_chain_id: u64,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
+    cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    resolver: &crate::names::NameResolver<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let meta = crate::tx::display::safe_route_meta(tx_chain_id, safe_v1, safe_exec, erc20);
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Safe {
+            safe_v1,
+            safe_exec,
+            cow,
+            erc20: meta,
+            resolver,
+        },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// A single-UserOp route (value / contract call, ERC-20, typed call, blind).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_userop(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    body: crate::tx::display::userop_screens::UserOpInputs<'_>,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::UserOp(body),
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// A direct CoW Swap order (no Safe context).
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_cow(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    v3: &crate::tx::eip712::cowswap::VerifiedCowswapV3,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Cow { v3 },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// An authenticated ERC-7730 render: the body is the proven page range
+/// before the handler's trailers.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_erc7730(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    family: crate::tx::display::userop_screens::Family,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let tail = crate::tx::display::expected_trailer_count(facts);
+    let body_len = pages.len.checked_sub(tail).ok_or("px body")?;
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Erc7730 {
+            pages,
+            start: 0,
+            body_len,
+            chain_id,
+            family,
+        },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
+
+/// The slot-rotation consent.
+#[cfg(feature = "ui-px")]
+pub(super) fn px_confirm_rotation(
+    scratch: &mut [u8],
+    pages: &crate::tx::display::Pages,
+    chain_id: u64,
+    slot_index: u32,
+    facts: &crate::tx::display::TrailerFacts<'_>,
+) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {
+    let inputs = crate::tx::display::px_lift::ContentInputs {
+        body: crate::tx::display::px_lift::Body::Rotation { chain_id, slot_index },
+        trailers: facts,
+    };
+    px_confirm(scratch, pages, &inputs)
+}
 
 /// HIGH-7 guard: depth counter incremented on handler entry,
 /// decremented on exit. SysTick refuses to wipe when depth > 0 so
@@ -1168,9 +1430,14 @@ pub unsafe fn gated_unlock(
         crate::fi::wait_random();
         let pre_count_b = crate::hw::flash::pin_attempts_read();
         if pre_count_a != pre_count_b {
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::CounterUnstable,
+                pre_count_a,
+            );
             return Err(UnlockError::PinLocked);
         }
         let pre_count = pre_count_a;
+        crate::pin_attempt_log::note_precharge(pre_count);
 
         // Affirmative "allowed to proceed" — Hamming-distant sentinel
         // returned only on a clean `pre_count < MAX_ATTEMPTS`. The
@@ -1179,6 +1446,11 @@ pub unsafe fn gated_unlock(
             || pre_count < sphincs_tz_shared::MAX_ATTEMPTS,
         );
         if allowed != crate::fi::OK_SENTINEL {
+            // Short-circuit at MAX: nothing burned, nothing wiped here.
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
+                pre_count,
+            );
             return Err(UnlockError::PinLocked);
         }
 
@@ -1209,6 +1481,10 @@ pub unsafe fn gated_unlock(
                 && unsafe { crate::hw::flash::pin_attempts_read() } == pre_count + 1
         });
         if bumped != crate::fi::OK_SENTINEL {
+            crate::pin_attempt_log::record(
+                crate::pin_attempt_log::AttemptReason::PrechargeFailed,
+                pre_count,
+            );
             // Flash write fault (PROGERR / readback mismatch), a faulted or
             // skipped bump, or the counter did not advance by exactly one.
             // Refuse without ever calling the SE driver.
@@ -1318,18 +1594,42 @@ pub unsafe fn gated_unlock(
                 let reset_ok =
                     crate::fi::check_true_into_sentinel(|| reset_result.is_ok());
                 if reset_ok != crate::fi::OK_SENTINEL {
+                    // The PIN was CORRECT but the counter stayed charged.
+                    // Repeat this and the budget walks to a lockout with the
+                    // user doing nothing wrong — the self-brick the comment
+                    // above describes, now visible instead of silent (#715).
+                    crate::pin_attempt_log::record_outcome(
+                        crate::pin_attempt_log::AttemptReason::OkResetFailed,
+                    );
                     return Err(UnlockError::InternalError);
                 }
             }
+            crate::pin_attempt_log::record_outcome(
+                crate::pin_attempt_log::AttemptReason::OkReset,
+            );
             Ok(master)
         }
         Ok(_) => {
             // FI inconsistency between the two reads of `result.is_ok()` (or a
             // glitched `verdict`) — refuse without resetting the MCU counter.
             // Counter stays bumped from the pre-commit above.
+            crate::pin_attempt_log::record_outcome(
+                crate::pin_attempt_log::AttemptReason::NoVerdict,
+            );
             Err(UnlockError::InternalError)
         }
-        Err(e) => Err(e),
+        Err(e) => {
+            // A real chip-side verdict is what the budget exists for; anything
+            // else burned an attempt without judging the PIN.
+            crate::pin_attempt_log::record_outcome(match e {
+                UnlockError::PinIncorrect => {
+                    crate::pin_attempt_log::AttemptReason::PinIncorrect
+                }
+                UnlockError::PinLocked => crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
+                _ => crate::pin_attempt_log::AttemptReason::NoVerdict,
+            });
+            Err(e)
+        }
     }
 }
 
@@ -1525,6 +1825,13 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_LOCK => cmd_lock::run(),
         #[cfg(feature = "e2e-test")]
         sphincs_tz_shared::CMD_TEST_PIN_LOCKOUT => cmd_test_pin_lockout::run(),
+        // PRESENT IN PRODUCTION, deliberately: its whole purpose is explaining
+        // a lockout on a shipped unit, and shipping images carry no debug-log.
+        // Read-only, no secret material — see the disclosure note in
+        // `crate::pin_attempt_log`. Placed ABOVE the prodtest block so it is
+        // not mistaken for a prodtest-gated command.
+        sphincs_tz_shared::CMD_GET_PIN_ATTEMPT_LOG => cmd_pin_attempt_log::run(args),
+
         // Prodtest commands — only present in the `prodtest` build
         // profile, never in production firmware.
         #[cfg(feature = "prodtest")]
@@ -1563,6 +1870,12 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         sphincs_tz_shared::CMD_PRODTEST_BUTTON_TEST => {
             prodtest::cmd_button_test_run(args)
         }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_RGB_TEST => prodtest::cmd_rgb_test_run(args),
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_RGB_OSD => prodtest::cmd_rgb_osd_run(args),
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_RNG_CONFIG => prodtest::cmd_rng_config_run(args),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -1735,6 +2048,19 @@ pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
 // Prodtest CMSE veneers (`prodtest` feature)
 // ---------------------------------------------------------------------------
 
+/// CMD_GET_PIN_ATTEMPT_LOG (4) — why each PIN attempt was consumed (#715).
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { cmd_pin_attempt_log::run(&args) };
+    secure_log!("[NSC] get_pin_attempt_log -> {}", r);
+    r
+}
+
 /// CMD_PRODTEST_GET_ID (100) — read STM32 UID + firmware version.
 #[cfg(feature = "prodtest")]
 #[no_mangle]
@@ -1876,6 +2202,51 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_button_test(out_ptr: u32) -> u
     };
     let r = unsafe { prodtest::cmd_button_test_run(&args) };
     secure_log!("[NSC] prodtest_button_test -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_RGB_TEST (110) — light the 9 RGB LEDs and report the AW21036's
+/// identity, a bus scan and an ACK tally. `in_ptr` is 6 bytes
+/// `[r, g, b, gcc, en, reserved]`; `out_ptr` is 24 bytes.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: in_ptr,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_rgb_test_run(&args) };
+    secure_log!("[NSC] prodtest_rgb_test -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_RNG_CONFIG (112) — TRNG certified-configuration receipt.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rng_config(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_rng_config_run(&args) };
+    secure_log!("[NSC] prodtest_rng_config -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_RGB_OSD (111) — per-channel open/short detection. `in_ptr` is
+/// 4 bytes `[gcc, en, reserved, reserved]`; `out_ptr` is 24 bytes.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_osd(in_ptr: u32, out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: in_ptr,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_rgb_osd_run(&args) };
+    secure_log!("[NSC] prodtest_rgb_osd -> {}", r);
     r
 }
 

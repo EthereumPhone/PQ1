@@ -13,9 +13,11 @@
 # are frozen by external standards, not our protocol.
 #
 # Intentionally NOT in the workspace:
-#   * tools/ob-configurator — STM32U585 option-byte unlocker, needs a
-#     different RUSTFLAGS / linker config than secure/nonsecure.
-#   * tools/oled-mirror — host-side RTT framebuffer viewer.
+#   * (tools/ob-configurator was DELETED 2026-09-16 — issue #37: it wrote the
+#     CubeProgrammer field value into the SECBOOTADD0 register, swapped the
+#     SECSR/SECCR offsets, and wrote command bits to registers that do not
+#     implement them. `make bootproof-hw` programs option bytes correctly via
+#     STM32_Programmer_CLI; recoverable from git history if ever needed.)
 #   * tools/*.py / *.js / *.sh — host scripts; not Rust.
 [workspace]
 members = [
@@ -27,6 +29,10 @@ members = [
     # 256 pages, exactly one owner each, const exact-once coverage
     # checks. Zero-dependency by policy (same rule as proto). FA-1.1.
     "geometry",
+    # STM32U585 peripheral drivers shared by the secure world and the FSBL:
+    # typed MMIO + the HASH (SHA-256) accelerator. Extracted from
+    # `secure/src/hw/` so the FSBL stops carrying software SHA-256 (#758).
+    "hw",
     # Pure no_std journal/floor core for the Draft 1.1 A/B rollback
     # architecture: FROZEN-JRN-IFACE-3 / FROZEN-OTP-API-3 / §6.2
     # decoder semantics. FA-1.3.
@@ -49,6 +55,11 @@ members = [
     # no_std, no heap. Companion ships compiled IR + Merkle proof in a
     # trailer on every sign; this crate parses & binds it.
     "pqsigner-erc7730",
+    # Pixel trusted-UI substrate: 256-byte printable-ASCII `Screen` transcript
+    # records, the design tier fitter, fixed-point motion, the two-button
+    # input grammar and the strip rasteriser for the NV3007. Pure-logic,
+    # no_std, no heap, no unsafe. Feature-gated into `secure` by `ui-px`.
+    "pqsigner-ui-px",
     # Trait-only HAL surface (Rng / Sha256 / Saes / Flash / Otp / Tamp
     # / ConsumptionMask / I2cBus / SpiBus / Buttons / Uart + Platform
     # aggregate + BootStage). Phase 6 PR 1 of the modularity refactor.
@@ -114,9 +125,11 @@ pqsigner-tx-core  = { path = "tx-core" }
 pqsigner-aa       = { path = "aa" }
 pqsigner-domain   = { path = "domain" }
 pqsigner-tx       = { path = "tx" }
+pqsigner-ui-px    = { path = "pqsigner-ui-px" }
 pqsigner-erc7730  = { path = "pqsigner-erc7730" }
 pqsigner-hal      = { path = "hal" }
 sphincs-tz-shared = { path = "shared" }
+pqsigner-hw = { path = "hw" }
 sphincs-tz-bip39  = { path = "bip39", default-features = false }
 sphincs-c10       = { path = "sphincs-c10" }
 masked-sha2       = { path = "masked-sha2" }
@@ -169,6 +182,14 @@ opt-level = 3
 
 [profile.release.package.hmac]
 opt-level = 3
+
+# The pixel trusted-UI rasteriser runs per frame on the NV3007. Owner decision
+# 2026-09-23 (port plan § Flash): size over speed for this crate — `s` buys
+# ~8 KB of the A/B slot; the EVT #1 hero sweep measured 8–11 ms render at `3`
+# against a 24 ms frame period, so `s` (~2× slower) still fits the budget.
+# Re-measure with `make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime`.
+[profile.release.package.pqsigner-ui-px]
+opt-level = "s"
 
 # `micromath` provides the f32 sin/cos/sqrt/powf for the `splash-test` animated
 # preview. It is the per-frame hot path there (the nebula noise field alone is

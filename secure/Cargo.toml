@@ -5,6 +5,9 @@ edition.workspace = true
 
 [dependencies]
 sphincs-tz-shared = { workspace = true }
+# Shared STM32U585 drivers (typed MMIO + HASH). `debug-log` mirrors this
+# crate's own flag so the semihosting diagnostics keep working here.
+pqsigner-hw = { workspace = true }
 sphincs-tz-bip39  = { workspace = true, features = ["full-wordlist"] }
 fw-manifest       = { workspace = true }
 # Frozen §5 flash-geometry registry (Draft 1.1, post-errata-4): the single
@@ -50,6 +53,10 @@ pqsigner-tx       = { workspace = true }
 # rendering layer lives in `secure/src/tx/display/erc7730/` and
 # depends on this crate.
 pqsigner-erc7730  = { workspace = true }
+# Pixel trusted-UI substrate (Screen transcript, tier fitter, motion, input,
+# rasteriser). Always linked so the host test mounts see it; the `ui-px`
+# feature switches the firmware wiring on.
+pqsigner-ui-px = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c10 = { workspace = true }
@@ -180,14 +187,81 @@ legacy-fw-rollback-unsafe = []
 # temporary: the first reviewed `erc8176-verified` root rotation MUST remove
 # `erc7730-dev-unattested` from these aliases in the same change, because the
 # generated verified-root fence intentionally rejects a stale warning feature.
-debug-log = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested"]
+debug-log = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested", "pqsigner-hw/debug-log"]
 mock-se = ["legacy-fw-rollback-unsafe", "erc7730-dev-unattested"]
 ui-semihosting = []
 ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger)
+# Pixel trusted UI (PQ-UI design system port, pilot = the Safe sign flow).
+# Additive over the backend axis: with `ui-lcd` the strip rasteriser paints
+# the panel; with `ui-semihosting` the screens print as text for QEMU e2e.
+# Mutually exclusive with `ui-oled-bench` (16x4-only bench backend).
+ui-px = []
+# `ui-px` at SPI ÷4 = 40 MHz (production board without the dev kit's LED on SCK).
+ui-px-spi40 = ["ui-px", "ui-lcd"]
+# Bench-only: overlay the previous frame's render / blit / period (ms) in the
+# top-left of every pixel-UI frame (DWT cycle counter). NEVER ship.
+ui-px-frametime = ["ui-px", "ui-lcd"]
 # Real STM32U585 hardware target (vs QEMU mps2-an505). Pulls in `hw-sha256`
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.
 stm32u585 = ["sphincs-tz-shared/stm32u585", "hw-sha256"]
+
+# ---------------------------------------------------------------------------
+# Board axis — which physical board an `stm32u585` image targets.
+#
+# `secure/src/board/` holds one pin/peripheral map per board and re-exports
+# the selected one, so drivers name a constant instead of a port base.
+#
+#   board-iota2  ST B-U585I-IOT02A dev board, STM32U585AII6 (169-pin BGA).
+#   board-pq1    AL_A66_MB_V10 production board, STM32U585CIU6 (48-pin
+#                UFQFPN — only PA0-15, PB0-15 and PC13 are bonded).
+#
+# Naming a board is MANDATORY on every `stm32u585` build: `secure/src/board/
+# mod.rs` hard-errors if neither feature is set, and if both are.
+#
+# This used to read "selection is *opt-in to pq1* ... `board-iota2` therefore
+# carries no implications". That model was retracted in a15561b4 and the text
+# is preserved here only as a warning, because the belief it encoded is what
+# caused the bug: `#[cfg(feature = "board-pq1")] compile_error!` fences are
+# SILENT when the feature is absent, so a recipe that omitted the board did not
+# fail — it compiled the iota2 pin map and every pq1 fence went quiet. That is
+# how `build-hw-prodtest BOARD=pq1` came to compile iota2 pins onto pq1
+# silicon. `board-iota2` is load-bearing; treating it as inert is what let
+# seven build sites drift.
+#
+# Use `make <target> BOARD=pq1`, which sets the feature and the probe-rs chip
+# name together with `override`, so neither can be detached from the other.
+board-iota2 = []
+board-pq1 = []
+
+# Bench-only, read-only secure-element address probe (`hw::se_i2c_probe`).
+# Answers "does the chip at this address ACK?" and nothing else: every probe
+# is a zero-data-byte transfer, so no payload reaches either part. Exists
+# because on a production board the OPTIGA is virgin and its lifecycle
+# transitions are irreversible — this is the one SE check that is safe to run
+# on hardware you cannot replace. NEVER SHIP: it is a diagnostic, and it is
+# listed in the Makefile's PROD_FORBIDDEN.
+se-i2c-probe = []
+
+# LCD-only secure-element diagnostic for a probe-less board (EVT over DFU):
+# after the panel is up, runs TRNG / SE050 init+random / OPTIGA init+pair+
+# shield+random / rng_strong one step at a time, shows each result on the
+# LCD, then cycles the summary forever. Never reaches the wizard. Performs
+# the SAME SE writes the normal first boot performs (OPTIGA E140 pairing),
+# nothing more. NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
+se-lcd-diag = []
+
+# Bench: hold BOTH buttons while powering up → firmware clears nSWBOOT0/nBOOT0
+# and reloads option bytes, so the chip comes back in the ROM USB-DFU
+# bootloader without a probe or an SBU cable (`hw::dev_dfu`, checked right
+# after `rcc::init`, before any UI/SE/USB code). Pair with
+# `tools/evt-dev-flash.sh`, which restores the boot option bits.
+# NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
+dev-dfu = []
+
+# `ui-oled-bench` (bench-only SSD1306 over bit-banged I2C) was REMOVED
+# 2026-09-23: real NV3007 panels exist now, so the stand-in is not needed.
+# It was the last consumer of `embedded-graphics` outside `ui-lcd`.
 # Route every SHA-256 call in the signing crates through the STM32U585 HASH
 # peripheral (the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`).
 # Without this feature the signing crates use software `sha2::Sha256` — what
@@ -478,6 +552,11 @@ ui-lcd = ["spi1-arduino", "gpio-buttons", "dep:embedded-graphics"]
 # (green→red→blue fill loop) to validate the NV3007 wiring + init sequence on
 # real silicon. Pulls in `ui-lcd` (→ `spi1-arduino`). Build via `make lcd-test-hw`.
 lcd-test = ["ui-lcd"]
+# `aw99703-ovp-low` and `aw99703-full-brightness` were #705 bench experiments,
+# REMOVED 2026-09-23 once they had answered their question. Owner decision: keep
+# the shipping OVP at `OVPSEL=001` and the shipping brightness at 0x5FF. Both
+# are recoverable from git (`27f38683`, `0a7ceef4`) if the ODM envelope ever
+# reopens the question; the measurements they produced are recorded on #705.
 # Animated splash-screen preview. Short-circuits `main()` into
 # `ui::splash_test::run`, which ports the three `assets/splash-1{6,7,8}-*.html`
 # revisions (hyperspace / horizon / nebula) to no_std and cycles them on the
@@ -688,6 +767,29 @@ se050-scp03-allow-factory-fallback = ["se050-derived-scp03"]
 # the forbidden rotate⊕fallback compile_error: the rotation tool legitimately
 # needs the fallback; only the runtime-signing image must omit it.)
 se050-rotate-scp03 = ["se050-derived-scp03", "se050-scp03-allow-factory-fallback"]
+# Which SE050 VARIANT is fitted, and therefore which published factory SCP03
+# keyset `scp03_logic::PLATFORM_*` must present. OFF = SE050E2 / OEF `0xA921`
+# (the default, because every board we physically have is an E2: the
+# `AL_A66_MB_V10` pq1 board per its schematic, and the OM-SE050ARD-E bench
+# shield). ON = SE050C2 / OEF `0xA201` (`SE050C2HQ1/Z01SDZ`).
+#
+# Getting this wrong is NOT subtle and NOT dangerous — it fails closed with
+# `[SCP03] Card cryptogram MISMATCH` on every `establish()`, because the static
+# keys simply don't match the chip. It is, however, easy to misdiagnose: the
+# `admin_factory_reset` recovery path needs SCP03 too, so a wrong keyset locks
+# the door and the key in the same motion (observed on pq1 silicon 2026-09-17,
+# 11 consecutive mismatches ending in a provisioning panic).
+#
+# Only affects builds that use the PUBLISHED keys, i.e. those WITHOUT
+# `se050-derived-scp03`: every bench HW target (`se050-stress`,
+# `pin-gate-hw-*`, any `e2e-test` image). Shipping builds derive per-device
+# keys and are unaffected by this flag — EXCEPT the rotation tooling
+# (`se050-rotate-scp03`), which must open a factory-key session against a
+# still-factory chip and therefore must name the correct part.
+#
+# A C2 on a plain OM-SE050ARD dev kit is a third case: it presents the separate
+# A375 "Development Board" keyset (ENC `35C25645…`), which is not encoded here.
+se050-part-c2 = []
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.
 se050-admin-wipe-e2e = ["se050"]  # Admin-auth wipe roundtrip test on isolated OID range. Use `make se050-admin-wipe-e2e`.
@@ -835,6 +937,9 @@ png = "0.17"
 # `pqsigner_sha256_*` externs. Instead build.rs requires the caller
 # to supply a precomputed 32-byte pubkey file via FSBL_VENDOR_PUBKEY;
 # `make dev-pubkey-fixture` generates one for dev builds.
+# Also pins the NS-resident pixel-UI atlas: `validate_ui_px_assets`
+# recomputes sha256(nonsecure/assets/ui-px/atlas.pq1a) and refuses a stale
+# `src/ui/px/atlas_root.rs`.
 sha2        = "0.10"
 
 [dev-dependencies]

@@ -2,8 +2,17 @@
  *
  * Legacy bench layout: the FSBL occupies the first 32 KB of bank 1
  * (pages 0–3). This file is not production geometry or factory authority.
- * Draft 1.1 proposes a different envelope and keeps FLASH/RAM/factory gates
- * open; do not derive WRP or irreversible operations from this linker script.
+ * The frozen registry reserves a different envelope (40 KiB, pages 0..4) and
+ * landed as the `pqsigner-geometry` crate; this script has NOT been migrated to
+ * it (cutover: issue #540). The WRP/option-byte ceremony and the silicon
+ * receipts stay open.
+ *
+ * Do not read the WRP range off this script. `make fsbl` runs
+ * `scripts/check_fsbl_geometry.py`, which derives the page range from the
+ * linked image's physical LOAD span and prints it — the declared region here is
+ * only the ceiling that span must fit inside. The two differ: the image is
+ * 28,704 B and fills 3.50 of the four declared pages, so a 40 KiB region today
+ * would freeze page 4 while empty.
  *
  * Flash layout (bank 1, secure alias):
  *   0x0C00_0000  FSBL           32 KB   (legacy bench pages 0–3)

@@ -89,6 +89,42 @@ pub const CMD_NONE: u32 = 0;
 pub const CMD_GET_REMAINING: u32 = 1;
 pub const CMD_REQUEST_UNLOCK: u32 = 2;
 pub const CMD_GET_PUBKEY: u32 = 3;
+
+/// CMD_GET_PIN_ATTEMPT_LOG — why each PIN attempt was consumed.
+///
+/// `gated_unlock` PRE-CHARGES the page-124 counter before the secure element
+/// judges the PIN, so the counter alone cannot distinguish a legitimate
+/// wrong-PIN burn from a fault that burned an attempt without ever reaching a
+/// verdict. This returns the reason for each recent attempt.
+///
+/// Motivated by #715: a pq1 unit displayed "PIN locked" after the operator
+/// entered the CORRECT PIN, and nothing recorded how ten attempts had been
+/// spent — shipping images omit `debug-log` because semihosting `BKPT`
+/// hard-faults on a sealed unit, so the event left no trace at all.
+///
+/// RAM-resident: it explains a lockout on a device that is still powered, and
+/// does NOT survive a reset. Read it BEFORE power-cycling a suspect unit.
+///
+/// Discloses reason codes and the pre-attempt counter value — no secret, no
+/// PIN material. An attacker with USB access can already read the remaining
+/// count via `CMD_GET_REMAINING`, so this grants no new capability.
+///   in_ptr  → ignored
+///   out_ptr → `PIN_ATTEMPT_LOG_LEN` bytes:
+///     `[0]`     format version (1)
+///     `[1]`     entry count
+///     `[2..4]`  entries dropped since boot (u16 BE) — a non-zero value means
+///               the ring wrapped and the earliest cause is gone
+///     `[4..]`   `(reason, pre_count)` pairs, OLDEST FIRST, zero padded
+///   Reason codes: 1 ok+reset, 2 ok-but-reset-FAILED, 3 wrong PIN,
+///   4 already at max, 5 precharge failed, 6 no verdict, 7 counter unstable,
+///   8 duress wipe.
+/// Returns `NscStatus::Ok`, or `NscStatus::InvalidPointer` on validation
+/// failure.
+pub const CMD_GET_PIN_ATTEMPT_LOG: u32 = 4;
+
+/// Byte count of the [`CMD_GET_PIN_ATTEMPT_LOG`] response. Mirrors
+/// `secure/src/pin_attempt_log.rs::SERIALISED_LEN` (4 + 16 * 2).
+pub const PIN_ATTEMPT_LOG_LEN: usize = 36;
 // CMD 4 reserved (was CMD_SIGN in v1)
 // CMD 5 reserved; do not reuse this frozen protocol value.
 // CMD 6 reserved (was CMD_CLEAR_SIGN_MSG — standalone EIP-712 typed-data
@@ -721,6 +757,201 @@ pub const CMD_PRODTEST_USB_LOOPBACK: u32 = 108;
 /// (1=timeout, 2=wrong button) so the fixture's error table is compact.
 pub const CMD_PRODTEST_BUTTON_TEST: u32 = 109;
 
+/// CMD_PRODTEST_RGB_TEST — light the `pq1` board's 9 RGB LEDs through the
+/// AW21036 on I²C2 (`0x34`) and report what the part said back. Catches a
+/// dead/unsoldered driver, a bad `RGB_EN` line, swapped R/G/B channels, and
+/// dead individual LEDs (the operator sees the colour).
+///
+/// The response is deliberately self-localizing, because "the LEDs are dark"
+/// otherwise has half a dozen causes: it carries a full bus scan (the AW99703
+/// backlight at `0x36` is a positive control for the bus, and `0x1C` is the
+/// AW21036 broadcast address answering as a second witness), both readable
+/// identity registers, and an ACK tally over the 58 register writes.
+///   in_ptr  → 6 bytes `[r, g, b, gcc, en, reserved]`
+///     `r`/`g`/`b` — brightness written to every wired LED's R/G/B channel.
+///       All-zero is the "off" case and still writes/ACKs every register.
+///     `gcc`      — global current; `0` selects the driver's conservative
+///                  default (full scale on 27 channels is ~0.46 A).
+///     `en`       — `1` drives `RGB_EN` high (normal), `0` leaves it low as the
+///                  negative control for that pin. Note the part's I²C stays
+///                  accessible in standby, so an ACK with `en = 0` is expected
+///                  and proves nothing; only the *functional* difference
+///                  (identical writes, dark at `0`, lit at `1`) tests the pin.
+///   out_ptr → 24 bytes
+///     `[0..16]` — 7-bit address bitmap; address `a` is bit `a % 8` of byte `a / 8`
+///     `[16]`    — `VER` (`0x7E`) readback, `0xA8` when healthy, `0xFF` if the
+///                 addressing phase was not ACKed at all
+///     `[17]`    — `RESET` (`0x7F`) readback, `0x18` when healthy, `0xFF` as above
+///     `[18]`    — register writes ACKed
+///     `[19]`    — register writes attempted
+///     `[20]`    — `RGB_EN` read back from `IDR` (0/1)
+///     `[21]`    — the `GCC` actually programmed
+///     `[22..24]`— reserved, zero
+/// Returns `NscStatus::Ok` when `VER == 0xA8` and every write was ACKed,
+/// `NscStatus::InvalidPointer` if either buffer fails NS-pointer validation,
+/// and `NscStatus::InternalError` otherwise — **with the output still
+/// written**, so the fixture always gets the diagnostic instead of a bare
+/// status. On a board with no RGB driver the output is all-zero and the status
+/// is `InternalError` (there is no `NotSupported` code in this ABI).
+pub const CMD_PRODTEST_RGB_TEST: u32 = 110;
+
+/// Byte counts for [`CMD_PRODTEST_RGB_TEST`]'s two buffers.
+pub const PRODTEST_RGB_IN_LEN: usize = 6;
+pub const PRODTEST_RGB_OUT_LEN: usize = 24;
+
+/// CMD_PRODTEST_RGB_OSD — run the AW21036's per-channel **open/short
+/// detection** and return the raw status bitmaps. This is the machine-checkable
+/// dead-LED test: it names the failing channel by index instead of relying on
+/// an operator seeing a wrong colour, which is what a certification or
+/// end-of-line fixture needs.
+///
+/// Two properties make the result trustworthy, and both matter more than the
+/// measurement itself:
+///
+/// 1. **Both `OSDE` encodings are returned, because the datasheet contradicts
+///    itself.** Its prose says `OSDE=10` enables open detection and `11` short;
+///    the `OSDCR` register table says the opposite. Firmware does not guess.
+/// 2. **The result is self-validating.** `LED28..LED36` have no LED attached on
+///    this board, so they MUST read open. Whichever mode flags those channels is
+///    the open-detect encoding; if *neither* does, detection did not run and the
+///    only honest verdict is inconclusive — never a pass. A certification gate
+///    that can pass vacuously is worse than no gate.
+///
+/// The response carries the wired/total channel counts so the host derives that
+/// control set from the device instead of duplicating a board constant.
+///   in_ptr  → 4 bytes `[gcc, en, reserved, reserved]`
+///     `gcc` — bias current; `0` selects the driver's ~1 mA default. The
+///             datasheet asks for ~1 mA per LED during detection.
+///     `en`  — `1` drives `RGB_EN` high; `0` is the negative control.
+///   out_ptr → 24 bytes
+///     `[0..5]`   — `OSST0..4` after `OSDE=0b10`
+///     `[5..10]`  — `OSST0..4` after `OSDE=0b11`
+///                  In both, `LED(k)` is bit `(k-1) % 8` of byte `(k-1) / 8`.
+///     `[10]`     — `VER` readback (`0xA8` healthy, `0xFF` if unreadable)
+///     `[11]`     — register writes ACKed
+///     `[12]`     — register writes attempted
+///     `[13]`     — `RGB_EN` read back from `IDR`
+///     `[14]`     — the `GCC` actually programmed
+///     `[15]`     — wired channel count (LEDs physically present)
+///     `[16]`     — total channel count the part drives
+///     `[17..24]` — reserved, zero
+/// The command leaves the board dark. Returns `NscStatus::Ok` when the part
+/// identified itself and every write was ACKed, `NscStatus::InvalidPointer` on
+/// buffer validation failure, `NscStatus::InternalError` otherwise — with the
+/// output still written. Note `Ok` means *the scan ran*, not *the LEDs are
+/// good*: the pass/fail over channels is the host's call from the bitmaps.
+pub const CMD_PRODTEST_RGB_OSD: u32 = 111;
+
+/// CMD_PRODTEST_RNG_CONFIG — prove this unit's TRNG is in the certified
+/// configuration, and that its silicon is the certified revision.
+///
+/// NIST ESV certificate **E11** (validated 2022-12-16) covers the entropy
+/// source "implemented in the STM32U575x / STM32U585x family of
+/// microcontrollers of **revision B and Later**", identified by reading
+/// **0x41** from the RNG version register. E11 Table 2 fixes the configuration:
+/// `RNG_CR = 0x80F00DXX` (bit 31 CONFIGLOCK set, low byte application
+/// dependent), `RNG_NSCR = 0x17CBB`, `RNG_HTCR = 0x06E9C` or `0x0A2B0`.
+///
+/// Neither half is checkable from outside the device, and both are per-unit
+/// facts: silicon revision varies by batch, and a configuration write can be
+/// silently ignored. A fixture that records this per unit turns "we set the
+/// certified values in firmware" into evidence for the unit in hand.
+///   in_ptr  → ignored
+///   out_ptr → 20 bytes, all little-endian u32:
+///     `[0..4]`   RNG_CR      (expect 0x80F00D04: config + RNGEN + CONFIGLOCK)
+///     `[4..8]`   RNG_NSCR    (expect 0x00017CBB)
+///     `[8..12]`  RNG_HTCR    (expect 0x0000A2B0)
+///     `[12..16]` RNG version register (expect 0x41 for revision B and later)
+///     `[16..20]` DBGMCU_IDCODE (DEV_ID low 12 bits = 0x482 for U575/U585;
+///                REV_ID in the top 16 — the independent revision witness)
+/// Returns `NscStatus::Ok` once the reads complete; the host decides pass/fail
+/// so the raw values always reach the receipt.
+pub const CMD_PRODTEST_RNG_CONFIG: u32 = 112;
+
+/// Byte count of the [`CMD_PRODTEST_RNG_CONFIG`] response.
+pub const PRODTEST_RNG_CONFIG_LEN: usize = 20;
+
+pub const PRODTEST_RGB_OSD_IN_LEN: usize = 4;
+pub const PRODTEST_RGB_OSD_OUT_LEN: usize = 24;
+
+// ---------------------------------------------------------------------------
+// Prodtest wire contract — buffer sizes, the fw-version stamp, and the
+// BUTTON_TEST step-status encoding.
+//
+// These live HERE rather than in `secure/src/nsc/prodtest.rs` because that
+// module is `#![cfg(feature = "prodtest")]`, `prodtest` implies `stm32u585`,
+// and `stm32u585` does not build for the host — so its `#[cfg(test)] mod
+// tests` never compiled and its eight tests never ran (#708). One of them
+// asserted `PRODTEST_FW_VERSION == 3` long after the constant reached 5: a
+// must-fail test reporting green for two releases.
+//
+// They are also wire facts in the strict sense: `tools/factory-prodtest-
+// runner.py` parses the responses on these byte offsets and decodes the step
+// codes by number, so the firmware and the fixture have to agree. A constant
+// that two programs must agree on belongs where both can see it tested.
+// ---------------------------------------------------------------------------
+
+/// Prodtest firmware version, stamped into [`CMD_PRODTEST_GET_ID`]'s response.
+///
+/// Bumped on every prodtest behavioural change so the factory's traceability
+/// DB can correlate per-unit diagnostic data with the firmware that produced
+/// it. `docs/provisioning/factory-prodtest.md` carries the per-version row;
+/// `prodtest_fw_version_is_documented` holds the two together.
+pub const PRODTEST_FW_VERSION: u32 = 5;
+
+/// STM32U585 chip UID: 96 bits at `0x0BFA_0700` (RM0456 §28.10).
+pub const PRODTEST_STM32_UID_LEN: usize = 12;
+
+/// [`CMD_PRODTEST_GET_ID`] response: 12 B UID || 4 B fw version (LE) || 8 B reserved.
+pub const PRODTEST_GET_ID_OUT_LEN: usize = 24;
+
+/// SAES self-test fingerprint width, mirroring `hw::saes::self_test` so the
+/// fixture's reference values stay reusable across builds.
+pub const PRODTEST_SAES_FINGERPRINT_LEN: usize = 8;
+
+/// BHK self-test diagnostic width — the negative-capability probe still has to
+/// return a well-formed buffer.
+pub const PRODTEST_BHK_FINGERPRINT_LEN: usize = 8;
+
+/// Bytes of SE-sourced randomness returned by each secure-element handshake.
+/// The fixture files these into its per-die uniqueness DB.
+pub const PRODTEST_OPTIGA_HANDSHAKE_RNG_LEN: usize = 16;
+pub const PRODTEST_SE050_HANDSHAKE_RNG_LEN: usize = 16;
+
+/// [`CMD_PRODTEST_BUTTON_TEST`] response width.
+pub const PRODTEST_BUTTON_TEST_OUT_LEN: usize = 4;
+
+/// Per-step operator patience budget. Three steps, so the whole interactive
+/// button test is bounded by three times this.
+pub const PRODTEST_BUTTON_TEST_TIMEOUT_MS: u32 = 10_000;
+
+/// BUTTON_TEST step-status byte: upper nibble = step (1 LEFT, 2 RIGHT, 3 BOTH),
+/// lower nibble = error kind (1 timeout, 2 wrong button, 3 release stuck, #453).
+/// Decoded by number in `tools/factory-prodtest-runner.py::BUTTON_STEP_DECODE`;
+/// changing the encoding means changing the operator manual's decoder too.
+pub const PRODTEST_STEP_OK: u8 = 0x00;
+pub const PRODTEST_STEP_LEFT_TIMEOUT: u8 = 0x11;
+pub const PRODTEST_STEP_LEFT_WRONG: u8 = 0x12;
+pub const PRODTEST_STEP_LEFT_STUCK: u8 = 0x13;
+pub const PRODTEST_STEP_RIGHT_TIMEOUT: u8 = 0x21;
+pub const PRODTEST_STEP_RIGHT_WRONG: u8 = 0x22;
+pub const PRODTEST_STEP_RIGHT_STUCK: u8 = 0x23;
+pub const PRODTEST_STEP_BOTH_TIMEOUT: u8 = 0x31;
+pub const PRODTEST_STEP_BOTH_STUCK: u8 = 0x33;
+
+/// Every defined BUTTON_TEST failure code, for exhaustive iteration in tests
+/// and in the fixture's decode-table completeness check.
+pub const PRODTEST_STEP_FAILURES: [u8; 8] = [
+    PRODTEST_STEP_LEFT_TIMEOUT,
+    PRODTEST_STEP_LEFT_WRONG,
+    PRODTEST_STEP_LEFT_STUCK,
+    PRODTEST_STEP_RIGHT_TIMEOUT,
+    PRODTEST_STEP_RIGHT_WRONG,
+    PRODTEST_STEP_RIGHT_STUCK,
+    PRODTEST_STEP_BOTH_TIMEOUT,
+    PRODTEST_STEP_BOTH_STUCK,
+];
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks
@@ -792,6 +1023,7 @@ pub const APDU_CLA_V2: u8 = 0xF0;
 // -- Device info & status (0x01-0x0F) --
 pub const INS_V2_GET_DEVICE_INFO: u8 = 0x01;
 pub const INS_V2_GET_STATUS: u8 = 0x02;
+pub const INS_V2_GET_PIN_ATTEMPT_LOG: u8 = 0x03;
 
 /// `GET_DEVICE_INFO.capabilities` bit 0: the unified UserOperation signing
 /// command is available.
@@ -877,6 +1109,9 @@ pub const INS_V2_PRODTEST_OPTIGA_HANDSHAKE: u8 = 0x86;
 pub const INS_V2_PRODTEST_SE050_HANDSHAKE: u8 = 0x87;
 pub const INS_V2_PRODTEST_USB_LOOPBACK: u8 = 0x88;
 pub const INS_V2_PRODTEST_BUTTON_TEST: u8 = 0x89;
+pub const INS_V2_PRODTEST_RGB_TEST: u8 = 0x8A;
+pub const INS_V2_PRODTEST_RGB_OSD: u8 = 0x8B;
+pub const INS_V2_PRODTEST_RNG_CONFIG: u8 = 0x8C;
 
 // -- Continuation --
 pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
@@ -1959,6 +2194,184 @@ impl From<u32> for NscStatus {
 
 #[cfg(test)]
 mod tests {
+    /// The prodtest INS space is `0x80 + (CMD - 100)` by convention, and the
+    /// factory runner mirrors both the map and the RGB buffer sizes by hand
+    /// (`tools/factory-prodtest-runner.py`). This is the only place the two
+    /// can be checked against each other in a test that actually runs: the
+    /// firmware-side `nsc/prodtest.rs` test module sits inside
+    /// `#![cfg(feature = "prodtest")]`, which never builds for the host.
+    #[test]
+    fn prodtest_ins_map_is_mechanical_and_collision_free() {
+        let pairs = [
+            (CMD_PRODTEST_GET_ID, INS_V2_PRODTEST_GET_ID),
+            (CMD_PRODTEST_DISPLAY_PATTERN, INS_V2_PRODTEST_DISPLAY_PATTERN),
+            (CMD_PRODTEST_SAES_SELFTEST, INS_V2_PRODTEST_SAES_SELFTEST),
+            (CMD_PRODTEST_BHK_SELFTEST, INS_V2_PRODTEST_BHK_SELFTEST),
+            (CMD_PRODTEST_FLASH_RW, INS_V2_PRODTEST_FLASH_RW),
+            (CMD_PRODTEST_TRNG_SAMPLE, INS_V2_PRODTEST_TRNG_SAMPLE),
+            (CMD_PRODTEST_OPTIGA_HANDSHAKE, INS_V2_PRODTEST_OPTIGA_HANDSHAKE),
+            (CMD_PRODTEST_SE050_HANDSHAKE, INS_V2_PRODTEST_SE050_HANDSHAKE),
+            (CMD_PRODTEST_USB_LOOPBACK, INS_V2_PRODTEST_USB_LOOPBACK),
+            (CMD_PRODTEST_BUTTON_TEST, INS_V2_PRODTEST_BUTTON_TEST),
+            (CMD_PRODTEST_RGB_TEST, INS_V2_PRODTEST_RGB_TEST),
+            (CMD_PRODTEST_RGB_OSD, INS_V2_PRODTEST_RGB_OSD),
+            (CMD_PRODTEST_RNG_CONFIG, INS_V2_PRODTEST_RNG_CONFIG),
+        ];
+        for (cmd, ins) in pairs {
+            assert_eq!(
+                u32::from(ins),
+                0x80 + (cmd - 100),
+                "INS for CMD {cmd} breaks the 0x80 + (CMD - 100) convention"
+            );
+        }
+        // No INS reused, and none collides with the continuation INS.
+        for (i, (_, ins_a)) in pairs.iter().enumerate() {
+            assert_ne!(*ins_a, INS_V2_GET_RESPONSE);
+            for (_, ins_b) in pairs.iter().skip(i + 1) {
+                assert_ne!(ins_a, ins_b, "duplicate prodtest INS");
+            }
+        }
+    }
+
+    /// The RGB response is decoded by fixed offsets on the host, so its size
+    /// and the 16-byte scan prefix are part of the wire contract.
+    #[test]
+    fn prodtest_rgb_buffers_match_the_documented_layout() {
+        assert_eq!(PRODTEST_RGB_IN_LEN, 6, "[r, g, b, gcc, en, reserved]");
+        // 16 B scan bitmap + ver + reset_id + acks_ok + acks_total + en + gcc
+        // + 2 reserved.
+        assert_eq!(PRODTEST_RGB_OUT_LEN, 16 + 6 + 2);
+        // A 128-bit bitmap is exactly the 7-bit address space.
+        assert_eq!(16 * 8, 128);
+        // Both buffers must survive the NS response buffer's status-word tail.
+        assert!(PRODTEST_RGB_OUT_LEN <= PRODTEST_MAX_RESPONSE_DATA_LEN);
+    }
+
+    /// The OSD response packs two 5-byte bitmaps plus scalars; the host reads
+    /// those windows by offset, and the 36 status bits must fit the 5 bytes.
+    #[test]
+    fn prodtest_rgb_osd_buffers_match_the_documented_layout() {
+        assert_eq!(PRODTEST_RGB_OSD_IN_LEN, 4);
+        assert_eq!(PRODTEST_RGB_OSD_OUT_LEN, 24);
+        // 2 x 5 bitmap bytes + ver + 2 ack counters + en + gcc + 2 channel
+        // counts + 7 reserved.
+        assert_eq!(5 + 5 + 1 + 2 + 1 + 1 + 2 + 7, PRODTEST_RGB_OSD_OUT_LEN);
+        // 5 bytes must cover all 36 channels, with room to spare in the last.
+        assert!(5 * 8 >= 36);
+        assert!(PRODTEST_RGB_OSD_OUT_LEN <= PRODTEST_MAX_RESPONSE_DATA_LEN);
+    }
+
+    // -----------------------------------------------------------------------
+    // #708: migrated from `secure/src/nsc/prodtest.rs`, where they had never
+    // executed — that module is `#![cfg(feature = "prodtest")]` and `prodtest`
+    // implies `stm32u585`, so its `#[cfg(test)]` block never compiled on the
+    // host. `scripts/check_tests_actually_run.py` is the gate that now makes
+    // that failure mode loud instead of green.
+    // -----------------------------------------------------------------------
+
+    /// GET_ID is parsed by byte offset in the fixture, so the field widths are
+    /// a wire contract, not an implementation detail.
+    #[test]
+    fn prodtest_get_id_output_layout() {
+        assert_eq!(PRODTEST_GET_ID_OUT_LEN, 24);
+        assert_eq!(PRODTEST_STM32_UID_LEN, 12);
+        // 12 B UID + 4 B version + 8 B reserved, exactly filling the response.
+        assert_eq!(PRODTEST_STM32_UID_LEN + 4 + 8, PRODTEST_GET_ID_OUT_LEN);
+        assert!(PRODTEST_GET_ID_OUT_LEN <= PRODTEST_MAX_RESPONSE_DATA_LEN);
+    }
+
+    /// The version stamp only earns its keep if the operator manual moves with
+    /// it — that was the whole point of the original (never-run) test, and the
+    /// doc had drifted two versions behind by the time this was noticed.
+    ///
+    /// Binding it to the document rather than to a literal means the next bump
+    /// fails here until the manual is updated, instead of re-pinning a number
+    /// against itself.
+    #[test]
+    fn prodtest_fw_version_is_documented() {
+        // `proto` is `no_std`; the test harness can still link std for this.
+        extern crate std;
+        use std::format;
+
+        const DOC: &str = include_str!("../../docs/provisioning/factory-prodtest.md");
+        // Guard the oracle first: if the include ever resolves to something
+        // empty or unrelated, the search below would pass vacuously.
+        assert!(
+            DOC.contains("CMD_PRODTEST_GET_ID"),
+            "factory-prodtest.md does not look like the prodtest manual"
+        );
+        let expected = format!("firmware version is exactly {PRODTEST_FW_VERSION}.");
+        assert!(
+            DOC.contains(&expected),
+            "docs/provisioning/factory-prodtest.md must state {expected:?} — bump the \
+             manual in the same commit as PRODTEST_FW_VERSION"
+        );
+        // And the receipt sentence the runner emits alongside it.
+        assert!(
+            DOC.contains(&format!("prodtest firmware version {PRODTEST_FW_VERSION} in every JSON")),
+            "the receipt paragraph still names a different prodtest firmware version"
+        );
+    }
+
+    /// Both caps are the same response ceiling so one host-side buffer serves
+    /// TRNG_SAMPLE and USB_LOOPBACK alike.
+    #[test]
+    fn prodtest_sample_and_loopback_share_the_response_cap() {
+        assert_eq!(PRODTEST_MAX_RESPONSE_DATA_LEN, 254);
+    }
+
+    /// Mirrors `hw::saes::self_test`'s 8-byte fingerprint so the fixture's
+    /// reference values stay comparable across builds.
+    #[test]
+    fn prodtest_fingerprint_widths_match_the_saes_self_test() {
+        assert_eq!(PRODTEST_SAES_FINGERPRINT_LEN, 8);
+        assert_eq!(PRODTEST_BHK_FINGERPRINT_LEN, 8);
+    }
+
+    /// The fixture files these into a per-die uniqueness DB by offset.
+    #[test]
+    fn prodtest_handshake_rng_lens_pinned() {
+        assert_eq!(PRODTEST_OPTIGA_HANDSHAKE_RNG_LEN, 16);
+        assert_eq!(PRODTEST_SE050_HANDSHAKE_RNG_LEN, 16);
+    }
+
+    /// Upper nibble = step, lower = error kind. `factory-prodtest-runner.py`
+    /// decodes these by number, so the encoding is a cross-language contract.
+    #[test]
+    fn prodtest_button_step_codes_have_compact_layout() {
+        assert_eq!(PRODTEST_STEP_OK, 0x00);
+        assert_eq!(PRODTEST_STEP_LEFT_TIMEOUT, 0x11);
+        assert_eq!(PRODTEST_STEP_LEFT_WRONG, 0x12);
+        assert_eq!(PRODTEST_STEP_LEFT_STUCK, 0x13);
+        assert_eq!(PRODTEST_STEP_RIGHT_TIMEOUT, 0x21);
+        assert_eq!(PRODTEST_STEP_RIGHT_WRONG, 0x22);
+        assert_eq!(PRODTEST_STEP_RIGHT_STUCK, 0x23);
+        assert_eq!(PRODTEST_STEP_BOTH_TIMEOUT, 0x31);
+        assert_eq!(PRODTEST_STEP_BOTH_STUCK, 0x33);
+
+        for (i, &code) in PRODTEST_STEP_FAILURES.iter().enumerate() {
+            assert_ne!(code, PRODTEST_STEP_OK, "failure code collides with success");
+            assert!((1..=3).contains(&(code >> 4)), "step nibble out of range");
+            assert!((1..=3).contains(&(code & 0x0F)), "error nibble out of range");
+            // Distinctness: a duplicated code would silently merge two
+            // different operator diagnoses into one.
+            for &other in &PRODTEST_STEP_FAILURES[i + 1..] {
+                assert_ne!(code, other, "duplicate step-status code");
+            }
+        }
+    }
+
+    /// 10 s per step is enough for an operator without making the per-unit
+    /// test take forever; three steps bounds the whole interaction at 30 s.
+    #[test]
+    fn prodtest_button_test_timeout_is_operator_friendly() {
+        assert_eq!(PRODTEST_BUTTON_TEST_TIMEOUT_MS, 10_000);
+        assert_eq!(PRODTEST_BUTTON_TEST_OUT_LEN, 4);
+        // The host transport's read timeout has to outlast all three steps or
+        // a legitimately slow operator reads as a dead device.
+        assert!(3 * PRODTEST_BUTTON_TEST_TIMEOUT_MS < 60_000);
+    }
+
     use super::*;
 
     #[test]

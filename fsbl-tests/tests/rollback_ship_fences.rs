@@ -182,14 +182,19 @@ fn rollback_backend_cannot_enter_production_or_factory_images() {
         &workspace,
         &target_dir,
         "pqsigner-fsbl",
-        "mode-production,legacy-fw-rollback-unsafe",
+        // The board feature is load-bearing for this NEGATIVE test, not
+        // incidental: `fsbl/src/board/mod.rs` hard-errors on a board-less
+        // build, and `assert_cargo_rejected` checks the build failed with the
+        // EXPECTED message. Without a board named here the build would still
+        // fail — for the wrong reason — and the fence below would be untested.
+        "mode-production,legacy-fw-rollback-unsafe,board-iota2",
         "FW_ROLLBACK_FSBL_PRODUCTION_BLOCKED",
     );
     assert_cargo_rejected(
         &workspace,
         &target_dir,
         "pqsigner-fsbl",
-        "lcd-test",
+        "lcd-test,board-iota2",
         "FW_ROLLBACK_FSBL_UNSAFE_OPT_IN_REQUIRED",
     );
     assert_cargo_rejected(
@@ -594,9 +599,18 @@ fn advertised_ship_and_irreversible_factory_gates_fail_loudly() {
 /// `se050-derived-scp03`) and the current dev-unattested ERC-7730
 /// catalogue marker. It compiles the full secure image, so a successful
 /// check proves the real-key fence does not over-reach.
+///
+/// `board-iota2` is REQUIRED, not decorative: since a15561b4 every `stm32u585`
+/// build must name its board (`secure/src/board/mod.rs`). This is the only
+/// fixture here that expects a SUCCESSFUL build, so it is the only one the
+/// board rule can break — the rejection fixtures below are unaffected because
+/// their `build.rs` fences fire before the board `compile_error!` is reached.
+/// Missed by the 2026-08-31 sweep, which covered Makefile targets and CI
+/// workflows but not test code that shells out to cargo with its own feature
+/// list.
 const SECURE_BENCH_FEATURES: &str = concat!(
     "se050,gpio-buttons,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,",
-    "erc7730-dev-unattested,consumption-mask,se050-derived-scp03"
+    "erc7730-dev-unattested,consumption-mask,se050-derived-scp03,board-iota2"
 );
 
 #[test]
@@ -686,7 +700,9 @@ fn real_vendor_key_cannot_compose_with_legacy_backend_outside_production() {
         &workspace,
         &target_dir,
         "pqsigner-fsbl",
-        "legacy-fw-rollback-unsafe",
+        // `board-iota2` here and `board-pq1` in `footprint.rs`, so CI compiles
+        // BOTH pin maps. A single board everywhere would let the other one rot.
+        "legacy-fw-rollback-unsafe,board-iota2",
         &[("FSBL_VENDOR_PUBKEY", fixture_str.as_str())],
         &["FSBL_ALLOW_DEV_KEY"],
     );
@@ -707,7 +723,7 @@ fn real_vendor_key_cannot_compose_with_legacy_backend_outside_production() {
         &workspace,
         &target_dir,
         "pqsigner-fsbl",
-        "legacy-fw-rollback-unsafe",
+        "legacy-fw-rollback-unsafe,board-iota2",
         &[("FSBL_ALLOW_DEV_KEY", "1")],
         &["FSBL_VENDOR_PUBKEY"],
     );

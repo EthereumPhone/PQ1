@@ -15,6 +15,10 @@
 
 use sphincs_c10::{counters, SigningKey};
 
+/// The counters are process-global; the tests in this file reset and read
+/// them, so they must not run concurrently.
+static COUNTERS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 const SK_SEED: [u8; 32] = [
     0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00,
     0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01,
@@ -28,6 +32,7 @@ const MSG: [u8; 32] = *b"PQSigner C10 hash-count probe !1";
 fn count_secret_touching_hashes_per_sign() {
     // keygen() also calls the PRF heavily (compute_pk_root builds the
     // top subtree). Reset AFTER keygen so we measure SIGN only.
+    let _serial = COUNTERS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let sk = SigningKey::keygen(SK_SEED, PK_SEED);
     counters::reset();
 
@@ -70,4 +75,42 @@ fn count_secret_touching_hashes_per_sign() {
          'mask only the subset' plan's feasibility hinges on this number",
         s.secret_touching()
     );
+}
+
+/// The longest stretch of hash calls between two progress reports in one
+/// sign. The pixel signing film only advances when the hook fires, so this
+/// is the film's worst stall. Before the subtree builds reported inside
+/// their leaf loop it was a whole hypertree layer (~200k hashes, ~200 ms
+/// on the STM32U585), and the WOTS+C count grind added up to ~100k more in
+/// its tail. Both now report from inside their loops; the measured worst
+/// over these signs is ~11k (the FORS R-grind keeps a small, geometric
+/// tail, so the bound leaves headroom).
+#[test]
+fn longest_hash_run_between_progress_reports() {
+    use std::cell::Cell;
+    thread_local! {
+        static LAST: Cell<u64> = const { Cell::new(0) };
+        static MAX: Cell<u64> = const { Cell::new(0) };
+    }
+    fn cb(_pct: u8) {
+        let now = counters::snapshot().total() as u64;
+        LAST.with(|l| {
+            MAX.with(|m| m.set(m.get().max(now - l.get())));
+            l.set(now);
+        });
+    }
+    let _serial = COUNTERS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let sk = SigningKey::keygen(SK_SEED, PK_SEED);
+    let mut worst = 0u64;
+    for i in 0..8u8 {
+        let mut msg = MSG;
+        msg[0] = i;
+        counters::reset();
+        LAST.with(|l| l.set(0));
+        MAX.with(|m| m.set(0));
+        let _ = sk.sign_with_shuffle(&msg, None, &sphincs_c10::shuffle::ShuffleSeed::zero(), cb);
+        worst = worst.max(MAX.with(Cell::get));
+    }
+    eprintln!("longest hash run between progress reports (8 signs): {worst}");
+    assert!(worst < 40_000, "a progress gap of {worst} hashes stalls the signing film");
 }

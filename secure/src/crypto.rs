@@ -51,10 +51,43 @@ const CFI_STEP_VERIFY_GATE: u32 = 0x17_60_79BD;
 /// no runtime enum can fault a forced request into the ordinary charge path.
 struct VerifiedRateCharge(u32);
 
+/// Build the `(first_half, second_half)` progress pair for `$sink` (#759).
+///
+/// The FI countermeasure signs TWICE, so a single callback handed to both
+/// signs ramps 0..100 and then 0..100 again — on the text route
+/// `ui::show_progress` renders a real percentage, so the bar counts to 100,
+/// drops to 0 and climbs again, which on a trusted display reads as a
+/// failed-and-retrying operation. Handing `|_| {}` to the second sign instead
+/// freezes the pixel signing film for seconds, which reads as a hang. The
+/// phases are therefore SCALED: sign A into 0..=50, sign B into 50..=100.
+///
+/// It is a macro rather than a function because
+/// `SigningKey::sign_with_shuffle` takes `progress: fn(u8)` — a bare pointer,
+/// deliberately: its own doc records that the arrow type is already the limit
+/// of what the Aeneas Lean extraction can represent, which is why that method
+/// is `#[cfg(not(lean_extract))]`. Widening it to `impl Fn(u8)` would push an
+/// active FV boundary further, and a capturing closure cannot coerce to
+/// `fn(u8)`. Expanding two `fn` items per call site keeps the scaling
+/// compile-time and STATELESS — an earlier attempt routed the sink through a
+/// `static mut` and raced under the host test harness, which runs tests on
+/// parallel threads even though the device is single-threaded.
+#[macro_export]
+macro_rules! progress_halves {
+    ($sink:path) => {{
+        fn first_half(pct: u8) {
+            $sink(pct / 2);
+        }
+        fn second_half(pct: u8) {
+            $sink(50 + pct / 2);
+        }
+        (first_half as fn(u8), second_half as fn(u8))
+    }};
+}
+
 pub fn c10_sign_verified_with_progress(
     sk: &sphincs_c10::SigningKey,
     msg_hash: &[u8; 32],
-    progress: fn(u8),
+    progress: (fn(u8), fn(u8)),
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
     #[cfg(not(test))]
     {
@@ -81,7 +114,7 @@ pub fn c10_sign_verified_with_progress(
 pub(crate) fn c10_sign_verified_forced_with_progress(
     sk: &sphincs_c10::SigningKey,
     msg_hash: &[u8; 32],
-    progress: fn(u8),
+    progress: (fn(u8), fn(u8)),
     rate_receipt: &crate::sign_rate::ForcedRateReceipt,
     request_digest: &[u8; 32],
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
@@ -107,7 +140,7 @@ pub(crate) fn c10_sign_verified_forced_with_progress(
 fn c10_sign_verified_with_progress_inner(
     sk: &sphincs_c10::SigningKey,
     msg_hash: &[u8; 32],
-    progress: fn(u8),
+    progress: (fn(u8), fn(u8)),
     verified_rate_charge: VerifiedRateCharge,
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
     use subtle::ConstantTimeEq;
@@ -314,10 +347,15 @@ fn c10_sign_verified_with_progress_inner(
     crate::fi::zeroize_barrier();
     cfi.bump(CFI_STEP_SHUFFLE);
 
-    let sig_a = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_a, progress);
+    let sig_a = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_a, progress.0);
     cfi.bump(CFI_STEP_SIGN_A);
     crate::fi::wait_random();
-    let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_b, |_| {});
+    // The SECOND HALF of the same ramp (#759), so the film keeps moving on the
+    // pixel route and the percentage continues upward on the text route rather
+    // than restarting at 0. Like `sign_a`'s it returns unit, captures nothing
+    // and receives only a percentage, so it cannot touch the CFI chain, the
+    // compare, or the verify-before-release gates below.
+    let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_b, progress.1);
     cfi.bump(CFI_STEP_SIGN_B);
 
     // Constant-time comparison of the 4008-byte signatures.

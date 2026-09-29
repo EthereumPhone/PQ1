@@ -26,7 +26,7 @@
 
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::flash_policy::{self, GenericSecurePage, GenericSecureQwAddr};
+use crate::flash_policy::{self, GenericNsPage, GenericSecurePage, GenericSecureQwAddr};
 use crate::hw::mmio::{Reg32, RoReg32};
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,8 @@ const FLASH_NS: u32 = 0x4002_2000;
 
 /// `FLASH_OPTR` offset (RM0456 §7.11) — RDP[7:0] in the low byte. And
 /// `FLASH_SECBOOTADD0R` offset (secure boot-address option register), confirmed
-/// by `tools/ob-configurator/src/main.rs:32` (`FLASH_S+0x4C`).
+/// as `FLASH_S+0x4C` by the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`,
+/// `FLASH_SECBOOTADD0R` addressOffset `0x4c`) and RM0456 §7.9.16.
 #[allow(dead_code)]
 const FLASH_OPTR_OFF: u32 = 0x40;
 #[allow(dead_code)]
@@ -72,9 +73,11 @@ pub use sphincs_tz_shared::lockdown::RdpLevel;
 ///
 /// NOTE (BOOT_LOCK/HDP1 follow-up): we check the RDP level and the boot
 /// *address* (`secboot_selects_fsbl`) — the reliable, code-confirmed signals.
-/// The `BOOT_LOCK` bit and `HDP1` polarity are doc-ambiguous
-/// (production-todo's `0x0C00_007C` vs the ob-configurator's `0x0018_0000`), so
-/// asserting them is a bench-confirmation follow-up (work-todo), not done here.
+/// `BOOT_LOCK` is bit 0 (RM0456 §7.9.16, pinned as
+/// `lockdown::SECBOOTADD0_BOOT_LOCK`); the apparent `0x0C00_007C` vs
+/// `0x0018_0000` contradiction was register-word vs CubeProgrammer field-value,
+/// not a disagreement about the bit (#214). `HDP1` polarity IS still
+/// doc-ambiguous, so asserting that remains a bench-confirmation follow-up.
 #[cfg(feature = "stm32u585")]
 #[allow(dead_code)]
 #[must_use]
@@ -369,18 +372,33 @@ pub unsafe fn write_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), 
 // which is why it lives behind the same feature the `nsc/mod.rs` ship fence
 // forces on only for `mode-production`.
 //
-// Register offsets: the option-byte programming keys + OPTSTRT/OBL_LAUNCH/
-// OPTLOCK bit positions come from `tools/ob-configurator/src/main.rs` (which
-// ran the OB-commit on the bench), but the SECSR/SECCR *offsets* there are
-// swapped — this code uses the RM0456-correct `secsr=0x24 / seccr=0x2C`
-// already bound in `REG` above. WRP1AR / SECWM offsets + the OEM-lock status
-// register are BENCH-CONFIRM (RM0456) items — see the #36 deferred runbook.
+// Register offsets and the OPTSTRT/OBL_LAUNCH/OPTLOCK bit positions come from
+// the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`) and RM0456; they are
+// mirrored as host-tested constants in `sphincs_tz_shared::lockdown`
+// (`FLASH_NSCR_OFF`, `FLASH_OPTSTRT`, …). The former `tools/ob-configurator`
+// is NOT the authority for them — it swapped the SECSR/SECCR offsets and has
+// been deleted (#37). `secsr=0x24 / seccr=0x2C` as bound in `REG` above is
+// SVD-correct. WRP1AR / SECWM offsets + the OEM-lock status register are
+// BENCH-CONFIRM (RM0456) items — see the #36 deferred runbook.
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ KNOWN DEFECT #268 — the three option-byte accesses below use `seccr`.   │
+// │ Per the SVD, `OPTSTRT` (17), `OBL_LAUNCH` (27) and `OPTLOCK` (30) exist │
+// │ ONLY in `FLASH_NSCR` (0x28); `FLASH_SECCR` (0x2C) implements none of    │
+// │ them. So the commit is inert, the OPTLOCK check can never fire, and     │
+// │ `program_rdp_level2_and_launch` returns Ok(()) after failing to burn.   │
+// │ NOT fixed here by deliberate decision: this is the irreversible RDP-2   │
+// │ path and wants an owner decision plus a sacrificial-silicon plan, not a │
+// │ drive-by edit. `REG.nscr` is already bound and correct for the fix.     │
+// │ Never executed — `rdp2-self-lock` is production-quarantined.            │
+// │ Guarded by `negative_optbyte_commit_defect_268_is_marked_or_fixed`.     │
+// └─────────────────────────────────────────────────────────────────────────┘
 // ===========================================================================
 
 /// Option-byte key register offset (RM0456; `FLASH_S+0x10`).
 #[cfg(feature = "rdp2-self-lock")]
 const OPTKEYR_OFF: u32 = 0x10;
-/// Option-byte unlock keys (GP/RM0456; from `tools/ob-configurator`).
+/// Option-byte unlock keys (RM0456 §7.9.2 `FLASH_OPTKEYR`).
 #[cfg(feature = "rdp2-self-lock")]
 const OPT_KEY1: u32 = 0x0819_2A3B;
 #[cfg(feature = "rdp2-self-lock")]
@@ -402,6 +420,8 @@ const RDP_LEVEL2: u32 = 0xCC;
 const SECWM1R1_OFF: u32 = 0x50;
 #[cfg(feature = "rdp2-self-lock")]
 const WRP1AR_OFF: u32 = 0x58;
+/// RM0456 §7.9.23 — bank-2 WRP area A. Bank-1 twin is `WRP1AR_OFF` (§7.9.19).
+const WRP2AR_OFF: u32 = 0x68;
 #[cfg(feature = "rdp2-self-lock")]
 const SECWM2R1_OFF: u32 = 0x60;
 
@@ -435,6 +455,20 @@ pub fn secwm2r1_raw() -> u32 {
 pub fn wrp1ar_raw() -> u32 {
     // SAFETY: as `optr_raw`.
     unsafe { RoReg32::new(FLASH + WRP1AR_OFF) }.read()
+}
+
+/// Raw `WRP2AR` (bank-2 FSBL-mirror write-protect span). **Address offset
+/// `0x68`**, RM0456 §7.9.23 "FLASH WPR2 area A address register" — the bank-2
+/// twin of `WRP1AR` at `0x58` (§7.9.19).
+///
+/// Added 2026-09-24: `verify_ship_profile` checked only bank 1, so the FSBL
+/// copy the frozen geometry puts in bank 2 was never verified write-protected
+/// before RDP-2 froze the option bytes for good.
+#[cfg(feature = "rdp2-self-lock")]
+#[must_use]
+pub fn wrp2ar_raw() -> u32 {
+    // SAFETY: as `optr_raw`.
+    unsafe { RoReg32::new(FLASH + WRP2AR_OFF) }.read()
 }
 
 /// Raw OEM-lock status. BENCH-CONFIRM register (FLASH_NSSR vs FLASH_OPTSR) —
@@ -1102,8 +1136,33 @@ fn clear_errors_ns() {
 /// Erases a non-secure-bank page. Caller must ensure the page is part
 /// of the inactive A/B slot.
 pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
-    assert!(page <= 127, "ns-bank page out of range");
-    let page = page as u32;
+    // SAFETY: forwarded contract. Bank 2 is the only bank with non-secure
+    // pages under the current geometry, so this stays the ordinary entry.
+    unsafe { erase_ns_page_in(pqsigner_geometry::Bank::Two, page) }
+}
+
+/// Erase one non-secure page in an EXPLICIT bank.
+///
+/// `erase_ns_page` used to set `BKER` unconditionally, i.e. always bank 2 —
+/// correct only while "non-secure page" and "bank-2 page" are the same claim.
+/// A geometry that puts an NS slot in bank 1 breaks that equivalence, and the
+/// failure is worse than the secure-side twin's: erasing the INACTIVE bank-1
+/// NS slot would target the bank-2 page of the same number, i.e. the NS slot
+/// the device is currently RUNNING FROM, in the middle of an update.
+///
+/// The bank now comes from a [`GenericNsPage`] proof, so the control-register
+/// write and the caller's intent cannot disagree.
+///
+/// # Safety
+/// Erases a non-secure page. Caller must ensure the page is part of the
+/// INACTIVE A/B slot.
+pub unsafe fn erase_ns_page_in(bank: pqsigner_geometry::Bank, page: u8) -> Result<(), ()> {
+    let proof = GenericNsPage::new_in(bank, page as u32).ok_or(())?;
+    let page = proof.get();
+    let bker = match proof.bank() {
+        pqsigner_geometry::Bank::One => 0,
+        pqsigner_geometry::Bank::Two => BKER,
+    };
 
     // NSCR is reached via the NS alias of the FLASH register block
     // (see `FLASH_NS` at top of file). The single-shot CR write matches
@@ -1113,7 +1172,9 @@ pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
         clear_errors_ns();
         unlock_ns();
 
-        let cr = PER | BKER | (page << PNB_SHIFT) | STRT;
+        // BKER comes from the proof (see `erase_ns_page_in`), not from the
+        // assumption that every NS page is in bank 2.
+        let cr = PER | bker | (page << PNB_SHIFT) | STRT;
         REG.nscr.write(cr);
 
         wait_bsy_ns();
@@ -1246,13 +1307,25 @@ pub unsafe fn write_ns_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(
 pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {
     // The proof constructor fails closed for page 127 and every out-of-range
     // value before the flash controller is unlocked or any MMIO write occurs.
-    let page = GenericSecurePage::new(page).ok_or(())?.get();
+    let proof = GenericSecurePage::new(page).ok_or(())?;
+    let page = proof.get();
+    // BKER selects the bank for a page erase. This used to be omitted
+    // entirely, i.e. hard-wired to bank 1 — correct only while every secure
+    // page lives in bank 1, and silently catastrophic under a geometry that
+    // puts a secure slot in bank 2: a bank-2 page number would erase the
+    // BANK-1 page of the same number (the manifests, slot A, or the
+    // per-device pages). The bank now comes from the proof, so the two cannot
+    // disagree.
+    let bker = match proof.bank() {
+        pqsigner_geometry::Bank::One => 0,
+        pqsigner_geometry::Bank::Two => BKER,
+    };
     cortex_m::interrupt::free(|_| {
         wait_bsy();
         clear_errors();
         unlock();
 
-        let cr = PER | (page << PNB_SHIFT);
+        let cr = PER | bker | (page << PNB_SHIFT);
         REG.seccr.write(cr);
         REG.seccr.write(cr | STRT);
 

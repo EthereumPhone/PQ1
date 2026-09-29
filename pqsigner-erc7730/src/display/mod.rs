@@ -96,9 +96,62 @@ pub struct Pages {
     /// The full `MAX_PAGES`-sized page buffer. Renderers write directly into
     /// their own slots; external callers must use [`Pages::as_slice`].
     pub buf: [Page; MAX_PAGES],
+    /// Per-page CHROME mask: bit `r` set means row `r` of that page is
+    /// renderer-emitted navigation, not content.
+    ///
+    /// WHY THIS EXISTS (#751). Consumers used to recover this by matching the
+    /// row's TEXT — anything beginning `"> "`, ending `"> next"`, or equal to
+    /// `"R=Confirm"` and friends. That vocabulary is not reserved, so a decoded
+    /// field VALUE could land in it and be dropped from the trusted display
+    /// while the signature still committed to it. Three separate instances of
+    /// that one root cause were found in a single day: the navigation
+    /// vocabulary, whitespace normalisation merging two operands, and a
+    /// 16-character intent gluing the owner into the caption.
+    ///
+    /// The renderer knows which rows it emitted as chrome. It says so here
+    /// instead of leaving the consumer to deduce it from the bytes it is
+    /// displaying.
+    ///
+    /// FAILURE DIRECTION, deliberately chosen: a row the renderer forgets to
+    /// mark reads as CONTENT, so the worst case is chrome appearing on screen —
+    /// visible and harmless. The dangerous direction (content silently treated
+    /// as chrome and dropped) cannot occur, because only the renderer's own
+    /// chrome writers ever call [`Pages::mark_nav`].
+    ///
+    /// ## Bit layout — two independent planes in one byte
+    ///
+    /// ```text
+    ///   bit 0..3  row r is renderer-emitted CHROME   (mark_nav / is_nav)
+    ///   bit 4     the intent is COMPLETE on row 0    (mark_intent_complete)
+    ///   bit 5     the intent CONTINUES onto row 1    (mark_intent_continues)
+    ///   bit 6..7  reserved (must stay 0)
+    /// ```
+    ///
+    /// One byte, not two arrays, and deliberately so: the batch banner copies
+    /// pages between `Pages` instances, and a second array is a second thing to
+    /// forget to copy — which is exactly the bug that refused batch ERC-7730
+    /// signing when `nav` itself was added. Everything that already carries
+    /// this byte carries both planes for free.
+    ///
+    /// The intent plane declares BOTH states positively, never one by the
+    /// absence of the other, so a forgotten write degrades to the neutral
+    /// `CONFIRM CLEAR SIGN?` caption rather than to a confident wrong one.
+    pub nav: [u8; MAX_PAGES],
     /// Number of currently-visible pages (`0..=MAX_PAGES`).
     pub len: usize,
 }
+
+/// `nav` bit 4 — the intent is complete on row 0 (see [`Pages::nav`]).
+const INTENT_COMPLETE: u8 = 1 << 4;
+/// `nav` bit 5 — the intent continues onto row 1 (see [`Pages::nav`]).
+const INTENT_CONTINUES: u8 = 1 << 5;
+/// Both intent-plane bits, for a repaint that must re-declare from scratch.
+pub(crate) const INTENT_EXTENT_MASK: u8 = INTENT_COMPLETE | INTENT_CONTINUES;
+
+// The chrome plane owns one bit per row and must not collide with the intent
+// plane above it.
+const _: () = assert!(DISPLAY_ROWS <= 4);
+const _: () = assert!((1u8 << (DISPLAY_ROWS - 1)) < INTENT_COMPLETE);
 
 impl Pages {
     /// View the visible pages (indices `0..len`) as a slice. This is what
@@ -115,6 +168,7 @@ impl Pages {
         assert!(len <= MAX_PAGES, "Pages::empty_with_len: len > MAX_PAGES");
         Pages {
             buf: [[[b' '; DISPLAY_COLS]; DISPLAY_ROWS]; MAX_PAGES],
+            nav: [0; MAX_PAGES],
             len,
         }
     }
@@ -153,9 +207,74 @@ impl Pages {
         // Re-clear the slot so dynamic-push renderers don't inherit prior
         // content (older renderers overran past `len` and bumped it).
         self.buf[self.len] = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+        // A recycled slot must not inherit the previous render's chrome mask,
+        // or a content row could be dropped as chrome.
+        self.nav[self.len] = 0;
         let idx = self.len;
         self.len += 1;
         Ok(idx)
+    }
+
+    /// Mark row `row` of page `page` as renderer-emitted chrome.
+    ///
+    /// Called only by the renderer's own navigation writers. Panics on an
+    /// out-of-range index, matching [`Pages::row_mut`]: both indices come from
+    /// the same compile-time constants.
+    pub fn mark_nav(&mut self, page: usize, row: usize) {
+        assert!(page < MAX_PAGES);
+        assert!(row < DISPLAY_ROWS);
+        self.nav[page] |= 1 << row;
+    }
+
+    /// Is row `row` of page `page` renderer-emitted chrome?
+    ///
+    /// Out-of-range answers `false`: an unknown row is content, which is the
+    /// safe direction (see the [`Pages::nav`] field docs).
+    #[must_use]
+    pub fn is_nav(&self, page: usize, row: usize) -> bool {
+        if page >= MAX_PAGES || row >= DISPLAY_ROWS {
+            return false;
+        }
+        self.nav[page] & (1 << row) != 0
+    }
+
+    /// Declare that page `page`'s intent text is COMPLETE on row 0, so row 1
+    /// (if any) holds something else — the owner.
+    pub fn mark_intent_complete(&mut self, page: usize) {
+        assert!(page < MAX_PAGES);
+        self.nav[page] |= INTENT_COMPLETE;
+    }
+
+    /// Declare that page `page`'s intent text CONTINUES onto row 1, so rows
+    /// 0 and 1 are one unbroken string and the owner was dropped for space.
+    pub fn mark_intent_continues(&mut self, page: usize) {
+        assert!(page < MAX_PAGES);
+        self.nav[page] |= INTENT_CONTINUES;
+    }
+
+    /// How far page `page`'s intent text runs, as the renderer declared it.
+    ///
+    /// `None` when the renderer declared nothing, or contradicted itself by
+    /// setting both. Consumers MUST treat `None` as "I do not know what this
+    /// page says" and fall back to a neutral caption. That is the whole point
+    /// of declaring both states: at exactly `DISPLAY_COLS` characters the two
+    /// layouts are byte-indistinguishable, so a consumer that guessed from
+    /// "row 0 is full" read a 16-character intent plus the owner as one
+    /// string and captioned it `SIGN SET ACCOUNT NAMECELO?`.
+    #[must_use]
+    pub fn intent_rows(&self, page: usize) -> Option<usize> {
+        if page >= MAX_PAGES {
+            return None;
+        }
+        match (
+            self.nav[page] & INTENT_COMPLETE != 0,
+            self.nav[page] & INTENT_CONTINUES != 0,
+        ) {
+            (true, false) => Some(1),
+            (false, true) => Some(2),
+            // Neither: undeclared. Both: the renderer contradicted itself.
+            _ => None,
+        }
     }
 
     /// Volatile-poison the full fixed buffer and reset its visible length.
@@ -170,19 +289,12 @@ impl Pages {
     pub fn volatile_poison_and_reset(&mut self) {
         for page in &mut self.buf {
             for row in page {
-                for byte in row {
-                    // SAFETY: every pointer comes from this unique mutable
-                    // borrow and remains within the live fixed-size buffer.
-                    unsafe { core::ptr::write_volatile(byte, TRANSCRIPT_POISON) };
-                }
+                volatile_poison_bytes(row);
             }
         }
         // Write the length last: a skipped second render then exposes either a
         // zero count or poison bytes, both of which fail the transcript proof.
-        // SAFETY: `self.len` is uniquely borrowed and remains live for this
-        // in-place reset.
-        unsafe { core::ptr::write_volatile(&mut self.len, 0) };
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        volatile_reset_len(&mut self.len);
     }
 
     /// Readback used before granting the reset CFI step.
@@ -197,6 +309,46 @@ impl Pages {
                 .flat_map(|row| row.iter())
                 .all(|byte| *byte == TRANSCRIPT_POISON)
     }
+}
+
+/// Volatile-fill a display byte buffer with [`TRANSCRIPT_POISON`].
+///
+/// Shared by [`Pages::volatile_poison_and_reset`] and the pixel-UI `Screens`
+/// transcript in `pqsigner-ui-px` (whose records are printable ASCII by
+/// construction, exactly like `Page`, so the same poison byte is unreachable
+/// there too). Lives here so that crate can stay 100% safe Rust: this file is
+/// one of the three documented host-verified `unsafe` exceptions in the
+/// `no-unsafe-in-pure-logic-crates` semgrep gate. Volatile writes prevent LLVM
+/// from deleting the poison as dead stores before the next render.
+#[inline(never)]
+pub fn volatile_poison_bytes(buf: &mut [u8]) {
+    for byte in buf {
+        // SAFETY: `byte` comes from this unique mutable borrow of a live slice
+        // element; a volatile write of a `u8` through it is always valid.
+        unsafe { core::ptr::write_volatile(byte, TRANSCRIPT_POISON) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+/// Volatile-zero a byte buffer and fence (the alignment-free twin of
+/// [`volatile_reset_len`] for byte-encoded length fields).
+#[inline(never)]
+pub fn volatile_zero_bytes(buf: &mut [u8]) {
+    for byte in buf {
+        // SAFETY: `byte` is a unique live mutable borrow of a slice element.
+        unsafe { core::ptr::write_volatile(byte, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+/// Volatile-zero a transcript length word and fence, so a skipped re-render
+/// exposes a zero count (or the poison bytes) to the transcript proof.
+#[inline(never)]
+pub fn volatile_reset_len(len: &mut usize) {
+    // SAFETY: `len` is a unique live mutable borrow; a volatile store through
+    // it is always valid.
+    unsafe { core::ptr::write_volatile(len, 0) };
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }
 
 /// Convert an ASCII-by-construction byte buffer into a `&str` without `unsafe`.

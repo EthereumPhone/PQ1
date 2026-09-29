@@ -1200,9 +1200,11 @@ dependencies = [
  "fw-manifest",
  "panic-halt",
  "pqsigner-fi",
+ "pqsigner-hw",
  "sha2",
  "sphincs-c10",
  "sphincs-tz-bip39",
+ "sphincs-tz-shared",
 ]
 
 [[package]]
@@ -1222,6 +1224,14 @@ name = "pqsigner-hal"
 version = "0.1.0"
 dependencies = [
  "static_assertions",
+]
+
+[[package]]
+name = "pqsigner-hw"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-semihosting",
 ]
 
 [[package]]
@@ -1274,6 +1284,16 @@ version = "0.1.0"
 dependencies = [
  "pqsigner-proto",
  "sha3 0.10.8",
+]
+
+[[package]]
+name = "pqsigner-ui-px"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "pqsigner-erc7730",
+ "pqsigner-ui-px",
+ "sha2",
 ]
 
 [[package]]
@@ -1694,9 +1714,11 @@ dependencies = [
  "pqsigner-erc7730",
  "pqsigner-fi",
  "pqsigner-geometry",
+ "pqsigner-hw",
  "pqsigner-pq-seal",
  "pqsigner-tx",
  "pqsigner-tx-core",
+ "pqsigner-ui-px",
  "proptest",
  "sha2",
  "sha3 0.10.8",

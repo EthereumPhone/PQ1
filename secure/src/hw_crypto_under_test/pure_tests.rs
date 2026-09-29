@@ -2,7 +2,8 @@
 //! slice.
 //!
 //! Slice files in scope:
-//!   - `secure/src/hw/mmio.rs`        (typed MMIO wrapper)
+//!   - `hw/src/mmio.rs`                (typed MMIO wrapper; moved out of
+//!                                    `secure/src/hw/` 2026-09-28, #758)
 //!   - `secure/src/hw/hash.rs`        (STM32U585 HASH peripheral)
 //!   - `secure/src/hw/saes.rs`        (Secure-AES coprocessor)
 //!   - `secure/src/hw/saes_cmac.rs`   (CMAC-AES-256 over SAES-DHUK)
@@ -40,7 +41,12 @@
 use hmac::Mac;
 use sha2::Sha256;
 
-const HASH_SRC: &str = include_str!("../hw/hash.rs");
+// The HASH driver and the typed MMIO handles MOVED to the `pqsigner-hw`
+// workspace crate on 2026-09-28 (#758) so the FSBL shares them instead of
+// carrying a second copy. These pins follow the code rather than the old path
+// — pinning the shim would assert nothing, which is exactly the vacuity this
+// file exists to prevent.
+const HASH_SRC: &str = include_str!("../../../hw/src/hash.rs");
 const SAES_SRC: &str = include_str!("../hw/saes.rs");
 const SAES_CMAC_SRC: &str = include_str!("../hw/saes_cmac.rs");
 const SECRET_KEYS_SRC: &str = include_str!("../hw/secret_keys.rs");
@@ -49,8 +55,17 @@ const OTP_SRC: &str = include_str!("../hw/otp.rs");
 /// of this slice it is MMIO-free, so its behaviour is tested for real in its
 /// own module — these text pins only hold the *shape* of the D4 rule in place.
 const OTP_STATE_SRC: &str = include_str!("../otp_state.rs");
+/// The OTP geometry exists in FOUR places, and until now only one pair was
+/// cross-checked. The FSBL reads the rollback tally with its own hardcoded
+/// copy of the base and word count (it cannot import from the secure crate),
+/// and the factory verification script decodes the sentinel over SWD with its
+/// own hardcoded address. A drift in any one of them is a silent
+/// disagreement about what a burned OTP word means.
+const FSBL_OTP_SRC: &str = include_str!("../../../fsbl/src/otp.rs");
+const FACTORY_VERIFY_SH: &str =
+    include_str!("../../../tools/factory-provisioning-verify.sh");
 const BHK_SRC: &str = include_str!("../hw/bhk.rs");
-const MMIO_SRC: &str = include_str!("../hw/mmio.rs");
+const MMIO_SRC: &str = include_str!("../../../hw/src/mmio.rs");
 
 // ─────────────────────────────────────────────────────────────────────
 // 1. Positive — register addresses + constants
@@ -69,6 +84,74 @@ fn positive_saes_base_secure_alias_0x520c_0c00() {
     assert!(
         SAES_SRC.contains("const SAES_BASE: u32 = 0x520C_0C00;"),
         "SAES peripheral must use secure alias 0x520C_0C00"
+    );
+}
+
+/// `load_and_lock` must PROVE the active BHK is the intended one.
+///
+/// Measured on silicon 2026-09-21 (issue #712, `tools/bhklock-reset-scope.sh`):
+/// `TAMP_SECCFGR.BHKLOCK` is sticky, survives a system reset, blocks software
+/// reads AND writes of `BKP0..7`, and software cannot clear it. So writing the
+/// key into already-locked registers is a silent no-op. The old code did
+/// exactly that and returned `Ok`, which is how a first-boot retry could
+/// rotate SE050 credentials against the PREVIOUS key while flash held the new
+/// one — stranding the SE050 with no mass erase involved.
+///
+/// These pins live here, not in `bhk.rs`'s own test module: that module is
+/// inside a target-only feature gate and never runs host-side (#708).
+#[test]
+fn positive_bhk_load_and_lock_verifies_the_active_key() {
+    // The reference ciphertext must come from the INTENDED key via the
+    // software key path. A `Bhk` round trip is self-consistent under any key,
+    // including a stale one, so it cannot substitute for this.
+    assert!(
+        BHK_SRC.contains("KeySel::Software, Some(&bhk), &ACTIVE_KEY_KAT_BLOCK"),
+        "the expected value must be computed from the key we intend to install"
+    );
+    assert!(
+        BHK_SRC.contains("saes::encrypt_ecb_block(KeySel::Bhk, None, &ACTIVE_KEY_KAT_BLOCK)"),
+        "the active value must come from the hardware BHK key path"
+    );
+    // ...and the two must actually be compared, in constant time.
+    assert!(
+        BHK_SRC.contains("ConstantTimeEq::ct_eq(&expected[..], &actual[..])"),
+        "expected and actual must be compared"
+    );
+    // A mismatch must be an error, never a log-and-continue.
+    assert!(
+        BHK_SRC.contains("BhkError::ActiveKeyMismatch") && BHK_SRC.contains("BhkError::AlreadyLocked"),
+        "a mismatched active key must surface as an error"
+    );
+    // The already-locked case must be detected explicitly, because that is the
+    // condition under which the hardware ignores the write.
+    assert!(
+        BHK_SRC.contains("let already_locked = read_volatile(TAMP_SECCFGR) & TAMP_BHKLOCK != 0;"),
+        "load_and_lock must know whether the registers were already locked"
+    );
+    // But being locked with the RIGHT key is the ordinary warm-reset case and
+    // must stay non-fatal — failing there would break a working device.
+    assert!(
+        BHK_SRC.contains("if !already_locked {"),
+        "the install must be skipped, not failed, when already locked"
+    );
+}
+
+#[test]
+fn positive_saes_rcc_uses_secure_alias_for_shsi() {
+    // RM0456: "The SHSI configuration and status bits are secured when the SAES
+    // is configured as secure." `sau.rs` marks SAES SECURE (GTZC1_TZSC_SECCFGR3
+    // bit 15), so SHSION/SHSIRDY (RCC_CR bits 14/15) are secure-only. Driven
+    // through the NS alias (0x4602_0C00) the enable is silently dropped,
+    // SHSIRDY never rises, and `saes::init()` fails `ShsiTimeout` — which is
+    // exactly what pq1 silicon did on 2026-09-21 (bare board AND sealed EVT),
+    // taking the whole DHUK / Tier-1 KDF path with it.
+    assert!(
+        SAES_SRC.contains("const RCC: u32 = 0x5602_0C00;"),
+        "SAES must reach RCC through the SECURE alias or SHSI never starts"
+    );
+    assert!(
+        !SAES_SRC.contains("const RCC: u32 = 0x4602_0C00;"),
+        "the NS RCC alias silently drops the SHSI enable"
     );
 }
 
@@ -120,6 +203,107 @@ fn positive_otp_layout_constants() {
     assert!(OTP_SRC.contains("pub const MAX_FW_VERSION: u32 = ROLLBACK_WORDS * 32;"));
     assert!(OTP_SRC.contains("pub const MASTER_KEY_OFFSET: u32 = ROLLBACK_WORDS * 4;"));
     assert!(OTP_SRC.contains("pub const MASTER_KEY_SIZE: usize = 32;"));
+}
+
+#[test]
+fn positive_otp_factory_sentinel_layout_is_pinned() {
+    // #723: these five declarations were asserted ONLY by
+    // `secure/src/hw/otp.rs`'s own `#[cfg(test)] mod tests`, which has never
+    // run — `mod hw;` is `#[cfg(not(test))]` in main.rs, so no feature flag
+    // can reach it. They are consumed by `factory_provisioning.rs` (the
+    // sentinel masks gate the first-boot production path), and the deleted
+    // test's own comment said drift here "would make field reports and the
+    // host fixture's ship-gate misinterpret the OTP state."
+    //
+    // Text pinning is COMPLETE for a constant, which is why it is the right
+    // tool here and the wrong one for a branch chain: the declaration text
+    // determines the value, whereas pinning one arm of an if-chain says
+    // nothing about its position (see #723's reset_cause differential).
+    assert!(OTP_SRC.contains(
+        "pub const FACTORY_SENTINEL_OFFSET: u32 = MASTER_KEY_OFFSET + MASTER_KEY_SIZE as u32;"
+    ));
+    assert!(OTP_SRC.contains(
+        "pub const FACTORY_SENTINEL_ADDR: u32 = OTP_BASE + FACTORY_SENTINEL_OFFSET;"
+    ));
+    assert!(OTP_SRC.contains("pub const FACTORY_SENTINEL_SIZE: u32 = 16;"));
+    assert!(OTP_SRC.contains("pub const FACTORY_SENTINEL_BIT_RAN: u32 = 1 << 0;"));
+    assert!(OTP_SRC.contains("pub const FACTORY_SENTINEL_BIT_REHEARSAL: u32 = 1 << 1;"));
+    assert!(OTP_SRC.contains("pub const FACTORY_SENTINEL_BIT_PRODUCTION: u32 = 1 << 2;"));
+
+    // The three masks must stay disjoint single bits: the script decodes the
+    // word by AND-ing them, so an overlap reports two ceremony states at once.
+    let bits = [1u32 << 0, 1 << 1, 1 << 2];
+    for (i, a) in bits.iter().enumerate() {
+        assert_eq!(a.count_ones(), 1, "sentinel masks must be single bits");
+        for b in &bits[i + 1..] {
+            assert_eq!(a & b, 0, "sentinel masks must be disjoint");
+        }
+    }
+}
+
+#[test]
+fn positive_otp_absolute_addresses_not_just_offsets() {
+    // Every offset here is expressed relative to OTP_BASE, so a suite that
+    // only checked offsets would still pass with the WRONG base — the whole
+    // region would move together and every relative assertion would hold.
+    // Pin the absolute values the outside world actually uses.
+    //
+    //   MASTER_KEY_ADDR      = 0x0BFA_0000 + 128 = 0x0BFA_0080
+    //   FACTORY_SENTINEL_ADDR= 0x0BFA_0000 + 160 = 0x0BFA_00A0
+    assert!(OTP_SRC.contains("pub const OTP_BASE: u32 = 0x0BFA_0000;"));
+    assert_eq!(0x0BFA_0000u32 + 128, 0x0BFA_0080);
+    assert_eq!(0x0BFA_0000u32 + 160, 0x0BFA_00A0);
+    // Private, not `pub`, and wrapped across two lines — pin the real text.
+    assert!(OTP_SRC.contains(
+        "const OTP_RESERVED_BYTES: u32 =\n    FACTORY_SENTINEL_OFFSET + FACTORY_SENTINEL_SIZE;"
+    ));
+    // 32 rollback words (128 B) + 32 B master key + 16 B sentinel = 176.
+    assert_eq!(32 * 4 + 32 + 16, 176);
+}
+
+#[test]
+fn negative_otp_geometry_agrees_across_all_four_copies() {
+    // The secure driver, the pure classifier, the FSBL and the factory shell
+    // script each carry their own copy of this geometry. Nothing compared
+    // them. The FSBL cannot import from the secure crate and the script is
+    // not Rust at all, so a cross-copy assertion is the only place the four
+    // can be held together.
+
+    // (1) secure driver  vs  (2) pure classifier: MASTER_KEY_SIZE is declared
+    //     in BOTH `hw/otp.rs` and `otp_state.rs`, independently.
+    assert!(OTP_SRC.contains("pub const MASTER_KEY_SIZE: usize = 32;"));
+    assert!(
+        OTP_STATE_SRC.contains("pub(crate) const MASTER_KEY_SIZE: usize = 32;"),
+        "otp_state.rs holds a SECOND definition of MASTER_KEY_SIZE; the two \
+         must agree or the classifier and the driver disagree about how many \
+         quad-words a complete master key occupies"
+    );
+
+    // (3) FSBL's independent copy — it reads the rollback tally pre-PIN and
+    //     cannot link against the secure crate.
+    assert!(
+        FSBL_OTP_SRC.contains("const OTP_BASE: usize = 0x0BFA_0000;"),
+        "fsbl/src/otp.rs must agree with the secure driver's OTP_BASE"
+    );
+    assert!(
+        FSBL_OTP_SRC.contains("const ROLLBACK_WORDS: usize = 32;"),
+        "fsbl/src/otp.rs must agree with the secure driver's ROLLBACK_WORDS"
+    );
+
+    // (4) The factory verification script decodes the sentinel over SWD using
+    //     a hardcoded absolute address. Same class as the BUTTON_STEP_DECODE
+    //     mirror: a number two programs must agree on, in two languages.
+    assert!(
+        FACTORY_VERIFY_SH.contains("OTP_SENTINEL_ADDR:-0x0BFA00A0"),
+        "tools/factory-provisioning-verify.sh reads a different sentinel \
+         address than OTP_BASE + FACTORY_SENTINEL_OFFSET (0x0BFA00A0)"
+    );
+
+    // Guard the oracle: an include that resolved to something unrelated would
+    // make every `contains` above vacuously false-negative-proof only because
+    // the assertions are positive — so check the fixtures are the real files.
+    assert!(FSBL_OTP_SRC.contains("fn "), "FSBL OTP fixture looks empty");
+    assert!(FACTORY_VERIFY_SH.contains("probe-rs"), "factory script fixture looks wrong");
 }
 
 #[test]
@@ -350,6 +534,42 @@ fn wt36_secret_keys_new_labels_and_fns_pinned() {
     assert!(SECRET_KEYS_SRC.contains("pub fn current_pbs() -> Result<[u8; 64], OtpError>"));
     // current_pbs gates the salted path on the ship feature.
     assert!(SECRET_KEYS_SRC.contains(r#"feature = "rdp2-self-lock""#), "current_pbs must gate salted path");
+}
+
+/// `current_pbs` must never fall back to the unsalted secret on a ROTATED
+/// device.
+///
+/// It used to select the credential with `if let Some(salt) =
+/// journal_salt_if_all_done()`, which returns `None` both before the rotation
+/// and when a completed rotation's salt is unrecoverable. Those two need
+/// opposite behaviour: pre-rotation the unsalted value is correct, while after
+/// rotation it is a DIFFERENT secret than the one E140 holds, so falling
+/// through silently selected the wrong credential instead of reporting that
+/// the final root record is damaged.
+#[test]
+fn positive_current_pbs_has_no_silent_unsalted_fallback() {
+    // The tri-state must be matched exhaustively — that is what keeps the two
+    // None cases apart.
+    for arm in [
+        "FinalPbs::Rotated(salt) => return optiga_pairing_secret_salted(&salt)",
+        "FinalPbs::RotatedSaltMissing => return Err(OtpError::FinalPbsSaltMissing)",
+        "FinalPbs::PreRotation => {}",
+    ] {
+        assert!(
+            SECRET_KEYS_SRC.contains(arm),
+            "current_pbs must handle each journal state explicitly: {arm}"
+        );
+    }
+    // The collapsing accessor must not be what drives the choice.
+    assert!(
+        !SECRET_KEYS_SRC.contains("if let Some(salt) = crate::first_boot::journal_salt_if_all_done()"),
+        "credential selection must not use the accessor that conflates the two None cases"
+    );
+    // A rotated-but-unrecoverable device must fail closed, with its own error.
+    assert!(
+        OTP_SRC.contains("FinalPbsSaltMissing"),
+        "the damaged-final-root state needs a distinct error to surface"
+    );
 }
 
 #[test]

@@ -151,6 +151,15 @@ impl Display {
     /// (it races the panel scan) and ~24 ms with no benefit. `draw_line`
     /// space-pads every row to 16 cols, so all 64 cells are overwritten.
     pub fn flush(&mut self) {
+        // Under `ui-px` every legacy 16×4 page is painted through the pixel
+        // engine (design typography) — the constant-time secret-row path
+        // below stays on the glyph blitter.
+        // If the NS-resident atlas failed verification the engine declines
+        // and the glyph blitter below keeps the device readable.
+        #[cfg(feature = "ui-px")]
+        if crate::ui::px::lcd::paint_legacy(&self.rows) {
+            return;
+        }
         for r in 0..DISPLAY_ROWS {
             for c in 0..DISPLAY_COLS {
                 let ch = self.rows[r][c];
@@ -331,14 +340,31 @@ impl Input {
         #[cfg(feature = "gpio-buttons")]
         unsafe {
             crate::hw::buttons::init();
-            secure_log!("[S][LCD] GPIO buttons ready (LEFT=PC1/D8, RIGHT=PA8/D9)");
+            secure_log!(
+                "[S][LCD] GPIO buttons ready on {} (LEFT=pin {}, RIGHT=pin {})",
+                crate::board::BOARD_NAME,
+                crate::board::BTN_LEFT_PIN,
+                crate::board::BTN_RIGHT_PIN
+            );
         }
 
         #[cfg(feature = "debug-log")]
         {
-            // DHCSR.C_DEBUGEN gate: the semihosting OPEN is a BKPT; without a
-            // debugger it HardFaults, so only open when a debugger is attached
-            // (see oled.rs for the full rationale).
+            // DHCSR.C_DEBUGEN gate. The semihosting OPEN below is a
+            // `BKPT 0xAB` instruction. With a debugger attached the probe
+            // intercepts it and returns a file descriptor (or an error under
+            // probe-rs, which lacks `--semihosting-file` support). **Without a
+            // debugger** the BKPT escalates to a DebugMonitor fault and then
+            // HardFault — the device hangs before finishing UI init, which is
+            // what broke the standalone-testkey build. Skipping the OPEN when
+            // `C_DEBUGEN == 0` keeps the GPIO-button path working on
+            // USB-C-only power.
+            //
+            // Full text moved here 2026-09-23 from `ui/oled.rs`, which this
+            // used to point at and which has been deleted with the bench OLED
+            // backend. It was the only complete copy; losing it would invite a
+            // future "simplification" that reintroduces a boot hang on a
+            // device powered from USB-C alone.
             let c_debugen = unsafe { core::ptr::read_volatile(0xE000_EDF0 as *const u32) & 1 };
             if c_debugen != 0 {
                 use cortex_m_semihosting::syscall;

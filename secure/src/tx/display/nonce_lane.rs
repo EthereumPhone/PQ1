@@ -106,7 +106,7 @@ pub(crate) fn nonce_lane_page_proof(pages: &Pages, prior_len: usize, nonce: &[u8
     })
 }
 
-fn nonce_lane_is_zero(nonce: &[u8; 32]) -> bool {
+pub(crate) fn nonce_lane_is_zero(nonce: &[u8; 32]) -> bool {
     let mut aggregate = 0u8;
     for &byte in &nonce[..24] {
         aggregate |= byte;
@@ -114,7 +114,7 @@ fn nonce_lane_is_zero(nonce: &[u8; 32]) -> bool {
     aggregate == 0
 }
 
-fn build_nonce_lane_page(nonce: &[u8; 32]) -> NonceLanePage {
+pub(crate) fn build_nonce_lane_page(nonce: &[u8; 32]) -> NonceLanePage {
     let mut page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     primitives::write_line(&mut page[0], "Nonce lane key:");
     for (i, &byte) in nonce[..24].iter().enumerate() {

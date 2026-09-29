@@ -34,6 +34,7 @@ mod transport {
 
     const CMD_GET_REMAINING: u32 = 1;
     const CMD_REQUEST_UNLOCK: u32 = 2;
+    const CMD_GET_PIN_ATTEMPT_LOG: u32 = 4;
     const CMD_SIGN_USEROP: u32 = 7;
     const CMD_IS_UNLOCKED: u32 = 11;
     const CMD_LOCK: u32 = 12;
@@ -139,6 +140,14 @@ mod transport {
         unsafe { gateway_call(CMD_OFFCHAIN_SYNC, in_ptr as u32, 0, in_len) }
     }
 
+    /// PIN-attempt reason log readback (bench reader). Mirrors the CMSE
+    /// veneer transport below so the QEMU build of `nsc_api` links; the
+    /// mailbox dispatcher answers `Unsupported` where the log is absent.
+    #[inline]
+    pub(super) fn get_pin_attempt_log_call(out_ptr: *mut u8) -> u32 {
+        unsafe { gateway_call(CMD_GET_PIN_ATTEMPT_LOG, out_ptr as u32, 0, 0) }
+    }
+
     #[cfg(feature = "e2e-test")]
     const CMD_TEST_PIN_LOCKOUT: u32 = 200;
 
@@ -184,6 +193,7 @@ mod transport {
         // Prodtest CMSE veneers. The secure side declares these under
         // `#[cfg(feature = "prodtest")]`; the NS side mirrors the gate
         // so non-prodtest builds don't link against missing symbols.
+        fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
         fn nsc_prodtest_get_id(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
@@ -204,6 +214,12 @@ mod transport {
         fn nsc_prodtest_usb_loopback(in_ptr: u32, out_ptr: u32, n: u32) -> u32;
         #[cfg(feature = "prodtest")]
         fn nsc_prodtest_button_test(out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_rgb_osd(in_ptr: u32, out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_rng_config(out_ptr: u32) -> u32;
 
         // IWDG heartbeat registration. Gated on `iwdg` on both sides so
         // a non-iwdg build links no dangling veneer symbol.
@@ -331,6 +347,11 @@ mod transport {
     // Prodtest transport wrappers
     // -----------------------------------------------------------------
 
+    #[inline]
+    pub(super) fn get_pin_attempt_log_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_get_pin_attempt_log(out_ptr as u32) }
+    }
+
     #[cfg(feature = "prodtest")]
     #[inline]
     pub(super) fn prodtest_get_id_call(out_ptr: *mut u8) -> u32 {
@@ -396,6 +417,24 @@ mod transport {
     #[inline]
     pub(super) fn prodtest_button_test_call(out_ptr: *mut u8) -> u32 {
         unsafe { nsc_prodtest_button_test(out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_rgb_test_call(in_ptr: *const u8, out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_rgb_test(in_ptr as u32, out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_rgb_osd_call(in_ptr: *const u8, out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_rgb_osd(in_ptr as u32, out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_rng_config_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_rng_config(out_ptr as u32) }
     }
 }
 
@@ -588,6 +627,12 @@ pub fn fw_abort() -> u32 {
 // — typical caller is `usb::commands::cmd_prodtest_*`.
 // ---------------------------------------------------------------------------
 
+pub fn get_pin_attempt_log(
+    out: &mut [u8; sphincs_tz_shared::PIN_ATTEMPT_LOG_LEN],
+) -> u32 {
+    transport::get_pin_attempt_log_call(out.as_mut_ptr())
+}
+
 #[cfg(feature = "prodtest")]
 pub fn prodtest_get_id(out: &mut [u8; 24]) -> u32 {
     transport::prodtest_get_id_call(out.as_mut_ptr())
@@ -643,4 +688,27 @@ pub fn prodtest_usb_loopback(input: &[u8], out: &mut [u8]) -> u32 {
 #[cfg(feature = "prodtest")]
 pub fn prodtest_button_test(out: &mut [u8; 4]) -> u32 {
     transport::prodtest_button_test_call(out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_rgb_test(
+    req: &[u8; sphincs_tz_shared::PRODTEST_RGB_IN_LEN],
+    out: &mut [u8; sphincs_tz_shared::PRODTEST_RGB_OUT_LEN],
+) -> u32 {
+    transport::prodtest_rgb_test_call(req.as_ptr(), out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_rgb_osd(
+    req: &[u8; sphincs_tz_shared::PRODTEST_RGB_OSD_IN_LEN],
+    out: &mut [u8; sphincs_tz_shared::PRODTEST_RGB_OSD_OUT_LEN],
+) -> u32 {
+    transport::prodtest_rgb_osd_call(req.as_ptr(), out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_rng_config(
+    out: &mut [u8; sphincs_tz_shared::PRODTEST_RNG_CONFIG_LEN],
+) -> u32 {
+    transport::prodtest_rng_config_call(out.as_mut_ptr())
 }

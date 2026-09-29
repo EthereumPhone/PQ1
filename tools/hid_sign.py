@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""Exercise CMD_SIGN_USEROP (INS 0x30) over USB HID on a live pq1 board.
+
+Closes the third v1 goal ("secure elements, FSBL and signing") at the
+transport + firmware level: builds a minimal normal-mode UserOp, sends it
+with APDU command chaining, drains the chunked response, and validates the
+returned Type-2 wrapper structurally. The raw bytes are ALSO written to
+disk so the C10 signature can be verified cryptographically offline,
+without holding the device's narrow window open.
+
+WHY STRUCTURAL + OFFLINE, NOT CRYPTOGRAPHIC INLINE: this client was written
+when the device only stayed reachable ~120 s after unlock (PendSV blocked in
+enter_pin(); fixed for e2e-test images by a8961636). Verification stays
+offline anyway: tools/verify-c10-sig checks the signature, and --deploy /
+--chain plus the <out>.json record let an on-chain UserOp be assembled from
+exactly the fields the device signed.
+
+Protocol (docs/companion/usb-protocol-v2.md + nonsecure/src/usb/commands.rs):
+  * Request chaining: P1=0x80 "more blocks follow", P1=0x00 last block
+    (triggers execute). LC <= 255 per APDU.
+  * Chunked response: a reply longer than APDU_MAX_RESP (253) returns its
+    first 253 bytes with SW1=0x61 and SW2=bytes-remaining (0xFF if >255).
+    The host then issues GET_RESPONSE (INS 0xC0, CLA-agnostic) repeatedly,
+    concatenating payloads, until SW1 != 0x61.
+
+Usage: ./hid_sign.py [--out FILE] [--chain ID] [--deploy] [--nonce N] [gas/value overrides]
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+
+from hid_smoke import (
+    APDU_CLA_V2,
+    HidRaw,
+    P1_LAST,
+    SW_OK,
+    find_hidraw,
+    frame_apdu,
+    read_response,
+    send,
+)
+
+P1_MORE = 0x80
+INS_GET_RESPONSE = 0xC0
+INS_SIGN_USEROP = 0x30
+INS_GET_WALLET_ADDRESS = 0x60
+SW1_MORE_DATA = 0x61
+
+# ── wire constants (proto/src/lib.rs, tools/webhid_test.html) ────────────
+SIGN_USEROP_HEADER_LEN = 330          # data starts at 330 (CLAUDE.md table)
+C10_SIG_LEN = 4008
+SIG_WRAPPER_LEN = 32 + 32 + 32 + 4032  # 4128
+ENTRY_POINT_V06 = bytes.fromhex("5FF137D4b0FDCD49DcA30c7CF57E578a026d2789")
+SHA256_EMPTY = hashlib.sha256(b"").digest()
+
+CHAIN_ID = 84532                      # Base Sepolia, matches webhid defaults
+# Gas: order on the wire is call, verification, preVerification, maxFee,
+# maxPriorityFee (CLAUDE.md "Unified sign input", offset 84, 5x32).
+CALL_GAS = 50_000
+VER_GAS = 800_000
+PRE_VER_GAS = 150_000
+MAX_FEE = 1_000_000_000
+MAX_PRIORITY_FEE = 100_000_000
+
+TO_ADDRESS = bytes.fromhex("1111111111111111111111111111111111111111")
+VALUE_WEI = 1_000_000_000_000_000     # 0.001 ETH
+
+
+def u16(n: int) -> bytes:
+    return n.to_bytes(2, "big")
+
+
+def u32(n: int) -> bytes:
+    return n.to_bytes(4, "big")
+
+
+def u64(n: int) -> bytes:
+    return n.to_bytes(8, "big")
+
+
+def u256(n: int) -> bytes:
+    return n.to_bytes(32, "big")
+
+
+def drain_response(hid: HidRaw, sw: int, data: bytes) -> tuple[int, bytes]:
+    """Follow SW1=0x61 with GET_RESPONSE until the reply is complete."""
+    collected = bytearray(data)
+    rounds = 0
+    while (sw >> 8) == SW1_MORE_DATA:
+        rounds += 1
+        if rounds > 200:
+            raise IOError("GET_RESPONSE drain exceeded 200 rounds")
+        apdu = bytes([APDU_CLA_V2, INS_GET_RESPONSE, 0x00, 0x00, 0x00])
+        for f in frame_apdu(apdu):
+            hid.write(f)
+        sw, data = read_response(hid)
+        collected.extend(data)
+    return sw, bytes(collected)
+
+
+def send_chained(hid: HidRaw, ins: int, payload: bytes) -> tuple[int, bytes]:
+    """Send `payload` as chained APDUs; return the final (sw, data)."""
+    off = 0
+    total = len(payload)
+    while off < total:
+        chunk = min(255, total - off)
+        is_last = (off + chunk) >= total
+        p1 = P1_LAST if is_last else P1_MORE
+        block = payload[off : off + chunk]
+        apdu = bytes([APDU_CLA_V2, ins, p1, 0x00, len(block)]) + block
+        for f in frame_apdu(apdu):
+            hid.write(f)
+        sw, data = read_response(hid)
+        sw, data = drain_response(hid, sw, data)
+        if is_last:
+            return sw, data
+        if sw != SW_OK:
+            return sw, data
+        off += chunk
+    raise AssertionError("empty payload")
+
+
+FLAG_INCLUDE_INIT_CODE = 0x8000_0000
+INIT_CODE_LEN = 4280
+
+
+def build_payload(sender: bytes, req: dict) -> bytes:
+    """One UserOp request, account 0 / slot 0, no inner calldata, no trailers.
+    `req` holds every signed field so the caller can record exactly what the
+    device committed to (an on-chain UserOp must reuse these values verbatim:
+    PQSmartWallet.sphincsDigest re-hashes all of them)."""
+    data = bytes.fromhex(req.get("data", "0x").removeprefix("0x"))
+    p = b"".join(
+        [
+            u64(req["chain_id"]),               # 0
+            u32(req["flags"]),                  # 8
+            sender,                             # 12  (20)
+            ENTRY_POINT_V06,                    # 32  (20)
+            u256(req["nonce"]),                 # 52
+            u256(req["callGasLimit"]),          # 84
+            u256(req["verificationGasLimit"]),  # 116
+            u256(req["preVerificationGas"]),    # 148
+            u256(req["maxFeePerGas"]),          # 180
+            u256(req["maxPriorityFeePerGas"]),  # 212
+            SHA256_EMPTY,                       # 244 paymaster_and_data_hash (no paymaster)
+            bytes.fromhex(req["to"][2:]),       # 276 (20)
+            u256(req["value"]),                 # 296
+            u16(len(data)),                     # 328 data_len
+        ]
+    )
+    assert len(p) == SIGN_USEROP_HEADER_LEN, f"payload is {len(p)} B, want {SIGN_USEROP_HEADER_LEN}"
+    # 330..N inner calldata. Without it the device can only render the
+    # value-transfer page; the ERC-20 / contract-call confirm families need
+    # real calldata to decode (#700).
+    # Trailers follow the inner calldata. The ERC-20 metadata bundle is read
+    # FIRST (cmd_sign_userop.rs:393); without it the device has only the pinned
+    # ERC20_DB_ROOT and correctly degrades to the loud "! unknown token" page.
+    # A missing trailer is absence, not an error, so later trailers can simply
+    # be omitted by running out of buffer.
+    trailer = bytes.fromhex(req.get("erc20_trailer", ""))
+    if trailer:
+        p = p + data + u16(len(trailer)) + trailer
+        return p
+    return p + data
+
+
+FAILURES: list[str] = []
+
+
+def check(label: str, got, want) -> None:
+    ok = got == want
+    fmt = lambda v: f"0x{v:x}" if isinstance(v, int) else (v.hex() if isinstance(v, bytes) else str(v))
+    print(f"    {'OK  ' if ok else 'FAIL'}  {label:<24} got={fmt(got)} want={fmt(want)}")
+    if not ok:
+        FAILURES.append(f"{label}: got {fmt(got)}, want {fmt(want)}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="sign_response.bin")
+    ap.add_argument("--chain", type=int, default=CHAIN_ID)
+    ap.add_argument("--deploy", action="store_true",
+                    help="set FLAG_INCLUDE_INIT_CODE (first UserOp: deploys the wallet, slot 0)")
+    ap.add_argument("--nonce", type=int, default=0)
+    ap.add_argument("--to", default="0x" + TO_ADDRESS.hex())
+    ap.add_argument("--value", type=int, default=VALUE_WEI)
+    ap.add_argument("--call-gas", type=int, default=CALL_GAS)
+    ap.add_argument("--ver-gas", type=int, default=VER_GAS)
+    ap.add_argument("--pre-ver-gas", type=int, default=PRE_VER_GAS)
+    ap.add_argument("--max-fee", type=int, default=MAX_FEE)
+    ap.add_argument("--max-prio", type=int, default=MAX_PRIORITY_FEE)
+    ap.add_argument(
+        "--erc20-trailer", default=None, metavar="FILE",
+        help="ERC-20 metadata bundle from tools/companion-stub/db_trailers.py; "
+             "without it the device renders the unknown-token page (#700).",
+    )
+    ap.add_argument(
+        "--data", default=None,
+        help="hex inner calldata, e.g. ERC-20 transfer(address,uint256); drives "
+             "the contract-call confirm pages rather than value-transfer (#700).",
+    )
+    ap.add_argument(
+        "--confirm-timeout",
+        type=float,
+        default=None,
+        help="seconds to wait for the on-device confirm (default 45; use ~300 "
+             "for a real trusted-UI build where a human presses the buttons)",
+    )
+    ap.add_argument("--req-out", default=None,
+                    help="write every signed field + the parsed response as JSON "
+                         "(default: <out>.json)")
+    args = ap.parse_args()
+    req = {
+        "chain_id": args.chain,
+        "flags": FLAG_INCLUDE_INIT_CODE if args.deploy else 0,
+        "nonce": args.nonce,
+        "callGasLimit": args.call_gas,
+        "verificationGasLimit": args.ver_gas,
+        "preVerificationGas": args.pre_ver_gas,
+        "maxFeePerGas": args.max_fee,
+        "maxPriorityFeePerGas": args.max_prio,
+        "paymasterAndData": "0x",
+        "to": args.to.lower(),
+        "value": args.value,
+        # Transport-only; not part of the signed payload (build_payload reads
+        # the wire fields by name, never this key).
+        "confirm_timeout": args.confirm_timeout,
+        "data": ("0x" + args.data.removeprefix("0x")) if args.data else "0x",
+        # hex, not bytes: this dict is JSON-dumped into the --req-out record.
+        "erc20_trailer": (
+            __import__("pathlib").Path(args.erc20_trailer).read_bytes().hex()
+            if args.erc20_trailer else ""
+        ),
+    }
+    want_init_len = INIT_CODE_LEN if args.deploy else 0
+
+    node = find_hidraw()
+    if node is None:
+        print("!! no PQSigner hidraw node — board not enumerated")
+        return 2
+    print(f"==> device node: {node}")
+
+    # Two different timeouts on purpose. The window is only ~2-4 minutes
+    # wide and cannot be extended, so a DEAD device must fail fast rather
+    # than burning 45 s of it on the first call; but a LIVE device needs
+    # real slack for the sign itself (master + slot keygen on a cold
+    # cache, CLAUDE.md budgets <= 3 s, plus FI double-sign + verify).
+    # GET_WALLET_ADDRESS is <1 s after unlock, so 12 s is generous for it
+    # while still failing fast when NS is not running.
+    hid = HidRaw(node, 12.0)
+    try:
+        print("\n==> INS 0x60 GET_WALLET_ADDRESS (account 0, show=0: no trusted-UI round-trip)")
+        sw, data = send(hid, INS_GET_WALLET_ADDRESS, u32(0))
+        sw, data = drain_response(hid, sw, data)
+        print(f"    SW=0x{sw:04x} data={len(data)} B")
+        if sw != SW_OK or len(data) != 20:
+            print(f"!! cannot get sender address (SW=0x{sw:04x}, {len(data)} B) — aborting")
+            print("!! if SW=0x6982/0x6984 the secure world locked or zeroized: power-cycle and retry")
+            return 1
+        sender = data
+        print(f"    sender = 0x{sender.hex()}")
+
+        payload = build_payload(sender, req)
+        # 45 s fits an `e2e-test` image, where confirm() is short-circuited. On
+        # a REAL trusted-UI build the device now blocks on the physical confirm
+        # while a human reads the pages, so the window has to be sized to how
+        # the thing is actually operated, not to the crypto. --confirm-timeout
+        # sets it; the default stays 45 s so automated runs fail fast.
+        hid.timeout_s = float(req.get("confirm_timeout") or 45.0)
+        if hid.timeout_s > 45.0:
+            print(f"    (waiting up to {hid.timeout_s:.0f}s — confirm on the DEVICE)")
+        print(f"\n==> INS 0x30 SIGN_USEROP — chain {req['chain_id']}, flags 0x{req['flags']:08x}, "
+              f"nonce {req['nonce']}, {len(payload)} B payload, "
+              f"{(len(payload) + 254) // 255} chained APDU(s)")
+        sw, resp = send_chained(hid, INS_SIGN_USEROP, payload)
+        print(f"    SW=0x{sw:04x}  response={len(resp)} B")
+
+        if resp:
+            with open(args.out, "wb") as fh:
+                fh.write(resp)
+            print(f"    raw response saved -> {args.out}")
+
+        check("SW", sw, SW_OK)
+        if sw != SW_OK:
+            print("\n!! device refused the sign; response bytes (if any) saved for analysis")
+            return 1
+
+        # Expected: [count(8)][init_len(4)][initCode][t1_len(4)=0][t2_len(4)=4128][t2]
+        expected_total = 8 + 4 + want_init_len + 4 + 4 + SIG_WRAPPER_LEN
+        check("total length", len(resp), expected_total)
+        if len(resp) < 20:
+            print("!! response too short to parse")
+            return 1
+
+        count = int.from_bytes(resp[0:8], "big")
+        init_len = int.from_bytes(resp[8:12], "big")
+        print(f"    ..    new_offchain_count       = {count}")
+        check("init_code_len", init_len, want_init_len)
+        init_code = resp[12 : 12 + init_len]
+        off = 12 + init_len
+        t1_len = int.from_bytes(resp[off : off + 4], "big")
+        check("type1_len (no flag)", t1_len, 0)
+        off += 4 + t1_len
+        t2_len = int.from_bytes(resp[off : off + 4], "big")
+        check("type2_len", t2_len, SIG_WRAPPER_LEN)
+        off += 4
+        t2 = resp[off : off + t2_len]
+
+        if len(t2) == SIG_WRAPPER_LEN:
+            # abi.encode(uint256 ownerIndex, bytes c10Sig)
+            owner_index = int.from_bytes(t2[0:32], "big")
+            bytes_off = int.from_bytes(t2[32:64], "big")
+            sig_len = int.from_bytes(t2[64:96], "big")
+            print(f"    ..    wrapper.ownerIndex       = {owner_index}")
+            check("wrapper bytes offset", bytes_off, 0x40)
+            check("wrapper sig length", sig_len, C10_SIG_LEN)
+            sig = t2[96 : 96 + C10_SIG_LEN]
+            nonzero = sum(1 for b in sig if b)
+            print(f"    ..    c10 sig first 16 B      = {sig[:16].hex()}")
+            print(f"    ..    c10 sig nonzero bytes   = {nonzero}/{C10_SIG_LEN}")
+            # An all-zero or near-constant signature would mean a stub, not a sign.
+            check("sig is not all zeros", nonzero > C10_SIG_LEN // 2, True)
+
+        # Everything the device committed to, plus what it returned. An on-chain
+        # UserOp must reuse these fields byte-for-byte; the wallet re-hashes them
+        # (PQSmartWallet.sphincsDigest), so any drift fails signature validation.
+        rec = dict(req)
+        # Transport-only knob; keep it out of the signed-request record, which
+        # fork_submit_userop.py replays field-for-field.
+        rec.pop("confirm_timeout", None)
+        rec.update({
+            "sender": "0x" + sender.hex(),
+            "entryPoint": "0x" + ENTRY_POINT_V06.hex(),
+            "newOffchainCount": count,
+            "initCode": "0x" + init_code.hex(),
+            "type2Wrapper": "0x" + t2.hex(),
+        })
+        req_out = args.req_out or (args.out + ".json")
+        with open(req_out, "w") as fh:
+            json.dump(rec, fh, indent=1)
+        print(f"    request + parsed response -> {req_out}")
+    except TimeoutError as e:
+        print(f"\n!! TIMEOUT: {e}")
+        print("!! The window likely closed (PendSV holds the CPU in secure state).")
+        print("!! Power-cycle the board and re-run via wait_and_smoke.sh timing.")
+        return 2
+    finally:
+        hid.close()
+
+    print()
+    if FAILURES:
+        print(f"=== FAIL === {len(FAILURES)} check(s):")
+        for f in FAILURES:
+            print(f"  - {f}")
+        return 1
+    print("=== PASS === device produced a well-formed C10 Type-2 signature over USB")
+    print(f"    (cryptographic verification still pending — bytes in {args.out})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,6 @@
+[package]
+name = "cortex-m"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Host stub of the cortex-m crate for the secure-miri-tests mount crate. Only the `asm` surface the mounted production files reference."
