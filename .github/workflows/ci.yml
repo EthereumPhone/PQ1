@@ -236,6 +236,15 @@ jobs:
       - name: Pixel-UI design gates (pq-ui-check, ui-px-assets-check, pq-ui-port-diff)
         run: |
           python3 -m pip install --quiet -r tools/pq-ui/requirements.txt
+          # The vendored requirements say `Pillow>=10.0`, and that file is
+          # byte-pinned by MANIFEST.sha256 so it cannot be edited here.
+          # Pillow's rasteriser decides the glyph bitmaps -> the atlas bytes
+          # -> ATLAS_ROOT, which the secure image re-hashes around every
+          # pixel dialog, so the bake records the version it ran under.
+          # Unpinned, CI re-baked under whatever it resolved to and
+          # ui-px-assets-check reported drift on every run; it could only
+          # pass on a machine that happened to have the recorded version.
+          python3 -m pip install --quiet "Pillow==10.2.0"
           make pq-ui-check
           make ui-px-assets-check
           make pq-ui-port-diff

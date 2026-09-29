@@ -4770,6 +4770,22 @@ ui-px-assets: ## Re-bake secure/assets/ui-px/*, nonsecure/assets/ui-px/atlas.pq1
 	@python3 tools/ui_px_assets.py
 
 ui-px-assets-check: ## Verify the committed ui-px assets (incl. the NS atlas container + pinned root) are reproducible
+	@# Pillow decides the glyph bitmaps, so it decides the atlas bytes and
+	@# therefore ATLAS_ROOT. Check it FIRST: otherwise a version difference
+	@# surfaces as an opaque "ui-px asset drift: manifest.json" and reads as
+	@# "someone forgot to re-bake" when the bake is in fact fine and the
+	@# TOOL differs. That misdiagnosis is what kept this gate red in CI while
+	@# it passed on every developer box with the recorded version.
+	@want=$$(python3 -c "import json;print(json.load(open('secure/assets/ui-px/manifest.json'))['pillow'])"); \
+	have=$$(python3 -c "import PIL;print(PIL.__version__)"); \
+	if [ "$$want" != "$$have" ]; then \
+	  echo "ui-px assets: Pillow $$have, but the committed bake recorded $$want."; \
+	  echo "  The atlas is rasterised by Pillow, so a different version can change"; \
+	  echo "  ATLAS_ROOT — which the secure image re-hashes around every pixel dialog."; \
+	  echo "  Install the recorded version (pip install 'Pillow==$$want'), or re-bake"; \
+	  echo "  deliberately with 'make ui-px-assets' and re-approve the new root."; \
+	  exit 1; \
+	fi
 	@tmp=$$(mktemp -d); \
 	python3 tools/ui_px_assets.py --out $$tmp --ns-out $$tmp/ns --metrics $$tmp/metrics_gen.rs --root-rs $$tmp/atlas_root.rs >/dev/null && \
 	for f in fonts.bin safe.a4 mainnet.a4 base.a4 eth.a4 blind.a4 rotate.a4 usdc.a4 usdt.a4 dai.a4 cowswap.a4 fprint.a4 manifest.json; do \
