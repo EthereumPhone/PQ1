@@ -27,7 +27,7 @@ verified Safe inputs ──► safe_display::classify()  (FI gates, refund / inn
   `screen` (256-byte printable-ASCII records; `Screens` overlays a byte
   scratch region), `fit` (tier table + baked advance widths; never
   truncates), `driver` (hub / page-first / commit arming), `input` (tap ≤ 250,
-  hold 2000, snap-back 200, chord 150, debounce 25 ms), `motion` (Q16 springs,
+  hold 2000, snap-back 200, chord 150, debounce 30 ms), `motion` (Q16 springs,
   curves, cycles), `raster` (428×N RGB565 strips, AA disc/ring/chord/chevron/
   marks, 4-bit glyph blit), `font` (atlas reader), `scene` (DESIGN.md grid +
   the animation runtime), `metrics_gen` (generated advance tables).
@@ -105,10 +105,11 @@ strips are skipped (per-strip 64-bit digests), frame period ≈ 24 ms
 > 100 ms per frame: the disc / ring / trail evaluated a 64-bit-divide Newton
 square root for every pixel of each circle's bounding box.
 
-**Input on hardware.** Taps are debounced in the SysTick ISR (25 ms lockout
+**Input on hardware.** Taps are debounced in the SysTick ISR (30 ms lockout
 per side, first edge exact), replayed with their timestamps, and the frame
 clock is read after the replay. `TAP_MAX_MS` is **500 ms on the device**
-(the PQ-UI reference says 250): deliberate presses on the pq1 switches run
+(the PQ-UI reference said 250 when this was written, and ADOPTED 500 in
+198bbcb9 — it is no longer a deviation): deliberate presses on the pq1 switches run
 250–400 ms and were being demoted to aborted holds ("only a double-click
 advances", EVT #1 2026-09-22). **The sign gesture on the device is the
 two-button chord click** (both down together, fires on release; owner
@@ -153,3 +154,26 @@ confirm through the pixel UI too; see the plan's step 3.
 7. Two branch fixes rode along: `hw/sca_trigger.rs` referenced `crate::board`
    on QEMU builds (gated on `sca-trigger`), and the QEMU mailbox transport
    lacked `get_pin_attempt_log_call`.
+
+
+## UPDATE 2026-09-30 — re-synced to PQ-UI 198bbcb9 (the Sep-27 re-audit)
+
+The vendored design system moved from `0b3ca495` (Sep 22) to `198bbcb9`
+(Sep 28) and the port was brought into conformance with it. What changed
+here:
+
+* **`placeholder_ramp` hashes over 13 ramps, not 14** (`MONO_RAMP`). The
+  reference's own fix, audit COL-01: a hashed key reaching the mono ramp
+  drew a disc byte-identical to ether's, and the address form of that key
+  is chosen by whoever deploys the contract. See the commit for the scope.
+* `DEBOUNCE_MS` 25 -> 30 and `PRESS_FEEDBACK_MS` 120 -> 145 (the
+  two-panel-frame floor). The debounce is **not re-validated on glass**.
+* Placeholder ramps 0 and 12 retuned; marks re-centred on their ink, so
+  the atlas is 75,176 B of its 77,824 B NS window.
+* **Left no longer leads on from the ask** (RULES.md § A): a left tap on
+  either ask is inert, right enters. Hold-left still declines everywhere.
+* `pq-ui-port-diff` now checks the palette and the hash rule as well as
+  the timings — 26 timing rows + 96 colour rows.
+
+`spec/colors.json` and `spec/icons.json` reached the handoff only in this
+upstream revision; before it nothing bound the palette at all.

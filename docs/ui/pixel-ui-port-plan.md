@@ -46,7 +46,7 @@ frame goldens for 11 Safe transcripts (`pqsigner-ui-px/tests/fixtures/safe/`,
 2026-09-23: `make e2e-px` 40/40 scenarios + the three ui-px assertions
 (4 pixel transcripts, 0 Legacy records, well-formed records); secure host
 tests 2596/0; `pq-ui-check`, `ui-px-assets-check`, `pq-ui-port-diff`
-(24 MATCH, 1 recorded DEVIATION) green. Only an EVT walk-through of the Safe
+(24 MATCH, 1 recorded DEVIATION; 26 MATCH / 0 DEVIATION after the 2026-09-30 re-sync) green. Only an EVT walk-through of the Safe
 flows is still pending (human).
 
 ### 2. Single-UserOp families — DONE (2026-09-23)
@@ -275,7 +275,7 @@ ASSERTIONS PASSED (47 pixel transcripts unchanged, plus the step-4 checks:
 SPLASH / READY / SIGNED / NOTICE / GENERATING KEYS status screens and **zero
 16×4 text pages in the whole run**); plain `make e2e` ALL ASSERTIONS
 PASSED; `make ui-px-check` green (vendored tree, reproducible bake incl.
-`fprint.a4`, port_diff 24 MATCH / 1 recorded DEVIATION);
+`fprint.a4`, port_diff 24 MATCH / 1 recorded DEVIATION — 26 MATCH / 0 DEVIATION plus 96 colour rows after the 2026-09-30 re-sync to 198bbcb9);
 `tools/ui_px_verdict_geometry.py --check` up to date; catalogue
 `docs/ui-screens/px/` regenerated (773 frames: the 30 e2e scenarios with only
 their fingerprint discs changed, plus 8 `lifecycle-*` sections from the host
