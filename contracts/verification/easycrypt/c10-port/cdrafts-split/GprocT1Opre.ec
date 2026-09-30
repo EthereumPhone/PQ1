@@ -1060,9 +1060,13 @@ have h3 : z = z %/ (l' * k * SPHINCS_PLUS.t) * (l' * k * SPHINCS_PLUS.t)
               + z %% (l' * k * SPHINCS_PLUS.t) by rewrite -divz_eq.
 have hzw : 0 <= z < N * (l' * k * SPHINCS_PLUS.t) by smt().
 split; 1: by smt().
-split; 1: by split; [rewrite divz_ge0 | move=> _]; smt(ltz_divLR).
-split; 2: by smt(modz_ge0 ltz_pmod).
-by split; [rewrite divz_ge0 1:// modz_ge0 | move=> _]; smt(ltz_divLR ltz_pmod).
+(* Derive the quotient and remainder bounds without SMT search. *)
+split; 1: by rewrite (divz_ge0 _ _ hlkt) (ltz_divLR _ _ _ hlkt).
+split; 2: by split; [exact (modz_ge0 _ _ (ltr0_neq0 _ hkt))
+                   | move=> _; exact (ltz_pmod _ _ hkt)].
+rewrite (divz_ge0 _ _ hkt) (ltz_divLR _ _ _ hkt) mulrA.
+by split; [exact (modz_ge0 _ _ (ltr0_neq0 _ hlkt))
+          | move=> _; exact (ltz_pmod _ _ hlkt)].
 qed.
 
 lemma tws_uniq (twsL : adrs list) :
@@ -1627,7 +1631,16 @@ have htw : nth witness twsL
           = Index.val (FTWES.mco mk' m').`2 %/ l' * l' * k * SPHINCS_PLUS.t
             + Index.val (FTWES.mco mk' m').`2 %% l' * k * SPHINCS_PLUS.t
             + (E.`2 * SPHINCS_PLUS.t + E.`3) by ring.
-  by apply htwsc; smt(ge2_t).
+  (* Use the existing flat-index bound directly: SMT search in this context
+     can exhaust its per-call budget when proof workers run concurrently. *)
+  have [_ [[hu0 huk] [hv0 hvt]]] := hrng.
+  have ht0 : 0 <= SPHINCS_PLUS.t by apply (ler_trans 2 _ _ _ ge2_t).
+  have hv1 : E.`3 <= SPHINCS_PLUS.t - 1 by rewrite ler_subr_addr -ltzE.
+  have hub := flat_le SPHINCS_PLUS.t E.`2 k E.`3 ht0 hu0 huk hv0 hv1.
+  have hw : 0 <= E.`2 * SPHINCS_PLUS.t + E.`3 < k * SPHINCS_PLUS.t.
+  + split; first exact (addr_ge0 _ _ (mulr_ge0 _ _ hu0 ht0) hv0).
+    by rewrite ltzE -ler_subr_addr.
+  by apply (htwsc _ _ _ hi hj hw).
 have hxs : nth witness xsL
              (Index.val (FTWES.mco mk' m').`2 %/ l' * l' * k * SPHINCS_PLUS.t
               + Index.val (FTWES.mco mk' m').`2 %% l' * k * SPHINCS_PLUS.t
