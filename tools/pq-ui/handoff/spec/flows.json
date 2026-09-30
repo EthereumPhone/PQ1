@@ -8,7 +8,7 @@
      "anim": "qubit",
      "bottom": "USDC APPROVED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -20,7 +20,7 @@
      "anim": "resolve",
      "bottom": "USDC REJECTED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -129,7 +129,7 @@
      "anim": "qubit",
      "bottom": "USDC APPROVED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "usdc",
      "id": "APPROVED",
      "interactive": false,
@@ -157,7 +157,7 @@
      "anim": "resolve",
      "bottom": "BATCH DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -169,7 +169,7 @@
      "anim": "qubit",
      "bottom": "BATCH SIGNED 3 OF 3",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -201,13 +201,13 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "TO",
      "kind": "detail",
      "label": "TO",
@@ -225,7 +225,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "AMOUNT",
      "kind": "detail",
      "label": "AMOUNT",
@@ -234,7 +234,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "MAX FEE",
      "kind": "detail",
      "label": "MAX FEE",
@@ -243,7 +243,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "WORST CASE",
      "kind": "detail",
      "label": "WORST CASE",
@@ -252,7 +252,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "DETAILS",
      "kind": "detail",
      "label": "DETAILS",
@@ -276,8 +276,8 @@
      "anim": "qubit",
      "bottom": "SIGNED 1 OF 3",
      "branded": false,
-     "duration": 8650,
-     "icon": "eth",
+     "duration": 9095,
+     "icon": "letter:T",
      "id": "SIGNED 1",
      "interactive": false,
      "kind": "status",
@@ -303,13 +303,13 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "TO",
      "kind": "detail",
      "label": "TO",
@@ -327,7 +327,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "AMOUNT",
      "kind": "detail",
      "label": "AMOUNT",
@@ -336,7 +336,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "MAX FEE",
      "kind": "detail",
      "label": "MAX FEE",
@@ -345,7 +345,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "WORST CASE",
      "kind": "detail",
      "label": "WORST CASE",
@@ -354,7 +354,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "DETAILS",
      "kind": "detail",
      "label": "DETAILS",
@@ -378,8 +378,8 @@
      "anim": "qubit",
      "bottom": "SIGNED 2 OF 3",
      "branded": false,
-     "duration": 8650,
-     "icon": "eth",
+     "duration": 9095,
+     "icon": "letter:T",
      "id": "SIGNED 2",
      "interactive": false,
      "kind": "status",
@@ -407,13 +407,13 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "TO",
      "kind": "detail",
      "label": "TO",
@@ -431,7 +431,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "AMOUNT",
      "kind": "detail",
      "label": "AMOUNT",
@@ -440,7 +440,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "MAX FEE",
      "kind": "detail",
      "label": "MAX FEE",
@@ -449,7 +449,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "WORST CASE",
      "kind": "detail",
      "label": "WORST CASE",
@@ -458,7 +458,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "DETAILS",
      "kind": "detail",
      "label": "DETAILS",
@@ -482,8 +482,8 @@
      "anim": "qubit",
      "bottom": "BATCH SIGNED 3 OF 3",
      "branded": false,
-     "duration": 8650,
-     "icon": "eth",
+     "duration": 9095,
+     "icon": "letter:T",
      "id": "BATCH SIGNED",
      "interactive": false,
      "kind": "status",
@@ -518,7 +518,7 @@
      "anim": "resolve",
      "bottom": "BATCH DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -550,13 +550,13 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "TO",
      "kind": "detail",
      "label": "TO",
@@ -574,7 +574,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "AMOUNT",
      "kind": "detail",
      "label": "AMOUNT",
@@ -583,7 +583,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "MAX FEE",
      "kind": "detail",
      "label": "MAX FEE",
@@ -592,7 +592,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "WORST CASE",
      "kind": "detail",
      "label": "WORST CASE",
@@ -601,7 +601,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "DETAILS",
      "kind": "detail",
      "label": "DETAILS",
@@ -625,8 +625,8 @@
      "anim": "qubit",
      "bottom": "SIGNED 1 OF 3",
      "branded": false,
-     "duration": 8650,
-     "icon": "eth",
+     "duration": 9095,
+     "icon": "letter:T",
      "id": "SIGNED 1",
      "interactive": false,
      "kind": "status",
@@ -652,13 +652,13 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "TO",
      "kind": "detail",
      "label": "TO",
@@ -676,7 +676,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "AMOUNT",
      "kind": "detail",
      "label": "AMOUNT",
@@ -685,7 +685,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "MAX FEE",
      "kind": "detail",
      "label": "MAX FEE",
@@ -694,7 +694,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "WORST CASE",
      "kind": "detail",
      "label": "WORST CASE",
@@ -703,7 +703,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "DETAILS",
      "kind": "detail",
      "label": "DETAILS",
@@ -727,8 +727,8 @@
      "anim": "resolve",
      "bottom": "BATCH DECLINED",
      "branded": false,
-     "duration": 2850,
-     "icon": "eth",
+     "duration": 3295,
+     "icon": "letter:T",
      "id": "BATCH DECLINED",
      "interactive": false,
      "kind": "status",
@@ -759,7 +759,7 @@
      "anim": "qubit",
      "bottom": "UNKNOWN CALL CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -771,7 +771,7 @@
      "anim": "resolve",
      "bottom": "UNKNOWN CALL DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -889,7 +889,7 @@
      "anim": "qubit",
      "bottom": "UNKNOWN CALL CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "blind",
      "id": "CONFIRMED",
      "interactive": false,
@@ -917,7 +917,7 @@
      "anim": "qubit",
      "bottom": "UNKNOWN CALL CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -929,7 +929,7 @@
      "anim": "resolve",
      "bottom": "UNKNOWN CALL DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -1047,7 +1047,7 @@
      "anim": "qubit",
      "bottom": "UNKNOWN CALL CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "blind",
      "id": "CONFIRMED",
      "interactive": false,
@@ -1075,7 +1075,7 @@
      "anim": "qubit",
      "bottom": "BLIND SIGN CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -1087,7 +1087,7 @@
      "anim": "resolve",
      "bottom": "BLIND SIGN DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -1232,7 +1232,7 @@
      "anim": "qubit",
      "bottom": "BLIND SIGN CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "blind",
      "id": "CONFIRMED",
      "interactive": false,
@@ -1260,7 +1260,7 @@
      "anim": "qubit",
      "bottom": "UNKNOWN CALL CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -1272,7 +1272,7 @@
      "anim": "resolve",
      "bottom": "UNKNOWN CALL DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -1399,7 +1399,7 @@
      "anim": "qubit",
      "bottom": "UNKNOWN CALL CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "blind",
      "id": "CONFIRMED",
      "interactive": false,
@@ -1419,6 +1419,155 @@
    ],
    "source": "flows/blind/unknown_call.py"
   },
+  "chains": {
+   "confirm_index": 5,
+   "default_end": null,
+   "ends": {},
+   "has_early_exit": true,
+   "playable": {
+    "decline_index": null,
+    "screens": 13,
+    "sign_index": null
+   },
+   "screens": [
+    {
+     "chain": 1,
+     "chev": "lr",
+     "hint": true,
+     "icon": "mainnet",
+     "id": "Mainnet",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 10,
+     "chev": "lr",
+     "hint": true,
+     "icon": "op",
+     "id": "Optimism",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 56,
+     "chev": "lr",
+     "hint": true,
+     "icon": "bnb",
+     "id": "BNB",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 137,
+     "chev": "lr",
+     "hint": true,
+     "icon": "polygon",
+     "id": "Polygon",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 324,
+     "chev": "lr",
+     "hint": true,
+     "icon": "zksync",
+     "id": "zkSync",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "bottom": "Confirm?",
+     "chev": "up",
+     "commit": true,
+     "icon": "eth",
+     "id": "CONFIRM?",
+     "kind": "confirm"
+    },
+    {
+     "chain": 5000,
+     "chev": "lr",
+     "hint": true,
+     "icon": "mantle",
+     "id": "Mantle",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 8453,
+     "chev": "lr",
+     "hint": true,
+     "icon": "base",
+     "id": "Base",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 42161,
+     "chev": "lr",
+     "hint": true,
+     "icon": "arbitrum",
+     "id": "Arbitrum",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 43114,
+     "chev": "lr",
+     "hint": true,
+     "icon": "avalanche",
+     "id": "Avalanche",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 59144,
+     "chev": "lr",
+     "hint": true,
+     "icon": "linea",
+     "id": "Linea",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 534352,
+     "chev": "lr",
+     "hint": true,
+     "icon": "scroll",
+     "id": "Scroll",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
+     "chain": 42220,
+     "chain_name": "Celo",
+     "chev": "lr",
+     "hint": true,
+     "icon": "letter:C",
+     "id": "Celo",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    }
+   ],
+   "segments": [
+    [
+     0,
+     13
+    ]
+   ],
+   "source": "flows/chains.py"
+  },
   "contract_call": {
    "confirm_index": null,
    "default_end": "confirmed",
@@ -1427,7 +1576,7 @@
      "anim": "qubit",
      "bottom": "CONTRACT CALL CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -1439,7 +1588,7 @@
      "anim": "resolve",
      "bottom": "CONTRACT CALL DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -1531,7 +1680,7 @@
      "anim": "qubit",
      "bottom": "CONTRACT CALL CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "eth",
      "id": "CONFIRMED",
      "interactive": false,
@@ -1559,7 +1708,7 @@
      "anim": "resolve",
      "bottom": "COWSWAP DECLINED",
      "branded": true,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -1567,11 +1716,23 @@
      "state": "failed",
      "t_resolve": 400
     },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "COWSWAP FAILED",
+     "branded": true,
+     "duration": 9095,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    },
     "signed": {
      "anim": "qubit",
      "bottom": "COWSWAP SIGNED",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -1583,7 +1744,7 @@
    "has_early_exit": true,
    "playable": {
     "decline_index": 11,
-    "screens": 12,
+    "screens": 13,
     "sign_index": 10
    },
    "screens": [
@@ -1661,11 +1822,11 @@
     {
      "chev": "lr",
      "icon": "cowswap",
-     "id": "DETAILS",
+     "id": "FILL",
      "kind": "detail",
-     "label": "DETAILS",
+     "label": "FILL",
      "side": "right",
-     "size": 22
+     "size": 36
     },
     {
      "bottom": "SIGN COWSWAP?",
@@ -1680,7 +1841,7 @@
      "anim": "qubit",
      "bottom": "COWSWAP SIGNED",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "cowswap",
      "id": "SIGNED",
      "interactive": false,
@@ -1708,7 +1869,7 @@
      "anim": "resolve",
      "bottom": "COWSWAP DECLINED",
      "branded": true,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -1716,11 +1877,23 @@
      "state": "failed",
      "t_resolve": 400
     },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "COWSWAP FAILED",
+     "branded": true,
+     "duration": 9095,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    },
     "signed": {
      "anim": "qubit",
      "bottom": "COWSWAP SIGNED",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -1732,7 +1905,7 @@
    "has_early_exit": true,
    "playable": {
     "decline_index": 11,
-    "screens": 12,
+    "screens": 13,
     "sign_index": 10
    },
    "screens": [
@@ -1810,11 +1983,11 @@
     {
      "chev": "lr",
      "icon": "cowswap",
-     "id": "DETAILS",
+     "id": "FILL",
      "kind": "detail",
-     "label": "DETAILS",
+     "label": "FILL",
      "side": "right",
-     "size": 22
+     "size": 36
     },
     {
      "bottom": "SIGN COWSWAP?",
@@ -1829,7 +2002,7 @@
      "anim": "qubit",
      "bottom": "COWSWAP SIGNED",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "cowswap",
      "id": "SIGNED",
      "interactive": false,
@@ -1857,7 +2030,7 @@
      "anim": "resolve",
      "bottom": "EIP1271 DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -1869,7 +2042,7 @@
      "anim": "qubit",
      "bottom": "EIP1271 SIGNED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -1978,7 +2151,7 @@
      "anim": "qubit",
      "bottom": "EIP1271 SIGNED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "eth",
      "id": "SIGNED",
      "interactive": false,
@@ -2006,7 +2179,7 @@
      "anim": "resolve",
      "bottom": "EIP1271 DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -2018,7 +2191,7 @@
      "anim": "qubit",
      "bottom": "EIP1271 SIGNED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -2128,7 +2301,7 @@
      "anim": "qubit",
      "bottom": "EIP1271 SIGNED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "eth",
      "id": "SIGNED",
      "interactive": false,
@@ -2156,7 +2329,7 @@
      "anim": "resolve",
      "bottom": "SWAP DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -2168,7 +2341,7 @@
      "anim": "qubit",
      "bottom": "SWAP SIGNED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -2179,18 +2352,11 @@
    },
    "has_early_exit": false,
    "playable": {
-    "decline_index": 10,
-    "screens": 11,
-    "sign_index": 9
+    "decline_index": 9,
+    "screens": 10,
+    "sign_index": 8
    },
    "screens": [
-    {
-     "band_chev": true,
-     "bottom": "ERC-7730 CLEAR SIGNING",
-     "icon": "dev",
-     "id": "ERC7730",
-     "kind": "hero"
-    },
     {
      "bottom": "SIGN SWAP COINBASE UNISWAP V3?",
      "chev": "lr",
@@ -2267,7 +2433,7 @@
      "anim": "qubit",
      "bottom": "SWAP SIGNED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "eth",
      "id": "SIGNED",
      "interactive": false,
@@ -2282,7 +2448,7 @@
    "segments": [
     [
      0,
-     9
+     8
     ]
    ],
    "source": "flows/erc7730/swap.py"
@@ -2295,7 +2461,7 @@
      "anim": "qubit",
      "bottom": "DIGEST CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -2307,7 +2473,7 @@
      "anim": "resolve",
      "bottom": "DIGEST DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -2352,7 +2518,7 @@
      "anim": "qubit",
      "bottom": "DIGEST CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "fingerprint",
      "id": "CONFIRMED",
      "interactive": false,
@@ -2380,7 +2546,7 @@
      "anim": "qubit",
      "bottom": "SAFE TX HASH CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -2392,7 +2558,7 @@
      "anim": "resolve",
      "bottom": "SAFE TX HASH DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -2437,7 +2603,7 @@
      "anim": "qubit",
      "bottom": "SAFE TX HASH CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "fingerprint",
      "id": "CONFIRMED",
      "interactive": false,
@@ -2465,13 +2631,25 @@
      "anim": "arrive",
      "bottom": "UPDATE DECLINED",
      "branded": true,
-     "duration": 11250,
+     "duration": 10815,
      "interactive": false,
      "lead": "explosion",
      "loops": true,
      "result": "x",
      "state": "failed",
-     "t_resolve": 8800
+     "t_resolve": 8365
+    },
+    "failed": {
+     "anim": "arrive",
+     "bottom": "UPDATE FAILED",
+     "branded": true,
+     "duration": 13400,
+     "interactive": false,
+     "lead": "explosion",
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 10950
     },
     "updated": {
      "anim": "arrive",
@@ -2489,7 +2667,7 @@
    "has_early_exit": false,
    "playable": {
     "decline_index": 5,
-    "screens": 6,
+    "screens": 7,
     "sign_index": 4
    },
    "screens": [
@@ -2536,7 +2714,7 @@
      "interactive": false,
      "kind": "status",
      "lead": "explosion",
-     "lead_gap": null,
+     "lead_clear": null,
      "loops": true,
      "rests_on_token": true,
      "result": "check",
@@ -2672,7 +2850,7 @@
      "kind": "hero"
     },
     {
-     "bottom": "RAMP 12 #4C73CF NEW",
+     "bottom": "RAMP 12 #4A7A1C NEW",
      "chev": "lr",
      "commit": true,
      "hint": true,
@@ -2706,25 +2884,25 @@
      "anim": "pin_entering",
      "bottom": "PIN ENTERED",
      "branded": false,
-     "duration": 11720,
+     "duration": 11649,
      "interactive": true,
      "lead": null,
      "loops": false,
      "result": null,
      "state": "failed",
-     "t_resolve": 9270
+     "t_resolve": 9199
     },
     "unlocked": {
      "anim": "pin_entering",
      "bottom": "PIN ENTERED",
      "branded": false,
-     "duration": 11990,
+     "duration": 11919,
      "interactive": true,
      "lead": null,
      "loops": false,
      "result": null,
      "state": "done",
-     "t_resolve": 9540
+     "t_resolve": 9469
     }
    },
    "has_early_exit": false,
@@ -2739,7 +2917,7 @@
      "bottom": "PIN ENTERED",
      "branded": false,
      "busy": "ENTER PIN",
-     "duration": 11920,
+     "duration": 11956,
      "icon": "eth",
      "id": "TRY 1",
      "interactive": true,
@@ -2748,14 +2926,14 @@
      "rests_on_token": false,
      "result": null,
      "state": "failed",
-     "t_resolve": 9470
+     "t_resolve": 9506
     },
     {
      "anim": "pin_entering",
      "bottom": "PIN ENTERED",
      "branded": false,
      "busy": "ENTER PIN",
-     "duration": 14650,
+     "duration": 14679,
      "icon": "eth",
      "id": "TRY 2",
      "interactive": true,
@@ -2764,14 +2942,14 @@
      "rests_on_token": false,
      "result": null,
      "state": "failed",
-     "t_resolve": 12200
+     "t_resolve": 12229
     },
     {
      "anim": "pin_entering",
      "bottom": "PIN ENTERED",
      "branded": false,
-     "busy": "ENTER PIN",
-     "duration": 11990,
+     "busy": "LAST ATTEMPT",
+     "duration": 11919,
      "icon": "eth",
      "id": "TRY 3",
      "interactive": true,
@@ -2780,7 +2958,7 @@
      "rests_on_token": false,
      "result": null,
      "state": "done",
-     "t_resolve": 9540
+     "t_resolve": 9469
     }
    ],
    "segments": [],
@@ -2794,7 +2972,7 @@
      "anim": "resolve",
      "bottom": "SLOT ROTATION DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -2806,7 +2984,7 @@
      "anim": "qubit",
      "bottom": "SLOT ROTATED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -2862,7 +3040,7 @@
      "anim": "qubit",
      "bottom": "SLOT ROTATED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "rotate",
      "id": "ROTATED",
      "interactive": false,
@@ -2890,7 +3068,7 @@
      "anim": "resolve",
      "bottom": "SAFE TX DECLINED",
      "branded": true,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -2898,11 +3076,23 @@
      "state": "failed",
      "t_resolve": 400
     },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "SAFE TX FAILED",
+     "branded": true,
+     "duration": 9095,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    },
     "signed": {
      "anim": "qubit",
      "bottom": "SIGNED SAFE TX",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -2914,7 +3104,7 @@
    "has_early_exit": false,
    "playable": {
     "decline_index": 8,
-    "screens": 9,
+    "screens": 10,
     "sign_index": 7
    },
    "screens": [
@@ -2985,7 +3175,7 @@
      "anim": "qubit",
      "bottom": "SIGNED SAFE TX",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "safe",
      "id": "SIGNED",
      "interactive": false,
@@ -3013,7 +3203,7 @@
      "anim": "resolve",
      "bottom": "SAFE TX DECLINED",
      "branded": true,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -3021,11 +3211,23 @@
      "state": "failed",
      "t_resolve": 400
     },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "SAFE TX FAILED",
+     "branded": true,
+     "duration": 9095,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    },
     "signed": {
      "anim": "qubit",
      "bottom": "SIGNED SAFE TX",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -3037,7 +3239,7 @@
    "has_early_exit": true,
    "playable": {
     "decline_index": 11,
-    "screens": 12,
+    "screens": 13,
     "sign_index": 10
    },
    "screens": [
@@ -3051,6 +3253,15 @@
      "kind": "hero"
     },
     {
+     "chain": 8453,
+     "chev": "lr",
+     "icon": "base",
+     "id": "NETWORK",
+     "kind": "detail",
+     "side": "right",
+     "size": 36
+    },
+    {
      "chev": "lr",
      "icon": "safe",
      "id": "SAFE ACCT",
@@ -3062,30 +3273,21 @@
     {
      "chev": "lr",
      "icon": "safe",
-     "id": "BLIND SIGN",
+     "id": "TO",
      "kind": "detail",
-     "label": "BLIND SIGN",
-     "pulse": true,
+     "label": "TO",
      "side": "right",
      "size": 22
     },
     {
      "chev": "lr",
      "icon": "safe",
-     "id": "TO",
+     "id": "BLIND SIGN",
      "kind": "detail",
-     "label": "TO",
+     "label": "BLIND SIGN",
+     "pulse": true,
      "side": "left",
      "size": 22
-    },
-    {
-     "chain": 8453,
-     "chev": "lr",
-     "icon": "base",
-     "id": "CHAIN",
-     "kind": "detail",
-     "side": "right",
-     "size": 36
     },
     {
      "bottom": "Confirm?",
@@ -3101,7 +3303,7 @@
      "id": "TX INFO",
      "kind": "detail",
      "label": "TX INFO",
-     "side": "left",
+     "side": "right",
      "size": 28
     },
     {
@@ -3110,7 +3312,7 @@
      "id": "CALL DATA",
      "kind": "detail",
      "label": "CALL DATA",
-     "side": "right",
+     "side": "left",
      "size": 22
     },
     {
@@ -3119,7 +3321,8 @@
      "id": "TX HASH",
      "kind": "detail",
      "label": "TX HASH",
-     "side": "left",
+     "pages": 2,
+     "side": "right",
      "size": 22
     },
     {
@@ -3135,7 +3338,7 @@
      "anim": "qubit",
      "bottom": "SIGNED SAFE TX",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "safe",
      "id": "SIGNED",
      "interactive": false,
@@ -3163,7 +3366,7 @@
      "anim": "resolve",
      "bottom": "SAFE TX DECLINED",
      "branded": true,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -3171,11 +3374,23 @@
      "state": "failed",
      "t_resolve": 400
     },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "SAFE TX FAILED",
+     "branded": true,
+     "duration": 9095,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    },
     "signed": {
      "anim": "qubit",
      "bottom": "SIGNED SAFE TRANSACTION",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -3187,7 +3402,7 @@
    "has_early_exit": true,
    "playable": {
     "decline_index": 11,
-    "screens": 12,
+    "screens": 13,
     "sign_index": 10
    },
    "screens": [
@@ -3201,19 +3416,10 @@
      "kind": "hero"
     },
     {
-     "chev": "lr",
-     "icon": "safe",
-     "id": "AMOUNT",
-     "kind": "detail",
-     "label": "SEND",
-     "side": "left",
-     "size": 36
-    },
-    {
      "chain": 1,
      "chev": "lr",
      "icon": "mainnet",
-     "id": "CHAIN",
+     "id": "NETWORK",
      "kind": "detail",
      "side": "right",
      "size": 36
@@ -3237,6 +3443,15 @@
      "size": 22
     },
     {
+     "chev": "lr",
+     "icon": "safe",
+     "id": "AMOUNT",
+     "kind": "detail",
+     "label": "SEND",
+     "side": "left",
+     "size": 36
+    },
+    {
      "bottom": "Confirm?",
      "chev": "up",
      "commit": true,
@@ -3250,7 +3465,7 @@
      "id": "TX INFO",
      "kind": "detail",
      "label": "TX INFO",
-     "side": "left",
+     "side": "right",
      "size": 28
     },
     {
@@ -3259,7 +3474,7 @@
      "id": "CALL DATA",
      "kind": "detail",
      "label": "CALL DATA",
-     "side": "right",
+     "side": "left",
      "size": 22
     },
     {
@@ -3268,7 +3483,8 @@
      "id": "TX HASH",
      "kind": "detail",
      "label": "TX HASH",
-     "side": "left",
+     "pages": 2,
+     "side": "right",
      "size": 22
     },
     {
@@ -3284,7 +3500,7 @@
      "anim": "qubit",
      "bottom": "SIGNED SAFE TRANSACTION",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "safe",
      "id": "SIGNED",
      "interactive": false,
@@ -3312,7 +3528,7 @@
      "anim": "resolve",
      "bottom": "ENABLE MODULE DECLINED",
      "branded": true,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -3320,11 +3536,23 @@
      "state": "failed",
      "t_resolve": 400
     },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "ENABLE MODULE FAILED",
+     "branded": true,
+     "duration": 9095,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    },
     "signed": {
      "anim": "qubit",
      "bottom": "ENABLE MODULE APPROVED",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -3336,7 +3564,7 @@
    "has_early_exit": false,
    "playable": {
     "decline_index": 8,
-    "screens": 9,
+    "screens": 10,
     "sign_index": 7
    },
    "screens": [
@@ -3407,7 +3635,7 @@
      "anim": "qubit",
      "bottom": "ENABLE MODULE APPROVED",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "safe",
      "id": "SIGNED",
      "interactive": false,
@@ -3435,7 +3663,7 @@
      "anim": "resolve",
      "bottom": "SAFE TX DECLINED",
      "branded": true,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -3443,11 +3671,23 @@
      "state": "failed",
      "t_resolve": 400
     },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "SAFE TX FAILED",
+     "branded": true,
+     "duration": 9095,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    },
     "signed": {
      "anim": "qubit",
      "bottom": "SIGNED SAFE TX",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -3459,7 +3699,7 @@
    "has_early_exit": true,
    "playable": {
     "decline_index": 11,
-    "screens": 12,
+    "screens": 13,
     "sign_index": 10
    },
    "screens": [
@@ -3493,20 +3733,20 @@
     {
      "chev": "lr",
      "icon": "safe",
-     "id": "SEND",
+     "id": "TO",
      "kind": "detail",
-     "label": "SEND",
+     "label": "TO",
      "side": "right",
-     "size": 28
+     "size": 22
     },
     {
      "chev": "lr",
      "icon": "safe",
-     "id": "TO",
+     "id": "SEND",
      "kind": "detail",
-     "label": "TO",
+     "label": "SEND",
      "side": "left",
-     "size": 22
+     "size": 28
     },
     {
      "bottom": "Confirm?",
@@ -3556,7 +3796,7 @@
      "anim": "qubit",
      "bottom": "SIGNED SAFE TX",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "safe",
      "id": "SIGNED",
      "interactive": false,
@@ -3584,7 +3824,7 @@
      "anim": "resolve",
      "bottom": "SAFE TX EXECUTION DECLINED",
      "branded": true,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -3592,11 +3832,23 @@
      "state": "failed",
      "t_resolve": 400
     },
+    "failed": {
+     "anim": "qubit",
+     "bottom": "SAFE TX EXECUTION FAILED",
+     "branded": true,
+     "duration": 9095,
+     "interactive": false,
+     "lead": null,
+     "loops": true,
+     "result": "x",
+     "state": "failed",
+     "t_resolve": 6200
+    },
     "signed": {
      "anim": "qubit",
      "bottom": "SAFE TX EXECUTED",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -3608,7 +3860,7 @@
    "has_early_exit": false,
    "playable": {
     "decline_index": 9,
-    "screens": 10,
+    "screens": 11,
     "sign_index": 8
    },
    "screens": [
@@ -3642,20 +3894,20 @@
     {
      "chev": "lr",
      "icon": "safe",
-     "id": "SEND",
+     "id": "TO",
      "kind": "detail",
-     "label": "SEND",
+     "label": "TO",
      "side": "right",
-     "size": 36
+     "size": 22
     },
     {
      "chev": "lr",
      "icon": "safe",
-     "id": "TO",
+     "id": "SEND",
      "kind": "detail",
-     "label": "TO",
+     "label": "SEND",
      "side": "left",
-     "size": 22
+     "size": 36
     },
     {
      "chev": "lr",
@@ -3688,7 +3940,7 @@
      "anim": "qubit",
      "bottom": "SAFE TX EXECUTED",
      "branded": true,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "safe",
      "id": "SIGNED",
      "interactive": false,
@@ -3716,7 +3968,7 @@
      "anim": "qubit",
      "bottom": "TRANSACTION CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -3728,7 +3980,7 @@
      "anim": "resolve",
      "bottom": "DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -3740,7 +3992,7 @@
      "anim": "qubit",
      "bottom": "TRANSACTION FAILED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -3823,7 +4075,7 @@
      "anim": "qubit",
      "bottom": "TRANSACTION CONFIRMED",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "eth",
      "id": "CONFIRMED",
      "interactive": false,
@@ -3851,7 +4103,7 @@
      "anim": "resolve",
      "bottom": "TRANSACTION DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -3863,7 +4115,7 @@
      "anim": "qubit",
      "bottom": "TRANSACTION SUCCESSFUL",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -3884,7 +4136,7 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
@@ -3899,7 +4151,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "TO",
      "kind": "detail",
      "label": "TO",
@@ -3908,7 +4160,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "VALUE",
      "kind": "detail",
      "label": "VALUE",
@@ -3917,7 +4169,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "MAX FEE",
      "kind": "detail",
      "label": "MAX FEE",
@@ -3926,7 +4178,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "WORST CASE",
      "kind": "detail",
      "label": "WORST CASE",
@@ -3935,7 +4187,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "DETAIL",
      "kind": "detail",
      "label": "DETAIL",
@@ -3947,7 +4199,7 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
@@ -3955,8 +4207,8 @@
      "anim": "qubit",
      "bottom": "TRANSACTION SUCCESSFUL",
      "branded": false,
-     "duration": 8650,
-     "icon": "eth",
+     "duration": 9095,
+     "icon": "letter:T",
      "id": "SUCCESSFUL",
      "interactive": false,
      "kind": "status",
@@ -3983,7 +4235,7 @@
      "anim": "resolve",
      "bottom": "TRANSACTION DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -3995,7 +4247,7 @@
      "anim": "qubit",
      "bottom": "TRANSACTION SUCCESSFUL",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -4016,7 +4268,7 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
@@ -4031,7 +4283,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "TO",
      "kind": "detail",
      "label": "TO",
@@ -4040,7 +4292,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "VALUE",
      "kind": "detail",
      "label": "VALUE",
@@ -4049,7 +4301,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "MAX FEE",
      "kind": "detail",
      "label": "MAX FEE",
@@ -4058,7 +4310,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "WORST CASE",
      "kind": "detail",
      "label": "WORST CASE",
@@ -4067,7 +4319,7 @@
     },
     {
      "chev": "lr",
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "DETAIL",
      "kind": "detail",
      "label": "DETAIL",
@@ -4079,7 +4331,7 @@
      "chev": "lr",
      "commit": true,
      "hint": true,
-     "icon": "eth",
+     "icon": "letter:T",
      "id": "SEND",
      "kind": "hero"
     },
@@ -4087,8 +4339,8 @@
      "anim": "qubit",
      "bottom": "TRANSACTION SUCCESSFUL",
      "branded": false,
-     "duration": 8650,
-     "icon": "eth",
+     "duration": 9095,
+     "icon": "letter:T",
      "id": "SUCCESSFUL",
      "interactive": false,
      "kind": "status",
@@ -4107,6 +4359,200 @@
    ],
    "source": "flows/send_token_named.py"
   },
+  "setup/first_run": {
+   "confirm_index": null,
+   "default_end": "successful",
+   "ends": {
+    "failed": {
+     "anim": "check_word",
+     "bottom": "",
+     "branded": false,
+     "duration": 7469,
+     "interactive": true,
+     "lead": null,
+     "loops": false,
+     "result": null,
+     "state": "failed",
+     "t_resolve": 5019
+    },
+    "successful": {
+     "anim": "check_word",
+     "bottom": "",
+     "branded": false,
+     "duration": 7889,
+     "interactive": true,
+     "lead": null,
+     "loops": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 5439
+    }
+   },
+   "has_early_exit": false,
+   "playable": {
+    "decline_index": null,
+    "screens": 11,
+    "sign_index": null
+   },
+   "screens": [
+    {
+     "bottom": "SET UP PQ1?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "dots",
+     "id": "SETUP",
+     "kind": "hero"
+    },
+    {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "busy": "SET PIN",
+     "duration": 7540,
+     "icon": "dots",
+     "id": "SET PIN",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 7140
+    },
+    {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "busy": "REPEAT PIN",
+     "duration": 7540,
+     "icon": "dots",
+     "id": "REPEAT PIN",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 7140
+    },
+    {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "busy": "SET DURESS PIN",
+     "duration": 8060,
+     "icon": "dots",
+     "id": "SET DURESS PIN",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 7660
+    },
+    {
+     "anim": "pin_entering",
+     "bottom": "PIN ENTERED",
+     "branded": false,
+     "busy": "REPEAT DURESS PIN",
+     "duration": 8060,
+     "icon": "dots",
+     "id": "REPEAT DURESS PIN",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 7660
+    },
+    {
+     "band_chev": true,
+     "bottom": "WRITE DOWN 24 WORDS",
+     "icon": "dots",
+     "id": "BACKUP",
+     "kind": "hero"
+    },
+    {
+     "chev": "lr",
+     "icon": "dots",
+     "id": "WORDS",
+     "kind": "value",
+     "size": 22,
+     "words": 24
+    },
+    {
+     "bottom": "WORDS WRITTEN DOWN?",
+     "chev": "lr",
+     "commit": true,
+     "hint": true,
+     "icon": "dots",
+     "id": "WRITTEN",
+     "kind": "hero"
+    },
+    {
+     "anim": "check_word",
+     "bottom": "",
+     "branded": false,
+     "duration": 5620,
+     "icon": "dots",
+     "id": "CHECK 3",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 5220,
+     "words": 24
+    },
+    {
+     "anim": "check_word",
+     "bottom": "",
+     "branded": false,
+     "duration": 5200,
+     "icon": "dots",
+     "id": "CHECK 12",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 4800,
+     "words": 24
+    },
+    {
+     "anim": "check_word",
+     "bottom": "",
+     "branded": false,
+     "duration": 7889,
+     "icon": "dots",
+     "id": "CHECK 22",
+     "interactive": true,
+     "kind": "status",
+     "loops": false,
+     "rests_on_token": false,
+     "result": null,
+     "state": "done",
+     "t_resolve": 5439,
+     "words": 24
+    }
+   ],
+   "segments": [
+    [
+     0,
+     1
+    ],
+    [
+     5,
+     8
+    ]
+   ],
+   "source": "flows/setup/first_run.py"
+  },
   "transfer_token": {
    "confirm_index": null,
    "default_end": "successful",
@@ -4115,7 +4561,7 @@
      "anim": "resolve",
      "bottom": "TRANSACTION DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -4127,7 +4573,7 @@
      "anim": "qubit",
      "bottom": "TRANSACTION SUCCESSFUL",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -4219,7 +4665,7 @@
      "anim": "qubit",
      "bottom": "TRANSACTION SUCCESSFUL",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "usdc",
      "id": "SUCCESSFUL",
      "interactive": false,
@@ -4247,7 +4693,7 @@
      "anim": "resolve",
      "bottom": "TRANSFER DECLINED",
      "branded": false,
-     "duration": 2850,
+     "duration": 3295,
      "interactive": false,
      "lead": null,
      "loops": false,
@@ -4259,7 +4705,7 @@
      "anim": "qubit",
      "bottom": "TRANSFER SUCCESSFUL",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "interactive": false,
      "lead": null,
      "loops": true,
@@ -4368,7 +4814,7 @@
      "anim": "qubit",
      "bottom": "TRANSFER SUCCESSFUL",
      "branded": false,
-     "duration": 8650,
+     "duration": 9095,
      "icon": "eth",
      "id": "SUCCESSFUL",
      "interactive": false,
@@ -4396,13 +4842,13 @@
      "anim": "padlock",
      "bottom": "LOCKED",
      "branded": false,
-     "duration": 4320,
+     "duration": 4249,
      "interactive": false,
      "lead": null,
      "loops": false,
      "result": null,
      "state": "failed",
-     "t_resolve": 1870
+     "t_resolve": 1799
     }
    },
    "has_early_exit": false,
@@ -4447,7 +4893,7 @@
      "anim": "padlock",
      "bottom": "UNLOCKED",
      "branded": false,
-     "duration": 4850,
+     "duration": 4779,
      "icon": "eth",
      "id": "screen2",
      "interactive": false,
@@ -4456,7 +4902,7 @@
      "rests_on_token": false,
      "result": null,
      "state": "done",
-     "t_resolve": 2400
+     "t_resolve": 2329
     }
    ],
    "segments": [],

@@ -17,9 +17,10 @@ helpers are the identity: every render is the stock film.
 """
 import math
 
-from . import colors, components
+from . import colors, components, typography
 from .layout import BASELINE_Y, CENTER_X
-from .motion import SEED_ART, SEED_MS, back_out, clamp01, ease, ease_out, lerp
+from .motion import (RESULT_FADE_MS, RESULT_LAG_MS, SEED_ART, SEED_MS,
+                     back_out, clamp01, ease, ease_out, lerp)
 
 
 # ------------------------------------------------------------ qubit status --
@@ -117,7 +118,7 @@ def qubit_pose(t, c, seed=None):
              bind=0)
     t = max(0.0, t)
     if t < c.t2:
-        sx, sy, sr = seed or (gx, gy, c.r_big - components.TOKEN_INSET)
+        sx, sy, sr = seed or (gx, gy, components.visible_r(c.r_big))
         u = ease_out(clamp01(t / c.T_SEED))
         r = lerp(sr, c.r_q, u)
         P["bodies"] = [dict(x=lerp(sx, gx, u), y=lerp(sy, gy, u), r=r)]
@@ -161,12 +162,12 @@ def qubit_pose(t, c, seed=None):
     if t < c.t7:
         u = clamp01((t - c.t6) / c.T_FLASH)
         P["bodies"] = [dict(x=gx, y=gy, r=lerp(17, c.r_big, back_out(u)))]
-        P["flash_a"] = (1 - u) * 0.85
+        P["flash_a"] = (1 - u) * colors.FLASH_ALPHA
         P["flash_r"] = c.r_big + 55 * u
         return P
     e = t - c.t7
-    P["check_a"] = clamp01(e / 350)
-    P["text_a"] = clamp01((e - 120) / 350)
+    P["check_a"] = ease_out(clamp01(e / RESULT_FADE_MS))
+    P["text_a"] = ease_out(clamp01((e - RESULT_LAG_MS) / RESULT_FADE_MS))
     return P
 
 
@@ -306,10 +307,10 @@ def draw_status(cv, t, caption_text, cfg=None, result_color=None,
         else:
             components.unknown_disc(cv, b["x"], b["y"], b["r"], ramp)
         if single and done:
-            cv.ring(b["x"], b["y"], b["r"] if rest["flush"] else b["r"] - 1.2,
+            cv.ring(b["x"], b["y"], b["r"] if rest["flush"] else components.visible_r(b["r"]),
                     rest["ring"], components.TOKEN_RING_W)
 
-    if u < 1.0 and P["glyph_a"] > 0.01:
+    if u < 1.0 and P["glyph_a"] > colors.ALPHA_FLOOR:
         # the token's own dress leaving over the first SEED_ART of the morph:
         # the art, then its stroke OVER it (components.token's layer order),
         # both on the arriving body — a BARE qubit is what divides
@@ -319,10 +320,11 @@ def draw_status(cv, t, caption_text, cfg=None, result_color=None,
         cv.ring(b["x"], b["y"], b["r"],
                 (*(seed_ring or colors.WHITE), int(round(255 * a))),
                 components.TOKEN_RING_W)
-    if result_glyph is not None and P["check_a"] > 0.01:
+    if result_glyph is not None and P["check_a"] > colors.ALPHA_FLOOR:
         components.GLYPHS[result_glyph](cv, c.gc[0], c.gc[1], c.r_big,
                                         P["check_a"], rest["glyph"])
     components.flash_ring(cv, c.gc[0], c.gc[1], P["flash_r"], result_color,
-                          P["flash_a"], width=2.5)
+                          P["flash_a"])
 
-    cv.text(caption_text, CENTER_X, BASELINE_Y, 18, P["text_a"], ls=0.5, baseline=True)
+    cv.text(caption_text, CENTER_X, BASELINE_Y, typography.SIZE_QUESTION, P["text_a"],
+            ls=typography.LS_QUESTION, baseline=True)

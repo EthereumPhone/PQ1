@@ -11,7 +11,7 @@ dict(id="CHAIN", kind="detail", side="right", chain=8453, label=None, chev="lr")
 `chain` is the numeric EIP-155 chain id. Everything the screen shows is derived from
 it — the mark, the disc fill, the trail ramp, the caption and its tier
 ({{loc:pq1.chains}}, expanded in {{loc:pq1.layout.normalize_screens}}). A flow sets no
-`icon`, no `lines`, no `size`, and no `circle_x` / `text_x`.
+`icon`, no `lines`, no `size` — and no x position: the layout composes it (there are no `circle_x` / `text_x` keys; `normalize_screens` rejects them).
 
 **Why it is one field.** Before, a flow typed the icon and the caption separately, so
 nothing stopped a screen pairing the Base mark with "on Mainnet". On a signer the disc
@@ -49,12 +49,15 @@ and `SCROLL` are also token tickers and a bare key would repaint those *tokens* 
 *chain's* colours.
 
 The mark is knocked out of the fill: white, or black once the fill is light
-({{loc:pq1.colors.chain_mark_color}}, reading `luma` off the disc's actual fill). A chain
+({{loc:pq1.colors.chain_mark_color}}, reading `luma` off the disc's actual fill), unless
+the brand's own colour is the mark — Base's blue square, zkSync's deep navy — which
+{{loc:pq1.colors.CHAIN_MARK_COLORS}} pins because luma would flatten both to black. A chain
 whose body cannot come from its ramp at all — a black brand, or a mark on white — pins
 the fill in {{loc:pq1.colors.CHAIN_DISC_FILL}} and keeps the ramp for its trail. Only
 those: a merely dark brand darkens its own ramp instead, because pinning a dark disc
 over a bright ramp puts the nearest follower above the token in luminance and inverts
-the trail law. See [token disc](../components/token-disc.md).
+the trail law, and a pale brand needs no pin — zkSync ramps from its own body, so the
+disc is the ramp's last stop and the trail darkens away from it circle by circle. See [token disc](../components/token-disc.md).
 
 ## An unknown chain
 
@@ -63,6 +66,9 @@ ether mark. The disc shows the **first letter of the network's name** — the `l
 glyph namespace, resolved by shape rather than registered
 ({{loc:pq1.components.letter_glyph}}) — on a solid disc whose ramp is hashed from the
 chain id, so the same unrecognised network looks identical on every device and every run.
+The letter is the [token disc](../components/token-disc.md)'s monogram: **Bold** (the one
+Bold glyph on the device), {{tok:pq1.components.MONOGRAM_SCALE}} × the disc radius, so it
+shrinks with the disc in the seed film ({{loc:pq1.components.monogram}}).
 The circle stays exactly where it is.
 
 ```python
@@ -85,6 +91,6 @@ disc is never empty either way.
   resolved to.
 - **Do** keep the caption-to-disc gap constant and let the disc move. It is the one piece
   of this screen a reader notices when it is wrong.
-- **Don't** write `icon=`, `lines=`, `size=`, `circle_x=` or `text_x=` on a chain screen.
+- **Don't** write `icon=`, `lines=` or `size=` on a chain screen.
 - **Don't** give a chain ramp a bare ticker name, and don't let an unknown chain borrow
   another network's mark.

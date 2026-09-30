@@ -9,7 +9,9 @@ ramp's darkening stops, on the idle sweep.
 Each caption names the ramp and the colour the DISC actually wears
 (colors.ramp_palette(i)[0] — ramp 13 fills BLACK, the recognized-logo look,
 not its #F4F4F4 top stop), and marks the seven darkened to the >= 4.5:1
-floor against white (commit 8a7a473, Sep 2026).
+floor against white (commit 8a7a473, Sep 2026). Ramp 12 is the leaf green
+that replaced the old blue in place (it sat on the Mainnet disc's colour —
+rule C-CHAINRAMP, Sep 2026), so it is tagged NEW too.
 
 No ENDS: nothing is signed here, so there is no sign or decline ending —
 flows.playable returns None for both and the bench player just navigates
@@ -21,8 +23,10 @@ flows.playable returns None for both and the bench player just navigates
 """
 from pq1 import colors
 
-# the seven darkened so stop 6 clears 4.5:1 against the white ring + mark
-DARKENED = {0, 2, 5, 7, 8, 9, 12}
+# the six darkened so stop 6 clears 4.5:1 against the white ring + mark,
+# and ramp 12, replaced off the Mainnet blue
+DARKENED = {0, 2, 5, 7, 8, 9}
+REPLACED = {12}
 
 DEFAULTS = dict(icon="eth")
 
@@ -35,7 +39,7 @@ def _idle(i):
     """one palette as an idle screen: the disc in the ramp's fill, its trail
     behind, the caption naming the ramp and that fill"""
     fill = colors.ramp_palette(i)[0]
-    tag = " NEW" if i in DARKENED else ""
+    tag = " NEW" if i in DARKENED | REPLACED else ""
     return dict(id=f"RAMP{i}", kind="hero",
                 bottom=f"RAMP {i} {_hex(fill)}{tag}",
                 token=dict(palette=i), chev="lr", hint=True)

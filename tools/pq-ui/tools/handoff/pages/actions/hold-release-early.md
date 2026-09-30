@@ -24,7 +24,7 @@ One pure function covers the whole gesture, rise and retreat: `motion.hold_fill(
 {{row:released inside the tap window: it was a tap | pq1.motion.TAP_MAX_MS | hold | no fill was ever drawn, so there is nothing to drain — the hold record clears at once and the tap fires}}
 {{row:released mid-rise: the level freezes | - | hold | the level is whatever the linear rise had reached}}
 {{row:the fill drains from there to empty | pq1.motion.HOLD_SNAPBACK_MS | ease_out | measured from the RELEASE, not from the press}}
-{{row:for comparison, a completed hold | pq1.motion.HOLD_COMMIT_MS | linear | the action fires only here — [hold right](hold-right-sign.md)}}
+{{row:for comparison, a completed hold | pq1.motion.HOLD_COMMIT_MS | linear | the action fires only once the fill is drawn full (`motion.hold_full`) — [hold right](hold-right-sign.md)}}
 
 ## Input
 

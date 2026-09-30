@@ -34,6 +34,7 @@ BODY = [
 ENDS = ends()
 ENDS["signed"]["bottom"] = "ENABLE MODULE APPROVED"
 ENDS["declined"]["bottom"] = "ENABLE MODULE DECLINED"
+ENDS["failed"]["bottom"] = "ENABLE MODULE FAILED"
 DEFAULT_END = "signed"      # what the walkthrough resolves to when no --end is given
 # the full walkthrough: every detail, back on the idle ask, then the
 # ending plays — loading resolving to success (or cancellation via --end)

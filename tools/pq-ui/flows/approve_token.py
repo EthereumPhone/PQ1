@@ -27,7 +27,7 @@ every logo on its own coloured trail: components.token_defaults(symbol)
 dresses a listed token in its logo art (components.TOKEN_LOGOS) on the
 trail in the logo's own colour (colors.TOKEN_GRADIENTS, pinned by symbol),
 WETH in the white ether mark on the mono body, and any other symbol in
-the solid placeholder disc hashed from it. Production is untouched: on
+its initial on the solid placeholder disc hashed from it. Production is untouched: on
 device every value is filled per transaction and the same switch serves
 every token.
 

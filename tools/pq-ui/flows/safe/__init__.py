@@ -31,7 +31,10 @@ def ends():
     the brand fill (#13FF7F disc, black edge stroke, black check);
     DECLINED plays NO film — the cancel resolve (status.default_anim):
     the token resolves in place onto the red — #FF423D disc, black X in
-    the centre — the SIGNED construction with red swapped in"""
+    the centre — the SIGNED construction with red swapped in; FAILED is
+    the one X ending that plays the film — the work was dispatched and
+    FAILED (the host answered "no"): the same qubit loading, colliding
+    into the red cancel disc (flows/send.py's pattern, audit HS-02)"""
     return copy.deepcopy({
         "signed": dict(id="SIGNED", kind="status",
                        bottom="SIGNED SAFE TX",
@@ -41,4 +44,8 @@ def ends():
                          result="x", state="failed",
                          bottom="SAFE TX DECLINED",
                          resting=status.branded_resting(colors.RED)),
+        "failed": dict(id="FAILED", kind="status", anim="qubit",
+                       result="x", state="failed",
+                       bottom="SAFE TX FAILED",
+                       resting=status.branded_resting(colors.RED)),
     })

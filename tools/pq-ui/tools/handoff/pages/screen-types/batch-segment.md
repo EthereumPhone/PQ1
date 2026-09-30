@@ -49,19 +49,19 @@ Inside a segment nothing is new: [spring morph](../transitions/spring-morph.md) 
 
 Verified on the reference driver with flow `batch/transfers`. Every segment is its own little flow:
 
-| on | either tap | left tap | right tap | hold right | hold left |
-|---|---|---|---|---|---|
-| BATCH n, announce | to the inner ask | | | unbound | `BATCH DECLINED` |
-| BATCH m, ask form, opening the last transaction | to the inner ask | | | signs the last transaction: `BATCH SIGNED` | `BATCH DECLINED` |
-| the inner ask `SEND …?` | to the first detail | | | signs this transaction | `BATCH DECLINED` |
-| first detail | | back to the inner ask | next detail | unbound | `BATCH DECLINED` |
-| last detail | | previous detail | to the returning BATCH ask | unbound | `BATCH DECLINED` |
-| BATCH n, ask form, returning | to the first detail | | | signs this transaction | `BATCH DECLINED` |
+| on | left tap | right tap | hold right | hold left |
+|---|---|---|---|---|
+| BATCH n, announce | nothing — the segment's first screen | to the inner ask | unbound | `BATCH DECLINED` |
+| BATCH m, ask form, opening the last transaction | nothing — the segment's first screen | to the inner ask | signs the last transaction: `BATCH SIGNED` | `BATCH DECLINED` |
+| the inner ask `SEND …?` | back to the BATCH screen | to the first detail | signs this transaction | `BATCH DECLINED` |
+| first detail | back to the inner ask | next detail | unbound | `BATCH DECLINED` |
+| last detail | previous detail | to the returning BATCH ask | unbound | `BATCH DECLINED` |
+| BATCH n, ask form, returning | back to the last detail | to the first detail | signs this transaction | `BATCH DECLINED` |
 | `SIGNED n OF m` | input-dead | | | | |
 
 - **Hold right signs the current segment's ending**, not the flow's last one: the driver looks up the segment that holds the current screen (`_segment`, {{loc:pq1.driver.FlowDriver._segment}}) and goes to its closing status (`_hold`, {{loc:pq1.driver.FlowDriver._hold}}).
 - **Up to three screens can sign** in a segment: the inner ask and the returning BATCH ask always, and — on the last transaction only — the opening BATCH ask as well. A right hold there signs the last transaction before its details are seen. That is by design: every ask signs.
-- **Taps never cross a segment.** The hub target, the section start and the last navigable screen are all read from the current segment, so a signed transaction cannot be revisited. One gap in the reference driver: the back tap is guarded by `i > 0`, not by the segment's first screen (`_tap`, {{loc:pq1.driver.FlowDriver._tap}}). It never shows, because every live segment opens on a BATCH hero and a tap on a hero goes to the hub — but on the device clamp the back tap at the segment's first screen.
+- **Taps never cross a segment.** The hub target, the section start and the last navigable screen are all read from the current segment, so a signed transaction cannot be revisited. The back tap is clamped at the segment's first screen: `layout.back_target` ({{loc:pq1.layout.back_target}}) returns nothing when the screen behind is a status, so a left tap on a segment's opening BATCH screen does nothing (its chevrons still show).
 - **Hold left is armed on every navigable screen of every segment** and always reaches the same `BATCH DECLINED`. The UI rule stops there: a decline anywhere ends the whole batch. What happens to signatures already given is not defined in this repo.
 
 ## Preview

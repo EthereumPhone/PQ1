@@ -17,11 +17,13 @@ disagree, the code wins — run `python3 -m tools.handoff --check`.
 | to see it move | [`previews/`](previews/) — GIFs re-rendered at the panel's {{val:tools.handoff.introspect.PANEL_FPS}} fps from the code (illustrations: never measure timing off a GIF) |
 | to check your port against the spec | [`skill/pq1-conformance/`](skill/pq1-conformance/SKILL.md) |
 | **which rules are real** — what to implement, what to ignore, what is deliberate | [`RULES.md`](RULES.md) |
-| what the consistency audit found, and what is still open | [`REPORT.md`](REPORT.md) |
-| the Python itself | `source/` in the zip · the repo root otherwise (`pq1/` design system, `screens/` library, `flows/` the flows, `tools/panel/` the NV3007 driver) |
+| what the audit found, and what is still open (the Sep 25 re-audit status) | [`REPORT.md`](REPORT.md) |
+| every flow × every ending and every library screen, rendered, each with the Python file that makes it | [`GALLERY.md`](GALLERY.md) — the GIFs are in `pq1-handoff-renders.zip`: unzip it into this folder |
+| the Python that makes every screen and flow | [`source/`](source/) — `pq1/` the design system, `screens/` the library screens (verdicts, PIN, idle, fx, confirm), `flows/` the flows, `tools/check/` the rule checker, `tools/panel/` the NV3007 driver |
 
-Paths such as `pq1/motion.py:326` are relative to the **source root**: the repo root, or `source/`
-inside the zip.
+Paths such as `pq1/motion.py:326` are relative to the **source root**, which is `source/` in this folder
+(or the repo root). `source/` is a byte-for-byte copy of the code this folder was built from, and
+`python3 -m tools.handoff --check` fails if the two ever differ.
 
 ## How to read a catalog page
 
@@ -41,8 +43,10 @@ loop or the laptop bench player — do not port) · **SPEC-ONLY** (specified, no
 | file | holds |
 |---|---|
 | `spec/motion.json` | every timing / geometry token (`value`, `unit`, `frames_14`, `scope: device\|demo`, `source`), every easing (its Python source + 33 samples), sampled envelopes (hold fill, page flip, chevron hint, confirm band, busy pulse), both spring profiles sampled per panel frame, the verdict law, the qubit timeline, the explosion tables |
+| `spec/colors.json` | every colour the renderer can paint: the base and state colours, the 14 placeholder ramps (with the hash rule that picks one), the brand, token and chain ramps, the pinned discs and marks, the ink tints and the hold film — each swatch as `rgb`, `hex` and the `rgb565` word the panel takes, plus the flat `tokens` table `port_diff.py` pairs against a `ui_colors.h` |
 | `spec/anims.json` | every library screen × preset and the three core status animations: phases per preset, `t_resolve`, `duration`, result hold, what it rests on, whether it can lead, which curves it calls, the spec a flow splices in |
-| `spec/screens.schema.json` | the screen dict: every field, defaults per kind, enums, the validation errors the design system raises, layout tokens, the Confirm? rule |
+| `spec/screens.schema.json` | the screen dict: every field, defaults per kind, enums, the validation errors the design system raises, layout tokens, the Confirm? rule, and the **typography** block — the faces, the scale as roles, the fit ladder, the text regions and the fit rule |
+| `spec/icons.json` | the legal icon set and the laws around it: every name in the registry plus the `letter:` namespace, with its kind, its traced path data or geometry, its scale and nudge, its compositing model and its measured ink on the disc — and the sign box, the stroke vocabulary with each named exception, and the mark band |
 | `spec/gestures.json` | the input tokens and the **truth table** — every context × gesture, produced by executing the reference driver |
 | `spec/traces.json` | scripted two-button sessions and the screens / states / armed sets they must produce — replay them against the port |
 | `spec/flows.json` | all flows, screen by screen, with their endings |
@@ -53,6 +57,7 @@ loop or the laptop bench player — do not port) · **SPEC-ONLY** (specified, no
 ```
 cp -R skill/pq1-conformance <your-project>/.claude/skills/        # Claude Code finds it there
 python3 skill/pq1-conformance/scripts/port_diff.py path/to/ui_tokens.h --spec spec
+python3 skill/pq1-conformance/scripts/port_diff.py path/to/ui_colors.h --colors --spec spec
 ```
 
 Then ask your Claude to *"check the port against the PQ1 spec"* — the skill walks the constants, the
@@ -63,7 +68,7 @@ the flow shape and the do-not-port list. In the zip the skill is also pre-instal
 ## Running the Python
 
 ```
-cd source            # (or the repo root)
+cd source            # this folder's copy (or the repo root)
 pip install -r requirements.txt          # Pillow only
 python3 -m flows send_token --end all    # render a flow: every ending
 python3 -m screens --list                # the library screens

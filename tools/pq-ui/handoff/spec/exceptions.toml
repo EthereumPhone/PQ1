@@ -18,17 +18,6 @@
 
 [[known]]
 rule = "V-ENTRANCE"
-where = "screens/verdict/padlock.py::Padlock.draw_icon"
-key = "arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))"
-audit = "D1-06"
-reason = """the padlock re-derives the entrance inline because it overrides T_IN to its whole
-mechanism window (1070 lock / 1600 unlock), so VerdictAnim's u is the mechanism's progress, not
-the entrance's. The fix is the same as V-TIN's: move the mechanism into T_WAIT and let the
-inherited entrance() run. Output is identical today — this is a structural exception, not a
-visual one."""
-
-[[known]]
-rule = "V-ENTRANCE"
 where = "pq1/status.py::ArriveStatus.draw"
 key = "motion.arrive(u)"
 audit = "D1-07"
@@ -43,31 +32,6 @@ key = "motion.arrive(u)"
 audit = "D1-07"
 reason = """the cancel branch of the hold demo copies the entrance law's two lines for the same
 reason as ArriveStatus. Fixed by the same lift. Zero pixel change."""
-
-[[known]]
-rule = "V-TIN"
-where = "anim:verdict/padlock"
-key = "T_IN=1070"
-audit = "D1-06"
-reason = """padlock lock spends its whole mechanism (turn-in 520 -> drop 260 -> click 290) inside
-T_IN instead of T_WAIT, so T_IN reads as a 1070 ms entrance. The icon's own fade + rise still
-finish within ARRIVE_MS — the law is obeyed on screen, only the bookkeeping differs."""
-
-[[known]]
-rule = "V-TIN"
-where = "anim:verdict/padlock|unlock"
-key = "T_IN=1600"
-audit = "D1-06"
-reason = "as above, for unlock (snap 145 -> kick 250 -> pause 250 -> swing 800)."
-
-[[known]]
-rule = "V-HOLD"
-where = "anim:pin/pin_entering"
-key = "hold=2840"
-audit = "D1-11"
-reason = """the PIN entry is an ENTRY, not an ending: its duration is the typed row plus whichever
-verdict tail follows, so the 2450 ms result hold does not apply to the screen as a whole (the tail
-inside it does rest 2450). The rule should arguably skip interactive screens."""
 
 [[known]]
 rule = "V-LAWCOPY"
@@ -121,58 +85,6 @@ a spiral), not a time easing — the rule catches it by shape. Keep, or move the
 motion.py so the exception disappears."""
 
 [[known]]
-rule = "M-DIVLIT"
-where = "pq1/loading.py::qubit_pose"
-key = "e / 350"
-audit = "D3-07"
-reason = """the result glyph's fade-in span, written as a bare literal in two places (here and
-ResolveStatus) — one 350 ms token owned by status.py would link them."""
-
-[[known]]
-rule = "M-DIVLIT"
-where = "pq1/loading.py::qubit_pose"
-key = "(e - 120) / 350"
-audit = "D3-07"
-reason = "the caption's 120 ms stagger behind the glyph, same duplication."
-
-[[known]]
-rule = "M-DIVLIT"
-where = "pq1/status.py::ResolveStatus.draw"
-key = "e / 350"
-audit = "D3-07"
-reason = "the second copy of the 350 ms result fade."
-
-[[known]]
-rule = "M-DIVLIT"
-where = "pq1/status.py::ResolveStatus.draw"
-key = "(e - 120) / 350"
-audit = "D3-07"
-reason = "the second copy of the 120 ms caption stagger."
-
-[[known]]
-rule = "M-DIVLIT"
-where = "pq1/motion.py::chevron_hint"
-key = "p / 350"
-audit = "D4-15"
-reason = """the chevron hint's envelope (350 up / 1200 bob / 350 down) is written inline inside
-the helper. It is self-contained and documented in DESIGN.md, but the three spans deserve names
-so the hint envelope can be shared with the other hints (PIN labels, confirm band)."""
-
-[[known]]
-rule = "M-DIVLIT"
-where = "pq1/motion.py::chevron_hint"
-key = "math.pi * (p - 350) / 1200"
-audit = "D4-15"
-reason = "the bob span of the same envelope."
-
-[[known]]
-rule = "M-DIVLIT"
-where = "pq1/motion.py::chevron_hint"
-key = "(p - 1550) / 350"
-audit = "D4-15"
-reason = "the return span of the same envelope."
-
-[[known]]
 rule = "M-UNUSED"
 where = "pq1/motion.py"
 key = "MOVE_MS"
@@ -206,20 +118,109 @@ sides and chev values do not."""
 [[known]]
 rule = "X-VALIDATE"
 where = "pq1/layout.py::normalize_screens"
-key = "size=30"
-audit = "G17-05"
-reason = "an off-scale type size is accepted silently; the tiers are 36 / 32 / 28 / 22."
-
-[[known]]
-rule = "X-VALIDATE"
-where = "pq1/layout.py::normalize_screens"
 key = "side='top'"
 audit = "G17-05"
 reason = "an unknown side is accepted silently; only left / right exist."
 
+# ------------------------------------------------------------------ icon laws --
+# V-CENTRE measures the optical-centre law: the ink's centre of MASS on the circle.
+# These nine are the written exceptions — shapes whose mass is deliberately not
+# their optical centre. Nothing below is a nudge waiting to be applied.
+
 [[known]]
-rule = "X-VALIDATE"
-where = "pq1/layout.py::normalize_screens"
-key = "chev='down'"
-audit = "G17-05"
-reason = "an unknown chev is accepted silently; only lr / up / None exist."
+rule = "V-CENTRE"
+where = "anim:verdict/tamper"
+key = "centroid"
+audit = "ICO-04"
+reason = """the notice triangle is BOX-centred: its bounding box sits on the circle, and
+two thirds of a triangle's area lies in its lower half, so the mass measures ~10 px low.
+Centring the mass instead would float the apex above the grid every other sign sits on,
+and the three notices would stop lining up with each other."""
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/sig_error"
+key = "centroid"
+audit = "ICO-04"
+reason = """the same notice triangle, docked in a detail column instead of centred — it is
+measured against its own column centre and reads identically to tamper's (ICO-06 closed
+the gap between them). Box-centred by the same decision."""
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/tamper|firmware_tampered"
+key = "centroid"
+audit = "HS-10"
+reason = """tamper's own triangle under a second caption (FIRMWARE TAMPERED) — the
+anim:verdict/tamper row's decision, not a new exception: box-centred, never nudged."""
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/sig_error|type1_sig_fail"
+key = "centroid"
+audit = "HS-10"
+reason = """sig_error's own docked triangle with other lines (TYPE 1 SIG) — the
+anim:verdict/sig_error row's decision, not a new exception: box-centred, never nudged."""
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/wipe"
+key = "centroid"
+audit = "ICO-04"
+reason = """WALLET WIPED's triangle, box-centred like tamper's; it sits a touch higher
+because the wipe mark inside it carries ink the exclamation does not."""
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/wipe|wallet_wiped_explosion"
+key = "centroid"
+audit = "ICO-04"
+reason = """the same triangle led by the explosion film; the blast is long gone by the
+resting frame, so what is measured is wipe's pose."""
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/shield"
+key = "centroid"
+audit = "ICO-04"
+reason = """both sources sit the mark about 2 px above the shield's centre, and the shield
+keeps its OUTLINE — it is the container, the mark inside it is the verdict (the one
+written exception to the filled-silhouette rule, owner decision, Sep 2026). Centring the
+mass would drop the mark onto the shield's lower lobe, where the outline narrows."""
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/shield|no_match"
+key = "centroid"
+audit = "ICO-04"
+reason = "the same shield carrying the X instead of the check — the same 2 px, same reason."
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/last_attempt"
+key = "centroid"
+audit = "ICO-04"
+reason = """LAST ATTEMPT is not a sign at all: a display digit beside a heart, composed as
+a PAIR on the type tier and centred by their box. The digit carries most of the ink, so
+the mass leans ~5 px toward it. Composed the way the type tier composes (owner decision)."""
+
+[[known]]
+rule = "V-CENTRE"
+where = "anim:verdict/padlock|unlock"
+key = "centroid"
+audit = "ICO-04"
+reason = """the unlock preset RESTS OPEN — the shackle has sprung up and clear of the body,
+so the open pose's mass sits right of and above the circle. The CLOSED rest, which the bare
+padlock and its lock preset show, is what the centre law governs, and it passes."""
+
+[[known]]
+rule = "F-ELLIPSIS"
+where = "flow:blind/typed_call/sign_with_args"
+key = "0xaabbceff…8aabbccdd"
+audit = "TY-02"
+reason = """the bytes32 ARG 3 wears the DATA HASH fingerprint form under its own
+label, which DESIGN.md does not sanction. Parked, not settled: ARG 0 of the SAME
+flow is a comparable raw hash shown IN FULL over two lines, so the flow reads its
+own argument values two ways. Decide which ARG 3 is — a fingerprint to match (keep
+the shortening, and name it in DESIGN.md) or a value to verify (page it, as the
+Safe TX HASH now does) — then delete this row."""

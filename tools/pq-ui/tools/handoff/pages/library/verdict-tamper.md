@@ -2,12 +2,12 @@
 
 ## Timeline
 
-One variant, no presets. `t` is milliseconds since the screen's own t 0. The whole screen is the default `VerdictAnim.draw` — this module only supplies `draw_icon` and two shorter phase lengths.
+One variant, no presets. `t` is milliseconds since the screen's own t 0. The whole screen is the default `VerdictAnim.draw` — this module only supplies `draw_icon` and its phase lengths (the law's hold, a longer beat).
 
 {{motion-head}}
-{{row:black hold — the flow's token hands over | screens.verdict.tamper.Tamper.T_HOLD | ease_out | shorter than the base verdict hold ({{tok:pq1.verdict.VerdictAnim.T_HOLD}}): this screen keeps the timeline of its detail-grid twin, [sig error](verdict-sig-error.md). The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md)}}
+{{row:black hold — the flow's token hands over | screens.verdict.tamper.Tamper.T_HOLD | ease_out | the law's own hold, {{tok:pq1.motion.VERDICT_HOLD_MS}}: this screen keeps the timeline of its detail-grid twin, [sig error](verdict-sig-error.md). The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md)}}
 {{row:the triangle arrives — fade + rise | pq1.motion.ARRIVE_MS | ease_out + arrive | alpha 0 to 1, height scales {{val:pq1.motion.ARRIVE_FROM}} to 1. The exclamation scales with it and is drawn opaque black from the first frame}}
-{{row:two decaying attention pulses | screens.verdict.tamper.Tamper.T_WAIT | attention_pulse | the height is REPLACED by the pulse: 1 plus 0.09 times a decaying rectified sine at 2.5 half-cycles. It peaks 1.053 about a sixth of the way in and 1.016 past the middle — a 3.4 px swell on a {{val:screens.verdict.tamper.TRI_H}} px triangle, and the mark swells with it}}
+{{row:two decaying attention pulses | screens.verdict.tamper.Tamper.T_WAIT | attention_pulse | the height is REPLACED by the pulse: 1 plus 0.09 times a decaying rectified sine at 2.5 half-cycles. It peaks 1.053 about a sixth of the way in and 1.016 past the middle — a 3.2 px swell on a {{val:screens.verdict.tamper.TRI_H}} px triangle, and the mark swells with it}}
 {{row:caption fades in | pq1.verdict.VerdictAnim.T_TEXT | ease_out | TAMPER DETECTED on the y {{val:pq1.layout.BASELINE_Y}} baseline}}
 {{row:rest, then the flow moves on | pq1.status.RESULT_HOLD_MS | hold | see [result hold](../transitions/result-hold.md)}}
 
@@ -31,7 +31,7 @@ That black is a real detail: the mark is drawn with the icon's alpha but the col
 
 {{constants}}
 
-`TRI_H` is the triangle's height in UI pixels, chosen so the icon fills the centred circle slot.
+`TRI_H` is the triangle's height in UI pixels — the ONE notice height, `warning_triangle.NOTICE_H` ({{loc:pq1.procedural.warning_triangle.NOTICE_H}}), derived from the sign box ({{tok:pq1.layout.VERDICT_BOX}}) and shared with [sig error](verdict-sig-error.md) and [wipe](verdict-wipe.md).
 
 ## Input
 

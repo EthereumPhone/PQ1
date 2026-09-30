@@ -12,25 +12,26 @@ Every screen between the [ask](hero-ask.md) and its return. {{used-in}}
 
 ## Spec
 
-{{fields:kind,side,label,lines,size,circle_x,text_x,pulse,icon,chev}}
+{{fields:kind,side,label,lines,size,pulse,icon,chev}}
 
 {{example}}
 
 - `kind` defaults to `"detail"`, `label` to none, `size` to 28, `chev` to `"lr"`.
 - A line is a plain string, a **name** line `{"str": NAME, "weight": "semibold"}`, or a **transition** row `{"transition": [old, new]}` drawn as `old ▸ new` on one row. See [detail text](../components/detail-text.md).
-- `circle_x` / `text_x` nudge the disc and the text off the column grid. A **chain badge** sets neither: it says `chain=<id>` and composes itself — see [chain badge](chain.md).
+- There are no x nudges: a detail's disc and text sit on the column grid, the right-docked pair the exact mirror of the left one. A **chain badge** says `chain=<id>` and composes itself — see [chain badge](chain.md).
+- `side` may be left out: details then alternate columns within a segment, the first on the left (`normalize_screens`, {{loc:pq1.layout.normalize_screens}}). Every live flow writes it.
 - `pulse` adds the attention rings around the docked disc — see [pulse rings](../components/pulse-rings.md).
 
-### Choosing the tier (the design rule — the Python does not enforce it)
+### Choosing the tier (measured — `normalize_screens` runs this rule)
 
-| size | max characters per line | max lines |
+| size | max lines | typical characters per line |
 |---|---|---|
-| 36 | 12 | 1 |
-| 32 | 14 | 1 |
-| 28 | 16 | 2 |
-| 22 | 21 | 3 |
+| {{val:pq1.typography.SIZE_XL}} | 1 | ~12 |
+| {{val:pq1.typography.SIZE_L}} | 1 | ~14 |
+| {{val:pq1.typography.SIZE_M}} | 2 | ~16 |
+| {{val:pq1.typography.SIZE_BODY}} | 3 | ~21 |
 
-Use the largest tier that fits. Never below 22, never truncate, never ellipsize. `layout_of` does not measure, clip or shrink the value: `size` is whatever the flow wrote. On the device every value line is per-transaction data, so **the firmware must run this rule itself**.
+Use the largest tier whose every line MEASURES inside the {{val:pq1.layout.TEXT_REGION_W}} px region ({{val:pq1.layout.TEXT_REGION_FULL_W}} px full-width). The character counts are a sighting shot, not the rule: a count is not a width, so each line is measured in the face it will be drawn in (`layout.fit_size`, {{loc:pq1.layout.fit_size}}). Never below the Default tier, never truncate, never ellipsize — a value that fits no tier RAISES. `normalize_screens` fits any screen that does not pin a `size`; a typed `size` is the author's pin, and the checker's T-WIDTH measures it anyway. `layout_of` still does not clip or shrink. On the device every value line is per-transaction data, so **the firmware must run this rule itself**.
 
 ## Geometry
 
@@ -75,7 +76,7 @@ Walked by the demo loop (KIOSK pace, dwell timers) — the device moves only on 
 
 - **Do** render a value exactly as supplied: never re-case, re-punctuate or reformat it.
 - **Do** keep one tier for the whole screen — a SemiBold name line and its Regular address lines share the size.
-- **Do** break an address mid-string into centred lines of 21 characters or fewer; the full value must be verifiable.
+- **Do** break an address mid-string into centred lines that measure inside the region — typically 21 characters or fewer, but the measure decides; the full value must be verifiable.
 - **Don't** fix a sample value into firmware: `lines` in a flow module are placeholders that exercise the tier rule.
 - **Don't** port {{tok:pq1.motion.DETAIL_DWELL}} or the KIOSK spring pace.
 

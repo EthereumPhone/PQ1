@@ -27,7 +27,7 @@ The endings are the device rebooting into the new image: ends(version)
 gives UPDATED — the MAJOR explosion film (screens/fx/explosion, the
 flow's token handing its mark off into the split) on a LONGER orbit
 (revs=LOAD_REVS: a reboot outlasts a signature) with the busy caption
-"RECONNECTING…" held past the orbit through the spiral and the trembling
+"UPDATING…" held past the orbit through the spiral and the trembling
 clump, gone as the blast launches (busy_until="boom"); then, on the
 emptied canvas, the resting look ARRIVING (status "arrive": the verdict
 entrance law) — the disc FILLED WHITE under the black flush ring with
@@ -51,7 +51,7 @@ from pq1 import colors, loading, status
 
 ICON = "download"       # the traced download mark
 PALETTE = "FIRMWARE"    # the white disc over the mono trail (colors)
-BUSY = "RECONNECTING…"  # the loading caption while the device reboots
+BUSY = "UPDATING…"  # the loading caption while the device reboots
 LOAD_REVS = loading.REVS_LONG   # the reconnect orbit: two turns more than the sources' 3 — the MINIMUM; the loop adds turns while the reboot is outstanding
 
 DEFAULTS = dict(icon=ICON, icon_color=list(colors.BLACK),   # black mark …
@@ -69,12 +69,12 @@ def fingerprint_intro(caption=FINGERPRINT_CAPTION):
                 bottom=caption, band_chev=True, commit=False)
 
 
-def words(values, label=None):
+def words(values):
     """the fingerprint's words on the numbered seed-words grid — a value
     screen: the words alone, the token off the panel, the corner chevrons
-    for tap-nav; an optional caps `label` sits centred on the bottom
-    baseline (the update flow shows none)"""
-    return dict(id="WORDS", kind="value", words=list(values), label=label, chev="lr")
+    for tap-nav; no label — a words grid has no caption, the intro's
+    caption names it (DESIGN.md § Text rules, Words)"""
+    return dict(id="WORDS", kind="value", words=list(values), chev="lr")
 
 
 def _lead(severity, busy=None, **film):
@@ -90,9 +90,14 @@ def _lead(severity, busy=None, **film):
 def ends(version):
     """fresh copies of the shared endings for the version installing:
     UPDATED — the major explosion on the long reconnect orbit
-    ("RECONNECTING…" until the blast), then the white disc + black check
+    ("UPDATING…" until the blast), then the white disc + black check
     arrives, "FIRMWARE UPDATED TO <version>"; DECLINED — the minor
-    explosion, then the red disc + black X, "UPDATE DECLINED" """
+    explosion, then the red disc + black X, "UPDATE DECLINED"; FAILED —
+    the update was dispatched and its signature FAILED to verify (the
+    host's "no" while UPDATING… orbits): the SAME major reconnect film
+    as UPDATED, landing the red disc + black X, "UPDATE FAILED" — its lead
+    must stay UPDATED's verbatim, since a failure answer swaps only the
+    landing look (status.RESTYLE), never the film (audit HS-12)"""
     return copy.deepcopy({
         "updated": dict(id="UPDATED", kind="status", anim="arrive",
                         lead=_lead("major", BUSY, revs=LOAD_REVS, busy_until="boom"),
@@ -102,4 +107,9 @@ def ends(version):
                          result="x", state="failed", lead=_lead("minor"),
                          resting=status.branded_resting(colors.RED),
                          bottom="UPDATE DECLINED", chev=None),
+        "failed": dict(id="FAILED", kind="status", anim="arrive",
+                       result="x", state="failed", film_fail=True,
+                       lead=_lead("major", BUSY, revs=LOAD_REVS, busy_until="boom"),
+                       resting=status.branded_resting(colors.RED),
+                       bottom="UPDATE FAILED", chev=None),
     })

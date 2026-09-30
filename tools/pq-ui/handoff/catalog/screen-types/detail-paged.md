@@ -11,7 +11,7 @@ A [detail](detail.md) whose value is too long for its tier's three lines but mus
 
 ## When it appears
 
-Only when a value overflows and cannot be shortened. Never two screens for one value, never an ellipsis where the value must be verified. Used in 1 of 31 flows: `eip1271/personal_counterfactual_hash`
+Only when a value overflows and cannot be shortened. Never two screens for one value, never an ellipsis where the value must be verified. Used in 3 of 33 flows: `eip1271/personal_counterfactual_hash`, `safe/can_not_decode`, `safe/clear_sign`
 
 The same paging works on a full-width value — see [value — paged](value-paged.md).
 
@@ -20,10 +20,10 @@ The same paging works on a full-width value — see [value — paged](value-page
 | key | form | meaning |
 |---|---|---|
 | `kind` | `"hero" \| "detail" \| "value" \| "confirm" \| "status"` |  |
-| `side` | `"left" \| "right"` |  |
-| `label` | `"MAX FEE"` | 16 px SEMIBOLD caps, baseline y 128 |
-| `pages` | `[[line, line], [line, line]]` | ONE value too long for its tier's three lines — a full 32-byte hash — shown in 2+ pages of 1-3 lines at the screen's one "size"; the pager "n/m" (12 px, 80 % white, top centre) shows only then. The demo turns a page per detail dwell … (full text: the `pq1/layout.py` docstring) |
-| `size` | `36 \| 32 \| 28 \| 22` | largest tier that fits |
+| `side` | `"left" \| "right"` | (default: the opposite of the previous detail in the segment, the first on the left — details alternate columns) |
+| `label` | `"MAX FEE"` | the Label face (SIZE_LABEL SEMIBOLD caps), baseline y 128 |
+| `pages` | `[[line, line], [line, line]]` | ONE value too long for its tier's three lines — a full 32-byte hash — shown in 2+ pages of 1-3 lines at the screen's one "size"; the pager "n/m" (the Label face, INK_PAGING, top centre) shows only then. The demo turns a page per detail … (full text: the `pq1/layout.py` docstring) |
+| `size` | `36 \| 32 \| 28 \| 22` | largest tier that fits (no per-screen x nudges: a detail sits on the column grid; a chain screen composes itself — chain_compose) |
 
 Screen 7 of flow `eip1271/personal_counterfactual_hash`, as the design system normalizes it (defaults filled in):
 
@@ -41,41 +41,41 @@ Screen 7 of flow `eip1271/personal_counterfactual_hash`, as the design system no
  'lines': ['0x7d2e9a41c6f08b3d', '5e1a92c4f7b0d8e6']}
 ```
 
-- `pages` replaces `lines`. `normalize_screens` copies the first page into `lines` for readers that know one page (`pq1/layout.py:510`).
+- `pages` replaces `lines`. `normalize_screens` copies the first page into `lines` for readers that know one page (`pq1/layout.py:653`).
 - Fewer than two pages, an empty page or a page over three lines raises `ValueError` — the flow does not load.
 - How to split is the flow's choice. The live hash pages on byte lines: `0x` + 8 bytes / 8 bytes, then 8 / 8, at 22.
-- The schema note above still says the pager is 12 px. The code draws it at the label size (16) — the code wins.
+- The pager is drawn in the **Label face** — 16 px, SemiBold, tracking 1 px — exactly like the detail label at the other edge of the panel.
 
 ## Geometry
 
 | part | value |
 |---|---|
-| circle | centre x 352, y 72, r 30 |
-| text `HASH` | x 352, y 128, size 16, weight semibold |
-| text `0x7d2e9a41c6f08b3d` | x 163, y 57.5, size 22, weight regular |
-| text `5e1a92c4f7b0d8e6` | x 163, y 87.5, size 22, weight regular |
+| circle | centre x 354, y 72, r 30 |
+| text `HASH` | x 354, y 128, size 16, weight semibold |
+| text `0x7d2e9a41c6f08b3d` | x 165, y 57.5, size 22, weight regular |
+| text `5e1a92c4f7b0d8e6` | x 165, y 87.5, size 22, weight regular |
 
-- The table lists the label and the **first** page. `layout_of` also returns `fixed` (the label) and `pages` (one text list per page) — `pq1/layout.py:365`.
+- The table lists the label and the **first** page. `layout_of` also returns `fixed` (the label) and `pages` (one text list per page) — `pq1/layout.py:492`.
 - Every page is centred on `TEXT_CY` 72.5 px **by its own line count**. A two-line page and a three-line page of one screen do not share line positions.
-- Pager: text `n/m`, centre x 214, baseline y 24, size 16 Regular, tracking +1 px, white at `PAGER_ALPHA` 0.8 alpha (`pq1/components.py:517`). It sits between the corner chevrons and is drawn only when there is more than one page.
+- Pager: text `n/m`, centre x 214, baseline y 24, size 16 SemiBold (the Label face), tracking +1 px, white at `PAGER_ALPHA` 0.8 alpha (`pq1/components.py:566`). It sits between the corner chevrons and is drawn only when there is more than one page.
 
 ## Motion
 
-The screen arrives and leaves like any detail. The page turn is its own scripted envelope, `motion.page_flip(ms since the turn)` → `(a_out, a_in)` (`pq1/motion.py:283`) — a pure function of time. It is **sequential**, never a crossfade.
+The screen arrives and leaves like any detail. The page turn is its own scripted envelope, `motion.page_flip(ms since the turn)` → `(a_out, a_in)` (`pq1/motion.py:356`) — a pure function of time. It is **sequential**, never a crossfade.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | first page arrives with the screen | — | — | spring NAV | — | — | the screen's own text alpha; every page alpha below multiplies it |
-| turn, phase 1: the showing page fades away | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:280` | alpha = 1 − ease_out(t); the incoming page is not drawn yet |
+| turn, phase 1: the showing page fades away | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:353` | alpha = 1 − ease_out(t); the incoming page is not drawn yet |
 | the pager number switches | — | — | cut | — | — | the instant phase 1 ends; the pager itself never fades during a turn |
-| turn, phase 2: the new page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:280` | alpha = ease(t) |
-| whole turn | 600 | 8.4 | ease_out + ease | `PAGE_FADE_MS * 2` | `pq1/motion.py:280` | for one instant between the phases no value text is drawn |
-| DEMO ONLY: each page rests | 4100 | 57.4 | hold | `PAGE_SWAP_MS` | `pq1/motion.py:279` | the demo's page clock, equal to the detail dwell; do not port |
-| DEMO ONLY: the turn starts this long into a page's slot | 3800 | 53.2 | hold | `PAGE_SWAP_MS - PAGE_FADE_MS` | `pq1/motion.py:279` | so the fade-out lands on the slot boundary; do not port |
+| turn, phase 2: the new page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:353` | alpha = ease(t) |
+| whole turn | 600 | 8.4 | ease_out + ease | `PAGE_FADE_MS * 2` | `pq1/motion.py:353` | for one instant between the phases no value text is drawn |
+| DEMO ONLY: each page rests | 4100 | 57.4 | hold | `PAGE_SWAP_MS` | `pq1/motion.py:352` | the demo's page clock, equal to the detail dwell; do not port |
+| DEMO ONLY: the turn starts this long into a page's slot | 3800 | 53.2 | hold | `PAGE_SWAP_MS - PAGE_FADE_MS` | `pq1/motion.py:352` | so the fade-out lands on the slot boundary; do not port |
 
-The demo dwell of a paged screen is the detail dwell times the page count (`pq1/flow.py:310`). The driver pins every dwell to infinity, so under input only a tap turns a page.
+The demo dwell of a paged screen is the detail dwell times the page count (`pq1/flow.py:338`). The driver pins every dwell to infinity, so under input only a tap turns a page.
 
-`flip_page` sets the page counter **at once** and then plays the envelope (`pq1/flow.py:232`). A second turn during a flip restarts the envelope from the page the counter already points at: the interrupted turn's incoming page — which the reader never saw — appears at **full** alpha and fades out. The live alpha is not carried over, so the text jumps in brightness. That is how the reference behaves, not a design rule: keep "the press is never dropped", and ask the designer before copying the jump.
+`flip_page` sets the page counter **at once** and then plays the envelope (`pq1/flow.py:254`). A second turn during a flip restarts the envelope from the page the counter already points at: the interrupted turn's incoming page — which the reader never saw — appears at **full** alpha and fades out. The live alpha is not carried over, so the text jumps in brightness. That is how the reference behaves, not a design rule: keep "the press is never dropped", and ask the designer before copying the jump.
 
 ## Input
 
@@ -92,7 +92,7 @@ The demo dwell of a paged screen is the detail dwell times the page count (`pq1/
 
 - **Right tap:** the next page until the last, then the next screen.
 - **Left tap:** the previous page until the first, then the previous screen.
-- Stepping **back** onto a paged screen enters it on its **last** page, so left undoes right (`go_to(..., back=True)`, `pq1/flow.py:175`). Every other arrival — forward, or from the ask — enters on page 1.
+- Stepping **back** onto a paged screen enters it on its **last** page, so left undoes right (`go_to(..., back=True)`, `pq1/flow.py:193`). Every other arrival — forward, or from the ask — enters on page 1.
 - A tap during a flip is not dropped: on the last page a right tap leaves for the next screen while the flip is still fading.
 - Holds are the same as on a detail: `hold left` declines, `hold right` is unbound.
 

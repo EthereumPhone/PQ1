@@ -3,7 +3,9 @@
 All functions take a pq1.canvas.Canvas as their first argument and UI-pixel
 coordinates. The token is the centrepiece: a solid fill + white ring for a
 KNOWN token, or the gradient disc reserved for UNKNOWN tokens (see
-pq1.colors). Glyphs inside the token resolve image -> vector -> monogram.
+pq1.colors). A glyph inside the token is a traced vector mark
+(pq1/procedural — the ether mark is the default and the fallback), a
+popular token's full-bleed logo art, or the monogram.
 """
 import functools
 import math
@@ -11,8 +13,8 @@ import os
 
 from PIL import Image, ImageChops, ImageDraw
 
-from . import colors, typography
-from .procedural.marks import check, exclamation, minus, plus, x_mark  # noqa: F401
+from . import colors, motion, typography
+from .procedural.marks import base_mark, check, dots, exclamation, minus, plus, x_mark  # noqa: F401
 from .procedural import blind as blind_mark
 from .procedural import chains as chain_marks
 from .procedural import dev as dev_mark
@@ -20,10 +22,10 @@ from .procedural import download as download_mark
 from .procedural import eth as eth_logo
 from .procedural import fingerprint as fingerprint_mark
 from .procedural import rotate as rotate_mark
-from .layout import BASELINE_Y, CENTER_X, CHEV_LEFT, CHEV_RIGHT, SUP
+from .layout import (BASELINE_Y, CENTER_X, CHEV_LEFT, CHEV_RIGHT, GO_BACK_CX, STROKE, SUP,
+                     VIEW_MORE_CX)
 
 ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-ETH_LOGO = os.path.join(ASSET_DIR, "eth-logo.png")
 
 
 # ------------------------------------------------------ unknown-token disc --
@@ -78,60 +80,38 @@ def unknown_disc(cv, cx, cy, r, ramp, alpha=1.0):
     cv.paste(tile, int(round((cx - r) * s)), int(round((cy - r) * s)), mask)
 
 
-# ------------------------------------------------------------ image glyphs --
-_IMAGES = {}      # (path, recolor) -> decoded RGBA
-_SIZED = {}       # (path, recolor, size) -> resized RGBA
+# --------------------------------------------------------------- logo art --
+# Image art is full-bleed LOGO art only (safe, cowswap, usdc, dai, tether):
+# a mark is always traced vector art in pq1/procedural — the raster ether
+# mark that used to live here, recoloured white from a PNG, is gone (audit
+# ICO-02): it was a second Ethereum at a second size and ignored icon_color.
+_IMAGES = {}      # path -> decoded RGBA
+_SIZED = {}       # (path, size) -> resized RGBA
 
 
-def _load_rgba(path, recolor_white):
-    key = (path, recolor_white)
-    if key not in _IMAGES:
+def _load_rgba(path):
+    if path not in _IMAGES:
         if os.path.exists(path):
-            im = Image.open(path).convert("RGBA")
-            if recolor_white:
-                px = im.load()
-                for y in range(im.height):
-                    for x in range(im.width):
-                        r, g, b, a = px[x, y]
-                        lum = max(r, g, b)
-                        px[x, y] = (255, 255, 255, min(a, lum))
+            _IMAGES[path] = Image.open(path).convert("RGBA")
         else:
-            im = Image.new("RGBA", (2, 2), (0, 0, 0, 0))
-        _IMAGES[key] = im
-    return _IMAGES[key]
+            _IMAGES[path] = Image.new("RGBA", (2, 2), (0, 0, 0, 0))
+    return _IMAGES[path]
 
 
-def _sized(path, recolor_white, size):
-    key = (path, recolor_white, size)
+def _sized(path, size):
+    key = (path, size)
     if key not in _SIZED:
-        _SIZED[key] = _load_rgba(path, recolor_white).resize((size, size), Image.LANCZOS)
+        _SIZED[key] = _load_rgba(path).resize((size, size), Image.LANCZOS)
     return _SIZED[key]
-
-
-def image_glyph(path, recolor_white=False, scale=0.78):
-    """glyph function pasting an image centred in the token at scale*r"""
-    def draw(cv, cx, cy, r, alpha=1.0, color=None, rot=0.0):
-        if alpha <= 0.01:
-            return
-        g = scale * r * SUP
-        im = _sized(path, recolor_white, max(1, int(2 * g)))
-        if rot:
-            im = im.rotate(-math.degrees(rot), resample=Image.BICUBIC)
-        if alpha < 1:
-            im = im.copy()
-            a = im.getchannel("A").point(lambda v: int(v * alpha))
-            im.putalpha(a)
-        cv.paste(im, int(cx * SUP - g), int(cy * SUP - g), im)
-    return draw
 
 
 def circle_image(cv, path, cx, cy, r, alpha=1.0, rot=0.0):
     """image fitted and circular-masked to the token circle (avatar/logo);
     square or circular art both work"""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     size = max(2, int(2 * r * SUP))
-    im = _sized(path, False, size)
+    im = _sized(path, size)
     if rot:
         im = im.rotate(-math.degrees(rot), resample=Image.BICUBIC)
     mask = Image.new("L", (size, size), 0)
@@ -142,44 +122,60 @@ def circle_image(cv, path, cx, cy, r, alpha=1.0, rot=0.0):
     cv.paste(im, int(cx * SUP - size / 2), int(cy * SUP - size / 2), mask)
 
 
-# ----------------------------------------------------------- vector glyphs --
-def eth_mark(cv, cx, cy, r, alpha=1.0, color=None, rot=0.0):
-    """vector Ethereum diamond (fallback when no image logo is available)"""
-    if alpha <= 0.01:
-        return
-    col = tuple(int(round(c * alpha)) for c in (color or colors.WHITE))
-    X, Y, R = cx * SUP, cy * SUP, r * SUP
-    ca, sa = math.cos(rot), math.sin(rot)
-
-    def pt(px, py):
-        return (X + (px * ca - py * sa) * R, Y + (px * sa + py * ca) * R)
-
-    cv.d.polygon([pt(0, -.56), pt(.34, -.02), pt(0, .18), pt(-.34, -.02)], fill=col)
-    cv.d.polygon([pt(-.34, .10), pt(0, .58), pt(.34, .10), pt(0, .30)], fill=col)
-
-
+# ------------------------------------------------------------- the monogram --
 MONOGRAM_SCALE = 1.34   # cap height ~= a chain mark's, so a letter disc and a
 #                         mark disc carry the same weight in a walk
+
+
+@functools.lru_cache(maxsize=256)
+def _ink(f, ch):
+    """the inked box of `ch` drawn at the origin with anchor "ls" — measured
+    from pixels, because font.getbbox counts the pen origin as ink and so
+    misses the left side bearing"""
+    x0, y0, x1, y1 = f.getbbox(ch, anchor="ls")
+    pad = 2
+    im = Image.new("L", (int(x1 - x0) + 2 * pad, int(y1 - y0) + 2 * pad), 0)
+    ImageDraw.Draw(im).text((pad - x0, pad - y0), ch, font=f, fill=255,
+                            anchor="ls")
+    b = im.getbbox() or (pad, pad, pad, pad)
+    return (b[0] - pad + x0, b[1] - pad + y0, b[2] - pad + x0, b[3] - pad + y0)
 
 
 def monogram(letter):
     """glyph function drawing the first letter of a symbol.
 
     BOLD: unlike every other caption on the device this letter stands alone as
-    a disc's entire content — an unknown chain's initial (pq1.chains) — so it
-    carries the weight a mark would, not the weight of running text."""
+    a disc's entire content — an unknown chain's initial (pq1.chains) or a
+    long-tail token's (token_defaults) — so it
+    carries the weight a mark would, not the weight of running text. Drawn
+    through base_mark like every mark that rests on a disc (audit ICO-01):
+    the letter sits on a solid hashed-ramp fill, where a colour-scaled glyph
+    would fade as a dark shape mid-morph.
+
+    CENTRED ON THE INK, not the font's line box: anchor "mm" sat a capital
+    ~0.1 r low and shifted it by its side bearings. The letter's ink is
+    centred across, and the cap height (not the letter's own box, so a Q's
+    tail never lifts it) is centred down."""
     ch = (letter or "?")[0].upper()
 
     def draw(cv, cx, cy, r, alpha=1.0, color=None, rot=0.0):
-        cv.text(ch, cx, cy, MONOGRAM_SCALE * r, alpha,
-                color=color or colors.WHITE, weight="bold")
+        f = typography.font(MONOGRAM_SCALE * r, "bold")
+        x0, x1 = _ink(f, ch)[::2]
+        cap = -_ink(f, "H")[1]
+
+        def paint(d, ox, oy, R, a):
+            d.text((ox - (x0 + x1) / 2, oy + cap / 2), ch, font=f, fill=a,
+                   anchor="ls")
+        base_mark(cv, paint, cx, cy, r, color, alpha, rot)
     return draw
 
 
 # ---------------------------------------------------------- glyph registry --
+_ETHER = eth_logo.glyph()   # THE Ethereum mark (audit ICO-02) — the rounded-edge
+#                             logo traced in pq1/procedural/eth.py, at LOGO_SCALE
 GLYPHS = {
-    "eth": image_glyph(ETH_LOGO, recolor_white=True),
-    "mainnet": eth_logo.glyph(),  # rounded-edge eth, black on chain discs
+    "eth": _ETHER,        # the schema default and the fallback (DESIGN.md § Components)
+    "mainnet": _ETHER,    # chain id 1 — the same art under the chain family's name
     # the chain marks — every network the device can name, traced from its
     # logo (pq1/procedural/chains.py). Registered EAGERLY here, never from a
     # flow package: the legal icon set the handoff spec publishes must not
@@ -194,13 +190,14 @@ GLYPHS = {
     "check": check,
     "x": x_mark,
     "exclamation": exclamation,
+    "dots": dots,        # the 3 x 3 dot grid — the setup family's mark
     "plus": plus,        # the entry signs beside the corner chevrons
     "minus": minus,
 }
-VECTOR_SYMBOLS = {"ETH": eth_mark}
 
 
-LETTER_PREFIX = "letter:"   # pq1.chains — an unknown chain wears its initial
+LETTER_PREFIX = "letter:"   # an unknown chain (pq1.chains) or a long-tail
+#                             token (token_defaults) wears its initial
 
 
 @functools.lru_cache(maxsize=64)
@@ -230,7 +227,7 @@ def register_glyph(name, fn):
 
 
 def resolve_glyph(icon=None, logo=None, symbol=None):
-    """glyph lookup: named icon -> image logo -> vector for symbol -> monogram"""
+    """glyph lookup: named icon -> image logo -> the symbol's monogram"""
     if icon and icon in GLYPHS:
         return GLYPHS[icon]
     fn = letter_glyph(icon)
@@ -243,10 +240,8 @@ def resolve_glyph(icon=None, logo=None, symbol=None):
             # the solid disc's and the trail circles' radius), never the
             # layout radius: the token is exactly the size of its trail
             return lambda cv, cx, cy, r, alpha=1.0, color=None, rot=0.0: \
-                circle_image(cv, path, cx, cy, r - TOKEN_INSET, alpha, rot)
+                circle_image(cv, path, cx, cy, visible_r(r), alpha, rot)
     if symbol:
-        if symbol.upper() in VECTOR_SYMBOLS:
-            return VECTOR_SYMBOLS[symbol.upper()]
         return monogram(symbol)
     return monogram("?")
 
@@ -263,12 +258,22 @@ def glyph(cv, name, cx, cy, r, alpha=1.0, color=None, rot=0.0):
     fn(cv, cx, cy, r, alpha=alpha, color=color, rot=rot)
 
 
+def same_art(a, b):
+    """do two glyph names draw the same function — one mark under two names
+    ("eth" and "mainnet")? Then a morph between them draws it once at full
+    alpha instead of dipping through no glyph at the midpoint (token)."""
+    if a == b:
+        return True
+    return (a is not None and b is not None and
+            (letter_glyph(a) or GLYPHS.get(a)) is (letter_glyph(b) or GLYPHS.get(b)))
+
+
 # ------------------------------------------------------ token logo assets --
 # Popular tokens whose logo ships in pq1/assets/ (400x400 RGBA, the art
 # full-bleed like safe.png / cowswap.png): the disc WEARS the art, on the
 # mono trail. token_defaults(symbol) is the one switch point between that
 # look and the placeholder ramp. ETH is not listed: its identity is the
-# white mark on the mono body (eth-logo.png, the SEND flow). A new logo:
+# white ether mark on the mono body (GLYPHS["eth"], the SEND flow). A new logo:
 # rasterize the SVG to a 400x400 PNG (flow-builder skill § Token logos),
 # drop it in pq1/assets/, add one row.
 TOKEN_LOGOS = {"USDC": "usdc", "USDT": "tether", "DAI": "dai"}   # symbol -> glyph / file stem
@@ -311,10 +316,13 @@ def token_defaults(symbol):
     explicit; user rule, Sep 2026) on a trail in the token's own colour
     (colors.TOKEN_GRADIENTS, pinned by symbol — the mono trail when no ramp
     is registered), ETH / WETH the white ether mark on the mono body (its
-    default white ring), any other symbol the SOLID placeholder disc + trail
-    hashed from the symbol (token_ramp). One flow serves every token on
-    device; a flow's SAMPLES cycle the popular tokens through its example
-    renders."""
+    default white ring), any other symbol its INITIAL — the Bold monogram,
+    the "letter:X" namespace an unknown chain answers with — on the SOLID
+    placeholder disc + trail hashed from the symbol (token_ramp): a long-tail
+    token names itself rather than borrowing the ether mark (user rule, Sep
+    2026). A symbol with no letter or digit to show keeps the ether mark, so
+    the disc is never empty. One flow serves every token on device; a flow's
+    SAMPLES cycle the popular tokens through its example renders."""
     sym = (symbol or "").upper()
     icon = token_icon(sym)
     if icon:
@@ -322,26 +330,43 @@ def token_defaults(symbol):
         return dict(icon=icon, token=dict(palette=palette, ring=list(colors.WHITE)))
     if sym in ETHER_SYMBOLS:
         return dict(icon="eth", token=dict(palette=colors.MONO_RAMP))
-    return dict(icon="eth", token=dict(palette=symbol))
+    initial = sym[:1]
+    icon = LETTER_PREFIX + initial if initial.isalnum() else "eth"
+    return dict(icon=icon, token=dict(palette=symbol))
 
 
 # ------------------------------------------------------------------- token --
-TOKEN_RING_W = 2.4   # white ring stroke width
+TOKEN_RING_W = STROKE["ring"]   # the token ring — the "ring" weight of layout.STROKE
 TOKEN_INSET = 1.2    # disc, ring AND full-bleed art sit inside the layout radius
                      # by this much; the token's VISIBLE edge is r - TOKEN_INSET —
                      # the trail circles' exact radius (the top circle is never
                      # bigger than its trail; user rule, Sep 2026)
 
 
-def token(cv, cx, cy, r, *, variant="unknown", fill=None, ring_color=None,
+
+def visible_r(r):
+    """the token's VISIBLE edge for a layout radius r: r - TOKEN_INSET.
+
+    One rule decides which radius a component measures from (audit RAD-09):
+    anything that IS the token — its disc, its ring, full-bleed art, the
+    trail links — sits at visible_r(r); anything that LEAVES it — the pulse
+    rings, the resolve flash, the handoff wash, a branded flush resting
+    ring — measures from the layout radius r."""
+    return r - TOKEN_INSET
+
+def token(cv, cx, cy, r, *, variant="solid", fill=None, ring_color=None,
           ring_w=TOKEN_RING_W, inset=TOKEN_INSET, glyph_a=None, glyph_b=None,
           mix=1.0, ramp=None, glyph_color=None, alpha=1.0, hold=None):
     """The main token circle.
 
-    variant "solid"   — known token: solid fill + ring (the normal case)
-    variant "unknown" — unrecognized token: gradient disc + ring, coloured
-                        by the placeholder ramp index `ramp` (token_ramp
-                        resolves it from a spec; neutral grey if None)
+    variant "solid"   — solid fill + ring. EVERY live token, recognized or
+                        not (the default, and what token_style_from_spec
+                        resolves); an unknown token's fill is simply the
+                        ramp hashed from its identity.
+    variant "unknown" — gradient disc + ring, coloured by the placeholder
+                        ramp index `ramp` (neutral grey if None). RESERVED:
+                        no flow and no library screen asks for it and a port
+                        must not implement it (audit A11-12, Sep 2026).
     glyph_a/glyph_b/mix crossfade the inner glyph during transitions.
 
     The default white ring sits UNDER the glyph, so full-bleed logo art
@@ -375,7 +400,7 @@ def token(cv, cx, cy, r, *, variant="unknown", fill=None, ring_color=None,
     if glyph_a is not None or glyph_b is not None:
         ga = glyph_a if glyph_a is not None else glyph_b
         gb = glyph_b if glyph_b is not None else glyph_a
-        if ga == gb:
+        if same_art(ga, gb):
             glyph(cv, gb, cx, cy, r, alpha, color=glyph_color)
         else:
             glyph(cv, ga, cx, cy, r, alpha * max(0.0, 1 - mix * 2), color=glyph_color)
@@ -418,7 +443,7 @@ def token_ramp(spec=None):
 
 def token_style_from_spec(spec=None):
     """resolve a screen's optional "token" field
-    -> dict(variant, fill, ring, ramp, film)
+    -> dict(variant, fill, ring, ramp, film, icon_color, art)
 
     The default variant is "solid" — the gradient disc ("unknown") must be
     asked for explicitly. "palette" (ramp index or token symbol) picks a
@@ -429,7 +454,13 @@ def token_style_from_spec(spec=None):
     colour status-film bodies take — the ramp's brightest stop when a
     palette is named, so a black-filled token (MONO_RAMP) never renders
     black-on-black qubits. "art" flags a full-bleed logo glyph (is_art) so
-    the hold film rises over the art instead of hiding under it.
+    the hold film rises over the art instead of hiding under it. "icon_color"
+    is the screen's own when it sets one (a family's mark colour, a chain's
+    knock-out); otherwise the default mark takes the disc-wide luma rule a
+    chain disc already obeyed (colors.mark_color, audit ICO-13): WHITE, or
+    BLACK once the fill is light enough to swallow it — so a light brand
+    under the default mark can never render white-on-light. Logo art keeps
+    its own colours (None).
     """
     tok = (spec or {}).get("token") or {}
     ramp = token_ramp(spec)
@@ -440,12 +471,15 @@ def token_style_from_spec(spec=None):
     if "fill" not in tok and "palette" in tok:
         film = colors.hex_to_rgb(colors.ramp_gradient(ramp)[-1])
     sp = spec or {}
+    art = is_art(sp.get("icon"))
+    if "icon_color" in sp:
+        icon_color = tuple(sp["icon_color"])
+    else:
+        icon_color = None if art else colors.mark_color(fill)
     return dict(variant=tok.get("variant", "solid"),
-                fill=fill, film=film, ramp=ramp,
-                icon_color=(tuple(sp["icon_color"])
-                            if "icon_color" in sp else None),
+                fill=fill, film=film, ramp=ramp, icon_color=icon_color,
                 ring=tuple(tok["ring"]) if "ring" in tok else None,
-                art=is_art(sp.get("icon")))
+                art=art)
 
 
 def token_styled(cv, cx, cy, r, st, glyph_a=None, glyph_b=None, mix=1.0, alpha=1.0,
@@ -476,19 +510,28 @@ def trail_palette_from_spec(spec=None):
 
 
 # -------------------------------------------------- chevrons + text pieces --
+# The corner chevron's geometry — ONE polygon every reader shares: the tip
+# 4 px above the centre, the base corners CHEV_HALF_W to each side and 3.2
+# below, outlined with the "sign" weight of layout.STROKE, round joints.
+# The PIN screen measures its hint anchors off CHEV_HALF_W and the handoff
+# cites these, so a reshape here moves everything that depends on it.
+CHEV_PTS = ((0, -4), (-4.2, 3.2), (4.2, 3.2))
+CHEV_STROKE = STROKE["sign"]                       # 4.5
+CHEV_HALF_W = max(abs(x) for x, _ in CHEV_PTS)     # 4.2: the base half-width
+
+
 def chevron(cv, cx, cy, ang, alpha=1.0):
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     col = tuple(int(round(c * alpha)) for c in colors.WHITE)
-    pts = [(0, -4), (-4.2, 3.2), (4.2, 3.2)]
     ca, sa = math.cos(ang), math.sin(ang)
     poly = [((cx + px * ca - py * sa) * SUP, (cy + px * sa + py * ca) * SUP)
-            for px, py in pts]
+            for px, py in CHEV_PTS]
     cv.d.polygon(poly, fill=col, outline=col)
     # loop through the first two points again so every vertex (incl. the
     # tip, where the stroke starts and ends) gets a curved joint
     cv.d.line(poly + [poly[0], poly[1]], fill=col,
-              width=int(round(4.5 * SUP)), joint="curve")
+              width=int(round(CHEV_STROKE * SUP)), joint="curve")
 
 
 def chevron_angles(chev):
@@ -497,48 +540,61 @@ def chevron_angles(chev):
 
 
 def chevron_pair(cv, ang_l, ang_r, y_off=0.0, alpha=1.0):
-    """both corner chevrons in their PQ1 slots"""
-    if alpha <= 0.01:
+    """both corner chevrons in their PQ1 slots — always BOTH, at one alpha.
+
+    A hold never fades either of them (user decision, Sep 2026: "it should
+    keep on showing both chevrons"): the pressed-side fade of audit A11-01
+    was retired, so a live sign or decline hold leaves the pair exactly as it
+    rests (DESIGN.md § Input; tools/check I-ARMED)."""
+    if alpha <= colors.ALPHA_FLOOR:
         return
     chevron(cv, CHEV_LEFT[0], CHEV_LEFT[1] + y_off, ang_l, alpha)
     chevron(cv, CHEV_RIGHT[0], CHEV_RIGHT[1] + y_off, ang_r, alpha)
 
 
 def caption(cv, s, alpha=1.0, color=colors.WHITE):
-    """bottom-band caption: 18 px caps, centred, baseline y 128"""
+    """bottom-band caption: the Question caps (SIZE_QUESTION, LS_QUESTION),
+    centred, baseline y 128"""
     cv.text(s, CENTER_X, BASELINE_Y, typography.SIZE_QUESTION, alpha,
             ls=typography.LS_QUESTION, color=color, baseline=True)
 
 
 PAGER_BASELINE = 24     # the pager's top-centre spot, between the corner chevrons
-PAGER_ALPHA = 0.8       # 80 % white (DESIGN.md § Typography, Paging)
+PAGER_ALPHA = colors.INK_PAGING   # the pager's ink tint (DESIGN.md § Color)
 
 
 def pager(cv, n, m, alpha=1.0):
-    """page indicator "n/m": the LABEL size (16 px — the detail label's, so
-    the two band-edge annotations read at one size; user request, Sep 2026),
-    80 % white, top centre — drawn when a screen has more than one page, or
-    a hero declares its position in a sequence (DESIGN.md § Typography,
-    Paging)"""
+    """page indicator "n/m": the LABEL face (SIZE_LABEL, SemiBold, LS_LABEL
+    — the detail label's, so every band-edge annotation reads alike; user
+    decision, Sep 2026), INK_PAGING white, top centre — drawn when a screen
+    has more than one page, or a hero declares its position in a sequence
+    (DESIGN.md § Typography, Label; § Layout grid, Pager)"""
     if m < 2:
         return
     cv.text(f"{n}/{m}", CENTER_X, PAGER_BASELINE, typography.SIZE_LABEL, alpha,
-            ls=1.0, color=colors.scale(colors.WHITE, PAGER_ALPHA), baseline=True)
+            ls=typography.LS_LABEL, weight=typography.WEIGHT_LABEL,
+            color=colors.scale(colors.WHITE, PAGER_ALPHA), baseline=True)
 
 
 VIEW_MORE_TEXT = "OR VIEW MORE"
 GO_BACK_TEXT = "TO GO BACK"
-VIEW_MORE_CX = 206          # unit nudged left so text + chevron read centred
+# the units' text centres are grid anchors (imported from layout):
+# VIEW_MORE_CX 206 for the unit whose chevron follows the text, and its
+# mirror GO_BACK_CX 222 for the one whose chevron leads it
 VIEW_MORE_CHEV_GAP = 13     # chevron centre this far past the text edge
 VIEW_MORE_CHEV_CY = 121.5   # optical centre of question caps on baseline 128
 
 
-def _band_unit(cv, s, alpha, right, cx=VIEW_MORE_CX):
+def _band_unit(cv, s, alpha, right, cx=None):
     """one confirm-band unit: question-style caps + a pointing chevron —
-    after the text pointing right, or before it pointing left; the text
-    centred on cx (the confirm band's nudge, or a band_chev hero's)"""
-    if alpha <= 0.01:
+    after the text pointing right (text centred on VIEW_MORE_CX), or before
+    it pointing left (on GO_BACK_CX, the mirror), so the two messages that
+    alternate every 5 s share one visual centre; a band_chev hero passes
+    the x its layout reports"""
+    if alpha <= colors.ALPHA_FLOOR:
         return
+    if cx is None:
+        cx = VIEW_MORE_CX if right else GO_BACK_CX
     cv.text(s, cx, BASELINE_Y, typography.SIZE_QUESTION, alpha,
             ls=typography.LS_QUESTION, baseline=True)
     tw = (typography.text_width(s, typography.SIZE_QUESTION)
@@ -586,10 +642,9 @@ def draw_text(cv, t, alpha=1.0):
         transition_row(cv, t, alpha)
         return
     if t.get("band_chev"):
-        # the confirm band's unit, the run nudged left like OR VIEW MORE
-        # so text + chevron read centred
-        _band_unit(cv, t["str"], alpha, right=True,
-                   cx=t["x"] + VIEW_MORE_CX - CENTER_X)
+        # the confirm band's unit, at the x the layout reports (layout_of
+        # places a band_chev caption on VIEW_MORE_CX)
+        _band_unit(cv, t["str"], alpha, right=True, cx=t["x"])
         return
     cv.text(t["str"], t["x"], t["y"], t["size"], alpha,
             ls=t.get("ls", 0), color=t.get("color", colors.WHITE),
@@ -604,7 +659,7 @@ def trail_static(cv, cx, cy, r, gap=22, direction=-1, palette=None):
     radius (r - TOKEN_INSET) so every link is exactly the size of the circle.
     """
     palette = palette or colors.placeholder_palette(colors.NEUTRAL_RAMP)[1]
-    rr = r - TOKEN_INSET
+    rr = visible_r(r)
     for i in range(len(palette) - 1, -1, -1):
         cv.circle(cx + direction * gap * (i + 1), cy, rr, palette[i])
 
@@ -615,7 +670,7 @@ def trail_chain(cv, chain, hx, hy, r, palette=None):
     `r` is the token's layout radius; links match the token's visible edge.
     """
     palette = palette or colors.placeholder_palette(colors.NEUTRAL_RAMP)[1]
-    rr = r - TOKEN_INSET
+    rr = visible_r(r)
     pts = chain.points
     for i in range(len(pts) - 1, -1, -1):
         p = pts[i]
@@ -628,13 +683,13 @@ def trail_chain(cv, chain, hx, hy, r, palette=None):
 def pulse(cv, cx, cy, r, t, color, alpha=1.0, period=2000):
     """two staggered rings expanding r+1.5 .. r+8.5 px and fading out
     (TOKEN_RING_W stroke — the system ring weight)"""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     for k in range(2):
         phase = ((t / period) + k * 0.5) % 1.0
         rad = r + 1.5 + phase * 7
-        a = (1 - phase) * 0.4 * alpha
-        if a <= 0.02:
+        a = (1 - phase) * colors.PULSE_PEAK_ALPHA * alpha
+        if a <= colors.ALPHA_FLOOR:
             continue
         X, Y, R = cx * SUP, cy * SUP, rad * SUP
         cv.d.ellipse([X - R, Y - R, X + R, Y + R],
@@ -642,9 +697,12 @@ def pulse(cv, cx, cy, r, t, color, alpha=1.0, period=2000):
                      width=int(round(TOKEN_RING_W * SUP)))
 
 
-def flash_ring(cv, cx, cy, r, color, alpha, width=2.5):
-    """expanding one-shot ring, colour faded toward black"""
-    if alpha <= 0.01:
+def flash_ring(cv, cx, cy, r, color, alpha, width=TOKEN_RING_W):
+    """expanding one-shot ring, colour faded toward black — stroked at the
+    system ring weight like every other ring the token casts (user
+    decision, audit RAD-01: the old 2.5 was a third of a pixel heavier and
+    had no name)"""
+    if alpha <= colors.ALPHA_FLOOR:
         return
     cv.ring(cx, cy, r, colors.scale(color, alpha), width)
 
@@ -684,13 +742,13 @@ def hold_flood(cv, cx, cy, r, k, color, alpha=1.0):
     surface (cv.chord). The colour is hold_style's RGBA film: its alpha is
     scaled by `alpha` and composited; a plain RGB colour fades toward black
     instead (the flow's alpha idiom)."""
-    if k <= 0.003 or alpha <= 0.01:
+    if k <= motion.LEVEL_EPS or alpha <= colors.ALPHA_FLOOR:
         return
     if len(color) == 4:
         col = (*color[:3], int(round(color[3] * alpha)))
     else:
         col = colors.scale(color, alpha)
-    if k >= 0.997:
+    if k >= 1 - motion.LEVEL_EPS:
         cv.circle(cx, cy, r, col)
         return
     d = r * (1 - 2 * k)                       # the surface, below the centre
@@ -698,20 +756,10 @@ def hold_flood(cv, cx, cy, r, k, color, alpha=1.0):
     cv.chord(cx, cy, r, a, 180 - a, col)      # the bottom cap: angles a -> 180 - a
 
 
-# --------------------------------------------------------- pills / badges --
-def pill(cv, box, radius, fill=None, outline=None, width=1.0):
-    """rounded-rect chip; RGBA fills composite (e.g. (255,255,255,26) tint)"""
-    cv.rounded_rect(box, radius, fill=fill, outline=outline, width=width)
-
-
-def badge(cv, s, x, y, *, size=None, fg=None, bg=(255, 255, 255, 26),
-          pad=(8, 3), radius=9):
-    """small labelled pill centred at (x, y); returns its box"""
-    size = size or typography.SIZE_PAGING
-    fg = fg or colors.WHITE
-    tw = typography.text_width(s, size)
-    box = (x - tw / 2 - pad[0], y - size / 2 - pad[1],
-           x + tw / 2 + pad[0], y + size / 2 + pad[1])
-    pill(cv, box, radius, fill=bg)
-    cv.text(s, x, y, size, color=fg)
-    return box
+# pill() and badge() lived here and were RETIRED (audit COL-06, Sep 2026):
+# no screen ever drew one, and badge's default — 100 % white text on a typed
+# (255, 255, 255, 26) tint — contradicted the type table it claimed to
+# follow. A component nothing draws is a promise to the port that the device
+# does not keep. The chip shape is not forbidden; it is simply not part of
+# this system until a screen needs one, and then it arrives with its tint
+# named here and its tier taken from typography.

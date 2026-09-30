@@ -9,28 +9,28 @@ Every ending rests for the same time after it resolves, then the flow returns.
 
 The rest at the end of every ending. However long a screen took to get there — a film, a verdict, a cancel that does no work at all — once it has resolved it stands still for the **same** span before anything else may happen. One constant, `RESULT_HOLD_MS` 2450 ms (34.3 f), and one rule:
 
-    duration = t_resolve + RESULT_HOLD_MS
+    duration = t_landed + RESULT_HOLD_MS        t_landed = t_resolve + landing_ms
 
-That is `StatusAnim.duration` (`pq1/status.py:246`), inherited by every film and every verdict. A screen sets `t_resolve`; it never sets its own rest. Three kinds of screen override `duration` instead, and each has a reason: a [led screen](lead-film.md) defers to its main (so the rest is still counted once, at the end), an entry's length depends on what was typed into it and on the verdict tail that follows (the rest lives inside that tail), and an idle screen never resolves at all — it loops. A **live** loading film ([loading loop](loading-loop.md)) reports `t_resolve` and `duration` as infinity until the work answers; the moment it does both are finite again and the rule holds unchanged, the hold counted from the latched resolve.
+That is `StatusAnim.duration` (`pq1/status.py:278`), inherited by every film and every verdict. The hold counts from the moment the result is **fully visible**: on a verdict that is `t_resolve` itself (`landing_ms` 0 — the caption has already landed), on a film it is `RESULT_LANDING_MS` 445 ms (6.2 f) later, once the result glyph and its caption have faded in. A screen sets `t_resolve` (and a film its `landing_ms`); it never sets its own rest. Three kinds of screen override `duration` instead, and each has a reason: a [led screen](lead-film.md) defers to its main (so the rest is still counted once, at the end), an entry's length depends on what was typed into it and on the verdict tail that follows (the rest lives inside that tail), and an idle screen never resolves at all — it loops. A **live** loading film ([loading loop](loading-loop.md)) reports `t_resolve` and `duration` as infinity until the work answers; the moment it does both are finite again and the rule holds unchanged, the hold counted from the latched resolve.
 
 ## What `t_resolve` means
 
 Two slightly different things, which matters when you port the hold:
 
 - On a **verdict** ([the verdict law](verdict-law.md)) everything has already landed at `t_resolve` — icon, mechanism and caption. The hold is completely static.
-- On a **film** ([qubit](../screen-types/status-qubit.md), [resolve](../screen-types/status-resolve.md)) `t_resolve` is when the *result begins*: the flash is done and the glyph starts. The result glyph fades in, and the caption a beat behind it, inside the opening of the hold (`e / 350` and `(e - 120) / 350` in `loading.qubit_pose` and `ResolveStatus.draw` — bare literals in the reference, listed by the audit as A-06). On the device that instant is the stock `t7` plus wraps × 850, read from the property (`pq1/status.py:429`), never from a constant.
+- On a **film** ([qubit](../screen-types/status-qubit.md), [resolve](../screen-types/status-resolve.md)) `t_resolve` is when the *result begins*: the flash is done and the glyph starts. The result glyph fades in, and the caption a beat behind it, and the hold counts from when both have **landed** — `t_landed` = `t_resolve` + `RESULT_LANDING_MS` 445 ms (6.2 f) (`pq1/status.py:272`): the glyph over `RESULT_FADE_MS` 300 ms (4.2 f) on `ease_out`, the caption `RESULT_LAG_MS` 145 ms (2.0 f) behind it on the same fade (`loading.qubit_pose`, `ResolveStatus.draw`). On the device that instant is the stock `t7` plus wraps × 850, read from the property (`pq1/status.py:459`), never from a constant.
 
 Either way the hold is measured from `t_resolve`, never from the last thing that moved.
 
 ## The spans
 
-| screen | resolves at | rests | ends |
-|---|---:|---:|---:|
-| [cancel resolve](../screen-types/status-resolve.md) — no film | 400 | 2450 | 2850 |
-| [qubit film](../screen-types/status-qubit.md) | 6200 | 2450 | 8650 |
-| [arrive](../screen-types/status-arrive.md), after a lead | 1450 | 2450 | 3900 |
-| a plain verdict — firmware verified | 1450 | 2450 | 3900 |
-| the longest — WALLET WIPED with its [lead film](lead-film.md) | 12148 | 2450 | 14598 |
+| screen | resolves at | landed at | rests | ends |
+|---|---:|---:|---:|---:|
+| [cancel resolve](../screen-types/status-resolve.md) — no film | 400 | 845 | 2450 | 3295 |
+| [qubit film](../screen-types/status-qubit.md) | 6200 | 6645 | 2450 | 9095 |
+| [arrive](../screen-types/status-arrive.md), after a lead | 1479 | 1479 | 2450 | 3929 |
+| a plain verdict — firmware verified | 1479 | 1479 | 2450 | 3929 |
+| the longest — WALLET WIPED with its [lead film](lead-film.md) | 12328 | 12328 | 2450 | 14778 |
 
 A led screen rests **once**, at the very end — never after the lead as well.
 
@@ -39,25 +39,26 @@ A led screen rests **once**, at the very end — never after the lead as well.
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | the screen's own animation | — | — | — | — | — | ends at its `t_resolve`, which every animation defines for itself |
-| the result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | nothing moves: the resting look or the icon and its caption simply stand |
-| the demo's status dwell, for comparison | 8650 | 121.1 | — | `STATUS_DWELL` | `pq1/motion.py:155` | the legacy constant — the qubit film's resolve plus the hold. `pq1/status.py` asserts they still agree |
+| a film's result lands — glyph, then caption | 445 | 6.2 | ease_out | `RESULT_LANDING_MS` | `pq1/status.py:110` | `RESULT_LAG_MS` + `RESULT_FADE_MS`; zero on a verdict |
+| the result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | nothing moves: the resting look or the icon and its caption simply stand |
+| the demo's status dwell, for comparison | 9095 | 127.3 | — | `STATUS_DWELL` | `pq1/motion.py:175` | the legacy constant — the qubit film's resolve plus the hold. `pq1/status.py` asserts they still agree |
 
-`STATUS_DWELL` 8650 ms (121.1 f) is a **demo token**: the device never waits on it. The animation's own `duration` is the only span to port.
+`STATUS_DWELL` 9095 ms (127.3 f) is a **demo token**: the device never waits on it. The animation's own `duration` is the only span to port.
 
 ## Leaving an ending
 
 | context | what happens when the hold ends |
 |---|---|
-| the button grammar (`pq1/driver.py:505`) | the state turns `finished` and the **resting frame freezes**. The flow does not walk on by itself — this is the device behaviour. A live film that was never answered never finishes: it loops; there is no timeout in this design |
-| a mid-batch ending | the exception: the player moves on to the next segment's first screen. The reference calls this its own advance (`pq1/driver.py:505`) — decide deliberately whether the device steps between a batch's transactions without a press |
-| a [PIN entry](../actions/entry-outcome.md) | the outcome routes (`pq1/driver.py:454`) — a miss opens the next attempt, or rests on its verdict when none is left; a match continues to the first screen that is not an entry, or rests; a cancel returns to the last navigable screen before the row, or — when there is none, as in both PIN flows — opens a fresh round in place |
+| the button grammar (`pq1/driver.py:537`) | the state turns `finished` and the **resting frame freezes**. The flow does not walk on by itself — this is the device behaviour. A live film that was never answered never finishes: it loops; there is no timeout in this design |
+| a mid-batch ending | the exception: the player moves on to the next segment's first screen. The reference calls this its own advance (`pq1/driver.py:537`) — decide deliberately whether the device steps between a batch's transactions without a press |
+| a [PIN entry](../actions/entry-outcome.md) | the outcome routes (`pq1/driver.py:460`) — a miss opens the next attempt, or rests on its verdict when none is left; a match continues to the first screen that is not an entry, or rests; a cancel returns to the last navigable screen before the row, or — when there is none, as in both PIN flows — opens a fresh round in place |
 | the demo loop | the screen's dwell IS its `duration`, so the Sim advances to the next screen by itself. **Do not port** ([demo auto-advance](../actions/demo-auto-advance.md)) |
 
-Leaving a verdict or an entry is a [token-less transit](tokenless-fade.md), not a morph.
+Leaving a verdict, an entry or any ending that shows a result is a [fade to black](tokenless-fade.md), not a morph.
 
 ## Input
 
-None, from the ending's first frame to the last: every press is refused while the state is not `navigating` (`pq1/driver.py:230`). The hold is not a window to skip — there is no skip gesture ([unbound gestures](../actions/unbound-gestures.md)).
+None, from the ending's first frame to the last: every press is refused while the state is not `navigating` (`pq1/driver.py:234`). The hold is not a window to skip — there is no skip gesture ([unbound gestures](../actions/unbound-gestures.md)).
 
 ## Do / Don't
 

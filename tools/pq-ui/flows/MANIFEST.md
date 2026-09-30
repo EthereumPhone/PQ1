@@ -22,7 +22,7 @@ samples (table = the first): USDC → full/approved, DAI → full/rejected, USDT
 ends: approved (qubit → check), rejected (resolve → x, failed)
 
 ## batch/transfers — 30 screens
-defaults: icon `eth`, trail palette `TOSHI`
+defaults: icon `letter:T`, trail palette `TOSHI`
 
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
@@ -60,7 +60,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 ends: declined (resolve → x, failed), signed (qubit → check)
 
 ## batch/transfers_declined — 20 screens
-defaults: icon `eth`, trail palette `TOSHI`
+defaults: icon `letter:T`, trail palette `TOSHI`
 
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
@@ -171,6 +171,24 @@ defaults: icon `blind`, trail palette `0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD2
 
 ends: confirmed (qubit → check), declined (resolve → x, failed)
 
+## chains — 13 screens
+
+| # | id | kind | text | extras |
+|---|----|------|------|--------|
+| 1 | Mainnet | detail | on Mainnet |  |
+| 2 | Optimism | detail | on Optimism |  |
+| 3 | BNB | detail | on BNB |  |
+| 4 | Polygon | detail | on Polygon |  |
+| 5 | zkSync | detail | on zkSync |  |
+| 6 | CONFIRM? | confirm | Confirm? | early exit — OR VIEW MORE ▸ / ◂ TO GO BACK, commit |
+| 7 | Mantle | detail | on Mantle |  |
+| 8 | Base | detail | on Base |  |
+| 9 | Arbitrum | detail | on Arbitrum |  |
+| 10 | Avalanche | detail | on Avalanche |  |
+| 11 | Linea | detail | on Linea |  |
+| 12 | Scroll | detail | on Scroll |  |
+| 13 | Celo | detail | on Celo |  |
+
 ## contract_call — 9 screens
 defaults: trail palette `0x78D8526282Ac09f1885D0F39B8875a0180Fc081e`
 
@@ -201,11 +219,11 @@ defaults: icon `cowswap`, trail palette `COWSWAP`
 | 6 | CONFIRM? | confirm | Confirm? | early exit — OR VIEW MORE ▸ / ◂ TO GO BACK, commit |
 | 7 | EXPIRES | detail | EXPIRES: Tx expires in / ~20 min |  |
 | 8 | FEE | detail | FEE: No extra fee |  |
-| 9 | DETAILS | detail | DETAILS: Fills in one go. / If not, the / trade's cancelled. |  |
+| 9 | FILL | detail | FILL: Fill or kill |  |
 | 10 | SIGN | hero | SIGN COWSWAP? | hint, commit |
 | 11 | SIGNED | status | COWSWAP SIGNED | qubit → check |
 
-ends: declined (resolve → x, failed), signed (qubit → check)
+ends: declined (resolve → x, failed), failed (qubit → x, failed), signed (qubit → check)
 
 ## cowswap/swap — 11 screens
 defaults: icon `cowswap`, trail palette `COWSWAP`
@@ -220,11 +238,11 @@ defaults: icon `cowswap`, trail palette `COWSWAP`
 | 6 | CONFIRM? | confirm | Confirm? | early exit — OR VIEW MORE ▸ / ◂ TO GO BACK, commit |
 | 7 | EXPIRES | detail | EXPIRES: Tx expires in / ~20 min |  |
 | 8 | FEE | detail | FEE: No extra fee |  |
-| 9 | DETAILS | detail | DETAILS: Fills in one go. / If not, the / trade's cancelled. |  |
+| 9 | FILL | detail | FILL: Fill or kill |  |
 | 10 | SIGN | hero | SIGN COWSWAP? | hint, commit |
 | 11 | SIGNED | status | COWSWAP SIGNED | qubit → check |
 
-ends: declined (resolve → x, failed), signed (qubit → check)
+ends: declined (resolve → x, failed), failed (qubit → x, failed), signed (qubit → check)
 
 ## eip1271/personal_counterfactual — 11 screens
 defaults: icon `eth`, trail palette `0x5Ea1c7D93b04F6a28E7c3D0b9F1e6A4c8B2d7E05`
@@ -264,21 +282,20 @@ defaults: icon `eth`, trail palette `0x5Ea1c7D93b04F6a28E7c3D0b9F1e6A4c8B2d7E05`
 
 ends: declined (resolve → x, failed), signed (qubit → check)
 
-## erc7730/swap — 10 screens
+## erc7730/swap — 9 screens
 defaults: icon `eth`, trail palette `0x2626664c2603336E57B271c5C0b26F421741e481`
 
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
-| 1 | ERC7730 | hero | ERC-7730 CLEAR SIGNING | band chevron ▸, no corner chevrons |
-| 2 | SIGN | hero | SIGN SWAP COINBASE UNISWAP V3? | hint, commit |
-| 3 | NETWORK | detail | on Base |  |
-| 4 | AMOUNT | detail | AMOUNT: 0 ETH |  |
-| 5 | FUNCTION | detail | FUNCTION: Approve / unlimited USDC |  |
-| 6 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
-| 7 | WORST CASE | detail | WORST CASE: Max: 0.00273 ETH / Gas: 60000 |  |
-| 8 | DETAIL | detail | DETAIL: Nonce: 42 |  |
-| 9 | SIGN | hero | SIGN SWAP COINBASE UNISWAP V3? | hint, commit |
-| 10 | SIGNED | status | SWAP SIGNED | qubit → check |
+| 1 | SIGN | hero | SIGN SWAP COINBASE UNISWAP V3? | hint, commit |
+| 2 | NETWORK | detail | on Base |  |
+| 3 | AMOUNT | detail | AMOUNT: 0 ETH |  |
+| 4 | FUNCTION | detail | FUNCTION: Approve / unlimited USDC |  |
+| 5 | MAX FEE | detail | MAX FEE: 45.5 gwei / Tip: 2 gwei |  |
+| 6 | WORST CASE | detail | WORST CASE: Max: 0.00273 ETH / Gas: 60000 |  |
+| 7 | DETAIL | detail | DETAIL: Nonce: 42 |  |
+| 8 | SIGN | hero | SIGN SWAP COINBASE UNISWAP V3? | hint, commit |
+| 9 | SIGNED | status | SWAP SIGNED | qubit → check |
 
 ends: declined (resolve → x, failed), signed (qubit → check)
 
@@ -315,9 +332,9 @@ defaults: icon `download`, trail palette `FIRMWARE`
 | 2 | KEY FINGERPRINT | hero | FIRMWARE KEY FINGERPRINT | band chevron ▸, no corner chevrons |
 | 3 | WORDS | value | close · agent · own · deputy · grape · though · sail · simple |  |
 | 4 | CONFIRM UPDATE | hero | CONFIRM UPDATE TO 1.0.3? | hint, commit |
-| 5 | UPDATED | status | FIRMWARE UPDATED TO 1.0.3 | lead explosion major busy "RECONNECTING…", arrive → check |
+| 5 | UPDATED | status | FIRMWARE UPDATED TO 1.0.3 | lead explosion major busy "UPDATING…", arrive → check |
 
-ends: declined (lead explosion minor, arrive → x, failed), updated (lead explosion major busy "RECONNECTING…", arrive → check)
+ends: declined (lead explosion minor, arrive → x, failed), failed (lead explosion major busy "UPDATING…", arrive → x, failed), updated (lead explosion major busy "UPDATING…", arrive → check)
 
 ## palettes — 14 screens
 defaults: icon `eth`
@@ -336,7 +353,7 @@ defaults: icon `eth`
 | 10 | RAMP9 | hero | RAMP 9 #CA4D45 NEW | hint, commit |
 | 11 | RAMP10 | hero | RAMP 10 #6A6B70 | hint, commit |
 | 12 | RAMP11 | hero | RAMP 11 #8C57BC | hint, commit |
-| 13 | RAMP12 | hero | RAMP 12 #4C73CF NEW | hint, commit |
+| 13 | RAMP12 | hero | RAMP 12 #4A7A1C NEW | hint, commit |
 | 14 | RAMP13 | hero | RAMP 13 #000000 | hint, commit |
 
 ## pin/unlock — 3 screens
@@ -345,9 +362,9 @@ defaults: icon `eth`
 |---|----|------|------|--------|
 | 1 | TRY 1 | status | PIN ENTERED | pin_entering → None, miss pin_mismatch → WRONG PIN, match padlock → UNLOCKED, failed, busy "ENTER PIN" |
 | 2 | TRY 2 | status | PIN ENTERED | pin_entering → None, miss last_attempt → LAST ATTEMPT, match padlock → UNLOCKED, failed, busy "ENTER PIN" |
-| 3 | TRY 3 | status | PIN ENTERED | pin_entering → None, miss padlock → LOCKED, match padlock → UNLOCKED, busy "ENTER PIN" |
+| 3 | TRY 3 | status | PIN ENTERED | pin_entering → None, miss padlock → LOCKED, match padlock → UNLOCKED, busy "LAST ATTEMPT" |
 
-ends: locked (pin_entering → None, miss padlock → LOCKED, match padlock → UNLOCKED, failed, busy "ENTER PIN"), unlocked (pin_entering → None, miss padlock → LOCKED, match padlock → UNLOCKED, busy "ENTER PIN")
+ends: locked (pin_entering → None, miss padlock → LOCKED, match padlock → UNLOCKED, failed, busy "LAST ATTEMPT"), unlocked (pin_entering → None, miss padlock → LOCKED, match padlock → UNLOCKED, busy "LAST ATTEMPT")
 
 ## rotate_slot — 5 screens
 defaults: icon `rotate`, trail palette `ROTATE`
@@ -370,13 +387,13 @@ defaults: icon `safe`, trail palette `SAFE`
 | 1 | ADD OWNER | hero | SAFE ADD OWNER? | hint, commit |
 | 2 | NETWORK | detail | on Mainnet |  |
 | 3 | SAFE ACCT | detail | SAFE ACCT: 0x1111111111222222222 / 3333333333444444444aa |  |
-| 4 | NEW | detail | NEW: 0xAAAABBBBCCCCDDDDEEE / EFFFF0000111122223333 |  |
+| 4 | NEW | detail | NEW: 0x8d279925e092FE090A7 / 90E9466064B147E26dBe7 |  |
 | 5 | SIGNERS | detail | SIGNERS: 2 of 3 / Signers required |  |
 | 6 | TX INFO | detail | TX INFO: Nonce: 12 |  |
 | 7 | ADD OWNER | hero | SAFE ADD OWNER? | hint, commit |
 | 8 | SIGNED | status | SIGNED SAFE TX | qubit → check |
 
-ends: declined (resolve → x, failed), signed (qubit → check)
+ends: declined (resolve → x, failed), failed (qubit → x, failed), signed (qubit → check)
 
 ## safe/can_not_decode — 11 screens
 defaults: icon `safe`, trail palette `SAFE`
@@ -384,18 +401,18 @@ defaults: icon `safe`, trail palette `SAFE`
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | APPROVE | hero | APPROVE SAFE TX? | hint, commit |
-| 2 | SAFE ACCT | detail | SAFE ACCT: 0x1111111111222222222 / 3333333333444444444aa |  |
-| 3 | BLIND SIGN | detail | BLIND SIGN: Can not decode data / Confirm on dapp | **pulse** |
+| 2 | NETWORK | detail | on Base |  |
+| 3 | SAFE ACCT | detail | SAFE ACCT: 0x1111111111222222222 / 3333333333444444444aa |  |
 | 4 | TO | detail | TO: 0x123456789abcdef1234 / 56789abcdef123456789a |  |
-| 5 | CHAIN | detail | on Base |  |
+| 5 | BLIND SIGN | detail | BLIND SIGN: Can not decode data / Confirm on dapp | **pulse** |
 | 6 | CONFIRM? | confirm | Confirm? | early exit — OR VIEW MORE ▸ / ◂ TO GO BACK, commit |
 | 7 | TX INFO | detail | TX INFO: Nonce: 8 / Type: Standard |  |
 | 8 | CALL DATA | detail | CALL DATA: Function: 0x12345678 / Data: 64 B |  |
-| 9 | TX HASH | detail | TX HASH: 0x9f86d081884c7d / ...6c15b0f00a08 |  |
+| 9 | TX HASH | detail | TX HASH: 0x3891eebc185e86fb / 1b32cb344d10b93d ‖ 2be974b27f759d33 / c6275096ddca3720 | 2 pages |
 | 10 | APPROVE | hero | APPROVE SAFE TX? | hint, commit |
 | 11 | SIGNED | status | SIGNED SAFE TX | qubit → check |
 
-ends: declined (resolve → x, failed), signed (qubit → check)
+ends: declined (resolve → x, failed), failed (qubit → x, failed), signed (qubit → check)
 
 ## safe/clear_sign — 11 screens
 defaults: icon `safe`, trail palette `SAFE`
@@ -403,18 +420,18 @@ defaults: icon `safe`, trail palette `SAFE`
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
 | 1 | SEND | hero | SEND 25,000 USDC? | hint, commit |
-| 2 | AMOUNT | detail | SEND: 25,000 USDC |  |
-| 3 | CHAIN | detail | on Mainnet |  |
-| 4 | SAFE ACCT | detail | SAFE ACCT: 0x1111111111222222222 / 3333333333444444444aa |  |
-| 5 | TO | detail | TO: 0x123456789abcdef1234 / 56789abcdef123456789 |  |
+| 2 | NETWORK | detail | on Mainnet |  |
+| 3 | SAFE ACCT | detail | SAFE ACCT: 0x1111111111222222222 / 3333333333444444444aa |  |
+| 4 | TO | detail | TO: 0x123456789abcdef1234 / 56789abcdef123456789 |  |
+| 5 | AMOUNT | detail | SEND: 25,000 USDC |  |
 | 6 | CONFIRM? | confirm | Confirm? | early exit — OR VIEW MORE ▸ / ◂ TO GO BACK, commit |
 | 7 | TX INFO | detail | TX INFO: Nonce: 8 / Standard call |  |
 | 8 | CALL DATA | detail | CALL DATA: Function: 0x12345678 / Data: 64 B |  |
-| 9 | TX HASH | detail | TX HASH: 0x9f86d081884c7d / ...6c15b0f00a08 |  |
+| 9 | TX HASH | detail | TX HASH: 0xb79b7df60161f21a / 70ba06cad4839a18 ‖ 45ee2d6787c5272e / 8a09960f18dd3120 | 2 pages |
 | 10 | SEND | hero | SEND 25,000 USDC? | hint, commit |
 | 11 | SIGNED | status | SIGNED SAFE TRANSACTION | qubit → check |
 
-ends: declined (resolve → x, failed), signed (qubit → check)
+ends: declined (resolve → x, failed), failed (qubit → x, failed), signed (qubit → check)
 
 ## safe/enable_module — 8 screens
 defaults: icon `safe`, trail palette `SAFE`
@@ -430,7 +447,7 @@ defaults: icon `safe`, trail palette `SAFE`
 | 7 | ENABLE MODULE | hero | APPROVE ENABLE MODULE? | hint, commit |
 | 8 | SIGNED | status | ENABLE MODULE APPROVED | qubit → check |
 
-ends: declined (resolve → x, failed), signed (qubit → check)
+ends: declined (resolve → x, failed), failed (qubit → x, failed), signed (qubit → check)
 
 ## safe/erc20_transfer — 11 screens
 defaults: icon `safe`, trail palette `SAFE`
@@ -440,8 +457,8 @@ defaults: icon `safe`, trail palette `SAFE`
 | 1 | TRANSFER | hero | SEND 250 USDC? | hint, commit |
 | 2 | NETWORK | detail | on Mainnet |  |
 | 3 | SAFE ACCT | detail | SAFE ACCT: 0x1111111111222222222 / 3333333333444444444aa |  |
-| 4 | SEND | detail | SEND: 250.000000 USDC |  |
-| 5 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
+| 4 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
+| 5 | SEND | detail | SEND: 250.000000 USDC |  |
 | 6 | CONFIRM? | confirm | Confirm? | early exit — OR VIEW MORE ▸ / ◂ TO GO BACK, commit |
 | 7 | TOKEN | detail | TOKEN: USD Coin |  |
 | 8 | CONTRACT | detail | CONTRACT: 0xA0b86991c6218b36c1d / 19D4a2e9Eb0cE3606eB48 |  |
@@ -449,7 +466,7 @@ defaults: icon `safe`, trail palette `SAFE`
 | 10 | TRANSFER | hero | SEND 250 USDC? | hint, commit |
 | 11 | SIGNED | status | SIGNED SAFE TX | qubit → check |
 
-ends: declined (resolve → x, failed), signed (qubit → check)
+ends: declined (resolve → x, failed), failed (qubit → x, failed), signed (qubit → check)
 
 ## safe/execute_refund — 9 screens
 defaults: icon `safe`, trail palette `SAFE`
@@ -459,14 +476,14 @@ defaults: icon `safe`, trail palette `SAFE`
 | 1 | EXECUTE | hero | EXECUTE SAFE TX? | hint, commit |
 | 2 | NETWORK | detail | on Mainnet |  |
 | 3 | SAFE ACCT | detail | SAFE ACCT: 0x1111111111222222222 / 3333333333444444444aa |  |
-| 4 | SEND | detail | SEND: 0.1 ETH |  |
-| 5 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
+| 4 | TO | detail | TO: 0x78D8526282Ac09f1885 / D0F39B8875a0180Fc081e |  |
+| 5 | SEND | detail | SEND: 0.1 ETH |  |
 | 6 | GAS | detail | GAS: Safe pays / the execution |  |
 | 7 | CONTRACT | detail | CONTRACT: 0x41675C099F32341bf84 / BFc5382aF534df5C7461a |  |
 | 8 | EXECUTE | hero | EXECUTE SAFE TX? | hint, commit |
 | 9 | SIGNED | status | SAFE TX EXECUTED | qubit → check |
 
-ends: declined (resolve → x, failed), signed (qubit → check)
+ends: declined (resolve → x, failed), failed (qubit → x, failed), signed (qubit → check)
 
 ## send — 8 screens
 defaults: trail palette `13`
@@ -485,7 +502,7 @@ defaults: trail palette `13`
 ends: confirmed (qubit → check), declined (resolve → x, failed), failed (qubit → x, failed)
 
 ## send_token — 9 screens
-defaults: icon `eth`, trail palette `TOSHI`
+defaults: icon `letter:T`, trail palette `TOSHI`
 
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
@@ -502,7 +519,7 @@ defaults: icon `eth`, trail palette `TOSHI`
 ends: declined (resolve → x, failed), successful (qubit → check)
 
 ## send_token_named — 9 screens
-defaults: icon `eth`, trail palette `TOSHI`
+defaults: icon `letter:T`, trail palette `TOSHI`
 
 | # | id | kind | text | extras |
 |---|----|------|------|--------|
@@ -517,6 +534,25 @@ defaults: icon `eth`, trail palette `TOSHI`
 | 9 | SUCCESSFUL | status | TRANSACTION SUCCESSFUL | qubit → check |
 
 ends: declined (resolve → x, failed), successful (qubit → check)
+
+## setup/first_run — 11 screens
+defaults: icon `dots`, trail palette `FIRMWARE`
+
+| # | id | kind | text | extras |
+|---|----|------|------|--------|
+| 1 | SETUP | hero | SET UP PQ1? | hint, commit |
+| 2 | SET PIN | status | PIN ENTERED | pin_entering → None, busy "SET PIN" |
+| 3 | REPEAT PIN | status | PIN ENTERED | pin_entering → None, miss pin_mismatch → PIN MISMATCH, busy "REPEAT PIN" |
+| 4 | SET DURESS PIN | status | PIN ENTERED | pin_entering → None, miss duress_differ → DURESS PIN MUST DIFFER, busy "SET DURESS PIN" |
+| 5 | REPEAT DURESS PIN | status | PIN ENTERED | pin_entering → None, miss pin_mismatch → PIN MISMATCH, busy "REPEAT DURESS PIN" |
+| 6 | BACKUP | hero | WRITE DOWN 24 WORDS | band chevron ▸, no corner chevrons |
+| 7 | WORDS | value | close · agent · own · deputy · grape · though · sail · simple · ribbon · cactus · noble · violet · ember · lucky · orbit · pencil · tundra · mimic · gravel · spice · fetch · cabin · motor · dawn |  |
+| 8 | WRITTEN | hero | WORDS WRITTEN DOWN? | hint, commit |
+| 9 | CHECK 3 | status |  | check_word → None, miss headshake → WRONG SEED PHRASE |
+| 10 | CHECK 12 | status |  | check_word → None, miss headshake → WRONG SEED PHRASE |
+| 11 | CHECK 22 | status |  | check_word → None, miss headshake → WRONG SEED PHRASE, match arrive → SETUP COMPLETE |
+
+ends: failed (check_word → None, miss headshake → WRONG SEED PHRASE, match arrive → SETUP COMPLETE, failed), successful (check_word → None, miss headshake → WRONG SEED PHRASE, match arrive → SETUP COMPLETE)
 
 ## transfer_token — 9 screens
 defaults: icon `usdc`, trail palette `USDC`

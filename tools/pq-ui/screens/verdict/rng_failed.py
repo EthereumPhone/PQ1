@@ -26,11 +26,13 @@ takes the edge off the first frames the way a camera sees a thrown die,
 without smearing the faces away: the die is sharp again well before
 it settles.
 
-The die keeps the source's half-edge 21; its resting ink box (64 x 55)
-centres on the circle grid (214, 72) with a half-pixel nudge right
-(DIE_DX — the corner view inks 0.5 px left of the cube's centre). The
-caption is the source's 18 px caps with 0.5 px tracking on the y 128
-baseline — components.caption.
+The die's half-edge derives from the sign box (layout.VERDICT_BOX — the
+source's 21: the corner view inks the box wide, 64 x 55); its resting ink
+centres on the circle grid (214, 72) with no nudge (DIE_DX 0 — the
+source's half-pixel bbox nudge pushed the ink centroid the wrong way,
+audit ICO-04). The
+caption is the Question caps (typography.SIZE_QUESTION / LS_QUESTION) on
+the y 128 baseline — components.caption.
 
     screens.spec("rng_failed")
     python3 -m screens rng_failed
@@ -38,7 +40,7 @@ baseline — components.caption.
 import math
 
 from pq1 import status
-from pq1.layout import CENTER_X, CIRCLE_CY
+from pq1.layout import CENTER_X, CIRCLE_CY, VERDICT_BOX
 from pq1.motion import VERDICT_ACCENT_MIN_MS, clamp01, decel
 from pq1.procedural import die3d
 from pq1.verdict import VerdictAnim
@@ -46,11 +48,16 @@ from pq1.verdict import VerdictAnim
 ANIM = "rng_failed"
 SPEC = dict(state="failed", bottom="RNG FAILED")
 
-SIZE = 21.0                                        # half-edge (source)
+# the half-edge: the resting corner view (1-2-3) inks the sign box WIDE —
+# 64.3 at the source's 21 — so the box derives it (audit ICO-03)
+SIZE = VERDICT_BOX * 21 / 64
 SPIN = (math.pi, 1.5 * math.pi, 0.5 * math.pi)     # per-axis tumble (the
                                                    # source's 3pi/4pi/1.5pi tamed)
 DECEL_P = 2.8      # the tumble's deceleration (source)
-DIE_DX = 0.5       # the resting corner view inks 0.5 px left of the cube centre
+# no nudge: the source's 0.5 px bbox nudge right moved the ink CENTROID
+# the wrong way — the corner view's bounding box is off-centre, its ink is
+# not (audit ICO-04; owner decision Sep 2026: re-centre the die only)
+DIE_DX = 0.0
 
 # the mechanism, on the arrived sign (source windows)
 T_REST = 350       # the wound-up die at rest — the source's visible hold

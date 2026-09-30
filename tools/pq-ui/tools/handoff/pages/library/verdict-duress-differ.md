@@ -6,7 +6,7 @@ arrives whole — outline and all {{val:pq1.procedural.pin_pill.SLOTS}} dots alr
 orange — and the mechanism is the device *checking* it: a scanline crosses the pill and comes back,
 finds the same PIN, and the row shakes it off.
 
-Everything is in `state="warning"` (orange 245 160 51). The art is the shared
+Everything is in `state="warning"` (orange {{col:pq1.colors.ORANGE}}). The art is the shared
 `pq1.procedural.pin_pill` ({{loc:pq1.procedural.pin_pill.draw}}), plus its scanline
 ({{loc:pq1.procedural.pin_pill.scanline}}): a bar {{val:pq1.procedural.pin_pill.SCAN_HW}} px to each
 side of its centre, overhanging the pill {{val:pq1.procedural.pin_pill.SCAN_OVER}} px top and bottom,
@@ -18,7 +18,7 @@ Play order; this module has no presets, so one table. The mechanism clock `tm` s
 entrance ends — at `T_HOLD` + `T_IN` on the screen's clock.
 
 {{motion-head}}
-{{row:black hold — the flow's token hands over | screens.verdict.duress_differ.DuressDiffer.T_HOLD | ease_out | the resting token is drawn, and a black disc of FIXED radius — the token's ({{val:pq1.layout.CIRCLE_R}} px) plus a hair — fades in over it; the disc never grows ({{loc:pq1.status.draw_handoff}}); with no token before it, plain black}}
+{{row:black hold — the flow's token hands over | screens.verdict.duress_differ.DuressDiffer.T_HOLD | ease_out | {{tok:pq1.motion.PIN_HOLD_MS}}, four panel frames — a PIN outcome answers a keypress. The resting token is drawn, and a black disc of FIXED radius — the token's ({{val:pq1.layout.CIRCLE_R}} px) plus a hair — fades in over it; the disc never grows ({{loc:pq1.status.draw_handoff}}); with no token before it, plain black}}
 {{row:pill AND dots arrive together | screens.verdict.duress_differ.DuressDiffer.T_IN | ease_out + arrive | the entrance law: one alpha over outline and dots, scale {{val:pq1.motion.ARRIVE_FROM}} to 1, no overshoot. Already orange — there is no normal state to recap}}
 {{row:the filled row holds | screens.verdict.duress_differ.T_FILLED | hold | the beat before the check}}
 {{row:the scanline crosses and comes back | screens.verdict.duress_differ.T_SCAN | raised cosine | position is 0.5 − 0.5·cos(2π·u) for {{val:screens.verdict.duress_differ.SCAN_CYCLES}} cycle, so the bar eases at each end, travels 92 px each way and ENDS WHERE IT STARTED. Each traverse is half this}}
@@ -51,8 +51,7 @@ inside 0 to 1, which ends exactly when the shake begins. No result glyph, no fla
 {{used-in}}
 
 No flow splices it yet — it is the library answer for a duress-PIN rule, ready for the flow that
-sets one. Its plain (non-verdict) twin, [pin / pin_differ](pin-pin-differ.md), states the same rule
-with a longer sweep and no entrance.
+sets one. [pin / pin_differ](pin-pin-differ.md) is this same animation under its pin-category name.
 
 ## Preview
 

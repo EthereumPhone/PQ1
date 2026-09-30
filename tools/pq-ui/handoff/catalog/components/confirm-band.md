@@ -16,24 +16,25 @@ The bottom band of the [Confirm?](../screen-types/confirm.md) screen. The big pr
 
 Only one is visible at a time. The swap is sequential: one fades out completely, then the other fades in. They never crossfade.
 
-The texts are fixed strings of the design system (`pq1/components.py:529`), not flow data. The drawing is `components.confirm_band` (`pq1/components.py:554`), two calls of the band unit (`pq1/components.py:536`) that an intro's [band chevron](band-chevron.md) also uses. The timing is `motion.confirm_band` (`pq1/motion.py:265`).
+The texts are fixed strings of the design system (`pq1/components.py:579`), not flow data. The drawing is `components.confirm_band` (`pq1/components.py:610`), two calls of the band unit (`pq1/components.py:588`) that an intro's [band chevron](band-chevron.md) also uses. The timing is `motion.confirm_band` (`pq1/motion.py:341`), which runs each slot through `motion.hint_env` (`pq1/motion.py:317`) — the one appear / rest / go envelope the busy caption, the PIN hints and the chevron hint share.
 
 ## When it appears
 
-Only on a `confirm` screen, and only while that screen is **settled**. The Sim draws it outside the screen's text list (`pq1/flow.py:310`), so it is not part of the transit.
+Only on a `confirm` screen, and only while that screen is **settled**. The Sim draws it outside the screen's text list (`pq1/flow.py:338`), so it is not part of the transit.
 
 ## Geometry
 
 | part | value |
 |---|---|
-| text centre x, both messages | 206 |
+| text centre x, OR VIEW MORE | 206 (`VIEW_MORE_CX`) |
+| text centre x, TO GO BACK | 222 (`GO_BACK_CX`, the mirror: 2 × centre − VIEW_MORE_CX) |
 | baseline y | 128 |
 | type | the question caps: size 18, letter spacing 0.5, white |
 | chevron centre x | 13 px past the text's right edge (VIEW MORE), or the same distance before its left edge (GO BACK) |
 | chevron centre y | 121.5 |
 | chevron shape | the [corner chevron](chevrons.md)'s, turned a quarter right or left |
 
-Both texts are centred on the same x. That x is the panel centre (214) nudged left so that `OR VIEW MORE ▸` reads centred as a unit; `◂ TO GO BACK` keeps the same text centre, so as a unit it reads further left. Port it as the code has it.
+Each text is nudged off the panel centre (214) so that its whole unit — text plus chevron — reads centred: `OR VIEW MORE ▸` (chevron after) on 206, `◂ TO GO BACK` (chevron before) on the mirror 222. The two alternate every few seconds in one slot, so they share one visual centre and the band does not jump sideways at the swap.
 
 ## Motion
 
@@ -42,14 +43,14 @@ The clock is the ms since the Confirm? screen settled. Each alpha below multipli
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | arrival: the band stays empty until the screen settles | — | — | — | — | — | the band is not drawn at all during the transit; its clock starts at settle, where the envelope is zero, so it fades up from nothing |
-| a message fades in | 300 | 4.2 | ease_out | `BAND_FADE_MS` | `pq1/motion.py:261` | first part of its slot |
-| it holds at full | 4400 | 61.6 | hold | `BAND_SWAP_MS - 2 * BAND_FADE_MS` | `pq1/motion.py:260` |  |
-| it fades out | 300 | 4.2 | ease_out | `BAND_FADE_MS` | `pq1/motion.py:261` | last part of its slot; the same curve run as 1 − ease_out |
-| one slot = one message | 5000 | 70.0 | — | `BAND_SWAP_MS` | `pq1/motion.py:260` | VIEW MORE takes the first slot, GO BACK the second |
-| full cycle, then it repeats | 10000 | 140.0 | — | `2 * BAND_SWAP_MS` | `pq1/motion.py:260` | for as long as the screen rests |
-| the corner chevrons bob once per slot | 5000 | 70.0 | sine | `BAND_SWAP_MS` | `pq1/motion.py:260` | the hero hint's envelope run with the band's period; the chevrons already rest up, so its turn does nothing and only the bob shows — see [chevrons](chevrons.md) |
+| a message fades in | 300 | 4.2 | ease_out | `BAND_FADE_MS` | `pq1/motion.py:337` | first part of its slot |
+| it holds at full | 4400 | 61.6 | hold | `BAND_SWAP_MS - 2 * BAND_FADE_MS` | `pq1/motion.py:336` |  |
+| it fades out | 300 | 4.2 | ease_out | `BAND_FADE_MS` | `pq1/motion.py:337` | last part of its slot; the same curve run as 1 − ease_out |
+| one slot = one message | 5000 | 70.0 | — | `BAND_SWAP_MS` | `pq1/motion.py:336` | VIEW MORE takes the first slot, GO BACK the second |
+| full cycle, then it repeats | 10000 | 140.0 | — | `2 * BAND_SWAP_MS` | `pq1/motion.py:336` | for as long as the screen rests |
+| the corner chevrons bob once per slot | 5000 | 70.0 | sine | `BAND_SWAP_MS` | `pq1/motion.py:336` | the hero hint's envelope run with the band's period; the chevrons already rest up, so its turn does nothing and only the bob shows — see [chevrons](chevrons.md) |
 | leaving: the band disappears | — | — | cut | — | — | it is not drawn during a transit, so it is gone on the frame a tap lands, while the prompt fades on its spring |
-| demo only: the screen's dwell | 10000 | 140.0 | — | `CONFIRM_DWELL` | `pq1/motion.py:262` | **do not port** — two slots, so a GIF shows both messages |
+| demo only: the screen's dwell | 10000 | 140.0 | — | `CONFIRM_DWELL` | `pq1/motion.py:338` | **do not port** — two slots, so a GIF shows both messages |
 
 The cut on leaving never shows in a GIF: the demo leaves at the end of the second slot (its default dwell), where the band has already faded to zero. On the device a tap can land at any time, so the reference cuts a fully lit message. Keep it a deliberate choice in the port (cut as the reference does, or fade it with the prompt) and check it with the designer.
 

@@ -24,8 +24,8 @@ Last attempt — the attempt counter reels down to 1 beside a red heart.
 > Geometry from the source (digit x 199 / heart x 233, 34 px apart, one
 > line y 67; 40 px digit, 30 px heart) re-centred so the RESTING sign —
 > the 1 and the heart — sits on the circle grid (214, 72). The digit is
-> sign art, not type: it keeps the source's 40 px, whose cap height is the
-> heart's height, rather than the type scale's 36, and it is SemiBold (the
+> sign art, not detail text: it stands on the DISPLAY tier (SIZE_DISPLAY — the
+> source's 40 px, whose cap height is the heart's height), and it is SemiBold (the
 > 600 weight, the label caps' face — user request, Sep 2026; the source's
 > own medium weight is not a PQ1 face).
 >
@@ -41,7 +41,7 @@ before they see what it became.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 400 | 5.6 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | `status.draw_handoff` veils the resting token. Inside a PIN attempt the entry builds this verdict with `handoff` off, so the hold is plain black — see [token-less transit](../transitions/tokenless-fade.md) |
+| black hold — the flow's token hands over | 429 | 6.0 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | `status.draw_handoff` veils the resting token. Inside a PIN attempt the entry builds this verdict with `handoff` off, so the hold is plain black — see [token-less transit](../transitions/tokenless-fade.md) |
 | the sign arrives — fade | 300 | 4.2 | ease_out | `T_IN` | `pq1/verdict.py:42` | digit and heart on one alpha |
 | the sign arrives — rise | 300 | 4.2 | arrive | `T_IN` | `pq1/verdict.py:42` | scale `ARRIVE_FROM` 0.97 to 1. The rise is about the grid centre, so both anchors converge on it as they grow — x = CENTER_X + (x_rest - CENTER_X) x s — and the pair is never seen drifting apart |
 | rest on the start digit | 400 | 5.6 | — | `T_REST` | `screens/verdict/last_attempt.py:39` | the source's visible hold. The count is read before it falls |
@@ -49,7 +49,7 @@ before they see what it became.
 | the settle | 700 | 9.8 | wobble | `T_SETTLE` | `screens/verdict/last_attempt.py:41` | the 1 overshoots and comes back: progress goes past 1 by `BOUNCE` 0.18 x wobble, divided by start - 1, so the strip travels the same distance whatever the start digit. wobble's first crest is about 0.53 of its amplitude, so the overshoot peaks near a tenth of a reel step — about 4.4 px — and dies on decay 3 |
 | the heart's pump train | 700 | 9.8 | heartbeat | `T_BEAT` | `screens/verdict/last_attempt.py:42` | height = `HEART_H` 30 px x heartbeat: 3 pumps, amplitude 0.22, decay 4 — a peak height near 33.7 px on the first pump, smaller on each one after. The digit does not move |
 | the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | LAST ATTEMPT on the baseline y 128 |
-| resolved — the result hold | 2450 | 34.3 | — | `RESULT_HOLD_MS` | `pq1/status.py:101` | see [result hold](../transitions/result-hold.md) |
+| resolved — the result hold | 2450 | 34.3 | — | `RESULT_HOLD_MS` | `pq1/status.py:107` | see [result hold](../transitions/result-hold.md) |
 
 `T_WAIT` is the whole mechanism — `T_REST + T_ROLL + T_SETTLE + T_BEAT` — and its clock starts
 at `T_HOLD + T_IN`, after the entrance. The heart's window opens exactly where the settle's
@@ -79,13 +79,13 @@ dimmed.
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 4800 ms (67.2 f) | 7250 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 4829 ms (67.6 f) | 7279 ms | 2450 ms | no | yes | no | no |
 
 ## Phases
 
 | phase attribute | `(default)` |
 |---|---:|
-| `T_HOLD` | 400 ms (5.6 f) |
+| `T_HOLD` | 429 ms (6.0 f) |
 | `T_IN` | 300 ms (4.2 f) |
 | `T_TEXT` | 300 ms (4.2 f) |
 | `T_WAIT` | 3800 ms (53.2 f) |
@@ -99,7 +99,7 @@ Curves this module calls: `motion.decel`, `motion.heartbeat`, `motion.wobble`. T
 |---|---|
 | `BOUNCE` | `0.18` |
 | `DIGIT_DY` | `-0.8` |
-| `DIGIT_PX` | `40.0` |
+| `DIGIT_PX` | `40` |
 | `DIGIT_WEIGHT` | `"semibold"` |
 | `HEART_DX` | `34.0` |
 | `HEART_H` | `30.0` |
@@ -144,8 +144,9 @@ Used in: _no live flow yet._
   from 8 and a count from 3 bounce by the same distance on screen.
 - **Do** keep the heart still while the reel rolls, and the reel still while the heart pumps.
   Two mechanisms moving at once reads as noise, not as a consequence.
-- **Don't** treat the digit as a text label on the type scale. It is 40 px art whose cap height
-  is tuned to the heart; re-sizing it breaks the pair.
+- **Don't** treat the digit as detail text. It is the **Display** tier
+  (`SIZE_DISPLAY` 40, SemiBold, one digit alone) whose cap height is tuned
+  to the heart; re-sizing it breaks the pair.
 - **Don't** let the window's bottom fade reach the digit's foot — the resting 1 must be solid.
 
 ## Port notes

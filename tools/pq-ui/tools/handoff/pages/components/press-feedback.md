@@ -33,6 +33,8 @@ This page describes a rule that exists only on paper. **No Python in this repo d
 
 The nudge ends before the tap window does, so a hold always sees it finish before its fill appears.
 
+**It is a one-shot, never a sustained state.** The nudge answers "did you feel my finger?" in the first {{val:pq1.motion.PRESS_FEEDBACK_MS}} ms and then the pair is at rest again. Through the rest of a hold both [chevrons](chevrons.md) stay exactly as they rest — a hold never fades one (user decision, Sep 2026; the A11-01 un-held-corner fade is retired).
+
 One other thing already answers a press-down, but only where a hold is armed: the press pulls a sweeping hero's disc home, from the press edge, before anything is known about the gesture (see [idle sweep](idle-sweep.md)). Where nothing is armed — hold right on a detail — the panel is still, and the nudge is the whole acknowledgment.
 
 ## What the spec leaves open
@@ -41,11 +43,11 @@ The port has to decide these, and should settle them with the designer before bu
 
 - **The shape of the nudge.** Direction, distance, and whether it is a move, a scale or a brightness change are not written down. The only chevron motion that exists in code is the hint's bob ({{loc:pq1.motion.chevron_hint}}), which moves both chevrons and is not a press response.
 - **Screens with no corner chevrons.** An [intro](../screen-types/hero-intro.md) hides the pair (its caption carries the [band chevron](band-chevron.md)) but still takes taps. Status screens hide it and take no input.
-- **Unarmed presses.** Whether a press that can do nothing (hold right on a detail) still nudges. The hold fill, by rule, draws nothing on an unarmed side.
+- **Unarmed presses.** Whether a press that can do nothing (hold right on a detail) still nudges. The hold fill, by rule, draws nothing on an unarmed side — and so does the pressed-side fade, which the driver only ever starts where the hold is armed.
 - **The PIN entry.** It draws its own chevron pair and has its own press grammar — see [PIN row](pin-row.md).
 - **Meeting other chevron motion.** A press can land while the hint has the chevrons turned up or mid-bob. A quick tap releases before the nudge ends, so the nudge overlaps the start of the transit's chevron morph. The spec calls the nudge non-interruptible; how it adds to the other motion is not written down.
 
-One number needs care. The nudge is shorter than two panel frames; the design system's own floor for a one-shot accent is {{tok:pq1.motion.VERDICT_ACCENT_MIN_MS}}. Sampled at the panel's rate, a nudge of this length can fall on a single frame. The spec generator flags the token for this (`under_two_frames`). Raise it with the designer rather than silently stretching it.
+The length sits exactly on the design system's floor for a one-shot accent, {{tok:pq1.motion.VERDICT_ACCENT_MIN_MS}} — two panel frames — so the panel always samples the nudge at least twice. Do not shorten it below that floor.
 
 ## Do / Don't
 

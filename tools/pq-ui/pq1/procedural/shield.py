@@ -41,7 +41,7 @@ _SHIELD = _outline()
 def draw(cv, cx, cy, *, h, color, alpha=1.0, lw=None):
     """shield outline, h UI px tall, design-box centre on (cx, cy).
     lw defaults to the source stroke, 3 px at the design height of 63."""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     col = tuple(int(round(c * alpha)) for c in color)
     k = (h / 63.0) * SUP

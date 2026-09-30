@@ -8,10 +8,10 @@ is the five-ring blast past the frame, "minor" the contained two-ring
 pop. Each element keeps its own spec colour (trail, body, clump_from,
 clump_to, ring — "#RRGGBB" or [r, g, b]), all white by default like
 the sources. bottom is empty by default; a flow can set one and it
-fades onto the baseline once the boom lands; busy ("RECONNECTING…") is
+fades onto the baseline once the boom lands; busy ("UPDATING…") is
 the loading caption, riding the orbit like the qubit film's (split done
 -> spiral; busy_until below holds it longer). enter ("left" / "right") opens on the circle sliding in from
-that side of the panel at the flows' KIOSK spring pace, its follower
+that side of the panel at the device's NAV spring pace, its follower
 trail riding in with it; enter="sides" opens on the two qubits flying in
 from both edges and spiralling straight onto the orbit — no rest, no
 split, a speed that only falls onto the orbit's (burst.SIDES_*).
@@ -159,7 +159,7 @@ class Explosion(status.StatusAnim):
         else:
             P = loading.qubit_pose(t - t0, q, src)
             b, gr, ga = P["bodies"][0], P["glyph_r"], P["glyph_a"]
-        if ga <= 0.01:
+        if ga <= colors.ALPHA_FLOOR:
             return
         gx, gy = b["x"], b["y"]
         components.glyph(cv, st["icon"], gx, gy, gr, ga, color=st["icon_color"])

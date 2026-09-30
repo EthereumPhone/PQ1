@@ -10,7 +10,8 @@ Hold to confirm — a hold fills the token's ring; confirm or cancel.
 > The standalone demo of the design system's hold gesture (DESIGN.md § Input).
 > A teal placeholder token drifts on a scaled-down idle sweep under "HOLD TO
 > CONFIRM" with the chevrons in the up (hold-armed) pose; the press lands at
-> T_IDLE and the system hold fill rises from TAP_MAX_MS after it to a full
+> T_IDLE (this demo holds the right button — BOTH chevrons stay, a hold never
+> fades one), and the system hold fill rises from TAP_MAX_MS after it to a full
 > disc at HOLD_COMMIT_MS — the same components.hold_flood on the same
 > motion.hold_fill curve that pq1.flow.Sim draws on a flow's commit screens:
 > a 30 % see-through liquid rising from the bottom of the disc — black over
@@ -18,8 +19,11 @@ Hold to confirm — a hold fills the token's ring; confirm or cancel.
 > mono token gets the white film inside instead). The spec's token / icon /
 > resting fields are honoured, so a SAFE-pinned spec renders the Safe disc,
 > black flush ring and the same dark film rising over the logo (`--family safe`).
-> ending="confirm": the token fades and the inner qubit status film plays on
-> the token's palette to "TRANSACTION CONFIRMED" — a branded spec lands on its
+> ending="confirm": the committed fill, the chevrons and the caption fade
+> over FADE_MS with the disc held, the bare disc holds SEED_HOLD_MS, then the
+> inner qubit film opens ON that disc (enter_from — flow.Sim's own
+> fade-hold-seed beat, never a black frame or a cold seed) and plays on the
+> token's palette to "TRANSACTION CONFIRMED" — a branded spec lands on its
 > filled resting disc. ending="cancel": the hold releases at 60 %, snaps back,
 > the token fades, and the failed resting look pops in over procedural.burst's
 > MINOR boom — burst.draw is called at an offset entering its boom phase, so
@@ -37,40 +41,41 @@ This screen is a **scripted demo of a live gesture**. It performs the press itse
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| chevrons fade in, both in the up (hold-armed) pose | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:103` | `components.chevron_pair(cv, 0, 0)` — no hint bob, no rotation |
-| the caption fades in — steady, not breathing | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:103` | HOLD TO CONFIRM is a gesture caption, so `busy_pulse` is false. See [busy caption](../components/busy-caption.md) |
-| idle drift, until the scripted press | 1800 | 25.2 | sine | `T_IDLE` | `screens/confirm/hold_to_confirm.py:41` | a plain sine of absolute `t` on the sweep period `SWEEP_PERIOD_MS` 5000 ms (70.0 f), amplitude 11.875 px — the idle sweep divided by 8. No delay, no chase, no trail. DEMO: the press lands here |
-| the press pulls the drift home | 300 | 4.2 | ease_out | `T_RECENTER` | `screens/confirm/hold_to_confirm.py:51` | the sine keeps running underneath; only its amplitude decays to zero, so the disc glides to the centre and the fill rises in a disc that stands still |
-| fill flat at zero — the press may still be a tap | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | measured from the press. A tap never flashes a partial fill |
-| fill rises to full | 1750 | 24.5 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:171` | `motion.hold_fill` (`pq1/motion.py:178`) drawn by `components.hold_flood` (`pq1/components.py:681`) — a see-through liquid at opacity 0.3, black over the teal body, white inside a near-black one. See [hold flood](../components/hold-flood.md) |
+| chevrons fade in, both in the up (hold-armed) pose | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:119` | `components.chevron_pair(cv, 0, 0)` — no hint bob, no rotation |
+| the caption fades in — steady, not breathing | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:119` | HOLD TO CONFIRM is a gesture caption, so `busy_pulse` is false. See [busy caption](../components/busy-caption.md) |
+| idle drift, until the scripted press | 1800 | 25.2 | sine | `T_IDLE` | `screens/confirm/hold_to_confirm.py:45` | a plain sine of absolute `t` on the sweep period `SWEEP_PERIOD_MS` 5000 ms (70.0 f), amplitude 11.875 px — the idle sweep divided by 8. No delay, no chase, no trail. DEMO: the press lands here |
+| the press pulls the drift home | 300 | 4.2 | ease_out | `T_RECENTER` | `screens/confirm/hold_to_confirm.py:55` | the sine keeps running underneath; only its amplitude decays to zero, so the disc glides to the centre and the fill rises in a disc that stands still |
+| fill flat at zero — the press may still be a tap | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | measured from the press. A tap never flashes a partial fill |
+| fill rises to full | 1500 | 21.0 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:195` | `motion.hold_fill` (`pq1/motion.py:211`) drawn by `components.hold_flood` (`pq1/components.py:739`) — a see-through liquid at opacity 0.3, black over the teal body, white inside a near-black one. See [hold flood](../components/hold-flood.md) |
 
 **`confirm` — the default, and the `hold_confirm_success` preset.** The fill completes.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the commit fires: the disc is full | 3800 | 53.2 | — | `T_COMMIT` | `screens/confirm/hold_to_confirm.py:42` | a time, not a length: the idle plus `HOLD_COMMIT_MS` 2000 ms (28.0 f) |
-| the hold composition fades out | 260 | 3.6 | ease_out | `T_FADE` | `screens/confirm/hold_to_confirm.py:43` | token, fill and chevrons together on one alpha. The caption rides its own slightly longer fade (`BUSY_FADE_MS` 300 ms (4.2 f), from the commit) and is down to a few thousandths of full when the cut comes — no pop |
-| the qubit film starts | 4060 | 56.8 | cut | `T_COMMIT + T_FADE` | `screens/confirm/hold_to_confirm.py:42` | a whole inner `status.QubitStatus` on the SAME spec minus `busy`, forced to `state="done"` / `result="check"` — so a branded demo lands on its branded resting disc |
-| the film, hold to resolved | 6200 | 86.8 | — | `QubitCfg.t7` | `pq1/loading.py:34` | every phase of it on [status — the qubit film](../screen-types/status-qubit.md) |
-| resolved | 10260 | 143.6 | — | `t_resolve` | `pq1/status.py:201` |  |
-| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | see [result hold](../transitions/result-hold.md) |
-| whole screen | 12710 | 177.9 | — | `duration` | `pq1/status.py:246` |  |
+| the commit fires: the disc is full | 3800 | 53.2 | — | `T_COMMIT` | `screens/confirm/hold_to_confirm.py:46` | a time, not a length: the idle plus `HOLD_COMMIT_MS` 2000 ms (28.0 f) |
+| the fill, the chevrons and the caption fade — the disc stays | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:145` | the committed fill and the up chevrons share one dress alpha; the disc is held at full alpha, parked at the centre (the press recentred the drift long before). The caption rides its own steady `BUSY_FADE_MS` 300 ms (4.2 f) envelope from the commit and is drawn only while the dress is up |
+| the bare disc holds alone on black | 180 | 2.5 | hold | `SEED_HOLD_MS` | `pq1/motion.py:148` | the Sim's own fade-hold-seed beat — see [entering a film](../transitions/film-entrance.md) |
+| the qubit film opens ON the disc | 4160 | 58.2 | — | `T_SEED` | `screens/confirm/hold_to_confirm.py:47` | a time: the commit plus the fade plus the hold. A whole inner `status.QubitStatus` on the SAME spec minus `busy`, forced to `state="done"` / `result="check"` — so a branded demo lands on its branded resting disc. It is built in `__init__` with `enter_from` the parked disc (centre, visible radius, fill, ring, icon), so its seed travels, shrinks and tints that very disc: no cut, no black frame, no cold seed |
+| the film, hold to resolved | 6200 | 86.8 | — | `QubitCfg.t7` | `pq1/loading.py:35` | every phase of it on [status — the qubit film](../screen-types/status-qubit.md) |
+| resolved | 10360 | 145.0 | — | `t_resolve` | `pq1/status.py:224` |  |
+| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | see [result hold](../transitions/result-hold.md) |
+| whole screen | 13255 | 185.6 | — | `duration` | `pq1/status.py:278` |  |
 
 **`hold_confirm_cancel` — the release.** The button comes up at 0.6 of the fill.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the release | 3100 | 43.4 | cut | `T_REL` | `screens/confirm/hold_to_confirm.py:45` | a time: the idle plus `motion.hold_fill_ms(RELEASE_K)`. Derived from the curve, never typed |
-| the fill drains | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:173` | from the level it had reached — see [release early](../actions/hold-release-early.md) |
-| the chevrons fade out | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:133` | from the release. The caption starts at the same instant but takes `BUSY_FADE_MS` 300 ms (4.2 f), so the words are the last thing to go |
-| the token fades out | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:133` | starts only once the fill has finished draining: drain first, then disappear |
-| the pop | 3480 | 48.7 | cut | `T_POP` | `screens/confirm/hold_to_confirm.py:46` | a time: release plus the drain plus the fade. `burst.draw` is entered at exactly the offset where the MINOR boom begins (`MINOR.qubit.t6` plus `MINOR.t_clump`), so no loading leg and no clump ever play — the bloom and ring constants are reused, never copied. The rings take the ending's own colour, red either way |
-| the failed disc arrives | 300 | 4.2 | ease_out + arrive | `T_IN` | `screens/confirm/hold_to_confirm.py:47` | the verdict entrance law: alpha 0 to 1 while the radius rises 0.97 to 1 of `CIRCLE_R` 30 px. It runs over the blast, not after it |
-| the beat before the caption | 450 | 6.3 | — | `T_WAIT` | `screens/confirm/hold_to_confirm.py:47` | nothing moves but the rings still flying out |
-| the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `screens/confirm/hold_to_confirm.py:47` | TRANSACTION CANCELLED |
-| resolved | 4530 | 63.4 | — | `t_resolve` | `pq1/status.py:201` |  |
-| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` |  |
-| whole screen | 6980 | 97.7 | — | `duration` | `pq1/status.py:246` |  |
+| the release | 3200 | 44.8 | cut | `T_REL` | `screens/confirm/hold_to_confirm.py:49` | a time: the idle plus `motion.hold_fill_ms(RELEASE_K)`. Derived from the curve, never typed |
+| the fill drains | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:197` | from the level it had reached — see [release early](../actions/hold-release-early.md) |
+| the chevrons fade out | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:145` | from the release. The caption starts at the same instant but takes `BUSY_FADE_MS` 300 ms (4.2 f), so the words are the last thing to go |
+| the token fades out | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:145` | starts only once the fill has finished draining: drain first, then disappear |
+| the pop | 3580 | 50.1 | cut | `T_POP` | `screens/confirm/hold_to_confirm.py:50` | a time: release plus the drain plus the fade. `burst.draw` is entered at exactly the offset where the MINOR boom begins (`MINOR.qubit.t6` plus `MINOR.t_clump`), so no loading leg and no clump ever play — the bloom and ring constants are reused, never copied. The rings take the ending's own colour, red either way |
+| the failed disc arrives | 300 | 4.2 | ease_out + arrive | `T_IN` | `screens/confirm/hold_to_confirm.py:51` | the verdict entrance law: alpha 0 to 1 while the radius rises 0.97 to 1 of `CIRCLE_R` 30 px. It runs over the blast, not after it |
+| the beat before the caption | 450 | 6.3 | — | `T_WAIT` | `screens/confirm/hold_to_confirm.py:51` | nothing moves but the rings still flying out |
+| the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `screens/confirm/hold_to_confirm.py:51` | TRANSACTION CANCELLED |
+| resolved | 4630 | 64.8 | — | `t_resolve` | `pq1/status.py:224` |  |
+| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` |  |
+| whole screen | 7080 | 99.1 | — | `duration` | `pq1/status.py:278` |  |
 
 ### What the endings rest on
 
@@ -78,14 +83,14 @@ This screen is a **scripted demo of a live gesture**. It performs the press itse
 
 Watch that swap when you read the demo as a reference: a real family's DECLINED ending rests on the red disc with a **black** X (`status.branded_resting`, DESIGN.md § Color), and only a family whose mark is already black (SAFE) renders the same here. `--family cowswap` leaves the navy mark on the X — the demo's own shortcut, not the endings rule.
 
-The demo's own token is the placeholder teal ramp 7 with the ETH glyph. `--family safe` re-dresses it from a flow family's `DEFAULTS` and its done ending's `resting`, which is the whole point of the screen: the hold film is resolved once, in `components.hold_style` (`pq1/components.py:660`), so a new brand gets it for free.
+The demo's own token is the placeholder teal ramp 7 with the ETH glyph. `--family safe` re-dresses it from a flow family's `DEFAULTS` and its done ending's `resting`, which is the whole point of the screen: the hold film is resolved once, in `components.hold_style` (`pq1/components.py:718`), so a new brand gets it for free.
 
 ## Variants
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 10260 ms (143.6 f) | 12710 ms | 2450 ms | no | no | no | no |
-| `hold_confirm_cancel` | 4530 ms (63.4 f) | 6980 ms | 2450 ms | no | no | no | no |
+| `(default)` | 10360 ms (145.0 f) | 13255 ms | 2895 ms | no | no | no | no |
+| `hold_confirm_cancel` | 4630 ms (64.8 f) | 7080 ms | 2450 ms | no | no | no | no |
 
 `(default)` is `hold_confirm_success` — identical specs, so the build renders it once. Both rest on a token, so a flow morphs out of them normally; neither can lead.
 
@@ -101,16 +106,16 @@ _This screen declares no `T_*` phase attributes; its timeline is in the module c
 | `ENDINGS` | `["confirm", "cancel"]` |
 | `RELEASE_K` | `0.6` |
 | `T_COMMIT` | `3800` |
-| `T_FADE` | `260` |
 | `T_IDLE` | `1800` |
 | `T_IN` | `300` |
-| `T_POP` | `3480` |
+| `T_POP` | `3580` |
 | `T_RECENTER` | `300` |
-| `T_REL` | `3100` |
+| `T_REL` | `3200` |
+| `T_SEED` | `4160` |
 | `T_TEXT` | `300` |
 | `T_WAIT` | `450` |
 
-`T_COMMIT`, `T_REL` and `T_POP` are **derived**: `T_IDLE` plus the system hold curve, plus the snap-back and the fade. Do not re-type them — recompute them from `HOLD_COMMIT_MS` 2000 ms (28.0 f), `HOLD_SNAPBACK_MS` 200 ms (2.8 f) and `motion.hold_fill_ms`, so a change to the gesture moves this screen with it. `DRIFT_AMP` is `SWEEP_AMP` 95 px over 8.
+`T_COMMIT`, `T_SEED`, `T_REL` and `T_POP` are **derived**: `T_IDLE` plus the system hold curve, plus the snap-back and the fade (or, for `T_SEED`, the fade and the seed hold). Do not re-type them — recompute them from `HOLD_COMMIT_MS` 2000 ms (28.0 f), `HOLD_SNAPBACK_MS` 200 ms (2.8 f) and `motion.hold_fill_ms`, so a change to the gesture moves this screen with it. `DRIFT_AMP` is `SWEEP_AMP` 95 px over 8.
 
 ## Spec a flow splices in
 

@@ -11,15 +11,15 @@ the device checking it: the scanline crosses the pill and comes back
 (one ping-pong cycle over T_SCAN, ending where it started), finds the
 same PIN, and the row shakes it off. Then the beat and the rule:
 
-    hold 250 -> arrive 300 (pill + dots) -> hold 200 -> scan 650
-             -> shake 420 -> beat 200 -> caption 300      t_resolve 2320
+    hold 286 -> arrive 300 (pill + dots) -> hold 280 -> scan 900
+             -> shake 580 -> beat 280 -> caption 300      t_resolve 2926
 
-Pace (user, Sep 2026, settled over three passes — twice "too slow", then
-"a bit slower"): the source's 1500 ms sweep is 650, the bar crossing in
-325 ms each way (four and a half frames at the NV3007's 14 fps), and the
-beats sit at 200 ms rather than on VERDICT_ACCENT_MIN_MS (145 — two
-frames, the floor a beat can hold and still be seen), which read as
-rushed.
+Pace (user, Sep 2026, settled over four passes — twice "too slow", then
+"a bit slower", then "slower" again on 2026-09-26, about 1.4x): the
+source's 1500 ms sweep is 900, the bar crossing in 450 ms each way
+(six and a half frames at the NV3007's 14 fps), and the beats sit at
+280 ms rather than on VERDICT_ACCENT_MIN_MS (145 — two frames, the floor
+a beat can hold and still be seen), which read as rushed.
 
 The art is pq1.procedural.pin_pill, shared with pin_mismatch (the same
 pill refused for the other reason — that one still fills after the pill
@@ -31,24 +31,24 @@ screen — its own longer 1.5-cycle sweep, no verdict entrance.
 """
 from pq1 import status
 from pq1.layout import CENTER_X, CIRCLE_CY
-from pq1.motion import ARRIVE_MS, clamp01, shake
+from pq1.motion import ARRIVE_MS, PIN_HOLD_MS, clamp01, shake
 from pq1.procedural import pin_pill
 from pq1.verdict import VerdictAnim
 
 ANIM = "duress_differ"
 SPEC = dict(state="warning", bottom="DURESS PIN MUST DIFFER")
 
-T_FILLED = 200    # the arrived row holds, before the check
-T_SCAN = 650      # the scanline crosses and comes back: one cycle
-T_SHAKE = 420     # the row shakes the duress PIN off — 2 source cycles
-T_BEAT = 200      # the verdict beat before the caption
+T_FILLED = 280    # the arrived row holds, before the check
+T_SCAN = 900      # the scanline crosses and comes back: one cycle
+T_SHAKE = 580     # the row shakes the duress PIN off — 2 source cycles
+T_BEAT = 280      # the verdict beat before the caption
 SHAKE_CYCLES = 2.0
 SHAKE_PX = 7.0    # the source's excursion
 SCAN_CYCLES = 1.0  # right once, left once — the sweep ends where it began
 
 
 class DuressDiffer(VerdictAnim):
-    T_HOLD = 250
+    T_HOLD = PIN_HOLD_MS    # a PIN outcome answers a keypress: 4 frames
     T_IN = ARRIVE_MS        # pill AND dots arrive — the entrance law
     T_WAIT = T_FILLED + T_SCAN + T_SHAKE + T_BEAT
 

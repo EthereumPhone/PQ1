@@ -69,7 +69,9 @@ class BatchSign(status.StatusAnim):
                                    glyph_a=st["icon"])
         components.pager(cv, self.tx, self.total)   # the system's n/m spot
         components.caption(cv, st["bottom"])
-        # hint bob pushed along the chevron's pointing direction (right)
+        # the hint bob (motion.CHEV_BOB_PX) pushed along the chevron's
+        # pointing direction (right) instead of up: this idle screen's
+        # ambience, not the flows' affordance (handoff: chevrons.md)
         _, y_off = motion.chevron_hint(self.t)
         components.chevron(cv, CHEV_RIGHT[0] - y_off, CHEV_RIGHT[1],
                            math.pi / 2)

@@ -7,13 +7,13 @@ A batch is several transactions in one flow: each segment has its own hub hero a
 
 ## What it is
 
-A batch is several transactions signed in one session. The flow is a run of **segments**, one per transaction. A segment is every screen up to and including a status screen: the status closes it (`layout._segments`, `pq1/layout.py:590`). An ordinary flow is one segment; a batch has one per transaction, and each segment has its own hub, its own commit points and its own ending.
+A batch is several transactions signed in one session. The flow is a run of **segments**, one per transaction. A segment is every screen up to and including a status screen: the status closes it (`layout._segments`, `pq1/layout.py:807`). An ordinary flow is one segment; a batch has one per transaction, and each segment has its own hub, its own commit points and its own ending.
 
 This is not a new screen kind. It is a rule about how heroes, details and endings are strung together, and about what the buttons reach.
 
 ## When it appears
 
-Used in 2 of 31 flows: `batch/transfers` ×4, `batch/transfers_declined` ×2
+Used in 2 of 33 flows: `batch/transfers` ×4, `batch/transfers_declined` ×2
 
 `batch/transfers` signs three transfers. `batch/transfers_declined` is its render twin: it shows a decline on transaction 2 ending the whole batch. The twin exists for the GIF only — do not port it as a second flow.
 
@@ -37,16 +37,16 @@ Screen 9 of flow `batch/transfers`, as the design system normalizes it (defaults
 {'id': 'BATCH 1 ASK',
  'kind': 'hero',
  'pager': [1, 3],
+ 'icon': 'eth',
  'bottom': 'BATCH SIGN TX 1 OF 3 TX?',
  'chev': 'lr',
  'hint': True,
- 'icon': 'eth',
  'token': {'palette': 'TOSHI'},
  'commit': True}
 ```
 
-- Mid-batch endings come from `signed()` (`flows/batch/__init__.py:70`); the two terminal endings from `ends()` (`flows/batch/__init__.py:78`). There is **one** decline ending for the whole batch, `BATCH DECLINED`: its caption names the batch, never the transaction it was reached from.
-- [Confirm?](confirm.md) is counted **per segment**: a segment with 7 or more details gets it at index 5 of the segment, never on the batch total (`pq1/layout.py:603`). The BATCH screen and the inner ask both take a slot, so in a batch segment Confirm? lands after the third detail. No live batch is that long; the rule was checked on a synthetic one.
+- Mid-batch endings come from `signed()` (`flows/batch/__init__.py:75`); the two terminal endings from `ends()` (`flows/batch/__init__.py:83`). There is **one** decline ending for the whole batch, `BATCH DECLINED`: its caption names the batch, never the transaction it was reached from.
+- [Confirm?](confirm.md) is counted **per segment**: a segment with 7 or more details gets it at index 5 of the segment, never on the batch total (`pq1/layout.py:820`). The BATCH screen and the inner ask both take a slot, so in a batch segment Confirm? lands after the third detail. No live batch is that long; the rule was checked on a synthetic one.
 - Every number, address and amount is per-transaction data. So are n and m.
 
 ## Motion
@@ -55,33 +55,33 @@ Inside a segment nothing is new: [spring morph](../transitions/spring-morph.md) 
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the hold on an ask fires, measured from press-down | 2000 | 28.0 | — | `HOLD_COMMIT_MS` | `pq1/motion.py:171` | then the full fill fades with the leg into the segment's own ending — see [hold right](../actions/hold-right-sign.md) |
-| the mid-batch ending, `SIGNED n OF m`, start to end | 8650 | 121.1 | — | `duration` | `pq1/status.py:246` | the full [qubit film](status-qubit.md), counted from the moment the leg into it has settled; input-dead for all of it |
-| of which: the result rests | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | the same [result hold](../transitions/result-hold.md) as every ending |
+| the hold on an ask fires, measured from press-down | 2000 | 28.0 | — | `HOLD_COMMIT_MS` | `pq1/motion.py:195` | then the full fill fades with the leg into the segment's own ending — see [hold right](../actions/hold-right-sign.md) |
+| the mid-batch ending, `SIGNED n OF m`, start to end | 9095 | 127.3 | — | `duration` | `pq1/status.py:278` | the full [qubit film](status-qubit.md), counted from the moment the leg into it has settled; input-dead for all of it |
+| of which: the result rests | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | the same [result hold](../transitions/result-hold.md) as every ending |
 | the resting look is replaced by the next token | — | — | cut | — | — | the first step of the leg already draws the next hero's disc; the check, the green ring and the old caption do not crossfade |
 | the next segment's BATCH screen settles | — | — | spring NAV | — | — | the disc is already centred, so only the glyph mix and the text alpha move |
-| its caption and pager fade in | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` |  |
-| a decline from anywhere: `BATCH DECLINED`, start to end | 2850 | 39.9 | — | `duration` | `pq1/status.py:246` | the [cancel resolve](status-resolve.md), no film; then the batch is over |
+| its caption and pager fade in | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` |  |
+| a decline from anywhere: `BATCH DECLINED`, start to end | 3295 | 46.1 | — | `duration` | `pq1/status.py:278` | the [cancel resolve](status-resolve.md), no film; then the batch is over |
 
-**The mid-batch ending moves on by itself.** When `SIGNED n OF m` has rested, the next segment's first screen opens with no press. This is part of the grammar (`DESIGN.md` § Input: the mid-batch ending plays through into the next segment), and the reference driver does it in `frame()` (`pq1/driver.py:505`). No press is needed and none is accepted: the ending is input-dead. After the **last** ending, and after `BATCH DECLINED`, the driver freezes on the resting frame.
+**The mid-batch ending moves on by itself.** When `SIGNED n OF m` has rested, the next segment's first screen opens with no press. This is part of the grammar (`DESIGN.md` § Input: the mid-batch ending plays through into the next segment), and the reference driver does it in `frame()` (`pq1/driver.py:537`). No press is needed and none is accepted: the ending is input-dead. After the **last** ending, and after `BATCH DECLINED`, the driver freezes on the resting frame.
 
 ## Input
 
 Verified on the reference driver with flow `batch/transfers`. Every segment is its own little flow:
 
-| on | either tap | left tap | right tap | hold right | hold left |
-|---|---|---|---|---|---|
-| BATCH n, announce | to the inner ask | | | unbound | `BATCH DECLINED` |
-| BATCH m, ask form, opening the last transaction | to the inner ask | | | signs the last transaction: `BATCH SIGNED` | `BATCH DECLINED` |
-| the inner ask `SEND …?` | to the first detail | | | signs this transaction | `BATCH DECLINED` |
-| first detail | | back to the inner ask | next detail | unbound | `BATCH DECLINED` |
-| last detail | | previous detail | to the returning BATCH ask | unbound | `BATCH DECLINED` |
-| BATCH n, ask form, returning | to the first detail | | | signs this transaction | `BATCH DECLINED` |
+| on | left tap | right tap | hold right | hold left |
+|---|---|---|---|---|
+| BATCH n, announce | nothing — the segment's first screen | to the inner ask | unbound | `BATCH DECLINED` |
+| BATCH m, ask form, opening the last transaction | nothing — the segment's first screen | to the inner ask | signs the last transaction: `BATCH SIGNED` | `BATCH DECLINED` |
+| the inner ask `SEND …?` | back to the BATCH screen | to the first detail | signs this transaction | `BATCH DECLINED` |
+| first detail | back to the inner ask | next detail | unbound | `BATCH DECLINED` |
+| last detail | previous detail | to the returning BATCH ask | unbound | `BATCH DECLINED` |
+| BATCH n, ask form, returning | back to the last detail | to the first detail | signs this transaction | `BATCH DECLINED` |
 | `SIGNED n OF m` | input-dead | | | | |
 
-- **Hold right signs the current segment's ending**, not the flow's last one: the driver looks up the segment that holds the current screen (`_segment`, `pq1/driver.py:165`) and goes to its closing status (`_hold`, `pq1/driver.py:472`).
+- **Hold right signs the current segment's ending**, not the flow's last one: the driver looks up the segment that holds the current screen (`_segment`, `pq1/driver.py:169`) and goes to its closing status (`_hold`, `pq1/driver.py:504`).
 - **Up to three screens can sign** in a segment: the inner ask and the returning BATCH ask always, and — on the last transaction only — the opening BATCH ask as well. A right hold there signs the last transaction before its details are seen. That is by design: every ask signs.
-- **Taps never cross a segment.** The hub target, the section start and the last navigable screen are all read from the current segment, so a signed transaction cannot be revisited. One gap in the reference driver: the back tap is guarded by `i > 0`, not by the segment's first screen (`_tap`, `pq1/driver.py:349`). It never shows, because every live segment opens on a BATCH hero and a tap on a hero goes to the hub — but on the device clamp the back tap at the segment's first screen.
+- **Taps never cross a segment.** The hub target, the section start and the last navigable screen are all read from the current segment, so a signed transaction cannot be revisited. The back tap is clamped at the segment's first screen: `layout.back_target` (`pq1/layout.py:793`) returns nothing when the screen behind is a status, so a left tap on a segment's opening BATCH screen does nothing (its chevrons still show).
 - **Hold left is armed on every navigable screen of every segment** and always reaches the same `BATCH DECLINED`. The UI rule stops there: a decline anywhere ends the whole batch. What happens to signatures already given is not defined in this repo.
 
 ## Preview

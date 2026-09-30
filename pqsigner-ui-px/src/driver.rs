@@ -143,10 +143,10 @@ impl FlowDriver {
         let hero = s.kind() == Some(Kind::Hero);
         let last = self.cur + 1 == self.count;
         Armed {
-            // A hero's taps both enter the details; a detail can always go
-            // back (to the previous screen or the hero) and forward until
-            // the returning hero.
-            back: hero || self.cur > 0,
+            // On a hero only RIGHT enters (left never leads on); a detail can
+            // always go back (to the previous screen or the hero) and forward
+            // until the returning hero.
+            back: !hero && self.cur > 0,
             forward: hero || !last,
             sign: s.kind().is_some_and(Kind::may_commit) && s.commit(),
             decline: true,
@@ -173,10 +173,17 @@ impl FlowDriver {
             }
             Gesture::Tap(btn) => {
                 if self.is_hero(screens) {
-                    // The hub: either tap enters the details at the first
-                    // detail screen, first page (the ask itself when the
-                    // transcript is just the hero pair).
-                    if n <= 2 {
+                    // The hub: RIGHT enters the details at the first detail
+                    // screen, first page. LEFT does nothing.
+                    //
+                    // "The ask is the hub: right enters; left never leads on"
+                    // (RULES.md § A, upstream a7943591). Both taps used to
+                    // enter, which meant left LED ON from the ask — the one
+                    // thing the rule forbids, because left is the regress
+                    // direction everywhere else in the walk. Re-reading is
+                    // not lost: `forward` stays armed on the returning ask,
+                    // so right walks the details again.
+                    if btn == Btn::Left || n <= 2 {
                         return NavResult::Ignored;
                     }
                     self.cur = 1;
@@ -295,8 +302,10 @@ mod tests {
     fn hub_and_page_first_taps() {
         let f = flow();
         let mut d = FlowDriver::new(&f).unwrap();
-        // Either tap enters the details.
-        assert_eq!(d.apply(&f, Gesture::Tap(Btn::Left)), NavResult::Moved);
+        // RIGHT enters the details; LEFT never leads on.
+        assert_eq!(d.apply(&f, Gesture::Tap(Btn::Left)), NavResult::Ignored);
+        assert_eq!((d.index(), d.page()), (0, 0));
+        assert_eq!(d.apply(&f, Gesture::Tap(Btn::Right)), NavResult::Moved);
         assert_eq!((d.index(), d.page()), (1, 0));
         assert_eq!(d.apply(&f, Gesture::Tap(Btn::Right)), NavResult::Moved);
         assert_eq!((d.index(), d.page()), (2, 0));
@@ -314,14 +323,40 @@ mod tests {
         assert_eq!(d.apply(&f, Gesture::Tap(Btn::Left)), NavResult::Moved);
         assert_eq!(d.apply(&f, Gesture::Tap(Btn::Left)), NavResult::Moved);
         assert_eq!(d.index(), 0);
-        // From the returning ask any tap restarts the details.
+        // From the returning ask RIGHT restarts the details — so re-reading
+        // what you are about to sign is still one tap away, which is why
+        // making LEFT inert costs the user nothing.
         for _ in 0..6 {
             d.apply(&f, Gesture::Tap(Btn::Right));
         }
         assert_eq!(d.index(), 5);
         assert!(d.armed(&f).sign);
+        assert_eq!(d.apply(&f, Gesture::Tap(Btn::Left)), NavResult::Ignored);
+        assert_eq!(d.index(), 5, "left must not leave the returning ask");
         assert_eq!(d.apply(&f, Gesture::Tap(Btn::Right)), NavResult::Moved);
         assert_eq!((d.index(), d.page()), (1, 0));
+    }
+
+    /// RULES.md § A, upstream a7943591: "the ask is the hub: right enters;
+    /// left never leads on". Left is the REGRESS direction on every detail
+    /// screen, so a left tap that advanced the walk from the ask inverted the
+    /// one thing the two buttons mean. `spec/traces.json` reports the ask
+    /// armed `["decline","forward","sign"]` — no `back`.
+    #[test]
+    fn left_never_leads_on_from_an_ask() {
+        let f = flow();
+        let mut d = FlowDriver::new(&f).unwrap();
+        for ask in [0usize, 5] {
+            while d.index() != ask {
+                d.apply(&f, Gesture::Tap(Btn::Right));
+            }
+            assert!(!d.armed(&f).back, "ask at {ask} must not arm back");
+            assert!(d.armed(&f).forward, "ask at {ask} must still arm forward");
+            assert_eq!(d.apply(&f, Gesture::Tap(Btn::Left)), NavResult::Ignored);
+            assert_eq!(d.index(), ask, "a left tap moved the walk on from the ask at {ask}");
+            // Hold-left still declines everywhere, including here.
+            assert_eq!(d.apply(&f, Gesture::HoldCommit(Btn::Left)), NavResult::Decline);
+        }
     }
 
     #[test]

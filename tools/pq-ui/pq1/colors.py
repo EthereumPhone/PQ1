@@ -3,12 +3,20 @@
 Solid colors are the primary language: tokens are solid fills with a white
 ring, and the semantic state colors below carry meaning across every screen.
 
-A gradient disc is NOT a general decoration — it is the treatment for a
-token the device does not recognize (an unknown token). The disc's hue is
-one of the placeholder ramps below, chosen deterministically from the
-token's identity (components.token_ramp), so the same unknown token always
-wears the same gradient. Do not confuse it with blind signing; it only
-says "this asset is not known".
+A token the device does not recognize wears a SOLID disc, not a gradient:
+its hue is one of the placeholder ramps below, chosen deterministically from
+the token's identity (components.token_ramp) out of the 13 ramps that are
+not the mono entry, so the same unknown token always wears the same colour
+and none of them can wear the recognized-token look. Its trail is that same
+ramp. What makes it unknown is said in WORDS — "TRANSFER UNKNOWN TOKEN?",
+"(RAW)", the bare contract address — never by colour alone, and the disc
+carries the ether mark (DESIGN.md § Screen schema, Glyph resolution).
+
+The gradient disc is RESERVED, not live (audit A11-12, Sep 2026). The
+renderer can still draw one (components.unknown_disc, variant="unknown"),
+but no flow and no library screen asks for it: over every normalised flow
+screen and every screens/ SPEC, none resolves to anything but "solid". A
+firmware port must NOT implement a gradient disc.
 
 Ramp material (placeholder ramps, sampling helpers) is defined here and
 surfaced for screen code through pq1.gradients.
@@ -27,9 +35,48 @@ ORANGE = (245, 160, 51)     # warning
 # semantic aliases — prefer these in screen code so intent stays readable
 STATE = {"awaiting": YELLOW, "done": GREEN, "failed": RED, "warning": ORANGE}
 
-# factory screens only — provisioning/manufacturing UI. Never a state colour,
-# never on user-facing wallet screens (DESIGN.md § Color).
-FACTORY_BLUE = (74, 159, 240)
+# There is no factory colour. FACTORY_BLUE was RETIRED (audit COL-05, user
+# decision Sep 2026): the factory signing gear draws WHITE — the same
+# firmware / neutral role the FIRMWARE VERIFIED sign already uses — so the
+# system carries no colour role that STATE has no key for. Do not add a new
+# per-context accent: a sign takes a state colour, or it takes white.
+
+# ------------------------------------------------------------- ink tints --
+# The greys. Every one of these is WHITE scaled toward the black panel
+# (scale(), the alpha idiom), and every one lives HERE so a port reads the
+# whole set from spec/colors.json instead of four modules (audit COL-06:
+# three tiers were spread over components.py, layout.py, pin_slots.py and
+# pin_entering.py, two of them retyped by hand). A screen names the tier it
+# means — never a bare 0.8 — and the C-INK rule keeps it that way.
+INK_SECONDARY = 0.7     # the PIN row's "not the cursor" tier: the idle ring,
+                        # and the digit sitting in one (audit A11-10) — so it
+                        # is ink that is not text AND text that is not live
+INK_PAGING = 0.8        # the n/m pager and the PIN hint labels
+INK_MUTED = 0.5         # the seed-word numbers beside their words
+# The pulse ring's peak. Not a tint of WHITE like the three above — it is a
+# true-alpha value composited over the panel (components.pulse), and it
+# decays to nothing across the ring's life, so it is named, not scaled.
+PULSE_PEAK_ALPHA = 0.4
+# The resolve flash ring's peak (loading.qubit_pose, status.ResolveStatus,
+# the MINOR burst's rings): one bright pulse of the result colour, faded
+# toward black as it expands. Named once so the film's flash, the film-less
+# resolve and the minor explosion cannot drift apart (audit RAD-05).
+FLASH_ALPHA = 0.85
+
+# ------------------------------------------------------- visibility floors --
+# Below ALPHA_FLOOR an element is not drawn at all. The value is the panel's,
+# not a round number (user decision, audit RAD-13): the NV3007 takes RGB565
+# by TRUNCATION (tools/panel/image_convert.py), so the first alpha of white
+# that survives on glass is 0.0137 (3.5 / 255 rounds to byte 4, which is
+# green's first 6-bit step). Every guard of the form `alpha <= floor`
+# reads this token (rule A-FLOOR); nothing under it ever reached the glass,
+# and a fade now vanishes on the same frame whichever module draws it.
+ALPHA_FLOOR = 0.0137
+# A black dimming FILM laid over a finished picture (the transit dim, the
+# handoff wash, the resolve's disc cover) starts at a lower bar: it darkens
+# ink that is already there, so its first effect is visible sooner.
+FILM_FLOOR = 0.003
+
 
 def grad_color(u, stops):
     """sample a stop list [(pos, (r, g, b)), ...] at u in [0, 1]"""
@@ -68,20 +115,26 @@ def luma(color):
 #
 # i.e. fill = ramp[-1], trail = ramp[-2::-1]. Use placeholder_palette().
 #
-# Stop 6 is held at >= 4.5:1 against WHITE: the token disc carries the
-# system's white ring (TOKEN_RING_W) and a white mark, so the top circle's
-# luminance is a legibility constraint, not a free choice. 4.5:1 also lands
-# these colours near the balance point between the two grounds they must
-# work on -- roughly 4.6:1 against the black panel behind them. Ramps 0, 2,
-# 5, 7, 8, 9 and 12 were darkened to this floor (Sep 2026); the taper leaves
-# stop 1 untouched so the far trail circles keep their exact values.
+# Stop 6 is held at >= PLACEHOLDER_MIN_CONTRAST against WHITE: the token
+# disc carries the system's white ring (TOKEN_RING_W) and a white mark, so
+# the top circle's luminance is a legibility constraint, not a free choice.
+# 4.5:1 also lands these colours near the balance point between the two
+# grounds they must work on -- roughly 4.6:1 against the black panel behind
+# them. Ramps 0, 2, 5, 7, 8, 9 and 12 were darkened to this floor (Sep
+# 2026); the taper leaves stop 1 untouched so the far trail circles keep
+# their exact values.
+PLACEHOLDER_MIN_CONTRAST = 4.5   # WCAG AA for text, because the white mark on
+                                 # these discs IS read as a glyph. The floor was
+                                 # prose until Sep 2026 and the darkest ramp sits
+                                 # 0.006 above it, so checker rule C-CONTRAST
+                                 # measures it now (audit A11-05)
 PLACEHOLDER_GRADIENTS = [
     (
         "#413D2E",
-        "#48422C",
-        "#5C5223",
-        "#756400",
-        "#7D6500",
+        "#4F482C",   # gold: the four inner stops respaced to even
+        "#5D5329",   # lightness steps (Sep 2026) -- the old 48422C and
+        "#6C5E23",   # 756400/7D6500 left two trail pairs near-identical
+        "#7B6919",
         "#8A7500",
     ),
 
@@ -184,13 +237,18 @@ PLACEHOLDER_GRADIENTS = [
         "#8C57BC",
     ),
 
+    # 12 — leaf green (Sep 2026). The blue ramp that stood here filled
+    # #4C73CF, a hair from the Mainnet chain disc (#627EEA) and from USDC:
+    # an unknown token hashing onto it announced itself in Ethereum's own
+    # colour. Replaced in place so every other key keeps its ramp; the
+    # stops are even Lab-lightness steps at one hue (rule C-CHAINRAMP)
     (
-        "#07238B",
-        "#15379A",
-        "#2448A9",
-        "#3258B8",
-        "#4067C4",
-        "#4C73CF",
+        "#0E1A06",
+        "#1A2B0F",
+        "#253D13",
+        "#315116",
+        "#3D6519",
+        "#4A7A1C",
     ),
 
     # 13 — MONO: the recognized-logo treatment (black body, white ring, grey
@@ -223,7 +281,10 @@ def _ramp_to_palette(ramp):
 PLACEHOLDER_PALETTES = [_ramp_to_palette(g) for g in PLACEHOLDER_GRADIENTS]
 
 # named ramp indices
-MONO_RAMP = len(PLACEHOLDER_GRADIENTS) - 1   # 13 — recognized-logo treatment
+MONO_RAMP = len(PLACEHOLDER_GRADIENTS) - 1   # 13 — recognized-logo treatment, and
+                                             # the end of the hash space: strings
+                                             # hash over ramps 0..MONO_RAMP-1 only
+                                             # (placeholder_index)
 NEUTRAL_RAMP = 10                            # grey — keyless-unknown fallback
 
 # the mono entry fills BLACK (a token with a logo keeps the black body +
@@ -236,12 +297,22 @@ RAMP_STOPS = [tuple((i / (len(g) - 1), hex_to_rgb(h)) for i, h in enumerate(g))
 
 
 def placeholder_index(key):
-    """stable ramp index for a key: an int wraps, a string (token symbol /
-    name) hashes deterministically so the same token always gets the same
-    palette across runs (Python's str hash is salted per process)"""
+    """stable ramp index for a key: an int wraps over every ramp, a string
+    (token symbol / name / address) hashes deterministically so the same token
+    always gets the same palette across runs (Python's str hash is salted per
+    process).
+
+    The hash space stops short of MONO_RAMP. The mono entry is the treatment
+    for a token the device RECOGNIZES — black body, white ring, white mark,
+    grey trail — and the SEND flow pins ETH to it, so a hashed key landing
+    there would render an unrecognized token pixel-identical to ether on a
+    signing screen (audit COL-01). Strings therefore hash over the 13 real
+    ramps; an int still wraps over all 14, so an explicit pin
+    (token={"palette": colors.MONO_RAMP}) keeps its meaning — that pin is the
+    one way to the mono look, and the checker rule C-RAMP holds the door."""
     if isinstance(key, int):
         return key % len(PLACEHOLDER_PALETTES)
-    return zlib.crc32(str(key).upper().encode()) % len(PLACEHOLDER_PALETTES)
+    return zlib.crc32(str(key).upper().encode()) % MONO_RAMP
 
 
 def placeholder_palette(key):
@@ -351,7 +422,7 @@ CHAIN_COLORS = {
     "CHAIN:OP":        "#FF0420",
     "CHAIN:BNB":       "#F0B90B",
     "CHAIN:POLYGON":   "#8247E5",
-    "CHAIN:ZKSYNC":    "#1E69FF",
+    "CHAIN:ZKSYNC":    "#D7E2F5",   # the pale body itself — see the mark below
     "CHAIN:MANTLE":    "#B4B4B4",   # trail only — the disc fills BLACK below
     "CHAIN:BASE":      "#0000FF",
     "CHAIN:ARBITRUM":  "#1554C8",
@@ -370,7 +441,7 @@ CHAIN_GRADIENTS = {k: ramp_from(h) for k, h in CHAIN_COLORS.items()}
 # qubit trap ROTATE_GRADIENT documents.
 #
 #   black brands (Mantle, Linea)   the ROTATE treatment
-#   mark-on-white (Base, zkSync)   the FINGERPRINT / FIRMWARE look, per chain:
+#   mark-on-white (Base)           the FINGERPRINT / FIRMWARE look, per chain:
 #                                  the mark is the brand, the disc is the paper,
 #                                  and the ordinary white ring reads as no
 #                                  stroke at all on a white body
@@ -383,14 +454,20 @@ CHAIN_DISC_FILL = {
     "CHAIN:MANTLE":   "#000000",
     "CHAIN:LINEA":    "#000000",
     "CHAIN:BASE":     "#FFFFFF",
-    "CHAIN:ZKSYNC":   "#FFFFFF",
 }
-# The mark colour is normally decided by luma (below), which is right for every
-# chain but one: a white disc says BLACK, and that is what zkSync wants — but
-# Base's whole identity is the BLUE square, so it pins its mark explicitly.
-CHAIN_MARK_COLORS = {"CHAIN:BASE": "#0000FF"}
-# above this relative brightness a disc takes a BLACK mark instead of white
-CHAIN_DARK_MARK_LUMA = 0.62
+# The mark colour is normally decided by luma (below) — the two chains here are
+# where that judgement is too coarse. Base's whole identity is the BLUE square
+# on white paper, and zkSync's is the deep navy on its own pale blue, which the
+# ramp carries as stop 6 so the trail still darkens circle by circle away from
+# the body. Luma would knock both marks out flat BLACK.
+CHAIN_MARK_COLORS = {"CHAIN:BASE": "#0000FF", "CHAIN:ZKSYNC": "#051A6A"}
+# above this relative brightness a disc takes a BLACK mark instead of white —
+# every disc, not only a chain's: the default mark on a token disc follows
+# the same rule (components.token_style_from_spec, audit ICO-13). The
+# CHAIN_ name is the alias the chain code, the handoff spec and a port
+# already read
+DARK_MARK_LUMA = 0.62
+CHAIN_DARK_MARK_LUMA = DARK_MARK_LUMA
 
 # every named ramp — brands, popular tokens, device operations, chains —
 # pinned by name, outside the placeholder hash space
@@ -412,18 +489,24 @@ for _k, _hex in CHAIN_DISC_FILL.items():
     BRAND_PALETTES[_k] = (hex_to_rgb(_hex), BRAND_PALETTES[_k][1])
 
 
+def mark_color(fill):
+    """the colour a mark knocks out of a disc: WHITE, or BLACK once the
+    fill is light enough to swallow it (luma — "is this body dark or
+    light?"). One rule for every disc — a chain's, a token's default mark
+    (audit ICO-13); None is the black body."""
+    return BLACK if fill is not None and luma(fill) > DARK_MARK_LUMA else WHITE
+
+
 def chain_mark_color(ramp_key):
-    """the mark colour a chain disc knocks out: WHITE, or BLACK once the
-    fill is light enough to swallow it (luma — "is this body dark or light?"),
-    read off the disc's ACTUAL fill, so a chain that pins one in CHAIN_DISC_FILL
-    is judged on what it really shows rather than on its ramp.
-    A chain in CHAIN_MARK_COLORS pins its own instead — the one case luma gets
-    wrong, where the disc is white (so luma says BLACK) but the BRAND colour is
+    """the mark colour a chain disc knocks out: mark_color read off the
+    disc's ACTUAL fill, so a chain that pins one in CHAIN_DISC_FILL is judged
+    on what it really shows rather than on its ramp.
+    A chain in CHAIN_MARK_COLORS pins its own instead — the case luma gets
+    wrong, where the disc is pale (so luma says BLACK) but the BRAND colour is
     meant to ride the mark."""
     if ramp_key in CHAIN_MARK_COLORS:
         return hex_to_rgb(CHAIN_MARK_COLORS[ramp_key])
-    fill = BRAND_PALETTES[ramp_key][0]
-    return BLACK if luma(fill) > CHAIN_DARK_MARK_LUMA else WHITE
+    return mark_color(BRAND_PALETTES[ramp_key][0])
 
 BRAND_RAMP_STOPS = {
     k: tuple((i / (len(g) - 1), hex_to_rgb(h)) for i, h in enumerate(g))

@@ -17,24 +17,24 @@ Only on a screen whose dict has `pages` — a [paged detail](../screen-types/det
 
 | key | form | meaning |
 |---|---|---|
-| `pages` | `[[line, line], [line, line]]` | ONE value too long for its tier's three lines — a full 32-byte hash — shown in 2+ pages of 1-3 lines at the screen's one "size"; the pager "n/m" (12 px, 80 % white, top centre) shows only then. The demo turns a page per detail dwell … (full text: the `pq1/layout.py` docstring) |
+| `pages` | `[[line, line], [line, line]]` | ONE value too long for its tier's three lines — a full 32-byte hash — shown in 2+ pages of 1-3 lines at the screen's one "size"; the pager "n/m" (the Label face, INK_PAGING, top centre) shows only then. The demo turns a page per detail … (full text: the `pq1/layout.py` docstring) |
 
 ## Motion
 
-The envelope is `motion.page_flip(t)` (`pq1/motion.py:283`), a pure function of ms since the flip began returning `(a_out, a_in)`. Both alphas multiply the screen's own text alpha, so a flip caught by a [spring morph](spring-morph.md) simply fades out with the screen.
+The envelope is `motion.page_flip(t)` (`pq1/motion.py:356`), a pure function of ms since the flip began returning `(a_out, a_in)` — it is `motion.seq_swap(t, PAGE_FADE_MS)` (`pq1/motion.py:326`), the one sequential-swap envelope the PIN row's caption and label swaps use too. Both alphas multiply the screen's own text alpha, so a flip caught by a [spring morph](spring-morph.md) simply fades out with the screen.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| showing page fades away | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:280` | inverted — the alpha is `1 − ease_out(t / PAGE_FADE_MS)`, so it drops fast and tails off |
+| showing page fades away | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:353` | inverted — the alpha is `1 − ease_out(t / PAGE_FADE_MS)`, so it drops fast and tails off |
 | the pager number switches | — | — | cut | — | — | at the boundary between the two halves, while nothing is drawn |
-| next page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:280` | cubic in-out, from the boundary; the flip is cleared when it reaches 1 |
-| whole swap | 600 | 8.4 | ease_out + ease | `2 * PAGE_FADE_MS` | `pq1/motion.py:280` |  |
+| next page fades in | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:353` | from the boundary; an arriving page is an entrance, so it lands fast like every other (DESIGN.md § Motion, the role table). The flip is cleared when it reaches 1 |
+| whole swap | 600 | 8.4 | ease_out + ease_out | `2 * PAGE_FADE_MS` | `pq1/motion.py:353` |  |
 
-At the boundary both alphas are zero: for a frame or two the value region is **empty** while the label and the pager stay up. That gap is the effect — do not close it. Sampled at the panel's rate from a flip that starts on a frame, the outgoing page reads 0.44, 0.14, 0.02, then the blank frame, then the incoming page 0.03, 0.31, 0.85, 1.00 — the fade-out is nearly done in its first two frames, which is what `ease_out` buys.
+At the boundary both alphas are zero: for a frame or two the value region is **empty** while the label and the pager stay up. That gap is the effect — do not close it. Sampled at the panel's rate from a flip that starts on a frame, the outgoing page reads 0.44, 0.14, 0.02, then the blank frame, then the incoming page 0.47, 0.81, 0.96, 1.00 — each half is nearly done in its first two frames, which is what `ease_out` buys (the incoming page read 0.03, 0.31, 0.85 on `ease` until Sep 2026: half a second where the value was on the glass but not yet readable).
 
-The label and every other fixed text are drawn straight through, at the screen's own alpha (`pq1/flow.py:279`). The pager reads the page actually on the glass: the outgoing number while `a_out` is still above zero, the incoming one after.
+The label and every other fixed text are drawn straight through, at the screen's own alpha (`pq1/flow.py:307`). The pager reads the page actually on the glass: the outgoing number while `a_out` is still above zero, the incoming one after.
 
-Entering a paged screen never flips. `go_to` resets it to its first page — or to its **last** page when entered backwards, so a left tap undoes a right tap — and discards any flip left in flight on it (`pq1/flow.py:175`). The first page therefore arrives on the transition's own text alpha, and the last page leaves on it.
+Entering a paged screen never flips. `go_to` resets it to its first page — or to its **last** page when entered backwards, so a left tap undoes a right tap — and discards any flip left in flight on it (`pq1/flow.py:193`). The first page therefore arrives on the transition's own text alpha, and the last page leaves on it.
 
 ## Input
 
@@ -60,7 +60,7 @@ Right turns the page until the last, then leaves for the next screen. Left turns
 - **Don't** port the demo page-turn clock (`PAGE_SWAP_MS` 4100 ms (57.4 f), one page per detail dwell, the flip starting `PAGE_FADE_MS` 300 ms (4.2 f) before the slot ends). The reference driver pins every dwell to infinity; on the device only a tap turns a page.
 - **Don't** crossfade the two pages, and don't slide them.
 
-> **Known rough edge.** A flip is restarted from the *pending* page, not the visible one: `flip_page` writes the new page into `self.page[i]` immediately, so a tap that reverses a flip already in flight takes `frm` from the page you have not seen yet (`pq1/flow.py:232`). Measured on `eip1271/personal_counterfactual_hash`: tapping left halfway through a 1 → 2 flip makes page 2 pop in at full opacity and fade away before page 1 returns. A port that latches the visible page as `frm` is closer to the intent.
+> **Known rough edge.** A flip is restarted from the *pending* page, not the visible one: `flip_page` writes the new page into `self.page[i]` immediately, so a tap that reverses a flip already in flight takes `frm` from the page you have not seen yet (`pq1/flow.py:254`). Measured on `eip1271/personal_counterfactual_hash`: tapping left halfway through a 1 → 2 flip makes page 2 pop in at full opacity and fade away before page 1 returns. A port that latches the visible page as `frm` is closer to the intent.
 
 ## Port notes
 

@@ -1,0 +1,1446 @@
+{
+ "compositing": {
+  "mask": {
+   "applies": "every mark that rests on a disc — check, x and the monogram through base_mark itself, the traced marks building the same tile, the logos through their PNG's alpha",
+   "model": "an L mask inked at the mark's alpha, pasted in the mark's colour; the tile side is EVEN and the paste is rounded",
+   "note": "draw a mark by TRUE alpha: `paint(d, ox, oy, R, a)` inks the shape into an L mask — an ImageDraw whose centre is (ox, oy), R = r * SUP the supersampled radius, a = int(255 * alpha) the ink value — and the tile is pasted in `color` through that mask. The one compositing model for a mark that sits on a disc (audit ICO-01; re-exported as components.base_mark): scaling the colour toward black instead is exact only on the black panel — on a lit disc a black check scaled by alpha is still black, so SAFE SIGNED's mark cut in at full strength on frame one while the caption faded. The traced marks (eth, the chains, blind, dev, rotate, fingerprint, download) build the same tile themselves. rot turns the mask; the tile side covers the diagonal so a turn never clips, and it is EVEN, so the tile's centre is a whole pixel and the rounded paste lands it on (cx, cy) exactly — an odd side or a truncated paste sat every mark half a supersampled pixel up and left (audit ICO-09).",
+   "source": "pq1/procedural/marks.py:30"
+  },
+  "rule": "ONE model for a mark on a disc (audit ICO-01): colour-scaling is exact only against black, so a scaled check on the SAFE green stayed green-black at alpha 0 and cut in at full strength on frame one while the caption faded.",
+  "scaled": {
+   "applies": "the exclamation inside its own triangle and the plus / minus entry signs on the black panel — the only two places a mark never meets a lit body",
+   "model": "the mark's colour scaled toward black by alpha, drawn straight onto the canvas",
+   "source": "pq1/procedural/marks.py:132"
+  }
+ },
+ "icons": {
+  "arbitrum": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": -0.07,
+    "centroid_dy": 1.25,
+    "extent_pct": 54.4,
+    "ink_area": 399.2,
+    "ink_h": 31.33,
+    "ink_pct": 15.3,
+    "ink_w": 28.67
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "m13.353 13.368-.885 2.39a.3.3 0 0 0 0 .205l1.523 4.112 1.76-1.001-2.113-5.706a.152.152 0 0 0-.285 0m1.774-4.019a.152.152 0 0 0-.285 0l-.885 2.39a.3.3 0 0 0 0 .205l2.494 6.732 1.761-1.001z",
+     "fill_rule": "nonzero"
+    },
+    {
+     "d": "M11.998 4.115a.3.3 0 0 1 .126.033l6.715 3.818a.25.25 0 0 1 .126.214v7.635c0 .089-.048.17-.126.214l-6.715 3.819a.25.25 0 0 1-.126.032.3.3 0 0 1-.125-.032l-6.715-3.815a.25.25 0 0 1-.126-.215V8.182c0-.089.048-.17.126-.215l6.715-3.818a.26.26 0 0 1 .125-.034m0-1.115c-.238 0-.478.06-.692.183L4.593 7A1.36 1.36 0 0 0 3.9 8.182v7.635c0 .487.264.938.693 1.181l6.714 3.819a1.41 1.41 0 0 0 1.386 0l6.714-3.818a1.36 1.36 0 0 0 .693-1.182V8.182A1.36 1.36 0 0 0 19.407 7l-6.716-3.817A1.4 1.4 0 0 0 11.998 3",
+     "fill_rule": "nonzero"
+    },
+    {
+     "d": "m7.559 18.685.617-1.666 1.244 1.018-1.163 1.046zm3.874-11.05H9.731a.3.3 0 0 0-.285.197l-3.649 9.852 1.761 1.001 4.018-10.849a.15.15 0 0 0-.143-.2",
+     "fill_rule": "nonzero"
+    },
+    {
+     "d": "M14.412 7.635h-1.703a.3.3 0 0 0-.284.197l-4.167 11.25 1.761 1 4.535-12.246a.15.15 0 0 0-.142-.2",
+     "fill_rule": "nonzero"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "height",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['arbitrum']",
+    "value": 0.52
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/arbitrum.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "avalanche": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": -3.0,
+    "centroid_dx": -0.72,
+    "centroid_dy": -0.0,
+    "extent_pct": 46.3,
+    "ink_area": 270.7,
+    "ink_h": 22.67,
+    "ink_pct": 10.4,
+    "ink_w": 26.67
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "nudge": {
+    "rule": "optical centring: the mark's MASS is put on the disc centre, so its BOX is deliberately off",
+    "source": "pq1/procedural/chains.py:54",
+    "unit": "SVG units, y down",
+    "x": 0.0,
+    "y": -2.05
+   },
+   "path": [
+    {
+     "d": "M7.515 19.56H4.492c-.637 0-.952 0-1.142-.114a.7.7 0 0 1-.248-.245.7.7 0 0 1-.101-.327c-.012-.216.145-.475.46-1l7.47-12.461c.32-.53.484-.794.687-.891a.79.79 0 0 1 .697 0c.202.097.36.361.675.89l1.542 2.538.005.011c.253.36.454.75.596 1.16.085.325.085.676 0 1.005a4.7 4.7 0 0 1-.596 1.172l-3.926 6.567-.011.021a4.7 4.7 0 0 1-.766 1.08 2.4 2.4 0 0 1-.927.513c-.32.08-.676.08-1.392.08m7.647 0h4.33c.648 0 .968 0 1.16-.12a.7.7 0 0 0 .246-.244.7.7 0 0 0 .101-.327c.012-.21-.14-.459-.443-.951l-.034-.053-2.171-3.51-.023-.043c-.304-.487-.461-.735-.658-.832a.77.77 0 0 0-.692 0c-.202.097-.36.357-.675.874l-2.172 3.516v.011c-.32.517-.477.777-.466.988a.7.7 0 0 0 .102.329c.06.1.145.185.246.248.187.113.507.113 1.149.113",
+     "fill_rule": "nonzero"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "width",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['avalanche']",
+    "value": 0.44
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/avalanche.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "base": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.0,
+    "centroid_dy": 0.0,
+    "extent_pct": 44.0,
+    "ink_area": 640.4,
+    "ink_h": 25.33,
+    "ink_pct": 24.6,
+    "ink_w": 25.33
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M3 4.706c0-.585 0-.877.11-1.101.106-.215.28-.39.496-.495C3.83 3 4.122 3 4.706 3h14.588c.585 0 .876 0 1.101.11.215.105.389.28.494.495.111.225.111.517.111 1.101v14.588c0 .585 0 .876-.11 1.101-.106.215-.28.389-.495.494-.225.111-.517.111-1.101.111H4.706c-.585 0-.876 0-1.101-.11a1.08 1.08 0 0 1-.494-.495C3 20.17 3 19.878 3 19.294z",
+     "fill_rule": "nonzero"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "height",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['base']",
+    "value": 0.42
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/base.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "blind": {
+   "brand": false,
+   "compositing": "mask",
+   "fill": "the flattened subpaths are disjoint, so the mark is their union (geometry.svg_subpaths)",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": true,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.0,
+    "centroid_dy": -0.66,
+    "extent_pct": 59.0,
+    "ink_area": 154.6,
+    "ink_h": 34.0,
+    "ink_pct": 5.9,
+    "ink_w": 6.67
+   },
+   "note": "the blind mark, half-height r, its box centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M6.56824 27.5009C6.53025 28.892 5.39161 30 4 30C2.60839 30 1.46975 28.892 1.43176 27.5009L0.771447 3.31792C0.721817 1.50032 2.18173 0 4 0C5.81828 0 7.27818 1.50032 7.22855 3.31791L6.56824 27.5009ZM4.02837 33.5881C6.35461 33.5881 8 35.3778 8 37.8239C8 40.2699 6.35461 42 4.02837 42C1.70213 42 0 40.2699 0 37.8239C0 35.3778 1.70213 33.5881 4.02837 33.5881Z",
+     "fill_rule": null
+    }
+   ],
+   "path_source": "pq1/procedural/blind.py:26",
+   "scale": {
+    "axis": "height",
+    "rule": "half-height = scale x the glyph r, over the viewBox",
+    "source": "pq1/procedural/blind.py:36",
+    "token": "blind.MARK_SCALE",
+    "value": 0.56
+   },
+   "source": "pq1/procedural/blind.py:69",
+   "viewbox": {
+    "h": 42.0,
+    "rule": "the art is scaled by the whole viewBox, so the padding in the box is part of the mark's size",
+    "source": "pq1/procedural/blind.py:25",
+    "w": 8.0
+   }
+  },
+  "bnb": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.0,
+    "centroid_dy": 0.1,
+    "extent_pct": 56.7,
+    "ink_area": 460.8,
+    "ink_h": 32.67,
+    "ink_pct": 17.7,
+    "ink_w": 29.33
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M7.09 5.755 12 3l4.91 2.755-1.8 1.02L12 5.035l-3.105 1.74zm9.82 3.48-1.8-1.02L12 9.955l-3.105-1.74-1.805 1.02v2.035l3.1 1.74v3.475l1.81 1.02 1.805-1.02V13.01l3.105-1.74zm0 5.515v-2.04l-1.8 1.02v2.035zm1.285.72-3.105 1.735v2.04l4.91-2.76v-5.51l-1.805 1.015zM16.39 7.495l1.8 1.02v2.035L20 9.535v-2.04l-1.805-1.02L16.39 7.5zm-6.2 10.45v2.035L12 21l1.805-1.02v-2.03L12 18.965l-1.805-1.02zm-3.1-3.2 1.8 1.02V13.73l-1.8-1.02v2.04zm3.1-7.25L12 8.515l1.805-1.02L12 6.475 10.195 7.5zm-4.385 1.02 1.805-1.02-1.8-1.02L4 7.5v2.04l1.805 1.015zm0 3.475L4 10.975v5.51l4.91 2.76V17.2l-3.1-1.735v-3.48z",
+     "fill_rule": "nonzero"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "height",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['bnb']",
+    "value": 0.54
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/bnb.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "check": {
+   "brand": false,
+   "compositing": "mask",
+   "fill_rule": null,
+   "full_bleed": false,
+   "geometry": {
+    "rule": "arms and stroke are fractions of r, listed in the note — there is no path to trace",
+    "sign_stroke": 0.16,
+    "source": "pq1/procedural/marks.py:25"
+   },
+   "in_band": true,
+   "kind": "geometry",
+   "measured": {
+    "bbox_mid_dx": 0.5,
+    "bbox_mid_dy": 0.17,
+    "centroid_dx": 0.78,
+    "centroid_dy": 1.13,
+    "extent_pct": 52.7,
+    "ink_area": 184.2,
+    "ink_h": 22.33,
+    "ink_pct": 7.1,
+    "ink_w": 30.33
+   },
+   "note": "the result check: a round-capped SIGN_STROKE polyline, arms -0.40 .. +0.44 r; true alpha (base_mark) — it rests on lit discs",
+   "scale": {
+    "axis": "radius",
+    "rule": "drawn at the r it is handed; on a disc that is the disc's own radius, so the mark fills the face",
+    "source": "pq1/procedural/marks.py:60",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/procedural/marks.py:60"
+  },
+  "cowswap": {
+   "art": "pq1/assets/cowswap.png",
+   "brand": true,
+   "compositing": "mask",
+   "fill": "the PNG's own alpha",
+   "fill_rule": null,
+   "full_bleed": true,
+   "in_band": false,
+   "kind": "logo",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": -0.01,
+    "centroid_dy": 0.49,
+    "extent_pct": 99.5,
+    "ink_area": 1474.9,
+    "ink_h": 57.33,
+    "ink_pct": 56.6,
+    "ink_w": 57.33
+   },
+   "note": "full-bleed art: the disc WEARS the logo, circle-masked to the token's visible edge, and an explicit ring may be stroked over it",
+   "scale": {
+    "axis": "diameter",
+    "rule": "the art fills the token's VISIBLE disc (components.visible_r), never the layout radius",
+    "source": "pq1/components.py:229",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/components.py:242"
+  },
+  "dai": {
+   "art": "pq1/assets/dai.png",
+   "brand": true,
+   "compositing": "mask",
+   "fill": "the PNG's own alpha",
+   "fill_rule": null,
+   "full_bleed": true,
+   "in_band": false,
+   "kind": "logo",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": -0.02,
+    "centroid_dy": -0.0,
+    "extent_pct": 99.5,
+    "ink_area": 1979.6,
+    "ink_h": 57.33,
+    "ink_pct": 76.0,
+    "ink_w": 57.33
+   },
+   "note": "full-bleed art: the disc WEARS the logo, circle-masked to the token's visible edge, and an explicit ring may be stroked over it",
+   "scale": {
+    "axis": "diameter",
+    "rule": "the art fills the token's VISIBLE disc (components.visible_r), never the layout radius",
+    "source": "pq1/components.py:229",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/components.py:242"
+  },
+  "dev": {
+   "brand": false,
+   "compositing": "mask",
+   "fill": "the flattened subpaths are disjoint, so the mark is their union (geometry.svg_subpaths)",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": true,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": -0.13,
+    "centroid_dy": 0.07,
+    "extent_pct": 59.0,
+    "ink_area": 141.3,
+    "ink_h": 22.0,
+    "ink_pct": 5.4,
+    "ink_w": 34.0
+   },
+   "note": "the dev mark, half-width r, its box centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M21.437 0C22.1044 0 22.5901 0.637544 22.4166 1.28612L16.5431 23.2446C16.4239 23.6904 16.0221 24 15.5635 24C14.8961 23.9999 14.4106 23.3626 14.584 22.7141L20.4575 0.755356C20.5768 0.309716 20.9783 3.11023e-05 21.437 0ZM24.472 6.76182C24.4721 5.93395 25.3409 5.39798 26.074 5.77368L36.3064 11.0183C36.7319 11.2363 37 11.6761 37 12.1566C37 12.637 36.7319 13.077 36.3064 13.2951L26.074 18.5394C25.3409 18.9152 24.4721 18.3794 24.472 17.5515C24.472 17.1256 24.7144 16.7373 25.0956 16.5524L34.0042 12.2333V12.0798L25.0956 7.76069C24.7144 7.57583 24.472 7.18766 24.472 6.76182ZM10.926 5.59746C11.6591 5.22184 12.5279 5.75776 12.528 6.5856C12.528 7.01147 12.2854 7.39963 11.9042 7.58447L2.99579 11.9036V12.0571L11.9042 16.3762C12.2854 16.561 12.528 16.9494 12.528 17.3753C12.5279 18.2031 11.6591 18.7389 10.926 18.3632L0.693362 13.1188C0.267899 12.9008 0 12.4608 0 11.9803C3.57212e-05 11.4999 0.267932 11.0601 0.693362 10.842L10.926 5.59746Z",
+     "fill_rule": null
+    }
+   ],
+   "path_source": "pq1/procedural/dev.py:21",
+   "scale": {
+    "axis": "width",
+    "rule": "half-width = scale x the glyph r, over the viewBox",
+    "source": "pq1/procedural/dev.py:42",
+    "token": "dev.MARK_SCALE",
+    "value": 0.56
+   },
+   "source": "pq1/procedural/dev.py:76",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is scaled by the whole viewBox, so the padding in the box is part of the mark's size",
+    "source": "pq1/procedural/dev.py:20",
+    "w": 37.0
+   }
+  },
+  "dots": {
+   "brand": false,
+   "compositing": "mask",
+   "fill_rule": null,
+   "full_bleed": false,
+   "geometry": {
+    "rule": "arms and stroke are fractions of r, listed in the note — there is no path to trace",
+    "sign_stroke": 0.16,
+    "source": "pq1/procedural/marks.py:25"
+   },
+   "in_band": true,
+   "kind": "geometry",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.06,
+    "centroid_dy": 0.06,
+    "extent_pct": 44.0,
+    "ink_area": 277.0,
+    "ink_h": 25.33,
+    "ink_pct": 10.6,
+    "ink_w": 25.33
+   },
+   "note": "the 3 x 3 dot grid — the setup family's mark (a new device, a keypad of choices to come): nine round dots DOTS_PITCH apart, each DOTS_R across its radius; true alpha (base_mark) — it rests on the white disc",
+   "scale": {
+    "axis": "radius",
+    "rule": "drawn at the r it is handed; on a disc that is the disc's own radius, so the mark fills the face",
+    "source": "pq1/procedural/marks.py:118",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/procedural/marks.py:118"
+  },
+  "download": {
+   "brand": false,
+   "compositing": "mask",
+   "fill": "the flattened subpaths are disjoint, so the mark is their union (geometry.svg_subpaths)",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": true,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": -0.0,
+    "centroid_dy": 0.3,
+    "extent_pct": 40.5,
+    "ink_area": 195.4,
+    "ink_h": 23.33,
+    "ink_pct": 7.5,
+    "ink_w": 18.67
+   },
+   "note": "the download mark, half-height r, its box centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M7.49609 32.9995C6.66767 32.9995 5.99609 32.3279 5.99609 31.4995C5.99609 30.6711 6.66767 29.9995 7.49609 29.9995H28.4961C29.3245 29.9995 29.9961 30.6711 29.9961 31.4995C29.9961 32.3279 29.3245 32.9995 28.4961 32.9995H7.49609ZM19.5748 24.9698C18.7741 25.9992 17.2181 25.9992 16.4174 24.9697L8.75138 15.1135C8.24049 14.4566 8.70859 13.4995 9.54073 13.4995H12.4961C13.0484 13.4995 13.4961 13.0518 13.4961 12.4995V4.99951C13.4961 3.89494 14.3915 2.99951 15.4961 2.99951H20.4961C21.6007 2.99951 22.4961 3.89494 22.4961 4.99951V12.4995C22.4961 13.0518 22.9438 13.4995 23.4961 13.4995H26.4515C27.2836 13.4995 27.7517 14.4566 27.2408 15.1135L19.5748 24.9698Z",
+     "fill_rule": null
+    }
+   ],
+   "path_source": "pq1/procedural/download.py:24",
+   "scale": {
+    "axis": "height",
+    "rule": "half-height = scale x the glyph r, over the viewBox",
+    "source": "pq1/procedural/download.py:38",
+    "token": "download.MARK_SCALE",
+    "value": 0.46
+   },
+   "source": "pq1/procedural/download.py:73",
+   "viewbox": {
+    "h": 36.0,
+    "rule": "the art is scaled by the whole viewBox, so the padding in the box is part of the mark's size",
+    "source": "pq1/procedural/download.py:23",
+    "w": 36.0
+   }
+  },
+  "eth": {
+   "brand": false,
+   "compositing": "mask",
+   "fill": "the two polygons are disjoint — their union is the mark",
+   "fill_rule": null,
+   "full_bleed": false,
+   "geometry": {
+    "lower": [
+     [
+      -0.582,
+      0.22
+     ],
+     [
+      0.0,
+      0.404
+     ],
+     [
+      0.582,
+      0.22
+     ],
+     [
+      0.0,
+      1.0
+     ]
+    ],
+    "lower_rr": [
+     0.13,
+     0.13,
+     0.13,
+     0.24
+    ],
+    "round": 0.13,
+    "round_tip": 0.24,
+    "rule": "two polygons in half-height units about the centre (x right, y down), corners trimmed by ROUND and the two points by ROUND_TIP, both fractions of the half-height",
+    "source": "pq1/procedural/eth.py:24",
+    "upper": [
+     [
+      0.0,
+      -1.0
+     ],
+     [
+      0.578,
+      -0.111
+     ],
+     [
+      0.0,
+      0.209
+     ],
+     [
+      -0.578,
+      -0.111
+     ]
+    ],
+    "upper_rr": [
+     0.24,
+     0.13,
+     0.13,
+     0.13
+    ]
+   },
+   "in_band": true,
+   "kind": "geometry",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.0,
+    "centroid_dy": -0.4,
+    "extent_pct": 53.2,
+    "ink_area": 298.7,
+    "ink_h": 30.67,
+    "ink_pct": 11.5,
+    "ink_w": 18.0
+   },
+   "note": "the rounded-edge eth mark, half-height r, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a disc, so a colour-scaled fill would read wrong while fading.",
+   "scale": {
+    "axis": "height",
+    "rule": "half-height = scale x the glyph r. The owner kept the PROCEDURAL height when the raster mark was deleted (audit ICO-02), so the mark grew on every default disc",
+    "source": "pq1/procedural/eth.py:30",
+    "token": "eth.LOGO_SCALE",
+    "value": 0.56
+   },
+   "source": "pq1/procedural/eth.py:68"
+  },
+  "exclamation": {
+   "brand": false,
+   "compositing": "scaled",
+   "fill_rule": null,
+   "full_bleed": false,
+   "geometry": {
+    "rule": "arms and stroke are fractions of r, listed in the note — there is no path to trace",
+    "sign_stroke": 0.16,
+    "source": "pq1/procedural/marks.py:25"
+   },
+   "in_band": false,
+   "kind": "geometry",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.17,
+    "centroid_dx": 0.13,
+    "centroid_dy": -1.22,
+    "extent_pct": 103.6,
+    "ink_area": 396.0,
+    "ink_h": 59.67,
+    "ink_pct": 15.2,
+    "ink_w": 10.67
+   },
+   "note": "exclamation mark, optically centred on (cx, cy), half-height ~= r. Proportions from the sig_error notice art (bar w 4s, len 22s, dot r 2.8s, 7s gap, s = r / 16); draw black on a warning triangle.",
+   "scale": {
+    "axis": "radius",
+    "rule": "drawn at the r it is handed; on a disc that is the disc's own radius, so the mark fills the face",
+    "source": "pq1/procedural/marks.py:132",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/procedural/marks.py:132"
+  },
+  "fingerprint": {
+   "brand": false,
+   "compositing": "mask",
+   "fill": "the flattened subpaths are disjoint, so the mark is their union (geometry.svg_subpaths)",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": true,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.17,
+    "centroid_dx": -0.24,
+    "centroid_dy": -0.32,
+    "extent_pct": 42.2,
+    "ink_area": 316.7,
+    "ink_h": 24.33,
+    "ink_pct": 12.2,
+    "ink_w": 24.0
+   },
+   "note": "the fingerprint mark, half-height r, its box centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M7.82689 2.26027C-2.21832 9.02179 -2.67731 22.9588 6.93013 29.4728C9.38923 31.1413 9.38476 31.0922 6.62638 26.1656C3.35428 20.3199 3.03824 14.8539 5.70617 10.2409C8.15633 6.00653 14.0584 3.10418 18.2898 4.053C22.2933 4.95165 27.0943 9.72998 27.9274 13.6473C29.0385 18.8704 29.4607 19.655 30.8834 19.1407C32.8623 18.4256 32.0873 11.777 29.5321 7.56434C25.1232 0.294197 14.5766 -2.28314 7.82689 2.26027ZM10.8354 8.62492C7.26516 11.1783 5.56881 17.4084 7.1278 22.2358C9.01735 28.0815 12.467 32 15.7235 32C16.8328 32 17.4304 30.698 16.7072 29.8568L15.1003 27.988C8.99055 20.8821 9.11339 12.4088 15.3359 11.6755C19.5327 11.1806 21.6691 13.2527 21.6691 17.8212C21.6691 20.2001 22.682 22.7991 24.3906 24.8085C26.9256 27.7884 27.2417 27.8797 28.9883 26.1246C30.7427 24.3615 30.7114 24.1562 28.5003 22.9474C27.0552 22.1582 26.1361 20.5411 26.1361 18.7883C26.1361 15.0272 23.3163 9.56234 20.6137 8.08551C17.5572 6.4148 13.6217 6.63148 10.8354 8.62492ZM14.275 15.4127C13.3727 17.8132 16.6705 26.5933 19.4344 29.1478C20.6964 30.3145 22.3682 30.8299 23.4804 30.3943C25.1332 29.7465 24.9758 29.2265 22.2353 26.307C20.4831 24.4391 18.8001 21.0954 18.4249 18.7358C17.7046 14.2118 15.4152 12.378 14.275 15.4127Z",
+     "fill_rule": null
+    }
+   ],
+   "path_source": "pq1/procedural/fingerprint.py:23",
+   "scale": {
+    "axis": "height",
+    "rule": "half-height = scale x the glyph r, over the viewBox",
+    "source": "pq1/procedural/fingerprint.py:46",
+    "token": "fingerprint.MARK_SCALE",
+    "value": 0.4
+   },
+   "source": "pq1/procedural/fingerprint.py:80",
+   "viewbox": {
+    "h": 32.0,
+    "rule": "the art is scaled by the whole viewBox, so the padding in the box is part of the mark's size",
+    "source": "pq1/procedural/fingerprint.py:22",
+    "w": 32.0
+   }
+  },
+  "letter:<CHAR>": {
+   "brand": false,
+   "compositing": "mask",
+   "fill": "the font's own rasterization, inked into the mask like any other mark",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "text",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.17,
+    "centroid_dx": 0.11,
+    "centroid_dy": 1.19,
+    "extent_pct": 49.2,
+    "ink_area": 340.6,
+    "ink_h": 28.33,
+    "ink_pct": 13.1,
+    "ink_w": 27.33
+   },
+   "namespace": true,
+   "note": "glyph function drawing the first letter of a symbol. BOLD: unlike every other caption on the device this letter stands alone as a disc's entire content — an unknown chain's initial (pq1.chains) or a long-tail token's (token_defaults) — so it carries the weight a mark would, not the weight of running text. Drawn through base_mark like every mark that rests on a disc (audit ICO-01): the letter sits on a solid hashed-ramp fill, where a colour-scaled glyph would fade as a dark shape mid-morph. CENTRED ON THE INK, not the font's line box: anchor \"mm\" sat a capital ~0.1 r low and shifted it by its side bearings. The letter's ink is centred across, and the cap height (not the letter's own box, so a Q's tail never lifts it) is centred down.",
+   "rule": "resolved by SHAPE at draw time, never a GLYPHS entry: registering letters lazily would make the published icon set depend on render order (components.letter_glyph, audit G17-07). screens.schema.json publishes it as enums.icon_namespaces.",
+   "sample": "A",
+   "scale": {
+    "axis": "cap height",
+    "rule": "the font size is scale x the glyph r, so the letter shrinks with the disc and carries a mark's weight, not running text's",
+    "source": "pq1/components.py:126",
+    "token": "components.MONOGRAM_SCALE",
+    "value": 1.34
+   },
+   "source": "pq1/components.py:144"
+  },
+  "linea": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 2.67,
+    "bbox_mid_dy": -1.83,
+    "centroid_dx": 0.39,
+    "centroid_dy": 0.21,
+    "extent_pct": 44.6,
+    "ink_area": 221.6,
+    "ink_h": 25.67,
+    "ink_pct": 8.5,
+    "ink_w": 24.0
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "nudge": {
+    "rule": "optical centring: the mark's MASS is put on the disc centre, so its BOX is deliberately off",
+    "source": "pq1/procedural/chains.py:54",
+    "unit": "SVG units, y down",
+    "x": 1.89,
+    "y": -1.29
+   },
+   "path": [
+    {
+     "d": "M17.633 21H3.478V5.921h3.238v12.157h10.917zm.001-12.159c1.595 0 2.889-1.307 2.889-2.92S19.229 3 17.633 3c-1.595 0-2.888 1.308-2.888 2.92 0 1.614 1.293 2.921 2.889 2.921",
+     "fill_rule": "nonzero"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "height",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['linea']",
+    "value": 0.42
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/linea.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "mainnet": {
+   "brand": false,
+   "compositing": "mask",
+   "fill": "the two polygons are disjoint — their union is the mark",
+   "fill_rule": null,
+   "full_bleed": false,
+   "geometry": {
+    "lower": [
+     [
+      -0.582,
+      0.22
+     ],
+     [
+      0.0,
+      0.404
+     ],
+     [
+      0.582,
+      0.22
+     ],
+     [
+      0.0,
+      1.0
+     ]
+    ],
+    "lower_rr": [
+     0.13,
+     0.13,
+     0.13,
+     0.24
+    ],
+    "round": 0.13,
+    "round_tip": 0.24,
+    "rule": "two polygons in half-height units about the centre (x right, y down), corners trimmed by ROUND and the two points by ROUND_TIP, both fractions of the half-height",
+    "source": "pq1/procedural/eth.py:24",
+    "upper": [
+     [
+      0.0,
+      -1.0
+     ],
+     [
+      0.578,
+      -0.111
+     ],
+     [
+      0.0,
+      0.209
+     ],
+     [
+      -0.578,
+      -0.111
+     ]
+    ],
+    "upper_rr": [
+     0.24,
+     0.13,
+     0.13,
+     0.13
+    ]
+   },
+   "in_band": true,
+   "kind": "geometry",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.0,
+    "centroid_dy": -0.4,
+    "extent_pct": 53.2,
+    "ink_area": 298.7,
+    "ink_h": 30.67,
+    "ink_pct": 11.5,
+    "ink_w": 18.0
+   },
+   "note": "the rounded-edge eth mark, half-height r, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a disc, so a colour-scaled fill would read wrong while fading.",
+   "scale": {
+    "axis": "height",
+    "rule": "half-height = scale x the glyph r. The owner kept the PROCEDURAL height when the raster mark was deleted (audit ICO-02), so the mark grew on every default disc",
+    "source": "pq1/procedural/eth.py:30",
+    "token": "eth.LOGO_SCALE",
+    "value": 0.56
+   },
+   "source": "pq1/procedural/eth.py:68"
+  },
+  "mantle": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": -0.08,
+    "centroid_dy": -0.02,
+    "extent_pct": 56.7,
+    "ink_area": 437.0,
+    "ink_h": 32.67,
+    "ink_pct": 16.8,
+    "ink_w": 32.67
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "m12.928 6.082.461-2.975A9 9 0 0 0 12 3h-.005v6.075H12c.259 0 .506.034.754.096l.787-2.96a6 6 0 0 0-.613-.129m-2.39 3.387-1.52-2.605a6 6 0 0 0-.511.338L6.7 4.727a8.5 8.5 0 0 1 1.2-.743l1.378 2.683c.282-.14.563-.264.861-.36L9.204 3.44a9 9 0 0 1 1.373-.327l.484 3.027a5 5 0 0 0-.608.13l.788 2.907a2.7 2.7 0 0 0-.704.293M3.972 7.922l2.734 1.39c-.14.28-.265.562-.36.86l-2.914-.945q.219-.674.54-1.305m13.163 1.097-2.605 1.518c.13.22.225.45.293.698l2.908-.787q.085.303.13.607l3.025-.478a9 9 0 0 0-.331-1.378l-2.87.939a5.5 5.5 0 0 0-.354-.866l2.678-1.378a9 9 0 0 0-.737-1.198L16.798 8.5c.124.169.236.338.338.518m-2.368-5.586c.45.146.888.326 1.305.54L14.683 6.7a6 6 0 0 0-.855-.354zm.219 3.375-1.53 2.655c.225.13.427.281.607.467l4.287-4.303a9 9 0 0 0-1.07-.917L15.51 7.151a5 5 0 0 0-.523-.337zm-5.524 3.735-2.655-1.53a8 8 0 0 1 .343-.523L4.71 6.718c.281-.382.585-.742.917-1.069L9.93 9.936q-.272.27-.467.607m-3.251-.084 2.959.787a3 3 0 0 0-.096.754H3c0-.467.034-.94.112-1.395l2.97.461c.034-.202.08-.41.13-.607m11.081 4.23 2.734 1.39c.214-.423.393-.862.54-1.306l-2.914-.945c-.096.293-.22.585-.36.86m-3.825-.158 1.508 2.605q.271-.152.517-.338l1.806 2.475a8.5 8.5 0 0 1-1.198.743l-1.378-2.683a6 6 0 0 1-.867.36l.94 2.868c-.45.14-.912.253-1.379.326l-.478-3.026q.304-.043.608-.13l-.788-2.907q.373-.1.704-.293zm-6.604.45 2.605-1.518a2.7 2.7 0 0 1-.293-.698l-2.908.787a5 5 0 0 1-.13-.607l-3.026.478q.112.702.332 1.378l2.87-.94q.143.447.353.867L3.99 16.106c.214.416.461.821.737 1.198L7.202 15.5a5 5 0 0 1-.338-.518m2.368 5.586a9 9 0 0 1-1.305-.54L9.311 17.3q.422.21.86.354zm-.219-3.375 1.53-2.655a3 3 0 0 1-.607-.462L5.649 18.38c.332.326.692.635 1.07.91l1.771-2.435q.253.178.523.338m5.524-3.735 2.65 1.53a5 5 0 0 1-.338.529l2.435 1.766q-.413.575-.91 1.074l-4.304-4.292q.272-.27.467-.607m-3.29 1.372-.788 2.96c.202.055.405.095.613.128l-.461 2.976a9 9 0 0 0 1.389.107h.006v-6.075H12a3 3 0 0 1-.754-.096m3.582-2.075a3 3 0 0 0 .096-.754H21c0 .467-.034.94-.113 1.395l-2.97-.461a7 7 0 0 1-.129.607z",
+     "fill_rule": "nonzero"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "height",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['mantle']",
+    "value": 0.54
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/mantle.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "minus": {
+   "brand": false,
+   "compositing": "scaled",
+   "fill_rule": null,
+   "full_bleed": false,
+   "geometry": {
+    "rule": "arms and stroke are fractions of r, listed in the note — there is no path to trace",
+    "sign_stroke": 0.16,
+    "source": "pq1/procedural/marks.py:25"
+   },
+   "in_band": false,
+   "kind": "geometry",
+   "measured": {
+    "bbox_mid_dx": 0.17,
+    "bbox_mid_dy": 0.17,
+    "centroid_dx": 0.17,
+    "centroid_dy": 0.29,
+    "extent_pct": 39.9,
+    "ink_area": 104.2,
+    "ink_h": 5.0,
+    "ink_pct": 4.0,
+    "ink_w": 23.0
+   },
+   "note": "the decrement sign: one bar on the x mark's span; stroke as a fraction of r (the x mark's 0.16 by default — an entry's hint row asks for a lighter one)",
+   "scale": {
+    "axis": "radius",
+    "rule": "drawn at the r it is handed; on a disc that is the disc's own radius, so the mark fills the face",
+    "source": "pq1/procedural/marks.py:106",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/procedural/marks.py:106"
+  },
+  "op": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": -0.57,
+    "centroid_dy": -0.54,
+    "extent_pct": 54.4,
+    "ink_area": 272.8,
+    "ink_h": 16.0,
+    "ink_pct": 10.5,
+    "ink_w": 31.33
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M3.966 15.8q.979.7 2.512.7 1.854 0 2.962-.838 1.108-.85 1.559-2.562.27-1.05.464-2.163.063-.398.064-.663 0-.874-.451-1.499a2.7 2.7 0 0 0-1.237-.95Q9.053 7.5 8.062 7.5q-3.644 0-4.52 3.437a40 40 0 0 0-.477 2.163q-.058.335-.065.674 0 1.314.966 2.026m4.65-2.775c-.247.957-.926 1.58-1.958 1.58-1.02 0-1.368-.69-1.184-1.58a27 27 0 0 1 .464-2.05c.265-1.034.89-1.58 1.956-1.58 1.017 0 1.348.68 1.173 1.58a30 30 0 0 1-.451 2.05m3.902 3.385q.076.09.214.089h1.704a.38.38 0 0 0 .238-.089.36.36 0 0 0 .138-.232l.538-2.52h1.733c1.094 0 1.95-.53 2.576-1.002q.953-.707 1.266-2.186.075-.348.075-.67 0-1.117-.851-1.71-.84-.591-2.23-.591h-3.333a.38.38 0 0 0-.238.09.38.38 0 0 0-.138.232l-1.73 8.356a.3.3 0 0 0 .038.232m6.09-5.966c-.157.689-.757 1.319-1.462 1.319h-1.44l.496-2.369h1.503c.512 0 .94.102.94.665q0 .165-.037.385",
+     "fill_rule": "evenodd"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "width",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['op']",
+    "value": 0.52
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/op.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "plus": {
+   "brand": false,
+   "compositing": "scaled",
+   "fill_rule": null,
+   "full_bleed": false,
+   "geometry": {
+    "rule": "arms and stroke are fractions of r, listed in the note — there is no path to trace",
+    "sign_stroke": 0.16,
+    "source": "pq1/procedural/marks.py:25"
+   },
+   "in_band": false,
+   "kind": "geometry",
+   "measured": {
+    "bbox_mid_dx": 0.17,
+    "bbox_mid_dy": 0.17,
+    "centroid_dx": 0.22,
+    "centroid_dy": 0.22,
+    "extent_pct": 39.9,
+    "ink_area": 186.7,
+    "ink_h": 23.0,
+    "ink_pct": 7.2,
+    "ink_w": 23.0
+   },
+   "note": "the increment sign: the bar and its upright",
+   "scale": {
+    "axis": "radius",
+    "rule": "drawn at the r it is handed; on a disc that is the disc's own radius, so the mark fills the face",
+    "source": "pq1/procedural/marks.py:113",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/procedural/marks.py:113"
+  },
+  "polygon": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.01,
+    "centroid_dy": -0.0,
+    "extent_pct": 48.6,
+    "ink_area": 247.0,
+    "ink_h": 24.67,
+    "ink_pct": 9.5,
+    "ink_w": 28.0
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "m16.364 15.217 4.27-2.435a.73.73 0 0 0 .366-.627V7.284a.72.72 0 0 0-.366-.627l-4.27-2.435a.74.74 0 0 0-.732 0l-4.27 2.435a.72.72 0 0 0-.366.627v8.704l-2.994 1.707-2.994-1.707v-3.415l2.994-1.707 1.974 1.127V9.702l-1.608-.918a.75.75 0 0 0-.732 0l-4.27 2.435a.72.72 0 0 0-.366.627v4.87c0 .258.14.498.366.627l4.27 2.436a.75.75 0 0 0 .732 0l4.27-2.436a.72.72 0 0 0 .366-.626V8.012l.053-.03 2.94-1.677 2.994 1.707v3.415l-2.994 1.707-1.972-1.124v2.291l1.606.916a.75.75 0 0 0 .732 0z",
+     "fill_rule": "nonzero"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "width",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['polygon']",
+    "value": 0.46
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/polygon.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "rotate": {
+   "brand": false,
+   "compositing": "mask",
+   "fill": "the flattened subpaths are disjoint, so the mark is their union (geometry.svg_subpaths)",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": true,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": -0.05,
+    "centroid_dy": -0.01,
+    "extent_pct": 41.7,
+    "ink_area": 242.2,
+    "ink_h": 24.0,
+    "ink_pct": 9.3,
+    "ink_w": 24.0
+   },
+   "note": "the rotate mark, half-height r, its box centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M20.0791 13.4758C21.0079 13.4759 21.687 14.3608 21.3145 15.2111C21.1579 15.5683 20.985 15.9142 20.7949 16.2482C20.3118 17.0972 19.7201 17.8713 19.0205 18.5705C16.788 20.8016 14.1135 21.9258 10.998 21.9426C8.18011 21.9576 5.72547 21.0505 3.62988 19.2267L1.56055 21.2961C1.51123 21.3454 1.45678 21.3849 1.40234 21.4201C1.37818 21.4358 1.355 21.452 1.33008 21.465C1.31575 21.4725 1.30067 21.478 1.28613 21.4846C1.26142 21.4958 1.23713 21.507 1.21191 21.5158C1.18942 21.5236 1.16634 21.5285 1.14355 21.5344C1.12456 21.5393 1.10605 21.5454 1.08691 21.549C1.06873 21.5525 1.05048 21.5545 1.03223 21.5568C1.00614 21.5601 0.980211 21.5627 0.954102 21.5637C0.939083 21.5642 0.924166 21.5638 0.90918 21.5637C0.882665 21.5633 0.856371 21.5624 0.830078 21.5598C0.814365 21.5582 0.798793 21.5563 0.783203 21.5539C0.755525 21.5497 0.728316 21.5439 0.701172 21.5373C0.688412 21.5342 0.675698 21.5312 0.663086 21.5275C0.636911 21.52 0.611346 21.511 0.585938 21.5012C0.570512 21.4952 0.555131 21.4894 0.540039 21.4826C0.515413 21.4716 0.491377 21.4596 0.467773 21.4465C0.455651 21.4397 0.44346 21.4332 0.431641 21.426C0.4083 21.4116 0.386284 21.3955 0.364258 21.3791C0.351752 21.3698 0.339186 21.3607 0.327148 21.3508C0.30616 21.3335 0.286035 21.3153 0.266602 21.2961C0.254642 21.2843 0.242764 21.2724 0.231445 21.26C0.21671 21.2437 0.203025 21.2266 0.189453 21.2092C0.177182 21.1934 0.164573 21.1779 0.15332 21.1613C0.137278 21.1376 0.123188 21.1126 0.109375 21.0871C0.102659 21.0747 0.0950239 21.0628 0.0888672 21.05C0.0766594 21.0246 0.067497 20.9978 0.0576172 20.9709C0.0522422 20.9563 0.0456639 20.942 0.0410156 20.9269C0.0333865 20.9022 0.0280348 20.8767 0.0224609 20.8508C0.00913672 20.7889 0.000440069 20.7243 0 20.6564V14.6291C0 14.1241 0.409116 13.7141 0.914062 13.7141H6.93555L7.08301 13.7258C7.13068 13.7331 7.17664 13.7439 7.2207 13.758C7.61658 13.8844 7.8606 14.2672 7.85059 14.6584C7.84838 14.7451 7.83401 14.8323 7.80566 14.9172C7.76305 15.0447 7.69003 15.1676 7.58203 15.2756L5.63379 17.2228C7.1614 18.4866 8.94523 19.1149 10.9854 19.1076C13.3262 19.0992 15.3378 18.2541 17.0205 16.5725C17.4536 16.1396 17.829 15.6656 18.1455 15.1496C18.2893 14.9152 18.4213 14.6717 18.541 14.4201C18.8024 13.871 19.331 13.4758 19.9395 13.4758H20.0791ZM10.9473 0.000184454C13.7647 -0.0148726 16.2191 0.89192 18.3145 2.71503L20.3848 0.646669C20.9607 0.070701 21.9453 0.478612 21.9453 1.29315V7.31366C21.9453 7.81861 21.5362 8.2287 21.0312 8.2287H15.0098L14.8711 8.21893C14.8233 8.21202 14.7776 8.20033 14.7334 8.18671C14.7146 8.18092 14.6968 8.17311 14.6787 8.1662C14.6552 8.1572 14.6317 8.14868 14.6094 8.13788C14.5925 8.12971 14.5767 8.11968 14.5605 8.11054C14.5386 8.09818 14.5167 8.08647 14.4961 8.07245C14.4822 8.06298 14.4693 8.05236 14.4561 8.04218C14.4349 8.02588 14.4141 8.00939 14.3945 7.9914C14.383 7.98076 14.3723 7.96938 14.3613 7.95819C14.3434 7.93984 14.3259 7.92128 14.3096 7.90155C14.297 7.8863 14.285 7.87067 14.2734 7.85468C14.2614 7.83811 14.2501 7.82119 14.2393 7.8039C14.2276 7.78533 14.2164 7.76658 14.2061 7.74725C14.1973 7.73092 14.1894 7.71426 14.1816 7.69745C14.1719 7.67622 14.1625 7.65489 14.1543 7.633C14.1474 7.61465 14.1414 7.59607 14.1357 7.57733C14.1291 7.5554 14.1232 7.53331 14.1182 7.51093C14.1135 7.49023 14.1097 7.46942 14.1064 7.44843C14.1038 7.43122 14.1013 7.41403 14.0996 7.39667C14.097 7.37039 14.096 7.34406 14.0957 7.31757C14.0955 7.30259 14.0951 7.28765 14.0957 7.27265C14.096 7.26582 14.0953 7.25896 14.0957 7.25214L14.1074 7.15448C14.1078 7.15222 14.108 7.14991 14.1084 7.14765C14.1134 7.12004 14.1212 7.09293 14.1289 7.06561C14.1337 7.04872 14.1377 7.03156 14.1436 7.01483C14.1497 6.99728 14.1577 6.9804 14.165 6.96308C14.2092 6.85837 14.2732 6.75722 14.3633 6.66718L16.3105 4.71893C14.7832 3.45578 12.9996 2.82789 10.96 2.83515C8.61914 2.84352 6.60754 3.68864 4.9248 5.3703C4.49171 5.80313 4.11632 6.27711 3.7998 6.79315C3.65604 7.02757 3.52401 7.27106 3.4043 7.52265C3.14293 8.07173 2.6143 8.46698 2.00586 8.46698H1.86621C0.937416 8.46688 0.258274 7.58191 0.630859 6.73163C0.787404 6.37441 0.960332 6.02856 1.15039 5.69452C1.63347 4.84551 2.22522 4.07147 2.9248 3.37225C5.15732 1.14117 7.83178 0.0169288 10.9473 0.000184454Z",
+     "fill_rule": null
+    }
+   ],
+   "path_source": "pq1/procedural/rotate.py:22",
+   "scale": {
+    "axis": "height",
+    "rule": "half-height = scale x the glyph r, over the viewBox",
+    "source": "pq1/procedural/rotate.py:85",
+    "token": "rotate.MARK_SCALE",
+    "value": 0.4
+   },
+   "source": "pq1/procedural/rotate.py:120",
+   "viewbox": {
+    "h": 22.0,
+    "rule": "the art is scaled by the whole viewBox, so the padding in the box is part of the mark's size",
+    "source": "pq1/procedural/rotate.py:21",
+    "w": 22.0
+   }
+  },
+  "safe": {
+   "art": "pq1/assets/safe.png",
+   "brand": true,
+   "compositing": "mask",
+   "fill": "the PNG's own alpha",
+   "fill_rule": null,
+   "full_bleed": true,
+   "in_band": false,
+   "kind": "logo",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.01,
+    "centroid_dy": -0.08,
+    "extent_pct": 99.5,
+    "ink_area": 1323.9,
+    "ink_h": 57.33,
+    "ink_pct": 50.8,
+    "ink_w": 57.33
+   },
+   "note": "full-bleed art: the disc WEARS the logo, circle-masked to the token's visible edge, and an explicit ring may be stroked over it",
+   "scale": {
+    "axis": "diameter",
+    "rule": "the art fills the token's VISIBLE disc (components.visible_r), never the layout radius",
+    "source": "pq1/components.py:229",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/components.py:242"
+  },
+  "scroll": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.4,
+    "centroid_dy": -0.6,
+    "extent_pct": 47.4,
+    "ink_area": 280.1,
+    "ink_h": 26.67,
+    "ink_pct": 10.7,
+    "ink_w": 27.33
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "M5.247 9.971C4.55 9.317 4.07 8.466 4.07 7.462v-.109c.066-1.702 1.462-3.098 3.164-3.142H18.12c.284.022.502.219.502.502v9.229c.24.044.371.087.611.153.196.065.458.218.458.218v-9.6a1.597 1.597 0 0 0-1.592-1.57H7.233A4.31 4.31 0 0 0 3 7.462c0 1.374.633 2.552 1.636 3.359.066.066.131.13.328.13.327 0 .545-.261.523-.523 0-.24-.087-.327-.24-.458",
+     "fill_rule": "nonzero"
+    },
+    {
+     "d": "M17.836 14.552h-8.53A1.03 1.03 0 0 0 8.28 15.6v1.222c.021.567.501 1.047 1.069 1.047h.632v-1.047H9.35v-1.2h.349c1.069 0 1.876 1.003 1.876 2.072 0 .96-.873 2.16-2.313 2.073-1.287-.087-1.985-1.222-1.985-2.073V7.287a.866.866 0 0 0-.85-.85h-.852v1.069h.633v10.21c-.044 2.073 1.483 3.12 3.054 3.12l8.596.022A3.143 3.143 0 0 0 21 17.716c-.022-1.767-1.418-3.164-3.164-3.164m2.073 3.208a2.09 2.09 0 0 1-2.073 2.007l-5.977-.022c.48-.545.763-1.265.763-2.05 0-1.223-.72-2.074-.72-2.074h5.956c1.135 0 2.073.939 2.073 2.073zM15.545 7.68H9.107V6.61h6.436a.53.53 0 0 1 .524.524c0 .306-.218.546-.524.546",
+     "fill_rule": "nonzero"
+    },
+    {
+     "d": "M15.545 12.698H9.107v-1.069h6.436a.53.53 0 0 1 .524.524c0 .305-.218.545-.524.545m1.137-2.509H9.107v-1.07h7.571a.536.536 0 0 1 0 1.07",
+     "fill_rule": "nonzero"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "height",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['scroll']",
+    "value": 0.44
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/scroll.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  },
+  "tether": {
+   "art": "pq1/assets/tether.png",
+   "brand": true,
+   "compositing": "mask",
+   "fill": "the PNG's own alpha",
+   "fill_rule": null,
+   "full_bleed": true,
+   "in_band": false,
+   "kind": "logo",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.0,
+    "centroid_dy": -0.28,
+    "extent_pct": 99.5,
+    "ink_area": 1586.8,
+    "ink_h": 57.33,
+    "ink_pct": 60.9,
+    "ink_w": 57.33
+   },
+   "note": "full-bleed art: the disc WEARS the logo, circle-masked to the token's visible edge, and an explicit ring may be stroked over it",
+   "scale": {
+    "axis": "diameter",
+    "rule": "the art fills the token's VISIBLE disc (components.visible_r), never the layout radius",
+    "source": "pq1/components.py:229",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/components.py:242"
+  },
+  "usdc": {
+   "art": "pq1/assets/usdc.png",
+   "brand": true,
+   "compositing": "mask",
+   "fill": "the PNG's own alpha",
+   "fill_rule": null,
+   "full_bleed": true,
+   "in_band": false,
+   "kind": "logo",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.0,
+    "centroid_dy": -0.08,
+    "extent_pct": 99.5,
+    "ink_area": 1381.4,
+    "ink_h": 57.33,
+    "ink_pct": 53.0,
+    "ink_w": 57.33
+   },
+   "note": "full-bleed art: the disc WEARS the logo, circle-masked to the token's visible edge, and an explicit ring may be stroked over it",
+   "scale": {
+    "axis": "diameter",
+    "rule": "the art fills the token's VISIBLE disc (components.visible_r), never the layout radius",
+    "source": "pq1/components.py:229",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/components.py:242"
+  },
+  "x": {
+   "brand": false,
+   "compositing": "mask",
+   "fill_rule": null,
+   "full_bleed": false,
+   "geometry": {
+    "rule": "arms and stroke are fractions of r, listed in the note — there is no path to trace",
+    "sign_stroke": 0.16,
+    "source": "pq1/procedural/marks.py:25"
+   },
+   "in_band": true,
+   "kind": "geometry",
+   "measured": {
+    "bbox_mid_dx": 0.17,
+    "bbox_mid_dy": 0.17,
+    "centroid_dx": 0.17,
+    "centroid_dy": 0.17,
+    "extent_pct": 39.9,
+    "ink_area": 248.6,
+    "ink_h": 23.0,
+    "ink_pct": 9.5,
+    "ink_w": 23.0
+   },
+   "note": "the cancel X: two round-capped SIGN_STROKE bars over ±0.30 r; true alpha (base_mark) — it rests on the cancel red",
+   "scale": {
+    "axis": "radius",
+    "rule": "drawn at the r it is handed; on a disc that is the disc's own radius, so the mark fills the face",
+    "source": "pq1/procedural/marks.py:73",
+    "token": null,
+    "value": 1.0
+   },
+   "source": "pq1/procedural/marks.py:73"
+  },
+  "zksync": {
+   "brand": true,
+   "compositing": "mask",
+   "fill": "subpaths XOR within one <path> element, elements union — a counter reads as a hole",
+   "fill_rule": null,
+   "full_bleed": false,
+   "in_band": false,
+   "kind": "traced",
+   "measured": {
+    "bbox_mid_dx": 0.0,
+    "bbox_mid_dy": 0.0,
+    "centroid_dx": 0.0,
+    "centroid_dy": 0.06,
+    "extent_pct": 54.4,
+    "ink_area": 199.2,
+    "ink_h": 16.0,
+    "ink_pct": 7.6,
+    "ink_w": 31.33
+   },
+   "note": "a chain mark, half-extent r on its dominant axis, centred on (cx, cy). True alpha compositing (marks.base_mark's model): the mark sits on a coloured disc, so a colour-scaled fill would read wrong while fading.",
+   "path": [
+    {
+     "d": "m21 12-5.106-4.498v3.296l-5.07 3.298 5.07.002V16.5zM3 12l5.106 4.5v-3.263l5.034-3.3-5.032-.002V7.5z",
+     "fill_rule": "evenodd"
+    }
+   ],
+   "path_source": "pq1/procedural/chains.py:59",
+   "scale": {
+    "axis": "width",
+    "rule": "half-extent = scale x the glyph r, on that axis of the ART's own span (not of the viewBox)",
+    "source": "pq1/procedural/chains.py:37",
+    "token": "chains.MARKS['zksync']",
+    "value": 0.52
+   },
+   "source": "pq1/procedural/chains.py:296",
+   "svg": "reference/logos/zksync.svg",
+   "viewbox": {
+    "h": 24.0,
+    "rule": "the art is centred on the viewBox centre",
+    "source": "pq1/procedural/chains.py:35",
+    "w": 24.0
+   }
+  }
+ },
+ "mark_band": {
+  "exempt": [
+   "chain brand logos — their proportions are the network's, not ours",
+   "full-bleed token art — the art IS the disc",
+   "letter:<CHAR> — a letter is sized by the font's cap height",
+   "exclamation, plus and minus — they never rest on a disc"
+  ],
+  "extent_pct": [
+   39.0,
+   60.0
+  ],
+  "ink_pct": [
+   4.5,
+   12.5
+  ],
+  "measured": {
+   "extent_pct": {
+    "max": {
+     "icon": "dev",
+     "value": 59.0
+    },
+    "min": {
+     "icon": "x",
+     "value": 39.9
+    }
+   },
+   "ink_pct": {
+    "max": {
+     "icon": "fingerprint",
+     "value": 12.2
+    },
+    "min": {
+     "icon": "dev",
+     "value": 5.4
+    }
+   }
+  },
+  "members": [
+   "blind",
+   "check",
+   "dev",
+   "dots",
+   "download",
+   "eth",
+   "fingerprint",
+   "mainnet",
+   "rotate",
+   "x"
+  ],
+  "of": "the token's VISIBLE disc, 2 x components.visible_r(layout.CIRCLE_R)",
+  "rule": "every mark that RESTS on a disc and is not a brand's own logo sits inside the band. It is a weight rule, not a size law — the sign box above is what fixes a verdict's size.",
+  "source": "tools/handoff/introspect.py:1227"
+ },
+ "measured_at": {
+  "disc": 57.6,
+  "r": 30,
+  "rule": "each glyph drawn alone, white on black, at the disc's layout radius; the ink box and both centres in UI px about the glyph's own centre. Box edges are EXCLUSIVE (min, max + 1) — inclusive indices read a phantom half-pixel offset whenever the ink spans an even number of supersampled pixels (audit ICO-09).",
+  "supersample": 3
+ },
+ "optical_centre": {
+  "exceptions": [
+   "chains.NUDGE — avalanche and linea centre their mass, so their box is deliberately off centre",
+   "letter:<CHAR> — a letter is text, centred by the font's metrics rather than by its ink",
+   "screens/verdict/last_attempt.py — the display digit and the heart are composed as a pair by the type tier (owner, Sep 2026)"
+  ],
+  "rule": "a mark's ink sits on the circle grid in the resting frame: the box is centred by construction, and where the ink is lopsided the art is nudged until the MASS lands there instead."
+ },
+ "schema_version": 1,
+ "stroke": {
+  "draws": {
+   "hair": "the PIN rings at rest and the die's edges",
+   "heavy": "the padlock's shackle",
+   "ring": "the token ring (components.TOKEN_RING_W) and the resolve flash",
+   "sign": "the corner chevrons"
+  },
+  "exceptions": [
+   {
+    "code": "HINT_STROKE = STROKE[\"hair\"] / SIGN_R   # ... on the hair stroke, 2 px (the x mark's is 3)",
+    "name": "the plus / minus entry hints",
+    "reason": "a fraction of the hint sign's radius. The signs are smaller than the x mark and read heavy at its stroke, so they are drawn on the hair weight instead",
+    "source": "screens/pin/pin_entering.py:121",
+    "value": 0.10526315789473684
+   },
+   {
+    "code": "STROKE = 2.6",
+    "name": "the PIN pill",
+    "reason": "the pill is a container the width of a caption, not a sign: on the ring weight its outline vanished, on the sign weight it read as a button",
+    "source": "pq1/procedural/pin_pill.py:21",
+    "value": 2.6
+   },
+   {
+    "code": "SCAN_STROKE = 1.6",
+    "name": "the PIN pill's scan line",
+    "reason": "a moving hairline INSIDE the pill — necessarily thinner than the pill it travels in",
+    "source": "pq1/procedural/pin_pill.py:29",
+    "value": 1.6
+   },
+   {
+    "code": "ACTIVE_LW = STROKE[\"hair\"] + 1.0",
+    "name": "the active PIN ring",
+    "reason": "a FULL panel pixel over the hair weight the resting rings take (2 -> 3), because the dialling ring has to read as the live one without changing size — and the hue step that used to carry that job alone measures 1.21:1 against the idle grey, near-isoluminant on black glass. It was +0.5 until Sep 2026; 0.047 mm is not a cue (audit A11-10)",
+    "source": "pq1/procedural/pin_slots.py:56",
+    "value": 3.0
+   },
+   {
+    "code": "SIGN_STROKE = 0.16      # the result marks' and the signs' stroke, a fraction of r",
+    "name": "the result marks and the entry signs",
+    "reason": "a fraction of r, not a width: check, x, plus and minus are drawn at whatever radius they are handed, so their stroke scales with them",
+    "source": "pq1/procedural/marks.py:25",
+    "value": 0.16
+   },
+   {
+    "code": "w = (lw if lw is not None else 3.0 * h / 63.0) * SUP",
+    "name": "the shield outline",
+    "reason": "the traced source's own stroke, scaled with the drawn height. The shield keeps its OUTLINE — the one written exception to a sign being a filled silhouette with a black knock-out — because the shield is the container and the mark inside it is the verdict (owner, Sep 2026)",
+    "source": "pq1/procedural/shield.py:50",
+    "value": null
+   },
+   {
+    "code": "mw = 4 * s",
+    "name": "the exclamation bar",
+    "reason": "a fraction of r: the notice mark is drawn at the radius its triangle gives it",
+    "source": "pq1/procedural/marks.py:140",
+    "value": null
+   }
+  ],
+  "not_an_exception": [
+   {
+    "name": "the resolve flash ring",
+    "note": "it takes the system ring weight by default (components.TOKEN_RING_W); it used to carry a width of its own and no longer does",
+    "source": "pq1/components.py:700"
+   }
+  ],
+  "readers": [
+   "pq1/components.py:339",
+   "pq1/components.py:519",
+   "pq1/procedural/die3d.py:100",
+   "pq1/procedural/die3d.py:131",
+   "pq1/procedural/padlock.py:21",
+   "pq1/procedural/pin_slots.py:15",
+   "pq1/procedural/pin_slots.py:56",
+   "pq1/procedural/pin_slots.py:81",
+   "pq1/procedural/pin_slots.py:83",
+   "pq1/procedural/pin_slots.py:85",
+   "screens/pin/pin_entering.py:121"
+  ],
+  "rule": "every line weight the port draws, by name. A width off this scale is a recorded decision, named where it is drawn.",
+  "source": "pq1/layout.py:313",
+  "unit": "px",
+  "widths": {
+   "hair": 2.0,
+   "heavy": 5.4,
+   "ring": 2.4,
+   "sign": 4.5
+  }
+ },
+ "verdict_box": {
+  "exempt": [
+   {
+    "art": "the token's own disc, filled white",
+    "size": 60.0,
+    "what": "screens/verdict/firmware_verified.py",
+    "why": "a disc ending IS the token, not a sign — it already carries the system's one radius"
+   },
+   {
+    "art": "the token's visible disc, ringed in the state colour",
+    "size": 57.6,
+    "what": "screens/verdict/headshake.py",
+    "why": "a ring ending is the token's visible disc; the ring is the verdict"
+   },
+   {
+    "art": "the open padlock",
+    "size": null,
+    "what": "screens/verdict/padlock.py, the unlock rest",
+    "why": "the shackle is sprung at rest, so the OPEN pose stands taller than the box the closed one fits"
+   },
+   {
+    "art": "a display digit beside the heart",
+    "size": null,
+    "what": "screens/verdict/last_attempt.py",
+    "why": "composed by the type tier, not drawn as a sign (owner, Sep 2026)"
+   },
+   {
+    "art": "the PIN pill",
+    "size": null,
+    "what": "screens/verdict/pin_mismatch.py, screens/verdict/duress_differ.py",
+    "why": "the pill is the row the user typed into, not a sign"
+   }
+  ],
+  "readers": [
+   "pq1/procedural/warning_triangle.py:11",
+   "pq1/procedural/warning_triangle.py:20",
+   "screens/verdict/factory_signing.py:26",
+   "screens/verdict/factory_signing.py:38",
+   "screens/verdict/factory_signing.py:55",
+   "screens/verdict/padlock.py:26",
+   "screens/verdict/padlock.py:54",
+   "screens/verdict/rng_failed.py:29",
+   "screens/verdict/rng_failed.py:43",
+   "screens/verdict/rng_failed.py:53",
+   "screens/verdict/shield.py:23",
+   "screens/verdict/shield.py:41"
+  ],
+  "rule": "a verdict SIGN — a triangle, a padlock, a shield, a gear, a die — inks its LARGEST dimension to VERDICT_BOX and centres it on the circle grid. One size for every sign that stands where the token would; tools/check rule V-BOX measures the resting frame.",
+  "source": "pq1/layout.py:305",
+  "unit": "px",
+  "value": 64
+ }
+}

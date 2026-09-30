@@ -87,15 +87,17 @@ Common
                                                  GRADIENTS, e.g. "SAFE") pins
                                                  that brand ramp instead
                 "address": "0x…",                unknown-token identity: the
-                "symbol": "XYZ"}                 gradient disc + trail take
-                                                 the ramp hashed from address
+                "symbol": "XYZ"}                 solid disc + trail take the
+                                                 ramp hashed from address
                                                  (preferred) or symbol, so
                                                  the same token always wears
-                                                 the same gradient
-               "solid" is the normal treatment for a KNOWN token (and the
-               default); "unknown" draws the gradient disc reserved for
-               unrecognized tokens, coloured by components.token_ramp
-               ("palette" -> "address" -> "symbol" -> "icon" -> neutral).
+                                                 the same colour
+               "solid" is the treatment for EVERY live token, known or not
+               (and the default); "unknown" draws the gradient disc, which
+               is RESERVED and asked for by no screen (audit A11-12) — a
+               port must not implement it. Either way the ramp comes from
+               components.token_ramp ("palette" -> "address" -> "symbol"
+               -> "icon" -> neutral).
 
 hero — circle centred x 214, question text on the y 128 baseline
     "bottom" : "SEND 5.25 ETH?"
@@ -104,7 +106,8 @@ hero — circle centred x 214, question text on the y 128 baseline
                                                  sequence of asks — the pager
                                                  "n/m" in the same top-centre
                                                  spot a paged detail uses
-                                                 (12 px, 80 % white). A
+                                                 (the Label face, INK_PAGING).
+                                                 A
                                                  batch's transactions
                                                  (flows/batch). NOT text
                                                  pages: nothing flips and the
@@ -127,12 +130,15 @@ confirm — the long-flow early exit (DESIGN.md § Flow shape: inserted as the
           5 s (components.confirm_band driven by motion.confirm_band);
           corner chevrons rest in the "up" (hold-armed) pose and point —
           the hero bob — on the same 5 s beat
-    "bottom" : "Confirm?"                        (default) 36 px prompt
+    "bottom" : "Confirm?"                        (default) the prompt at SIZE_XL
     "commit" : True                              (default) hold-right sign armed
 
 detail — circle docked in a 100 px column, text centred in the other region
-    "side"     : "left" | "right"
-    "label"    : "MAX FEE"                       16 px SEMIBOLD caps, baseline y 128
+    "side"     : "left" | "right"                (default: the opposite of the
+                                                 previous detail in the segment,
+                                                 the first on the left — details
+                                                 alternate columns)
+    "label"    : "MAX FEE"                       the Label face (SIZE_LABEL SEMIBOLD caps), baseline y 128
     "lines"    : ["45.5 gwei", "Tip: 2 gwei"]    detail value, 1-3 lines; a
                                                  line is a str, or {"str": …,
                                                  "weight": "semibold"} — a
@@ -149,24 +155,26 @@ detail — circle docked in a 100 px column, text centred in the other region
                                                  them ("Slot 3 ▸ Slot 4",
                                                  § Text rules, Transitions)
     "size"     : 36 | 32 | 28 | 22               largest tier that fits
-    "circle_x" : 291                             optional nudge off the column
-    "text_x"   : 175                             optional nudge
-    "pulse"    : True | [r, g, b]                pulsating rings around the
+                                                 (no per-screen x nudges: a
+                                                 detail sits on the column
+                                                 grid; a chain screen composes
+                                                 itself — chain_compose)
+    "pulse"    : True | <STATE key>              pulsating rings around the
                                                  token (components.pulse;
-                                                 True = token fill colour)
+                                                 True = STATE["warning"])
     "pages"    : [[line, line], [line, line]]    ONE value too long for its
                                                  tier's three lines — a full
                                                  32-byte hash — shown in
                                                  2+ pages of 1-3 lines at
                                                  the screen's one "size";
-                                                 the pager "n/m" (12 px,
-                                                 80 % white, top centre)
+                                                 the pager "n/m" (the Label
+                                                 face, INK_PAGING, top centre)
                                                  shows only then. The demo
                                                  turns a page per detail
                                                  dwell (motion.page_flip:
                                                  the page fades away
                                                  ease-out, the next fades
-                                                 in ease); a right tap
+                                                 in ease-out); a right tap
                                                  turns the page before it
                                                  advances (DESIGN.md
                                                  § Input). "lines" is
@@ -189,7 +197,11 @@ value — the value alone, full width: NO token on the panel — the circle
                                                  full-width budgets
     "words"    : ["close", "agent", …]           a NUMBERED WORD GRID in
                                                  place of lines: up to 8
-                                                 short words on the seed-
+                                                 a page (up to 24, paged
+                                                 in 8s under the n/m
+                                                 pager, the numbers
+                                                 counting on — the setup
+                                                 seed), short words on the seed-
                                                  words grid — two columns
                                                  of four (WORDS_COLS: the
                                                  number right-aligned, the
@@ -203,10 +215,11 @@ value — the value alone, full width: NO token on the panel — the circle
                                                  (22, Regular) — a
                                                  fingerprint read as words
                                                  (flows/firmware; the
-                                                 design's pq1_seed_words)
-    "label"    : "KEY FINGERPRINT"               with words only (optional):
-                                                 a caps label centred on
-                                                 the bottom baseline
+                                                 design's pq1_seed_words).
+                                                 A value screen carries NO
+                                                 label — the value stands
+                                                 alone, and a words grid
+                                                 has no caption
 
 status — animated loading, then the shared resting look: black token,
          state-coloured ring + result glyph, caption (see pq1/status.py);
@@ -245,12 +258,31 @@ status — animated loading, then the shared resting look: black token,
     "busy"   : "SIGNING…"                        caption while loading (optional;
                                                  film only — the cancel resolve
                                                  has no loading window)
+    "accept" : "any"                             a PIN entry CHOOSING a PIN:
+                                                 any entry matches (SET PIN,
+                                                 flows/setup)
+    "forbid" : "00000000"                        ... any entry BUT this one
+                                                 matches (the duress PIN
+                                                 must differ)
+    "on_match": "next"                           an entry's bench route on a
+                                                 match: the very next screen,
+                                                 even another entry (default:
+                                                 past the entries)
+    "on_miss": "SET PIN"                         ... on a miss: the screen with
+                                                 this id, its own retrying in
+                                                 place (pq1.driver
+                                                 _after_entry; default: the
+                                                 next attempt)
     dwell defaults to the animation's duration (qubit 8650 ms, the cancel
     resolve 2850 ms). Any extra
     fields ride along to the registered animation via its spec (the screens/
     library uses this for per-screen params like pin= or direction=).
 """
 import copy
+
+from . import colors, typography   # both safe at module level: colors imports
+                                   # only motion; typography reads SUP back from
+                                   # here lazily, inside font() / text_width()
 
 # ------------------------------------------------------------------ canvas --
 W, H = 428, 142
@@ -263,19 +295,58 @@ CIRCLE_CY = 72              # main circle vertical centre
 CIRCLE_R = 30               # diameter 60, never resizes
 TEXT_CY = 72.5              # vertical centre of detail text blocks
 
+# The sign box: a verdict's icon — a triangle, a padlock, a shield, a gear,
+# a die — inks its LARGEST dimension to VERDICT_BOX, centred on the circle
+# grid: one size for every sign that stands where the token would (audit
+# ICO-03; the value is the owner's, Sep 2026). A disc ending (FIRMWARE
+# VERIFIED's white disc, the X ring) is the token itself, 2 * CIRCLE_R, and
+# is not a sign. Screens derive their art constants from it; tools/check
+# rule V-BOX measures the resting frame.
+VERDICT_BOX = 64
+# The stroke vocabulary — every line weight the port draws, by name (audit
+# ICO-05): hair = the PIN rings at rest and the die's edges, ring = the token
+# ring (components.TOKEN_RING_W), sign = the corner chevrons, heavy = the
+# padlock's shackle. A width that is a recorded decision off this scale is
+# named where it is drawn (the ± hint stroke, the pin pill, the shield
+# outline, the exclamation bar, the result marks' SIGN_STROKE — a fraction
+# of r) — DESIGN.md § Iconography.
+STROKE = dict(hair=2.0, ring=2.4, sign=4.5, heavy=5.4)
+
 SWEEP_X_MIN, SWEEP_X_MAX = 89, 339
 
-COL_LEFT = (24, 123)        # detail circle column, left
-COL_RIGHT = (303, 402)      # detail circle column, right
+# The detail grid is ONE layout and its mirror image about CENTER_X: every
+# right-hand anchor is derived from the left one (pixel-edge coordinates,
+# so a point mirrors as W - x and a pixel column as W - 1 - x — DESIGN.md
+# § Canvas). The left values are the designer's (reference/design_canvas).
+COL_LEFT = (24, 123)        # detail circle column, left (pixel columns)
+COL_RIGHT = (W - 1 - COL_LEFT[1], W - 1 - COL_LEFT[0])   # (304, 403)
 COL_LEFT_CX = 74
-COL_RIGHT_CX = 352
-DETAIL_TEXT_CX = {"left": 263, "right": 163}   # text centre opposite the circle
+COL_RIGHT_CX = W - COL_LEFT_CX                            # 354
+DETAIL_TEXT_CX = {"left": 263, "right": W - 263}   # text centre opposite the
+                            # circle: the designer's 263, and its mirror 165
+
+# The detail text's own width — the budget the fit rule measures against.
+# Derived from the two constraints the detail grid already obeys, rather
+# than typed: OUTSIDE, the panel margin; INSIDE, one MARGIN of air past the
+# circle's ink (COL_LEFT_CX +/- CIRCLE_R, not the wider reserved column).
+# The inner bound binds (147 < 153) and mirrors exactly on the other side:
+# a right-docked circle leaves 165 - 147 = 18, still clear of MARGIN.
+TEXT_REGION_W = 2 * min(W - MARGIN - DETAIL_TEXT_CX["left"],
+                        DETAIL_TEXT_CX["left"] - (COL_LEFT_CX + CIRCLE_R + MARGIN))
+TEXT_REGION_FULL_W = W - 2 * MARGIN   # a value screen: no circle to clear
 
 BAND_TOP, BAND_BOTTOM = 105, 129
 BASELINE_Y = 128            # all bottom-band text baselines
 
-CHEV_LEFT = (23.5, 19.0)    # corner chevron slots
-CHEV_RIGHT = (403.5, 19.0)
+# the confirm band's two units — "OR VIEW MORE ▸" and "◂ TO GO BACK" — each
+# centre their TEXT off the panel centre so that text + chevron read centred
+# as one unit; the two alternate every 5 s, so they share one visual centre.
+# A band_chev hero's caption sits on VIEW_MORE_CX too (it points right).
+VIEW_MORE_CX = 206          # text centre, chevron after it: nudged left
+GO_BACK_CX = 2 * CENTER_X - VIEW_MORE_CX   # 222: the mirror, chevron before it
+
+CHEV_LEFT = (23.5, 19.0)    # corner chevron slots ...
+CHEV_RIGHT = (W - CHEV_LEFT[0], CHEV_LEFT[1])   # ... (404.5, 19): the mirror
 
 # ------------------------------------------------------------- flow shape --
 # DESIGN.md § Flow shape: a flow with CONFIRM_MIN_DETAILS or more detail
@@ -284,8 +355,14 @@ CHEV_RIGHT = (403.5, 19.0)
 CONFIRM_MIN_DETAILS = 7
 CONFIRM_INDEX = 5
 
-CONFIRM_CIRCLE_X = 291      # confirm circle right of centre ...
-CONFIRM_TEXT_X = 175        # ... prompt centred to its left (the CHAIN nudges)
+# The Confirm? screen is composed like the chain screen: the prompt +
+# CHAIN_GAP + the disc as ONE group centred on the panel (layout_of calls
+# chain_compose on the prompt). These two are that composition's result for
+# the default prompt "Confirm?" — pinned here for the pages and the port, and
+# held equal to chain_compose by tools/check rule G-CONFIRM (a module-level
+# chain_compose call is impossible: typography reads SUP back from here).
+CONFIRM_TEXT_X = 175        # prompt centre ...
+CONFIRM_CIRCLE_X = 297      # ... and the disc, CHAIN_GAP past the prompt's edge
 CHAIN_GAP = 18              # chain screen: the FIXED air between the caption's
                             # right edge and the disc's left edge. A chain screen
                             # composes itself — caption + gap + disc as one group,
@@ -303,9 +380,11 @@ VALUE_PARK_X = -2 * CIRCLE_R   # ... its token parked off the panel to the left
 # the words and numbers a tier up from the design's 16 px)
 WORDS_ROWS = (32, 58, 84, 110)         # row centre lines
 WORDS_COLS = ((88, 98), (272, 282))    # (number right edge, word left edge) per column
-WORDS_SIZE = 22                        # the words' and numbers' one size: the Default tier
-WORDS_NUM_ALPHA = 0.5                  # the numbers' grey (the design's ~50 % GRAY)
-WORDS_MAX = len(WORDS_COLS) * len(WORDS_ROWS)
+WORDS_SIZE = typography.SIZE_BODY      # the words' and numbers' one size: the Default tier
+WORDS_NUM_ALPHA = colors.INK_MUTED     # the numbers' grey (the design's ~50 % GRAY)
+WORDS_MAX = len(WORDS_COLS) * len(WORDS_ROWS)   # words on ONE page of the grid
+WORDS_TOTAL_MAX = 24                   # a longer list pages in WORDS_MAX (a 24-word
+                                       # seed: 3 pages under the n/m pager — audit HS-09)
                                # (disc and trail clear the edge at rest)
 
 
@@ -329,6 +408,54 @@ def line_weight(ln):
     return ln.get("weight", "regular") if isinstance(ln, dict) else "regular"
 
 
+def fit_tiers():
+    """the detail ladder, largest first: (size, max lines per screen).
+
+    The tiers are the typography tokens, never re-typed (DESIGN.md
+    § Typography)."""
+    return ((typography.SIZE_XL, 1), (typography.SIZE_L, 1),
+            (typography.SIZE_M, 2), (typography.SIZE_BODY, 3))
+
+
+def line_width(ln, size):
+    """the width one detail line occupies at `size`, measured in its own face.
+
+    A transition row measures as the WHOLE run — both values plus one size of
+    chevron space (components.TRANSITION_GAP past each value's edge), because
+    the pair is fitted as one row (DESIGN.md § Text rules, Transitions)."""
+    w = line_weight(ln)
+    if isinstance(ln, dict) and "transition" in ln:
+        old, new = ln["transition"]
+        return (typography.text_width(old, size, w)
+                + typography.text_width(new, size, w) + size)
+    return typography.text_width(line_str(ln), size, w)
+
+
+def fit_size(lines, full=False):
+    """the largest tier whose every line MEASURES inside the text region.
+
+    The one fit rule (DESIGN.md § Typography, Choosing the size), in pixels.
+    A character count is not a width: "D" x 21 measures 327.6 px at 22 — well
+    past the region — while "l" x 21 measures 132.2. Each line is measured in
+    the face it will be drawn in, so a SemiBold name is never counted as
+    Regular. `full` is a value screen's full-width region.
+
+    Raises when nothing fits: the answer is to split the value across screens,
+    or to page it (§ Text rules, Pages) — never to shrink below the floor."""
+    budget = TEXT_REGION_FULL_W if full else TEXT_REGION_W
+    for size, rows in fit_tiers():
+        if len(lines) <= rows and all(line_width(ln, size) <= budget
+                                      for ln in lines):
+            return size
+    floor, rows = fit_tiers()[-1]
+    widest = max(line_width(ln, floor) for ln in lines)
+    raise ValueError(
+        f"{len(lines)} lines, widest {widest:.1f} px at {floor}, fits no tier "
+        f"({floor} holds {rows} lines inside {budget:.0f} px) — split the "
+        f"value or page it, never shrink or ellipsize "
+        f"(DESIGN.md § Typography, Choosing the size)")
+
+
 def _value_texts(lines, tx, size):
     """the text specs of one detail value: 1-3 lines stacked on
     line_height about TEXT_CY, centred on tx"""
@@ -344,17 +471,17 @@ def _value_texts(lines, tx, size):
     return out
 
 
-def _words_texts(words):
+def _words_texts(words, first=1):
     """the text specs of a numbered word grid: word k in column k // 4,
-    row k % 4 — its number (k + 1, grey) right-aligned at the column's
+    row k % 4 — its number (k + first, grey; a later page of a paged list
+    counts on) right-aligned at the column's
     number edge, the word (white) left-aligned at its word edge (cv.text
     centres on x, so each anchor is the edge plus or minus half the width)"""
-    from . import colors, typography   # lazy: typography imports SUP from here
     rows, out = len(WORDS_ROWS), []
     grey = colors.scale(colors.WHITE, WORDS_NUM_ALPHA)
     for k, w in enumerate(words):
         num_x, word_x = WORDS_COLS[k // rows]
-        y, n = WORDS_ROWS[k % rows], str(k + 1)
+        y, n = WORDS_ROWS[k % rows], str(k + first)
         out.append(dict(str=n, x=num_x - typography.text_width(n, WORDS_SIZE) / 2,
                         y=y, size=WORDS_SIZE, color=grey))
         out.append(dict(str=w, x=word_x + typography.text_width(w, WORDS_SIZE) / 2,
@@ -370,10 +497,15 @@ def layout_of(s):
         return dict(circle=dict(cx=CENTER_X, cy=CIRCLE_CY, r=CIRCLE_R, icon=s["icon"]),
                     texts=[], chev=s["chev"])
     if s["kind"] == "hero":
+        # a band_chev caption is the confirm band's unit: its text centres on
+        # VIEW_MORE_CX so text + chevron read centred together — the layout
+        # reports the x the renderer draws at (components.draw_text)
+        band = bool(s.get("band_chev"))
         out = dict(circle=dict(cx=CENTER_X, cy=CIRCLE_CY, r=CIRCLE_R, icon=s["icon"]),
-                   texts=[dict(str=s["bottom"], x=CENTER_X, y=BASELINE_Y,
-                               size=18, ls=0.5, base=True,
-                               band_chev=bool(s.get("band_chev")))],
+                   texts=[dict(str=s["bottom"], x=VIEW_MORE_CX if band else CENTER_X,
+                               y=BASELINE_Y, size=typography.SIZE_QUESTION,
+                               ls=typography.LS_QUESTION, base=True,
+                               band_chev=band)],
                    chev=s["chev"])
         if s.get("pager"):
             # position in a sequence, not text pages — Sim draws it under the
@@ -381,30 +513,44 @@ def layout_of(s):
             out["pager"] = tuple(s["pager"])
         return out
     if s["kind"] == "confirm":
-        return dict(circle=dict(cx=CONFIRM_CIRCLE_X, cy=CIRCLE_CY, r=CIRCLE_R,
-                                icon=s["icon"]),
-                    texts=[dict(str=s["bottom"], x=CONFIRM_TEXT_X, y=TEXT_CY,
-                                size=36)],
+        # composed like the chain screen: prompt + CHAIN_GAP + disc as one
+        # centred group (CONFIRM_TEXT_X / CONFIRM_CIRCLE_X for "Confirm?")
+        tx, cx = chain_compose(s["bottom"], typography.SIZE_XL)
+        return dict(circle=dict(cx=cx, cy=CIRCLE_CY, r=CIRCLE_R, icon=s["icon"]),
+                    texts=[dict(str=s["bottom"], x=tx, y=TEXT_CY,
+                                size=typography.SIZE_XL)],
                     chev=s["chev"])
     if s["kind"] == "value":
         # full width: the token leaves the panel, the value takes the region
         cx, tx, texts = VALUE_PARK_X, VALUE_TEXT_CX, []
         if s.get("words"):
-            # the numbered word grid; an optional label sits centred on the
-            # bottom baseline
-            if s.get("label"):
-                texts.append(dict(str=s["label"], x=CENTER_X, y=BASELINE_Y, size=16,
-                                  ls=1, base=True, weight="semibold"))
+            # the numbered word grid alone — a value screen carries no label
+            # (normalize_screens rejects one; DESIGN.md § Text rules, Words)
+            w = s["words"]
+            if len(w) <= WORDS_MAX:
+                return dict(circle=dict(cx=cx, cy=CIRCLE_CY, r=CIRCLE_R, icon=s["icon"]),
+                            chev=s["chev"], texts=_words_texts(w))
+            # a longer list PAGES the grid, WORDS_MAX words a page, the
+            # numbers counting on — the paged value's machinery (the Sim's
+            # page flip, the n/m pager, the driver's page taps)
+            pages = [_words_texts(w[i:i + WORDS_MAX], i + 1)
+                     for i in range(0, len(w), WORDS_MAX)]
             return dict(circle=dict(cx=cx, cy=CIRCLE_CY, r=CIRCLE_R, icon=s["icon"]),
-                        chev=s["chev"], texts=texts + _words_texts(s["words"]))
+                        chev=s["chev"], fixed=[], pages=pages, texts=pages[0])
     else:
         left = s["side"] == "left"
-        cx = s.get("circle_x", COL_LEFT_CX if left else COL_RIGHT_CX)
+        if "chain" in s:
+            # a chain screen composes itself: caption + CHAIN_GAP + disc as
+            # one group centred on the panel (_expand_chain wrote the caption)
+            tx, cx = chain_compose(line_str(s["lines"][0]), s["size"])
+        else:
+            cx = COL_LEFT_CX if left else COL_RIGHT_CX
+            tx = DETAIL_TEXT_CX["left" if left else "right"]
         texts = []
         if s.get("label"):
-            texts.append(dict(str=s["label"], x=cx, y=BASELINE_Y, size=16, ls=1,
-                              base=True, weight="semibold"))
-        tx = s.get("text_x", DETAIL_TEXT_CX["left"] if left else DETAIL_TEXT_CX["right"])
+            texts.append(dict(str=s["label"], x=cx, y=BASELINE_Y,
+                              size=typography.SIZE_LABEL, ls=typography.LS_LABEL,
+                              base=True, weight=typography.WEIGHT_LABEL))
     out = dict(circle=dict(cx=cx, cy=CIRCLE_CY, r=CIRCLE_R, icon=s["icon"]),
                chev=s["chev"])
     if s.get("pages"):
@@ -439,9 +585,9 @@ def _expand_chain(s):
     """
     if "chain" not in s:
         return
-    from . import chains        # local: layout is a leaf, and typography (which
-    #                             chain_caption_size needs) imports IT — a
-    #                             module-level import here would be a cycle
+    from . import chains        # local: the registry is a leaf of the flows'
+    #                             world — the schema module stays importable
+    #                             without it (no cycle: typography reads SUP lazily)
     cid = s["chain"]
     if not isinstance(cid, int) or isinstance(cid, bool):
         raise ValueError(
@@ -466,16 +612,13 @@ def _expand_chain(s):
     line = s["lines"][0] if s.get("lines") else ""
     s.setdefault("size", chain_caption_size(line))
     # the caption and the disc are ONE centred group with a fixed gap, so the
-    # air between them never changes with the length of the network's name.
-    # Assigned, not defaulted: a flow that still carries the old x nudges gets
-    # the composition anyway.
-    tx, cx = chain_compose(line, s["size"])
-    s["text_x"], s["circle_x"] = tx, cx
+    # air between them never changes with the length of the network's name —
+    # composed at layout time (layout_of -> chain_compose); nothing about the
+    # composition is written onto the screen dict
 
 
 def chain_group_w(line, size):
     """width of a chain screen's caption + CHAIN_GAP + disc, as one group"""
-    from . import typography
     return typography.text_width(line, size) + CHAIN_GAP + 2 * CIRCLE_R
 
 
@@ -495,13 +638,13 @@ def chain_caption_size(line):
 
 
 def chain_compose(line, size):
-    """(text_x, circle_x) for a chain screen: the caption and the disc as one
-    group centred on the panel, CHAIN_GAP of air between them.
+    """(text centre, disc centre) for a chain screen — and the Confirm?
+    screen: the caption and the disc as one group centred on the panel,
+    CHAIN_GAP of air between them.
 
     Rounded to whole pixels — every other anchor in this module is an integer,
     and a port should not have to carry a repeating fraction to place a disc.
     The gap it costs is under half a pixel."""
-    from . import typography
     tw = typography.text_width(line, size)
     left = CENTER_X - chain_group_w(line, size) / 2.0
     return round(left + tw / 2.0), round(left + tw + CHAIN_GAP + CIRCLE_R)
@@ -513,9 +656,17 @@ def normalize_screens(data, defaults=None):
     defaults: optional dict of per-flow shared fields (e.g. icon, token)
     applied to every screen before the kind defaults — so a flow can set its
     glyph or palette once instead of on each screen."""
+    prev_side = None   # the last detail's column in this segment
     for i, s in enumerate(data):
         for k, v in (defaults or {}).items():
             s.setdefault(k, copy.deepcopy(v))
+        for k in ("circle_x", "text_x"):
+            if k in s:
+                raise ValueError(
+                    f"screen {s.get('id')!r}: {k!r} is not a field — there are no "
+                    f"per-screen nudges: a detail sits on the column grid and a "
+                    f"chain screen composes itself (chain=<id>; DESIGN.md "
+                    f"§ Layout grid)")
         _expand_chain(s)
         s.setdefault("id", f"screen{i}")
         s.setdefault("kind", "detail")
@@ -527,10 +678,23 @@ def normalize_screens(data, defaults=None):
         s.setdefault("chev",
                      None if s["kind"] == "status" or s.get("band_chev")
                      else "up" if s["kind"] == "confirm" else "lr")
+        if s["chev"] not in CHEV_STATES:
+            raise ValueError(
+                f"screen {s['id']!r}: unknown chev {s['chev']!r} — "
+                f"one of {CHEV_STATES} (pq1/layout.py, chev)")
         if s["kind"] in ("detail", "value"):   # value: a detail without the docked token
             if s["kind"] == "detail":
-                s.setdefault("side", "left" if i % 2 == 0 else "right")
+                # a flow that does not say: details alternate columns within
+                # a segment, the first on the left (the rule every live flow
+                # writes out; a bench tour may pin one column)
+                s.setdefault("side", "right" if prev_side == "left" else "left")
+                prev_side = s["side"]
                 s.setdefault("label", None)
+            elif s.get("label") is not None:
+                raise ValueError(
+                    f"screen {s['id']!r}: a value screen has no label — the value "
+                    f"stands alone, full width, and a words grid has no caption "
+                    f"(DESIGN.md § Text rules, Words)")
             pages = s.get("pages")
             if pages is not None:   # a paged value (DESIGN.md § Text rules, Pages)
                 if len(pages) < 2 or not all(1 <= len(p) <= 3 for p in pages):
@@ -544,14 +708,49 @@ def normalize_screens(data, defaults=None):
                     raise ValueError(
                         f"screen {s['id']!r}: \"words\" is a VALUE screen's whole "
                         f"value — no lines, no pages beside it (pq1/layout.py, value)")
-                if not 1 <= len(words) <= WORDS_MAX:
+                if not 1 <= len(words) <= WORDS_TOTAL_MAX:
                     raise ValueError(
-                        f"screen {s['id']!r}: \"words\" holds 1-{WORDS_MAX} words "
-                        f"(two columns of four); got {len(words)}")
+                        f"screen {s['id']!r}: \"words\" holds 1-{WORDS_TOTAL_MAX} "
+                        f"words (two columns of four a page, paged past "
+                        f"{WORDS_MAX}); got {len(words)}")
                 s["words"] = [str(w) for w in words]
                 s["size"] = WORDS_SIZE
             s.setdefault("lines", [])
-            s.setdefault("size", 28)
+            if len(s["lines"]) > 3:
+                # A detail value is 1-3 lines (DESIGN.md § Typography). The
+                # fourth stacks at y 117.5 — inside the bottom band — and
+                # fit_size only guards a screen that does NOT pin a size, so
+                # a typed `size` would otherwise draw it there silently.
+                # "pages" is already validated 1-3 above; bare lines was not.
+                raise ValueError(
+                    f"screen {s['id']!r}: a detail value is 1-3 lines at one "
+                    f"size (DESIGN.md § Typography, Choosing the size); got "
+                    f"{len(s['lines'])} — a fourth line lands in the bottom "
+                    f"band. Split the value across screens, or page it "
+                    f"(§ Text rules, Pages)")
+            if "size" in s:
+                # a typed size is the author's PIN — honoured, never re-fitted
+                # (T-FIT only reports one below the measured tier). It must
+                # still be ON the ladder: an off-scale size is a typo, not a
+                # decision (DESIGN.md § Typography, Choosing the size).
+                tiers = [t[0] for t in fit_tiers()]
+                if s["size"] not in tiers and s.get("words") is None:
+                    raise ValueError(
+                        f"screen {s['id']!r}: unknown size {s['size']!r} — the "
+                        f"detail tiers are {' / '.join(map(str, tiers))} "
+                        f"(DESIGN.md § Typography, Choosing the size)")
+            else:
+                # fitted, never a flat default a long value could overflow
+                # (DESIGN.md § Typography, Choosing the size). A paged value
+                # takes the size its WIDEST page can carry — one size for the
+                # whole screen (§ Text rules, Pages).
+                if s["lines"]:
+                    full = s["kind"] == "value"
+                    s["size"] = min(fit_size(p, full=full)
+                                    for p in (pages if pages is not None
+                                              else [s["lines"]]))
+                else:
+                    s["size"] = typography.SIZE_M
         elif s["kind"] == "hero":
             s.setdefault("bottom", "")
             pg = s.get("pager")
@@ -562,7 +761,7 @@ def normalize_screens(data, defaults=None):
                     raise ValueError(
                         f"screen {s['id']!r}: \"pager\" is [n, m] — the "
                         f"hero's position in a sequence of asks, 1 <= n <= m "
-                        f"(DESIGN.md § Typography, Paging); got {s['pager']!r}")
+                        f"(DESIGN.md § Layout grid, Pager); got {s['pager']!r}")
                 s["pager"] = pg
             # every ask signs: hold-right is armed on the opening hero as
             # much as on the returning one ("back on the idle ask, then
@@ -575,6 +774,7 @@ def normalize_screens(data, defaults=None):
             s.setdefault("bottom", "Confirm?")
             s.setdefault("commit", True)
         elif s["kind"] == "status":
+            prev_side = None   # a status screen closes the segment
             s.setdefault("bottom", "")
             # "anim" stays unset here: the default splits on outcome and
             # lives in ONE place — status.default_anim ("qubit" for done
@@ -585,6 +785,23 @@ def normalize_screens(data, defaults=None):
             s.setdefault("busy", None)
             # no dwell default: Sim dwells for the animation's duration
     return data
+
+
+CHEV_STATES = ("lr", "up", None)   # the corner-chevron states (normalize_screens)
+
+
+def back_target(data, i):
+    """where a LEFT tap lands from navigable screen i: the screen before
+    it, or None when nothing navigable is behind it — the flow's first
+    screen, or the first screen after a status (a mid-batch ending closes
+    its segment and is never walked back into). The rule the driver's left
+    tap reads (DESIGN.md § Input, "Left never leads on"): on an idle screen
+    left goes back or does nothing, never forward — only right enters the
+    details. The chevrons do not follow it: a hero keeps both (user
+    decision, Sep 2026)."""
+    if i <= 0 or data[i - 1].get("kind") == "status":
+        return None
+    return i - 1
 
 
 def _segments(data):

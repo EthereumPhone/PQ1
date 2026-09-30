@@ -13,7 +13,7 @@ Moving is the only way to revisit a digit, and it is deliberately the *only* thi
 
 ## When it is armed
 
-On the [PIN row](../components/pin-row.md), and only where the cursor can actually go (`screens/pin/pin_entering.py:382`):
+On the [PIN row](../components/pin-row.md), and only where the cursor can actually go (`screens/pin/pin_entering.py:374`):
 
 | side | armed when | why |
 |---|---|---|
@@ -26,9 +26,9 @@ Everywhere else in the UI the double press is unbound. That is what lets a tap o
 
 ## How a double press forms
 
-A press on one side within `DOUBLE_TAP_MS` 250 ms (3.5 f) of that side's own last tap — measured from that tap's *release* to this press-down — **and** the cursor can move that way (`pq1/driver.py:374`). Then:
+A press on one side within `DOUBLE_TAP_MS` 250 ms (3.5 f) of that side's own last tap — measured from that tap's *release* to this press-down — **and** the cursor can move that way (`pq1/driver.py:380`). Then:
 
-1. the first tap is undone (`screens/pin/pin_entering.py:364`) — wherever the cursor CAN move, that tap's digit waits out the same `DOUBLE_TAP_MS` 250 ms (3.5 f), so it had not landed yet and nothing is visibly taken back;
+1. the first tap is undone (`screens/pin/pin_entering.py:356`) — wherever the cursor CAN move, that tap's digit waits out the same `DOUBLE_TAP_MS` 250 ms (3.5 f), so it had not landed yet and nothing is visibly taken back;
 2. the cursor moves one slot;
 3. the second press is spent: its release is not another tap.
 
@@ -38,7 +38,7 @@ The **chord is tested first**. A press that is within `CHORD_MS` 150 ms (2.1 f) 
 
 ## Nothing is taken away
 
-This is the rule a port most easily gets wrong (`screens/pin/pin_entering.py:207`):
+This is the rule a port most easily gets wrong (`screens/pin/pin_entering.py:210`):
 
 - a **changed digit stays changed** — going BACK, dialing, and going NEXT again keeps the new value;
 - a digit **dialed on a fresh slot but not entered** stays visible in its grey ring; move away and back, it is still there;
@@ -53,7 +53,7 @@ A move also **lands any pending tap** at once — the beat a dial waits out (see
 |---|---:|---:|---|---|---|---|
 | the cursor moves | — | — | cut | — | — | the ring left behind and the ring arrived at swap look in one frame — see [ENTER](entry-enter.md) |
 | the arriving ring bounces | 220 | 3.1 | sine | `BOUNCE_MS` | `screens/pin/pin_entering.py:87` | the same micro-bounce a dial gets: up 2.5 px at the midpoint |
-| the hint rotation keeps its own beat | 6000 | 84.0 | ease_out + hold | `L_SLOT` | `screens/pin/pin_entering.py:98` | moving does not restart the pulse; BACK (2X) / NEXT (2X) is the third hint of three |
+| the hint rotation keeps its own beat | 6000 | 84.0 | ease_out + hold | `L_SLOT` | `screens/pin/pin_entering.py:99` | moving does not restart the pulse; BACK (2X) / NEXT (2X) is the third hint of three |
 
 ## Input
 

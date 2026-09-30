@@ -20,7 +20,7 @@ The page cases are [tap on a paged screen](tap-page.md). The screen cases use tw
 - **Forward** stops at `last_nav` ({{loc:pq1.driver.FlowDriver.last_nav}}) — the last navigable screen of the **current segment**, the one before the status that closes it. Forward is armed while the current index is below it. In a [batch](../screen-types/batch-segment.md) that is this transaction's returning ask, not the end of the whole screen list.
 - **Back** is armed on plain index: any screen but the first one of the whole list ({{loc:pq1.driver.FlowDriver.armed}}). So the first detail's left tap lands on the ask. It is not segment-aware, and does not need to be: every segment after the first opens on a hero, and a hero's taps are [hub taps](tap-hub.md), so a left tap can never step backwards out of a segment.
 
-The walk is a straight line: right from the last detail arrives on the returning ask, and from there either tap starts the details again from the top.
+The walk is a straight line: right from the last detail arrives on the returning ask, and from there a right tap starts the details again from the top while a left tap steps back to the last detail.
 
 ## Motion
 

@@ -13,13 +13,13 @@ A PIN row has no token disc, so there is nothing to fill in the middle of the sc
 
 ## When it is armed
 
-Whenever the row is open. `cancel` is in the driver's armed set on every slot, empty row included; the row only stops accepting it once the eighth digit has been entered — and on the device that same moment submits, so a full row is never sitting there waiting (`screens/pin/pin_entering.py:433` refuses to fill a done or submitted row).
+Whenever the row is open. `cancel` is in the driver's armed set on every slot, empty row included; the row only stops accepting it once the eighth digit has been entered — and on the device that same moment submits, so a full row is never sitting there waiting (`screens/pin/pin_entering.py:421` refuses to fill a done or submitted row).
 
-The right hold is unbound here: its clock runs, but nothing is drawn and nothing fires when it completes (`pq1/driver.py:444`).
+The right hold is unbound here: its clock runs, but nothing is drawn and nothing fires when it completes (`pq1/driver.py:450`).
 
 ## The liquid
 
-Same curve as every other hold in this UI — `motion.hold_fill` (`pq1/motion.py:178`) — a different dress:
+Same curve as every other hold in this UI — `motion.hold_fill` (`pq1/motion.py:211`) — a different dress:
 
 | | the token's hold | the entry's hold |
 |---|---|---|
@@ -36,10 +36,10 @@ Pressing the **other** button while the left hold is rising makes a [chord](entr
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| nothing visible: the press may still be a tap | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | a tap dials; it never flashes a partial fill |
-| the liquid rises in every ring | 1750 | 24.5 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:171` | constant speed, one shared level |
-| the cancel fires, measured from press-down | 2000 | 28.0 | — | `HOLD_COMMIT_MS` | `pq1/motion.py:171` | only at completion — a release one frame earlier does nothing |
-| released early: the liquid drains | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:173` | from the level it had reached; the row is untouched, the digits are still there |
+| nothing visible: the press may still be a tap | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | a tap dials; it never flashes a partial fill |
+| the liquid rises in every ring | 1500 | 21.0 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:195` | constant speed, one shared level |
+| the cancel fires, measured from press-down | 1995.5 | 27.9 | — | `HOLD_COMMIT_MS - LEVEL_EPS * ( HOLD_COMMIT_MS - TAP_MAX_MS )` | `pq1/motion.py:195` | only at completion — a release one frame earlier does nothing — `motion.hold_full` (`pq1/motion.py:247`): the first frame drawn full is the frame it fires |
+| released early: the liquid drains | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:197` | from the level it had reached; the row is untouched, the digits are still there |
 | after the cancel: the whole row fades to black | 500 | 7.0 | ease_out | `T_OUT` | `screens/pin/pin_entering.py:92` | rings, digits, liquid and caption on one alpha. No check beat — that belongs to the submit |
 
 Then the driver routes — see [outcome](entry-outcome.md). The entry's `outcome` is `"cancel"` until a fresh round opens.

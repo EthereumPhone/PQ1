@@ -9,11 +9,11 @@ The GIF / kiosk loop advances on dwell timers and performs the hold itself. On h
 
 Everything the renderer does **by itself** so a GIF can be made without a finger: it waits out a dwell on each screen, moves on, and — where the next screen is an ending — performs the hold gesture for you. None of it belongs on the device.
 
-`pq1.flow.Sim` is the demo loop (`pq1/flow.py:310`). `pq1.driver.FlowDriver` is the device-shaped walk of the same screens, and its first act is to switch all of this off.
+`pq1.flow.Sim` is the demo loop (`pq1/flow.py:338`). `pq1.driver.FlowDriver` is the device-shaped walk of the same screens, and its first act is to switch all of this off.
 
 ## How the driver switches it off
 
-`FlowDriver.__init__` deep-copies the screen list and pins **every** screen's `dwell` to infinity before the `Sim` is built (`pq1/driver.py:41`). `Sim.draw` then never reaches its advance branch, never starts a demo hold, and never turns a page on the clock. Nothing moves without a press — exactly as on hardware.
+`FlowDriver.__init__` deep-copies the screen list and pins **every** screen's `dwell` to infinity before the `Sim` is built (`pq1/driver.py:42`). `Sim.draw` then never reaches its advance branch, never starts a demo hold, and never turns a page on the clock. Nothing moves without a press — exactly as on hardware.
 
 It also swaps the spring pace: the `Sim` defaults to the KIOSK profile ({'response': 0.55, 'damping': 1.0}), the driver asks for NAV ({'response': 0.4, 'damping': 1.0}). **The device uses NAV.** Every transition in the GIFs is a little slower than the real thing.
 
@@ -23,40 +23,50 @@ Each is how long a settled screen stays before the loop moves on. A screen may o
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| a hero | 5000 | 70.0 | — | `HERO_DWELL` | `pq1/motion.py:153` | one full [idle sweep](../components/idle-sweep.md) |
-| a detail or a value, per page | 4100 | 57.4 | — | `DETAIL_DWELL` | `pq1/motion.py:154` | multiplied by the screen's page count |
-| a Confirm? | 10000 | 140.0 | — | `CONFIRM_DWELL` | `pq1/motion.py:262` | two [band](../components/confirm-band.md) messages, so both are read |
-| a status screen | 8650 | 121.1 | — | `STATUS_DWELL` | `pq1/motion.py:155` | the token names the qubit film's duration; the code actually reads each screen's own animation duration, so a shorter ending dwells less; a film rendered with `ready` dwells its wrapped duration |
-| a paged screen's page turn | 4100 | 57.4 | — | `PAGE_SWAP_MS` | `pq1/motion.py:279` | the flip starts one fade early so the outgoing page lands on the slot boundary — [tap on a paged screen](tap-page.md) |
+| a hero | 5000 | 70.0 | — | `HERO_DWELL` | `pq1/motion.py:173` | one full [idle sweep](../components/idle-sweep.md) |
+| a detail or a value, per page | 4100 | 57.4 | — | `DETAIL_DWELL` | `pq1/motion.py:174` | multiplied by the screen's page count |
+| a Confirm? | 10000 | 140.0 | — | `CONFIRM_DWELL` | `pq1/motion.py:338` | two [band](../components/confirm-band.md) messages, so both are read |
+| a status screen | 9095 | 127.3 | — | `STATUS_DWELL` | `pq1/motion.py:175` | the token names the qubit film's duration; the code actually reads each screen's own animation duration, so a shorter ending dwells less; a film rendered with `ready` dwells its wrapped duration |
+| a paged screen's page turn | 4100 | 57.4 | — | `PAGE_SWAP_MS` | `pq1/motion.py:352` | the flip starts one fade early so the outgoing page lands on the slot boundary — [tap on a paged screen](tap-page.md) |
 
-Where the loop goes next is the screen's `next` field, default the following screen, wrapping to the first (`pq1/flow.py:95`) — that wrap is what makes a GIF loop.
+Where the loop goes next is the screen's `next` field, default the following screen, wrapping to the first (`pq1/flow.py:112`) — that wrap is what makes a GIF loop.
 
 ## The demo-performed hold
 
 A cut into an ending would be a lie: on the device an ending is only ever reached through a hold. So the loop performs the hold itself, inside the dwell it already had.
 
-- **Which side** comes from `Sim._demo_hold_side` (`pq1/flow.py:113`), resolved once per screen at construction: nothing when this screen is itself a status, nothing unless the screen the loop advances to (the resolved `next`, not necessarily the following index) is a status; **left** ([decline](hold-left-decline.md)) when that ending's `state` is not `done`; **right** ([sign](hold-right-sign.md)) when it resolves done *and* this screen has `commit`. A done ending behind a screen that does not commit keeps a plain cut — the hold is never faked where it is not armed.
-- **When**: the press is back-dated to `dwell − HOLD_COMMIT_MS`, so the fill is exactly full at the moment the dwell expires and the leg begins. Dwell lengths — and therefore GIF durations — are unchanged by it.
+- **Which side** comes from `Sim._demo_hold_side` (`pq1/flow.py:130`), resolved once per screen at construction: nothing when this screen is itself a status, nothing unless the screen the loop advances to (the resolved `next`, not necessarily the following index) is a status; **left** ([decline](hold-left-decline.md)) when that ending's `state` is not `done`; **right** ([sign](hold-right-sign.md)) when it resolves done *and* this screen has `commit`. A done ending behind a screen that does not commit keeps a plain cut — the hold is never faked where it is not armed.
+- **When**: the press is back-dated to `dwell − HOLD_COMMIT_MS`, and the hold fires on `motion.hold_full` — the same test the driver uses — so the leg begins on the first frame the fill is drawn full, a hair before the dwell expires. Dwell lengths — and therefore GIF durations — are unchanged by it.
 - In practice that is the returning ask of every flow, and the Confirm? in an `--early` render.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the screen rests, nothing drawn | 3000 | 42.0 | — | `HERO_DWELL - HOLD_COMMIT_MS` | `pq1/motion.py:153` | on a hero; the press edge is planted at the end of this |
-| still nothing: the fake press is inside the tap window | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | the fill's appearance is what says "this became a hold" |
-| the fill rises to full | 1750 | 24.5 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:171` | the same [hold flood](../components/hold-flood.md) a real press draws |
+| the screen rests, nothing drawn | 3000 | 42.0 | — | `HERO_DWELL - HOLD_COMMIT_MS` | `pq1/motion.py:173` | on a hero; the press edge is planted at the end of this |
+| still nothing: the fake press is inside the tap window | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | the fill's appearance is what says "this became a hold" |
+| the fill rises to full | 1500 | 21.0 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:195` | the same [hold flood](../components/hold-flood.md) a real press draws |
 | the leg to the ending, fill fading with it | — | — | spring KIOSK | — | — | NAV on the device — [hold commit fade](../transitions/hold-commit-fade.md) |
 
-## The one advance the driver keeps
+## The two advances the driver keeps
 
-A [batch](../screen-types/batch-segment.md) ending mid-run — SIGNED 1 OF 3 — is **not** the end of the walk. When a finished ending is the screen before another segment's first screen, `FlowDriver.frame` moves on to that segment by itself (`pq1/driver.py:505`); any other finished ending freezes on its resting frame and waits.
+Almost every finished ending freezes on its resting frame and waits for a press. There are exactly **two** exceptions, and both are device behaviour, not demo convenience. Port both, and generalise neither.
+
+**1. A mid-batch ending.** A [batch](../screen-types/batch-segment.md) ending mid-run — SIGNED 1 OF 3 — is **not** the end of the walk. When a finished ending is the screen before another segment's first screen, `FlowDriver.frame` moves on to that segment by itself (`pq1/driver.py:537`).
 
 Executed on `batch/transfers`: sign transaction 1, SIGNED 1 plays, and the walk lands on BATCH 2 on its own, with no press.
 
-Port that one. `pq1/DESIGN.md` § Input states it as the grammar — "the mid-batch ending plays through into the next segment" — so it is device behaviour, not a demo convenience; the code's own comment at that line calls it "the demo's own advance", which is the misleading half. Confirm the wording with the designer, but build the advance.
+`pq1/DESIGN.md` § Input states it as the grammar — "the mid-batch ending plays through into the next segment" — so it is device behaviour; the code's own comment at that line calls it "the demo's own advance", which is the misleading half.
+
+**2. An entry verdict that leads to another entry.** When a PIN attempt misses and another attempt remains, the WRONG PIN verdict plays out its rest and the driver opens the next row by itself (`pq1/driver.py:460`) — no press. The rule is written in `pq1/DESIGN.md` § Input ("then the driver moves on: a miss to the next attempt"), and it is the only reasonable behaviour: the next row is the only thing the user could do anyway.
+
+It applies **only** where another entry follows. The last miss has nowhere to go, so LOCKED rests like any other ending; a match leaves the entry for the first screen after the attempts; a cancel returns to the ask before the entry.
+
+Executed on `pin/unlock`: type a wrong PIN, WRONG PIN plays, and TRY 2's empty row arrives on its own.
+
+Because that verdict leaves on a clock, the warning it carries must not be the only copy of the warning. TRY 3 of `pin/unlock` is captioned **LAST ATTEMPT** instead of ENTER PIN for exactly this reason — the caption stays while the user types, where the verdict could not (audit A11-03). Port the caption, not just the routing.
 
 ## Do / Don't
 
-- **Don't** implement a dwell timer, an auto-advance, or a screen that leaves by itself — outside the batch case above.
+- **Don't** implement a dwell timer, an auto-advance, or a screen that leaves by itself — outside the **two** cases above. Implement those two: without the entry one, WRONG PIN hangs forever on the device.
 - **Don't** ship the KIOSK spring profile. Use NAV.
 - **Don't** turn a page on a clock.
 - **Don't** copy the demo hold's shape as a "confirming" animation: what it draws is exactly what a real press draws, and a real press is the only thing that should draw it.

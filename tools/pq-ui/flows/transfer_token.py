@@ -24,8 +24,8 @@ full/declined USDC, full/successful DAI; `--sample USDC` or
 their own coloured trails: components.token_defaults(symbol) dresses a
 listed token in its logo art (components.TOKEN_LOGOS) on the trail in
 the logo's own colour (colors.TOKEN_GRADIENTS, pinned by symbol), WETH in
-the white ether mark on the mono body, and any other symbol in the solid
-placeholder disc hashed from it. Production is untouched: on device
+the white ether mark on the mono body, and any other symbol in its
+initial on the solid placeholder disc hashed from it. Production is untouched: on device
 every value is filled per transaction and the same switch serves every
 token — flows/send_token.py is the same transfer on a long-tail sample.
 

@@ -29,7 +29,7 @@ velocity = (B - w*(x + B*dt)) * e
 
 That is the closed-form solution of the ODE, so it is **exact at any dt**: the panel and a faster offline preview trace the same curve. Do not integrate it per fixed tick.
 
-Released from rest the same thing has a pure form, `1 − (1 + ωt)·e^(−ωt)` — `motion.spring_travel` ({{loc:pq1.motion.spring_travel}}), which a film uses so its circle travels like a flow leg. Checked frame by frame against the stepped spring: the same curve. Note its default profile is `KIOSK`, and the film's [side entrance](side-entrance.md) calls it that way — that one is deliberate, not the demo pace leaking in.
+Released from rest the same thing has a pure form, `1 − (1 + ωt)·e^(−ωt)` — `motion.spring_travel` ({{loc:pq1.motion.spring_travel}}), which a film uses so its circle travels like a flow leg. Checked frame by frame against the stepped spring: the same curve. Its default profile is `NAV`, and the film's [side entrance](side-entrance.md) runs on it; `motion.settle_ms(px, profile)` ({{loc:pq1.motion.settle_ms}}) turns a trip into the whole ms at which it has settled, so a scripted travel's length is derived from the spring, never typed.
 
 Profiles: response 0.40 (`NAV`, {{loc:pq1.motion.NAV}}) and 0.55 (`KIOSK`, {{loc:pq1.motion.KIOSK}}), both at damping 1.0. **Navigation on the device is NAV**; `KIOSK` is the `Sim`'s own default, which the reference driver overrides ({{loc:pq1.driver.FlowDriver}}), so a port reads NAV for every leg. The per-panel-frame progress ladder for both, and the time to come within 1 px on a short and a full-width trip, are in `spec/motion.json` → `springs` — port from there rather than from a stopwatch.
 
@@ -60,7 +60,7 @@ Assigning `sim.cur = i` ({{loc:pq1.flow.Sim.cur}}) teleports: springs are writte
 - **Do** keep one spring object per animated value and step them all once per frame with the measured `dt`.
 - **Do** carry position **and** velocity through a retarget. That is the whole contract.
 - **Don't** replace the spring with duration + easing. A tween cannot be redirected mid-flight without a jump, and § Input promises presses are never dropped.
-- **Don't** navigate at the `KIOSK` pace: it is the demo loop's, and the `Sim` default the driver replaces. Legs are `NAV`. The one KIOSK curve that does reach the device is inside a film's side entrance, through `spring_travel`'s default.
+- **Don't** navigate at the `KIOSK` pace: it is the demo loop's, and the `Sim` default the driver replaces. Legs are `NAV`, and so is every scripted travel on the device — a film's side entrance included.
 - **Don't** spring into a film. That entrance is sequential and the film owns the travel ([entering a film](film-entrance.md)).
 - **Don't** drive the springs from a frame counter. They are dt-exact; a fixed-step port drifts as soon as a frame is late.
 

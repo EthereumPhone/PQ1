@@ -1,12 +1,14 @@
 """The page engine: prose with placeholders in, markdown with LIVE numbers out.
 
-A page under tools/handoff/pages/ never types a duration, a frame count or a
-file:line — it names the token and the engine resolves it against the running
-code. A stale name, a raw "300 ms" in prose or an easing that pq1.motion does
-not define FAILS the build: that is what keeps handoff/ from drifting.
+A page under tools/handoff/pages/ never types a duration, a frame count, a
+file:line or a COLOUR — it names the token and the engine resolves it against
+the running code. A stale name, a raw "300 ms" in prose, a typed "#13FF7F" or
+"245 160 51", or an easing that pq1.motion does not define FAILS the build:
+that is what keeps handoff/ from drifting.
 
 Placeholders
   {{val:PATH}}              the bare value                       300
+  {{col:PATH}}              a colour as hex                       #FF423D
   {{tok:PATH}}              name + value + frames                `ARRIVE_MS` 300 ms (4.2 f)
   {{loc:PATH}}              where it is defined                  `pq1/motion.py:326`
   {{row:phase | EXPR | easing | note}}   one motion-table row (after {{motion-head}})
@@ -19,6 +21,7 @@ Placeholders
       {{preview}} {{variants}} {{phases}} {{gestures:CONTEXT}} {{owners}} {{geometry}}
 
 PATH is a dotted python path (pq1.motion.ARRIVE_MS, pq1.verdict.VerdictAnim.T_HOLD),
+optionally indexed for one entry of a sequence (pq1.colors.SAFE_GRADIENT[-1]),
 or anim:<key>:<attr> for a per-preset value from the live instance
 (anim:verdict/padlock@unlock:T_IN, anim:core/qubit:duration — '@' names the preset), or qubit:<field>
 (loading.QubitCfg), or burst:MAJOR.<field> / burst:MINOR.<field>.
@@ -38,6 +41,9 @@ EASINGS_EXTRA = {"linear", "spring", "spring NAV", "spring KIOSK", "tau_chase", 
                  "raised cosine", "sine"}
 _PH = re.compile(r"\{\{\s*([a-z-]+)\s*(?::((?:(?!\{\{|\}\}).)*))?\}\}", re.S)   # innermost first
 _RAW = re.compile(r"(?<![\w{:.|/-])\d+(?:\.\d+)?\s?(?:ms|fps|frames?)\b")
+_C8 = r"(?:25[0-5]|2[0-4]\d|1\d\d|\d{1,2})"
+_RAWCOL = re.compile(r"#[0-9A-Fa-f]{6}\b"                      # #RRGGBB
+                     rf"|(?<![\w.,#-]){_C8}(?:,\s|\s){_C8}(?:,\s|\s){_C8}(?![\w.,%-])")  # r g b
 
 
 class PageError(Exception):
@@ -57,7 +63,20 @@ def _anim(key):
 
 
 def value_of(path):
-    """(value, display name, location or None)"""
+    """(value, display name, location or None) — PATH, optionally indexed:
+    'pq1.colors.SAFE_GRADIENT[-1]' names one stop of a ramp"""
+    m = re.fullmatch(r"(.+?)\s*\[(-?\d+)\]", path.strip())
+    if not m:
+        return _value_of(path)
+    v, name, loc = _value_of(m.group(1))
+    i = int(m.group(2))
+    try:
+        return v[i], f"{name}[{i}]", loc
+    except (TypeError, KeyError, IndexError):
+        raise PageError(f"{m.group(1)!r} cannot be indexed [{i}] (it is {v!r})") from None
+
+
+def _value_of(path):
     path = path.strip()
     if path.startswith("anim:"):
         _, key, attr = path.split(":", 2)
@@ -123,6 +142,18 @@ def fmt_num(v):
     return f"{v:g}" if isinstance(v, float) else str(v)
 
 
+def fmt_color(v, where=""):
+    """a colour token -> '#RRGGBB'; accepts an (r, g, b) triple or a hex string"""
+    if isinstance(v, str):
+        h = v.strip().lstrip("#")
+        if re.fullmatch(r"[0-9A-Fa-f]{6}", h):
+            return "#" + h.upper()
+    elif isinstance(v, (list, tuple)) and len(v) >= 3 and all(
+            isinstance(c, (int, float)) and not isinstance(c, bool) for c in v[:3]):
+        return "#%02X%02X%02X" % tuple(max(0, min(255, int(round(c)))) for c in v[:3])
+    raise PageError(f"{where}: {v!r} is not a colour (want an (r, g, b) triple or '#RRGGBB')")
+
+
 def fmt_frames(ms):
     return f"{ms / I.FRAME_MS:.1f}"
 
@@ -151,6 +182,8 @@ def render(text, where, blocks=None, schema_fields=None):
         kind, arg = m.group(1), (m.group(2) or "").strip()
         if kind == "val":
             return fmt_num(value_of(arg)[0])
+        if kind == "col":
+            return fmt_color(value_of(arg)[0], where)
         if kind == "tok":
             v, nm, _ = value_of(arg)
             unit = I._unit(nm, v) or ("ms" if arg.startswith(("anim:", "qubit:")) and isinstance(v, (int, float)) else None)
@@ -212,6 +245,12 @@ def render(text, where, blocks=None, schema_fields=None):
         line = text[:text.find(hit.group(0))].count("\n") + 1
         raise PageError(f"{where}:{line}: raw number {hit.group(0)!r} in prose — name the token "
                         f"({{{{tok:pq1.motion.X}}}}) so it cannot drift, or wrap it in {{{{lit:...}}}}")
+    hit = _RAWCOL.search(stripped)
+    if hit:
+        line = text[:text.find(hit.group(0))].count("\n") + 1
+        raise PageError(f"{where}:{line}: typed colour {hit.group(0)!r} in prose — name the token "
+                        f"({{{{col:pq1.colors.RED}}}}, {{{{col:pq1.colors.SAFE_GRADIENT[-1]}}}}) so a port "
+                        f"reads it from spec/colors.json, or wrap it in {{{{lit:...}}}}")
     out = text
     for _ in range(6):                          # innermost placeholders first, then the rows holding them
         nxt = _PH.sub(sub, out)

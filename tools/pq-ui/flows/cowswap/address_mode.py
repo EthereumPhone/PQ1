@@ -2,7 +2,7 @@
 
   SIGN COWSWAP? (idle sweep) -> NETWORK -> SELL -> BUY -> TO -> Confirm?
   (auto-inserted 6th — 7 detail screens, DESIGN.md § Flow shape)
-  -> EXPIRES -> FEE -> DETAILS -> back on the idle hero (every detail
+  -> EXPIRES -> FEE -> FILL -> back on the idle hero (every detail
   seen, the ask again) -> loading -> COWSWAP SIGNED (success) — the
   full walkthrough. `--end declined` swaps the cancellation ending;
   `--early [--end …]` renders the commit path. Ending renders land in
@@ -36,8 +36,11 @@ BODY = [
          lines=["Tx expires in", "~20 min"], size=28),
     dict(id="FEE", kind="detail", side="left", label="FEE",
          lines=["No extra fee"], size=36),
-    dict(id="DETAILS", kind="detail", side="right", label="DETAILS",
-         lines=["Fills in one go.", "If not, the", "trade's cancelled."], size=22),
+    # the order's partiallyFillable term as DATA, under its own label — not
+    # DETAILS (the nonce / data screen's label everywhere else; audit HS-06):
+    # "Fill or kill" when false, ["Partial fills", "allowed"] at 28 when true
+    dict(id="FILL", kind="detail", side="right", label="FILL",
+         lines=["Fill or kill"], size=36),
 ]
 
 ENDS = ends()

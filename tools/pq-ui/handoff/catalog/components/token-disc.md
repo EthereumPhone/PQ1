@@ -7,7 +7,7 @@ The 60 px circle every navigable screen carries: solid, unknown (address-hashed 
 
 ## What it is
 
-The circle every navigable screen carries. It says **which asset or actor** the screen is about. One function draws it, `components.token` (`pq1/components.py:336`); the flow calls it through `token_styled` with a style resolved once per screen by `token_style_from_spec` (`pq1/components.py:419`).
+The circle every navigable screen carries. It says **which asset or actor** the screen is about. One function draws it, `components.token` (`pq1/components.py:357`); the flow calls it through `token_styled` with a style resolved once per screen by `token_style_from_spec` (`pq1/components.py:444`).
 
 A disc is three independent choices: a **body**, a **ring** and a **glyph**.
 
@@ -16,8 +16,8 @@ A disc is three independent choices: a **body**, a **ring** and a **glyph**.
 | solid, mono | a recognized token that shows its own mark (ETH, WETH) — `palette` = `MONO_RAMP` (13) | black fill, white ring, white glyph, grey trail |
 | solid, placeholder ramp | a token with no logo asset — `palette` = a symbol, an address or a ramp index | the ramp's last stop as a flat fill, white ring; the [trail](trail.md) takes the other five stops |
 | solid, named ramp | a brand family, a popular token or a device action pins a ramp by name (`"SAFE"`, `"USDC"`, `"FIRMWARE"` …) | that ramp's palette fill — its last stop, or the black (`ROTATE`, `ERC7730`) / white (`FINGERPRINT`, `FIRMWARE`) override of a device action; often full-bleed logo art over it and an explicit ring |
-| solid, chain brand | a chain screen — `chain=<id>` pins `CHAIN:<NAME>` (`colors.CHAIN_COLORS`) | the network's own colour as the fill, its ramp as the trail, the mark knocked out white — or black once the fill is light (`colors.luma`). A chain whose body is not the ramp's last stop pins it in `CHAIN_DISC_FILL` and keeps the ramp for its trail, Mantle and Linea BLACK, Base and zkSync WHITE. Only a disc the ramp cannot produce is pinned: a merely dark brand darkens its ramp, or its nearest follower outshines the token and the trail law inverts |
-| unknown | `variant: "unknown"` — a token the device does **not** recognize | a gradient disc on the ramp hashed from the token's identity, white ring |
+| solid, chain brand | a chain screen — `chain=<id>` pins `CHAIN:<NAME>` (`colors.CHAIN_COLORS`) | the network's own colour as the fill, its ramp as the trail, the mark knocked out white — or black once the fill is light (`colors.luma`). A chain whose body is not the ramp's last stop pins it in `CHAIN_DISC_FILL` and keeps the ramp for its trail, Mantle and Linea BLACK, Base WHITE. Only a disc the ramp cannot produce is pinned: a merely dark brand darkens its ramp, or its nearest follower outshines the token and the trail law inverts — a pale brand simply ramps from its own body, as zkSync does. Base and zkSync pin the mark itself in `CHAIN_MARK_COLORS`, where luma is too coarse for a brand that is a colour on pale paper |
+| unknown (**reserved — do not implement**) | `variant: "unknown"` — implemented in the reference, asked for by no screen | a gradient disc on the ramp hashed from the token's identity, white ring |
 
 ## When it appears
 
@@ -35,18 +35,20 @@ No live flow sets `variant: "unknown"` today. Even TRANSFER UNKNOWN TOKEN draws 
 
 `token_style_from_spec` returns `variant`, `fill`, `ring`, `ramp`, `film` (the colour status-film bodies take), `icon_color` and `art` (the glyph is full-bleed logo art). Screens are frozen: resolve the style once, not per frame.
 
-`components.token_defaults(symbol)` (`pq1/components.py:305`) is the one switch between the looks for a token a flow signs for: a symbol in `TOKEN_LOGOS` wears its logo art under a white explicit ring, on the ramp registered for that symbol in `colors.TOKEN_GRADIENTS` — the mono ramp when it has none; ETH / WETH wear the white ether mark on the mono body; any other symbol gets the solid placeholder hashed from the symbol.
+A screen that sets no `icon_color` takes the disc-wide default rather than a hard white: the mark knocks out WHITE, or BLACK once the body is light enough to swallow it (`colors.mark_color` against `DARK_MARK_LUMA` 0.62, `pq1/colors.py:492`). One rule for every disc, the chains' included — so a pale brand can never render white on light. Full-bleed logo art is left alone: its colours are the brand's.
+
+`components.token_defaults(symbol)` (`pq1/components.py:310`) is the one switch between the looks for a token a flow signs for: a symbol in `TOKEN_LOGOS` wears its logo art under a white explicit ring, on the ramp registered for that symbol in `colors.TOKEN_GRADIENTS` — the mono ramp when it has none; ETH / WETH wear the white ether mark on the mono body; any other symbol gets its **initial** — the monogram, `letter:<X>` — on the solid placeholder hashed from the symbol (a symbol with no letter or digit to show keeps the ether mark). A screen standing for the session rather than the token names `icon="eth"` itself: the BATCH screen keeps the ether mark while each transaction's idle screen wears the token's initial.
 
 ## Identity becomes colour in one place
 
-`components.token_ramp` (`pq1/components.py:393`) resolves the ramp for the disc **and** the trail, so they cannot diverge. Order: `token.palette` → `token.address` → `token.symbol` → the screen's `icon` → the neutral grey ramp (10).
+`components.token_ramp` (`pq1/components.py:418`) resolves the ramp for the disc **and** the trail, so they cannot diverge. Order: `token.palette` → `token.address` → `token.symbol` → the screen's `icon` → the neutral grey ramp (10).
 
-- A string key is hashed by `colors.placeholder_index` (`pq1/colors.py:238`): upper-case the string, CRC-32 (the zlib / IEEE polynomial) over its bytes, modulo the number of placeholder ramps (13 + 1). An integer key wraps with the same modulo.
+- A string key is hashed by `colors.placeholder_index` (`pq1/colors.py:299`): upper-case the string, CRC-32 (the zlib / IEEE polynomial) over its bytes, modulo the number of placeholder ramps (13 + 1). An integer key wraps with the same modulo.
 - Test vector: `0x3cA9e5F1b72D04E8a6c1D9B3f57E28a0C4d6B1e9` → hashed as `0X3CA9…B1E9` → CRC-32 760397135 → ramp 1. Letter case does not matter; the `0x` prefix is part of the hashed string.
 - `address` outranks `symbol`: two tokens can share a ticker, never a contract.
 - A `palette` that names a ramp in `colors.BRAND_GRADIENTS` is **pinned by name** and never hashed. The hash can only land on a placeholder ramp, so no unknown token can wear a brand, a popular token's colour or a device-action look.
 
-**Security rule.** The gradient disc is reserved for unrecognized tokens and its ramp is hashed deterministically from the token's address — the same contract always wears the same gradient, on every device, on every run. It is not decoration, it is not a blind-signing mark, and a known token never uses it. There is no fixed "unknown" gradient.
+**Security rule.** A token the device does not recognize wears a **solid** disc whose ramp is hashed deterministically from its contract address — the same contract always wears the same colour, on every device, on every run. The colour is an identity check, not a warning: what makes the token unknown is said in **words** (`TRANSFER UNKNOWN TOKEN?`, `(RAW)`, the bare address), never by colour alone. A token known by its symbol wears its initial; one known only by its address carries the ether mark like any art the device cannot resolve. There is no fixed "unknown" colour, and no gradient — see the reserved row above.
 
 ## Geometry
 
@@ -55,9 +57,9 @@ No live flow sets `variant: "unknown"` today. Even TRANSFER UNKNOWN TOKEN draws 
 | layout radius | `CIRCLE_R` 30 px, centre y 72; it never resizes between screens |
 | visible edge | layout radius − `TOKEN_INSET` 1.2 px — body, ring, full-bleed art and every trail link share this radius |
 | ring | `TOKEN_RING_W` 2.4 px, stroked **inward** from the visible edge |
-| image glyph | a square of half-side 0.78 × r, centred |
+| the ether mark | procedural, not art: the rounded-edge mark traced in `pq1/procedural/eth.py` (`pq1/procedural/eth.py:35`), half-height `LOGO_SCALE` 0.56 × r. `mainnet` is the same function under the chain family's name |
 | chain marks | each network's logo traced from its SVG, flattened once at import (`pq1/procedural/chains.py`); the half-extent is `MARK_SCALE × r` on the mark's dominant axis — wide marks (`op`, `zksync`) scale off width |
-| monogram | the symbol's first letter, upper-case, font size 1.05 × r |
+| monogram | the symbol's first letter, upper-case, **Bold** — the one Bold glyph on the device, a letter standing as the disc's whole content — at `MONOGRAM_SCALE` 1.34 factor × r (`pq1/components.py:144`) |
 | gradient | linear, six evenly spaced stops, along the axis from (−0.8 r, −r) to (+0.8 r, +r) about the centre: dark top-left, bright bottom-right |
 
 The gradient is rendered once per ramp as a master tile at radius 30 and resized; radii are kept exact (no quantizing — the disc edge shows it).
@@ -73,7 +75,7 @@ The gradient is rendered once per ramp as a master tile at radius 30 and resized
 
 Steps 3 and 6 are exclusive: a disc gets one ring, either the default white one under the glyph or the explicit one over it — never both. So full-bleed art covers the default ring, and an explicit ring is a deliberate stroke that survives on top of the art (the white stroke on USDC, the black stroke on SAFE).
 
-Glyph lookup (`resolve_glyph`, `pq1/components.py:232`): a named icon in `GLYPHS` → image logo, circle-masked → a vector mark for the symbol → the monogram. `components.glyph` falls back to the `eth` mark for an unregistered name — except a `letter:X` name, which draws that initial through the same monogram: an unknown CHAIN names its own network rather than borrowing the ether mark, which would name a different one (`letter:` is a namespace resolved at draw time, never a `GLYPHS` entry, so the published icon set cannot depend on render order). The disc is never empty. Marks are traced vector art (`pq1/procedural/`); logos are full-bleed PNGs in `pq1/assets/`. The one exception is `eth`: `eth-logo.png` recoloured to white when it is loaded (`image_glyph(..., recolor_white=True)`).
+Glyph lookup (`resolve_glyph`, `pq1/components.py:229`): a named icon in `GLYPHS` → a `letter:X` initial → image logo, circle-masked → the symbol's monogram. `components.glyph` falls back to the `eth` mark for an unregistered name — except a `letter:X` name, which draws that initial through the same monogram: an unknown CHAIN names its own network, and a long-tail TOKEN its own symbol, rather than borrowing the ether mark, which would name something else (`letter:` is a namespace resolved at draw time, never a `GLYPHS` entry, so the published icon set cannot depend on render order). The disc is never empty. Marks are traced vector art (`pq1/procedural/`); logos are full-bleed PNGs in `pq1/assets/`. There is no raster mark and no exception: `eth` is procedural like every other mark, and the whole legal set — with each one's art, scale and measured ink — is in [icons](icons.md).
 
 ## Motion
 
@@ -87,7 +89,7 @@ No clip of its own. See the disc at rest and in transit in [Hero — the ask](..
 
 - **Do** port `token_ramp` and `placeholder_index` bit-exact, and the ramp tables in `pq1/colors.py` value for value. The colour is an identity check the user learns.
 - **Do** hash the address when you have one. Hash the symbol only when there is no address.
-- **Don't** use the gradient body for a known token, for a brand, or as a warning.
+- **Don't** implement the gradient body at all. It is reserved (audit A11-12): no flow and no library screen resolves to `variant: "unknown"`, so a port that draws one shows a look this product does not have.
 - **Don't** let a hashed key reach a named ramp. Only a flow's own `palette` string may pin one.
 - **Know** that the hash space includes the mono ramp (13) and the neutral ramp (10). An address that lands on the mono ramp through `palette` gets the black body, white ring and grey trail — the same style dict as ETH. The reference does not exclude it. Settle this with the designer before shipping.
 

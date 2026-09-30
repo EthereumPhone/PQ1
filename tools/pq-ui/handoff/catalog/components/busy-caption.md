@@ -7,7 +7,7 @@ The caption during a loading film breathes; it starts only once the qubits are o
 
 ## What it is
 
-The line in the bottom band **while a status screen is still working** — `SIGNING…`, `RECONNECTING…`, `WIPING…`. Same type, same slot and same drawing as the resolved [caption](caption.md); what differs is that it lives inside a window and breathes.
+The line in the bottom band **while a status screen is still working** — `SIGNING…`, `UPDATING…`, `WIPING…`. Same type, same slot and same drawing as the resolved [caption](caption.md); what differs is that it lives inside a window and breathes.
 
 Two dresses, chosen by the animation, never by the flow:
 
@@ -22,10 +22,10 @@ The rule behind it: a caption over a loading animation pulses; a caption that in
 
 Only on a `status` screen whose animation declares a busy window (`t_busy`) **and** whose spec carries `busy`. Everything else about it is computed, not authored: the flow gives the words, the animation gives the window.
 
-- the qubit film (`pq1/status.py:409`) — the window opens once the two qubits are on the orbit and closes when they spiral in
+- the qubit film (`pq1/status.py:438`) — the window opens once the two qubits are on the orbit and closes when they spiral in
 - the explosion (`screens/fx/explosion.py:80`) — the same orbit window, or, with `busy_until="boom"`, held through the spiral and the clump and closed one `BUSY_FADE_MS` 300 ms (4.2 f) before the blast launches
-- `hold_to_confirm` (`screens/confirm/hold_to_confirm.py:54`) — steady, from frame 0 to the commit (its cancel ending closes the window at the early release instead)
-- the **cancel resolve has no window** (`pq1/status.py:452`): its `t_busy` is `None`, so a `busy` on a cancel ending is silently ignored. A cancellation did no work — there is nothing to caption.
+- `hold_to_confirm` (`screens/confirm/hold_to_confirm.py:58`) — steady, from frame 0 to the commit (its cancel ending closes the window at the early release instead)
+- the **cancel resolve has no window** (`pq1/status.py:480`): its `t_busy` is `None`, so a `busy` on a cancel ending is silently ignored. A cancellation did no work — there is nothing to caption.
 - the PIN row is not this: it pins `t_busy` to `None` and draws `ENTER PIN` / `PIN ENTERED` itself, one swap per typed row — see [PIN row](pin-row.md).
 
 ## Spec
@@ -40,27 +40,27 @@ That row is written out here instead of generated: the parser folds the closing 
 
 ## Geometry
 
-Identical to the resolved [caption](caption.md): question caps, size 18, tracking 0.5 px, centred on x 214, baseline y 128, white. It is the same call (`pq1/components.py:507`).
+Identical to the resolved [caption](caption.md): question caps, size 18, tracking 0.5 px, centred on x 214, baseline y 128, white. It is the same call (`pq1/components.py:555`).
 
 The busy line and the resolved line never overlap: every window closes before its screen resolves.
 
 ## Motion
 
-One function owns all of it: `StatusAnim.draw_busy` (`pq1/status.py:343`), with the breath in `motion.busy_pulse` (`pq1/motion.py:298`). The clock is ms since the screen started.
+One function owns all of it: `StatusAnim.draw_busy` (`pq1/status.py:375`), with the breath in `motion.busy_pulse` (`pq1/motion.py:371`). The clock is ms since the screen started.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| dark while the token splits and sweeps out | 2250 | 31.5 | hold | `QubitCfg.t2 + QubitCfg.T_SPLIT + QubitCfg.T_JOIN` | `pq1/loading.py:34` | the qubit film's window opens only once both qubits are ON the orbit — never over the split |
-| the qubit film's window: it breathes until the spiral begins | 2550 | 35.7 | raised cosine | `QubitCfg.t5 - QubitCfg.t2 - QubitCfg.T_SPLIT - QubitCfg.T_JOIN` | `pq1/loading.py:34` | this window fits exactly one breath |
-| nominal breath | 2000 | 28.0 | raised cosine | `BUSY_PULSE_MS` | `pq1/motion.py:295` | the window is cut into the NEAREST whole number of these, at least one, so the real period is a little longer or shorter and the line always starts and ends dark |
-| steady dress: fade in from the window's start | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:103` |  |
-| steady dress: fade out, beginning AT the window's end | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:103` | so a steady line outlives its window by one fade |
-| a list of lines: each line holds | 2000 | 28.0 | — | `BUSY_SWAP_MS` | `pq1/status.py:107` | the window plus one fade is cut into equal slots, one line per slot; more lines than whole slots and the slots shrink to fit them all |
+| dark while the token splits and sweeps out | 2250 | 31.5 | hold | `QubitCfg.t2 + QubitCfg.T_SPLIT + QubitCfg.T_JOIN` | `pq1/loading.py:35` | the qubit film's window opens only once both qubits are ON the orbit — never over the split |
+| the qubit film's window: it breathes until the spiral begins | 2550 | 35.7 | raised cosine | `QubitCfg.t5 - QubitCfg.t2 - QubitCfg.T_SPLIT - QubitCfg.T_JOIN` | `pq1/loading.py:35` | this window fits exactly one breath |
+| nominal breath | 2000 | 28.0 | raised cosine | `BUSY_PULSE_MS` | `pq1/motion.py:368` | the window is cut into the NEAREST whole number of these, at least one, so the real period is a little longer or shorter and the line always starts and ends dark |
+| steady dress: fade in from the window's start | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:119` |  |
+| steady dress: fade out, beginning AT the window's end | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:119` | so a steady line outlives its window by one fade |
+| a list of lines: each line holds | 2000 | 28.0 | — | `BUSY_SWAP_MS` | `pq1/status.py:123` | the window plus one fade is cut into equal slots, one line per slot; more lines than whole slots and the slots shrink to fit them all |
 | on the device, while the film loops | — | — | raised cosine | — | — | the pose wraps, the breath does not: the period fitted to the STOCK window carries on unwrapped for as long as the loop runs (a list gains slots on the same grid), then fades out over BUSY_FADE_MS as the spiral starts — [loading loop](../transitions/loading-loop.md) |
 
 The breath is a raised cosine — `0.5 − 0.5·cos(2πu)` over the cycle's unit progress: dark at the start, full in the middle, dark at the end. Fitting whole cycles into the window is what makes it land dark exactly when the loading stops; do not free-run a sine against a wall clock. When the film loops the caption keeps that period on the unwrapped clock and is faded out over `BUSY_FADE_MS` 300 ms (4.2 f) (ease-out) the moment the spiral starts, so a wrap never jumps the caption.
 
-**A list takes turns, it does not scroll.** The number of slots is the larger of the line count and the whole number of `BUSY_SWAP_MS` that fit, and slot `k` shows line `k mod count` — so the two-line WALLET WIPED film gets three slots and shows `WIPING…` again at the end. On a breathing film each slot is one breath; on a steady caption each line fades out before the next fades in, like the [confirm band](confirm-band.md).
+**A list takes turns, it does not scroll.** The number of slots is the larger of the line count and the whole number of `BUSY_SWAP_MS` that fit, and slot `k` shows line `k mod count` — so the two-line WALLET WIPED film gets three slots and shows `WIPING…` again at the end. On a breathing film each slot is one breath; on a steady caption each line fades out before the next fades in, like the [confirm band](confirm-band.md). Every steady envelope — one line or a slot of a list — is `motion.hint_env` (`pq1/motion.py:317`): fade in, rest, fade out, `ease_out` both ways, the envelope the confirm band and the PIN hints share.
 
 Windows are computed from the film, so they are not round numbers: the explosion's opens when its bodies arrive, which on a two-sided entrance lands on a fractional millisecond. Compute them the same way in the port instead of writing constants down.
 

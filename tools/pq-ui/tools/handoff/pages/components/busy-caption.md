@@ -1,6 +1,6 @@
 ## What it is
 
-The line in the bottom band **while a status screen is still working** — `SIGNING…`, `RECONNECTING…`, `WIPING…`. Same type, same slot and same drawing as the resolved [caption](caption.md); what differs is that it lives inside a window and breathes.
+The line in the bottom band **while a status screen is still working** — `SIGNING…`, `UPDATING…`, `WIPING…`. Same type, same slot and same drawing as the resolved [caption](caption.md); what differs is that it lives inside a window and breathes.
 
 Two dresses, chosen by the animation, never by the flow:
 
@@ -52,7 +52,7 @@ One function owns all of it: `StatusAnim.draw_busy` ({{loc:pq1.status.StatusAnim
 
 The breath is a raised cosine — `0.5 − 0.5·cos(2πu)` over the cycle's unit progress: dark at the start, full in the middle, dark at the end. Fitting whole cycles into the window is what makes it land dark exactly when the loading stops; do not free-run a sine against a wall clock. When the film loops the caption keeps that period on the unwrapped clock and is faded out over {{tok:pq1.status.BUSY_FADE_MS}} (ease-out) the moment the spiral starts, so a wrap never jumps the caption.
 
-**A list takes turns, it does not scroll.** The number of slots is the larger of the line count and the whole number of `BUSY_SWAP_MS` that fit, and slot `k` shows line `k mod count` — so the two-line WALLET WIPED film gets three slots and shows `WIPING…` again at the end. On a breathing film each slot is one breath; on a steady caption each line fades out before the next fades in, like the [confirm band](confirm-band.md).
+**A list takes turns, it does not scroll.** The number of slots is the larger of the line count and the whole number of `BUSY_SWAP_MS` that fit, and slot `k` shows line `k mod count` — so the two-line WALLET WIPED film gets three slots and shows `WIPING…` again at the end. On a breathing film each slot is one breath; on a steady caption each line fades out before the next fades in, like the [confirm band](confirm-band.md). Every steady envelope — one line or a slot of a list — is `motion.hint_env` ({{loc:pq1.motion.hint_env}}): fade in, rest, fade out, `ease_out` both ways, the envelope the confirm band and the PIN hints share.
 
 Windows are computed from the film, so they are not round numbers: the explosion's opens when its bodies arrive, which on a two-sided entrance lands on a fractional millisecond. Compute them the same way in the port instead of writing constants down.
 

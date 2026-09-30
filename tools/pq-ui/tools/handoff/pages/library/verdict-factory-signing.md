@@ -8,7 +8,7 @@ deliberately put under the entrance — the first part of the coast and the fade
 clock — because a gear that sat still and then jumped to speed reads as fake.
 
 {{motion-head}}
-{{row:black hold — the flow's token hands over | screens.verdict.factory_signing.FactorySigning.T_HOLD | ease_out | shorter than the law's default ({{tok:pq1.verdict.VerdictAnim.T_HOLD}}): the source's own hold, kept}}
+{{row:black hold — the flow's token hands over | screens.verdict.factory_signing.FactorySigning.T_HOLD | ease_out | the law's own hold, {{tok:pq1.motion.VERDICT_HOLD_MS}} — six panel frames, so the entrance starts on a frame}}
 {{row:the gear arrives — fade | pq1.verdict.VerdictAnim.T_IN | ease_out | alpha 0 to 1 on the body and the teeth. The hole does NOT fade: it is punched flat black at every alpha, so the gear reads as a ring from the first frame}}
 {{row:the gear arrives — rise | pq1.verdict.VerdictAnim.T_IN | arrive | radius {{tok:screens.verdict.factory_signing.GEAR_R}} scaled from {{tok:pq1.motion.ARRIVE_FROM}} to 1 — about a pixel. The gear is a shade wider than the token circle ({{tok:pq1.layout.CIRCLE_R}}), by design}}
 {{row:the coast — one whole turn, launched WITH the arrival | screens.verdict.factory_signing.T_SPIN | freewheel | angle = 2 pi x {{tok:screens.verdict.factory_signing.TOTAL_TURNS}} x freewheel(t, k = {{tok:screens.verdict.factory_signing.DECAY_K}}). About 61 degrees a panel frame at launch, nothing at the end. Whole turns land tooth-aligned on the 8 teeth}}
@@ -53,7 +53,7 @@ join never shows a seam. The hole is punched with a black ellipse, not left tran
 
 {{spec}}
 
-The colour is explicit (`colors.FACTORY_BLUE`), not a `state`, and `result` is None — no
+The colour is explicit (`colors.WHITE` — the firmware / neutral role), not a `state`, and `result` is None — no
 check or cross lands on this sign.
 
 {{used-in}}

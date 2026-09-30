@@ -18,7 +18,7 @@ On a detail at rest the links sit exactly under the token and are not drawn. The
 | part | value |
 |---|---|
 | links | {{tok:pq1.motion.TRAIL_COUNT}}, nearest first |
-| link radius | the token's **visible** radius: layout r − {{tok:pq1.components.TOKEN_INSET}} px. A link is exactly the size of the disc, never bigger |
+| link radius | the token's **visible** radius: layout r − {{tok:pq1.components.TOKEN_INSET}}. A link is exactly the size of the disc, never bigger |
 | gap cap | {{tok:pq1.motion.MAX_GAP}} between a link and the point ahead of it, so the whole trail is never longer than {{val:pq1.motion.TRAIL_COUNT}} × {{val:pq1.motion.MAX_GAP}} px |
 | fill | flat and opaque, one colour per link. No alpha, no blur, no gradient |
 | order | farthest link first, nearest last, then the [pulse rings](pulse-rings.md), then the [token](token-disc.md) on top |

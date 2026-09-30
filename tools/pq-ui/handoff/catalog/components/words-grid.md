@@ -9,7 +9,7 @@ Two columns of four numbered words, numbers right-aligned in grey.
 
 A fingerprint read as words: up to eight short words on a fixed grid of two columns of four, each word numbered. It replaces the value lines of a [value](../screen-types/value.md) screen — `words` instead of `lines` — so the panel shows the whole fingerprint at once and the user can compare it with the one published for the release.
 
-It is a fixed grid, not a text layout: no tier fitting, no wrapping, no stacking rule. The words are white, the numbers grey, both at one size. The band stays empty — the schema allows an optional caps label there, and the live screen does not use it.
+It is a fixed grid, not a text layout: no tier fitting, no wrapping, no stacking rule. The words are white, the numbers grey, both at one size. The band stays empty — a value screen has no label, and `normalize_screens` rejects one.
 
 ## When it appears
 
@@ -19,10 +19,9 @@ On a `value` screen whose spec carries `words`. Live: the WORDS screen of the fi
 
 | key | form | meaning |
 |---|---|---|
-| `value.words` | `["close", "agent", …]` | a NUMBERED WORD GRID in place of lines: up to 8 short words on the seed- words grid — two columns of four (WORDS_COLS: the number right-aligned, the word left-aligned beside it), numbered 1-4 down the left, 5-8 down the right, rows on … (full text: the `pq1/layout.py` docstring) |
-| `value.label` | `"KEY FINGERPRINT"` | with words only (optional): a caps label centred on the bottom baseline |
+| `value.words` | `["close", "agent", …]` | a NUMBERED WORD GRID in place of lines: up to 8 a page (up to 24, paged in 8s under the n/m pager, the numbers counting on — the setup seed), short words on the seed- words grid — two columns of four (WORDS_COLS: the number … (full text: the `pq1/layout.py` docstring) |
 
-`normalize_screens` (`pq1/layout.py:510`) enforces the shape and raises otherwise:
+`normalize_screens` (`pq1/layout.py:653`) enforces the shape and raises otherwise:
 
 - `words` belongs to a **value** screen only, and nothing else may share it — no `lines`, no `pages`
 - between one and 8 words (`WORDS_MAX` = the two columns of four)
@@ -36,7 +35,7 @@ dict(id="WORDS", kind="value", chev="lr",
 
 ## Geometry
 
-Built by `_words_texts` (`pq1/layout.py:347`).
+Built by `_words_texts` (`pq1/layout.py:474`).
 
 | part | value |
 |---|---|
@@ -62,10 +61,10 @@ The grid does not animate. It arrives and leaves with its screen.
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | outgoing screen starts fading as the leg begins | — | — | spring NAV | — | — | a full grid is sixteen pieces — eight numbers, eight words — on the screen's one alpha |
-| the grid is released after | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the token leads — here it leads by leaving the panel — see [text-in delay](../transitions/text-in-delay.md) |
+| the grid is released after | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the token leads — here it leads by leaving the panel — see [text-in delay](../transitions/text-in-delay.md) |
 | no stagger | — | — | cut | — | — | the words never count themselves in one by one |
 | the token travels off the left edge and back | — | — | spring NAV | — | — | the position spring, the trail following — see [spring morph](../transitions/spring-morph.md) |
-| demo only: the screen advances itself after | 4100 | 57.4 | — | `DETAIL_DWELL` | `pq1/motion.py:154` | **do not port** — the reader decides when to move on |
+| demo only: the screen advances itself after | 4100 | 57.4 | — | `DETAIL_DWELL` | `pq1/motion.py:174` | **do not port** — the reader decides when to move on |
 
 ## Input
 
@@ -77,7 +76,7 @@ The grid does not animate. It arrives and leaves with its screen.
 | value — full-width text | hold right | `None` | HASH (value, p1) | HASH (value, p1) |
 | value — full-width text | release a hold early (1000 ms) | `snapback` | HASH (value, p1) | HASH (value, p1) |
 | value — full-width text | both buttons (chord) | `None` | HASH (value, p1) | HASH (value, p1) |
-| value — full-width text | double press left | `None` | HASH (value, p1) | HASH (value, p1) |
+| value — full-width text | double press left | `None` | HASH (value, p1) | SAFE TX HASH FINGERPRINT (hero, p1) |
 | value — full-width text | double press right | `None` | HASH (value, p1) | HASH (value, p1) |
 
 Nothing here is interactive: taps navigate, hold left declines, hold right is unbound (the update is committed on the ask that follows, never on the words).
@@ -91,7 +90,7 @@ No clip of its own. It plays in [Value — numbered words grid](../screen-types/
 - **Do** keep the words as data: they are the fingerprint of the firmware being installed, filled per update.
 - **Do** number in reading order — down the left column, then down the right.
 - **Don't** wrap, hyphenate, shrink or truncate a word. Nothing fits it at runtime; a word that does not fit is a wordlist bug.
-- **Don't** put a caption under a grid of four or more words: the fourth row's ink and the band's text overlap.
+- **Don't** put a caption under the grid: the fourth row's ink reaches into the band. The schema has no field for one.
 - **Don't** use the grid for an arbitrary list. It is the fingerprint's layout.
 - **Don't** change the row lines or column edges to centre a shorter list. Four words fill the left column and leave the right empty — that is the layout.
 

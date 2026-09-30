@@ -7,22 +7,23 @@ Expanding rings around the disc that mark a screen needing extra attention (blin
 
 ## What it is
 
-Two thin rings that are born at the edge of the token, grow a few pixels and fade out, one after the other, for as long as the screen is up. They mark a screen that needs **extra attention** — the user is about to approve something the device cannot fully show. They are an accent on the token, not a state: the screen keeps its normal layout, caption and input.
+Two thin rings that are born at the edge of the token, grow a few pixels and fade out, one after the other, for as long as the screen is up. They mark a screen that needs **extra attention** — the user is about to approve something the device cannot fully show. They carry a **state** colour, not the token's dress, but they change nothing else: the screen keeps its normal layout, caption and input.
 
-The drawing is `components.pulse` (`pq1/components.py:628`); `flow.Sim` calls it for every screen whose spec carries `pulse` (`pq1/flow.py:310`). Do not confuse it with `motion.attention_pulse` (a verdict icon's scale pulse) or `motion.busy_pulse` (the [busy caption](busy-caption.md)).
+The drawing is `components.pulse` (`pq1/components.py:683`); `flow.Sim` calls it for every screen whose spec carries `pulse` (`pq1/flow.py:338`). Do not confuse it with `motion.attention_pulse` (a verdict icon's scale pulse) or `motion.busy_pulse` (the [busy caption](busy-caption.md)).
 
 ## When it appears
 
-Exactly one live screen uses it today: **BLIND SIGN** in `safe/can_not_decode` ("Can not decode data / Confirm on dapp"), with `pulse: True`, so the rings take the Safe green of the token's fill. The `flows/blind/` family does **not** pulse; it carries the `blind` mark instead. Treat the rings as a rare emphasis a flow author opts into per screen, never as a default.
+Exactly one live screen uses it today: **BLIND SIGN** in `safe/can_not_decode` ("Can not decode data / Confirm on dapp"), with `pulse: True`, so the rings take the WARNING tier — orange around the Safe-green disc, deliberately not the brand's SIGNED green. The `flows/blind/` family does **not** pulse; it carries the `blind` mark instead. Treat the rings as a rare emphasis a flow author opts into per screen, never as a default.
 
 ## Spec
 
 | key | form | meaning |
 |---|---|---|
-| `pulse` | `True \| [r, g, b]` | pulsating rings around the token (components.pulse; True = token fill colour) |
+| `pulse` | `True \| <STATE key>` | pulsating rings around the token (components.pulse; True = STATE["warning"]) |
 
-- `True` → the rings take the token's resolved **fill** (`token_style_from_spec`), or white when the style has no fill (`_pulse_color`, `pq1/flow.py:37`).
-- `[r, g, b]` → that colour.
+- `True` → `colors.STATE["warning"]` — the ORANGE warning tier (`_pulse_color`, `pq1/flow.py:37`).
+- a `colors.STATE` key (`"warning"`, `"failed"`, `"done"`, `"awaiting"`) → that tier's colour.
+- anything else — a raw `[r, g, b]`, an unknown name — **raises**. The rings report a state, so they may not be dressed in an arbitrary colour, and never in the token's own fill.
 - The schema lists `pulse` under detail, but the code reads it on any screen that rests on the token.
 
 ## Geometry
@@ -35,7 +36,7 @@ Both rings share the token's live centre — they travel with it in a transit an
 | outer radius | `r + 1.5 + 7 · phase` — from r + 1.5 to r + 8.5 px, linear |
 | stroke | `TOKEN_RING_W` 2.4 px — the system ring weight — stroked inward from that radius |
 | alpha | `(1 − phase) · 0.4 · screen alpha`, linear; composited with **true alpha**, not scaled toward black |
-| cut-off | a ring under alpha 0.02 is not drawn (the last 5 % of its life) |
+| cut-off | a ring at or under `ALPHA_FLOOR` 0.0137 is not drawn — the panel's first visible alpha, the one floor every fade shares |
 | layer | over the [trail](trail.md) links, under the [token](token-disc.md) |
 
 A newborn ring hugs the token: its stroke spans r − 0.9 to r + 1.5 px, a hair outside the token's visible edge (r − 1.2). It appears at its full 0.4 alpha — there is no fade-in.
@@ -44,9 +45,9 @@ A newborn ring hugs the token: its stroke spans r − 0.9 to r + 1.5 px, a hair 
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| one ring: born at the token's edge, grows 7 px and fades to nothing | 2000 | 28.0 | linear | `2000` | — | one whole `period`; radius and alpha are both straight lines of the phase. The token column shows the literal because the value is the `period` default argument of `components.pulse` (`pq1/components.py:628`), not a named constant — give it one in the port |
+| one ring: born at the token's edge, grows 7 px and fades to nothing | 2000 | 28.0 | linear | `2000` | — | one whole `period`; radius and alpha are both straight lines of the phase. The token column shows the literal because the value is the `period` default argument of `components.pulse` (`pq1/components.py:683`), not a named constant — give it one in the port |
 | the second ring is half a period behind | 1000 | 14.0 | — | `2000 * 0.5` | — | its life is the same; so a ring is born every half period and two are always alive |
-| the rings appear when the screen arrives | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | they ride the screen's **text alpha** spring: released after this delay, then fading in with the words |
+| the rings appear when the screen arrives | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | they ride the screen's **text alpha** spring: released after this delay, then fading in with the words |
 | the rings leave when the screen leaves | — | — | spring NAV | — | — | the same alpha spring, retargeted to 0 the moment the transit starts |
 
 The phase is `(now / period + k · 0.5) mod 1` for ring `k` = 0, 1, where `now` is the flow's **running clock**, not the time on this screen. The rings are free-running: they do not restart when the screen arrives, and the first ring you see may be born mid-life as the alpha comes up. That is the reference behaviour; nothing needs to be synchronised.

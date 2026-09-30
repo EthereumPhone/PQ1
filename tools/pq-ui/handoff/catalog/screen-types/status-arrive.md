@@ -9,11 +9,11 @@ The resting look arrives on an empty canvas under the verdict entrance law.
 
 An ending with no film of its own. The canvas is already empty — a [lead film](status-led.md) has just shown the work and blown the token apart — so the resting look simply **arrives**: after a black hold the resolved disc, its ring and the result glyph fade in together and rise from 0.97 to full size, a beat passes, the caption fades in, the screen rests.
 
-It is a `status` screen with `anim="arrive"`; the class is `ArriveStatus` (`pq1/status.py:520`). It obeys [the verdict law](../transitions/verdict-law.md) — the same four phases and the same entrance as every verdict icon — but what arrives is the token-shaped [resting look](resting-look.md), not an icon.
+It is a `status` screen with `anim="arrive"`; the class is `ArriveStatus` (`pq1/status.py:560`). It obeys [the verdict law](../transitions/verdict-law.md) — the same four phases and the same entrance as every verdict icon — but what arrives is the token-shaped [resting look](resting-look.md), not an icon.
 
 ## When it appears
 
-Never by default: `status.default_anim` only picks the [qubit film](status-qubit.md) or [the resolve](status-resolve.md). A flow names `anim="arrive"` itself, on an ending that carries a `lead`. Today that is the firmware family: the explosion, then the white disc with the black check (`UPDATED`), or the red disc with the black X (`DECLINED`). Used in 1 of 31 flows: `firmware/update` ×2
+Never by default: `status.default_anim` only picks the [qubit film](status-qubit.md) or [the resolve](status-resolve.md). A flow names `anim="arrive"` itself, on an ending that carries a `lead`. Today that is the firmware family: the explosion, then the white disc with the black check (`UPDATED`), or the red disc with the black X (`DECLINED`). Used in 1 of 33 flows: `firmware/update` ×3
 
 ## Spec
 
@@ -40,7 +40,7 @@ Screen 5 of flow `firmware/update`, as the design system normalizes it (defaults
           'severity': 'major',
           'revs': 5,
           'busy_until': 'boom',
-          'busy': 'RECONNECTING…'},
+          'busy': 'UPDATING…'},
  'resting': {'fill': [255, 255, 255], 'ring': [0, 0, 0], 'glyph': [0, 0, 0]},
  'bottom': 'FIRMWARE UPDATED TO 1.0.3',
  'chev': None,
@@ -52,7 +52,7 @@ Screen 5 of flow `firmware/update`, as the design system normalizes it (defaults
  'busy': None}
 ```
 
-`lead` (and `lead_gap`, `handoff`) are documented in the `pq1/status.py` docstring and on [status — led by a film](status-led.md). `result` and `state` work as on every status screen; `resting` brands the look (a filled disc under a flush black ring). Without `resting` the look is the default one: black disc, ring and glyph in the state colour.
+`lead` (and `lead_clear`, `handoff`) are documented in the `pq1/status.py` docstring and on [status — led by a film](status-led.md). `result` and `state` work as on every status screen; `resting` brands the look (a filled disc under a flush black ring). Without `resting` the look is the default one: black disc, ring and glyph in the state colour.
 
 ## Geometry
 
@@ -69,21 +69,21 @@ Disc, ring and glyph share **one** alpha and **one** scale. Nothing inside the l
 
 ## Motion
 
-Time 0 is the start of the screen's own animation. Under a lead that is the moment the lead resolves (plus any gap) — see [led](status-led.md).
+Time 0 is the start of the screen's own animation. Under a lead it is placed from the lead's tail: the black hold ends `lead_clear` ms after the last ring clears (default `LEAD_CLEAR_MS` -180 ms (-2.5 f) — the look rises as the blast clears) — see [led](status-led.md).
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold | 400 | 5.6 | hold | `T_HOLD` | `pq1/status.py:535` | the screen draws nothing; under a lead the film's last rings keep fading here (a major blast's tail outlasts this hold — see [led](status-led.md)). With `handoff` and no lead, the flow's token crossfades out over this span on `ease_out` |
-| entrance: the look fades in and rises | 300 | 4.2 | ease_out + arrive | `T_IN` | `pq1/status.py:536` | alpha on `ease_out`, scale on `motion.arrive` — both from the same linear progress. `T_IN` is `ARRIVE_MS` 300 ms (4.2 f): the law's maximum, never longer, never an overshoot |
-| beat | 450 | 6.3 | hold | `T_WAIT` | `pq1/status.py:537` | the look stands alone |
-| caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/status.py:538` |  |
-| resolved, from time 0 | 1450 | 20.3 | — | `t_resolve` | `pq1/status.py:546` | hold + entrance + beat + caption |
-| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | see [result hold](../transitions/result-hold.md) |
-| whole screen | 3900 | 54.6 | — | `duration` | `pq1/status.py:246` | resolved + result hold; under a lead the lead's length is added |
+| black hold | 429 | 6.0 | hold | `T_HOLD` | `pq1/status.py:575` | the screen draws nothing; under a lead the film's last rings keep fading here (the hold is placed against the tail's clearance — see [led](status-led.md)). With `handoff` and no lead, the flow's token crossfades out over this span on `ease_out` |
+| entrance: the look fades in and rises | 300 | 4.2 | ease_out + arrive | `T_IN` | `pq1/status.py:576` | alpha on `ease_out`, scale on `motion.arrive` — both from the same linear progress. `T_IN` is `ARRIVE_MS` 300 ms (4.2 f): the law's maximum, never longer, never an overshoot |
+| beat | 450 | 6.3 | hold | `T_WAIT` | `pq1/status.py:577` | the look stands alone |
+| caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/status.py:578` |  |
+| resolved, from time 0 | 1479 | 20.7 | — | `t_resolve` | `pq1/status.py:586` | hold + entrance + beat + caption |
+| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | see [result hold](../transitions/result-hold.md) |
+| whole screen | 3929 | 55.0 | — | `duration` | `pq1/status.py:278` | resolved + result hold; under a lead the lead's length is added |
 
 The fade is a colour fade toward black (`colors.scale`), which on this panel's black ground equals alpha.
 
-`ArriveStatus` types the phase lengths itself; they are copies of `VerdictAnim`'s (`pq1/verdict.py:41`). If you port one table, port them as one.
+`ArriveStatus` reads the hold and the entrance from the same tokens as `VerdictAnim` (`VERDICT_HOLD_MS`, `ARRIVE_MS`) and types the beat and the caption fade beside them — copies of `VerdictAnim`'s (`pq1/verdict.py:41`). If you port one table, port them as one.
 
 ## Input
 
@@ -91,7 +91,7 @@ None. The chevrons are hidden and every press is ignored for the whole ending, t
 
 ## What it leaves behind
 
-`arrive` rests on the token disc (`rests_on_token` stays true), unlike a verdict icon. Leaving it is an ordinary token transit ([spring morph](../transitions/spring-morph.md)), not the [fade to black](../transitions/tokenless-fade.md) of a screen that owns its canvas.
+`arrive` rests on the token disc (`rests_on_token` stays true), unlike a verdict icon — but it shows a result, so leaving it is the [fade to black](../transitions/tokenless-fade.md), never a [spring morph](../transitions/spring-morph.md) that would drag the check or X into the next screen.
 
 ## Preview
 

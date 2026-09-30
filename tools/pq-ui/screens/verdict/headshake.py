@@ -35,8 +35,6 @@ PRESETS = dict(
 T_SHAKE = 420     # the wiggle window (source), on the arrived sign
 T_BEAT = 450      # the verdict beat before the caption
 SHAKE_PX = 6.0    # the wiggle's excursion (source: cx += 6 sin(2 pi w)(1 - w))
-RING_INSET = 1.2  # an unbranded resting ring sits just inside the disc edge
-                  # (status.ArriveStatus / ResolveStatus)
 
 
 class Headshake(VerdictAnim):
@@ -51,7 +49,7 @@ class Headshake(VerdictAnim):
         rest = self.style["resting"]
         r = CIRCLE_R * s
         cv.circle(cx, CIRCLE_CY, r, colors.scale(rest["fill"], a))
-        cv.ring(cx, CIRCLE_CY, r if rest["flush"] else r - RING_INSET,
+        cv.ring(cx, CIRCLE_CY, r if rest["flush"] else components.visible_r(r),
                 colors.scale(rest["ring"], a), components.TOKEN_RING_W)
         result = self.style["result"]
         if result is not None:

@@ -1,6 +1,6 @@
 """SAFE ERC-20 transfer flow — token send from the Safe, screen content only.
 
-  SEND 250 USDC? (idle sweep) -> NETWORK -> SAFE ACCT -> SEND -> TO
+  SEND 250 USDC? (idle sweep) -> NETWORK -> SAFE ACCT -> TO -> SEND
   -> Confirm? (auto-inserted 6th — this flow has 7 detail screens,
   DESIGN.md § Flow shape: hold-right commits from there, the band
   alternates OR VIEW MORE / TO GO BACK) -> TOKEN -> CONTRACT -> TX INFO
@@ -10,7 +10,7 @@
   Confirm? jumps straight to the ending, the rest never visited.
 
 Transfers an ERC-20 token out of the Safe: the chain context, the Safe
-account, the amount at full decimal precision, the recipient, the token's
+account, the recipient, the amount at full decimal precision, the token's
 full name, its contract address and the transaction nonce. Every label
 and value line is variable content — "250 USDC" / "USD Coin" and the
 addresses are representative samples filled per transaction on device.
@@ -25,10 +25,10 @@ BODY = [
     dict(id="NETWORK", kind="detail", side="right", chain=1, label=None),
     dict(id="SAFE ACCT", kind="detail", side="left", label="SAFE ACCT",
          lines=["0x1111111111222222222", "3333333333444444444aa"], size=22),
-    dict(id="SEND", kind="detail", side="right", label="SEND",
-         lines=["250.000000 USDC"], size=28),
-    dict(id="TO", kind="detail", side="left", label="TO",
+    dict(id="TO", kind="detail", side="right", label="TO",
          lines=["0x78D8526282Ac09f1885", "D0F39B8875a0180Fc081e"], size=22),
+    dict(id="SEND", kind="detail", side="left", label="SEND",
+         lines=["250.000000 USDC"], size=28),
     dict(id="TOKEN", kind="detail", side="right", label="TOKEN",
          lines=["USD Coin"], size=36),
     dict(id="CONTRACT", kind="detail", side="left", label="CONTRACT",

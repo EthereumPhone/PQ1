@@ -1,0 +1,7395 @@
+{
+ "base": {
+  "BLACK": {
+   "comment": "",
+   "hex": "#000000",
+   "rgb": [
+    0,
+    0,
+    0
+   ],
+   "rgb565": 0,
+   "rgb565_hex": "0x0000",
+   "source": "pq1/colors.py:28"
+  },
+  "COWSWAP_DARK": {
+   "comment": "#012F7A — the cow head: the family's mark",
+   "hex": "#012F7A",
+   "rgb": [
+    1,
+    47,
+    122
+   ],
+   "rgb565": 367,
+   "rgb565_hex": "0x016F",
+   "source": "pq1/colors.py:350"
+  },
+  "GREEN": {
+   "comment": "done / success",
+   "hex": "#2EE56A",
+   "rgb": [
+    46,
+    229,
+    106
+   ],
+   "rgb565": 12077,
+   "rgb565_hex": "0x2F2D",
+   "source": "pq1/colors.py:31"
+  },
+  "ORANGE": {
+   "comment": "warning",
+   "hex": "#F5A033",
+   "rgb": [
+    245,
+    160,
+    51
+   ],
+   "rgb565": 62726,
+   "rgb565_hex": "0xF506",
+   "source": "pq1/colors.py:33"
+  },
+  "RED": {
+   "comment": "failed / canceled  (#FF423D)",
+   "hex": "#FF423D",
+   "rgb": [
+    255,
+    66,
+    61
+   ],
+   "rgb565": 64007,
+   "rgb565_hex": "0xFA07",
+   "source": "pq1/colors.py:32"
+  },
+  "WHITE": {
+   "comment": "",
+   "hex": "#FFFFFF",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "rgb565": 65535,
+   "rgb565_hex": "0xFFFF",
+   "source": "pq1/colors.py:29"
+  },
+  "YELLOW": {
+   "comment": "awaiting input",
+   "hex": "#DCC419",
+   "rgb": [
+    220,
+    196,
+    25
+   ],
+   "rgb565": 56867,
+   "rgb565_hex": "0xDE23",
+   "source": "pq1/colors.py:30"
+  }
+ },
+ "brand_ramps": {
+  "CHAIN:ARBITRUM": {
+   "fill": {
+    "hex": "#1554C8",
+    "rgb": [
+     21,
+     84,
+     200
+    ],
+    "rgb565": 4793,
+    "rgb565_hex": "0x12B9"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#030D1E",
+     "rgb": [
+      3,
+      13,
+      30
+     ],
+     "rgb565": 99,
+     "rgb565_hex": "0x0063"
+    },
+    {
+     "hex": "#06193C",
+     "rgb": [
+      6,
+      25,
+      60
+     ],
+     "rgb565": 199,
+     "rgb565_hex": "0x00C7"
+    },
+    {
+     "hex": "#0A2A64",
+     "rgb": [
+      10,
+      42,
+      100
+     ],
+     "rgb565": 2380,
+     "rgb565_hex": "0x094C"
+    },
+    {
+     "hex": "#0F3B8C",
+     "rgb": [
+      15,
+      59,
+      140
+     ],
+     "rgb565": 2513,
+     "rgb565_hex": "0x09D1"
+    },
+    {
+     "hex": "#1248AC",
+     "rgb": [
+      18,
+      72,
+      172
+     ],
+     "rgb565": 4693,
+     "rgb565_hex": "0x1255"
+    },
+    {
+     "hex": "#1554C8",
+     "rgb": [
+      21,
+      84,
+      200
+     ],
+     "rgb565": 4793,
+     "rgb565_hex": "0x12B9"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#1248AC",
+     "rgb": [
+      18,
+      72,
+      172
+     ],
+     "rgb565": 4693,
+     "rgb565_hex": "0x1255"
+    },
+    {
+     "hex": "#0F3B8C",
+     "rgb": [
+      15,
+      59,
+      140
+     ],
+     "rgb565": 2513,
+     "rgb565_hex": "0x09D1"
+    },
+    {
+     "hex": "#0A2A64",
+     "rgb": [
+      10,
+      42,
+      100
+     ],
+     "rgb565": 2380,
+     "rgb565_hex": "0x094C"
+    },
+    {
+     "hex": "#06193C",
+     "rgb": [
+      6,
+      25,
+      60
+     ],
+     "rgb565": 199,
+     "rgb565_hex": "0x00C7"
+    },
+    {
+     "hex": "#030D1E",
+     "rgb": [
+      3,
+      13,
+      30
+     ],
+     "rgb565": 99,
+     "rgb565_hex": "0x0063"
+    }
+   ]
+  },
+  "CHAIN:AVALANCHE": {
+   "fill": {
+    "hex": "#E84142",
+    "rgb": [
+     232,
+     65,
+     66
+    ],
+    "rgb565": 59912,
+    "rgb565_hex": "0xEA08"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#230A0A",
+     "rgb": [
+      35,
+      10,
+      10
+     ],
+     "rgb565": 8257,
+     "rgb565_hex": "0x2041"
+    },
+    {
+     "hex": "#461414",
+     "rgb": [
+      70,
+      20,
+      20
+     ],
+     "rgb565": 16546,
+     "rgb565_hex": "0x40A2"
+    },
+    {
+     "hex": "#742021",
+     "rgb": [
+      116,
+      32,
+      33
+     ],
+     "rgb565": 28932,
+     "rgb565_hex": "0x7104"
+    },
+    {
+     "hex": "#A22E2E",
+     "rgb": [
+      162,
+      46,
+      46
+     ],
+     "rgb565": 41317,
+     "rgb565_hex": "0xA165"
+    },
+    {
+     "hex": "#C83839",
+     "rgb": [
+      200,
+      56,
+      57
+     ],
+     "rgb565": 51655,
+     "rgb565_hex": "0xC9C7"
+    },
+    {
+     "hex": "#E84142",
+     "rgb": [
+      232,
+      65,
+      66
+     ],
+     "rgb565": 59912,
+     "rgb565_hex": "0xEA08"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#C83839",
+     "rgb": [
+      200,
+      56,
+      57
+     ],
+     "rgb565": 51655,
+     "rgb565_hex": "0xC9C7"
+    },
+    {
+     "hex": "#A22E2E",
+     "rgb": [
+      162,
+      46,
+      46
+     ],
+     "rgb565": 41317,
+     "rgb565_hex": "0xA165"
+    },
+    {
+     "hex": "#742021",
+     "rgb": [
+      116,
+      32,
+      33
+     ],
+     "rgb565": 28932,
+     "rgb565_hex": "0x7104"
+    },
+    {
+     "hex": "#461414",
+     "rgb": [
+      70,
+      20,
+      20
+     ],
+     "rgb565": 16546,
+     "rgb565_hex": "0x40A2"
+    },
+    {
+     "hex": "#230A0A",
+     "rgb": [
+      35,
+      10,
+      10
+     ],
+     "rgb565": 8257,
+     "rgb565_hex": "0x2041"
+    }
+   ]
+  },
+  "CHAIN:BASE": {
+   "fill": {
+    "hex": "#0000FF",
+    "rgb": [
+     0,
+     0,
+     255
+    ],
+    "rgb565": 31,
+    "rgb565_hex": "0x001F"
+   },
+   "fill_override": {
+    "hex": "#FFFFFF",
+    "rgb": [
+     255,
+     255,
+     255
+    ],
+    "rgb565": 65535,
+    "rgb565_hex": "0xFFFF"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#000026",
+     "rgb": [
+      0,
+      0,
+      38
+     ],
+     "rgb565": 4,
+     "rgb565_hex": "0x0004"
+    },
+    {
+     "hex": "#00004C",
+     "rgb": [
+      0,
+      0,
+      76
+     ],
+     "rgb565": 9,
+     "rgb565_hex": "0x0009"
+    },
+    {
+     "hex": "#000080",
+     "rgb": [
+      0,
+      0,
+      128
+     ],
+     "rgb565": 16,
+     "rgb565_hex": "0x0010"
+    },
+    {
+     "hex": "#0000B2",
+     "rgb": [
+      0,
+      0,
+      178
+     ],
+     "rgb565": 22,
+     "rgb565_hex": "0x0016"
+    },
+    {
+     "hex": "#0000DB",
+     "rgb": [
+      0,
+      0,
+      219
+     ],
+     "rgb565": 27,
+     "rgb565_hex": "0x001B"
+    },
+    {
+     "hex": "#0000FF",
+     "rgb": [
+      0,
+      0,
+      255
+     ],
+     "rgb565": 31,
+     "rgb565_hex": "0x001F"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#0000DB",
+     "rgb": [
+      0,
+      0,
+      219
+     ],
+     "rgb565": 27,
+     "rgb565_hex": "0x001B"
+    },
+    {
+     "hex": "#0000B2",
+     "rgb": [
+      0,
+      0,
+      178
+     ],
+     "rgb565": 22,
+     "rgb565_hex": "0x0016"
+    },
+    {
+     "hex": "#000080",
+     "rgb": [
+      0,
+      0,
+      128
+     ],
+     "rgb565": 16,
+     "rgb565_hex": "0x0010"
+    },
+    {
+     "hex": "#00004C",
+     "rgb": [
+      0,
+      0,
+      76
+     ],
+     "rgb565": 9,
+     "rgb565_hex": "0x0009"
+    },
+    {
+     "hex": "#000026",
+     "rgb": [
+      0,
+      0,
+      38
+     ],
+     "rgb565": 4,
+     "rgb565_hex": "0x0004"
+    }
+   ]
+  },
+  "CHAIN:BNB": {
+   "fill": {
+    "hex": "#F0B90B",
+    "rgb": [
+     240,
+     185,
+     11
+    ],
+    "rgb565": 62913,
+    "rgb565_hex": "0xF5C1"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#241C02",
+     "rgb": [
+      36,
+      28,
+      2
+     ],
+     "rgb565": 8416,
+     "rgb565_hex": "0x20E0"
+    },
+    {
+     "hex": "#483803",
+     "rgb": [
+      72,
+      56,
+      3
+     ],
+     "rgb565": 18880,
+     "rgb565_hex": "0x49C0"
+    },
+    {
+     "hex": "#785C06",
+     "rgb": [
+      120,
+      92,
+      6
+     ],
+     "rgb565": 31456,
+     "rgb565_hex": "0x7AE0"
+    },
+    {
+     "hex": "#A88208",
+     "rgb": [
+      168,
+      130,
+      8
+     ],
+     "rgb565": 44033,
+     "rgb565_hex": "0xAC01"
+    },
+    {
+     "hex": "#CE9F09",
+     "rgb": [
+      206,
+      159,
+      9
+     ],
+     "rgb565": 52449,
+     "rgb565_hex": "0xCCE1"
+    },
+    {
+     "hex": "#F0B90B",
+     "rgb": [
+      240,
+      185,
+      11
+     ],
+     "rgb565": 62913,
+     "rgb565_hex": "0xF5C1"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#CE9F09",
+     "rgb": [
+      206,
+      159,
+      9
+     ],
+     "rgb565": 52449,
+     "rgb565_hex": "0xCCE1"
+    },
+    {
+     "hex": "#A88208",
+     "rgb": [
+      168,
+      130,
+      8
+     ],
+     "rgb565": 44033,
+     "rgb565_hex": "0xAC01"
+    },
+    {
+     "hex": "#785C06",
+     "rgb": [
+      120,
+      92,
+      6
+     ],
+     "rgb565": 31456,
+     "rgb565_hex": "0x7AE0"
+    },
+    {
+     "hex": "#483803",
+     "rgb": [
+      72,
+      56,
+      3
+     ],
+     "rgb565": 18880,
+     "rgb565_hex": "0x49C0"
+    },
+    {
+     "hex": "#241C02",
+     "rgb": [
+      36,
+      28,
+      2
+     ],
+     "rgb565": 8416,
+     "rgb565_hex": "0x20E0"
+    }
+   ]
+  },
+  "CHAIN:LINEA": {
+   "fill": {
+    "hex": "#61DFFF",
+    "rgb": [
+     97,
+     223,
+     255
+    ],
+    "rgb565": 26367,
+    "rgb565_hex": "0x66FF"
+   },
+   "fill_override": {
+    "hex": "#000000",
+    "rgb": [
+     0,
+     0,
+     0
+    ],
+    "rgb565": 0,
+    "rgb565_hex": "0x0000"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#0F2126",
+     "rgb": [
+      15,
+      33,
+      38
+     ],
+     "rgb565": 2308,
+     "rgb565_hex": "0x0904"
+    },
+    {
+     "hex": "#1D434C",
+     "rgb": [
+      29,
+      67,
+      76
+     ],
+     "rgb565": 6665,
+     "rgb565_hex": "0x1A09"
+    },
+    {
+     "hex": "#307080",
+     "rgb": [
+      48,
+      112,
+      128
+     ],
+     "rgb565": 13200,
+     "rgb565_hex": "0x3390"
+    },
+    {
+     "hex": "#449CB2",
+     "rgb": [
+      68,
+      156,
+      178
+     ],
+     "rgb565": 17654,
+     "rgb565_hex": "0x44F6"
+    },
+    {
+     "hex": "#53C0DB",
+     "rgb": [
+      83,
+      192,
+      219
+     ],
+     "rgb565": 22043,
+     "rgb565_hex": "0x561B"
+    },
+    {
+     "hex": "#61DFFF",
+     "rgb": [
+      97,
+      223,
+      255
+     ],
+     "rgb565": 26367,
+     "rgb565_hex": "0x66FF"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#53C0DB",
+     "rgb": [
+      83,
+      192,
+      219
+     ],
+     "rgb565": 22043,
+     "rgb565_hex": "0x561B"
+    },
+    {
+     "hex": "#449CB2",
+     "rgb": [
+      68,
+      156,
+      178
+     ],
+     "rgb565": 17654,
+     "rgb565_hex": "0x44F6"
+    },
+    {
+     "hex": "#307080",
+     "rgb": [
+      48,
+      112,
+      128
+     ],
+     "rgb565": 13200,
+     "rgb565_hex": "0x3390"
+    },
+    {
+     "hex": "#1D434C",
+     "rgb": [
+      29,
+      67,
+      76
+     ],
+     "rgb565": 6665,
+     "rgb565_hex": "0x1A09"
+    },
+    {
+     "hex": "#0F2126",
+     "rgb": [
+      15,
+      33,
+      38
+     ],
+     "rgb565": 2308,
+     "rgb565_hex": "0x0904"
+    }
+   ]
+  },
+  "CHAIN:MAINNET": {
+   "fill": {
+    "hex": "#627EEA",
+    "rgb": [
+     98,
+     126,
+     234
+    ],
+    "rgb565": 25597,
+    "rgb565_hex": "0x63FD"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#0F1323",
+     "rgb": [
+      15,
+      19,
+      35
+     ],
+     "rgb565": 2180,
+     "rgb565_hex": "0x0884"
+    },
+    {
+     "hex": "#1D2646",
+     "rgb": [
+      29,
+      38,
+      70
+     ],
+     "rgb565": 6440,
+     "rgb565_hex": "0x1928"
+    },
+    {
+     "hex": "#313F75",
+     "rgb": [
+      49,
+      63,
+      117
+     ],
+     "rgb565": 12782,
+     "rgb565_hex": "0x31EE"
+    },
+    {
+     "hex": "#4558A4",
+     "rgb": [
+      69,
+      88,
+      164
+     ],
+     "rgb565": 17108,
+     "rgb565_hex": "0x42D4"
+    },
+    {
+     "hex": "#546CC9",
+     "rgb": [
+      84,
+      108,
+      201
+     ],
+     "rgb565": 21369,
+     "rgb565_hex": "0x5379"
+    },
+    {
+     "hex": "#627EEA",
+     "rgb": [
+      98,
+      126,
+      234
+     ],
+     "rgb565": 25597,
+     "rgb565_hex": "0x63FD"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#546CC9",
+     "rgb": [
+      84,
+      108,
+      201
+     ],
+     "rgb565": 21369,
+     "rgb565_hex": "0x5379"
+    },
+    {
+     "hex": "#4558A4",
+     "rgb": [
+      69,
+      88,
+      164
+     ],
+     "rgb565": 17108,
+     "rgb565_hex": "0x42D4"
+    },
+    {
+     "hex": "#313F75",
+     "rgb": [
+      49,
+      63,
+      117
+     ],
+     "rgb565": 12782,
+     "rgb565_hex": "0x31EE"
+    },
+    {
+     "hex": "#1D2646",
+     "rgb": [
+      29,
+      38,
+      70
+     ],
+     "rgb565": 6440,
+     "rgb565_hex": "0x1928"
+    },
+    {
+     "hex": "#0F1323",
+     "rgb": [
+      15,
+      19,
+      35
+     ],
+     "rgb565": 2180,
+     "rgb565_hex": "0x0884"
+    }
+   ]
+  },
+  "CHAIN:MANTLE": {
+   "fill": {
+    "hex": "#B4B4B4",
+    "rgb": [
+     180,
+     180,
+     180
+    ],
+    "rgb565": 46518,
+    "rgb565_hex": "0xB5B6"
+   },
+   "fill_override": {
+    "hex": "#000000",
+    "rgb": [
+     0,
+     0,
+     0
+    ],
+    "rgb565": 0,
+    "rgb565_hex": "0x0000"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#1B1B1B",
+     "rgb": [
+      27,
+      27,
+      27
+     ],
+     "rgb565": 6339,
+     "rgb565_hex": "0x18C3"
+    },
+    {
+     "hex": "#363636",
+     "rgb": [
+      54,
+      54,
+      54
+     ],
+     "rgb565": 12710,
+     "rgb565_hex": "0x31A6"
+    },
+    {
+     "hex": "#5A5A5A",
+     "rgb": [
+      90,
+      90,
+      90
+     ],
+     "rgb565": 23243,
+     "rgb565_hex": "0x5ACB"
+    },
+    {
+     "hex": "#7E7E7E",
+     "rgb": [
+      126,
+      126,
+      126
+     ],
+     "rgb565": 31727,
+     "rgb565_hex": "0x7BEF"
+    },
+    {
+     "hex": "#9B9B9B",
+     "rgb": [
+      155,
+      155,
+      155
+     ],
+     "rgb565": 40147,
+     "rgb565_hex": "0x9CD3"
+    },
+    {
+     "hex": "#B4B4B4",
+     "rgb": [
+      180,
+      180,
+      180
+     ],
+     "rgb565": 46518,
+     "rgb565_hex": "0xB5B6"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#9B9B9B",
+     "rgb": [
+      155,
+      155,
+      155
+     ],
+     "rgb565": 40147,
+     "rgb565_hex": "0x9CD3"
+    },
+    {
+     "hex": "#7E7E7E",
+     "rgb": [
+      126,
+      126,
+      126
+     ],
+     "rgb565": 31727,
+     "rgb565_hex": "0x7BEF"
+    },
+    {
+     "hex": "#5A5A5A",
+     "rgb": [
+      90,
+      90,
+      90
+     ],
+     "rgb565": 23243,
+     "rgb565_hex": "0x5ACB"
+    },
+    {
+     "hex": "#363636",
+     "rgb": [
+      54,
+      54,
+      54
+     ],
+     "rgb565": 12710,
+     "rgb565_hex": "0x31A6"
+    },
+    {
+     "hex": "#1B1B1B",
+     "rgb": [
+      27,
+      27,
+      27
+     ],
+     "rgb565": 6339,
+     "rgb565_hex": "0x18C3"
+    }
+   ]
+  },
+  "CHAIN:OP": {
+   "fill": {
+    "hex": "#FF0420",
+    "rgb": [
+     255,
+     4,
+     32
+    ],
+    "rgb565": 63524,
+    "rgb565_hex": "0xF824"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#260105",
+     "rgb": [
+      38,
+      1,
+      5
+     ],
+     "rgb565": 8192,
+     "rgb565_hex": "0x2000"
+    },
+    {
+     "hex": "#4C010A",
+     "rgb": [
+      76,
+      1,
+      10
+     ],
+     "rgb565": 18433,
+     "rgb565_hex": "0x4801"
+    },
+    {
+     "hex": "#800210",
+     "rgb": [
+      128,
+      2,
+      16
+     ],
+     "rgb565": 32770,
+     "rgb565_hex": "0x8002"
+    },
+    {
+     "hex": "#B20316",
+     "rgb": [
+      178,
+      3,
+      22
+     ],
+     "rgb565": 45058,
+     "rgb565_hex": "0xB002"
+    },
+    {
+     "hex": "#DB031C",
+     "rgb": [
+      219,
+      3,
+      28
+     ],
+     "rgb565": 55299,
+     "rgb565_hex": "0xD803"
+    },
+    {
+     "hex": "#FF0420",
+     "rgb": [
+      255,
+      4,
+      32
+     ],
+     "rgb565": 63524,
+     "rgb565_hex": "0xF824"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#DB031C",
+     "rgb": [
+      219,
+      3,
+      28
+     ],
+     "rgb565": 55299,
+     "rgb565_hex": "0xD803"
+    },
+    {
+     "hex": "#B20316",
+     "rgb": [
+      178,
+      3,
+      22
+     ],
+     "rgb565": 45058,
+     "rgb565_hex": "0xB002"
+    },
+    {
+     "hex": "#800210",
+     "rgb": [
+      128,
+      2,
+      16
+     ],
+     "rgb565": 32770,
+     "rgb565_hex": "0x8002"
+    },
+    {
+     "hex": "#4C010A",
+     "rgb": [
+      76,
+      1,
+      10
+     ],
+     "rgb565": 18433,
+     "rgb565_hex": "0x4801"
+    },
+    {
+     "hex": "#260105",
+     "rgb": [
+      38,
+      1,
+      5
+     ],
+     "rgb565": 8192,
+     "rgb565_hex": "0x2000"
+    }
+   ]
+  },
+  "CHAIN:POLYGON": {
+   "fill": {
+    "hex": "#8247E5",
+    "rgb": [
+     130,
+     71,
+     229
+    ],
+    "rgb565": 33340,
+    "rgb565_hex": "0x823C"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#140B22",
+     "rgb": [
+      20,
+      11,
+      34
+     ],
+     "rgb565": 4164,
+     "rgb565_hex": "0x1044"
+    },
+    {
+     "hex": "#271545",
+     "rgb": [
+      39,
+      21,
+      69
+     ],
+     "rgb565": 8360,
+     "rgb565_hex": "0x20A8"
+    },
+    {
+     "hex": "#412472",
+     "rgb": [
+      65,
+      36,
+      114
+     ],
+     "rgb565": 16686,
+     "rgb565_hex": "0x412E"
+    },
+    {
+     "hex": "#5B32A0",
+     "rgb": [
+      91,
+      50,
+      160
+     ],
+     "rgb565": 22932,
+     "rgb565_hex": "0x5994"
+    },
+    {
+     "hex": "#703DC5",
+     "rgb": [
+      112,
+      61,
+      197
+     ],
+     "rgb565": 29176,
+     "rgb565_hex": "0x71F8"
+    },
+    {
+     "hex": "#8247E5",
+     "rgb": [
+      130,
+      71,
+      229
+     ],
+     "rgb565": 33340,
+     "rgb565_hex": "0x823C"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#703DC5",
+     "rgb": [
+      112,
+      61,
+      197
+     ],
+     "rgb565": 29176,
+     "rgb565_hex": "0x71F8"
+    },
+    {
+     "hex": "#5B32A0",
+     "rgb": [
+      91,
+      50,
+      160
+     ],
+     "rgb565": 22932,
+     "rgb565_hex": "0x5994"
+    },
+    {
+     "hex": "#412472",
+     "rgb": [
+      65,
+      36,
+      114
+     ],
+     "rgb565": 16686,
+     "rgb565_hex": "0x412E"
+    },
+    {
+     "hex": "#271545",
+     "rgb": [
+      39,
+      21,
+      69
+     ],
+     "rgb565": 8360,
+     "rgb565_hex": "0x20A8"
+    },
+    {
+     "hex": "#140B22",
+     "rgb": [
+      20,
+      11,
+      34
+     ],
+     "rgb565": 4164,
+     "rgb565_hex": "0x1044"
+    }
+   ]
+  },
+  "CHAIN:SCROLL": {
+   "fill": {
+    "hex": "#FFEEDA",
+    "rgb": [
+     255,
+     238,
+     218
+    ],
+    "rgb565": 65403,
+    "rgb565_hex": "0xFF7B"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#262421",
+     "rgb": [
+      38,
+      36,
+      33
+     ],
+     "rgb565": 8484,
+     "rgb565_hex": "0x2124"
+    },
+    {
+     "hex": "#4C4741",
+     "rgb": [
+      76,
+      71,
+      65
+     ],
+     "rgb565": 18984,
+     "rgb565_hex": "0x4A28"
+    },
+    {
+     "hex": "#80776D",
+     "rgb": [
+      128,
+      119,
+      109
+     ],
+     "rgb565": 33709,
+     "rgb565_hex": "0x83AD"
+    },
+    {
+     "hex": "#B2A799",
+     "rgb": [
+      178,
+      167,
+      153
+     ],
+     "rgb565": 46387,
+     "rgb565_hex": "0xB533"
+    },
+    {
+     "hex": "#DBCDBB",
+     "rgb": [
+      219,
+      205,
+      187
+     ],
+     "rgb565": 56951,
+     "rgb565_hex": "0xDE77"
+    },
+    {
+     "hex": "#FFEEDA",
+     "rgb": [
+      255,
+      238,
+      218
+     ],
+     "rgb565": 65403,
+     "rgb565_hex": "0xFF7B"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#DBCDBB",
+     "rgb": [
+      219,
+      205,
+      187
+     ],
+     "rgb565": 56951,
+     "rgb565_hex": "0xDE77"
+    },
+    {
+     "hex": "#B2A799",
+     "rgb": [
+      178,
+      167,
+      153
+     ],
+     "rgb565": 46387,
+     "rgb565_hex": "0xB533"
+    },
+    {
+     "hex": "#80776D",
+     "rgb": [
+      128,
+      119,
+      109
+     ],
+     "rgb565": 33709,
+     "rgb565_hex": "0x83AD"
+    },
+    {
+     "hex": "#4C4741",
+     "rgb": [
+      76,
+      71,
+      65
+     ],
+     "rgb565": 18984,
+     "rgb565_hex": "0x4A28"
+    },
+    {
+     "hex": "#262421",
+     "rgb": [
+      38,
+      36,
+      33
+     ],
+     "rgb565": 8484,
+     "rgb565_hex": "0x2124"
+    }
+   ]
+  },
+  "CHAIN:ZKSYNC": {
+   "fill": {
+    "hex": "#D7E2F5",
+    "rgb": [
+     215,
+     226,
+     245
+    ],
+    "rgb565": 55070,
+    "rgb565_hex": "0xD71E"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#202225",
+     "rgb": [
+      32,
+      34,
+      37
+     ],
+     "rgb565": 8452,
+     "rgb565_hex": "0x2104"
+    },
+    {
+     "hex": "#40444A",
+     "rgb": [
+      64,
+      68,
+      74
+     ],
+     "rgb565": 16937,
+     "rgb565_hex": "0x4229"
+    },
+    {
+     "hex": "#6C717A",
+     "rgb": [
+      108,
+      113,
+      122
+     ],
+     "rgb565": 27535,
+     "rgb565_hex": "0x6B8F"
+    },
+    {
+     "hex": "#969EAC",
+     "rgb": [
+      150,
+      158,
+      172
+     ],
+     "rgb565": 38133,
+     "rgb565_hex": "0x94F5"
+    },
+    {
+     "hex": "#B9C2D3",
+     "rgb": [
+      185,
+      194,
+      211
+     ],
+     "rgb565": 48666,
+     "rgb565_hex": "0xBE1A"
+    },
+    {
+     "hex": "#D7E2F5",
+     "rgb": [
+      215,
+      226,
+      245
+     ],
+     "rgb565": 55070,
+     "rgb565_hex": "0xD71E"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#B9C2D3",
+     "rgb": [
+      185,
+      194,
+      211
+     ],
+     "rgb565": 48666,
+     "rgb565_hex": "0xBE1A"
+    },
+    {
+     "hex": "#969EAC",
+     "rgb": [
+      150,
+      158,
+      172
+     ],
+     "rgb565": 38133,
+     "rgb565_hex": "0x94F5"
+    },
+    {
+     "hex": "#6C717A",
+     "rgb": [
+      108,
+      113,
+      122
+     ],
+     "rgb565": 27535,
+     "rgb565_hex": "0x6B8F"
+    },
+    {
+     "hex": "#40444A",
+     "rgb": [
+      64,
+      68,
+      74
+     ],
+     "rgb565": 16937,
+     "rgb565_hex": "0x4229"
+    },
+    {
+     "hex": "#202225",
+     "rgb": [
+      32,
+      34,
+      37
+     ],
+     "rgb565": 8452,
+     "rgb565_hex": "0x2104"
+    }
+   ]
+  },
+  "COWSWAP": {
+   "fill": {
+    "hex": "#65D9FF",
+    "rgb": [
+     101,
+     217,
+     255
+    ],
+    "rgb565": 26335,
+    "rgb565_hex": "0x66DF"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#021E34",
+     "rgb": [
+      2,
+      30,
+      52
+     ],
+     "rgb565": 230,
+     "rgb565_hex": "0x00E6"
+    },
+    {
+     "hex": "#012F7A",
+     "rgb": [
+      1,
+      47,
+      122
+     ],
+     "rgb565": 367,
+     "rgb565_hex": "0x016F"
+    },
+    {
+     "hex": "#005EB7",
+     "rgb": [
+      0,
+      94,
+      183
+     ],
+     "rgb565": 758,
+     "rgb565_hex": "0x02F6"
+    },
+    {
+     "hex": "#00A1FF",
+     "rgb": [
+      0,
+      161,
+      255
+     ],
+     "rgb565": 1311,
+     "rgb565_hex": "0x051F"
+    },
+    {
+     "hex": "#3FC4FF",
+     "rgb": [
+      63,
+      196,
+      255
+     ],
+     "rgb565": 15935,
+     "rgb565_hex": "0x3E3F"
+    },
+    {
+     "hex": "#65D9FF",
+     "rgb": [
+      101,
+      217,
+      255
+     ],
+     "rgb565": 26335,
+     "rgb565_hex": "0x66DF"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#3FC4FF",
+     "rgb": [
+      63,
+      196,
+      255
+     ],
+     "rgb565": 15935,
+     "rgb565_hex": "0x3E3F"
+    },
+    {
+     "hex": "#00A1FF",
+     "rgb": [
+      0,
+      161,
+      255
+     ],
+     "rgb565": 1311,
+     "rgb565_hex": "0x051F"
+    },
+    {
+     "hex": "#005EB7",
+     "rgb": [
+      0,
+      94,
+      183
+     ],
+     "rgb565": 758,
+     "rgb565_hex": "0x02F6"
+    },
+    {
+     "hex": "#012F7A",
+     "rgb": [
+      1,
+      47,
+      122
+     ],
+     "rgb565": 367,
+     "rgb565_hex": "0x016F"
+    },
+    {
+     "hex": "#021E34",
+     "rgb": [
+      2,
+      30,
+      52
+     ],
+     "rgb565": 230,
+     "rgb565_hex": "0x00E6"
+    }
+   ]
+  },
+  "DAI": {
+   "fill": {
+    "hex": "#F5AC37",
+    "rgb": [
+     245,
+     172,
+     55
+    ],
+    "rgb565": 62822,
+    "rgb565_hex": "0xF566"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#251A08",
+     "rgb": [
+      37,
+      26,
+      8
+     ],
+     "rgb565": 8385,
+     "rgb565_hex": "0x20C1"
+    },
+    {
+     "hex": "#4A3410",
+     "rgb": [
+      74,
+      52,
+      16
+     ],
+     "rgb565": 18850,
+     "rgb565_hex": "0x49A2"
+    },
+    {
+     "hex": "#7A561C",
+     "rgb": [
+      122,
+      86,
+      28
+     ],
+     "rgb565": 31395,
+     "rgb565_hex": "0x7AA3"
+    },
+    {
+     "hex": "#AC7826",
+     "rgb": [
+      172,
+      120,
+      38
+     ],
+     "rgb565": 43972,
+     "rgb565_hex": "0xABC4"
+    },
+    {
+     "hex": "#D3942F",
+     "rgb": [
+      211,
+      148,
+      47
+     ],
+     "rgb565": 54437,
+     "rgb565_hex": "0xD4A5"
+    },
+    {
+     "hex": "#F5AC37",
+     "rgb": [
+      245,
+      172,
+      55
+     ],
+     "rgb565": 62822,
+     "rgb565_hex": "0xF566"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#D3942F",
+     "rgb": [
+      211,
+      148,
+      47
+     ],
+     "rgb565": 54437,
+     "rgb565_hex": "0xD4A5"
+    },
+    {
+     "hex": "#AC7826",
+     "rgb": [
+      172,
+      120,
+      38
+     ],
+     "rgb565": 43972,
+     "rgb565_hex": "0xABC4"
+    },
+    {
+     "hex": "#7A561C",
+     "rgb": [
+      122,
+      86,
+      28
+     ],
+     "rgb565": 31395,
+     "rgb565_hex": "0x7AA3"
+    },
+    {
+     "hex": "#4A3410",
+     "rgb": [
+      74,
+      52,
+      16
+     ],
+     "rgb565": 18850,
+     "rgb565_hex": "0x49A2"
+    },
+    {
+     "hex": "#251A08",
+     "rgb": [
+      37,
+      26,
+      8
+     ],
+     "rgb565": 8385,
+     "rgb565_hex": "0x20C1"
+    }
+   ]
+  },
+  "ERC7730": {
+   "fill": {
+    "hex": "#DDC019",
+    "rgb": [
+     221,
+     192,
+     25
+    ],
+    "rgb565": 56835,
+    "rgb565_hex": "0xDE03"
+   },
+   "fill_override": {
+    "hex": "#000000",
+    "rgb": [
+     0,
+     0,
+     0
+    ],
+    "rgb565": 0,
+    "rgb565_hex": "0x0000"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#413D2E",
+     "rgb": [
+      65,
+      61,
+      46
+     ],
+     "rgb565": 16869,
+     "rgb565_hex": "0x41E5"
+    },
+    {
+     "hex": "#514B33",
+     "rgb": [
+      81,
+      75,
+      51
+     ],
+     "rgb565": 21062,
+     "rgb565_hex": "0x5246"
+    },
+    {
+     "hex": "#7A6E3B",
+     "rgb": [
+      122,
+      110,
+      59
+     ],
+     "rgb565": 31591,
+     "rgb565_hex": "0x7B67"
+    },
+    {
+     "hex": "#AF992E",
+     "rgb": [
+      175,
+      153,
+      46
+     ],
+     "rgb565": 44229,
+     "rgb565_hex": "0xACC5"
+    },
+    {
+     "hex": "#DDC019",
+     "rgb": [
+      221,
+      192,
+      25
+     ],
+     "rgb565": 56835,
+     "rgb565_hex": "0xDE03"
+    },
+    {
+     "hex": "#DDC019",
+     "rgb": [
+      221,
+      192,
+      25
+     ],
+     "rgb565": 56835,
+     "rgb565_hex": "0xDE03"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#DDC019",
+     "rgb": [
+      221,
+      192,
+      25
+     ],
+     "rgb565": 56835,
+     "rgb565_hex": "0xDE03"
+    },
+    {
+     "hex": "#AF992E",
+     "rgb": [
+      175,
+      153,
+      46
+     ],
+     "rgb565": 44229,
+     "rgb565_hex": "0xACC5"
+    },
+    {
+     "hex": "#7A6E3B",
+     "rgb": [
+      122,
+      110,
+      59
+     ],
+     "rgb565": 31591,
+     "rgb565_hex": "0x7B67"
+    },
+    {
+     "hex": "#514B33",
+     "rgb": [
+      81,
+      75,
+      51
+     ],
+     "rgb565": 21062,
+     "rgb565_hex": "0x5246"
+    },
+    {
+     "hex": "#413D2E",
+     "rgb": [
+      65,
+      61,
+      46
+     ],
+     "rgb565": 16869,
+     "rgb565_hex": "0x41E5"
+    }
+   ]
+  },
+  "FINGERPRINT": {
+   "fill": {
+    "hex": "#F4F4F4",
+    "rgb": [
+     244,
+     244,
+     244
+    ],
+    "rgb565": 63422,
+    "rgb565_hex": "0xF7BE"
+   },
+   "fill_override": {
+    "hex": "#FFFFFF",
+    "rgb": [
+     255,
+     255,
+     255
+    ],
+    "rgb565": 65535,
+    "rgb565_hex": "0xFFFF"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#050505",
+     "rgb": [
+      5,
+      5,
+      5
+     ],
+     "rgb565": 32,
+     "rgb565_hex": "0x0020"
+    },
+    {
+     "hex": "#2E2E2E",
+     "rgb": [
+      46,
+      46,
+      46
+     ],
+     "rgb565": 10597,
+     "rgb565_hex": "0x2965"
+    },
+    {
+     "hex": "#5C5C5C",
+     "rgb": [
+      92,
+      92,
+      92
+     ],
+     "rgb565": 23275,
+     "rgb565_hex": "0x5AEB"
+    },
+    {
+     "hex": "#8F8F8F",
+     "rgb": [
+      143,
+      143,
+      143
+     ],
+     "rgb565": 35953,
+     "rgb565_hex": "0x8C71"
+    },
+    {
+     "hex": "#C4C4C4",
+     "rgb": [
+      196,
+      196,
+      196
+     ],
+     "rgb565": 50744,
+     "rgb565_hex": "0xC638"
+    },
+    {
+     "hex": "#F4F4F4",
+     "rgb": [
+      244,
+      244,
+      244
+     ],
+     "rgb565": 63422,
+     "rgb565_hex": "0xF7BE"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#C4C4C4",
+     "rgb": [
+      196,
+      196,
+      196
+     ],
+     "rgb565": 50744,
+     "rgb565_hex": "0xC638"
+    },
+    {
+     "hex": "#8F8F8F",
+     "rgb": [
+      143,
+      143,
+      143
+     ],
+     "rgb565": 35953,
+     "rgb565_hex": "0x8C71"
+    },
+    {
+     "hex": "#5C5C5C",
+     "rgb": [
+      92,
+      92,
+      92
+     ],
+     "rgb565": 23275,
+     "rgb565_hex": "0x5AEB"
+    },
+    {
+     "hex": "#2E2E2E",
+     "rgb": [
+      46,
+      46,
+      46
+     ],
+     "rgb565": 10597,
+     "rgb565_hex": "0x2965"
+    },
+    {
+     "hex": "#050505",
+     "rgb": [
+      5,
+      5,
+      5
+     ],
+     "rgb565": 32,
+     "rgb565_hex": "0x0020"
+    }
+   ]
+  },
+  "FIRMWARE": {
+   "fill": {
+    "hex": "#F4F4F4",
+    "rgb": [
+     244,
+     244,
+     244
+    ],
+    "rgb565": 63422,
+    "rgb565_hex": "0xF7BE"
+   },
+   "fill_override": {
+    "hex": "#FFFFFF",
+    "rgb": [
+     255,
+     255,
+     255
+    ],
+    "rgb565": 65535,
+    "rgb565_hex": "0xFFFF"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#050505",
+     "rgb": [
+      5,
+      5,
+      5
+     ],
+     "rgb565": 32,
+     "rgb565_hex": "0x0020"
+    },
+    {
+     "hex": "#2E2E2E",
+     "rgb": [
+      46,
+      46,
+      46
+     ],
+     "rgb565": 10597,
+     "rgb565_hex": "0x2965"
+    },
+    {
+     "hex": "#5C5C5C",
+     "rgb": [
+      92,
+      92,
+      92
+     ],
+     "rgb565": 23275,
+     "rgb565_hex": "0x5AEB"
+    },
+    {
+     "hex": "#8F8F8F",
+     "rgb": [
+      143,
+      143,
+      143
+     ],
+     "rgb565": 35953,
+     "rgb565_hex": "0x8C71"
+    },
+    {
+     "hex": "#C4C4C4",
+     "rgb": [
+      196,
+      196,
+      196
+     ],
+     "rgb565": 50744,
+     "rgb565_hex": "0xC638"
+    },
+    {
+     "hex": "#F4F4F4",
+     "rgb": [
+      244,
+      244,
+      244
+     ],
+     "rgb565": 63422,
+     "rgb565_hex": "0xF7BE"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#C4C4C4",
+     "rgb": [
+      196,
+      196,
+      196
+     ],
+     "rgb565": 50744,
+     "rgb565_hex": "0xC638"
+    },
+    {
+     "hex": "#8F8F8F",
+     "rgb": [
+      143,
+      143,
+      143
+     ],
+     "rgb565": 35953,
+     "rgb565_hex": "0x8C71"
+    },
+    {
+     "hex": "#5C5C5C",
+     "rgb": [
+      92,
+      92,
+      92
+     ],
+     "rgb565": 23275,
+     "rgb565_hex": "0x5AEB"
+    },
+    {
+     "hex": "#2E2E2E",
+     "rgb": [
+      46,
+      46,
+      46
+     ],
+     "rgb565": 10597,
+     "rgb565_hex": "0x2965"
+    },
+    {
+     "hex": "#050505",
+     "rgb": [
+      5,
+      5,
+      5
+     ],
+     "rgb565": 32,
+     "rgb565_hex": "0x0020"
+    }
+   ]
+  },
+  "ROTATE": {
+   "fill": {
+    "hex": "#DDC019",
+    "rgb": [
+     221,
+     192,
+     25
+    ],
+    "rgb565": 56835,
+    "rgb565_hex": "0xDE03"
+   },
+   "fill_override": {
+    "hex": "#000000",
+    "rgb": [
+     0,
+     0,
+     0
+    ],
+    "rgb565": 0,
+    "rgb565_hex": "0x0000"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#413D2E",
+     "rgb": [
+      65,
+      61,
+      46
+     ],
+     "rgb565": 16869,
+     "rgb565_hex": "0x41E5"
+    },
+    {
+     "hex": "#514B33",
+     "rgb": [
+      81,
+      75,
+      51
+     ],
+     "rgb565": 21062,
+     "rgb565_hex": "0x5246"
+    },
+    {
+     "hex": "#7A6E3B",
+     "rgb": [
+      122,
+      110,
+      59
+     ],
+     "rgb565": 31591,
+     "rgb565_hex": "0x7B67"
+    },
+    {
+     "hex": "#AF992E",
+     "rgb": [
+      175,
+      153,
+      46
+     ],
+     "rgb565": 44229,
+     "rgb565_hex": "0xACC5"
+    },
+    {
+     "hex": "#DDC019",
+     "rgb": [
+      221,
+      192,
+      25
+     ],
+     "rgb565": 56835,
+     "rgb565_hex": "0xDE03"
+    },
+    {
+     "hex": "#DDC019",
+     "rgb": [
+      221,
+      192,
+      25
+     ],
+     "rgb565": 56835,
+     "rgb565_hex": "0xDE03"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#DDC019",
+     "rgb": [
+      221,
+      192,
+      25
+     ],
+     "rgb565": 56835,
+     "rgb565_hex": "0xDE03"
+    },
+    {
+     "hex": "#AF992E",
+     "rgb": [
+      175,
+      153,
+      46
+     ],
+     "rgb565": 44229,
+     "rgb565_hex": "0xACC5"
+    },
+    {
+     "hex": "#7A6E3B",
+     "rgb": [
+      122,
+      110,
+      59
+     ],
+     "rgb565": 31591,
+     "rgb565_hex": "0x7B67"
+    },
+    {
+     "hex": "#514B33",
+     "rgb": [
+      81,
+      75,
+      51
+     ],
+     "rgb565": 21062,
+     "rgb565_hex": "0x5246"
+    },
+    {
+     "hex": "#413D2E",
+     "rgb": [
+      65,
+      61,
+      46
+     ],
+     "rgb565": 16869,
+     "rgb565_hex": "0x41E5"
+    }
+   ]
+  },
+  "SAFE": {
+   "fill": {
+    "hex": "#13FF7F",
+    "rgb": [
+     19,
+     255,
+     127
+    ],
+    "rgb565": 6127,
+    "rgb565_hex": "0x17EF"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#354E40",
+     "rgb": [
+      53,
+      78,
+      64
+     ],
+     "rgb565": 12904,
+     "rgb565_hex": "0x3268"
+    },
+    {
+     "hex": "#3F6852",
+     "rgb": [
+      63,
+      104,
+      82
+     ],
+     "rgb565": 15178,
+     "rgb565_hex": "0x3B4A"
+    },
+    {
+     "hex": "#3F9265",
+     "rgb": [
+      63,
+      146,
+      101
+     ],
+     "rgb565": 15500,
+     "rgb565_hex": "0x3C8C"
+    },
+    {
+     "hex": "#34C275",
+     "rgb": [
+      52,
+      194,
+      117
+     ],
+     "rgb565": 13838,
+     "rgb565_hex": "0x360E"
+    },
+    {
+     "hex": "#20DD77",
+     "rgb": [
+      32,
+      221,
+      119
+     ],
+     "rgb565": 9966,
+     "rgb565_hex": "0x26EE"
+    },
+    {
+     "hex": "#13FF7F",
+     "rgb": [
+      19,
+      255,
+      127
+     ],
+     "rgb565": 6127,
+     "rgb565_hex": "0x17EF"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#20DD77",
+     "rgb": [
+      32,
+      221,
+      119
+     ],
+     "rgb565": 9966,
+     "rgb565_hex": "0x26EE"
+    },
+    {
+     "hex": "#34C275",
+     "rgb": [
+      52,
+      194,
+      117
+     ],
+     "rgb565": 13838,
+     "rgb565_hex": "0x360E"
+    },
+    {
+     "hex": "#3F9265",
+     "rgb": [
+      63,
+      146,
+      101
+     ],
+     "rgb565": 15500,
+     "rgb565_hex": "0x3C8C"
+    },
+    {
+     "hex": "#3F6852",
+     "rgb": [
+      63,
+      104,
+      82
+     ],
+     "rgb565": 15178,
+     "rgb565_hex": "0x3B4A"
+    },
+    {
+     "hex": "#354E40",
+     "rgb": [
+      53,
+      78,
+      64
+     ],
+     "rgb565": 12904,
+     "rgb565_hex": "0x3268"
+    }
+   ]
+  },
+  "USDC": {
+   "fill": {
+    "hex": "#2775CA",
+    "rgb": [
+     39,
+     117,
+     202
+    ],
+    "rgb565": 9145,
+    "rgb565_hex": "0x23B9"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#06121E",
+     "rgb": [
+      6,
+      18,
+      30
+     ],
+     "rgb565": 131,
+     "rgb565_hex": "0x0083"
+    },
+    {
+     "hex": "#0C233D",
+     "rgb": [
+      12,
+      35,
+      61
+     ],
+     "rgb565": 2311,
+     "rgb565_hex": "0x0907"
+    },
+    {
+     "hex": "#143A65",
+     "rgb": [
+      20,
+      58,
+      101
+     ],
+     "rgb565": 4556,
+     "rgb565_hex": "0x11CC"
+    },
+    {
+     "hex": "#1B528D",
+     "rgb": [
+      27,
+      82,
+      141
+     ],
+     "rgb565": 6801,
+     "rgb565_hex": "0x1A91"
+    },
+    {
+     "hex": "#2265AE",
+     "rgb": [
+      34,
+      101,
+      174
+     ],
+     "rgb565": 9013,
+     "rgb565_hex": "0x2335"
+    },
+    {
+     "hex": "#2775CA",
+     "rgb": [
+      39,
+      117,
+      202
+     ],
+     "rgb565": 9145,
+     "rgb565_hex": "0x23B9"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#2265AE",
+     "rgb": [
+      34,
+      101,
+      174
+     ],
+     "rgb565": 9013,
+     "rgb565_hex": "0x2335"
+    },
+    {
+     "hex": "#1B528D",
+     "rgb": [
+      27,
+      82,
+      141
+     ],
+     "rgb565": 6801,
+     "rgb565_hex": "0x1A91"
+    },
+    {
+     "hex": "#143A65",
+     "rgb": [
+      20,
+      58,
+      101
+     ],
+     "rgb565": 4556,
+     "rgb565_hex": "0x11CC"
+    },
+    {
+     "hex": "#0C233D",
+     "rgb": [
+      12,
+      35,
+      61
+     ],
+     "rgb565": 2311,
+     "rgb565_hex": "0x0907"
+    },
+    {
+     "hex": "#06121E",
+     "rgb": [
+      6,
+      18,
+      30
+     ],
+     "rgb565": 131,
+     "rgb565_hex": "0x0083"
+    }
+   ]
+  },
+  "USDT": {
+   "fill": {
+    "hex": "#50AF95",
+    "rgb": [
+     80,
+     175,
+     149
+    ],
+    "rgb565": 21874,
+    "rgb565_hex": "0x5572"
+   },
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "pinned_by_name": true,
+   "stops": [
+    {
+     "hex": "#0C1A16",
+     "rgb": [
+      12,
+      26,
+      22
+     ],
+     "rgb565": 2242,
+     "rgb565_hex": "0x08C2"
+    },
+    {
+     "hex": "#18342D",
+     "rgb": [
+      24,
+      52,
+      45
+     ],
+     "rgb565": 6565,
+     "rgb565_hex": "0x19A5"
+    },
+    {
+     "hex": "#28584A",
+     "rgb": [
+      40,
+      88,
+      74
+     ],
+     "rgb565": 10953,
+     "rgb565_hex": "0x2AC9"
+    },
+    {
+     "hex": "#387A68",
+     "rgb": [
+      56,
+      122,
+      104
+     ],
+     "rgb565": 15309,
+     "rgb565_hex": "0x3BCD"
+    },
+    {
+     "hex": "#459680",
+     "rgb": [
+      69,
+      150,
+      128
+     ],
+     "rgb565": 17584,
+     "rgb565_hex": "0x44B0"
+    },
+    {
+     "hex": "#50AF95",
+     "rgb": [
+      80,
+      175,
+      149
+     ],
+     "rgb565": 21874,
+     "rgb565_hex": "0x5572"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#459680",
+     "rgb": [
+      69,
+      150,
+      128
+     ],
+     "rgb565": 17584,
+     "rgb565_hex": "0x44B0"
+    },
+    {
+     "hex": "#387A68",
+     "rgb": [
+      56,
+      122,
+      104
+     ],
+     "rgb565": 15309,
+     "rgb565_hex": "0x3BCD"
+    },
+    {
+     "hex": "#28584A",
+     "rgb": [
+      40,
+      88,
+      74
+     ],
+     "rgb565": 10953,
+     "rgb565_hex": "0x2AC9"
+    },
+    {
+     "hex": "#18342D",
+     "rgb": [
+      24,
+      52,
+      45
+     ],
+     "rgb565": 6565,
+     "rgb565_hex": "0x19A5"
+    },
+    {
+     "hex": "#0C1A16",
+     "rgb": [
+      12,
+      26,
+      22
+     ],
+     "rgb565": 2242,
+     "rgb565_hex": "0x08C2"
+    }
+   ]
+  }
+ },
+ "chains": {
+  "colors": {
+   "CHAIN:ARBITRUM": {
+    "hex": "#1554C8",
+    "rgb": [
+     21,
+     84,
+     200
+    ],
+    "rgb565": 4793,
+    "rgb565_hex": "0x12B9"
+   },
+   "CHAIN:AVALANCHE": {
+    "hex": "#E84142",
+    "rgb": [
+     232,
+     65,
+     66
+    ],
+    "rgb565": 59912,
+    "rgb565_hex": "0xEA08"
+   },
+   "CHAIN:BASE": {
+    "hex": "#0000FF",
+    "rgb": [
+     0,
+     0,
+     255
+    ],
+    "rgb565": 31,
+    "rgb565_hex": "0x001F"
+   },
+   "CHAIN:BNB": {
+    "hex": "#F0B90B",
+    "rgb": [
+     240,
+     185,
+     11
+    ],
+    "rgb565": 62913,
+    "rgb565_hex": "0xF5C1"
+   },
+   "CHAIN:LINEA": {
+    "hex": "#61DFFF",
+    "rgb": [
+     97,
+     223,
+     255
+    ],
+    "rgb565": 26367,
+    "rgb565_hex": "0x66FF"
+   },
+   "CHAIN:MAINNET": {
+    "hex": "#627EEA",
+    "rgb": [
+     98,
+     126,
+     234
+    ],
+    "rgb565": 25597,
+    "rgb565_hex": "0x63FD"
+   },
+   "CHAIN:MANTLE": {
+    "hex": "#B4B4B4",
+    "rgb": [
+     180,
+     180,
+     180
+    ],
+    "rgb565": 46518,
+    "rgb565_hex": "0xB5B6"
+   },
+   "CHAIN:OP": {
+    "hex": "#FF0420",
+    "rgb": [
+     255,
+     4,
+     32
+    ],
+    "rgb565": 63524,
+    "rgb565_hex": "0xF824"
+   },
+   "CHAIN:POLYGON": {
+    "hex": "#8247E5",
+    "rgb": [
+     130,
+     71,
+     229
+    ],
+    "rgb565": 33340,
+    "rgb565_hex": "0x823C"
+   },
+   "CHAIN:SCROLL": {
+    "hex": "#FFEEDA",
+    "rgb": [
+     255,
+     238,
+     218
+    ],
+    "rgb565": 65403,
+    "rgb565_hex": "0xFF7B"
+   },
+   "CHAIN:ZKSYNC": {
+    "hex": "#D7E2F5",
+    "rgb": [
+     215,
+     226,
+     245
+    ],
+    "rgb565": 55070,
+    "rgb565_hex": "0xD71E"
+   }
+  },
+  "dark_mark_luma": 0.62,
+  "disc_fill": {
+   "CHAIN:BASE": {
+    "hex": "#FFFFFF",
+    "rgb": [
+     255,
+     255,
+     255
+    ],
+    "rgb565": 65535,
+    "rgb565_hex": "0xFFFF"
+   },
+   "CHAIN:LINEA": {
+    "hex": "#000000",
+    "rgb": [
+     0,
+     0,
+     0
+    ],
+    "rgb565": 0,
+    "rgb565_hex": "0x0000"
+   },
+   "CHAIN:MANTLE": {
+    "hex": "#000000",
+    "rgb": [
+     0,
+     0,
+     0
+    ],
+    "rgb565": 0,
+    "rgb565_hex": "0x0000"
+   }
+  },
+  "key_rule": "keys are namespaced CHAIN:<NAME> because OP, BNB, BASE and SCROLL are also token tickers and token_ramp resolves any palette string matching a brand key",
+  "luma_weights": [
+   0.2126,
+   0.7152,
+   0.0722
+  ],
+  "mark_colors": {
+   "CHAIN:BASE": {
+    "hex": "#0000FF",
+    "rgb": [
+     0,
+     0,
+     255
+    ],
+    "rgb565": 31,
+    "rgb565_hex": "0x001F"
+   },
+   "CHAIN:ZKSYNC": {
+    "hex": "#051A6A",
+    "rgb": [
+     5,
+     26,
+     106
+    ],
+    "rgb565": 205,
+    "rgb565_hex": "0x00CD"
+   }
+  },
+  "mark_rule": "the mark a chain disc knocks out is WHITE, or BLACK once luma(fill) > dark_mark_luma — read off the disc's ACTUAL fill (disc_fill where pinned, else the ramp's stop 6); a chain in mark_colors pins its own instead",
+  "source": "pq1/colors.py:420"
+ },
+ "contrast_floors": {
+  "mark_vs_disc": 3.0,
+  "placeholder_fill_vs_white": 4.5,
+  "rule": "a placeholder disc's fill stop must read at least 4.5:1 against WHITE (it carries the white ring and a white mark, so the mark is read as a glyph); any mark must read 3:1 against the disc it lands on, the bar for a meaningful graphic. WCAG relative luminance, sRGB-linearized — NOT colors.luma, which is the un-linearized dark/light test mark_color uses and understates a mid-tone disc by roughly half. Ported colours must be re-measured after RGB565 quantisation, which only eats margin. Enforced by C-CONTRAST and F-MARKCONTRAST.",
+  "source": "pq1/colors.py:126"
+ },
+ "hash_rule": {
+  "expr": "zlib.crc32(str(key).upper().encode()) % MONO_RAMP",
+  "function": "placeholder_index",
+  "mono_ramp": 13,
+  "neutral_ramp": 10,
+  "ramps": 14,
+  "rule": "a string (symbol, name or contract address) hashes over ramps 0..mono_ramp-1, so an unrecognized token can never wear the recognized-token look; an int wraps over all of them, so token={'palette': MONO_RAMP} is the one way in. Resolution order is palette -> address -> symbol -> the screen's icon -> neutral_ramp (components.token_ramp); a palette naming a brand ramp is pinned by name, never hashed. Enforced by the checker rule C-RAMP.",
+  "source": "pq1/colors.py:299",
+  "space": 13
+ },
+ "hold_film": {
+  "HOLD_DARK_BODY": {
+   "note": "body luma below this counts as a black body, so the film goes white",
+   "source": "pq1/components.py:715",
+   "value": 0.15
+  },
+  "HOLD_OVERLAY_ALPHA": {
+   "note": "the hold film's opacity — black over a coloured body, white inside a black one",
+   "source": "pq1/components.py:714",
+   "value": 0.3
+  }
+ },
+ "ink_tints": {
+  "named": {
+   "INK_MUTED": {
+    "note": "the seed-word numbers beside their words",
+    "of": "WHITE",
+    "source": "pq1/colors.py:55",
+    "swatch": {
+     "hex": "#808080",
+     "rgb": [
+      128,
+      128,
+      128
+     ],
+     "rgb565": 33808,
+     "rgb565_hex": "0x8410"
+    },
+    "value": 0.5
+   },
+   "INK_PAGING": {
+    "note": "the n/m pager and the PIN hint labels",
+    "of": "WHITE",
+    "source": "pq1/colors.py:54",
+    "swatch": {
+     "hex": "#CCCCCC",
+     "rgb": [
+      204,
+      204,
+      204
+     ],
+     "rgb565": 52857,
+     "rgb565_hex": "0xCE79"
+    },
+    "value": 0.8
+   },
+   "INK_SECONDARY": {
+    "note": "the PIN idle ring — ink that is not text",
+    "of": "WHITE",
+    "source": "pq1/colors.py:51",
+    "swatch": {
+     "hex": "#B2B2B2",
+     "rgb": [
+      178,
+      178,
+      178
+     ],
+     "rgb565": 46486,
+     "rgb565_hex": "0xB596"
+    },
+    "value": 0.7
+   },
+   "PAGER_ALPHA": {
+    "alias_of": "INK_PAGING",
+    "note": "the n/m pager's 80 % white",
+    "of": "WHITE",
+    "source": "pq1/components.py:563",
+    "swatch": {
+     "hex": "#CCCCCC",
+     "rgb": [
+      204,
+      204,
+      204
+     ],
+     "rgb565": 52857,
+     "rgb565_hex": "0xCE79"
+    },
+    "value": 0.8
+   },
+   "PULSE_PEAK_ALPHA": {
+    "note": "the pulse ring's peak alpha, decaying to 0 across its life",
+    "of": null,
+    "source": "pq1/colors.py:59",
+    "value": 0.4
+   },
+   "WORDS_NUM_ALPHA": {
+    "alias_of": "INK_MUTED",
+    "note": "the seed-word numbers' grey",
+    "of": "WHITE",
+    "source": "pq1/layout.py:384",
+    "swatch": {
+     "hex": "#808080",
+     "rgb": [
+      128,
+      128,
+      128
+     ],
+     "rgb565": 33808,
+     "rgb565_hex": "0x8410"
+    },
+    "value": 0.5
+   }
+  },
+  "rule": "a tint is the colour scaled toward black (colors.scale) on the pure-black panel — the system's alpha idiom",
+  "unnamed": {}
+ },
+ "note": "Every colour the renderer can paint, dumped from pq1/colors.py. Each swatch carries rgb, hex and the RGB565 word the NV3007 takes. `tokens` is the flat table scripts/port_diff.py pairs against a port's ui_colors.h (each row's `role`: \"base\" a colour every port defines by name, \"ramp\" one stop of a table it more likely copies whole); everything else is the structure a screen reads. Colour is identity on a signing screen: a ramp stop that differs changes what the user checks.",
+ "placeholder_ramps": [
+  {
+   "fill": {
+    "hex": "#8A7500",
+    "rgb": [
+     138,
+     117,
+     0
+    ],
+    "rgb565": 35744,
+    "rgb565_hex": "0x8BA0"
+   },
+   "index": 0,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#413D2E",
+     "rgb": [
+      65,
+      61,
+      46
+     ],
+     "rgb565": 16869,
+     "rgb565_hex": "0x41E5"
+    },
+    {
+     "hex": "#4F482C",
+     "rgb": [
+      79,
+      72,
+      44
+     ],
+     "rgb565": 19013,
+     "rgb565_hex": "0x4A45"
+    },
+    {
+     "hex": "#5D5329",
+     "rgb": [
+      93,
+      83,
+      41
+     ],
+     "rgb565": 23173,
+     "rgb565_hex": "0x5A85"
+    },
+    {
+     "hex": "#6C5E23",
+     "rgb": [
+      108,
+      94,
+      35
+     ],
+     "rgb565": 27364,
+     "rgb565_hex": "0x6AE4"
+    },
+    {
+     "hex": "#7B6919",
+     "rgb": [
+      123,
+      105,
+      25
+     ],
+     "rgb565": 31555,
+     "rgb565_hex": "0x7B43"
+    },
+    {
+     "hex": "#8A7500",
+     "rgb": [
+      138,
+      117,
+      0
+     ],
+     "rgb565": 35744,
+     "rgb565_hex": "0x8BA0"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#7B6919",
+     "rgb": [
+      123,
+      105,
+      25
+     ],
+     "rgb565": 31555,
+     "rgb565_hex": "0x7B43"
+    },
+    {
+     "hex": "#6C5E23",
+     "rgb": [
+      108,
+      94,
+      35
+     ],
+     "rgb565": 27364,
+     "rgb565_hex": "0x6AE4"
+    },
+    {
+     "hex": "#5D5329",
+     "rgb": [
+      93,
+      83,
+      41
+     ],
+     "rgb565": 23173,
+     "rgb565_hex": "0x5A85"
+    },
+    {
+     "hex": "#4F482C",
+     "rgb": [
+      79,
+      72,
+      44
+     ],
+     "rgb565": 19013,
+     "rgb565_hex": "0x4A45"
+    },
+    {
+     "hex": "#413D2E",
+     "rgb": [
+      65,
+      61,
+      46
+     ],
+     "rgb565": 16869,
+     "rgb565_hex": "0x41E5"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#E01E37",
+    "rgb": [
+     224,
+     30,
+     55
+    ],
+    "rgb565": 57574,
+    "rgb565_hex": "0xE0E6"
+   },
+   "index": 1,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#641220",
+     "rgb": [
+      100,
+      18,
+      32
+     ],
+     "rgb565": 24708,
+     "rgb565_hex": "0x6084"
+    },
+    {
+     "hex": "#85182A",
+     "rgb": [
+      133,
+      24,
+      42
+     ],
+     "rgb565": 32965,
+     "rgb565_hex": "0x80C5"
+    },
+    {
+     "hex": "#A71E34",
+     "rgb": [
+      167,
+      30,
+      52
+     ],
+     "rgb565": 41190,
+     "rgb565_hex": "0xA0E6"
+    },
+    {
+     "hex": "#B21E35",
+     "rgb": [
+      178,
+      30,
+      53
+     ],
+     "rgb565": 45286,
+     "rgb565_hex": "0xB0E6"
+    },
+    {
+     "hex": "#C71F37",
+     "rgb": [
+      199,
+      31,
+      55
+     ],
+     "rgb565": 49382,
+     "rgb565_hex": "0xC0E6"
+    },
+    {
+     "hex": "#E01E37",
+     "rgb": [
+      224,
+      30,
+      55
+     ],
+     "rgb565": 57574,
+     "rgb565_hex": "0xE0E6"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#C71F37",
+     "rgb": [
+      199,
+      31,
+      55
+     ],
+     "rgb565": 49382,
+     "rgb565_hex": "0xC0E6"
+    },
+    {
+     "hex": "#B21E35",
+     "rgb": [
+      178,
+      30,
+      53
+     ],
+     "rgb565": 45286,
+     "rgb565_hex": "0xB0E6"
+    },
+    {
+     "hex": "#A71E34",
+     "rgb": [
+      167,
+      30,
+      52
+     ],
+     "rgb565": 41190,
+     "rgb565_hex": "0xA0E6"
+    },
+    {
+     "hex": "#85182A",
+     "rgb": [
+      133,
+      24,
+      42
+     ],
+     "rgb565": 32965,
+     "rgb565_hex": "0x80C5"
+    },
+    {
+     "hex": "#641220",
+     "rgb": [
+      100,
+      18,
+      32
+     ],
+     "rgb565": 24708,
+     "rgb565_hex": "0x6084"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#007EB2",
+    "rgb": [
+     0,
+     126,
+     178
+    ],
+    "rgb565": 1014,
+    "rgb565_hex": "0x03F6"
+   },
+   "index": 2,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#051923",
+     "rgb": [
+      5,
+      25,
+      35
+     ],
+     "rgb565": 196,
+     "rgb565_hex": "0x00C4"
+    },
+    {
+     "hex": "#002E4A",
+     "rgb": [
+      0,
+      46,
+      74
+     ],
+     "rgb565": 361,
+     "rgb565_hex": "0x0169"
+    },
+    {
+     "hex": "#004F75",
+     "rgb": [
+      0,
+      79,
+      117
+     ],
+     "rgb565": 622,
+     "rgb565_hex": "0x026E"
+    },
+    {
+     "hex": "#006097",
+     "rgb": [
+      0,
+      96,
+      151
+     ],
+     "rgb565": 786,
+     "rgb565_hex": "0x0312"
+    },
+    {
+     "hex": "#0074B1",
+     "rgb": [
+      0,
+      116,
+      177
+     ],
+     "rgb565": 950,
+     "rgb565_hex": "0x03B6"
+    },
+    {
+     "hex": "#007EB2",
+     "rgb": [
+      0,
+      126,
+      178
+     ],
+     "rgb565": 1014,
+     "rgb565_hex": "0x03F6"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#0074B1",
+     "rgb": [
+      0,
+      116,
+      177
+     ],
+     "rgb565": 950,
+     "rgb565_hex": "0x03B6"
+    },
+    {
+     "hex": "#006097",
+     "rgb": [
+      0,
+      96,
+      151
+     ],
+     "rgb565": 786,
+     "rgb565_hex": "0x0312"
+    },
+    {
+     "hex": "#004F75",
+     "rgb": [
+      0,
+      79,
+      117
+     ],
+     "rgb565": 622,
+     "rgb565_hex": "0x026E"
+    },
+    {
+     "hex": "#002E4A",
+     "rgb": [
+      0,
+      46,
+      74
+     ],
+     "rgb565": 361,
+     "rgb565_hex": "0x0169"
+    },
+    {
+     "hex": "#051923",
+     "rgb": [
+      5,
+      25,
+      35
+     ],
+     "rgb565": 196,
+     "rgb565_hex": "0x00C4"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#7E503C",
+    "rgb": [
+     126,
+     80,
+     60
+    ],
+    "rgb565": 31367,
+    "rgb565_hex": "0x7A87"
+   },
+   "index": 3,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#38160D",
+     "rgb": [
+      56,
+      22,
+      13
+     ],
+     "rgb565": 14497,
+     "rgb565_hex": "0x38A1"
+    },
+    {
+     "hex": "#4C261B",
+     "rgb": [
+      76,
+      38,
+      27
+     ],
+     "rgb565": 18723,
+     "rgb565_hex": "0x4923"
+    },
+    {
+     "hex": "#562F21",
+     "rgb": [
+      86,
+      47,
+      33
+     ],
+     "rgb565": 20836,
+     "rgb565_hex": "0x5164"
+    },
+    {
+     "hex": "#603728",
+     "rgb": [
+      96,
+      55,
+      40
+     ],
+     "rgb565": 24997,
+     "rgb565_hex": "0x61A5"
+    },
+    {
+     "hex": "#6A3F2F",
+     "rgb": [
+      106,
+      63,
+      47
+     ],
+     "rgb565": 27109,
+     "rgb565_hex": "0x69E5"
+    },
+    {
+     "hex": "#7E503C",
+     "rgb": [
+      126,
+      80,
+      60
+     ],
+     "rgb565": 31367,
+     "rgb565_hex": "0x7A87"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#6A3F2F",
+     "rgb": [
+      106,
+      63,
+      47
+     ],
+     "rgb565": 27109,
+     "rgb565_hex": "0x69E5"
+    },
+    {
+     "hex": "#603728",
+     "rgb": [
+      96,
+      55,
+      40
+     ],
+     "rgb565": 24997,
+     "rgb565_hex": "0x61A5"
+    },
+    {
+     "hex": "#562F21",
+     "rgb": [
+      86,
+      47,
+      33
+     ],
+     "rgb565": 20836,
+     "rgb565_hex": "0x5164"
+    },
+    {
+     "hex": "#4C261B",
+     "rgb": [
+      76,
+      38,
+      27
+     ],
+     "rgb565": 18723,
+     "rgb565_hex": "0x4923"
+    },
+    {
+     "hex": "#38160D",
+     "rgb": [
+      56,
+      22,
+      13
+     ],
+     "rgb565": 14497,
+     "rgb565_hex": "0x38A1"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#8B2FC9",
+    "rgb": [
+     139,
+     47,
+     201
+    ],
+    "rgb565": 35193,
+    "rgb565_hex": "0x8979"
+   },
+   "index": 4,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#310055",
+     "rgb": [
+      49,
+      0,
+      85
+     ],
+     "rgb565": 12298,
+     "rgb565_hex": "0x300A"
+    },
+    {
+     "hex": "#3C0663",
+     "rgb": [
+      60,
+      6,
+      99
+     ],
+     "rgb565": 14380,
+     "rgb565_hex": "0x382C"
+    },
+    {
+     "hex": "#4A0A77",
+     "rgb": [
+      74,
+      10,
+      119
+     ],
+     "rgb565": 18510,
+     "rgb565_hex": "0x484E"
+    },
+    {
+     "hex": "#5A108F",
+     "rgb": [
+      90,
+      16,
+      143
+     ],
+     "rgb565": 22673,
+     "rgb565_hex": "0x5891"
+    },
+    {
+     "hex": "#6818A5",
+     "rgb": [
+      104,
+      24,
+      165
+     ],
+     "rgb565": 26836,
+     "rgb565_hex": "0x68D4"
+    },
+    {
+     "hex": "#8B2FC9",
+     "rgb": [
+      139,
+      47,
+      201
+     ],
+     "rgb565": 35193,
+     "rgb565_hex": "0x8979"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#6818A5",
+     "rgb": [
+      104,
+      24,
+      165
+     ],
+     "rgb565": 26836,
+     "rgb565_hex": "0x68D4"
+    },
+    {
+     "hex": "#5A108F",
+     "rgb": [
+      90,
+      16,
+      143
+     ],
+     "rgb565": 22673,
+     "rgb565_hex": "0x5891"
+    },
+    {
+     "hex": "#4A0A77",
+     "rgb": [
+      74,
+      10,
+      119
+     ],
+     "rgb565": 18510,
+     "rgb565_hex": "0x484E"
+    },
+    {
+     "hex": "#3C0663",
+     "rgb": [
+      60,
+      6,
+      99
+     ],
+     "rgb565": 14380,
+     "rgb565_hex": "0x382C"
+    },
+    {
+     "hex": "#310055",
+     "rgb": [
+      49,
+      0,
+      85
+     ],
+     "rgb565": 12298,
+     "rgb565_hex": "0x300A"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#B65F1F",
+    "rgb": [
+     182,
+     95,
+     31
+    ],
+    "rgb565": 45795,
+    "rgb565_hex": "0xB2E3"
+   },
+   "index": 5,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#5C2E0C",
+     "rgb": [
+      92,
+      46,
+      12
+     ],
+     "rgb565": 22881,
+     "rgb565_hex": "0x5961"
+    },
+    {
+     "hex": "#703810",
+     "rgb": [
+      112,
+      56,
+      16
+     ],
+     "rgb565": 29122,
+     "rgb565_hex": "0x71C2"
+    },
+    {
+     "hex": "#834314",
+     "rgb": [
+      131,
+      67,
+      20
+     ],
+     "rgb565": 33282,
+     "rgb565_hex": "0x8202"
+    },
+    {
+     "hex": "#954D18",
+     "rgb": [
+      149,
+      77,
+      24
+     ],
+     "rgb565": 37475,
+     "rgb565_hex": "0x9263"
+    },
+    {
+     "hex": "#A6571B",
+     "rgb": [
+      166,
+      87,
+      27
+     ],
+     "rgb565": 41635,
+     "rgb565_hex": "0xA2A3"
+    },
+    {
+     "hex": "#B65F1F",
+     "rgb": [
+      182,
+      95,
+      31
+     ],
+     "rgb565": 45795,
+     "rgb565_hex": "0xB2E3"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#A6571B",
+     "rgb": [
+      166,
+      87,
+      27
+     ],
+     "rgb565": 41635,
+     "rgb565_hex": "0xA2A3"
+    },
+    {
+     "hex": "#954D18",
+     "rgb": [
+      149,
+      77,
+      24
+     ],
+     "rgb565": 37475,
+     "rgb565_hex": "0x9263"
+    },
+    {
+     "hex": "#834314",
+     "rgb": [
+      131,
+      67,
+      20
+     ],
+     "rgb565": 33282,
+     "rgb565_hex": "0x8202"
+    },
+    {
+     "hex": "#703810",
+     "rgb": [
+      112,
+      56,
+      16
+     ],
+     "rgb565": 29122,
+     "rgb565_hex": "0x71C2"
+    },
+    {
+     "hex": "#5C2E0C",
+     "rgb": [
+      92,
+      46,
+      12
+     ],
+     "rgb565": 22881,
+     "rgb565_hex": "0x5961"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#176849",
+    "rgb": [
+     23,
+     104,
+     73
+    ],
+    "rgb565": 4937,
+    "rgb565_hex": "0x1349"
+   },
+   "index": 6,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#031911",
+     "rgb": [
+      3,
+      25,
+      17
+     ],
+     "rgb565": 194,
+     "rgb565_hex": "0x00C2"
+    },
+    {
+     "hex": "#062A1D",
+     "rgb": [
+      6,
+      42,
+      29
+     ],
+     "rgb565": 323,
+     "rgb565_hex": "0x0143"
+    },
+    {
+     "hex": "#083324",
+     "rgb": [
+      8,
+      51,
+      36
+     ],
+     "rgb565": 2436,
+     "rgb565_hex": "0x0984"
+    },
+    {
+     "hex": "#0E4530",
+     "rgb": [
+      14,
+      69,
+      48
+     ],
+     "rgb565": 2598,
+     "rgb565_hex": "0x0A26"
+    },
+    {
+     "hex": "#12563D",
+     "rgb": [
+      18,
+      86,
+      61
+     ],
+     "rgb565": 4775,
+     "rgb565_hex": "0x12A7"
+    },
+    {
+     "hex": "#176849",
+     "rgb": [
+      23,
+      104,
+      73
+     ],
+     "rgb565": 4937,
+     "rgb565_hex": "0x1349"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#12563D",
+     "rgb": [
+      18,
+      86,
+      61
+     ],
+     "rgb565": 4775,
+     "rgb565_hex": "0x12A7"
+    },
+    {
+     "hex": "#0E4530",
+     "rgb": [
+      14,
+      69,
+      48
+     ],
+     "rgb565": 2598,
+     "rgb565_hex": "0x0A26"
+    },
+    {
+     "hex": "#083324",
+     "rgb": [
+      8,
+      51,
+      36
+     ],
+     "rgb565": 2436,
+     "rgb565_hex": "0x0984"
+    },
+    {
+     "hex": "#062A1D",
+     "rgb": [
+      6,
+      42,
+      29
+     ],
+     "rgb565": 323,
+     "rgb565_hex": "0x0143"
+    },
+    {
+     "hex": "#031911",
+     "rgb": [
+      3,
+      25,
+      17
+     ],
+     "rgb565": 194,
+     "rgb565_hex": "0x00C2"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#008482",
+    "rgb": [
+     0,
+     132,
+     130
+    ],
+    "rgb565": 1072,
+    "rgb565_hex": "0x0430"
+   },
+   "index": 7,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#03312E",
+     "rgb": [
+      3,
+      49,
+      46
+     ],
+     "rgb565": 389,
+     "rgb565_hex": "0x0185"
+    },
+    {
+     "hex": "#005252",
+     "rgb": [
+      0,
+      82,
+      82
+     ],
+     "rgb565": 650,
+     "rgb565_hex": "0x028A"
+    },
+    {
+     "hex": "#00675E",
+     "rgb": [
+      0,
+      103,
+      94
+     ],
+     "rgb565": 811,
+     "rgb565_hex": "0x032B"
+    },
+    {
+     "hex": "#006E67",
+     "rgb": [
+      0,
+      110,
+      103
+     ],
+     "rgb565": 876,
+     "rgb565_hex": "0x036C"
+    },
+    {
+     "hex": "#007A76",
+     "rgb": [
+      0,
+      122,
+      118
+     ],
+     "rgb565": 974,
+     "rgb565_hex": "0x03CE"
+    },
+    {
+     "hex": "#008482",
+     "rgb": [
+      0,
+      132,
+      130
+     ],
+     "rgb565": 1072,
+     "rgb565_hex": "0x0430"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#007A76",
+     "rgb": [
+      0,
+      122,
+      118
+     ],
+     "rgb565": 974,
+     "rgb565_hex": "0x03CE"
+    },
+    {
+     "hex": "#006E67",
+     "rgb": [
+      0,
+      110,
+      103
+     ],
+     "rgb565": 876,
+     "rgb565_hex": "0x036C"
+    },
+    {
+     "hex": "#00675E",
+     "rgb": [
+      0,
+      103,
+      94
+     ],
+     "rgb565": 811,
+     "rgb565_hex": "0x032B"
+    },
+    {
+     "hex": "#005252",
+     "rgb": [
+      0,
+      82,
+      82
+     ],
+     "rgb565": 650,
+     "rgb565_hex": "0x028A"
+    },
+    {
+     "hex": "#03312E",
+     "rgb": [
+      3,
+      49,
+      46
+     ],
+     "rgb565": 389,
+     "rgb565_hex": "0x0185"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#C54C71",
+    "rgb": [
+     197,
+     76,
+     113
+    ],
+    "rgb565": 49774,
+    "rgb565_hex": "0xC26E"
+   },
+   "index": 8,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#640E30",
+     "rgb": [
+      100,
+      14,
+      48
+     ],
+     "rgb565": 24678,
+     "rgb565_hex": "0x6066"
+    },
+    {
+     "hex": "#75173A",
+     "rgb": [
+      117,
+      23,
+      58
+     ],
+     "rgb565": 28839,
+     "rgb565_hex": "0x70A7"
+    },
+    {
+     "hex": "#862045",
+     "rgb": [
+      134,
+      32,
+      69
+     ],
+     "rgb565": 33032,
+     "rgb565_hex": "0x8108"
+    },
+    {
+     "hex": "#962A50",
+     "rgb": [
+      150,
+      42,
+      80
+     ],
+     "rgb565": 37194,
+     "rgb565_hex": "0x914A"
+    },
+    {
+     "hex": "#A73255",
+     "rgb": [
+      167,
+      50,
+      85
+     ],
+     "rgb565": 41354,
+     "rgb565_hex": "0xA18A"
+    },
+    {
+     "hex": "#C54C71",
+     "rgb": [
+      197,
+      76,
+      113
+     ],
+     "rgb565": 49774,
+     "rgb565_hex": "0xC26E"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#A73255",
+     "rgb": [
+      167,
+      50,
+      85
+     ],
+     "rgb565": 41354,
+     "rgb565_hex": "0xA18A"
+    },
+    {
+     "hex": "#962A50",
+     "rgb": [
+      150,
+      42,
+      80
+     ],
+     "rgb565": 37194,
+     "rgb565_hex": "0x914A"
+    },
+    {
+     "hex": "#862045",
+     "rgb": [
+      134,
+      32,
+      69
+     ],
+     "rgb565": 33032,
+     "rgb565_hex": "0x8108"
+    },
+    {
+     "hex": "#75173A",
+     "rgb": [
+      117,
+      23,
+      58
+     ],
+     "rgb565": 28839,
+     "rgb565_hex": "0x70A7"
+    },
+    {
+     "hex": "#640E30",
+     "rgb": [
+      100,
+      14,
+      48
+     ],
+     "rgb565": 24678,
+     "rgb565_hex": "0x6066"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#CA4D45",
+    "rgb": [
+     202,
+     77,
+     69
+    ],
+    "rgb565": 51816,
+    "rgb565_hex": "0xCA68"
+   },
+   "index": 9,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#7C050A",
+     "rgb": [
+      124,
+      5,
+      10
+     ],
+     "rgb565": 30753,
+     "rgb565_hex": "0x7821"
+    },
+    {
+     "hex": "#8C1917",
+     "rgb": [
+      140,
+      25,
+      23
+     ],
+     "rgb565": 35010,
+     "rgb565_hex": "0x88C2"
+    },
+    {
+     "hex": "#9B2723",
+     "rgb": [
+      155,
+      39,
+      35
+     ],
+     "rgb565": 39204,
+     "rgb565_hex": "0x9924"
+    },
+    {
+     "hex": "#AA352F",
+     "rgb": [
+      170,
+      53,
+      47
+     ],
+     "rgb565": 43429,
+     "rgb565_hex": "0xA9A5"
+    },
+    {
+     "hex": "#BA4239",
+     "rgb": [
+      186,
+      66,
+      57
+     ],
+     "rgb565": 47623,
+     "rgb565_hex": "0xBA07"
+    },
+    {
+     "hex": "#CA4D45",
+     "rgb": [
+      202,
+      77,
+      69
+     ],
+     "rgb565": 51816,
+     "rgb565_hex": "0xCA68"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#BA4239",
+     "rgb": [
+      186,
+      66,
+      57
+     ],
+     "rgb565": 47623,
+     "rgb565_hex": "0xBA07"
+    },
+    {
+     "hex": "#AA352F",
+     "rgb": [
+      170,
+      53,
+      47
+     ],
+     "rgb565": 43429,
+     "rgb565_hex": "0xA9A5"
+    },
+    {
+     "hex": "#9B2723",
+     "rgb": [
+      155,
+      39,
+      35
+     ],
+     "rgb565": 39204,
+     "rgb565_hex": "0x9924"
+    },
+    {
+     "hex": "#8C1917",
+     "rgb": [
+      140,
+      25,
+      23
+     ],
+     "rgb565": 35010,
+     "rgb565_hex": "0x88C2"
+    },
+    {
+     "hex": "#7C050A",
+     "rgb": [
+      124,
+      5,
+      10
+     ],
+     "rgb565": 30753,
+     "rgb565_hex": "0x7821"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#6A6B70",
+    "rgb": [
+     106,
+     107,
+     112
+    ],
+    "rgb565": 27470,
+    "rgb565_hex": "0x6B4E"
+   },
+   "index": 10,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "role": "neutral grey — the keyless-unknown fallback (token_ramp's last resort)",
+   "stops": [
+    {
+     "hex": "#26262C",
+     "rgb": [
+      38,
+      38,
+      44
+     ],
+     "rgb565": 8485,
+     "rgb565_hex": "0x2125"
+    },
+    {
+     "hex": "#2F3037",
+     "rgb": [
+      47,
+      48,
+      55
+     ],
+     "rgb565": 10630,
+     "rgb565_hex": "0x2986"
+    },
+    {
+     "hex": "#393A41",
+     "rgb": [
+      57,
+      58,
+      65
+     ],
+     "rgb565": 14792,
+     "rgb565_hex": "0x39C8"
+    },
+    {
+     "hex": "#4B4C52",
+     "rgb": [
+      75,
+      76,
+      82
+     ],
+     "rgb565": 19050,
+     "rgb565_hex": "0x4A6A"
+    },
+    {
+     "hex": "#5B5C62",
+     "rgb": [
+      91,
+      92,
+      98
+     ],
+     "rgb565": 23276,
+     "rgb565_hex": "0x5AEC"
+    },
+    {
+     "hex": "#6A6B70",
+     "rgb": [
+      106,
+      107,
+      112
+     ],
+     "rgb565": 27470,
+     "rgb565_hex": "0x6B4E"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#5B5C62",
+     "rgb": [
+      91,
+      92,
+      98
+     ],
+     "rgb565": 23276,
+     "rgb565_hex": "0x5AEC"
+    },
+    {
+     "hex": "#4B4C52",
+     "rgb": [
+      75,
+      76,
+      82
+     ],
+     "rgb565": 19050,
+     "rgb565_hex": "0x4A6A"
+    },
+    {
+     "hex": "#393A41",
+     "rgb": [
+      57,
+      58,
+      65
+     ],
+     "rgb565": 14792,
+     "rgb565_hex": "0x39C8"
+    },
+    {
+     "hex": "#2F3037",
+     "rgb": [
+      47,
+      48,
+      55
+     ],
+     "rgb565": 10630,
+     "rgb565_hex": "0x2986"
+    },
+    {
+     "hex": "#26262C",
+     "rgb": [
+      38,
+      38,
+      44
+     ],
+     "rgb565": 8485,
+     "rgb565_hex": "0x2125"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#8C57BC",
+    "rgb": [
+     140,
+     87,
+     188
+    ],
+    "rgb565": 35511,
+    "rgb565_hex": "0x8AB7"
+   },
+   "index": 11,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#11001C",
+     "rgb": [
+      17,
+      0,
+      28
+     ],
+     "rgb565": 4099,
+     "rgb565_hex": "0x1003"
+    },
+    {
+     "hex": "#220732",
+     "rgb": [
+      34,
+      7,
+      50
+     ],
+     "rgb565": 8230,
+     "rgb565_hex": "0x2026"
+    },
+    {
+     "hex": "#37174C",
+     "rgb": [
+      55,
+      23,
+      76
+     ],
+     "rgb565": 12457,
+     "rgb565_hex": "0x30A9"
+    },
+    {
+     "hex": "#5C317E",
+     "rgb": [
+      92,
+      49,
+      126
+     ],
+     "rgb565": 22927,
+     "rgb565_hex": "0x598F"
+    },
+    {
+     "hex": "#6F4097",
+     "rgb": [
+      111,
+      64,
+      151
+     ],
+     "rgb565": 27154,
+     "rgb565_hex": "0x6A12"
+    },
+    {
+     "hex": "#8C57BC",
+     "rgb": [
+      140,
+      87,
+      188
+     ],
+     "rgb565": 35511,
+     "rgb565_hex": "0x8AB7"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#6F4097",
+     "rgb": [
+      111,
+      64,
+      151
+     ],
+     "rgb565": 27154,
+     "rgb565_hex": "0x6A12"
+    },
+    {
+     "hex": "#5C317E",
+     "rgb": [
+      92,
+      49,
+      126
+     ],
+     "rgb565": 22927,
+     "rgb565_hex": "0x598F"
+    },
+    {
+     "hex": "#37174C",
+     "rgb": [
+      55,
+      23,
+      76
+     ],
+     "rgb565": 12457,
+     "rgb565_hex": "0x30A9"
+    },
+    {
+     "hex": "#220732",
+     "rgb": [
+      34,
+      7,
+      50
+     ],
+     "rgb565": 8230,
+     "rgb565_hex": "0x2026"
+    },
+    {
+     "hex": "#11001C",
+     "rgb": [
+      17,
+      0,
+      28
+     ],
+     "rgb565": 4099,
+     "rgb565_hex": "0x1003"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#4A7A1C",
+    "rgb": [
+     74,
+     122,
+     28
+    ],
+    "rgb565": 19395,
+    "rgb565_hex": "0x4BC3"
+   },
+   "index": 12,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "stops": [
+    {
+     "hex": "#0E1A06",
+     "rgb": [
+      14,
+      26,
+      6
+     ],
+     "rgb565": 2240,
+     "rgb565_hex": "0x08C0"
+    },
+    {
+     "hex": "#1A2B0F",
+     "rgb": [
+      26,
+      43,
+      15
+     ],
+     "rgb565": 6465,
+     "rgb565_hex": "0x1941"
+    },
+    {
+     "hex": "#253D13",
+     "rgb": [
+      37,
+      61,
+      19
+     ],
+     "rgb565": 8674,
+     "rgb565_hex": "0x21E2"
+    },
+    {
+     "hex": "#315116",
+     "rgb": [
+      49,
+      81,
+      22
+     ],
+     "rgb565": 12930,
+     "rgb565_hex": "0x3282"
+    },
+    {
+     "hex": "#3D6519",
+     "rgb": [
+      61,
+      101,
+      25
+     ],
+     "rgb565": 15139,
+     "rgb565_hex": "0x3B23"
+    },
+    {
+     "hex": "#4A7A1C",
+     "rgb": [
+      74,
+      122,
+      28
+     ],
+     "rgb565": 19395,
+     "rgb565_hex": "0x4BC3"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#3D6519",
+     "rgb": [
+      61,
+      101,
+      25
+     ],
+     "rgb565": 15139,
+     "rgb565_hex": "0x3B23"
+    },
+    {
+     "hex": "#315116",
+     "rgb": [
+      49,
+      81,
+      22
+     ],
+     "rgb565": 12930,
+     "rgb565_hex": "0x3282"
+    },
+    {
+     "hex": "#253D13",
+     "rgb": [
+      37,
+      61,
+      19
+     ],
+     "rgb565": 8674,
+     "rgb565_hex": "0x21E2"
+    },
+    {
+     "hex": "#1A2B0F",
+     "rgb": [
+      26,
+      43,
+      15
+     ],
+     "rgb565": 6465,
+     "rgb565_hex": "0x1941"
+    },
+    {
+     "hex": "#0E1A06",
+     "rgb": [
+      14,
+      26,
+      6
+     ],
+     "rgb565": 2240,
+     "rgb565_hex": "0x08C0"
+    }
+   ]
+  },
+  {
+   "fill": {
+    "hex": "#F4F4F4",
+    "rgb": [
+     244,
+     244,
+     244
+    ],
+    "rgb565": 63422,
+    "rgb565_hex": "0xF7BE"
+   },
+   "fill_override": {
+    "hex": "#000000",
+    "rgb": [
+     0,
+     0,
+     0
+    ],
+    "rgb565": 0,
+    "rgb565_hex": "0x0000",
+    "why": "the mono entry fills BLACK: a token with a logo keeps the black body + white ring"
+   },
+   "index": 13,
+   "note": "stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette override below pins the disc",
+   "role": "mono — the recognized-logo treatment; OUTSIDE the hash space",
+   "stops": [
+    {
+     "hex": "#050505",
+     "rgb": [
+      5,
+      5,
+      5
+     ],
+     "rgb565": 32,
+     "rgb565_hex": "0x0020"
+    },
+    {
+     "hex": "#2E2E2E",
+     "rgb": [
+      46,
+      46,
+      46
+     ],
+     "rgb565": 10597,
+     "rgb565_hex": "0x2965"
+    },
+    {
+     "hex": "#5C5C5C",
+     "rgb": [
+      92,
+      92,
+      92
+     ],
+     "rgb565": 23275,
+     "rgb565_hex": "0x5AEB"
+    },
+    {
+     "hex": "#8F8F8F",
+     "rgb": [
+      143,
+      143,
+      143
+     ],
+     "rgb565": 35953,
+     "rgb565_hex": "0x8C71"
+    },
+    {
+     "hex": "#C4C4C4",
+     "rgb": [
+      196,
+      196,
+      196
+     ],
+     "rgb565": 50744,
+     "rgb565_hex": "0xC638"
+    },
+    {
+     "hex": "#F4F4F4",
+     "rgb": [
+      244,
+      244,
+      244
+     ],
+     "rgb565": 63422,
+     "rgb565_hex": "0xF7BE"
+    }
+   ],
+   "trail": [
+    {
+     "hex": "#C4C4C4",
+     "rgb": [
+      196,
+      196,
+      196
+     ],
+     "rgb565": 50744,
+     "rgb565_hex": "0xC638"
+    },
+    {
+     "hex": "#8F8F8F",
+     "rgb": [
+      143,
+      143,
+      143
+     ],
+     "rgb565": 35953,
+     "rgb565_hex": "0x8C71"
+    },
+    {
+     "hex": "#5C5C5C",
+     "rgb": [
+      92,
+      92,
+      92
+     ],
+     "rgb565": 23275,
+     "rgb565_hex": "0x5AEB"
+    },
+    {
+     "hex": "#2E2E2E",
+     "rgb": [
+      46,
+      46,
+      46
+     ],
+     "rgb565": 10597,
+     "rgb565_hex": "0x2965"
+    },
+    {
+     "hex": "#050505",
+     "rgb": [
+      5,
+      5,
+      5
+     ],
+     "rgb565": 32,
+     "rgb565_hex": "0x0020"
+    }
+   ]
+  }
+ ],
+ "ramp_steps": [
+  0.15,
+  0.3,
+  0.5,
+  0.7,
+  0.86,
+  1.0
+ ],
+ "ramp_steps_note": "a six-stop ramp derived from one colour (colors.ramp_from): stop 6 is the colour, stops 5..1 scale it toward black by these factors",
+ "schema_version": 1,
+ "state": {
+  "awaiting": {
+   "hex": "#DCC419",
+   "name": "YELLOW",
+   "rgb": [
+    220,
+    196,
+    25
+   ],
+   "rgb565": 56867,
+   "rgb565_hex": "0xDE23"
+  },
+  "done": {
+   "hex": "#2EE56A",
+   "name": "GREEN",
+   "rgb": [
+    46,
+    229,
+    106
+   ],
+   "rgb565": 12077,
+   "rgb565_hex": "0x2F2D"
+  },
+  "failed": {
+   "hex": "#FF423D",
+   "name": "RED",
+   "rgb": [
+    255,
+    66,
+    61
+   ],
+   "rgb565": 64007,
+   "rgb565_hex": "0xFA07"
+  },
+  "warning": {
+   "hex": "#F5A033",
+   "name": "ORANGE",
+   "rgb": [
+    245,
+    160,
+    51
+   ],
+   "rgb565": 62726,
+   "rgb565_hex": "0xF506"
+  }
+ },
+ "state_source": "pq1/colors.py:36",
+ "token_ramp_colors": {
+  "DAI": {
+   "hex": "#F5AC37",
+   "rgb": [
+    245,
+    172,
+    55
+   ],
+   "rgb565": 62822,
+   "rgb565_hex": "0xF566"
+  },
+  "USDC": {
+   "hex": "#2775CA",
+   "rgb": [
+    39,
+    117,
+    202
+   ],
+   "rgb565": 9145,
+   "rgb565_hex": "0x23B9"
+  },
+  "USDT": {
+   "hex": "#50AF95",
+   "rgb": [
+    80,
+    175,
+    149
+   ],
+   "rgb565": 21874,
+   "rgb565_hex": "0x5572"
+  }
+ },
+ "tokens": {
+  "BLACK": {
+   "hex": "#000000",
+   "rgb": [
+    0,
+    0,
+    0
+   ],
+   "rgb565": 0,
+   "role": "base",
+   "source": "pq1/colors.py:28"
+  },
+  "CHAIN_ARBITRUM_FILL": {
+   "hex": "#1554C8",
+   "rgb": [
+    21,
+    84,
+    200
+   ],
+   "rgb565": 4793,
+   "role": "ramp"
+  },
+  "CHAIN_ARBITRUM_STOP_1": {
+   "hex": "#030D1E",
+   "rgb": [
+    3,
+    13,
+    30
+   ],
+   "rgb565": 99,
+   "role": "ramp"
+  },
+  "CHAIN_ARBITRUM_STOP_2": {
+   "hex": "#06193C",
+   "rgb": [
+    6,
+    25,
+    60
+   ],
+   "rgb565": 199,
+   "role": "ramp"
+  },
+  "CHAIN_ARBITRUM_STOP_3": {
+   "hex": "#0A2A64",
+   "rgb": [
+    10,
+    42,
+    100
+   ],
+   "rgb565": 2380,
+   "role": "ramp"
+  },
+  "CHAIN_ARBITRUM_STOP_4": {
+   "hex": "#0F3B8C",
+   "rgb": [
+    15,
+    59,
+    140
+   ],
+   "rgb565": 2513,
+   "role": "ramp"
+  },
+  "CHAIN_ARBITRUM_STOP_5": {
+   "hex": "#1248AC",
+   "rgb": [
+    18,
+    72,
+    172
+   ],
+   "rgb565": 4693,
+   "role": "ramp"
+  },
+  "CHAIN_ARBITRUM_STOP_6": {
+   "hex": "#1554C8",
+   "rgb": [
+    21,
+    84,
+    200
+   ],
+   "rgb565": 4793,
+   "role": "ramp"
+  },
+  "CHAIN_AVALANCHE_FILL": {
+   "hex": "#E84142",
+   "rgb": [
+    232,
+    65,
+    66
+   ],
+   "rgb565": 59912,
+   "role": "ramp"
+  },
+  "CHAIN_AVALANCHE_STOP_1": {
+   "hex": "#230A0A",
+   "rgb": [
+    35,
+    10,
+    10
+   ],
+   "rgb565": 8257,
+   "role": "ramp"
+  },
+  "CHAIN_AVALANCHE_STOP_2": {
+   "hex": "#461414",
+   "rgb": [
+    70,
+    20,
+    20
+   ],
+   "rgb565": 16546,
+   "role": "ramp"
+  },
+  "CHAIN_AVALANCHE_STOP_3": {
+   "hex": "#742021",
+   "rgb": [
+    116,
+    32,
+    33
+   ],
+   "rgb565": 28932,
+   "role": "ramp"
+  },
+  "CHAIN_AVALANCHE_STOP_4": {
+   "hex": "#A22E2E",
+   "rgb": [
+    162,
+    46,
+    46
+   ],
+   "rgb565": 41317,
+   "role": "ramp"
+  },
+  "CHAIN_AVALANCHE_STOP_5": {
+   "hex": "#C83839",
+   "rgb": [
+    200,
+    56,
+    57
+   ],
+   "rgb565": 51655,
+   "role": "ramp"
+  },
+  "CHAIN_AVALANCHE_STOP_6": {
+   "hex": "#E84142",
+   "rgb": [
+    232,
+    65,
+    66
+   ],
+   "rgb565": 59912,
+   "role": "ramp"
+  },
+  "CHAIN_BASE_FILL": {
+   "hex": "#FFFFFF",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "rgb565": 65535,
+   "role": "ramp"
+  },
+  "CHAIN_BASE_MARK": {
+   "hex": "#0000FF",
+   "rgb": [
+    0,
+    0,
+    255
+   ],
+   "rgb565": 31,
+   "role": "base"
+  },
+  "CHAIN_BASE_STOP_1": {
+   "hex": "#000026",
+   "rgb": [
+    0,
+    0,
+    38
+   ],
+   "rgb565": 4,
+   "role": "ramp"
+  },
+  "CHAIN_BASE_STOP_2": {
+   "hex": "#00004C",
+   "rgb": [
+    0,
+    0,
+    76
+   ],
+   "rgb565": 9,
+   "role": "ramp"
+  },
+  "CHAIN_BASE_STOP_3": {
+   "hex": "#000080",
+   "rgb": [
+    0,
+    0,
+    128
+   ],
+   "rgb565": 16,
+   "role": "ramp"
+  },
+  "CHAIN_BASE_STOP_4": {
+   "hex": "#0000B2",
+   "rgb": [
+    0,
+    0,
+    178
+   ],
+   "rgb565": 22,
+   "role": "ramp"
+  },
+  "CHAIN_BASE_STOP_5": {
+   "hex": "#0000DB",
+   "rgb": [
+    0,
+    0,
+    219
+   ],
+   "rgb565": 27,
+   "role": "ramp"
+  },
+  "CHAIN_BASE_STOP_6": {
+   "hex": "#0000FF",
+   "rgb": [
+    0,
+    0,
+    255
+   ],
+   "rgb565": 31,
+   "role": "ramp"
+  },
+  "CHAIN_BNB_FILL": {
+   "hex": "#F0B90B",
+   "rgb": [
+    240,
+    185,
+    11
+   ],
+   "rgb565": 62913,
+   "role": "ramp"
+  },
+  "CHAIN_BNB_STOP_1": {
+   "hex": "#241C02",
+   "rgb": [
+    36,
+    28,
+    2
+   ],
+   "rgb565": 8416,
+   "role": "ramp"
+  },
+  "CHAIN_BNB_STOP_2": {
+   "hex": "#483803",
+   "rgb": [
+    72,
+    56,
+    3
+   ],
+   "rgb565": 18880,
+   "role": "ramp"
+  },
+  "CHAIN_BNB_STOP_3": {
+   "hex": "#785C06",
+   "rgb": [
+    120,
+    92,
+    6
+   ],
+   "rgb565": 31456,
+   "role": "ramp"
+  },
+  "CHAIN_BNB_STOP_4": {
+   "hex": "#A88208",
+   "rgb": [
+    168,
+    130,
+    8
+   ],
+   "rgb565": 44033,
+   "role": "ramp"
+  },
+  "CHAIN_BNB_STOP_5": {
+   "hex": "#CE9F09",
+   "rgb": [
+    206,
+    159,
+    9
+   ],
+   "rgb565": 52449,
+   "role": "ramp"
+  },
+  "CHAIN_BNB_STOP_6": {
+   "hex": "#F0B90B",
+   "rgb": [
+    240,
+    185,
+    11
+   ],
+   "rgb565": 62913,
+   "role": "ramp"
+  },
+  "CHAIN_LINEA_FILL": {
+   "hex": "#000000",
+   "rgb": [
+    0,
+    0,
+    0
+   ],
+   "rgb565": 0,
+   "role": "ramp"
+  },
+  "CHAIN_LINEA_STOP_1": {
+   "hex": "#0F2126",
+   "rgb": [
+    15,
+    33,
+    38
+   ],
+   "rgb565": 2308,
+   "role": "ramp"
+  },
+  "CHAIN_LINEA_STOP_2": {
+   "hex": "#1D434C",
+   "rgb": [
+    29,
+    67,
+    76
+   ],
+   "rgb565": 6665,
+   "role": "ramp"
+  },
+  "CHAIN_LINEA_STOP_3": {
+   "hex": "#307080",
+   "rgb": [
+    48,
+    112,
+    128
+   ],
+   "rgb565": 13200,
+   "role": "ramp"
+  },
+  "CHAIN_LINEA_STOP_4": {
+   "hex": "#449CB2",
+   "rgb": [
+    68,
+    156,
+    178
+   ],
+   "rgb565": 17654,
+   "role": "ramp"
+  },
+  "CHAIN_LINEA_STOP_5": {
+   "hex": "#53C0DB",
+   "rgb": [
+    83,
+    192,
+    219
+   ],
+   "rgb565": 22043,
+   "role": "ramp"
+  },
+  "CHAIN_LINEA_STOP_6": {
+   "hex": "#61DFFF",
+   "rgb": [
+    97,
+    223,
+    255
+   ],
+   "rgb565": 26367,
+   "role": "ramp"
+  },
+  "CHAIN_MAINNET_FILL": {
+   "hex": "#627EEA",
+   "rgb": [
+    98,
+    126,
+    234
+   ],
+   "rgb565": 25597,
+   "role": "ramp"
+  },
+  "CHAIN_MAINNET_STOP_1": {
+   "hex": "#0F1323",
+   "rgb": [
+    15,
+    19,
+    35
+   ],
+   "rgb565": 2180,
+   "role": "ramp"
+  },
+  "CHAIN_MAINNET_STOP_2": {
+   "hex": "#1D2646",
+   "rgb": [
+    29,
+    38,
+    70
+   ],
+   "rgb565": 6440,
+   "role": "ramp"
+  },
+  "CHAIN_MAINNET_STOP_3": {
+   "hex": "#313F75",
+   "rgb": [
+    49,
+    63,
+    117
+   ],
+   "rgb565": 12782,
+   "role": "ramp"
+  },
+  "CHAIN_MAINNET_STOP_4": {
+   "hex": "#4558A4",
+   "rgb": [
+    69,
+    88,
+    164
+   ],
+   "rgb565": 17108,
+   "role": "ramp"
+  },
+  "CHAIN_MAINNET_STOP_5": {
+   "hex": "#546CC9",
+   "rgb": [
+    84,
+    108,
+    201
+   ],
+   "rgb565": 21369,
+   "role": "ramp"
+  },
+  "CHAIN_MAINNET_STOP_6": {
+   "hex": "#627EEA",
+   "rgb": [
+    98,
+    126,
+    234
+   ],
+   "rgb565": 25597,
+   "role": "ramp"
+  },
+  "CHAIN_MANTLE_FILL": {
+   "hex": "#000000",
+   "rgb": [
+    0,
+    0,
+    0
+   ],
+   "rgb565": 0,
+   "role": "ramp"
+  },
+  "CHAIN_MANTLE_STOP_1": {
+   "hex": "#1B1B1B",
+   "rgb": [
+    27,
+    27,
+    27
+   ],
+   "rgb565": 6339,
+   "role": "ramp"
+  },
+  "CHAIN_MANTLE_STOP_2": {
+   "hex": "#363636",
+   "rgb": [
+    54,
+    54,
+    54
+   ],
+   "rgb565": 12710,
+   "role": "ramp"
+  },
+  "CHAIN_MANTLE_STOP_3": {
+   "hex": "#5A5A5A",
+   "rgb": [
+    90,
+    90,
+    90
+   ],
+   "rgb565": 23243,
+   "role": "ramp"
+  },
+  "CHAIN_MANTLE_STOP_4": {
+   "hex": "#7E7E7E",
+   "rgb": [
+    126,
+    126,
+    126
+   ],
+   "rgb565": 31727,
+   "role": "ramp"
+  },
+  "CHAIN_MANTLE_STOP_5": {
+   "hex": "#9B9B9B",
+   "rgb": [
+    155,
+    155,
+    155
+   ],
+   "rgb565": 40147,
+   "role": "ramp"
+  },
+  "CHAIN_MANTLE_STOP_6": {
+   "hex": "#B4B4B4",
+   "rgb": [
+    180,
+    180,
+    180
+   ],
+   "rgb565": 46518,
+   "role": "ramp"
+  },
+  "CHAIN_OP_FILL": {
+   "hex": "#FF0420",
+   "rgb": [
+    255,
+    4,
+    32
+   ],
+   "rgb565": 63524,
+   "role": "ramp"
+  },
+  "CHAIN_OP_STOP_1": {
+   "hex": "#260105",
+   "rgb": [
+    38,
+    1,
+    5
+   ],
+   "rgb565": 8192,
+   "role": "ramp"
+  },
+  "CHAIN_OP_STOP_2": {
+   "hex": "#4C010A",
+   "rgb": [
+    76,
+    1,
+    10
+   ],
+   "rgb565": 18433,
+   "role": "ramp"
+  },
+  "CHAIN_OP_STOP_3": {
+   "hex": "#800210",
+   "rgb": [
+    128,
+    2,
+    16
+   ],
+   "rgb565": 32770,
+   "role": "ramp"
+  },
+  "CHAIN_OP_STOP_4": {
+   "hex": "#B20316",
+   "rgb": [
+    178,
+    3,
+    22
+   ],
+   "rgb565": 45058,
+   "role": "ramp"
+  },
+  "CHAIN_OP_STOP_5": {
+   "hex": "#DB031C",
+   "rgb": [
+    219,
+    3,
+    28
+   ],
+   "rgb565": 55299,
+   "role": "ramp"
+  },
+  "CHAIN_OP_STOP_6": {
+   "hex": "#FF0420",
+   "rgb": [
+    255,
+    4,
+    32
+   ],
+   "rgb565": 63524,
+   "role": "ramp"
+  },
+  "CHAIN_POLYGON_FILL": {
+   "hex": "#8247E5",
+   "rgb": [
+    130,
+    71,
+    229
+   ],
+   "rgb565": 33340,
+   "role": "ramp"
+  },
+  "CHAIN_POLYGON_STOP_1": {
+   "hex": "#140B22",
+   "rgb": [
+    20,
+    11,
+    34
+   ],
+   "rgb565": 4164,
+   "role": "ramp"
+  },
+  "CHAIN_POLYGON_STOP_2": {
+   "hex": "#271545",
+   "rgb": [
+    39,
+    21,
+    69
+   ],
+   "rgb565": 8360,
+   "role": "ramp"
+  },
+  "CHAIN_POLYGON_STOP_3": {
+   "hex": "#412472",
+   "rgb": [
+    65,
+    36,
+    114
+   ],
+   "rgb565": 16686,
+   "role": "ramp"
+  },
+  "CHAIN_POLYGON_STOP_4": {
+   "hex": "#5B32A0",
+   "rgb": [
+    91,
+    50,
+    160
+   ],
+   "rgb565": 22932,
+   "role": "ramp"
+  },
+  "CHAIN_POLYGON_STOP_5": {
+   "hex": "#703DC5",
+   "rgb": [
+    112,
+    61,
+    197
+   ],
+   "rgb565": 29176,
+   "role": "ramp"
+  },
+  "CHAIN_POLYGON_STOP_6": {
+   "hex": "#8247E5",
+   "rgb": [
+    130,
+    71,
+    229
+   ],
+   "rgb565": 33340,
+   "role": "ramp"
+  },
+  "CHAIN_SCROLL_FILL": {
+   "hex": "#FFEEDA",
+   "rgb": [
+    255,
+    238,
+    218
+   ],
+   "rgb565": 65403,
+   "role": "ramp"
+  },
+  "CHAIN_SCROLL_STOP_1": {
+   "hex": "#262421",
+   "rgb": [
+    38,
+    36,
+    33
+   ],
+   "rgb565": 8484,
+   "role": "ramp"
+  },
+  "CHAIN_SCROLL_STOP_2": {
+   "hex": "#4C4741",
+   "rgb": [
+    76,
+    71,
+    65
+   ],
+   "rgb565": 18984,
+   "role": "ramp"
+  },
+  "CHAIN_SCROLL_STOP_3": {
+   "hex": "#80776D",
+   "rgb": [
+    128,
+    119,
+    109
+   ],
+   "rgb565": 33709,
+   "role": "ramp"
+  },
+  "CHAIN_SCROLL_STOP_4": {
+   "hex": "#B2A799",
+   "rgb": [
+    178,
+    167,
+    153
+   ],
+   "rgb565": 46387,
+   "role": "ramp"
+  },
+  "CHAIN_SCROLL_STOP_5": {
+   "hex": "#DBCDBB",
+   "rgb": [
+    219,
+    205,
+    187
+   ],
+   "rgb565": 56951,
+   "role": "ramp"
+  },
+  "CHAIN_SCROLL_STOP_6": {
+   "hex": "#FFEEDA",
+   "rgb": [
+    255,
+    238,
+    218
+   ],
+   "rgb565": 65403,
+   "role": "ramp"
+  },
+  "CHAIN_ZKSYNC_FILL": {
+   "hex": "#D7E2F5",
+   "rgb": [
+    215,
+    226,
+    245
+   ],
+   "rgb565": 55070,
+   "role": "ramp"
+  },
+  "CHAIN_ZKSYNC_MARK": {
+   "hex": "#051A6A",
+   "rgb": [
+    5,
+    26,
+    106
+   ],
+   "rgb565": 205,
+   "role": "base"
+  },
+  "CHAIN_ZKSYNC_STOP_1": {
+   "hex": "#202225",
+   "rgb": [
+    32,
+    34,
+    37
+   ],
+   "rgb565": 8452,
+   "role": "ramp"
+  },
+  "CHAIN_ZKSYNC_STOP_2": {
+   "hex": "#40444A",
+   "rgb": [
+    64,
+    68,
+    74
+   ],
+   "rgb565": 16937,
+   "role": "ramp"
+  },
+  "CHAIN_ZKSYNC_STOP_3": {
+   "hex": "#6C717A",
+   "rgb": [
+    108,
+    113,
+    122
+   ],
+   "rgb565": 27535,
+   "role": "ramp"
+  },
+  "CHAIN_ZKSYNC_STOP_4": {
+   "hex": "#969EAC",
+   "rgb": [
+    150,
+    158,
+    172
+   ],
+   "rgb565": 38133,
+   "role": "ramp"
+  },
+  "CHAIN_ZKSYNC_STOP_5": {
+   "hex": "#B9C2D3",
+   "rgb": [
+    185,
+    194,
+    211
+   ],
+   "rgb565": 48666,
+   "role": "ramp"
+  },
+  "CHAIN_ZKSYNC_STOP_6": {
+   "hex": "#D7E2F5",
+   "rgb": [
+    215,
+    226,
+    245
+   ],
+   "rgb565": 55070,
+   "role": "ramp"
+  },
+  "COWSWAP_DARK": {
+   "hex": "#012F7A",
+   "rgb": [
+    1,
+    47,
+    122
+   ],
+   "rgb565": 367,
+   "role": "base",
+   "source": "pq1/colors.py:350"
+  },
+  "COWSWAP_FILL": {
+   "hex": "#65D9FF",
+   "rgb": [
+    101,
+    217,
+    255
+   ],
+   "rgb565": 26335,
+   "role": "ramp"
+  },
+  "COWSWAP_STOP_1": {
+   "hex": "#021E34",
+   "rgb": [
+    2,
+    30,
+    52
+   ],
+   "rgb565": 230,
+   "role": "ramp"
+  },
+  "COWSWAP_STOP_2": {
+   "hex": "#012F7A",
+   "rgb": [
+    1,
+    47,
+    122
+   ],
+   "rgb565": 367,
+   "role": "ramp"
+  },
+  "COWSWAP_STOP_3": {
+   "hex": "#005EB7",
+   "rgb": [
+    0,
+    94,
+    183
+   ],
+   "rgb565": 758,
+   "role": "ramp"
+  },
+  "COWSWAP_STOP_4": {
+   "hex": "#00A1FF",
+   "rgb": [
+    0,
+    161,
+    255
+   ],
+   "rgb565": 1311,
+   "role": "ramp"
+  },
+  "COWSWAP_STOP_5": {
+   "hex": "#3FC4FF",
+   "rgb": [
+    63,
+    196,
+    255
+   ],
+   "rgb565": 15935,
+   "role": "ramp"
+  },
+  "COWSWAP_STOP_6": {
+   "hex": "#65D9FF",
+   "rgb": [
+    101,
+    217,
+    255
+   ],
+   "rgb565": 26335,
+   "role": "ramp"
+  },
+  "DAI_FILL": {
+   "hex": "#F5AC37",
+   "rgb": [
+    245,
+    172,
+    55
+   ],
+   "rgb565": 62822,
+   "role": "ramp"
+  },
+  "DAI_STOP_1": {
+   "hex": "#251A08",
+   "rgb": [
+    37,
+    26,
+    8
+   ],
+   "rgb565": 8385,
+   "role": "ramp"
+  },
+  "DAI_STOP_2": {
+   "hex": "#4A3410",
+   "rgb": [
+    74,
+    52,
+    16
+   ],
+   "rgb565": 18850,
+   "role": "ramp"
+  },
+  "DAI_STOP_3": {
+   "hex": "#7A561C",
+   "rgb": [
+    122,
+    86,
+    28
+   ],
+   "rgb565": 31395,
+   "role": "ramp"
+  },
+  "DAI_STOP_4": {
+   "hex": "#AC7826",
+   "rgb": [
+    172,
+    120,
+    38
+   ],
+   "rgb565": 43972,
+   "role": "ramp"
+  },
+  "DAI_STOP_5": {
+   "hex": "#D3942F",
+   "rgb": [
+    211,
+    148,
+    47
+   ],
+   "rgb565": 54437,
+   "role": "ramp"
+  },
+  "DAI_STOP_6": {
+   "hex": "#F5AC37",
+   "rgb": [
+    245,
+    172,
+    55
+   ],
+   "rgb565": 62822,
+   "role": "ramp"
+  },
+  "ERC7730_FILL": {
+   "hex": "#000000",
+   "rgb": [
+    0,
+    0,
+    0
+   ],
+   "rgb565": 0,
+   "role": "ramp"
+  },
+  "ERC7730_STOP_1": {
+   "hex": "#413D2E",
+   "rgb": [
+    65,
+    61,
+    46
+   ],
+   "rgb565": 16869,
+   "role": "ramp"
+  },
+  "ERC7730_STOP_2": {
+   "hex": "#514B33",
+   "rgb": [
+    81,
+    75,
+    51
+   ],
+   "rgb565": 21062,
+   "role": "ramp"
+  },
+  "ERC7730_STOP_3": {
+   "hex": "#7A6E3B",
+   "rgb": [
+    122,
+    110,
+    59
+   ],
+   "rgb565": 31591,
+   "role": "ramp"
+  },
+  "ERC7730_STOP_4": {
+   "hex": "#AF992E",
+   "rgb": [
+    175,
+    153,
+    46
+   ],
+   "rgb565": 44229,
+   "role": "ramp"
+  },
+  "ERC7730_STOP_5": {
+   "hex": "#DDC019",
+   "rgb": [
+    221,
+    192,
+    25
+   ],
+   "rgb565": 56835,
+   "role": "ramp"
+  },
+  "ERC7730_STOP_6": {
+   "hex": "#DDC019",
+   "rgb": [
+    221,
+    192,
+    25
+   ],
+   "rgb565": 56835,
+   "role": "ramp"
+  },
+  "FINGERPRINT_FILL": {
+   "hex": "#FFFFFF",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "rgb565": 65535,
+   "role": "ramp"
+  },
+  "FINGERPRINT_STOP_1": {
+   "hex": "#050505",
+   "rgb": [
+    5,
+    5,
+    5
+   ],
+   "rgb565": 32,
+   "role": "ramp"
+  },
+  "FINGERPRINT_STOP_2": {
+   "hex": "#2E2E2E",
+   "rgb": [
+    46,
+    46,
+    46
+   ],
+   "rgb565": 10597,
+   "role": "ramp"
+  },
+  "FINGERPRINT_STOP_3": {
+   "hex": "#5C5C5C",
+   "rgb": [
+    92,
+    92,
+    92
+   ],
+   "rgb565": 23275,
+   "role": "ramp"
+  },
+  "FINGERPRINT_STOP_4": {
+   "hex": "#8F8F8F",
+   "rgb": [
+    143,
+    143,
+    143
+   ],
+   "rgb565": 35953,
+   "role": "ramp"
+  },
+  "FINGERPRINT_STOP_5": {
+   "hex": "#C4C4C4",
+   "rgb": [
+    196,
+    196,
+    196
+   ],
+   "rgb565": 50744,
+   "role": "ramp"
+  },
+  "FINGERPRINT_STOP_6": {
+   "hex": "#F4F4F4",
+   "rgb": [
+    244,
+    244,
+    244
+   ],
+   "rgb565": 63422,
+   "role": "ramp"
+  },
+  "FIRMWARE_FILL": {
+   "hex": "#FFFFFF",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "rgb565": 65535,
+   "role": "ramp"
+  },
+  "FIRMWARE_STOP_1": {
+   "hex": "#050505",
+   "rgb": [
+    5,
+    5,
+    5
+   ],
+   "rgb565": 32,
+   "role": "ramp"
+  },
+  "FIRMWARE_STOP_2": {
+   "hex": "#2E2E2E",
+   "rgb": [
+    46,
+    46,
+    46
+   ],
+   "rgb565": 10597,
+   "role": "ramp"
+  },
+  "FIRMWARE_STOP_3": {
+   "hex": "#5C5C5C",
+   "rgb": [
+    92,
+    92,
+    92
+   ],
+   "rgb565": 23275,
+   "role": "ramp"
+  },
+  "FIRMWARE_STOP_4": {
+   "hex": "#8F8F8F",
+   "rgb": [
+    143,
+    143,
+    143
+   ],
+   "rgb565": 35953,
+   "role": "ramp"
+  },
+  "FIRMWARE_STOP_5": {
+   "hex": "#C4C4C4",
+   "rgb": [
+    196,
+    196,
+    196
+   ],
+   "rgb565": 50744,
+   "role": "ramp"
+  },
+  "FIRMWARE_STOP_6": {
+   "hex": "#F4F4F4",
+   "rgb": [
+    244,
+    244,
+    244
+   ],
+   "rgb565": 63422,
+   "role": "ramp"
+  },
+  "GREEN": {
+   "hex": "#2EE56A",
+   "rgb": [
+    46,
+    229,
+    106
+   ],
+   "rgb565": 12077,
+   "role": "base",
+   "source": "pq1/colors.py:31"
+  },
+  "ORANGE": {
+   "hex": "#F5A033",
+   "rgb": [
+    245,
+    160,
+    51
+   ],
+   "rgb565": 62726,
+   "role": "base",
+   "source": "pq1/colors.py:33"
+  },
+  "RAMP_00_FILL": {
+   "hex": "#8A7500",
+   "rgb": [
+    138,
+    117,
+    0
+   ],
+   "rgb565": 35744,
+   "role": "ramp"
+  },
+  "RAMP_00_STOP_1": {
+   "hex": "#413D2E",
+   "rgb": [
+    65,
+    61,
+    46
+   ],
+   "rgb565": 16869,
+   "role": "ramp"
+  },
+  "RAMP_00_STOP_2": {
+   "hex": "#4F482C",
+   "rgb": [
+    79,
+    72,
+    44
+   ],
+   "rgb565": 19013,
+   "role": "ramp"
+  },
+  "RAMP_00_STOP_3": {
+   "hex": "#5D5329",
+   "rgb": [
+    93,
+    83,
+    41
+   ],
+   "rgb565": 23173,
+   "role": "ramp"
+  },
+  "RAMP_00_STOP_4": {
+   "hex": "#6C5E23",
+   "rgb": [
+    108,
+    94,
+    35
+   ],
+   "rgb565": 27364,
+   "role": "ramp"
+  },
+  "RAMP_00_STOP_5": {
+   "hex": "#7B6919",
+   "rgb": [
+    123,
+    105,
+    25
+   ],
+   "rgb565": 31555,
+   "role": "ramp"
+  },
+  "RAMP_00_STOP_6": {
+   "hex": "#8A7500",
+   "rgb": [
+    138,
+    117,
+    0
+   ],
+   "rgb565": 35744,
+   "role": "ramp"
+  },
+  "RAMP_01_FILL": {
+   "hex": "#E01E37",
+   "rgb": [
+    224,
+    30,
+    55
+   ],
+   "rgb565": 57574,
+   "role": "ramp"
+  },
+  "RAMP_01_STOP_1": {
+   "hex": "#641220",
+   "rgb": [
+    100,
+    18,
+    32
+   ],
+   "rgb565": 24708,
+   "role": "ramp"
+  },
+  "RAMP_01_STOP_2": {
+   "hex": "#85182A",
+   "rgb": [
+    133,
+    24,
+    42
+   ],
+   "rgb565": 32965,
+   "role": "ramp"
+  },
+  "RAMP_01_STOP_3": {
+   "hex": "#A71E34",
+   "rgb": [
+    167,
+    30,
+    52
+   ],
+   "rgb565": 41190,
+   "role": "ramp"
+  },
+  "RAMP_01_STOP_4": {
+   "hex": "#B21E35",
+   "rgb": [
+    178,
+    30,
+    53
+   ],
+   "rgb565": 45286,
+   "role": "ramp"
+  },
+  "RAMP_01_STOP_5": {
+   "hex": "#C71F37",
+   "rgb": [
+    199,
+    31,
+    55
+   ],
+   "rgb565": 49382,
+   "role": "ramp"
+  },
+  "RAMP_01_STOP_6": {
+   "hex": "#E01E37",
+   "rgb": [
+    224,
+    30,
+    55
+   ],
+   "rgb565": 57574,
+   "role": "ramp"
+  },
+  "RAMP_02_FILL": {
+   "hex": "#007EB2",
+   "rgb": [
+    0,
+    126,
+    178
+   ],
+   "rgb565": 1014,
+   "role": "ramp"
+  },
+  "RAMP_02_STOP_1": {
+   "hex": "#051923",
+   "rgb": [
+    5,
+    25,
+    35
+   ],
+   "rgb565": 196,
+   "role": "ramp"
+  },
+  "RAMP_02_STOP_2": {
+   "hex": "#002E4A",
+   "rgb": [
+    0,
+    46,
+    74
+   ],
+   "rgb565": 361,
+   "role": "ramp"
+  },
+  "RAMP_02_STOP_3": {
+   "hex": "#004F75",
+   "rgb": [
+    0,
+    79,
+    117
+   ],
+   "rgb565": 622,
+   "role": "ramp"
+  },
+  "RAMP_02_STOP_4": {
+   "hex": "#006097",
+   "rgb": [
+    0,
+    96,
+    151
+   ],
+   "rgb565": 786,
+   "role": "ramp"
+  },
+  "RAMP_02_STOP_5": {
+   "hex": "#0074B1",
+   "rgb": [
+    0,
+    116,
+    177
+   ],
+   "rgb565": 950,
+   "role": "ramp"
+  },
+  "RAMP_02_STOP_6": {
+   "hex": "#007EB2",
+   "rgb": [
+    0,
+    126,
+    178
+   ],
+   "rgb565": 1014,
+   "role": "ramp"
+  },
+  "RAMP_03_FILL": {
+   "hex": "#7E503C",
+   "rgb": [
+    126,
+    80,
+    60
+   ],
+   "rgb565": 31367,
+   "role": "ramp"
+  },
+  "RAMP_03_STOP_1": {
+   "hex": "#38160D",
+   "rgb": [
+    56,
+    22,
+    13
+   ],
+   "rgb565": 14497,
+   "role": "ramp"
+  },
+  "RAMP_03_STOP_2": {
+   "hex": "#4C261B",
+   "rgb": [
+    76,
+    38,
+    27
+   ],
+   "rgb565": 18723,
+   "role": "ramp"
+  },
+  "RAMP_03_STOP_3": {
+   "hex": "#562F21",
+   "rgb": [
+    86,
+    47,
+    33
+   ],
+   "rgb565": 20836,
+   "role": "ramp"
+  },
+  "RAMP_03_STOP_4": {
+   "hex": "#603728",
+   "rgb": [
+    96,
+    55,
+    40
+   ],
+   "rgb565": 24997,
+   "role": "ramp"
+  },
+  "RAMP_03_STOP_5": {
+   "hex": "#6A3F2F",
+   "rgb": [
+    106,
+    63,
+    47
+   ],
+   "rgb565": 27109,
+   "role": "ramp"
+  },
+  "RAMP_03_STOP_6": {
+   "hex": "#7E503C",
+   "rgb": [
+    126,
+    80,
+    60
+   ],
+   "rgb565": 31367,
+   "role": "ramp"
+  },
+  "RAMP_04_FILL": {
+   "hex": "#8B2FC9",
+   "rgb": [
+    139,
+    47,
+    201
+   ],
+   "rgb565": 35193,
+   "role": "ramp"
+  },
+  "RAMP_04_STOP_1": {
+   "hex": "#310055",
+   "rgb": [
+    49,
+    0,
+    85
+   ],
+   "rgb565": 12298,
+   "role": "ramp"
+  },
+  "RAMP_04_STOP_2": {
+   "hex": "#3C0663",
+   "rgb": [
+    60,
+    6,
+    99
+   ],
+   "rgb565": 14380,
+   "role": "ramp"
+  },
+  "RAMP_04_STOP_3": {
+   "hex": "#4A0A77",
+   "rgb": [
+    74,
+    10,
+    119
+   ],
+   "rgb565": 18510,
+   "role": "ramp"
+  },
+  "RAMP_04_STOP_4": {
+   "hex": "#5A108F",
+   "rgb": [
+    90,
+    16,
+    143
+   ],
+   "rgb565": 22673,
+   "role": "ramp"
+  },
+  "RAMP_04_STOP_5": {
+   "hex": "#6818A5",
+   "rgb": [
+    104,
+    24,
+    165
+   ],
+   "rgb565": 26836,
+   "role": "ramp"
+  },
+  "RAMP_04_STOP_6": {
+   "hex": "#8B2FC9",
+   "rgb": [
+    139,
+    47,
+    201
+   ],
+   "rgb565": 35193,
+   "role": "ramp"
+  },
+  "RAMP_05_FILL": {
+   "hex": "#B65F1F",
+   "rgb": [
+    182,
+    95,
+    31
+   ],
+   "rgb565": 45795,
+   "role": "ramp"
+  },
+  "RAMP_05_STOP_1": {
+   "hex": "#5C2E0C",
+   "rgb": [
+    92,
+    46,
+    12
+   ],
+   "rgb565": 22881,
+   "role": "ramp"
+  },
+  "RAMP_05_STOP_2": {
+   "hex": "#703810",
+   "rgb": [
+    112,
+    56,
+    16
+   ],
+   "rgb565": 29122,
+   "role": "ramp"
+  },
+  "RAMP_05_STOP_3": {
+   "hex": "#834314",
+   "rgb": [
+    131,
+    67,
+    20
+   ],
+   "rgb565": 33282,
+   "role": "ramp"
+  },
+  "RAMP_05_STOP_4": {
+   "hex": "#954D18",
+   "rgb": [
+    149,
+    77,
+    24
+   ],
+   "rgb565": 37475,
+   "role": "ramp"
+  },
+  "RAMP_05_STOP_5": {
+   "hex": "#A6571B",
+   "rgb": [
+    166,
+    87,
+    27
+   ],
+   "rgb565": 41635,
+   "role": "ramp"
+  },
+  "RAMP_05_STOP_6": {
+   "hex": "#B65F1F",
+   "rgb": [
+    182,
+    95,
+    31
+   ],
+   "rgb565": 45795,
+   "role": "ramp"
+  },
+  "RAMP_06_FILL": {
+   "hex": "#176849",
+   "rgb": [
+    23,
+    104,
+    73
+   ],
+   "rgb565": 4937,
+   "role": "ramp"
+  },
+  "RAMP_06_STOP_1": {
+   "hex": "#031911",
+   "rgb": [
+    3,
+    25,
+    17
+   ],
+   "rgb565": 194,
+   "role": "ramp"
+  },
+  "RAMP_06_STOP_2": {
+   "hex": "#062A1D",
+   "rgb": [
+    6,
+    42,
+    29
+   ],
+   "rgb565": 323,
+   "role": "ramp"
+  },
+  "RAMP_06_STOP_3": {
+   "hex": "#083324",
+   "rgb": [
+    8,
+    51,
+    36
+   ],
+   "rgb565": 2436,
+   "role": "ramp"
+  },
+  "RAMP_06_STOP_4": {
+   "hex": "#0E4530",
+   "rgb": [
+    14,
+    69,
+    48
+   ],
+   "rgb565": 2598,
+   "role": "ramp"
+  },
+  "RAMP_06_STOP_5": {
+   "hex": "#12563D",
+   "rgb": [
+    18,
+    86,
+    61
+   ],
+   "rgb565": 4775,
+   "role": "ramp"
+  },
+  "RAMP_06_STOP_6": {
+   "hex": "#176849",
+   "rgb": [
+    23,
+    104,
+    73
+   ],
+   "rgb565": 4937,
+   "role": "ramp"
+  },
+  "RAMP_07_FILL": {
+   "hex": "#008482",
+   "rgb": [
+    0,
+    132,
+    130
+   ],
+   "rgb565": 1072,
+   "role": "ramp"
+  },
+  "RAMP_07_STOP_1": {
+   "hex": "#03312E",
+   "rgb": [
+    3,
+    49,
+    46
+   ],
+   "rgb565": 389,
+   "role": "ramp"
+  },
+  "RAMP_07_STOP_2": {
+   "hex": "#005252",
+   "rgb": [
+    0,
+    82,
+    82
+   ],
+   "rgb565": 650,
+   "role": "ramp"
+  },
+  "RAMP_07_STOP_3": {
+   "hex": "#00675E",
+   "rgb": [
+    0,
+    103,
+    94
+   ],
+   "rgb565": 811,
+   "role": "ramp"
+  },
+  "RAMP_07_STOP_4": {
+   "hex": "#006E67",
+   "rgb": [
+    0,
+    110,
+    103
+   ],
+   "rgb565": 876,
+   "role": "ramp"
+  },
+  "RAMP_07_STOP_5": {
+   "hex": "#007A76",
+   "rgb": [
+    0,
+    122,
+    118
+   ],
+   "rgb565": 974,
+   "role": "ramp"
+  },
+  "RAMP_07_STOP_6": {
+   "hex": "#008482",
+   "rgb": [
+    0,
+    132,
+    130
+   ],
+   "rgb565": 1072,
+   "role": "ramp"
+  },
+  "RAMP_08_FILL": {
+   "hex": "#C54C71",
+   "rgb": [
+    197,
+    76,
+    113
+   ],
+   "rgb565": 49774,
+   "role": "ramp"
+  },
+  "RAMP_08_STOP_1": {
+   "hex": "#640E30",
+   "rgb": [
+    100,
+    14,
+    48
+   ],
+   "rgb565": 24678,
+   "role": "ramp"
+  },
+  "RAMP_08_STOP_2": {
+   "hex": "#75173A",
+   "rgb": [
+    117,
+    23,
+    58
+   ],
+   "rgb565": 28839,
+   "role": "ramp"
+  },
+  "RAMP_08_STOP_3": {
+   "hex": "#862045",
+   "rgb": [
+    134,
+    32,
+    69
+   ],
+   "rgb565": 33032,
+   "role": "ramp"
+  },
+  "RAMP_08_STOP_4": {
+   "hex": "#962A50",
+   "rgb": [
+    150,
+    42,
+    80
+   ],
+   "rgb565": 37194,
+   "role": "ramp"
+  },
+  "RAMP_08_STOP_5": {
+   "hex": "#A73255",
+   "rgb": [
+    167,
+    50,
+    85
+   ],
+   "rgb565": 41354,
+   "role": "ramp"
+  },
+  "RAMP_08_STOP_6": {
+   "hex": "#C54C71",
+   "rgb": [
+    197,
+    76,
+    113
+   ],
+   "rgb565": 49774,
+   "role": "ramp"
+  },
+  "RAMP_09_FILL": {
+   "hex": "#CA4D45",
+   "rgb": [
+    202,
+    77,
+    69
+   ],
+   "rgb565": 51816,
+   "role": "ramp"
+  },
+  "RAMP_09_STOP_1": {
+   "hex": "#7C050A",
+   "rgb": [
+    124,
+    5,
+    10
+   ],
+   "rgb565": 30753,
+   "role": "ramp"
+  },
+  "RAMP_09_STOP_2": {
+   "hex": "#8C1917",
+   "rgb": [
+    140,
+    25,
+    23
+   ],
+   "rgb565": 35010,
+   "role": "ramp"
+  },
+  "RAMP_09_STOP_3": {
+   "hex": "#9B2723",
+   "rgb": [
+    155,
+    39,
+    35
+   ],
+   "rgb565": 39204,
+   "role": "ramp"
+  },
+  "RAMP_09_STOP_4": {
+   "hex": "#AA352F",
+   "rgb": [
+    170,
+    53,
+    47
+   ],
+   "rgb565": 43429,
+   "role": "ramp"
+  },
+  "RAMP_09_STOP_5": {
+   "hex": "#BA4239",
+   "rgb": [
+    186,
+    66,
+    57
+   ],
+   "rgb565": 47623,
+   "role": "ramp"
+  },
+  "RAMP_09_STOP_6": {
+   "hex": "#CA4D45",
+   "rgb": [
+    202,
+    77,
+    69
+   ],
+   "rgb565": 51816,
+   "role": "ramp"
+  },
+  "RAMP_10_FILL": {
+   "hex": "#6A6B70",
+   "rgb": [
+    106,
+    107,
+    112
+   ],
+   "rgb565": 27470,
+   "role": "ramp"
+  },
+  "RAMP_10_STOP_1": {
+   "hex": "#26262C",
+   "rgb": [
+    38,
+    38,
+    44
+   ],
+   "rgb565": 8485,
+   "role": "ramp"
+  },
+  "RAMP_10_STOP_2": {
+   "hex": "#2F3037",
+   "rgb": [
+    47,
+    48,
+    55
+   ],
+   "rgb565": 10630,
+   "role": "ramp"
+  },
+  "RAMP_10_STOP_3": {
+   "hex": "#393A41",
+   "rgb": [
+    57,
+    58,
+    65
+   ],
+   "rgb565": 14792,
+   "role": "ramp"
+  },
+  "RAMP_10_STOP_4": {
+   "hex": "#4B4C52",
+   "rgb": [
+    75,
+    76,
+    82
+   ],
+   "rgb565": 19050,
+   "role": "ramp"
+  },
+  "RAMP_10_STOP_5": {
+   "hex": "#5B5C62",
+   "rgb": [
+    91,
+    92,
+    98
+   ],
+   "rgb565": 23276,
+   "role": "ramp"
+  },
+  "RAMP_10_STOP_6": {
+   "hex": "#6A6B70",
+   "rgb": [
+    106,
+    107,
+    112
+   ],
+   "rgb565": 27470,
+   "role": "ramp"
+  },
+  "RAMP_11_FILL": {
+   "hex": "#8C57BC",
+   "rgb": [
+    140,
+    87,
+    188
+   ],
+   "rgb565": 35511,
+   "role": "ramp"
+  },
+  "RAMP_11_STOP_1": {
+   "hex": "#11001C",
+   "rgb": [
+    17,
+    0,
+    28
+   ],
+   "rgb565": 4099,
+   "role": "ramp"
+  },
+  "RAMP_11_STOP_2": {
+   "hex": "#220732",
+   "rgb": [
+    34,
+    7,
+    50
+   ],
+   "rgb565": 8230,
+   "role": "ramp"
+  },
+  "RAMP_11_STOP_3": {
+   "hex": "#37174C",
+   "rgb": [
+    55,
+    23,
+    76
+   ],
+   "rgb565": 12457,
+   "role": "ramp"
+  },
+  "RAMP_11_STOP_4": {
+   "hex": "#5C317E",
+   "rgb": [
+    92,
+    49,
+    126
+   ],
+   "rgb565": 22927,
+   "role": "ramp"
+  },
+  "RAMP_11_STOP_5": {
+   "hex": "#6F4097",
+   "rgb": [
+    111,
+    64,
+    151
+   ],
+   "rgb565": 27154,
+   "role": "ramp"
+  },
+  "RAMP_11_STOP_6": {
+   "hex": "#8C57BC",
+   "rgb": [
+    140,
+    87,
+    188
+   ],
+   "rgb565": 35511,
+   "role": "ramp"
+  },
+  "RAMP_12_FILL": {
+   "hex": "#4A7A1C",
+   "rgb": [
+    74,
+    122,
+    28
+   ],
+   "rgb565": 19395,
+   "role": "ramp"
+  },
+  "RAMP_12_STOP_1": {
+   "hex": "#0E1A06",
+   "rgb": [
+    14,
+    26,
+    6
+   ],
+   "rgb565": 2240,
+   "role": "ramp"
+  },
+  "RAMP_12_STOP_2": {
+   "hex": "#1A2B0F",
+   "rgb": [
+    26,
+    43,
+    15
+   ],
+   "rgb565": 6465,
+   "role": "ramp"
+  },
+  "RAMP_12_STOP_3": {
+   "hex": "#253D13",
+   "rgb": [
+    37,
+    61,
+    19
+   ],
+   "rgb565": 8674,
+   "role": "ramp"
+  },
+  "RAMP_12_STOP_4": {
+   "hex": "#315116",
+   "rgb": [
+    49,
+    81,
+    22
+   ],
+   "rgb565": 12930,
+   "role": "ramp"
+  },
+  "RAMP_12_STOP_5": {
+   "hex": "#3D6519",
+   "rgb": [
+    61,
+    101,
+    25
+   ],
+   "rgb565": 15139,
+   "role": "ramp"
+  },
+  "RAMP_12_STOP_6": {
+   "hex": "#4A7A1C",
+   "rgb": [
+    74,
+    122,
+    28
+   ],
+   "rgb565": 19395,
+   "role": "ramp"
+  },
+  "RAMP_13_FILL": {
+   "hex": "#000000",
+   "rgb": [
+    0,
+    0,
+    0
+   ],
+   "rgb565": 0,
+   "role": "ramp"
+  },
+  "RAMP_13_STOP_1": {
+   "hex": "#050505",
+   "rgb": [
+    5,
+    5,
+    5
+   ],
+   "rgb565": 32,
+   "role": "ramp"
+  },
+  "RAMP_13_STOP_2": {
+   "hex": "#2E2E2E",
+   "rgb": [
+    46,
+    46,
+    46
+   ],
+   "rgb565": 10597,
+   "role": "ramp"
+  },
+  "RAMP_13_STOP_3": {
+   "hex": "#5C5C5C",
+   "rgb": [
+    92,
+    92,
+    92
+   ],
+   "rgb565": 23275,
+   "role": "ramp"
+  },
+  "RAMP_13_STOP_4": {
+   "hex": "#8F8F8F",
+   "rgb": [
+    143,
+    143,
+    143
+   ],
+   "rgb565": 35953,
+   "role": "ramp"
+  },
+  "RAMP_13_STOP_5": {
+   "hex": "#C4C4C4",
+   "rgb": [
+    196,
+    196,
+    196
+   ],
+   "rgb565": 50744,
+   "role": "ramp"
+  },
+  "RAMP_13_STOP_6": {
+   "hex": "#F4F4F4",
+   "rgb": [
+    244,
+    244,
+    244
+   ],
+   "rgb565": 63422,
+   "role": "ramp"
+  },
+  "RED": {
+   "hex": "#FF423D",
+   "rgb": [
+    255,
+    66,
+    61
+   ],
+   "rgb565": 64007,
+   "role": "base",
+   "source": "pq1/colors.py:32"
+  },
+  "ROTATE_FILL": {
+   "hex": "#000000",
+   "rgb": [
+    0,
+    0,
+    0
+   ],
+   "rgb565": 0,
+   "role": "ramp"
+  },
+  "ROTATE_STOP_1": {
+   "hex": "#413D2E",
+   "rgb": [
+    65,
+    61,
+    46
+   ],
+   "rgb565": 16869,
+   "role": "ramp"
+  },
+  "ROTATE_STOP_2": {
+   "hex": "#514B33",
+   "rgb": [
+    81,
+    75,
+    51
+   ],
+   "rgb565": 21062,
+   "role": "ramp"
+  },
+  "ROTATE_STOP_3": {
+   "hex": "#7A6E3B",
+   "rgb": [
+    122,
+    110,
+    59
+   ],
+   "rgb565": 31591,
+   "role": "ramp"
+  },
+  "ROTATE_STOP_4": {
+   "hex": "#AF992E",
+   "rgb": [
+    175,
+    153,
+    46
+   ],
+   "rgb565": 44229,
+   "role": "ramp"
+  },
+  "ROTATE_STOP_5": {
+   "hex": "#DDC019",
+   "rgb": [
+    221,
+    192,
+    25
+   ],
+   "rgb565": 56835,
+   "role": "ramp"
+  },
+  "ROTATE_STOP_6": {
+   "hex": "#DDC019",
+   "rgb": [
+    221,
+    192,
+    25
+   ],
+   "rgb565": 56835,
+   "role": "ramp"
+  },
+  "SAFE_FILL": {
+   "hex": "#13FF7F",
+   "rgb": [
+    19,
+    255,
+    127
+   ],
+   "rgb565": 6127,
+   "role": "ramp"
+  },
+  "SAFE_STOP_1": {
+   "hex": "#354E40",
+   "rgb": [
+    53,
+    78,
+    64
+   ],
+   "rgb565": 12904,
+   "role": "ramp"
+  },
+  "SAFE_STOP_2": {
+   "hex": "#3F6852",
+   "rgb": [
+    63,
+    104,
+    82
+   ],
+   "rgb565": 15178,
+   "role": "ramp"
+  },
+  "SAFE_STOP_3": {
+   "hex": "#3F9265",
+   "rgb": [
+    63,
+    146,
+    101
+   ],
+   "rgb565": 15500,
+   "role": "ramp"
+  },
+  "SAFE_STOP_4": {
+   "hex": "#34C275",
+   "rgb": [
+    52,
+    194,
+    117
+   ],
+   "rgb565": 13838,
+   "role": "ramp"
+  },
+  "SAFE_STOP_5": {
+   "hex": "#20DD77",
+   "rgb": [
+    32,
+    221,
+    119
+   ],
+   "rgb565": 9966,
+   "role": "ramp"
+  },
+  "SAFE_STOP_6": {
+   "hex": "#13FF7F",
+   "rgb": [
+    19,
+    255,
+    127
+   ],
+   "rgb565": 6127,
+   "role": "ramp"
+  },
+  "USDC_FILL": {
+   "hex": "#2775CA",
+   "rgb": [
+    39,
+    117,
+    202
+   ],
+   "rgb565": 9145,
+   "role": "ramp"
+  },
+  "USDC_STOP_1": {
+   "hex": "#06121E",
+   "rgb": [
+    6,
+    18,
+    30
+   ],
+   "rgb565": 131,
+   "role": "ramp"
+  },
+  "USDC_STOP_2": {
+   "hex": "#0C233D",
+   "rgb": [
+    12,
+    35,
+    61
+   ],
+   "rgb565": 2311,
+   "role": "ramp"
+  },
+  "USDC_STOP_3": {
+   "hex": "#143A65",
+   "rgb": [
+    20,
+    58,
+    101
+   ],
+   "rgb565": 4556,
+   "role": "ramp"
+  },
+  "USDC_STOP_4": {
+   "hex": "#1B528D",
+   "rgb": [
+    27,
+    82,
+    141
+   ],
+   "rgb565": 6801,
+   "role": "ramp"
+  },
+  "USDC_STOP_5": {
+   "hex": "#2265AE",
+   "rgb": [
+    34,
+    101,
+    174
+   ],
+   "rgb565": 9013,
+   "role": "ramp"
+  },
+  "USDC_STOP_6": {
+   "hex": "#2775CA",
+   "rgb": [
+    39,
+    117,
+    202
+   ],
+   "rgb565": 9145,
+   "role": "ramp"
+  },
+  "USDT_FILL": {
+   "hex": "#50AF95",
+   "rgb": [
+    80,
+    175,
+    149
+   ],
+   "rgb565": 21874,
+   "role": "ramp"
+  },
+  "USDT_STOP_1": {
+   "hex": "#0C1A16",
+   "rgb": [
+    12,
+    26,
+    22
+   ],
+   "rgb565": 2242,
+   "role": "ramp"
+  },
+  "USDT_STOP_2": {
+   "hex": "#18342D",
+   "rgb": [
+    24,
+    52,
+    45
+   ],
+   "rgb565": 6565,
+   "role": "ramp"
+  },
+  "USDT_STOP_3": {
+   "hex": "#28584A",
+   "rgb": [
+    40,
+    88,
+    74
+   ],
+   "rgb565": 10953,
+   "role": "ramp"
+  },
+  "USDT_STOP_4": {
+   "hex": "#387A68",
+   "rgb": [
+    56,
+    122,
+    104
+   ],
+   "rgb565": 15309,
+   "role": "ramp"
+  },
+  "USDT_STOP_5": {
+   "hex": "#459680",
+   "rgb": [
+    69,
+    150,
+    128
+   ],
+   "rgb565": 17584,
+   "role": "ramp"
+  },
+  "USDT_STOP_6": {
+   "hex": "#50AF95",
+   "rgb": [
+    80,
+    175,
+    149
+   ],
+   "rgb565": 21874,
+   "role": "ramp"
+  },
+  "WHITE": {
+   "hex": "#FFFFFF",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "rgb565": 65535,
+   "role": "base",
+   "source": "pq1/colors.py:29"
+  },
+  "YELLOW": {
+   "hex": "#DCC419",
+   "rgb": [
+    220,
+    196,
+    25
+   ],
+   "rgb565": 56867,
+   "role": "base",
+   "source": "pq1/colors.py:30"
+  }
+ }
+}

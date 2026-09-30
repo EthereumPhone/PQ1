@@ -268,21 +268,25 @@ def _mask(name, side, u, alpha):
 
 def draw(cv, cx, cy, *, name, r, color, alpha=1.0, rot=0.0):
     """a chain mark, half-extent r on its dominant axis, centred on (cx, cy).
-    True alpha compositing (components.base_mark's rationale): the mark sits
-    on a coloured disc, so a colour-scaled fill would read wrong while fading."""
-    if alpha <= 0.01:
+    True alpha compositing (marks.base_mark's model): the mark sits on a
+    coloured disc, so a colour-scaled fill would read wrong while fading."""
+    if alpha <= colors.ALPHA_FLOOR:
         return
     scale, axis = MARKS[name][1], MARKS[name][2]
     span = _SPAN[name][0 if axis == "w" else 1]
     u = 2.0 * r * SUP / span               # one SVG unit, supersampled px
     pad = 4
     side = int(math.ceil(math.hypot(W, H) * u)) + 2 * pad   # rotation never clips
+    side += side % 2   # even, so the centre is a whole pixel: an odd side or a
+    #                    truncated paste sat every mark half a supersampled
+    #                    pixel up and left (audit ICO-09)
     mask = _mask(name, side, u, alpha)
     if rot:
         mask = mask.rotate(-math.degrees(rot), resample=Image.BICUBIC)
     tile = Image.new("RGBA", (side, side), (*tuple(color), 255))
     tile.putalpha(mask)
-    cv.paste(tile, int(cx * SUP - side / 2), int(cy * SUP - side / 2), tile)
+    cv.paste(tile, int(round(cx * SUP - side / 2)),        # rounded, never
+             int(round(cy * SUP - side / 2)), tile)         # truncated (ICO-09)
 
 
 def glyph(name, scale=None):

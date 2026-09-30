@@ -34,7 +34,7 @@ def draw(cv, cx=CENTER_X, cy=CIRCLE_CY, *, color, alpha=1.0, scale=1.0,
          dots=()):
     """the pill centred on (cx, cy), one filled dot per entry in dots (its
     own 0..1 alpha, left to right); scale is the entrance rise"""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     s = scale
     cv.rounded_rect((cx - PW / 2 * s, cy - PH / 2 * s,
@@ -42,7 +42,7 @@ def draw(cv, cx=CENTER_X, cy=CIRCLE_CY, *, color, alpha=1.0, scale=1.0,
                     outline=colors.scale(color, alpha), width=STROKE * s)
     for i, da in enumerate(dots):
         a = alpha * clamp01(da)
-        if a <= 0.01:
+        if a <= colors.ALPHA_FLOOR:
             continue
         cv.circle(cx + (i - (SLOTS - 1) / 2.0) * SPAN * s, cy, DOT_R * s,
                   colors.scale(color, a))
@@ -53,7 +53,7 @@ def scanline(cv, cx, cy, u, *, color, alpha=1.0, scale=1.0, cycles=1.0):
     pill `cycles` times (1 comes back where it started, 1.5 ends at the far
     end) and fades out over SCAN_FADE, the sweep's tail"""
     a = alpha * ease_out(clamp01((1 - u) / SCAN_FADE))
-    if a <= 0.01:
+    if a <= colors.ALPHA_FLOOR:
         return
     s = scale
     pos = 0.5 - 0.5 * math.cos(clamp01(u) * math.pi * 2 * cycles)

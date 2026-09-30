@@ -9,7 +9,7 @@ The bottom band of the [Confirm?](../screen-types/confirm.md) screen. The big pr
 
 Only one is visible at a time. The swap is sequential: one fades out completely, then the other fades in. They never crossfade.
 
-The texts are fixed strings of the design system ({{loc:pq1.components.VIEW_MORE_TEXT}}), not flow data. The drawing is `components.confirm_band` ({{loc:pq1.components.confirm_band}}), two calls of the band unit ({{loc:pq1.components._band_unit}}) that an intro's [band chevron](band-chevron.md) also uses. The timing is `motion.confirm_band` ({{loc:pq1.motion.confirm_band}}).
+The texts are fixed strings of the design system ({{loc:pq1.components.VIEW_MORE_TEXT}}), not flow data. The drawing is `components.confirm_band` ({{loc:pq1.components.confirm_band}}), two calls of the band unit ({{loc:pq1.components._band_unit}}) that an intro's [band chevron](band-chevron.md) also uses. The timing is `motion.confirm_band` ({{loc:pq1.motion.confirm_band}}), which runs each slot through `motion.hint_env` ({{loc:pq1.motion.hint_env}}) — the one appear / rest / go envelope the busy caption, the PIN hints and the chevron hint share.
 
 ## When it appears
 
@@ -19,14 +19,15 @@ Only on a `confirm` screen, and only while that screen is **settled**. The Sim d
 
 | part | value |
 |---|---|
-| text centre x, both messages | {{val:pq1.components.VIEW_MORE_CX}} |
+| text centre x, OR VIEW MORE | {{val:pq1.layout.VIEW_MORE_CX}} (`VIEW_MORE_CX`) |
+| text centre x, TO GO BACK | {{val:pq1.layout.GO_BACK_CX}} (`GO_BACK_CX`, the mirror: 2 × centre − VIEW_MORE_CX) |
 | baseline y | {{val:pq1.layout.BASELINE_Y}} |
 | type | the question caps: size {{val:pq1.typography.SIZE_QUESTION}}, letter spacing {{val:pq1.typography.LS_QUESTION}}, white |
 | chevron centre x | {{val:pq1.components.VIEW_MORE_CHEV_GAP}} px past the text's right edge (VIEW MORE), or the same distance before its left edge (GO BACK) |
 | chevron centre y | {{val:pq1.components.VIEW_MORE_CHEV_CY}} |
 | chevron shape | the [corner chevron](chevrons.md)'s, turned a quarter right or left |
 
-Both texts are centred on the same x. That x is the panel centre ({{val:pq1.layout.CENTER_X}}) nudged left so that `OR VIEW MORE ▸` reads centred as a unit; `◂ TO GO BACK` keeps the same text centre, so as a unit it reads further left. Port it as the code has it.
+Each text is nudged off the panel centre ({{val:pq1.layout.CENTER_X}}) so that its whole unit — text plus chevron — reads centred: `OR VIEW MORE ▸` (chevron after) on {{val:pq1.layout.VIEW_MORE_CX}}, `◂ TO GO BACK` (chevron before) on the mirror {{val:pq1.layout.GO_BACK_CX}}. The two alternate every few seconds in one slot, so they share one visual centre and the band does not jump sideways at the swap.
 
 ## Motion
 

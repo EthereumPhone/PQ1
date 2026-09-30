@@ -17,12 +17,12 @@ beat. The whole screen is a pure function of `t`, so any frame can be recomputed
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 400 | 5.6 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | a black disc of radius 30 + 2.5 px is laid over the resting token at rising alpha (`status.draw_handoff`); with `handoff` unset the canvas is simply black |
+| black hold — the flow's token hands over | 429 | 6.0 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | a black disc of radius `HANDOFF_WASH_R` 32.5 px is laid over the resting token at rising alpha (`status.draw_handoff`); with `handoff` unset the canvas is simply black |
 | the disc arrives — fade | 300 | 4.2 | ease_out | `T_IN` | `pq1/verdict.py:42` | white, alpha 0 to 1. The colour is multiplied by alpha before drawing, not composited |
 | the disc arrives — rise | 300 | 4.2 | arrive | `T_IN` | `pq1/verdict.py:42` | radius `CIRCLE_R` 30 px scaled from `ARRIVE_FROM` 0.97 to 1 — under a pixel of growth, and never an overshoot |
 | beat on the arrived sign | 450 | 6.3 | — | `T_WAIT` | `pq1/verdict.py:43` | nothing moves. The disc is simply seen before it is named |
 | the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | FIRMWARE VERIFIED onto the shared baseline y 128 — see [caption](../components/caption.md) |
-| resolved — the result hold | 2450 | 34.3 | — | `RESULT_HOLD_MS` | `pq1/status.py:101` | the screen rests, then the flow moves on — see [result hold](../transitions/result-hold.md) |
+| resolved — the result hold | 2450 | 34.3 | — | `RESULT_HOLD_MS` | `pq1/status.py:107` | the screen rests, then the flow moves on — see [result hold](../transitions/result-hold.md) |
 
 The check is **not** animated and **not** faded: `marks.check` draws it in flat black at full
 alpha over the disc, so it is a hole punched in the white, legible at every stage of the fade.
@@ -34,13 +34,13 @@ scales with the disc.
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 1450 ms (20.3 f) | 3900 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 1479 ms (20.7 f) | 3929 ms | 2450 ms | no | yes | no | no |
 
 ## Phases
 
 | phase attribute | `(default)` |
 |---|---:|
-| `T_HOLD` | 400 ms (5.6 f) |
+| `T_HOLD` | 429 ms (6.0 f) |
 | `T_IN` | 300 ms (4.2 f) |
 | `T_TEXT` | 300 ms (4.2 f) |
 | `T_WAIT` | 450 ms (6.3 f) |

@@ -91,13 +91,16 @@ ARROWS = geometry.svg_subpaths(PATH)   # the two arrows, in SVG units (x right, 
 
 def draw(cv, cx, cy, *, r, color, alpha=1.0, rot=0.0):
     """the rotate mark, half-height r, its box centred on (cx, cy). True
-    alpha compositing (components.base_mark's rationale): the mark sits on a disc,
+    alpha compositing (marks.base_mark's model): the mark sits on a disc,
     so a colour-scaled fill would read wrong while fading."""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     u = 2.0 * r * SUP / H                       # one SVG unit, supersampled px
     pad = 4
     side = int(math.ceil(math.hypot(W, H) * u)) + 2 * pad   # rotation never clips
+    side += side % 2   # even, so the centre is a whole pixel: an odd side or a
+    #                    truncated paste sat every mark half a supersampled
+    #                    pixel up and left (audit ICO-09)
     mask = Image.new("L", (side, side), 0)
     d = ImageDraw.Draw(mask)
     ox, oy = side / 2 - W / 2 * u, side / 2 - H / 2 * u     # the box, centred
@@ -108,7 +111,8 @@ def draw(cv, cx, cy, *, r, color, alpha=1.0, rot=0.0):
         mask = mask.rotate(-math.degrees(rot), resample=Image.BICUBIC)
     tile = Image.new("RGBA", (side, side), (*tuple(color), 255))
     tile.putalpha(mask)
-    cv.paste(tile, int(cx * SUP - side / 2), int(cy * SUP - side / 2), tile)
+    cv.paste(tile, int(round(cx * SUP - side / 2)),        # rounded, never
+             int(round(cy * SUP - side / 2)), tile)         # truncated (ICO-09)
 
 
 def glyph(scale=MARK_SCALE):

@@ -23,7 +23,7 @@ A verdict may be LED by a film that ends on an empty canvas — the spec's
 verdict's T_HOLD running under the blast's fading rings.
 """
 from . import status
-from .motion import ARRIVE_MS, arrive, clamp01, ease_out
+from .motion import ARRIVE_MS, VERDICT_HOLD_MS, arrive, clamp01, ease_out
 
 
 class VerdictAnim(status.StatusAnim):
@@ -38,7 +38,7 @@ class VerdictAnim(status.StatusAnim):
 
     rests_on_token = False   # the sign owns the canvas: Sim fades it out,
                              # no token disc rides the transit (status.py)
-    T_HOLD = 400    # black hold / handoff crossfade
+    T_HOLD = VERDICT_HOLD_MS   # black hold / handoff crossfade: 6 panel frames
     T_IN = ARRIVE_MS   # icon entrance: fade + arrive — 300, the law's maximum
     T_WAIT = 450    # beat before the caption
     T_TEXT = 300    # caption fade (status.BUSY_FADE_MS pace, ease-out)

@@ -9,7 +9,7 @@ A batch's per-transaction hero: the pager says which transaction of how many; it
 
 The BATCH screen: a hero that carries the pager `n/m` at the top centre. It tells the signer which transaction of the batch is on the panel — `1/3`, `2/3`, `3/3`. The pager is a **position**, not text pages: nothing flips and no tap turns it. Only the two BATCH screens of a transaction carry it — the transaction's own ask and its details draw no pager at all — and the number changes only when the next [segment](batch-segment.md) opens.
 
-It wears two forms, both built by `flows.batch.batch_hero()` (`flows/batch/__init__.py:53`):
+It wears two forms, both built by `flows.batch.batch_hero()` (`flows/batch/__init__.py:54`):
 
 | form | caption | chevrons | `commit` |
 |---|---|---|---|
@@ -18,7 +18,7 @@ It wears two forms, both built by `flows.batch.batch_hero()` (`flows/batch/__ini
 
 ## When it appears
 
-Used in 2 of 31 flows: `batch/transfers` ×6, `batch/transfers_declined` ×4
+Used in 2 of 33 flows: `batch/transfers` ×6, `batch/transfers_declined` ×4
 
 Twice per transaction: the announce form opens the segment, the ask form closes it after the details. The **last** transaction has nothing to point on to, so it opens on the ask form too and never wears the band chevron.
 
@@ -26,7 +26,7 @@ Twice per transaction: the announce form opens the segment, the ask form closes 
 
 | key | form | meaning |
 |---|---|---|
-| `pager` | `[2, 3]` | this hero's position in a sequence of asks — the pager "n/m" in the same top-centre spot a paged detail uses (12 px, 80 % white). A batch's transactions (flows/batch). NOT text pages: nothing flips and the dwell is untouched |
+| `pager` | `[2, 3]` | this hero's position in a sequence of asks — the pager "n/m" in the same top-centre spot a paged detail uses (the Label face, INK_PAGING). A batch's transactions (flows/batch). NOT text pages: nothing flips and the dwell is untouched |
 | `bottom` | `"SEND 5.25 ETH?"` |  |
 | `band_chev` | `True` | the caption carries the confirm band's right- pointing chevron and the corner chevrons hide (chev defaults None) — the intro ahead of an ask (flows/erc7730); not an ask itself, so "commit": False |
 | `commit` | `True \| False` | hold-right sign/submit armed (optional; DESIGN.md § Input — reference driver: pq1/driver.py; device firmware implements the grammar natively; the demo loop performs the hold — the disc filling up — here before a done ending) |
@@ -39,17 +39,17 @@ Screen 1 of flow `batch/transfers`, as the design system normalizes it (defaults
 {'id': 'BATCH 1',
  'kind': 'hero',
  'pager': [1, 3],
+ 'icon': 'eth',
  'bottom': 'BATCH SIGN TX 1 OF 3',
  'band_chev': True,
  'commit': False,
- 'icon': 'eth',
  'token': {'palette': 'TOSHI'},
  'chev': None}
 ```
 
-- `pager` is `[n, m]`, two integers with 1 ≤ n ≤ m. Anything else raises in `normalize_screens` (`pq1/layout.py:510`).
-- A pager with m under 2 draws nothing (`components.pager`, `pq1/components.py:517`): a batch of one shows no pager.
-- The schema note above still says the pager is 12 px. The code draws it at the label size, `SIZE_LABEL` 16, and `DESIGN.md` § Typography agrees with the code.
+- `pager` is `[n, m]`, two integers with 1 ≤ n ≤ m. Anything else raises in `normalize_screens` (`pq1/layout.py:653`).
+- A pager with m under 2 draws nothing (`components.pager`, `pq1/components.py:566`): a batch of one shows no pager.
+- The pager is drawn in the **Label face** — `SIZE_LABEL` 16, SemiBold, tracking 1 px — exactly like a detail label (`DESIGN.md` § Typography, Label).
 - The `chev` note above ("None = no input") describes the drawing, not the arming: the announce form takes both taps and the left hold although its corner chevrons are hidden — see [hero — an intro](hero-intro.md) § Spec.
 - n and m are per-batch data. So is the caption: it is built from them.
 
@@ -58,23 +58,23 @@ Screen 1 of flow `batch/transfers`, as the design system normalizes it (defaults
 | part | value |
 |---|---|
 | circle | centre x 214, y 72, r 30 |
-| text `BATCH SIGN TX 1 OF 3` | x 214, y 128, size 18 |
+| text `BATCH SIGN TX 1 OF 3` | x 206, y 128, size 18 |
 
 The table above does not list the pager. It is drawn at x 214, baseline y 24, size 16, letter spacing 1, white scaled to 0.8 — the same spot and style a [paged detail](detail-paged.md) uses, between the two corner chevrons. See [pager](../components/pager.md).
 
-In the announce form the caption is drawn centred on x 206, not on the x the layout reports, to make room for the band chevron — see [hero — an intro](hero-intro.md) § Geometry.
+In the announce form the caption is drawn centred on x 206 (the layout reports that x) to make room for the band chevron — see [hero — an intro](hero-intro.md) § Geometry.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | arrive from the previous screen | — | — | spring NAV | — | — | disc, glyph mix and text alpha on one spring set — see [spring morph](../transitions/spring-morph.md) |
-| caption and pager fade in, after the disc starts | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the pager is drawn under the hero's own text alpha, so it fades with the caption |
+| caption and pager fade in, after the disc starts | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the pager is drawn under the hero's own text alpha, so it fades with the caption |
 | caption and pager fade out when the screen is left | — | — | spring NAV | — | — | at once, no delay |
 | the pager while the screen rests | — | — | hold | — | — | static; `motion.page_flip` never runs for a hero |
-| rest before the idle sweep starts | 1000 | 14.0 | — | `SWEEP_DELAY_MS` | `pq1/motion.py:204` | both forms sweep like any hero |
-| idle sweep, one full side-to-side cycle | 5000 | 70.0 | sine + tau_chase | `SWEEP_PERIOD_MS` | `pq1/motion.py:205` | only the disc and its trail move; the pager and the caption stay still |
-| chevron hint cycle (ask form only) | 3600 | 50.4 | ease + sine | `CHEV_HINT_PERIOD_MS` | `pq1/motion.py:308` | the corner chevrons turn up on `ease`, bob on a half sine, turn back — see [chevrons](../components/chevrons.md) |
+| rest before the idle sweep starts | 1000 | 14.0 | — | `SWEEP_DELAY_MS` | `pq1/motion.py:257` | both forms sweep like any hero |
+| idle sweep, one full side-to-side cycle | 5000 | 70.0 | sine + tau_chase | `SWEEP_PERIOD_MS` | `pq1/motion.py:258` | only the disc and its trail move; the pager and the caption stay still |
+| chevron hint cycle (ask form only) | 3571 | 50.0 | ease_out + sine | `CHEV_HINT_PERIOD_MS` | `pq1/motion.py:383` | the corner chevrons turn up on `ease_out` (the `hint_env` envelope), bob on a half sine, turn back — see [chevrons](../components/chevrons.md) |
 
 Between the announce hero and the transaction's own ask the pager fades out, because the inner ask has no pager. Two numbers never crossfade directly: a pager hero is always left for the inner ask, the details or an ending. The old number fades out with its screen, the ending plays, and the new number fades in with the next BATCH screen. The number never rolls or slides.
 
@@ -82,13 +82,13 @@ Between the announce hero and the transaction's own ask the pager fades out, bec
 
 Verified on the reference driver with flow `batch/transfers`:
 
-| form | either tap | hold right | hold left |
-|---|---|---|---|
-| announce | to the next hero: the transaction's own ask (`SEND 1,250 TOSHI?`) | unbound, no fill | declines the whole batch |
-| ask, opening the last transaction | to the transaction's own ask | signs the last transaction: the batch ending plays | declines the whole batch |
-| ask, returning after the details | back into the details, at their first screen | signs this transaction: its own ending plays | declines the whole batch |
+| form | right tap | left tap | hold right | hold left |
+|---|---|---|---|---|
+| announce | to the next hero: the transaction's own ask (`SEND 1,250 TOSHI?`) | nothing — a segment's first screen | unbound, no fill | declines the whole batch |
+| ask, opening the last transaction | to the transaction's own ask | nothing — a segment's first screen | signs the last transaction: the batch ending plays | declines the whole batch |
+| ask, returning after the details | back into the details, at their first screen | back to the last detail | signs this transaction: its own ending plays | declines the whole batch |
 
-The executed truth tables for the two forms are on [hero — an intro](hero-intro.md) (announce) and [hero — the ask](hero-ask.md) (ask). The rule for the taps is `_hub_target` (`pq1/driver.py:338`). What a hold reaches is on [batch — a run of segments](batch-segment.md).
+The executed truth tables for the two forms are on [hero — an intro](hero-intro.md) (announce) and [hero — the ask](hero-ask.md) (ask). The rule for the taps is `_hub_target` (`pq1/driver.py:342`). What a hold reaches is on [batch — a run of segments](batch-segment.md).
 
 The announce form is never returned to: a left tap on the first detail goes to the transaction's own ask, and that ask's taps go back into the details.
 
@@ -104,7 +104,7 @@ The clip is the demo walk: dwell timers advance it, at the KIOSK pace. On the de
 
 - **Do** keep the pager fixed for the whole segment. It changes only when the next transaction's BATCH screen arrives.
 - **Do** open the last transaction on the ask form, with no band chevron.
-- **Don't** bind a tap to the pager. Taps on a pager hero follow the hub rule, never a page turn.
+- **Don't** bind a tap to the pager. Taps on a pager hero follow the hub rule (right enters, left only goes back), never a page turn.
 - **Don't** lengthen the demo dwell for it: the hero dwell is untouched (`HERO_DWELL` 5000 ms (70.0 f)), and the dwell is not ported anyway.
 
 ## Port notes

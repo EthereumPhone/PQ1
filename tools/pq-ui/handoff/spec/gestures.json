@@ -11,33 +11,49 @@
   "CHORD_MS": {
    "comment": "both buttons: a press on one side within this of the other",
    "frames_14": 2.1,
-   "reader_count": 5,
+   "reader_count": 9,
    "readers": [
-    "pq1/driver.py:376",
-    "pq1/driver.py:395",
+    "pq1/driver.py:382",
+    "pq1/driver.py:401",
+    "screens/pin/check_word.py:20",
+    "screens/pin/check_word.py:35",
+    "screens/pin/check_word.py:127",
+    "screens/pin/check_word.py:143",
     "screens/pin/pin_entering.py:35",
-    "screens/pin/pin_entering.py:68",
-    "screens/pin/pin_entering.py:173"
+    "screens/pin/pin_entering.py:68"
    ],
    "scope": "device",
-   "source": "pq1/motion.py:169",
+   "source": "pq1/motion.py:193",
    "under_two_frames": false,
    "unit": "ms",
    "value": 150
+  },
+  "DEBOUNCE_MS": {
+   "comment": "scope: DEVICE. An edge within this of the previous edge",
+   "do_not_port": false,
+   "frames_14": 0.4,
+   "reader_count": 0,
+   "readers": [],
+   "scope": "spec-only",
+   "scope_reason": "contact-bounce rejection on a raw button edge: the reference driver is handed clean edges, so nothing in the Python filters them — the port (or the HAL, or the button itself) implements it from the spec",
+   "source": "pq1/motion.py:198",
+   "under_two_frames": true,
+   "unit": "ms",
+   "value": 30
   },
   "DOUBLE_TAP_MS": {
    "comment": "second press within this converts a tap (entry contexts only)",
    "frames_14": 3.5,
    "reader_count": 5,
    "readers": [
-    "pq1/driver.py:378",
-    "pq1/driver.py:405",
+    "pq1/driver.py:384",
+    "pq1/driver.py:411",
     "screens/pin/pin_entering.py:36",
     "screens/pin/pin_entering.py:68",
-    "screens/pin/pin_entering.py:173"
+    "screens/pin/pin_entering.py:176"
    ],
    "scope": "device",
-   "source": "pq1/motion.py:168",
+   "source": "pq1/motion.py:192",
    "under_two_frames": false,
    "unit": "ms",
    "value": 250
@@ -47,17 +63,17 @@
    "frames_14": 28.0,
    "reader_count": 17,
    "readers": [
-    "pq1/driver.py:16",
-    "pq1/driver.py:506",
-    "pq1/driver.py:512",
+    "pq1/driver.py:17",
+    "pq1/driver.py:539",
     "pq1/flow.py:20",
     "pq1/flow.py:32",
-    "pq1/flow.py:264",
-    "pq1/flow.py:270",
-    "pq1/flow.py:375"
+    "pq1/flow.py:286",
+    "pq1/flow.py:292",
+    "pq1/flow.py:403",
+    "pq1/flow.py:404"
    ],
    "scope": "device",
-   "source": "pq1/motion.py:171",
+   "source": "pq1/motion.py:195",
    "under_two_frames": false,
    "unit": "ms",
    "value": 2000
@@ -68,59 +84,58 @@
    "reader_count": 7,
    "readers": [
     "pq1/flow.py:32",
-    "pq1/flow.py:253",
-    "pq1/flow.py:333",
-    "pq1/motion.py:186",
-    "pq1/motion.py:195",
-    "screens/confirm/hold_to_confirm.py:46",
-    "screens/confirm/hold_to_confirm.py:103"
+    "pq1/flow.py:275",
+    "pq1/flow.py:361",
+    "pq1/motion.py:219",
+    "pq1/motion.py:228",
+    "screens/confirm/hold_to_confirm.py:50",
+    "screens/confirm/hold_to_confirm.py:121"
    ],
    "scope": "device",
-   "source": "pq1/motion.py:173",
+   "source": "pq1/motion.py:197",
    "under_two_frames": false,
    "unit": "ms",
    "value": 200
   },
   "PRESS_FEEDBACK_MS": {
-   "comment": "press-down acknowledgment nudge on the pressed-side chevron",
+   "comment": "press-down acknowledgment nudge on the pressed-side chevron —",
    "do_not_port": false,
-   "frames_14": 1.7,
+   "frames_14": 2.0,
    "reader_count": 1,
    "readers": [
-    "pq1/driver.py:32"
+    "pq1/driver.py:33"
    ],
    "scope": "spec-only",
    "scope_reason": "the press-down chevron nudge: specified in DESIGN.md § Input, rendered by nothing in the Python — the port implements it from the spec",
-   "source": "pq1/motion.py:166",
-   "under_two_frames": true,
-   "unit": "ms",
-   "value": 120
-  },
-  "TAP_MAX_MS": {
-   "comment": "released under this = tap; held past it = hold begins",
-   "frames_14": 3.5,
-   "reader_count": 9,
-   "readers": [
-    "pq1/driver.py:16",
-    "pq1/driver.py:246",
-    "pq1/driver.py:256",
-    "pq1/driver.py:435",
-    "pq1/flow.py:254",
-    "pq1/motion.py:181",
-    "pq1/motion.py:190",
-    "pq1/motion.py:201"
-   ],
-   "scope": "device",
-   "source": "pq1/motion.py:167",
+   "source": "pq1/motion.py:186",
    "under_two_frames": false,
    "unit": "ms",
-   "value": 250
+   "value": 145
+  },
+  "TAP_MAX_MS": {
+   "comment": "released under this = tap; held past it = hold begins.",
+   "frames_14": 7.0,
+   "reader_count": 9,
+   "readers": [
+    "pq1/driver.py:17",
+    "pq1/driver.py:250",
+    "pq1/driver.py:260",
+    "pq1/driver.py:441",
+    "pq1/flow.py:276",
+    "pq1/motion.py:214",
+    "pq1/motion.py:223",
+    "pq1/motion.py:244"
+   ],
+   "scope": "device",
+   "source": "pq1/motion.py:188",
+   "under_two_frames": false,
+   "unit": "ms",
+   "value": 500
   }
  },
  "truth_table": [
   {
    "armed_before": [
-    "back",
     "decline",
     "forward",
     "sign"
@@ -129,13 +144,12 @@
    "flow": "send_token",
    "from": "SEND (hero, p1)",
    "gesture": "tap left",
-   "result": "enter",
+   "result": null,
    "state_after": "navigating",
-   "to": "NETWORK (detail, p1)"
+   "to": "SEND (hero, p1)"
   },
   {
    "armed_before": [
-    "back",
     "decline",
     "forward",
     "sign"
@@ -150,7 +164,6 @@
   },
   {
    "armed_before": [
-    "back",
     "decline",
     "forward",
     "sign"
@@ -165,7 +178,6 @@
   },
   {
    "armed_before": [
-    "back",
     "decline",
     "forward",
     "sign"
@@ -180,7 +192,6 @@
   },
   {
    "armed_before": [
-    "back",
     "decline",
     "forward",
     "sign"
@@ -195,7 +206,6 @@
   },
   {
    "armed_before": [
-    "back",
     "decline",
     "forward",
     "sign"
@@ -206,11 +216,10 @@
    "gesture": "both buttons (chord)",
    "result": null,
    "state_after": "navigating",
-   "to": "TO (detail, p1)"
+   "to": "NETWORK (detail, p1)"
   },
   {
    "armed_before": [
-    "back",
     "decline",
     "forward",
     "sign"
@@ -225,7 +234,6 @@
   },
   {
    "armed_before": [
-    "back",
     "decline",
     "forward",
     "sign"
@@ -245,12 +253,12 @@
     "forward"
    ],
    "context": "hero — an intro (band_chev, commit False)",
-   "flow": "erc7730/swap",
-   "from": "ERC7730 (hero, p1)",
+   "flow": "firmware/update",
+   "from": "KEY FINGERPRINT (hero, p1)",
    "gesture": "tap left",
-   "result": "enter",
+   "result": "back",
    "state_after": "navigating",
-   "to": "SIGN (hero, p1)"
+   "to": "UPDATE (hero, p1)"
   },
   {
    "armed_before": [
@@ -259,12 +267,12 @@
     "forward"
    ],
    "context": "hero — an intro (band_chev, commit False)",
-   "flow": "erc7730/swap",
-   "from": "ERC7730 (hero, p1)",
+   "flow": "firmware/update",
+   "from": "KEY FINGERPRINT (hero, p1)",
    "gesture": "tap right",
    "result": "enter",
    "state_after": "navigating",
-   "to": "SIGN (hero, p1)"
+   "to": "WORDS (value, p1)"
   },
   {
    "armed_before": [
@@ -273,8 +281,8 @@
     "forward"
    ],
    "context": "hero — an intro (band_chev, commit False)",
-   "flow": "erc7730/swap",
-   "from": "ERC7730 (hero, p1)",
+   "flow": "firmware/update",
+   "from": "KEY FINGERPRINT (hero, p1)",
    "gesture": "hold left",
    "result": "fired",
    "state_after": "resolving",
@@ -287,12 +295,12 @@
     "forward"
    ],
    "context": "hero — an intro (band_chev, commit False)",
-   "flow": "erc7730/swap",
-   "from": "ERC7730 (hero, p1)",
+   "flow": "firmware/update",
+   "from": "KEY FINGERPRINT (hero, p1)",
    "gesture": "hold right",
    "result": null,
    "state_after": "navigating",
-   "to": "ERC7730 (hero, p1)"
+   "to": "KEY FINGERPRINT (hero, p1)"
   },
   {
    "armed_before": [
@@ -301,12 +309,12 @@
     "forward"
    ],
    "context": "hero — an intro (band_chev, commit False)",
-   "flow": "erc7730/swap",
-   "from": "ERC7730 (hero, p1)",
+   "flow": "firmware/update",
+   "from": "KEY FINGERPRINT (hero, p1)",
    "gesture": "release a hold early (1000 ms)",
    "result": "snapback",
    "state_after": "navigating",
-   "to": "ERC7730 (hero, p1)"
+   "to": "KEY FINGERPRINT (hero, p1)"
   },
   {
    "armed_before": [
@@ -315,12 +323,12 @@
     "forward"
    ],
    "context": "hero — an intro (band_chev, commit False)",
-   "flow": "erc7730/swap",
-   "from": "ERC7730 (hero, p1)",
+   "flow": "firmware/update",
+   "from": "KEY FINGERPRINT (hero, p1)",
    "gesture": "both buttons (chord)",
    "result": null,
    "state_after": "navigating",
-   "to": "NETWORK (detail, p1)"
+   "to": "KEY FINGERPRINT (hero, p1)"
   },
   {
    "armed_before": [
@@ -329,12 +337,12 @@
     "forward"
    ],
    "context": "hero — an intro (band_chev, commit False)",
-   "flow": "erc7730/swap",
-   "from": "ERC7730 (hero, p1)",
+   "flow": "firmware/update",
+   "from": "KEY FINGERPRINT (hero, p1)",
    "gesture": "double press left",
    "result": null,
    "state_after": "navigating",
-   "to": "NETWORK (detail, p1)"
+   "to": "UPDATE (hero, p1)"
   },
   {
    "armed_before": [
@@ -343,12 +351,12 @@
     "forward"
    ],
    "context": "hero — an intro (band_chev, commit False)",
-   "flow": "erc7730/swap",
-   "from": "ERC7730 (hero, p1)",
+   "flow": "firmware/update",
+   "from": "KEY FINGERPRINT (hero, p1)",
    "gesture": "double press right",
    "result": null,
    "state_after": "navigating",
-   "to": "NETWORK (detail, p1)"
+   "to": "CONFIRM UPDATE (hero, p1)"
   },
   {
    "armed_before": [
@@ -446,7 +454,7 @@
    "gesture": "double press left",
    "result": null,
    "state_after": "navigating",
-   "to": "NETWORK (detail, p1)"
+   "to": "SEND (hero, p1)"
   },
   {
    "armed_before": [
@@ -782,7 +790,7 @@
    "gesture": "double press left",
    "result": null,
    "state_after": "navigating",
-   "to": "HASH (value, p1)"
+   "to": "SAFE TX HASH FINGERPRINT (hero, p1)"
   },
   {
    "armed_before": [

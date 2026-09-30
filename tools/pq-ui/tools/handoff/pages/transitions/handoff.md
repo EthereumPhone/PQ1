@@ -16,7 +16,7 @@ In the live flows it is mostly **dropped**: of the six screens carrying the flag
 
 ## Spec
 
-Not a `pq1/layout.py` schema key; it is documented in the `pq1/status.py` docstring beside `lead` and `lead_gap`.
+Not a `pq1/layout.py` schema key; it is documented in the `pq1/status.py` docstring beside `lead` and `lead_clear`.
 
 | key | form | meaning |
 |---|---|---|
@@ -28,7 +28,7 @@ Not a `pq1/layout.py` schema key; it is documented in the `pq1/status.py` docstr
 
 1. nothing at all when the spec has no `handoff`, and nothing once the wash is complete — so it costs nothing after its span;
 2. the token, from **this screen's own spec** (`components.token_from_spec`), at x {{val:pq1.layout.CENTER_X}}, y {{val:pq1.layout.CIRCLE_CY}}, r {{val:pq1.layout.CIRCLE_R}}, carrying the screen's glyph;
-3. a black disc over it at r {{val:pq1.layout.CIRCLE_R}} + 2.5 px — just past the token's ring — at alpha `ease_out(t / span)`.
+3. a black disc over it at `HANDOFF_WASH_R` ({{val:pq1.status.HANDOFF_WASH_R}} px, the layout radius {{val:pq1.layout.CIRCLE_R}} plus a margin) — just past the token's ring — at alpha `ease_out(t / span)`.
 
 It is a **local** wash, not a frame dim: whatever the screen draws afterwards (the lead film, the verdict icon, the caption) is untouched. Contrast the [token-less transit](tokenless-fade.md), which dims the whole frame with `canvas.dim`.
 
@@ -40,12 +40,12 @@ The clock starts at the *end* of the transit, not at the press: a status screen'
 
 {{motion-head}}
 {{row:the wash rises over the token — a verdict | pq1.verdict.VerdictAnim.T_HOLD | ease_out | the span IS the verdict's black hold, so the token is gone exactly as the icon starts}}
-{{row:… a verdict with its own hold (the padlock) | anim:verdict/padlock@unlock:T_HOLD | ease_out | the span follows the instance's `T_HOLD`, not a shared constant}}
+{{row:… a PIN-outcome verdict (pin mismatch, duress differ) | pq1.motion.PIN_HOLD_MS | ease_out | the span follows the instance's `T_HOLD`: the PIN screens' shorter hold answers a keypress}}
 {{row:… an arriving ending | pq1.status.ArriveStatus.T_HOLD | ease_out | same span, declared again}}
 {{row:… a led screen | pq1.status.LedAnim.HANDOFF_MS | ease_out | measured from the screen's time 0, under the lead — never after it}}
 {{row:… the PIN row | screens.pin.pin_entering.T_FADE | ease_out | the row's own ring fade, deliberately longer than the verdict hold}}
 
-One span, three declarations. `VerdictAnim.T_HOLD`, `ArriveStatus.T_HOLD` and `LedAnim.HANDOFF_MS` are the same number meaning the same thing; the PIN row's is different on purpose. Port them as one constant plus the entry's own.
+One span, one constant. `VerdictAnim.T_HOLD`, `ArriveStatus.T_HOLD` and `LedAnim.HANDOFF_MS` all read {{tok:pq1.motion.VERDICT_HOLD_MS}} — six panel frames, so every entrance starts on a frame; the PIN-outcome verdicts read {{tok:pq1.motion.PIN_HOLD_MS}}, and the PIN row's ring fade is different on purpose. Port them as the two named holds plus the entry's own.
 
 ## Input
 
@@ -56,7 +56,7 @@ Nothing is bound *by* the handoff, and nothing about it changes with input. On a
 - **Do** drive the wash from the screen's own clock, as a pure function of `t`.
 - **Do** drop it when the previous screen left no token — otherwise a disc appears out of black at time 0, which is worse than the pop it was meant to fix.
 - **Do** run it under a lead film, from time 0, not between the lead and the main.
-- **Don't** dim the frame. Only the disc's own area darkens; the ring is covered because the wash is 2.5 px wider than the token.
+- **Don't** dim the frame. Only the disc's own area darkens; the ring is covered because `HANDOFF_WASH_R` measures from the layout radius, not the token's visible edge (`components.visible_r`), so it clears the ring's outer edge with room to spare. Any radius a little past the layout radius renders the same.
 - **Don't** let the redrawn token differ from the one the flow was showing. The screen's `icon` / `token` are what get drawn, not the previous screen's.
 
 {{partial:port-notes}}

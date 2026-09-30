@@ -2,7 +2,7 @@
 
 A fingerprint read as words: up to eight short words on a fixed grid of two columns of four, each word numbered. It replaces the value lines of a [value](../screen-types/value.md) screen — `words` instead of `lines` — so the panel shows the whole fingerprint at once and the user can compare it with the one published for the release.
 
-It is a fixed grid, not a text layout: no tier fitting, no wrapping, no stacking rule. The words are white, the numbers grey, both at one size. The band stays empty — the schema allows an optional caps label there, and the live screen does not use it.
+It is a fixed grid, not a text layout: no tier fitting, no wrapping, no stacking rule. The words are white, the numbers grey, both at one size. The band stays empty — a value screen has no label, and `normalize_screens` rejects one.
 
 ## When it appears
 
@@ -10,7 +10,7 @@ On a `value` screen whose spec carries `words`. Live: the WORDS screen of the fi
 
 ## Spec
 
-{{fields:value.words,value.label}}
+{{fields:value.words}}
 
 `normalize_screens` ({{loc:pq1.layout.normalize_screens}}) enforces the shape and raises otherwise:
 
@@ -71,7 +71,7 @@ No clip of its own. It plays in [Value — numbered words grid](../screen-types/
 - **Do** keep the words as data: they are the fingerprint of the firmware being installed, filled per update.
 - **Do** number in reading order — down the left column, then down the right.
 - **Don't** wrap, hyphenate, shrink or truncate a word. Nothing fits it at runtime; a word that does not fit is a wordlist bug.
-- **Don't** put a caption under a grid of four or more words: the fourth row's ink and the band's text overlap.
+- **Don't** put a caption under the grid: the fourth row's ink reaches into the band. The schema has no field for one.
 - **Don't** use the grid for an arbitrary list. It is the fingerprint's layout.
 - **Don't** change the row lines or column edges to centre a shorter list. Four words fill the left column and leave the right empty — that is the layout.
 

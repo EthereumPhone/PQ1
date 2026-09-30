@@ -80,8 +80,9 @@ the entry screen, after the row has faded out, never as a screen of its own — 
   from 8 and a count from 3 bounce by the same distance on screen.
 - **Do** keep the heart still while the reel rolls, and the reel still while the heart pumps.
   Two mechanisms moving at once reads as noise, not as a consequence.
-- **Don't** treat the digit as a text label on the type scale. It is 40 px art whose cap height
-  is tuned to the heart; re-sizing it breaks the pair.
+- **Don't** treat the digit as detail text. It is the **Display** tier
+  ({{tok:pq1.typography.SIZE_DISPLAY}}, SemiBold, one digit alone) whose cap height is tuned
+  to the heart; re-sizing it breaks the pair.
 - **Don't** let the window's bottom fade reach the digit's foot — the resting 1 must be solid.
 
 {{partial:port-notes}}

@@ -4,7 +4,7 @@ With no arguments, renders the default demo — the unknown-token idle screen
 on a randomly picked design-system ramp (idle/unknown_token). --list (or
 -h/--help) shows the catalog. Common flags come from pq1.render.run
 (-o/--fps/--at/--frames/--scale/--loops); per-screen flags come from the
-module (--pin, --severity, --dir, --treatment, --ending, ...); --ready MS
+module (--pin, --severity, --dir, --ending, ...); --ready MS
 answers a loading film (the explosion, also as a lead) at that ms — the
 orbit wraps whole turns until then. Output defaults to
 renders/screens/<name>.gif.

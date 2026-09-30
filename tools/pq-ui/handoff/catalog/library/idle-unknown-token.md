@@ -28,17 +28,17 @@ Token idle — a solid token drifts on the idle sweep, its ramp trailing.
 
 Ambient, like its twin [idle / batch_sign](idle-batch-sign.md): no phases, no resolve, no result. `t_resolve` stays zero and the class overrides `duration` with its own `LOOP_MS` — one sweep period, not the usual resolve-plus-result-hold — so a flow dwells exactly that long. The physics are the same code, constant for constant; only the composition differs (no pager, its own caption).
 
-It is **not pure in `t`**. `draw(cv, t)` advances internal state from the last drawn `t` (`screens/idle/unknown_token.py:78`); a backwards seek resets and replays from zero. These two idle screens are the only ones in the catalog that cannot be seeked to a single frame.
+It is **not pure in `t`**. `draw(cv, t)` advances internal state from the last drawn `t` (`screens/idle/unknown_token.py:80`); a backwards seek resets and replays from zero. These two idle screens are the only ones in the catalog that cannot be seeked to a single frame.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | the physics slice | 33.3 | 0.5 | — | `STEP_MS` | `screens/idle/unknown_token.py:31` | `step()` advances in chunks of at most this, whatever the real frame took. The chase itself is frame-rate independent |
-| the disc holds centred before the sweep starts | 1000 | 14.0 | hold | `SWEEP_DELAY_MS` | `pq1/motion.py:204` | the sweep clock is `t` minus this, floored at zero |
-| the sweep target, one full left-right cycle | 5000 | 70.0 | sine | `SWEEP_PERIOD_MS` | `pq1/motion.py:205` | target x offset = minus the sine of the cycle, times 95 px — a target, not the disc's position |
-| the disc chases the target | 180 | 2.5 | tau_chase | `OSC_TAU` | `pq1/motion.py:207` | the lag is what rounds the turns; there is no easing curve anywhere in this screen's travel |
-| each follower chases the link ahead of it | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:213` | the idle chase, slower than a transit's `CHAIN_TAU` 60 ms (0.8 f), so the ramp spreads out and stays readable. See [trail](../components/trail.md) |
-| the first chevron bob starts | 1400 | 19.6 | — | `1400` | — | a bare literal inside `motion.chevron_hint` (`pq1/motion.py:312`) |
-| the chevron hint cycle | 3600 | 50.4 | ease | `CHEV_HINT_PERIOD_MS` | `pq1/motion.py:308` | rise, bob, fall, rest. Only the bob shows: the module discards the up-rotation and keeps the mark pointing right |
+| the disc holds centred before the sweep starts | 1000 | 14.0 | hold | `SWEEP_DELAY_MS` | `pq1/motion.py:257` | the sweep clock is `t` minus this, floored at zero |
+| the sweep target, one full left-right cycle | 5000 | 70.0 | sine | `SWEEP_PERIOD_MS` | `pq1/motion.py:258` | target x offset = minus the sine of the cycle, times 95 px — a target, not the disc's position |
+| the disc chases the target | 180 | 2.5 | tau_chase | `OSC_TAU` | `pq1/motion.py:260` | the lag is what rounds the turns; there is no easing curve anywhere in this screen's travel |
+| each follower chases the link ahead of it | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:266` | the idle chase, slower than a transit's `CHAIN_TAU` 60 ms (0.8 f), so the ramp spreads out and stays readable. See [trail](../components/trail.md) |
+| the first chevron bob starts | 1429 | 20.0 | — | `CHEV_HINT_START_MS` | `pq1/motion.py:385` | the hint's one-time lead-in, read by `motion.chevron_hint` (`pq1/motion.py:396`) |
+| the chevron hint cycle | 3571 | 50.0 | ease_out | `CHEV_HINT_PERIOD_MS` | `pq1/motion.py:383` | rise, bob, fall, rest. Only the bob shows: the module discards the up-rotation and keeps the mark pointing right |
 | the loop | 5000 | 70.0 | — | `LOOP_MS` | `screens/idle/unknown_token.py:30` | equals the sweep period, and equals the screen's `duration` |
 
 The bob closes on the loop exactly (its start plus the hint period is the loop length). The sweep does not: the sweep clock starts `SWEEP_DELAY_MS` 1000 ms (14.0 f) late, so at the end of the loop the disc is still out near its right extreme, about 92 px from centre, where at t 0 it was on the centre line. Treat the loop as a window on continuous physics, not a cycle that closes.
@@ -57,13 +57,13 @@ Head plus trail spell the whole ramp: the fill stop on the disc, the five darker
 
 ### Identity is the colour
 
-The ramp is deterministic, resolved in one place, `components.token_ramp` (`pq1/components.py:393`): `palette`, then `address`, then `symbol`, then the screen's `icon`, then the neutral ramp. Address outranks symbol because two tokens can share a ticker but never a contract. A `palette` that names a brand pins that brand by name, outside the hash space — a brand ramp can never be reached by hashing a typed-in ticker.
+The ramp is deterministic, resolved in one place, `components.token_ramp` (`pq1/components.py:418`): `palette`, then `address`, then `symbol`, then the screen's `icon`, then the neutral ramp. Address outranks symbol because two tokens can share a ticker but never a contract. A `palette` that names a brand pins that brand by name, outside the hash space — a brand ramp can never be reached by hashing a typed-in ticker.
 
 Three traps a porter should know:
 
 - **The stock spec carries no identity.** `SPEC` sets `token={}`, so a flow splicing this screen unchanged gets no ramp fill at all: the default token look, a black body under the white ring, with the neutral grey trail.
 - **Only `palette` paints it.** The disc's fill and the coloured trail are both taken from a `palette` key (`components.token_style_from_spec`, `components.trail_palette_from_spec`). `address` or `symbol` alone resolve a ramp index that nothing on this screen reads — black disc, grey trail. Put the identity under `palette` (an index, a ticker, a contract address or a brand name) and the whole composition follows it.
-- **The random ramp is CLI-only.** With no `palette` pinned, `build()` picks a random ramp before the animation exists — resolved once so every frame and every seek of that render agree — and prints which one it chose (`screens/idle/unknown_token.py:112`). It does this even when `--symbol` / `--address` named something, so a bare render is not the place to check a hash. Nothing on the device ever picks a colour at random.
+- **The random ramp is CLI-only.** With no `palette` pinned, `build()` picks a random ramp before the animation exists — resolved once so every frame and every seek of that render agree — and prints which one it chose (`screens/idle/unknown_token.py:114`). It does this even when `--symbol` / `--address` named something, so a bare render is not the place to check a hash. Nothing on the device ever picks a colour at random.
 
 The disc here is always solid. `variant="unknown"` — the gradient disc DESIGN.md § Color reserves for an unrecognized token — is still in `components.token`, but no live flow asks for it: even the unknown-token transfer flow dresses its token as a solid disc on the address's ramp. See [token disc](../components/token-disc.md).
 

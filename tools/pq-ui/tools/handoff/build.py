@@ -25,6 +25,7 @@ PREVIEW_WARN_KB = 2048
 SOURCE_DIRS = ["pq1", "flows", "screens", os.path.join("tools", "panel"),
                os.path.join("tools", "handoff"), os.path.join("tools", "check")]
 SOURCE_FILES = ["requirements.txt", "README.md"]
+STRAY = (".orig", ".rej", ".bak", ".patch", ".pyc", "~")      # never shipped, wherever they sit
 
 
 class BuildError(Exception):
@@ -219,9 +220,66 @@ def blocks_for(entry, specs, preview_files):
         sp = specs["anims.json"]["anims"][keys[0]]["spec"]
         return "```python\n" + pprint.pformat(sp, width=92, sort_dicts=False, compact=True) + "\n```"
 
+    # ---- the icon blocks: the legal set and its three laws, straight out of
+    # spec/icons.json, so the page never types a scale or a measurement
+    # (audit ICO-07)
+    def _icons():
+        """spec/icons.json, or the reason a draft render cannot see it yet —
+        `--page` reads the specs ON DISK, which are a build behind the code"""
+        if "icons.json" not in specs:
+            raise template.PageError("spec/icons.json is not on disk yet — rebuild with "
+                                     "`python3 -m tools.handoff` before drafting this page")
+        return specs["icons.json"]
+
+    def icon_table(_arg):
+        rows = ["| icon | kind | scale | ink box, px | ink % | extent % | in band |",
+                "|---|---|---|---:|---:|---:|---|"]
+        for name, e in sorted(_icons()["icons"].items()):
+            m, sc = e["measured"], e["scale"]
+            scale = (f"{template.fmt_num(sc['value'])} × r, {sc['axis']}" if sc["token"]
+                     else f"r, {sc['axis']}")
+            kind = e["kind"] + (" · brand" if e["brand"] else "")
+            rows.append(f"| `{name}` | {kind} | {scale} | {template.fmt_num(m['ink_w'])} × "
+                        f"{template.fmt_num(m['ink_h'])} | {m['ink_pct']} | {m['extent_pct']} | "
+                        f"{'yes' if e['in_band'] else '—'} |")
+        return "\n".join(rows)
+
+    def stroke_table(_arg):
+        st = _icons()["stroke"]
+        rows = ["| weight | px | what it draws |", "|---|---:|---|"]
+        for name, w in sorted(st["widths"].items()):
+            rows.append(f"| `{name}` | {template.fmt_num(w)} | {st['draws'][name]} |")
+        return "\n".join(rows)
+
+    def stroke_exceptions(_arg):
+        rows = ["| exception | as written | why it is off the scale |", "|---|---|---|"]
+        for e in _icons()["stroke"]["exceptions"]:
+            rows.append(f"| {e['name']} <br> `{e['source']}` | `{e['code']}` | {e['reason']} |")
+        return "\n".join(rows)
+
+    def icon_band(_arg):
+        b = _icons()["mark_band"]
+        rows = ["| measure | the band | the set today |", "|---|---|---|"]
+        for key, label in (("extent_pct", "extent"), ("ink_pct", "ink")):
+            lo, hi = b[key]
+            m = b["measured"][key]
+            rows.append(f"| {label} | {template.fmt_num(lo)}–{template.fmt_num(hi)} % | "
+                        f"{m['min']['value']} % (`{m['min']['icon']}`) … "
+                        f"{m['max']['value']} % (`{m['max']['icon']}`) |")
+        return "\n".join(rows)
+
+    def sign_box(_arg):
+        rows = ["| ending | what stands there | px | why it is not a sign |", "|---|---|---:|---|"]
+        for e in _icons()["verdict_box"]["exempt"]:
+            size = template.fmt_num(e["size"]) if e["size"] is not None else "—"
+            rows.append(f"| `{e['what']}` | {e['art']} | {size} | {e['why']} |")
+        return "\n".join(rows)
+
     return {"example": example, "used-in": used_in, "geometry": geometry, "preview": preview,
             "variants": variants, "phases": phases, "constants": constants, "curves": curves,
-            "gestures": gestures, "owners": owners, "spec": spec_block}
+            "gestures": gestures, "owners": owners, "spec": spec_block,
+            "icon-table": icon_table, "stroke-table": stroke_table,
+            "stroke-exceptions": stroke_exceptions, "icon-band": icon_band, "sign-box": sign_box}
 
 
 LIBRARY_DEFAULT = """{{doc-self}}
@@ -383,7 +441,7 @@ def coverage_guards(entries, specs):
         ride_along |= set(getattr(mod, "SPEC", {}))
         for p in getattr(mod, "PRESETS", {}).values():
             ride_along |= set(p)
-    internal = {"lead", "lead_gap", "handoff", "live", "preset"}
+    internal = {"lead", "lead_clear", "handoff", "live", "preset"}
     for kind, keys in specs["screens.schema.json"]["keys_seen_in_live_flows"].items():
         for k in keys:
             if k not in documented and k not in ride_along and k not in internal:
@@ -434,7 +492,7 @@ def check(full=False):
     live = build_specs(fast_only=not full)
     if not full:
         live.pop("build.json", None)     # it hashes tools/handoff itself; --full checks it
-    bad = []
+    bad = source_drift()
     for name, data in live.items():
         p = os.path.join(spec_dir, name)
         disk = json.load(open(p)) if os.path.exists(p) else {}
@@ -459,11 +517,39 @@ def check(full=False):
     return 1
 
 
+def _source_files(root):
+    out = {}
+    for d in SOURCE_DIRS:
+        for r, dirs, files in os.walk(os.path.join(root, d)):
+            dirs[:] = [x for x in dirs if x != "__pycache__" and not x.endswith("_frames")]
+            for f in files:
+                if f != ".DS_Store" and not f.endswith(STRAY):
+                    p = os.path.join(r, f)
+                    out[os.path.relpath(p, root)] = p
+    for f in SOURCE_FILES:
+        if os.path.exists(os.path.join(root, f)):
+            out[f] = os.path.join(root, f)
+    return out
+
+
+def source_drift():
+    """handoff/source/ must be byte-identical to the live source"""
+    shipped = os.path.join(OUT, "source")
+    if not os.path.isdir(shipped):
+        return ["source/ (missing — rebuild)"]
+    live, disk = _source_files(I.REPO), _source_files(shipped)
+    bad = [f"source/{k} (not shipped)" for k in sorted(set(live) - set(disk))]
+    bad += [f"source/{k} (no longer in the repo)" for k in sorted(set(disk) - set(live))]
+    bad += [f"source/{k} (differs)" for k in sorted(set(live) & set(disk))
+            if open(live[k], "rb").read() != open(disk[k], "rb").read()]
+    return bad
+
+
 def _copy_tree(src, dst, skip=("__pycache__", ".DS_Store")):
     for root, dirs, files in os.walk(src):
         dirs[:] = sorted(d for d in dirs if d not in skip and not d.endswith("_frames"))
         for f in sorted(files):
-            if f in skip or f.endswith(".pyc"):
+            if f in skip or f.endswith(STRAY):
                 continue
             rel_ = os.path.relpath(os.path.join(root, f), src)
             os.makedirs(os.path.dirname(os.path.join(dst, rel_)) or dst, exist_ok=True)
@@ -560,6 +646,14 @@ def build(out=OUT, with_previews=True, only=None, allow_missing=False):
             dst = os.path.join(tmp, "skill", "pq1-conformance")
             _copy_tree(SKILL_SRC, dst)
             _copy_tree(os.path.join(tmp, "spec"), os.path.join(dst, "spec"))
+        for d in SOURCE_DIRS:           # the Python that makes every screen ships beside the catalog
+            _copy_tree(os.path.join(I.REPO, d), os.path.join(tmp, "source", d))
+        for f in SOURCE_FILES:
+            if os.path.exists(os.path.join(I.REPO, f)):
+                shutil.copyfile(os.path.join(I.REPO, f), os.path.join(tmp, "source", f))
+        gal = os.path.join(I.REPO, "renders", "handoff", "GALLERY.md")
+        if os.path.exists(gal):         # the index of pq1-handoff-renders.zip (python3 -m tools.handoff --renders)
+            shutil.copyfile(gal, os.path.join(tmp, "GALLERY.md"))
         bl = os.path.join(I.REPO, "tools", "check", "baseline.toml")
         if os.path.exists(bl):      # the tolerated debt ships beside the numbers it explains
             shutil.copyfile(bl, os.path.join(tmp, "spec", "exceptions.toml"))
@@ -581,8 +675,8 @@ def build(out=OUT, with_previews=True, only=None, allow_missing=False):
 
 
 def make_zip(out=OUT):
-    """pq1-handoff.zip: handoff/ at the root + the skill where Claude Code finds it + a
-    runnable snapshot of the source — built fresh, never committed"""
+    """pq1-handoff.zip: handoff/ at the root (its source/ = the runnable Python) + the skill
+    where Claude Code finds it — built fresh, never committed"""
     path = os.path.join(I.REPO, ZIP_NAME)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         def add(src, arc):
@@ -593,7 +687,7 @@ def make_zip(out=OUT):
         for root, dirs, files in os.walk(out):
             dirs.sort()
             for f in sorted(files):
-                if f != ".DS_Store":
+                if f != ".DS_Store" and not f.endswith(STRAY):
                     add(os.path.join(root, f), os.path.relpath(os.path.join(root, f), out))
         sk = os.path.join(out, "skill", "pq1-conformance")
         for root, dirs, files in os.walk(sk):
@@ -601,14 +695,5 @@ def make_zip(out=OUT):
             for f in sorted(files):
                 add(os.path.join(root, f), os.path.join(".claude", "skills", "pq1-conformance",
                                                         os.path.relpath(os.path.join(root, f), sk)))
-        for d in SOURCE_DIRS:
-            for root, dirs, files in os.walk(os.path.join(I.REPO, d)):
-                dirs[:] = sorted(x for x in dirs if x != "__pycache__" and not x.endswith("_frames"))
-                for f in sorted(files):
-                    if not f.endswith(".pyc") and f != ".DS_Store":
-                        add(os.path.join(root, f), os.path.join("source", os.path.relpath(os.path.join(root, f), I.REPO)))
-        for f in SOURCE_FILES:
-            if os.path.exists(os.path.join(I.REPO, f)):
-                add(os.path.join(I.REPO, f), os.path.join("source", f))
     print(f"zipped -> {ZIP_NAME} ({os.path.getsize(path) // 1024 // 1024} MB)")
     return 0

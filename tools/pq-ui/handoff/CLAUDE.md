@@ -18,19 +18,20 @@ one. Before calling any screen done, run the `pq1-conformance` skill (`skill/pq1
 3. **The entrance law.** A verdict icon fades in and rises from 0.97 to 1, both on
    `ease_out`, inside `ARRIVE_MS` 300 ms (4.2 f) — never longer, never an overshoot, one shared function
    (`pq1/verdict.py:54`). A mechanism (a turn, a tumble) plays on the *arrived* icon.
-4. **The verdict law.** hold 400 → arrive 300 →
+4. **The verdict law.** hold 429 → arrive 300 →
    wait 450 → caption 300 (ease-out), then every
    ending rests `RESULT_HOLD_MS` 2450 ms (34.3 f). Per-screen and per-preset values: `spec/anims.json`.
 5. **Named curves only.** Use the curves in `spec/motion.json` → `easings` (source + samples). Navigation
    springs are critically damped (damping 1.0): no bounce. The one sanctioned overshoot is `back_out`, in the
    status flash only. `motion.pop` is unused — do not port it as an entrance.
 6. **The device uses the NAV spring** (response 0.40, `pq1/motion.py:111`). KIOSK is the demo loop's pace.
-7. **Tap** = released within `TAP_MAX_MS` 250 ms (3.5 f) (inclusive); it fires on **release**.
-8. **Hold** = the fill stays empty until 250, then rises **linearly** to full at
+7. **Tap** = released within `TAP_MAX_MS` 500 ms (7.0 f) (inclusive); it fires on **release**.
+8. **Hold** = the fill stays empty until 500, then rises **linearly** to full at
    `HOLD_COMMIT_MS` 2000 ms (28.0 f) from press-**down**; the action fires only at completion. An early
    release drains it over `HOLD_SNAPBACK_MS` 200 ms (2.8 f) on `ease_out` and does nothing. The first live hold wins.
-9. **Left regresses, right progresses — never flipped.** The ask is the hub: either tap enters the
-   details. Decline (hold left) is armed on every navigable screen; sign (hold right) only where the
+9. **Left regresses, right progresses — never flipped.** The ask is the hub: a right tap enters the
+   details; a left tap on an idle screen goes back one screen or does nothing — never forward — and
+   the hero keeps both chevrons either way (`layout.back_target`). Decline (hold left) is armed on every navigable screen; sign (hold right) only where the
    screen commits (the ask, Confirm?). Endings accept no input.
 10. **A press is never dropped.** Input during a transit retargets the springs from the live pose.
     Nothing moves without a press: dwell timers and auto-advance are demo-only.
@@ -53,20 +54,27 @@ one. Before calling any screen done, run the `pq1-conformance` skill (`skill/pq1
     at y 72 and never resizes; all band text sits on baseline y 128.
 18. **Data stays data.** Amounts, symbols, addresses, hashes are per-transaction values — never constants,
     never re-cased. An unknown token wears the gradient hashed from its **address**; the gradient is
-    reserved for unrecognised tokens. Icon art is procedural (traced paths), never a recoloured bitmap.
+    reserved for unrecognised tokens. Icon art is procedural (traced paths), never a recoloured bitmap —
+    a rule that now holds without exception: the raster ether mark is gone, `eth` is the traced mark in
+    `pq1/procedural/eth.py`, and the only bitmaps left are full-bleed brand logos the disc *wears*
+    (`spec/icons.json` publishes the whole set, kind by kind — see `catalog/components/icons.md`).
 19. **Unknown names fail loudly — except the icon.** An unknown `anim`, `state` or `result` raises; never
     invent one. (All three are enforced: see `spec/screens.schema.json` → `enums_enforced`.)
 20. **The Ethereum mark is the deliberate fallback for an icon.** A screen that names no `icon` takes
-    the schema default `"eth"` (`pq1/layout.py:510`), and an icon name the registry
-    does not hold draws that same mark (`pq1/components.py:254`). **This is a design
+    the schema default `"eth"` (`pq1/layout.py:653`), and an icon name the registry
+    does not hold draws that same mark (`pq1/components.py:249`). **This is a design
     decision, not a gap** — the device is an Ethereum wallet and the ether mark is the honest answer for
     art it cannot resolve; `screens/idle/batch_sign.py` documents it as the intended look. Port it as it
     is. Do **not** raise, and do not substitute a `?`.
     **The one narrowing: a CHAIN does not take the ether mark.** A chain id the registry does not
-    hold resolves to `letter:<X>` and the disc draws that initial (`pq1/components.py:254` —
+    hold resolves to `letter:<X>` and the disc draws that initial (`pq1/components.py:249` —
     the `letter:` namespace is matched by shape, never a registry entry). Drawing Ethereum's mark
     would name a *different network*, which is the one case where the fallback would state
     something false rather than merely generic. The disc is still never empty.
+    **The fallback is a runtime answer, not a spelling check:** an icon name outside
+    `spec/screens.schema.json` → `enums.icon` and `enums.icon_namespaces` is a firmware **build**
+    error (the design system's own `F-ICON` rule catches it there), so the ether mark is only ever
+    reached for a token whose art this device genuinely lacks — never for a typo, and never for a chain.
 21. **But a name the registry DOES hold must never degrade.** Resolve every brand mark eagerly at
     startup. In the Python the family marks (`safe`, `cowswap`) register when their flow package is
     imported, so `{"icon": "safe"}` can draw the Ethereum mark if that import has not happened — and the

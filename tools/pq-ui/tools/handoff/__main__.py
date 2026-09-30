@@ -1,10 +1,12 @@
 """python3 -m tools.handoff            build handoff/ from the live code
    python3 -m tools.handoff --check    is handoff/ still true to the code? (fast; exit 1 if stale)
-   python3 -m tools.handoff --zip      build, then write pq1-handoff.zip (catalog + skill + runnable source)"""
+   python3 -m tools.handoff --zip      build, then write pq1-handoff.zip (catalog + skill + runnable source)
+   python3 -m tools.handoff --renders  render every flow x ending + library screen to renders/handoff/ (slow)
+   python3 -m tools.handoff --renders-zip   write pq1-handoff-renders.zip from renders/handoff/"""
 import argparse
 import sys
 
-from . import build
+from . import build, gallery
 
 
 def main(argv=None):
@@ -19,7 +21,12 @@ def main(argv=None):
     ap.add_argument("-o", "--out", default=build.OUT, help="output folder (default: handoff/)")
     ap.add_argument("--page", nargs="+", metavar="SECTION/SLUG", help="page authors: render these pages to stdout (fast)")
     ap.add_argument("--specs-from", default=build.OUT, metavar="DIR", help="with --page: a built handoff folder whose spec/ to reuse")
+    ap.add_argument("--renders", action="store_true", help="render the gallery (every flow x ending, every screen) — slow")
+    ap.add_argument("--renders-zip", action="store_true", help="write pq1-handoff-renders.zip from the gallery")
     a = ap.parse_args(argv)
+    if a.renders or a.renders_zip:
+        rc = gallery.render() if a.renders else 0
+        return gallery.make_zip() if rc == 0 and a.renders_zip else rc
     if a.page:
         return build.render_pages(a.page, a.specs_from)
     if a.check:

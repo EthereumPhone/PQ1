@@ -9,11 +9,11 @@ Five discs trail the token as it travels and as it sweeps; each chases the one a
 
 5 flat discs that follow the token wherever it goes. Each one chases the disc ahead of it, so the chain stretches when the token moves fast and folds back under the token when it rests. It is ambient motion: it has no start, no end and no duration, only a time constant.
 
-The physics is `motion.FollowerChain` (`pq1/motion.py:227`); the drawing is `components.trail_chain` (`pq1/components.py:612`); the colours come from `components.trail_palette_from_spec` (`pq1/components.py:467`).
+The physics is `motion.FollowerChain` (`pq1/motion.py:280`); the drawing is `components.trail_chain` (`pq1/components.py:667`); the colours come from `components.trail_palette_from_spec` (`pq1/components.py:501`).
 
 ## When it appears
 
-On every screen that rests on the token — hero, detail, value, Confirm? — and through every transit between them (`pq1/flow.py:310`). You see it in two situations:
+On every screen that rests on the token — hero, detail, value, Confirm? — and through every transit between them (`pq1/flow.py:338`). You see it in two situations:
 
 - **in a transit**: the token springs to its new place and the links string out behind it;
 - **on a hero at rest**: the links fan out behind the token as it drifts on the [idle sweep](idle-sweep.md).
@@ -35,7 +35,7 @@ On a detail at rest the links sit exactly under the token and are not drawn. The
 
 The trail takes the **same ramp as the disc** (`components.token_ramp`), so identity can never split between the two. A six-stop ramp reads: stop 6 = the token's fill, stop 5 = the nearest link, … stop 1 = the farthest link. The trail darkens away from the token.
 
-- the token names a `palette`, or is `variant: "unknown"` → that ramp's five trail stops (`colors.ramp_palette`, `pq1/colors.py:440`);
+- the token names a `palette`, or is `variant: "unknown"` → that ramp's five trail stops (`colors.ramp_palette`, `pq1/colors.py:523`);
 - the mono look (ETH) → the mono ramp's greys; a brand or popular token → its named ramp (SAFE greens, USDC blues);
 - no `token` field at all → the neutral grey ramp (10);
 - a token keyed by `address` or `symbol` **without** a `palette` → also the neutral grey ramp. `trail_palette_from_spec` reads the resolved ramp only when a `palette` is named or the token is `unknown`, and the solid body is black for the same reason. Every live flow pins `palette` (an address string is a legal `palette` value); only the library's idle screen takes the other keys.
@@ -44,7 +44,7 @@ Mid-transit the palette **cuts** from the old screen's to the new one's when the
 
 ## The step (once per drawn frame)
 
-`chain.step(head_x, head_y, dt, tau)` with `dt` in ms (`pq1/motion.py:238`):
+`chain.step(head_x, head_y, dt, tau)` with `dt` in ms (`pq1/motion.py:291`):
 
 1. If every link is within 0.001 px of the head, return. A resting chain costs nothing.
 2. `k = 1 − e^(−dt / tau)` — one exponential per frame, shared by all links.
@@ -57,12 +57,12 @@ The head is the token's live centre: the position springs **plus** the sweep off
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| a link chases the point ahead — in a transit, and at rest on any screen but a hero | 60 | 0.8 | tau_chase | `CHAIN_TAU` | `pq1/motion.py:212` | a time constant, not a duration: after one tau a link has closed 63 % of its gap |
-| the same chase while settled on a hero | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:213` | slower on purpose: more separation behind the sweeping token |
+| a link chases the point ahead — in a transit, and at rest on any screen but a hero | 60 | 0.8 | tau_chase | `CHAIN_TAU` | `pq1/motion.py:265` | a time constant, not a duration: after one tau a link has closed 63 % of its gap |
+| the same chase while settled on a hero | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:266` | slower on purpose: more separation behind the sweeping token |
 | the head itself, in a transit | — | — | spring NAV | — | — | see [spring morph](../transitions/spring-morph.md) |
-| the head itself, on the idle sweep | 5000 | 70.0 | sine + tau_chase | `SWEEP_PERIOD_MS` | `pq1/motion.py:205` | see [idle sweep](idle-sweep.md) |
+| the head itself, on the idle sweep | 5000 | 70.0 | sine + tau_chase | `SWEEP_PERIOD_MS` | `pq1/motion.py:258` | see [idle sweep](idle-sweep.md) |
 
-The tau is chosen per frame (`pq1/flow.py:310`): the idle value only when the flow is **settled** and the current screen is a hero; the instant a press starts a transit it is the fast value again.
+The tau is chosen per frame (`pq1/flow.py:338`): the idle value only when the flow is **settled** and the current screen is a hero; the instant a press starts a transit it is the fast value again.
 
 **The look depends on the frame step.** `k` is frame-rate independent for a fixed target, but each link chases a target that itself moves once per frame, so a longer `dt` gives a tighter chain. Measured on the reference with the device profile `NAV`, stepped at the panel's 14 fps: on a sweeping hero the links separate by up to about 13 px and the chain reaches some 63 px behind the token; the longest transit (detail left ↔ detail right, 278 px apart) briefly rides the 30 px cap and strings out to about 129 px. Stepped four times as often the same transit sits on the cap much longer and the chain opens to its full length (5 × 30 px). Every preview is rendered at the panel rate, but the flow-window clips walk the demo Sim on the slower `KIOSK` pace, where that transit peaks just under the cap; the scripted two-button clips run at `NAV`, the device pace. Step the chain once per displayed frame with the real elapsed `dt`; do not sub-step it.
 

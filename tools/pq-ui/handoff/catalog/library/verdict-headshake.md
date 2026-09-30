@@ -32,23 +32,23 @@ Both presets have exactly the same timing — only the caption differs. `t` is m
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 400 | 5.6 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | the base verdict hold; nothing is drawn yet. The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md) |
-| the sign arrives — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:343` | disc, ring and x fade in together and scale 0.97 to 1 about the circle centre. The entrance law, no overshoot — see [the verdict law](../transitions/verdict-law.md) |
+| black hold — the flow's token hands over | 429 | 6.0 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | the base verdict hold; nothing is drawn yet. The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md) |
+| the sign arrives — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:431` | disc, ring and x fade in together and scale 0.97 to 1 about the circle centre. The entrance law, no overshoot — see [the verdict law](../transitions/verdict-law.md) |
 | the headshake — one decaying wiggle | 420 | 5.9 | shake | `T_SHAKE` | `screens/verdict/headshake.py:35` | `cx` plus 6 px times shake at one cycle. Right first, then left: the realized peaks are 4.6 px right about a fifth of the way in and 1.7 px left past the middle — the unit curve tops out at 0.77, not 1. The whole sign translates; nothing scales |
 | beat before the caption | 450 | 6.3 | — | `T_BEAT` | `screens/verdict/headshake.py:36` | the sign rests, dead still, on the circle centre |
 | caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | CANCELED or WRONG SEED PHRASE on the y 128 baseline |
-| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | see [result hold](../transitions/result-hold.md) |
+| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | see [result hold](../transitions/result-hold.md) |
 
 `T_WAIT` is the shake window plus the beat — a class attribute here, not computed per spec. The shake window is gated `0 < w < 1`, so the offset is exactly zero before and after it: no clamping, no residual.
 
-**The rig.** There is no procedural art on this screen. It draws the *resting look* itself — the same three layers every unbranded ending lands on ([the resting look](../screen-types/resting-look.md), `status.ArriveStatus`), on the same geometry: a disc of radius `CIRCLE_R` 30 px at (cx 214, cy 72), a ring of width 2.4 px whose radius sits 1.2 px inside the disc edge, and the result glyph from `components.GLYPHS`. Unbranded that is a black disc with the state colour as stroke and x; a spec that carries `resting` (a brand family) fills the disc instead and rides the ring flush at the edge. That is the whole point of the screen: WRONG SEED PHRASE must read as the same refusal as a flow's own CANCELED, because it is the same sign — only shaken.
+**The rig.** There is no procedural art on this screen. It draws the *resting look* itself — the same three layers every unbranded ending lands on ([the resting look](../screen-types/resting-look.md), `status.ArriveStatus`), on the same geometry: a disc of radius `CIRCLE_R` 30 px at (cx 214, cy 72), a ring of width 2.4 px whose radius sits `TOKEN_INSET` 1.2 px inside the disc edge (`components.visible_r`), and the result glyph from `components.GLYPHS`. Unbranded that is a black disc with the state colour as stroke and x; a spec that carries `resting` (a brand family) fills the disc instead and rides the ring flush at the edge. That is the whole point of the screen: WRONG SEED PHRASE must read as the same refusal as a flow's own CANCELED, because it is the same sign — only shaken.
 
 ## Variants
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 1870 ms (26.2 f) | 4320 ms | 2450 ms | no | yes | no | no |
-| `wrong_seed_phrase` | 1870 ms (26.2 f) | 4320 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 1899 ms (26.6 f) | 4349 ms | 2450 ms | no | yes | no | no |
+| `wrong_seed_phrase` | 1899 ms (26.6 f) | 4349 ms | 2450 ms | no | yes | no | no |
 
 `(default)` is `canceled`; `wrong_seed_phrase` differs only in `bottom`, so both rows carry identical timings. `--text` renders any other refusal caption — WRONG PIN, for instance — on the same sign.
 
@@ -56,7 +56,7 @@ Both presets have exactly the same timing — only the caption differs. `t` is m
 
 | phase attribute | `(default)` | `wrong_seed_phrase` |
 |---|---:|---:|
-| `T_HOLD` | 400 ms (5.6 f) | 400 ms (5.6 f) |
+| `T_HOLD` | 429 ms (6.0 f) | 429 ms (6.0 f) |
 | `T_IN` | 300 ms (4.2 f) | 300 ms (4.2 f) |
 | `T_TEXT` | 300 ms (4.2 f) | 300 ms (4.2 f) |
 | `T_WAIT` | 870 ms (12.2 f) | 870 ms (12.2 f) |
@@ -65,16 +65,15 @@ Both presets have exactly the same timing — only the caption differs. `t` is m
 
 | module constant | value |
 |---|---|
-| `RING_INSET` | `1.2` |
 | `SHAKE_PX` | `6.0` |
 | `T_BEAT` | `450` |
 | `T_SHAKE` | `420` |
 
-`SHAKE_PX` and `RING_INSET` are UI pixels; `T_SHAKE` and `T_BEAT` sum to `T_WAIT`.
+`SHAKE_PX` is UI pixels; `T_SHAKE` and `T_BEAT` sum to `T_WAIT`.
 
 ## Input
 
-None. It is a verdict: an ending accepts no press from its first frame to its last (`pq1/driver.py:230`), and the corner chevrons are hidden.
+None. It is a verdict: an ending accepts no press from its first frame to its last (`pq1/driver.py:234`), and the corner chevrons are hidden.
 
 ## Spec a flow splices in
 

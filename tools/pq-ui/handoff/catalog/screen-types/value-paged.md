@@ -37,25 +37,25 @@ How `digest` splits: the bytes are balanced over the fewest lines of at most 13 
 
 - Disc parked at `VALUE_PARK_X` -60 px, as on every value screen. No label.
 - Text centre x 214. Each page is centred on `TEXT_CY` 72.5 px by its **own** line count: at 22 a three-line page sits at y 42.5 / 72.5 / 102.5 and a two-line page at y 57.5 / 87.5. Lines do not keep their position from page to page.
-- Pager: centre x 214, baseline y 24, size 16, white at `PAGER_ALPHA` 0.8 alpha (`pq1/components.py:517`). Its ink ends above the first line of a three-line page.
+- Pager: centre x 214, baseline y 24, size 16, white at `PAGER_ALPHA` 0.8 alpha (`pq1/components.py:566`). Its ink ends above the first line of a three-line page.
 - Corner chevrons stay in their slots.
 
 ## Motion
 
-Two motions, both defined elsewhere and unchanged here: the disc leaves and returns as on a [value screen](value.md), and the page turns as on a [paged detail](detail-paged.md) — `Sim._draw_pages` draws both kinds (`pq1/flow.py:279`).
+Two motions, both defined elsewhere and unchanged here: the disc leaves and returns as on a [value screen](value.md), and the page turns as on a [paged detail](detail-paged.md) — `Sim._draw_pages` draws both kinds (`pq1/flow.py:307`).
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | the disc travels off the left edge | — | — | spring NAV | — | — | see [value](value.md) |
-| the first page is released | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the screen's own text alpha; the pager rides it too |
-| turn, phase 1: the showing page fades away | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:280` |  |
+| the first page is released | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the screen's own text alpha; the pager rides it too |
+| turn, phase 1: the showing page fades away | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:353` |  |
 | the pager number switches | — | — | cut | — | — | between the two phases |
-| turn, phase 2: the new page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:280` | sequential, never a crossfade — see [page flip](../transitions/page-flip.md) |
-| DEMO ONLY: each page rests | 4100 | 57.4 | hold | `PAGE_SWAP_MS` | `pq1/motion.py:279` | the demo dwell is this times the page count; do not port |
+| turn, phase 2: the new page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:353` | sequential, never a crossfade — see [page flip](../transitions/page-flip.md) |
+| DEMO ONLY: each page rests | 4100 | 57.4 | hold | `PAGE_SWAP_MS` | `pq1/motion.py:352` | the demo dwell is this times the page count; do not port |
 
 ## Input
 
-The executed truth table has no paged value, because no live flow has one. The rows below are the paged **detail's**; the driver runs the same code for both — `_tap` reads the page state of every non-hero screen (`pq1/driver.py:349`). A probe on a synthetic 64-byte digest gave the same results.
+The executed truth table has no paged value, because no live flow has one. The rows below are the paged **detail's**; the driver runs the same code for both — `_tap` reads the page state of every non-hero screen (`pq1/driver.py:353`). A probe on a synthetic 64-byte digest gave the same results.
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
@@ -69,7 +69,7 @@ The executed truth table has no paged value, because no live flow has one. The r
 | detail — paged, on page 1 | double press right | `None` | HASH (detail, p1) | DETAILS (detail, p1) |
 
 - Right tap: next page, then the next screen. Left tap: previous page, then the previous screen.
-- Stepping back onto it from a later screen enters on the **last** page. Entering from an ask — either tap, the opening or the returning one — always opens page 1. When the value is the only screen of its section, its right neighbour is the returning ask, so the last-page entry never happens there.
+- Stepping back onto it from a later screen enters on the **last** page. Entering from an ask — a right tap, the opening or the returning one — always opens page 1. When the value is the only screen of its section, its right neighbour is the returning ask, so the last-page entry never happens there.
 - `hold left` declines but shows no fill: the disc is off the panel. See the gap noted on [value](value.md).
 
 See [tap on a paged screen](../actions/tap-page.md).

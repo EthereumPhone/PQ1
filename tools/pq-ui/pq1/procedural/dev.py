@@ -39,7 +39,7 @@ PATH = (
     "12.4608 0 11.9803C3.57212e-05 11.4999 0.267932 11.0601 0.693362 "
     "10.842L10.926 5.59746Z"
 )
-MARK_SCALE = 0.52   # half-WIDTH per glyph r — the mark is wide (37 x 24),
+MARK_SCALE = 0.56   # half-WIDTH per glyph r — the mark is wide (37 x 24),
                     # so its width, not its height, sets the optics
 
 SHAPES = geometry.svg_subpaths(PATH)   # slash + brackets, SVG units (y down)
@@ -47,13 +47,16 @@ SHAPES = geometry.svg_subpaths(PATH)   # slash + brackets, SVG units (y down)
 
 def draw(cv, cx, cy, *, r, color, alpha=1.0, rot=0.0):
     """the dev mark, half-width r, its box centred on (cx, cy). True alpha
-    compositing (components.base_mark's rationale): the mark sits on a disc,
-    so a colour-scaled fill would read wrong while fading."""
-    if alpha <= 0.01:
+    compositing (marks.base_mark's model): the mark sits on a disc, so a
+    colour-scaled fill would read wrong while fading."""
+    if alpha <= colors.ALPHA_FLOOR:
         return
     u = 2.0 * r * SUP / W                       # one SVG unit, supersampled px
     pad = 4
     side = int(math.ceil(math.hypot(W, H) * u)) + 2 * pad   # rotation never clips
+    side += side % 2   # even, so the centre is a whole pixel: an odd side or a
+    #                    truncated paste sat every mark half a supersampled
+    #                    pixel up and left (audit ICO-09)
     mask = Image.new("L", (side, side), 0)
     d = ImageDraw.Draw(mask)
     ox, oy = side / 2 - W / 2 * u, side / 2 - H / 2 * u     # the box, centred
@@ -64,7 +67,8 @@ def draw(cv, cx, cy, *, r, color, alpha=1.0, rot=0.0):
         mask = mask.rotate(-math.degrees(rot), resample=Image.BICUBIC)
     tile = Image.new("RGBA", (side, side), (*tuple(color), 255))
     tile.putalpha(mask)
-    cv.paste(tile, int(cx * SUP - side / 2), int(cy * SUP - side / 2), tile)
+    cv.paste(tile, int(round(cx * SUP - side / 2)),        # rounded, never
+             int(round(cy * SUP - side / 2)), tile)         # truncated (ICO-09)
 
 
 def glyph(scale=MARK_SCALE):

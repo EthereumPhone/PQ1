@@ -7,13 +7,13 @@ Inside the details left regresses, right progresses; a paged screen turns its pa
 
 ## What it is
 
-Inside the details the two buttons split: **left regresses, right progresses**. The mapping never flips while the signer reads — not on a [detail](../screen-types/detail.md), not on a full-width [value](../screen-types/value.md), not on the mid-flow [Confirm?](../screen-types/confirm.md). A tap fires on release, inside `TAP_MAX_MS` 250 ms (3.5 f), and moves exactly one step.
+Inside the details the two buttons split: **left regresses, right progresses**. The mapping never flips while the signer reads — not on a [detail](../screen-types/detail.md), not on a full-width [value](../screen-types/value.md), not on the mid-flow [Confirm?](../screen-types/confirm.md). A tap fires on release, inside `TAP_MAX_MS` 500 ms (7.0 f), and moves exactly one step.
 
 On a hero both taps do the same thing instead — see [tap on the ask](tap-hub.md). On a PIN row a tap dials a digit — see [entry — tap to dial](entry-dial.md).
 
 ## When it appears
 
-On every navigable screen that is not a hero and not an entry. `FlowDriver._tap` (`pq1/driver.py:349`) is the whole rule; `FlowDriver.armed` (`pq1/driver.py:134`) decides which of the two sides is live.
+On every navigable screen that is not a hero and not an entry. `FlowDriver._tap` (`pq1/driver.py:353`) is the whole rule; `FlowDriver.armed` (`pq1/driver.py:136`) decides which of the two sides is live.
 
 ## Where the tap lands
 
@@ -24,10 +24,10 @@ On every navigable screen that is not a hero and not an entry. `FlowDriver._tap`
 
 The page cases are [tap on a paged screen](tap-page.md). The screen cases use two different bounds, and only the forward one is segment-aware:
 
-- **Forward** stops at `last_nav` (`pq1/driver.py:175`) — the last navigable screen of the **current segment**, the one before the status that closes it. Forward is armed while the current index is below it. In a [batch](../screen-types/batch-segment.md) that is this transaction's returning ask, not the end of the whole screen list.
-- **Back** is armed on plain index: any screen but the first one of the whole list (`pq1/driver.py:134`). So the first detail's left tap lands on the ask. It is not segment-aware, and does not need to be: every segment after the first opens on a hero, and a hero's taps are [hub taps](tap-hub.md), so a left tap can never step backwards out of a segment.
+- **Forward** stops at `last_nav` (`pq1/driver.py:179`) — the last navigable screen of the **current segment**, the one before the status that closes it. Forward is armed while the current index is below it. In a [batch](../screen-types/batch-segment.md) that is this transaction's returning ask, not the end of the whole screen list.
+- **Back** is armed on plain index: any screen but the first one of the whole list (`pq1/driver.py:136`). So the first detail's left tap lands on the ask. It is not segment-aware, and does not need to be: every segment after the first opens on a hero, and a hero's taps are [hub taps](tap-hub.md), so a left tap can never step backwards out of a segment.
 
-The walk is a straight line: right from the last detail arrives on the returning ask, and from there either tap starts the details again from the top.
+The walk is a straight line: right from the last detail arrives on the returning ask, and from there a right tap starts the details again from the top while a left tap steps back to the last detail.
 
 ## Motion
 
@@ -35,13 +35,13 @@ Every step is one leg of the [spring morph](../transitions/spring-morph.md), at 
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| press-down: the pressed side's chevron nudges | 120 | 1.7 | ease_out | `PRESS_FEEDBACK_MS` | `pq1/motion.py:166` | specified, not rendered — [press feedback](../components/press-feedback.md) |
-| the tap window: nothing is drawn yet | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | past it the press is a hold, not a tap |
+| press-down: the pressed side's chevron nudges | 145 | 2.0 | ease_out | `PRESS_FEEDBACK_MS` | `pq1/motion.py:186` | specified, not rendered — [press feedback](../components/press-feedback.md) |
+| the tap window: nothing is drawn yet | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | past it the press is a hold, not a tap |
 | the leg — circle x / y / r, glyph mix, both text alphas | — | — | spring NAV | — | — | the outgoing text starts fading at once |
-| the incoming text is released after the circle | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | see [text-in delay](../transitions/text-in-delay.md) |
-| a page turn instead of a leg: out, then in | 600 | 8.4 | ease_out + ease | `2 * PAGE_FADE_MS` | `pq1/motion.py:280` | the disc does not move — [tap on a paged screen](tap-page.md) |
+| the incoming text is released after the circle | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | see [text-in delay](../transitions/text-in-delay.md) |
+| a page turn instead of a leg: out, then in | 600 | 8.4 | ease_out + ease | `2 * PAGE_FADE_MS` | `pq1/motion.py:353` | the disc does not move — [tap on a paged screen](tap-page.md) |
 
-A tap during a transit is never dropped: `Sim.go_to` retargets every spring from its live pose and carries the velocity (`pq1/flow.py:175`). Tapping forward twice quickly walks two screens; tapping back mid-flight turns around where it stands — see [reversal](../transitions/reversal.md).
+A tap during a transit is never dropped: `Sim.go_to` retargets every spring from its live pose and carries the velocity (`pq1/flow.py:193`). Tapping forward twice quickly walks two screens; tapping back mid-flight turns around where it stands — see [reversal](../transitions/reversal.md).
 
 ## Input
 
@@ -53,7 +53,7 @@ A tap during a transit is never dropped: `Sim.go_to` retargets every spring from
 | detail — first of the section | hold right | `None` | NETWORK (detail, p1) | NETWORK (detail, p1) |
 | detail — first of the section | release a hold early (1000 ms) | `snapback` | NETWORK (detail, p1) | NETWORK (detail, p1) |
 | detail — first of the section | both buttons (chord) | `None` | NETWORK (detail, p1) | NETWORK (detail, p1) |
-| detail — first of the section | double press left | `None` | NETWORK (detail, p1) | NETWORK (detail, p1) |
+| detail — first of the section | double press left | `None` | NETWORK (detail, p1) | SEND (hero, p1) |
 | detail — first of the section | double press right | `None` | NETWORK (detail, p1) | VALUE (detail, p1) |
 
 | context | gesture | result | from | to |
@@ -75,7 +75,7 @@ A tap during a transit is never dropped: `Sim.go_to` retargets every spring from
 | value — full-width text | hold right | `None` | HASH (value, p1) | HASH (value, p1) |
 | value — full-width text | release a hold early (1000 ms) | `snapback` | HASH (value, p1) | HASH (value, p1) |
 | value — full-width text | both buttons (chord) | `None` | HASH (value, p1) | HASH (value, p1) |
-| value — full-width text | double press left | `None` | HASH (value, p1) | HASH (value, p1) |
+| value — full-width text | double press left | `None` | HASH (value, p1) | SAFE TX HASH FINGERPRINT (hero, p1) |
 | value — full-width text | double press right | `None` | HASH (value, p1) | HASH (value, p1) |
 
 | context | gesture | result | from | to |

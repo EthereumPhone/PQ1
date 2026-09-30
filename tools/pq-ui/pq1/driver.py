@@ -1,10 +1,11 @@
 """PQ1 flow driver — the reference implementation of DESIGN.md § Input.
 
 FlowDriver walks a flow's normalized screens under the two-button grammar.
-The ask is the hub: on a hero either tap enters the details at their
-first screen, first page (an intro leads on to the ask, and the ask never
-regresses to it); inside the details left regresses, right progresses —
-taps navigate, holds commit. A batch (flows/batch) is a run of SEGMENTS,
+Left never leads on: on a hero a RIGHT tap enters the details at their
+first screen, first page (an intro leads on to the ask), and a LEFT tap
+goes back one screen where there is one (layout.back_target) and does
+nothing where there is not — the flow's opening ask; inside the details
+left regresses, right progresses — taps navigate, holds commit. A batch (flows/batch) is a run of SEGMENTS,
 each closed by its own ending (layout._segments): every segment's BATCH
 screen is that segment's hub, hold-right signs the segment's own ending,
 and a mid-batch ending plays through and moves on to the next segment —
@@ -29,7 +30,7 @@ The hold's progress fill is drawn by the Sim (components.hold_flood — the
 token filling from the bottom up): press() starts it where the gesture is
 armed, an early release() snaps it back, and the commit fades it out over
 the transition. Not simulated yet (spec-only in
-the renderer): the 120 ms pressed-side chevron nudge (PRESS_FEEDBACK_MS).
+the renderer): the 145 ms pressed-side chevron nudge (PRESS_FEEDBACK_MS).
 """
 import copy
 
@@ -39,8 +40,9 @@ from .motion import LEFT, RIGHT  # noqa: F401  (the button names live with the g
 
 
 class FlowDriver:
-    """Input-driven walk of one flow: taps navigate the pass (either tap on
-    an ask enters the details — _hub_target), hold-left
+    """Input-driven walk of one flow: taps navigate the pass (a right tap
+    on an ask enters the details — _hub_target; a left tap only ever goes
+    back — layout.back_target), hold-left
     declines from any navigable screen, hold-right signs where "commit" is
     armed. sign/decline are indices of the two terminal status screens
     (flows.playable builds a list carrying both); decline may be None for
@@ -151,10 +153,12 @@ class FlowDriver:
         out = {"decline"} if self.decline is not None else set()
         if self.screens[i].get("kind") == "hero":
             if self._hub_target(i) is not None:
-                out |= {"back", "forward"}      # either tap enters the details
+                out.add("forward")              # right enters the details
+            if layout.back_target(self.screens, i) is not None:
+                out.add("back")                 # left only ever goes back
         else:
             page, last = self._paged()
-            if i > 0 or page > 0:
+            if layout.back_target(self.screens, i) is not None or page > 0:
                 out.add("back")
             if i < self.last_nav or page < last:
                 out.add("forward")
@@ -336,8 +340,8 @@ class FlowDriver:
         return "restart"
 
     def _hub_target(self, i):
-        """where a tap on EITHER side lands from hero i (DESIGN.md § Input,
-        "The ask is the hub"): the ask when the next screen is one (the
+        """where a RIGHT tap lands from hero i (DESIGN.md § Input, "The ask
+        is the hub"): the ask when the next screen is one (the
         ERC-7730 intro), else the section's first screen; None when i is
         not a hero or the flow has no section (hero + endings only)"""
         if self.screens[i].get("kind") != "hero":
@@ -348,8 +352,8 @@ class FlowDriver:
 
     def _tap(self, side, now):
         i = self.sim.cur
-        if self.screens[i].get("kind") == "hero":
-            hub = self._hub_target(i)       # the ask is the hub: either tap enters
+        if self.screens[i].get("kind") == "hero" and side == RIGHT:
+            hub = self._hub_target(i)       # the ask is the hub: right enters
             if hub is None:
                 return None                 # no section (hero + endings only)
             self.sim.go_to(hub, now)        # ... always on its first page
@@ -365,8 +369,10 @@ class FlowDriver:
         elif page > 0:                      # ... and the previous page back
             self.sim.flip_page(page - 1, now)
             return "page"
-        elif i > 0:
-            self.sim.go_to(i - 1, now, back=True)   # left undoes right: last page
+        elif layout.back_target(self.screens, i) is not None:
+            # left undoes right (entered on its last page); on a hero it
+            # never leads on — back one screen, or nothing (user rule, Sep 2026)
+            self.sim.go_to(i - 1, now, back=True)
             return "back"
         return None
 
@@ -456,8 +462,24 @@ class FlowDriver:
         miss retries on the next attempt (the following entry) or, with
         none left, rests on the verdict (None); a match continues to the
         first screen after the attempts, else rests; a cancel returns to
-        the ask before the entry, else opens a fresh round here (i)"""
+        the ask before the entry, else opens a fresh round here (i).
+
+        An entry may route itself (flows/setup — a CHAIN of entries, each
+        meaning something different): on_match="next" continues to the very
+        next screen even when it is another entry (SET PIN -> REPEAT PIN);
+        on_miss=<screen id> goes there (REPEAT PIN -> SET PIN), its own id
+        retrying in place on a fresh round (a wrong check word). Both are
+        read only when present — an attempt ladder routes as it always did"""
         oc, n = self.sim._anim(i).outcome, len(self.screens)
+        s = self.screens[i]
+        if oc == "miss" and s.get("on_miss") is not None:
+            j = self._screen_id(s["on_miss"], i)
+            if j == i:                      # retry in place: a fresh round
+                self._fresh(i)
+                self.sim.idle_since = now
+            return j
+        if oc == "match" and s.get("on_match") == "next":
+            return i + 1 if i + 1 < n else None
         if oc == "miss":
             return i + 1 if i + 1 < n and self._entry[i + 1] else None
         if oc == "match":
@@ -468,6 +490,16 @@ class FlowDriver:
             self.sim._anim(i).input("restart", self._t(now))
             return i
         return prev
+
+    def _screen_id(self, sid, i):
+        """the screen an entry routes to by id: itself, else the nearest
+        one scanning BACK (a retry returns to what it repeats), else ahead"""
+        order = [i] + list(range(i - 1, -1, -1)) + list(range(i + 1, len(self.screens)))
+        for j in order:
+            if self.screens[j].get("id") == sid:
+                return j
+        raise ValueError(f"screen {self.screens[i].get('id')!r}: on_miss "
+                         f"{sid!r} matches no screen id")
 
     def _hold(self, side, now):
         if self.state != "navigating":
@@ -503,13 +535,14 @@ class FlowDriver:
 
     # ------------------------------------------------------------- frame --
     def frame(self, now):
-        """time-step the grammar (pending holds commit at HOLD_COMMIT_MS)
+        """time-step the grammar (pending holds commit the frame their fill
+        is drawn full — motion.hold_full, ~HOLD_COMMIT_MS)
         and render; a finished ending freezes on its resting frame — unless
         a segment follows it (a mid-batch ending): then the player moves
         on to that segment's first screen, the demo's own advance"""
         for side, t0 in self._press.items():
             if (t0 is not None and not self._hold_fired[side]
-                    and now - t0 >= motion.HOLD_COMMIT_MS):
+                    and motion.hold_full(now - t0)):
                 self._hold_fired[side] = True
                 self._hold(side, now)
         if self._final is not None:

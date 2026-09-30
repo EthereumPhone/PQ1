@@ -39,7 +39,7 @@ The loading leg is not a copy — it *is* `loading.qubit_pose` on a stock `Qubit
 
 ### The follower stream
 
-Through the whole loading leg each body drags a stream of five circles: `burst.draw` re-samples its own `pose` at fixed steps back in time — a fixed fraction of one orbit turn per step — and draws the samples farthest-first at the head's radius, in the spec's `trail` colour scaled down link by link. The walk stops early once two consecutive samples all but coincide, so a body that is not moving grows no tail. This is not the flow's [trail](../components/trail.md): no chain physics, no ramp palette, one colour.
+Through the whole loading leg each body drags a stream of five circles: `burst.draw` re-samples its own `pose` at fixed steps back in time — a fixed fraction of one orbit turn per step — and draws the samples farthest-first at the head's radius, in the spec's `trail` colour scaled down link by link by the film's own ramp steps, `colors.RAMP_STEPS` read nearest-first ({{val:pq1.colors.RAMP_STEPS[4]}} down to {{val:pq1.colors.RAMP_STEPS[0]}}), so the stream darkens exactly like every ramp trail. The walk stops early once two consecutive samples all but coincide, so a body that is not moving grows no tail. This is not the flow's [trail](../components/trail.md): no chain physics, no ramp palette, one colour.
 
 ### The busy caption
 
@@ -55,10 +55,10 @@ A list of lines (`["WIPING…", "DO NOT POWER OFF"]`) splits the window into equ
 ### Entrances
 
 {{motion-head}}
-{{row:`enter="left"` / `"right"`: one body slides in | pq1.motion.ENTER_MS | spring KIOSK | from x {{val:pq1.layout.VALUE_PARK_X}} (mirrored for `"right"`) to the centre on `motion.spring_travel`, the follower stream riding in with it. Everything after it is delayed by exactly this}}
+{{row:`enter="left"` / `"right"`: one body slides in | pq1.procedural.burst.ENTER_MS | spring NAV | from x {{val:pq1.layout.VALUE_PARK_X}} (mirrored for `"right"`) to the centre on `motion.spring_travel`, the follower stream riding in with it. Everything after it is delayed by exactly this}}
 {{row:`enter="sides"`: two qubits fly in and join the orbit | - | linear | length is geometry, not a constant — `burst._sides` measures the path and divides it by the speed. Hand-rolled, and NOT constant speed: the profile below eases it down onto the orbit's. It REPLACES the seed, the split and the join, so the film resolves EARLIER than the table above}}
 
-The slide-in is the one place a film uses a spring. It is `motion.spring_travel` on its **KIOSK** profile — the demo pace — released from rest, as a pure function of `t`, not a live spring retargeted by input. Port it as that curve: the device's NAV pace belongs to transits between screens, not inside this film.
+The slide-in is the one place a film uses a spring. It is `motion.spring_travel` on the device's **NAV** profile — the pace of every other move — released from rest, as a pure function of `t`, not a live spring retargeted by input. Its length is derived, not typed: `burst.ENTER_MS` = `motion.settle_ms(trip, NAV)` ({{loc:pq1.procedural.burst.ENTER_MS}}), the whole ms at which the trip has settled to within 0.3 px. Port it as that curve and that derivation.
 
 The `sides` approach is a polar spiral from r {{val:pq1.procedural.burst.SIDES_R0}} px (both qubits fully off the panel) down to the orbit radius over one full turn, the radius easing in on the power {{val:pq1.procedural.burst.SIDES_K}} and the vertical reach squashed toward {{val:pq1.procedural.burst.SIDES_Y_MAX}} px by a `tanh`. Each qubit travels it **by arc length** at a speed that only ever falls: {{val:pq1.procedural.burst.SIDES_V0}} times the orbit speed at the edge, easing on (1 − u)² onto exactly the orbit speed at the join. The join angle is solved so the orbit picks the pair up at the same speed *and* heading — nothing stops and restarts. See [side entrance](../transitions/side-entrance.md).
 

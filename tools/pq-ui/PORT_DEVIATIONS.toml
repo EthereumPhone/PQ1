@@ -5,12 +5,16 @@
 # listed deviation is a recorded decision, not an accident. Every entry names
 # the decision and its evidence. See docs/security/HARDENING.md § 2.4.
 
-[[deviation]]
-token = "TAP_MAX_MS"
-device = 500
-reference = 250
-decided = "2026-09-22"
-why = "EVT #1: deliberate presses on the pq1 switches run 250-400 ms and were demoted to aborted holds; 500 ms is the value the legacy button driver already validated on this hardware."
+# RETIRED 2026-09-30 — TAP_MAX_MS is no longer a deviation.
+#
+# The device deviated to 500 ms on 2026-09-22 (EVT #1: deliberate presses on
+# the pq1 switches run 250-400 ms and were demoted to aborted holds). Upstream
+# ADOPTED that value in 198bbcb9, so the reference now says 500 too and
+# port_diff scores it MATCH. A [[deviation]] row for a token that no longer
+# differs is itself drift: it would keep excusing a future MISMATCH on this
+# token, which is the opposite of what this file is for. Recorded here rather
+# than deleted silently, because the on-silicon evidence is still the reason
+# the value is what it is.
 
 # Grammar deviations that carry no numeric token (recorded here so the file
 # is the single list; port_diff cannot see them):

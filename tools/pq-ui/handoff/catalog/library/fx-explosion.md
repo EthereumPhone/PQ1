@@ -15,10 +15,10 @@ Explosion — the token loads, clumps, and blows apart; major or minor.
 > pop. Each element keeps its own spec colour (trail, body, clump_from,
 > clump_to, ring — "#RRGGBB" or [r, g, b]), all white by default like
 > the sources. bottom is empty by default; a flow can set one and it
-> fades onto the baseline once the boom lands; busy ("RECONNECTING…") is
+> fades onto the baseline once the boom lands; busy ("UPDATING…") is
 > the loading caption, riding the orbit like the qubit film's (split done
 > -> spiral; busy_until below holds it longer). enter ("left" / "right") opens on the circle sliding in from
-> that side of the panel at the flows' KIOSK spring pace, its follower
+> that side of the panel at the device's NAV spring pace, its follower
 > trail riding in with it; enter="sides" opens on the two qubits flying in
 > from both edges and spiralling straight onto the orbit — no rest, no
 > split, a speed that only falls onto the orbit's (burst.SIDES_*).
@@ -47,7 +47,7 @@ Explosion — the token loads, clumps, and blows apart; major or minor.
 
 ## Timeline
 
-Three acts: the **loading leg** (the qubit film's, borrowed whole), the **clump**, the **blast**. `t` is milliseconds since the screen's own t 0; `burst.draw` (`pq1/procedural/burst.py:216`) is pure in `t`, so any frame is seekable.
+Three acts: the **loading leg** (the qubit film's, borrowed whole), the **clump**, the **blast**. `t` is milliseconds since the screen's own t 0; `burst.draw` (`pq1/procedural/burst.py:222`) is pure in `t`, so any frame is seekable.
 
 The loading leg is not a copy — it *is* `loading.qubit_pose` on a stock `QubitCfg`, so every phase of it is the one documented on [status — the qubit film](../screen-types/status-qubit.md). One difference matters: the explosion **cuts away at the end of the spiral**. The qubit film's flash (`QubitCfg.T_FLASH` 400 ms (5.6 f)) never plays here; the clump takes its place.
 
@@ -55,22 +55,22 @@ The loading leg is not a copy — it *is* `loading.qubit_pose` on a stock `Qubit
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| seed: the flow's circle becomes one qubit | 300 | 4.2 | ease_out | `QubitCfg.T_SEED` | `pq1/loading.py:34` | shrinks to 13 at x 214, y 72 — the centre comes from `cfg.qubit.gc`, not from the layout. A side entrance slides a full-size body in first and the seed then runs in place; `enter="sides"` never reaches it |
-| split: two qubits part | 650 | 9.1 | ease | `QubitCfg.T_SPLIT` | `pq1/loading.py:34` | reach 0 to 120 px, both halves already at 13, goo bridge while they overlap. A flow's glyph hands off over the SEED, before this |
-| join: the pair swings onto the orbit | 1300 | 18.2 | linear | `QubitCfg.T_JOIN` | `pq1/loading.py:34` | hand-rolled: the reach falls to the orbit radius 23 on a smoothstep of linear progress |
-| spin-up ramp — runs INSIDE the join | 1300 | 18.2 | linear | `QubitCfg.T_RAMP` | `pq1/loading.py:34` | angular speed rises from rest to orbit speed. Not a phase of its own: do not add it to the timeline |
-| steady orbit — THE LOOP REGION | 2550 | 35.7 | linear | `QubitCfg.T_SPIN` | `pq1/loading.py:34` | whole turns of `QubitCfg.rev_ms` 850 ms (11.9 f). `revs` lengthens ONLY this row — the entrance, the spin speed and the spiral are untouched. On the device it repeats, whole turns at a time, until the host answers — the region starts where the pair is on the orbit (a sides entrance lands later than the stock join) — [loading loop](../transitions/loading-loop.md) |
-| spiral: the pair falls to the centre | 1000 | 14.0 | linear | `QubitCfg.T_SPIRAL` | `pq1/loading.py:34` | hand-rolled: radius shrinks with the square of progress, plus 2.2 extra turns on its cube |
-| the cut: the loading leg ends | 5800 | 81.2 | cut | `QubitCfg.t6` | `pq1/loading.py:34` | measured from the leg's own t 0. The spiral leaves two bodies of r 17 on the centre and the clump opens at r 22 — one frame of growth, by design |
+| seed: the flow's circle becomes one qubit | 300 | 4.2 | ease_out | `QubitCfg.T_SEED` | `pq1/loading.py:35` | shrinks to 13 at x 214, y 72 — the centre comes from `cfg.qubit.gc`, not from the layout. A side entrance slides a full-size body in first and the seed then runs in place; `enter="sides"` never reaches it |
+| split: two qubits part | 650 | 9.1 | ease | `QubitCfg.T_SPLIT` | `pq1/loading.py:35` | reach 0 to 120 px, both halves already at 13, goo bridge while they overlap. A flow's glyph hands off over the SEED, before this |
+| join: the pair swings onto the orbit | 1300 | 18.2 | linear | `QubitCfg.T_JOIN` | `pq1/loading.py:35` | hand-rolled: the reach falls to the orbit radius 23 on a smoothstep of linear progress |
+| spin-up ramp — runs INSIDE the join | 1300 | 18.2 | linear | `QubitCfg.T_RAMP` | `pq1/loading.py:35` | angular speed rises from rest to orbit speed. Not a phase of its own: do not add it to the timeline |
+| steady orbit — THE LOOP REGION | 2550 | 35.7 | linear | `QubitCfg.T_SPIN` | `pq1/loading.py:35` | whole turns of `QubitCfg.rev_ms` 850 ms (11.9 f). `revs` lengthens ONLY this row — the entrance, the spin speed and the spiral are untouched. On the device it repeats, whole turns at a time, until the host answers — the region starts where the pair is on the orbit (a sides entrance lands later than the stock join) — [loading loop](../transitions/loading-loop.md) |
+| spiral: the pair falls to the centre | 1000 | 14.0 | linear | `QubitCfg.T_SPIRAL` | `pq1/loading.py:35` | hand-rolled: radius shrinks with the square of progress, plus 2.2 extra turns on its cube |
+| the cut: the loading leg ends | 5800 | 81.2 | cut | `QubitCfg.t6` | `pq1/loading.py:35` | measured from the leg's own t 0. The spiral leaves two bodies of r 17 on the centre and the clump opens at r 22 — one frame of growth, by design |
 | clump: trembles, shakes harder, squashes, shifts colour | 1100 | 15.4 | ease | `burst.MAJOR.t_clump` | `pq1/procedural/burst.py:49` | a 48-point near-circle. Radius 22 px falls by the `squeeze` fraction on `ease`; the shake amplitude and the edge tremble both rise LINEARLY in progress, `clump_from` to `clump_to` on `ease` |
 | core flash bloom — fades over `MAJOR.bloom` first element | — | — | linear | — | — | a filled disc from r 6, growing by the pair's second element in px, its colour scaled 1 to 0. Both numbers are in the Constants table; they are never re-typed here |
 | ring i launches, i after i | 145 | 2.0 | cut | `burst.MAJOR.stagger_ms` | `pq1/procedural/burst.py:49` | ring `i` starts this much times `i` after the boom. The stagger is one number for both severities — the two sources' own staggers were each shorter than two panel frames, so the panel could not have told them apart |
 | one ring's flight | 900 | 12.6 | linear | `burst.MAJOR.t_boom` | `pq1/procedural/burst.py:49` | hand-rolled ease-out: reach = 1 minus (1 minus u) to the power `grow_p`. An ellipse of `aspect` ry to rx, stroke and reach both shrinking per ring index, alpha (1 minus u) times `ring_a` |
 | resolve — the boom lands (first ring done) | 7800 | 109.2 | — | `t_resolve` | `screens/fx/explosion.py:124` | the cut plus the clump plus one flight |
-| tail — the late rings keep fading | 580 | 8.1 | linear | `t_tail` | `pq1/status.py:204` | rings minus one, times the stagger. After it the canvas is EMPTY: that is what lets this film lead another screen |
-| caption fades in, if `bottom` is set | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:103` | from resolve. The standalone film sets no caption |
-| standalone only: the result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | never runs when the film leads — see [lead film](../transitions/lead-film.md) |
-| whole screen, standalone | 10250 | 143.5 | — | `duration` | `pq1/status.py:246` | resolve plus the result hold |
+| tail — the late rings keep fading | 580 | 8.1 | linear | `t_tail` | `pq1/status.py:230` | rings minus one, times the stagger. After it the canvas is EMPTY: that is what lets this film lead another screen |
+| caption fades in, if `bottom` is set | 300 | 4.2 | ease_out | `BUSY_FADE_MS` | `pq1/status.py:119` | from resolve. The standalone film sets no caption |
+| standalone only: the result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | never runs when the film leads — see [lead film](../transitions/lead-film.md) |
+| whole screen, standalone | 10250 | 143.5 | — | `duration` | `pq1/status.py:278` | resolve plus the result hold |
 
 **`minor` — the `minor_explosion` preset.** The loading leg is identical, row for row. Only the finale changes: a contained two-ring pop.
 
@@ -81,12 +81,12 @@ The loading leg is not a copy — it *is* `loading.qubit_pose` on a stock `Qubit
 | ring i launches | 145 | 2.0 | cut | `burst.MINOR.stagger_ms` | `pq1/procedural/burst.py:54` | the same stagger, over 2 rings instead of 5 |
 | one ring's flight | 750 | 10.5 | linear | `burst.MINOR.t_boom` | `pq1/procedural/burst.py:54` | reach about a fifth of `major`'s, and nearly round (`aspect` close to 1) rather than wide |
 | resolve | 7350 | 102.9 | — | `t_resolve` | `screens/fx/explosion.py:124` |  |
-| tail | 145 | 2.0 | linear | `t_tail` | `pq1/status.py:204` | one stagger: the pop clears almost at once |
-| whole screen, standalone | 9800 | 137.2 | — | `duration` | `pq1/status.py:246` |  |
+| tail | 145 | 2.0 | linear | `t_tail` | `pq1/status.py:230` | one stagger: the pop clears almost at once |
+| whole screen, standalone | 9800 | 137.2 | — | `duration` | `pq1/status.py:278` |  |
 
 ### The follower stream
 
-Through the whole loading leg each body drags a stream of five circles: `burst.draw` re-samples its own `pose` at fixed steps back in time — a fixed fraction of one orbit turn per step — and draws the samples farthest-first at the head's radius, in the spec's `trail` colour scaled down link by link. The walk stops early once two consecutive samples all but coincide, so a body that is not moving grows no tail. This is not the flow's [trail](../components/trail.md): no chain physics, no ramp palette, one colour.
+Through the whole loading leg each body drags a stream of five circles: `burst.draw` re-samples its own `pose` at fixed steps back in time — a fixed fraction of one orbit turn per step — and draws the samples farthest-first at the head's radius, in the spec's `trail` colour scaled down link by link by the film's own ramp steps, `colors.RAMP_STEPS` read nearest-first (0.86 down to 0.15), so the stream darkens exactly like every ramp trail. The walk stops early once two consecutive samples all but coincide, so a body that is not moving grows no tail. This is not the flow's [trail](../components/trail.md): no chain physics, no ramp palette, one colour.
 
 ### The busy caption
 
@@ -94,9 +94,9 @@ The film breathes its `busy` caption (`busy_pulse` is true): whole raised-cosine
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| window opens: the pair is ON the orbit | 2250 | 31.5 | — | `QubitCfg.T_SEED + QubitCfg.T_SPLIT + QubitCfg.T_JOIN` | `pq1/loading.py:34` | plus the entrance, when there is one |
-| window closes, `busy_until="spiral"` (default) | 4800 | 67.2 | — | `QubitCfg.t5` | `pq1/loading.py:34` | the orbit's end, exactly as the qubit film |
-| window closes, `busy_until="boom"` | 6600 | 92.4 | — | `QubitCfg.t6 + burst.MAJOR.t_clump - BUSY_FADE_MS` | `pq1/loading.py:34` | held through the spiral and the clump, gone as the blast launches. Shown for the stock orbit; `revs` moves it |
+| window opens: the pair is ON the orbit | 2250 | 31.5 | — | `QubitCfg.T_SEED + QubitCfg.T_SPLIT + QubitCfg.T_JOIN` | `pq1/loading.py:35` | plus the entrance, when there is one |
+| window closes, `busy_until="spiral"` (default) | 4800 | 67.2 | — | `QubitCfg.t5` | `pq1/loading.py:35` | the orbit's end, exactly as the qubit film |
+| window closes, `busy_until="boom"` | 6600 | 92.4 | — | `QubitCfg.t6 + burst.MAJOR.t_clump - BUSY_FADE_MS` | `pq1/loading.py:35` | held through the spiral and the clump, gone as the blast launches. Shown for the stock orbit; `revs` moves it |
 
 A list of lines (`["WIPING…", "DO NOT POWER OFF"]`) splits the window into equal slots of at least `BUSY_SWAP_MS` 2000 ms (28.0 f), one breath per slot.
 
@@ -104,10 +104,10 @@ A list of lines (`["WIPING…", "DO NOT POWER OFF"]`) splits the window into equ
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| `enter="left"` / `"right"`: one body slides in | 800 | 11.2 | spring KIOSK | `ENTER_MS` | `pq1/motion.py:125` | from x -60 (mirrored for `"right"`) to the centre on `motion.spring_travel`, the follower stream riding in with it. Everything after it is delayed by exactly this |
+| `enter="left"` / `"right"`: one body slides in | 582 | 8.1 | spring NAV | `ENTER_MS` | `pq1/procedural/burst.py:71` | from x -60 (mirrored for `"right"`) to the centre on `motion.spring_travel`, the follower stream riding in with it. Everything after it is delayed by exactly this |
 | `enter="sides"`: two qubits fly in and join the orbit | — | — | linear | — | — | length is geometry, not a constant — `burst._sides` measures the path and divides it by the speed. Hand-rolled, and NOT constant speed: the profile below eases it down onto the orbit's. It REPLACES the seed, the split and the join, so the film resolves EARLIER than the table above |
 
-The slide-in is the one place a film uses a spring. It is `motion.spring_travel` on its **KIOSK** profile — the demo pace — released from rest, as a pure function of `t`, not a live spring retargeted by input. Port it as that curve: the device's NAV pace belongs to transits between screens, not inside this film.
+The slide-in is the one place a film uses a spring. It is `motion.spring_travel` on the device's **NAV** profile — the pace of every other move — released from rest, as a pure function of `t`, not a live spring retargeted by input. Its length is derived, not typed: `burst.ENTER_MS` = `motion.settle_ms(trip, NAV)` (`pq1/procedural/burst.py:71`), the whole ms at which the trip has settled to within 0.3 px. Port it as that curve and that derivation.
 
 The `sides` approach is a polar spiral from r 240 px (both qubits fully off the panel) down to the orbit radius over one full turn, the radius easing in on the power 3 and the vertical reach squashed toward 44 px by a `tanh`. Each qubit travels it **by arc length** at a speed that only ever falls: 2.5 times the orbit speed at the edge, easing on (1 − u)² onto exactly the orbit speed at the join. The join angle is solved so the orbit picks the pair up at the same speed *and* heading — nothing stops and restarts. See [side entrance](../transitions/side-entrance.md).
 

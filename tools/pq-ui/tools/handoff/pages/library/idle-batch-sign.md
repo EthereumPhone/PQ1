@@ -12,8 +12,8 @@ It is also one of only two screens in the library that are **not pure in `t`** (
 {{row:the sweep target, one full left-right cycle | pq1.motion.SWEEP_PERIOD_MS | sine | target x offset = minus the sine of the cycle, times {{val:pq1.motion.SWEEP_AMP}} px. It is a TARGET, not the disc's position}}
 {{row:the disc chases the target | pq1.motion.OSC_TAU | tau_chase | one exponential step per slice. The lag is why the disc never quite reaches the amplitude and why it eases at the turns without an easing curve}}
 {{row:each follower chases the link ahead of it | pq1.motion.CHAIN_TAU_IDLE | tau_chase | deliberately slower than a transit's {{tok:pq1.motion.CHAIN_TAU}}, so the streak spreads out. See [trail](../components/trail.md)}}
-{{row:the first chevron bob starts | 1400 | — | a bare literal inside `motion.chevron_hint` ({{loc:pq1.motion.chevron_hint}})}}
-{{row:the chevron hint cycle | pq1.motion.CHEV_HINT_PERIOD_MS | ease | rise, bob, fall, then rest for the remainder. The bob is a half sine of amplitude 4 px}}
+{{row:the first chevron bob starts | pq1.motion.CHEV_HINT_START_MS | — | the hint's one-time lead-in, read by `motion.chevron_hint` ({{loc:pq1.motion.chevron_hint}})}}
+{{row:the chevron hint cycle | pq1.motion.CHEV_HINT_PERIOD_MS | ease_out | rise, bob, fall, then rest for the remainder. The bob is a half sine of amplitude {{val:pq1.motion.CHEV_BOB_PX}} px (`CHEV_BOB_PX`)}}
 {{row:the loop | screens.idle.batch_sign.LOOP_MS | — | equals the sweep period, and equals the screen's `duration`}}
 
 Two things about that loop, both verified against the running code. The chevron bob closes exactly — its start plus the hint period is the loop length, so the corner is at rest at both ends. The **sweep does not**: because the sweep clock starts {{tok:pq1.motion.SWEEP_DELAY_MS}} late, the disc is still near its right extreme (about 92 px out) when the loop ends, where at t 0 it was centred. The loop is a window onto continuous physics, not a closed cycle; the CLI's `--loops` keeps stepping the same state rather than restarting it.

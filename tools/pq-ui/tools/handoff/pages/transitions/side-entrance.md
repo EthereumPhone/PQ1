@@ -17,7 +17,8 @@ One full-size body at the token's visible radius (the layout radius {{val:qubit:
 | start x, `"left"` | {{val:pq1.layout.VALUE_PARK_X}} — the value screen's park spot, the disc fully off-panel |
 | start x, `"right"` | mirrored across the panel: its width, {{val:pq1.layout.W}}, minus the park spot |
 | travel | to the film's own centre, `QubitCfg.gc` — x {{val:pq1.layout.CENTER_X}}, y {{val:pq1.layout.CIRCLE_CY}}, the grid's circle centre — the same 274 px either way |
-| curve | `motion.spring_travel` ({{loc:pq1.motion.spring_travel}}) — a critically damped spring released from rest, in closed form |
+| curve | `motion.spring_travel` ({{loc:pq1.motion.spring_travel}}) on `NAV` — a critically damped spring released from rest, in closed form; the device's one pace |
+| length | `burst.ENTER_MS` ({{loc:pq1.procedural.burst.ENTER_MS}}) = `motion.settle_ms(trip, NAV)` ({{loc:pq1.motion.settle_ms}}) — derived from the spring, never typed: the first whole ms at which the trip is within 0.3 px, then it snaps |
 
 The whole film after it is simply **shifted** by the entrance's length (`burst.t_shift`, {{loc:pq1.procedural.burst.t_shift}}): seed, split, orbit, spiral, clump and boom all happen that much later.
 
@@ -32,10 +33,10 @@ This entrance **replaces** the film's seed, split and join, so `t_shift` is nega
 ## Motion
 
 {{motion-head}}
-{{row:left / right — the disc travels in | pq1.motion.ENTER_MS | spring KIOSK | by here the 274 px trip has settled to about a third of a pixel; the film then switches to the loading pose}}
-{{row:left / right — everything after, shifted whole | pq1.motion.ENTER_MS | — | `burst.t_shift`}}
+{{row:left / right — the disc travels in | pq1.procedural.burst.ENTER_MS | spring NAV | `settle_ms` over the 274 px trip: by here it is within 0.3 px; the film then switches to the loading pose}}
+{{row:left / right — everything after, shifted whole | pq1.procedural.burst.ENTER_MS | — | `burst.t_shift`}}
 {{row:no entrance — the pair reaches the orbit | qubit:t2 + qubit:T_SPLIT + qubit:T_JOIN | — | `burst.t_arrive`: the seed, the split and the sweep onto the circle}}
-{{row:left / right — the same moment | pq1.motion.ENTER_MS + qubit:t2 + qubit:T_SPLIT + qubit:T_JOIN | — | the busy caption opens here, never over the split ([busy caption](../components/busy-caption.md))}}
+{{row:left / right — the same moment | pq1.procedural.burst.ENTER_MS + qubit:t2 + qubit:T_SPLIT + qubit:T_JOIN | — | the busy caption opens here, never over the split ([busy caption](../components/busy-caption.md))}}
 {{row:sides — the approach, edge to orbit | - | linear + ease_out | no token: its length is geometry — the spiral's arc length divided by the speed schedule, a steady term plus a falling one shaped like `ease_out`}}
 {{row:sides — the orbit takes over | - | — | at the first orbit angle that matches the arrival, so nothing jumps}}
 {{row:the trail follows the entering body | - | — | five links sampled from the same pose, one every 0.22 rad of orbit}}
@@ -50,7 +51,7 @@ None: the film is part of an ending ([unbound gestures](../actions/unbound-gestu
 
 ## Do / Don't
 
-- **Do** port the `KIOSK` response for this one trip. It is the film's own choreography, baked into a pure function of ms, not a navigation spring — the one place the demo pace is device-visible on purpose. Everything the *flow* springs stays on `NAV` ([spring morph](spring-morph.md)).
+- **Do** run this trip on `NAV`, the pace of every other move on the device ([spring morph](spring-morph.md)), and derive its length from the spring (`settle_ms`) rather than typing it. It is a pure function of ms, so it stays seekable; the demo `KIOSK` pace never reaches the device.
 - **Do** keep the `"sides"` speed monotonically falling onto the orbit speed. A port that eases position instead of arc length will stall at the join.
 - **Do** hold the busy caption until the pair is on the orbit — on the way in a qubit crosses the caption band.
 - **Don't** expect a glyph handoff on `"sides"`: there is no single body to carry the mark, and the code draws none.

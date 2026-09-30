@@ -16,8 +16,8 @@ PIN mismatch — the entered PIN fills the pill, turns red, is shaken off.
 > (motion.shake, at the source's 210 ms per cycle). Then the beat and the
 > caption:
 >
->     hold 250 -> arrive 300 -> fill 200 -> hold 200 -> turn 200
->              -> shake 420 -> beat 200 -> caption 300      t_resolve 2070
+>     hold 286 -> arrive 300 -> fill 200 -> hold 200 -> turn 200
+>              -> shake 420 -> beat 200 -> caption 300      t_resolve 2106
 >
 > Pace (user, Sep 2026, settled over three passes — twice "too slow", then
 > "a bit slower"): roughly half the source's timings. The beats sit at
@@ -52,15 +52,15 @@ the fill, the turn and the shake all play on an already-arrived pill.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 250 | 3.5 | ease_out | `T_HOLD` | `screens/verdict/pin_mismatch.py:51` | the resting token is drawn, and a black disc of FIXED radius — the token's (30 px) plus a hair — fades in over it; the disc never grows (`pq1/status.py:166`). Spliced after the PIN row there is no token, so this window is plain black |
+| black hold — the flow's token hands over | 286 | 4.0 | ease_out | `T_HOLD` | `screens/verdict/pin_mismatch.py:51` | `PIN_HOLD_MS` 286 ms (4.0 f), four panel frames — shorter than the law's `VERDICT_HOLD_MS` 429 ms (6.0 f) because a PIN outcome answers a keypress. The resting token is drawn, and a black disc of FIXED radius — the token's (30 px) plus a hair — fades in over it; the disc never grows (`pq1/status.py:189`). Spliced after the PIN row there is no token, so this window is plain black |
 | the pill arrives — fade and rise | 300 | 4.2 | ease_out + arrive | `T_IN` | `screens/verdict/pin_mismatch.py:52` | the entrance law: alpha 0 to 1 and scale 0.97 to 1, never an overshoot. The pill arrives EMPTY and WHITE — the entry still reads normal |
-| the four dots fade in together | 200 | 2.8 | ease | `T_FILL` | `screens/verdict/pin_mismatch.py:41` | one alpha for all 4 dots, still white. Landing them one by one costs about this phase over again and was cut |
+| the four dots fade in together | 200 | 2.8 | ease_out | `T_FILL` | `screens/verdict/pin_mismatch.py:41` | one alpha for all 4 dots, still white. Landing them one by one costs about this phase over again and was cut |
 | the filled row holds | 200 | 2.8 | hold | `T_FILLED` | `screens/verdict/pin_mismatch.py:42` | the device is checking. Nothing moves |
-| pill and dots turn to the state colour | 200 | 2.8 | ease | `T_TURN` | `screens/verdict/pin_mismatch.py:43` | one mix from white to the failed red 255 66 61; outline and dots share the value, so the refusal is one sign |
+| pill and dots turn to the state colour | 200 | 2.8 | ease | `T_TURN` | `screens/verdict/pin_mismatch.py:43` | one mix from white to the failed red #FF423D; outline and dots share the value, so the refusal is one sign |
 | the row shakes the PIN off | 420 | 5.9 | shake | `T_SHAKE` | `screens/verdict/pin_mismatch.py:44` | horizontal only. The centre x moves by 7 px times a decaying sine of 2 cycles, so the first swing is about 6.1 px and the last is nearly nothing |
 | the verdict beat | 200 | 2.8 | hold | `T_BEAT` | `screens/verdict/pin_mismatch.py:45` | the red pill sits still before the words |
 | the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | PIN MISMATCH, or WRONG PIN on the preset, on the shared baseline y 128 |
-| the verdict rests | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | from `t_resolve` 2070 to the end. In a flow the driver leaves when this is over |
+| the verdict rests | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | from `t_resolve` 2106 to the end. In a flow the driver leaves when this is over |
 
 There is no result glyph and no ring flash: the pill is the whole picture, and `rests_on_token` is
 false, so the flow draws no token disc over the transit out — see
@@ -70,8 +70,8 @@ false, so the flow draws no token disc over the transit out — see
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 2070 ms (29.0 f) | 4520 ms | 2450 ms | no | yes | no | no |
-| `wrong_pin` | 2070 ms (29.0 f) | 4520 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 2106 ms (29.5 f) | 4556 ms | 2450 ms | no | yes | no | no |
+| `wrong_pin` | 2106 ms (29.5 f) | 4556 ms | 2450 ms | no | yes | no | no |
 
 ## Phases
 
@@ -79,7 +79,7 @@ false, so the flow draws no token disc over the transit out — see
 |---|---:|---:|
 | `T0_SHAKE` | 600 ms (8.4 f) | 600 ms (8.4 f) |
 | `T0_TURN` | 400 ms (5.6 f) | 400 ms (5.6 f) |
-| `T_HOLD` | 250 ms (3.5 f) | 250 ms (3.5 f) |
+| `T_HOLD` | 286 ms (4.0 f) | 286 ms (4.0 f) |
 | `T_IN` | 300 ms (4.2 f) | 300 ms (4.2 f) |
 | `T_TEXT` | 300 ms (4.2 f) | 300 ms (4.2 f) |
 | `T_WAIT` | 1220 ms (17.1 f) | 1220 ms (17.1 f) |

@@ -17,7 +17,7 @@ The same paging works on a full-width value — see [value — paged](value-page
 - `pages` replaces `lines`. `normalize_screens` copies the first page into `lines` for readers that know one page ({{loc:pq1.layout.normalize_screens}}).
 - Fewer than two pages, an empty page or a page over three lines raises `ValueError` — the flow does not load.
 - How to split is the flow's choice. The live hash pages on byte lines: `0x` + 8 bytes / 8 bytes, then 8 / 8, at 22.
-- The schema note above still says the pager is 12 px. The code draws it at the label size ({{val:pq1.typography.SIZE_LABEL}}) — the code wins.
+- The pager is drawn in the **Label face** — {{val:pq1.typography.SIZE_LABEL}} px, SemiBold, tracking {{val:pq1.typography.LS_LABEL}} px — exactly like the detail label at the other edge of the panel.
 
 ## Geometry
 
@@ -25,7 +25,7 @@ The same paging works on a full-width value — see [value — paged](value-page
 
 - The table lists the label and the **first** page. `layout_of` also returns `fixed` (the label) and `pages` (one text list per page) — {{loc:pq1.layout.layout_of}}.
 - Every page is centred on {{tok:pq1.layout.TEXT_CY}} **by its own line count**. A two-line page and a three-line page of one screen do not share line positions.
-- Pager: text `n/m`, centre x {{val:pq1.layout.CENTER_X}}, baseline y {{val:pq1.components.PAGER_BASELINE}}, size {{val:pq1.typography.SIZE_LABEL}} Regular, tracking +1 px, white at {{tok:pq1.components.PAGER_ALPHA}} ({{loc:pq1.components.pager}}). It sits between the corner chevrons and is drawn only when there is more than one page.
+- Pager: text `n/m`, centre x {{val:pq1.layout.CENTER_X}}, baseline y {{val:pq1.components.PAGER_BASELINE}}, size {{val:pq1.typography.SIZE_LABEL}} SemiBold (the Label face), tracking +{{val:pq1.typography.LS_LABEL}} px, white at {{tok:pq1.components.PAGER_ALPHA}} ({{loc:pq1.components.pager}}). It sits between the corner chevrons and is drawn only when there is more than one page.
 
 ## Motion
 

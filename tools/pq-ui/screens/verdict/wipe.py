@@ -1,10 +1,10 @@
-"""Wallet wiped — the warning triangle carries the brush, two treatments.
+"""Wallet wiped — the warning triangle carries the brush.
 
-treatment="pulse" (preset wallet_wiped): the icon arrives, rests a beat,
-then draws the eye with two decaying attention pulses. treatment="sweep"
-(preset wallet_wiped_anim): the icon arrives, then the brush swiffles —
-swinging around the top of its handle while the bristle strip drags
-against the ground, curving opposite the motion.
+Preset wallet_wiped_anim (the one WALLET WIPED sign — the pulse
+treatment was retired, user request Sep 2026): the icon arrives, rests a
+beat, then the brush swiffles — swinging around the top of its handle
+while the bristle strip drags against the ground, curving opposite the
+motion.
 
 Preset wallet_wiped_explosion leads the sweep with the major explosion
 (status "lead"): two red qubits fly in from both edges and spiral
@@ -19,16 +19,14 @@ import math
 
 from pq1 import colors, loading, status
 from pq1.layout import CENTER_X, CIRCLE_CY
-from pq1.motion import attention_pulse
 from pq1.procedural import brush, warning_triangle
 from pq1.verdict import VerdictAnim
 
 ANIM = "wipe"
-SPEC = dict(treatment="pulse", state="failed", bottom="WALLET WIPED")
-PRESETS = dict(wallet_wiped=dict(treatment="pulse"),
-               wallet_wiped_anim=dict(treatment="sweep"),
+SPEC = dict(state="failed", bottom="WALLET WIPED")
+PRESETS = dict(wallet_wiped_anim=dict(),
                wallet_wiped_explosion=dict(
-                   treatment="sweep", lead_gap=700,
+                   lead_clear=700,
                    lead=dict(anim="explosion", severity="major",
                              enter="sides", busy_until="boom",
                              revs=loading.REVS_LONG,   # two turns past the stock 3: it endures
@@ -38,52 +36,40 @@ PRESETS = dict(wallet_wiped=dict(treatment="pulse"),
                              clump_to=list(colors.RED),   # unset = white
                              ring=list(colors.RED))))
 
-TREATMENTS = ("pulse", "sweep")
+# the triangle's height is the notice token — the sign box sizes its width
+# (warning_triangle.NOTICE_H, audit ICO-03); TRI_H is the name the handoff
+# pages cite, never a second number
+TRI_H = warning_triangle.NOTICE_H
+# the brush was drawn against the sources' h-64 triangle (bounding box
+# 72 x 64 units): 30 wide, its centre 9 below the triangle's. Both ride
+# UNIT — one source unit in UI px; the 64.0 is the SOURCE box's height,
+# not the icon box — so the brush keeps its proportion inside the sign
+UNIT = TRI_H / 64.0
+BRUSH_W = 30 * UNIT     # brush width; its centre sits BRUSH_DY below the triangle's
+BRUSH_DY = 9 * UNIT
 
-TRI_H = 64      # triangle height (bounding box 72 x 64), from the sources
-BRUSH_W = 30    # brush width; its centre sits BRUSH_DY below the triangle's
-BRUSH_DY = 9
-
-T_MARK = 300                          # beat between entrance and accent
-ACCENT = dict(pulse=900, sweep=1400)  # attention pulses / brush swiffle
+T_MARK = 300    # beat between entrance and accent
+ACCENT = 1400   # the brush swiffle
 
 
 class Wipe(VerdictAnim):
-    def __init__(self, spec):
-        super().__init__(spec)
-        self.treatment = spec.get("treatment", "pulse")
-        if self.treatment not in TREATMENTS:
-            raise ValueError(f"unknown wipe treatment {self.treatment!r}; "
-                             f"expected one of {', '.join(TREATMENTS)}")
-        self.T_WAIT = T_MARK + ACCENT[self.treatment]
+    T_WAIT = T_MARK + ACCENT
 
     def draw_icon(self, cv, t, u):
-        a, s = self.entrance(u)     # fade + arrive, both treatments
+        a, s = self.entrance(u)     # fade + arrive
         swivel = bend = 0.0
-        v = (t - (self.T_HOLD + self.T_IN + T_MARK)) / ACCENT[self.treatment]
+        v = (t - (self.T_HOLD + self.T_IN + T_MARK)) / ACCENT
         if 0.0 < v < 1.0:
-            if self.treatment == "pulse":
-                s = attention_pulse(v)
-            else:
-                decay = 1 - v ** 3
-                swivel = 0.30 * math.sin(4 * math.pi * v) * decay
-                # positive swivel moves the brush bottom left, so the
-                # drag lag points the opposite way of that motion (+cos)
-                bend = 0.28 * math.cos(4 * math.pi * v) * decay
+            decay = 1 - v ** 3
+            swivel = 0.30 * math.sin(4 * math.pi * v) * decay
+            # positive swivel moves the brush bottom left, so the
+            # drag lag points the opposite way of that motion (+cos)
+            bend = 0.28 * math.cos(4 * math.pi * v) * decay
         warning_triangle.draw(cv, CENTER_X, CIRCLE_CY, h=TRI_H * s,
                               color=self.style["color"], alpha=a)
         # black inside the state-red fill stays black at any alpha
         brush.draw(cv, CENTER_X, CIRCLE_CY + BRUSH_DY * s, w=BRUSH_W * s,
                    color=colors.BLACK, alpha=a, swivel=swivel, bend=bend)
-
-
-def add_args(ap):
-    ap.add_argument("--treatment", choices=TREATMENTS, default=None,
-                    help="pulse (wallet_wiped) or sweep (wallet_wiped_anim)")
-
-
-def spec_from_args(args):
-    return {} if args.treatment is None else dict(treatment=args.treatment)
 
 
 status.register(ANIM, Wipe)

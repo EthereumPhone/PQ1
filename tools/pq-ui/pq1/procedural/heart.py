@@ -26,7 +26,7 @@ _OUTLINE = [p for seg in _SEGS for p in geometry.bezier(*seg, n=22)]
 
 def draw(cv, cx, cy, *, h, color, alpha=1.0):
     """filled heart, h UI px tall, design box centred on (cx, cy)"""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     col = tuple(int(round(c * alpha)) for c in color)
     k = h / _BOX_H

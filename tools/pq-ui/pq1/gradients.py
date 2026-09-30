@@ -6,12 +6,13 @@ gradient" is one import:
 
     from pq1 import gradients
 
-Reminder (DESIGN.md § Color): a gradient disc is the unknown-token
-treatment ONLY — its hue is one of the placeholder ramps, chosen from the
-token's identity (components.token_ramp) so the same token always gets the
-same ramp. Known tokens without art use a ramp as a SOLID fill + trail
-(placeholder_palette); MONO_RAMP is the recognized-logo treatment (black
-body, white ring, grey trail); everything else is solid colors. Brand
+Reminder (DESIGN.md § Color): every live disc is SOLID. A token without
+art — known or unknown — uses a ramp as a solid fill + trail
+(placeholder_palette), its hue chosen from the token's identity
+(components.token_ramp) so the same token always gets the same ramp;
+MONO_RAMP is the recognized-logo treatment (black body, white ring, grey
+trail). The gradient disc is RESERVED and renders nowhere (audit A11-12) —
+ramp_gradient() serves the ramp material, not a disc. Brand
 ramps (BRAND_GRADIENTS, e.g. "SAFE") are pinned by NAME from a flow and
 never hashed; a resolved ramp key (components.token_ramp) is a placeholder
 index or a brand name — read it with ramp_gradient / ramp_palette /
@@ -38,14 +39,6 @@ def mix(c1, c2, u):
     """blend two RGB colours; u in [0, 1] (0 -> c1, 1 -> c2)"""
     u = clamp01(u)
     return tuple(int(round(lerp(a, b, u))) for a, b in zip(c1, c2))
-
-
-def brightness_trail(color, n=5, lo=0.16):
-    """darkening follower palette for a solid colour: n steps, nearest link
-    first (brightest), fading toward lo * color for the farthest link"""
-    if n == 1:
-        return [tuple(color)]
-    return [scale(color, 1.0 - (1.0 - lo) * i / (n - 1)) for i in range(n)]
 
 
 @lru_cache(maxsize=32)

@@ -9,7 +9,7 @@ A film starts when the work is dispatched, repeats the steady orbit in whole tur
 
 The contract that lets a film wait. A loading film is a scripted depiction of work whose real length the device does not know: in the demo it is one fixed script; on the device it **starts when the work is dispatched**, the steady orbit **repeats in whole turns** while the answer is outstanding, and the answer chooses the landing — the check, or the X. Nothing in the drawing changed to allow this: the orbit was already pixel-periodic, and every frame before the spiral's end was already identical for success and failure. What changed is what the film is *told*, and when.
 
-Two films loop: the [qubit film](../screen-types/status-qubit.md) and the [explosion](../library/fx-explosion.md), including when the explosion leads ([led](../screen-types/status-led.md) screens loop while their lead does). `StatusAnim.loops` (`pq1/status.py:230`) says so, and `spec/anims.json` carries `loops`, `loop` and `loop_ms` per animation.
+Two films loop: the [qubit film](../screen-types/status-qubit.md) and the [explosion](../library/fx-explosion.md), including when the explosion leads ([led](../screen-types/status-led.md) screens loop while their lead does). `StatusAnim.loops` (`pq1/status.py:256`) says so, and `spec/anims.json` carries `loops`, `loop` and `loop_ms` per animation.
 
 ## The three regions
 
@@ -17,29 +17,29 @@ Two films loop: the [qubit film](../screen-types/status-qubit.md) and the [explo
 |---|---|---|---|
 | the fixed prefix — seed, split, join | 0 | 2250 | plays once |
 | **the loop** — the steady orbit, `QubitCfg.loop` | 2250 | 4800 | repeats, whole turns of `QubitCfg.loop_ms` 850 ms (11.9 f), until the host answers |
-| the fixed tail — spiral, flash, result, rest | 4800 | 8650 | plays once, after the last whole turn |
+| the fixed tail — spiral, flash, result, rest | 4800 | 9095 | plays once, after the last whole turn |
 
-The loop region is exactly the [busy caption](../components/busy-caption.md)'s window — the only part of a film over which the device may claim to be working. On the explosion's side entrance the region starts where the pair lands on the orbit (`pq1/procedural/burst.py:140`), later than the stock join.
+The loop region is exactly the [busy caption](../components/busy-caption.md)'s window — the only part of a film over which the device may claim to be working. On the explosion's side entrance the region starts where the pair lands on the orbit (`pq1/procedural/burst.py:146`), later than the stock join.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the loop unit — one orbit turn | 850 | 11.9 | linear | `QubitCfg.loop_ms` | `pq1/loading.py:34` | constant angular speed, so frame(t) equals frame(t + one turn) byte for byte across the whole region; the checker's `L-LOOP` proves it on every build |
-| the loop region at the stock turns | 2550 | 35.7 | linear | `QubitCfg.t5 - QubitCfg.t_orbit` | `pq1/loading.py:34` | 3 turns (`revs` — the film's MINIMUM); 5 where a loading must endure (the firmware reboot, the wipe) |
-| the answer arrives: the current turn completes | — | — | — | — | — | `wraps_for` (`pq1/loading.py:75`) counts the whole turns past the stock orbit; an answer inside the fixed prefix adds none, so a signing that finishes early still plays the stock film |
-| the spiral — the LATCH | 1000 | 14.0 | linear | `QubitCfg.T_SPIRAL` | `pq1/loading.py:34` | the outcome is taken here (`pq1/status.py:317`); its end, 5800 of the last turn, is the first outcome-dependent frame — an answer that arrives later is refused: the film has committed |
-| the flash and the result | 400 | 5.6 | back_out + linear | `QubitCfg.T_FLASH` | `pq1/loading.py:34` | unchanged — see [the qubit film](../screen-types/status-qubit.md) |
-| resolved | 6200 | 86.8 | — | `t_resolve` | `pq1/status.py:429` | at the stock turns; plus wraps × 850 on the device — `t_resolve` is a property (`pq1/status.py:429`), infinite while a live film is unanswered |
-| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | fixed; counted from the latched resolve — [result hold](result-hold.md) |
+| the loop unit — one orbit turn | 850 | 11.9 | linear | `QubitCfg.loop_ms` | `pq1/loading.py:35` | constant angular speed, so frame(t) equals frame(t + one turn) byte for byte across the whole region; the checker's `L-LOOP` proves it on every build |
+| the loop region at the stock turns | 2550 | 35.7 | linear | `QubitCfg.t5 - QubitCfg.t_orbit` | `pq1/loading.py:35` | 3 turns (`revs` — the film's MINIMUM); 5 where a loading must endure (the firmware reboot, the wipe) |
+| the answer arrives: the current turn completes | — | — | — | — | — | `wraps_for` (`pq1/loading.py:76`) counts the whole turns past the stock orbit; an answer inside the fixed prefix adds none, so a signing that finishes early still plays the stock film |
+| the spiral — the LATCH | 1000 | 14.0 | linear | `QubitCfg.T_SPIRAL` | `pq1/loading.py:35` | the outcome is taken here (`pq1/status.py:349`); its end, 5800 of the last turn, is the first outcome-dependent frame — an answer that arrives later is refused: the film has committed |
+| the flash and the result | 400 | 5.6 | back_out + linear | `QubitCfg.T_FLASH` | `pq1/loading.py:35` | unchanged — see [the qubit film](../screen-types/status-qubit.md) |
+| resolved | 6200 | 86.8 | — | `t_resolve` | `pq1/status.py:459` | at the stock turns; plus wraps × 850 on the device — `t_resolve` is a property (`pq1/status.py:459`), infinite while a live film is unanswered |
+| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | fixed; counted from the latched resolve — [result hold](result-hold.md) |
 
-`film_time` (`pq1/loading.py:86`) maps real time to pose time: the identity with no wraps (so every existing render is byte-identical), a whole-turn step back inside the loop otherwise. The busy caption is **not** mapped: it breathes on the unwrapped clock, whole cycles fitted to the film's stock window and continuing at that period while the loop runs, then fades out over `BUSY_FADE_MS` 300 ms (4.2 f) when the spiral starts (`pq1/status.py:343`).
+`film_time` (`pq1/loading.py:87`) maps real time to pose time: the identity with no wraps (so every existing render is byte-identical), a whole-turn step back inside the loop otherwise. The busy caption is **not** mapped: it breathes on the unwrapped clock, whole cycles fitted to the film's stock window and continuing at that period while the loop runs, then fades out over `BUSY_FADE_MS` 300 ms (4.2 f) when the spiral starts (`pq1/status.py:375`).
 
 ## Who answers
 
 | where | who | how |
 |---|---|---|
-| the device | the signing core / host | `answer(ok)` (`pq1/driver.py:294`) — the film finishes its turn and spirals into the check (`ok`) or the X |
+| the device | the signing core / host | `answer(ok)` (`pq1/driver.py:298`) — the film finishes its turn and spirals into the check (`ok`) or the X |
 | the bench | you | `y` / `n` in the panel player ([bench keys](../actions/bench-keys.md)); the driver marks every looping ending `live` |
 | a render | the spec | `ready` (the ms at which the work answers): `python3 -m flows send --end failed --ready 7000` — the same knob on `python3 -m screens explosion --ready 9000` |
 

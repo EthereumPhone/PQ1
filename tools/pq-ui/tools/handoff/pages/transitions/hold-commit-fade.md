@@ -8,7 +8,9 @@ When the ending is a loading film there is no leg to ride: the fill fades over t
 
 Every time a hold completes on a screen that arms one: [hold right — sign](../actions/hold-right-sign.md) from the [ask](../screen-types/hero-ask.md) or [Confirm?](../screen-types/confirm.md), and [hold left — decline](../actions/hold-left-decline.md) from any navigable screen of a flow that has a failing ending. An early release is a different thing entirely — it drains ([release early](../actions/hold-release-early.md)).
 
-An entry (the PIN row) is the exception: its hold-left cancel fills the rings, not a token disc, and it never goes through this fade — the row plays its own outcome in place ([hold left cancels the row](../actions/entry-cancel.md)).
+The library's standalone [hold to confirm](../library/confirm-hold-to-confirm.md) demo commits the same way as a flow into a film: on confirm its fill, chevrons and caption fade over {{tok:pq1.motion.FADE_MS}} with the disc held at full alpha, the bare disc holds {{tok:pq1.motion.SEED_HOLD_MS}}, and its inner qubit film opens **on** that disc (`enter_from`) — the Sim's own fade-hold-seed beat, with no cut, no black frame and no cold seed.
+
+An entry (the PIN row) is the one exception: its hold-left cancel fills the rings, not a token disc, and it never goes through this fade — the row plays its own outcome in place, and leaves on its own longer exit ({{tok:screens.pin.pin_entering.T_OUT}}), the documented exception to the one-hold-exit rule ([hold left cancels the row](../actions/entry-cancel.md)).
 
 ## How the alpha is driven
 
@@ -24,13 +26,13 @@ The fill *level* does not move: `motion.hold_fill` clamps at 1 past the commit (
 
 Two details worth copying exactly:
 
-- the fill's **dress** (black film over a coloured disc, white inside a dark one) is the one resolved for the screen the hold *started* on, not for the disc now being drawn — the disc's own style swaps to the destination's at the morph's halfway point. The two agree on every live commit path but one: on `erc7730/swap` a hold-left from the intro (a black disc, so a **white** film) declines into DECLINED, whose disc is a coloured solid, and the white film rides on over it for the frame or two before it fades. Resolve the dress once, at the hold's start, and keep it;
+- the fill's **dress** (black film over a coloured disc, white inside a dark one) is the one resolved for the screen the hold *started* on, not for the disc now being drawn — the disc's own style swaps to the destination's at the morph's halfway point. The two can disagree: a hold-left from a black disc (so a **white** film) that declines into an ending whose disc is a coloured solid keeps the white film riding over it for the frame or two before it fades. Resolve the dress once, at the hold's start, and keep it;
 - a commit whose target is the screen already current simply clears the hold: no leg, no fade.
 
 ## Motion
 
 {{motion-head}}
-{{row:the hold fires, measured from press-down | pq1.motion.HOLD_COMMIT_MS | — | only at completion; a release a moment earlier does nothing}}
+{{row:the hold fires, measured from press-down | pq1.motion.HOLD_COMMIT_MS - pq1.motion.LEVEL_EPS * (pq1.motion.HOLD_COMMIT_MS - pq1.motion.TAP_MAX_MS) | — | `motion.hold_full` ({{loc:pq1.motion.hold_full}}): the frame that first draws the full disc is the frame it fires — the driver, the Sim and `hold_flood` share the one test; a release a moment earlier does nothing}}
 {{row:the leg to the ending starts, same frame | - | spring NAV | an ordinary [spring morph](spring-morph.md)}}
 {{row:the full fill fades out | - | spring NAV | alpha = the morph spring, inverted — no timer of its own}}
 {{row:into a film: the fill fades over the entrance beat instead | pq1.motion.FADE_MS | ease_out | the disc is parked, the fill goes with the text — [entering a film](film-entrance.md)}}

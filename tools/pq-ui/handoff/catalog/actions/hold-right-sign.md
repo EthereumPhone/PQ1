@@ -17,13 +17,13 @@ Only where the screen's `commit` is true — the [ask](../screen-types/hero-ask.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| nothing visible: the press may still be a tap | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | a tap never flashes a partial fill |
-| the fill rises | 1750 | 24.5 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:171` | constant speed: progress you can trust |
-| the action fires, measured from press-down | 2000 | 28.0 | — | `HOLD_COMMIT_MS` | `pq1/motion.py:171` | only at completion |
+| nothing visible: the press may still be a tap | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | a tap never flashes a partial fill |
+| the fill rises | 1500 | 21.0 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:195` | constant speed: progress you can trust |
+| the action fires, measured from press-down | 1995.5 | 27.9 | — | `HOLD_COMMIT_MS - LEVEL_EPS * ( HOLD_COMMIT_MS - TAP_MAX_MS )` | `pq1/motion.py:195` | only at completion — `motion.hold_full` (`pq1/motion.py:247`): the first frame drawn full is the frame it fires |
 | the full fill fades out | — | — | spring NAV | — | — | it rides the transit's own spring — see [hold commit fade](../transitions/hold-commit-fade.md) |
-| released early: the fill drains | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:173` | see [release early](hold-release-early.md) |
+| released early: the fill drains | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:197` | see [release early](hold-release-early.md) |
 
-The fill's value is `motion.hold_fill(ms since press)` (`pq1/motion.py:178`) — a pure function, so any frame can be recomputed.
+The fill's value is `motion.hold_fill(ms since press)` (`pq1/motion.py:211`) — a pure function, so any frame can be recomputed.
 
 ## Rules
 
@@ -35,12 +35,12 @@ The fill's value is `motion.hold_fill(ms since press)` (`pq1/motion.py:178`) —
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — the ask (flow has details) | tap left | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
+| hero — the ask (flow has details) | tap left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | tap right | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | hold left | `fired` | SEND (hero, p1) | DECLINED (status, p1) |
 | hero — the ask (flow has details) | hold right | `fired` | SEND (hero, p1) | SUCCESSFUL (status, p1) |
 | hero — the ask (flow has details) | release a hold early (1000 ms) | `snapback` | SEND (hero, p1) | SEND (hero, p1) |
-| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | TO (detail, p1) |
+| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | double press left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | double press right | `None` | SEND (hero, p1) | TO (detail, p1) |
 

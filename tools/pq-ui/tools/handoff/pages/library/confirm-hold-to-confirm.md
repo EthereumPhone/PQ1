@@ -20,8 +20,9 @@ This screen is a **scripted demo of a live gesture**. It performs the press itse
 
 {{motion-head}}
 {{row:the commit fires: the disc is full | screens.confirm.hold_to_confirm.T_COMMIT | — | a time, not a length: the idle plus {{tok:pq1.motion.HOLD_COMMIT_MS}}}}
-{{row:the hold composition fades out | screens.confirm.hold_to_confirm.T_FADE | ease_out | token, fill and chevrons together on one alpha. The caption rides its own slightly longer fade ({{tok:pq1.status.BUSY_FADE_MS}}, from the commit) and is down to a few thousandths of full when the cut comes — no pop}}
-{{row:the qubit film starts | screens.confirm.hold_to_confirm.T_COMMIT + screens.confirm.hold_to_confirm.T_FADE | cut | a whole inner `status.QubitStatus` on the SAME spec minus `busy`, forced to `state="done"` / `result="check"` — so a branded demo lands on its branded resting disc}}
+{{row:the fill, the chevrons and the caption fade — the disc stays | pq1.motion.FADE_MS | ease_out | the committed fill and the up chevrons share one dress alpha; the disc is held at full alpha, parked at the centre (the press recentred the drift long before). The caption rides its own steady {{tok:pq1.status.BUSY_FADE_MS}} envelope from the commit and is drawn only while the dress is up}}
+{{row:the bare disc holds alone on black | pq1.motion.SEED_HOLD_MS | hold | the Sim's own fade-hold-seed beat — see [entering a film](../transitions/film-entrance.md)}}
+{{row:the qubit film opens ON the disc | screens.confirm.hold_to_confirm.T_SEED | — | a time: the commit plus the fade plus the hold. A whole inner `status.QubitStatus` on the SAME spec minus `busy`, forced to `state="done"` / `result="check"` — so a branded demo lands on its branded resting disc. It is built in `__init__` with `enter_from` the parked disc (centre, visible radius, fill, ring, icon), so its seed travels, shrinks and tints that very disc: no cut, no black frame, no cold seed}}
 {{row:the film, hold to resolved | qubit:t7 | — | every phase of it on [status — the qubit film](../screen-types/status-qubit.md)}}
 {{row:resolved | anim:confirm/hold_to_confirm:t_resolve | — | }}
 {{row:result hold | pq1.status.RESULT_HOLD_MS | hold | see [result hold](../transitions/result-hold.md)}}
@@ -64,7 +65,7 @@ The demo's own token is the placeholder teal ramp {{val:pq1.gradients.TEAL_RAMP}
 
 {{constants}}
 
-`T_COMMIT`, `T_REL` and `T_POP` are **derived**: `T_IDLE` plus the system hold curve, plus the snap-back and the fade. Do not re-type them — recompute them from {{tok:pq1.motion.HOLD_COMMIT_MS}}, {{tok:pq1.motion.HOLD_SNAPBACK_MS}} and `motion.hold_fill_ms`, so a change to the gesture moves this screen with it. `DRIFT_AMP` is {{tok:pq1.motion.SWEEP_AMP}} over 8.
+`T_COMMIT`, `T_SEED`, `T_REL` and `T_POP` are **derived**: `T_IDLE` plus the system hold curve, plus the snap-back and the fade (or, for `T_SEED`, the fade and the seed hold). Do not re-type them — recompute them from {{tok:pq1.motion.HOLD_COMMIT_MS}}, {{tok:pq1.motion.HOLD_SNAPBACK_MS}} and `motion.hold_fill_ms`, so a change to the gesture moves this screen with it. `DRIFT_AMP` is {{tok:pq1.motion.SWEEP_AMP}} over 8.
 
 ## Spec a flow splices in
 

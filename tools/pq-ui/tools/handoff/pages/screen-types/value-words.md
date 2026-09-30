@@ -10,14 +10,14 @@ In `firmware/update` it follows the [intro](hero-intro.md) captioned FIRMWARE KE
 
 ## Spec
 
-{{fields:kind,words,value.label,chev}}
+{{fields:kind,words,chev}}
 
 {{example}}
 
 - `words` is the screen's **whole** value: `normalize_screens` raises `ValueError` if it sits on a `"detail"`, if `lines` or `pages` sit beside it, or if the count is outside 1–{{val:pq1.layout.WORDS_MAX}} ({{loc:pq1.layout.normalize_screens}}). On any other kind — a hero, a status — `words` is **silently ignored**, never drawn: only a value screen has the grid.
 - `size` is forced to {{tok:pq1.layout.WORDS_SIZE}}; every entry is turned into a string. `lines` stays empty.
 - The words are data. The flow carries a sample; the Python defines no wordlist and no key-to-words mapping — that is the firmware's.
-- `label` is optional and the live flow passes none. Leave it out — see Geometry.
+- There is no `label`: a words grid has no caption, and `normalize_screens` rejects one on any value screen. The intro before it names the words.
 
 ## Geometry
 
@@ -30,7 +30,7 @@ The table shows **centre** x values because the Python canvas only draws centred
 | word `k` (0-based) | column `k // 4`, row `k % 4` |
 | row centre lines, y | {{val:pq1.layout.WORDS_ROWS}} ({{loc:pq1.layout.WORDS_ROWS}}) |
 | (number **right** edge x, word **left** edge x) per column | {{val:pq1.layout.WORDS_COLS}} |
-| number | `k + 1`, right-aligned so digits line up, white at {{tok:pq1.layout.WORDS_NUM_ALPHA}} — grey (128, 128, 128) |
+| number | `k + 1`, right-aligned so digits line up, white at {{tok:pq1.layout.WORDS_NUM_ALPHA}} — `colors.scale(WHITE, WORDS_NUM_ALPHA)`, the design's half-grey |
 | word | left-aligned, white, as supplied |
 | face | both {{val:pq1.layout.WORDS_SIZE}} px Regular, vertically centred on the row line |
 
@@ -38,7 +38,7 @@ The table shows **centre** x values because the Python canvas only draws centred
 - A short list is not re-centred: five words fill the left column and the first row of the right.
 - Nothing measures the words. A left-column word has the space up to the right column's numbers; a right-column word has the space up to the margin. Keep them short.
 - The disc is parked at {{tok:pq1.layout.VALUE_PARK_X}}; the corner chevrons stay ({{loc:pq1.layout.CHEV_LEFT}}).
-- **`label` collides.** When set it is drawn as a detail label — {{val:pq1.typography.SIZE_LABEL}} px SemiBold caps, centred x {{val:pq1.layout.CENTER_X}}, baseline y {{val:pq1.layout.BASELINE_Y}}. Row 4 (centre y 110) carries ink down to y 126 on a descender, and a label such as KEY FINGERPRINT spans x 138–292 from y 114: it overlaps the fourth left word and the `8`. DESIGN.md says the grid has no caption. Do not use `label` with a full grid.
+- **No label.** The band under the grid stays empty: row 4 (centre y 110) inks down into the band on a descender, so a caption there would overprint the fourth words. The schema rejects a label on a value screen.
 
 ## Motion
 
@@ -59,7 +59,7 @@ The grammar is the value screen's; the executed rows for that context:
 
 {{gestures:value — full-width}}
 
-Probed on `firmware/update`: on WORDS a left tap goes back to the KEY FINGERPRINT intro, a right tap goes forward to the CONFIRM UPDATE ask. Either tap on that ask, or on the intro, enters WORDS again. `hold right` is unbound here — the words are read, not signed. `hold left` declines, with **no visible fill** because the disc is off the panel: see the gap noted on [value](value.md).
+Probed on `firmware/update`: on WORDS a left tap goes back to the KEY FINGERPRINT intro, a right tap goes forward to the CONFIRM UPDATE ask. A right tap on that ask, or on the intro, enters WORDS again; a left tap on the returning ask steps back onto WORDS, and a left tap on the intro goes back to the opening ask. `hold right` is unbound here — the words are read, not signed. `hold left` declines, with **no visible fill** because the disc is off the panel: see the gap noted on [value](value.md).
 
 ## Preview
 

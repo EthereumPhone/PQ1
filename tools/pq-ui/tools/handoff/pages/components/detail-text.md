@@ -12,7 +12,7 @@ On every `detail` screen, and on a `value` screen (the same block, full width, w
 
 ## Spec
 
-{{fields:detail.label,detail.lines,detail.size,detail.text_x,detail.circle_x}}
+{{fields:detail.label,detail.lines,detail.size}}
 
 A line takes one of three forms:
 
@@ -42,7 +42,7 @@ lines = [{"str": "USD Coin", "weight": "semibold"},
 | leading `lh` | `line_height(size)` ({{loc:pq1.layout.line_height}}): the size itself at 36 and 32, size + 8 at 28 and 22 |
 | label | size {{val:pq1.typography.SIZE_LABEL}}, SemiBold, caps, tracking {{val:pq1.typography.LS_LABEL}} px, centred on the **circle's** x, baseline y {{val:pq1.layout.BASELINE_Y}} |
 | circle column | left `COL_LEFT` spans {{val:pq1.layout.COL_LEFT}}, centre x {{val:pq1.layout.COL_LEFT_CX}}; right `COL_RIGHT` spans {{val:pq1.layout.COL_RIGHT}}, centre x {{val:pq1.layout.COL_RIGHT_CX}} |
-| nudges | `circle_x` / `text_x` move the pair off the column; the CHAIN / NETWORK detail carries both, at the Confirm? screen's coordinates {{val:pq1.layout.CONFIRM_CIRCLE_X}} / {{val:pq1.layout.CONFIRM_TEXT_X}} (a confirm screen does not read the fields — `layout_of` pins it there) |
+| nudges | none — there are no per-screen x keys; `normalize_screens` rejects `circle_x` / `text_x`. A detail sits on its column. The CHAIN / NETWORK detail composes caption + {{val:pq1.layout.CHAIN_GAP}} px + disc as one group centred on x {{val:pq1.layout.CENTER_X}} (`chain_compose`, {{loc:pq1.layout.chain_compose}}), so its disc moves with the network's name; the Confirm? screen is composed the same way |
 | transition row | old value, chevron, new value, the whole run centred on the text x; the chevron centre sits `{{val:pq1.components.TRANSITION_GAP}} × size` past each value's edge |
 
 Three lines at the Default tier land on y 42.5 / 72.5 / 102.5, so the third dips into the band's y range. That is intended and safe: the label is over in the circle's column, far to the side.
@@ -51,16 +51,18 @@ Three lines at the Default tier land on y 42.5 / 72.5 / 102.5, so the third dips
 
 Always the largest tier whose content fits. Measure the longest unbreakable run with `typography.text_width` ({{loc:pq1.typography.text_width}}), in the face that line will use.
 
-| tier | max characters per line | max lines | full-width (value screens) |
+| tier | max lines | typical chars/line | full-width |
 |---|---|---|---|
-| {{val:pq1.typography.SIZE_XL}} | 12 | 1 | 17 |
-| {{val:pq1.typography.SIZE_L}} | 14 | 1 | 20 |
-| {{val:pq1.typography.SIZE_M}} | 16 | 2 | 23 |
-| {{val:pq1.typography.SIZE_BODY}} | 21 | 3 | 30 |
+| {{val:pq1.typography.SIZE_XL}} | 1 | ~12 | ~17 |
+| {{val:pq1.typography.SIZE_L}} | 1 | ~14 | ~20 |
+| {{val:pq1.typography.SIZE_M}} | 2 | ~16 | ~23 |
+| {{val:pq1.typography.SIZE_BODY}} | 3 | ~21 | ~30 |
+
+The region is {{val:pq1.layout.TEXT_REGION_W}} px, or {{val:pq1.layout.TEXT_REGION_FULL_W}} px on a value screen. The character counts are a sighting shot for an author writing a sample — the measure decides.
 
 Does not fit at the Default tier? Split it across two screens — or, when it is ONE value that must stay whole (a 32-byte hash), page it inside its screen ([detail — paged](../screen-types/detail-paged.md)). Never below the Default tier, never truncated, never an ellipsis.
 
-The reference **does not fit at runtime**: `size` is written in the flow and `normalize_screens` accepts it as given — even an off-scale one ({{loc:pq1.layout.normalize_screens}}; a known gap in the checker's baseline). On the device the value is real data, so the firmware has to run the rule itself and pick the tier per transaction.
+The reference **does fit**: `normalize_screens` ({{loc:pq1.layout.normalize_screens}}) runs `fit_size` ({{loc:pq1.layout.fit_size}}) for every screen that does not pin a `size`, and raises when no tier holds the value. A typed `size` is the author's pin and is taken as given — the checker measures it separately (T-WIDTH), so a pinned line that would clip fails the build rather than the panel. A pin must still be ON the ladder: an off-scale size now raises, because it is a typo rather than a decision. On the device the value is real data, so the firmware has to run the rule itself and pick the tier per transaction.
 
 SemiBold runs wider than Regular — about 3 % on the live name lines, more on some strings — so measure a name in its own face (`typography.text_width(name, size, "semibold")`), not in Regular.
 

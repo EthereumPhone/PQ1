@@ -21,7 +21,7 @@ One law, two dresses. **Branding fills the disc; no branding strokes it.**
 | flash ring as the result lands | the state colour | the resting fill — never state green over a brand disc |
 | caption | white | white |
 
-State colours come from `colors.STATE` (`pq1/colors.py:28`): done (46, 229, 106), failed (255, 66, 61), warning (245, 160, 51), awaiting (220, 196, 25). Live flows use only done and failed today; warning appears on library screens.
+State colours come from `colors.STATE` (`pq1/colors.py:36`): done #2EE56A, failed #FF423D, warning #F5A033, awaiting #DCC419. Live flows use only done and failed today; warning appears on library screens.
 
 ## When it appears
 
@@ -31,13 +31,13 @@ Branded: three families today — the three that pass a `resting` override.
 
 | family | SIGNED / done | DECLINED |
 |---|---|---|
-| SAFE (`flows/safe/__init__.py:27`) | `#13FF7F` disc, black check | red disc, black X |
-| CoW Swap (`flows/cowswap/__init__.py:31`) | `#65D9FF` disc, navy check (1, 47, 122) | red disc, **black** X |
+| SAFE (`flows/safe/__init__.py:27`) | #13FF7F disc, black check | red disc, black X |
+| CoW Swap (`flows/cowswap/__init__.py:31`) | #65D9FF disc, navy check #012F7A | red disc, **black** X |
 | firmware (`flows/firmware/__init__.py:90`) | white disc, black check | red disc, black X |
 
-Red is (255, 66, 61). It is the **one cancel circle every family shares**: a family's own mark colour dresses SIGNED only.
+Red is #FF423D. It is the **one cancel circle every family shares**: a family's own mark colour dresses SIGNED only.
 
-Used in 9 of 31 flows: `cowswap/address_mode` ×2, `cowswap/swap` ×2, `firmware/update` ×2, `safe/add_owner` ×2, `safe/can_not_decode` ×2, `safe/clear_sign` ×2, `safe/enable_module` ×2, `safe/erc20_transfer` ×2 … and 1 more (see the matrix in [INDEX](../INDEX.md))
+Used in 9 of 33 flows: `cowswap/address_mode` ×3, `cowswap/swap` ×3, `firmware/update` ×3, `safe/add_owner` ×3, `safe/can_not_decode` ×3, `safe/clear_sign` ×3, `safe/enable_module` ×3, `safe/erc20_transfer` ×3 … and 1 more (see the matrix in [INDEX](../INDEX.md))
 
 ## Spec
 
@@ -65,7 +65,7 @@ Screen 11 of flow `safe/clear_sign`, as the design system normalizes it (default
  'busy': None}
 ```
 
-Build the override with `status.branded_resting(fill, mark=BLACK)` (`pq1/status.py:114`); it always returns a black ring. `status.style_of` (`pq1/status.py:129`) resolves the look:
+Build the override with `status.branded_resting(fill, mark=BLACK)` (`pq1/status.py:130`); it always returns a black ring. `status.style_of` (`pq1/status.py:145`) resolves the look:
 
 - The accent colour (flash ring; unbranded ring and glyph) is `color` if given, else the `resting` fill, else the state colour.
 - The ring is flush as soon as the screen carries a `resting` key at all, even a partial one. Missing keys fall back to black fill and accent-coloured ring and glyph. Always pass all three.
@@ -76,8 +76,8 @@ Build the override with `status.branded_resting(fill, mark=BLACK)` (`pq1/status.
 - Disc: centre x 214, y 72, the full layout radius 30.
 - Ring: `TOKEN_RING_W` 2.4 px wide, stroked **inward** from its radius. Unbranded: outer edge 1.2 px inside the layout radius — exactly where a flow token's ring sits, so the ring does not jump when the token resolves. Branded: outer edge on the layout radius.
 - What shows on the black panel: a black ring over a black ground is invisible. A branded disc therefore reads as a filled disc whose radius is the layout radius minus the ring width. Draw it as the code does — the full disc, then the black ring over its rim — and the size comes out right.
-- Glyph: `check` or `x`, drawn at the disc centre for the full radius (`pq1/status.py:111`). `result: None` draws no glyph.
-- Caption: see [caption](../components/caption.md). Chevrons are hidden on every status screen (`pq1/layout.py:510`); here they are hidden because an ending takes no input.
+- Glyph: `check` or `x`, drawn at the disc centre for the full radius (`pq1/status.py:127`). `result: None` draws no glyph.
+- Caption: see [caption](../components/caption.md). Chevrons are hidden on every status screen (`pq1/layout.py:653`); here they are hidden because an ending takes no input.
 
 ## Motion
 
@@ -85,15 +85,15 @@ The look itself does not move. How it lands depends on the screen's animation; t
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| qubit film: the flash beat — the single body returns already wearing the resting fill and ring | 400 | 5.6 | back_out | `QubitCfg.T_FLASH` | `pq1/loading.py:34` | radius 17 px to full; the one sanctioned overshoot. Flash ring: radius +55 px, alpha 0.85 to 0, both linear — see [flash ring](../components/flash-ring.md) |
-| cancel resolve: token disc, ring and radius crossfade into the look | 400 | 5.6 | ease_out | `QubitCfg.T_FLASH` | `pq1/loading.py:34` | the resolve runs one flash beat — `ResolveStatus` takes the film's `T_FLASH` as its whole resolve. Fill and ring colours mix; the disc edge eases out to the full radius; a branded (flush) ring travels the inset outward, an unbranded one is already at the token edge and does not move. The token glyph is gone by 45 % of the beat (linear) |
-| film and resolve: the result glyph fades in | — | — | linear | — | — | starts when the beat ends; length is a literal in the code: 350 ms |
-| film and resolve: the caption fades in | — | — | linear | — | — | same length, starts 120 ms after the glyph |
-| arrive: black hold | 400 | 5.6 | hold | `T_HOLD` | `pq1/status.py:535` | after a [lead film](../transitions/lead-film.md) emptied the canvas |
-| arrive: disc, ring and glyph together | 300 | 4.2 | ease_out + arrive | `T_IN` | `pq1/status.py:536` | alpha on ease_out, scale 0.97 to 1 on arrive — the [verdict entrance law](../transitions/verdict-law.md); no flash ring |
-| arrive: beat | 450 | 6.3 | hold | `T_WAIT` | `pq1/status.py:537` |  |
-| arrive: the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/status.py:538` |  |
-| the rest | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | every ending rests this long once resolved — see [result hold](../transitions/result-hold.md) |
+| qubit film: the flash beat — the single body returns already wearing the resting fill and ring | 400 | 5.6 | back_out | `QubitCfg.T_FLASH` | `pq1/loading.py:35` | radius 17 px to full; the one sanctioned overshoot. Flash ring: radius +55 px, alpha `FLASH_ALPHA` 0.85 to 0, both linear — see [flash ring](../components/flash-ring.md) |
+| cancel resolve: token disc, ring and radius crossfade into the look | 400 | 5.6 | ease_out | `QubitCfg.T_FLASH` | `pq1/loading.py:35` | the resolve runs one flash beat — `ResolveStatus` takes the film's `T_FLASH` as its whole resolve. Fill and ring colours mix; the disc edge eases out to the full radius; a branded (flush) ring travels the inset outward, an unbranded one is already at the token edge and does not move. The token glyph is gone by 45 % of the beat (linear) |
+| film and resolve: the result glyph fades in | 300 | 4.2 | ease_out | `RESULT_FADE_MS` | `pq1/motion.py:163` | starts when the beat ends — an entrance |
+| film and resolve: the caption fades in | 300 | 4.2 | ease_out | `RESULT_FADE_MS` | `pq1/motion.py:163` | same length, starts `RESULT_LAG_MS` 145 ms (2.0 f) after the glyph; the hold counts from the landing |
+| arrive: black hold | 429 | 6.0 | hold | `T_HOLD` | `pq1/status.py:575` | after a [lead film](../transitions/lead-film.md) emptied the canvas |
+| arrive: disc, ring and glyph together | 300 | 4.2 | ease_out + arrive | `T_IN` | `pq1/status.py:576` | alpha on ease_out, scale 0.97 to 1 on arrive — the [verdict entrance law](../transitions/verdict-law.md); no flash ring |
+| arrive: beat | 450 | 6.3 | hold | `T_WAIT` | `pq1/status.py:577` |  |
+| arrive: the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/status.py:578` |  |
+| the rest | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | every ending rests this long once resolved — see [result hold](../transitions/result-hold.md) |
 
 ## Input
 

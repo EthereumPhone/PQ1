@@ -66,7 +66,12 @@ def attempt(miss, typed=WRONG, match="unlocked", pin=PIN, **over):
     is the padlock opening, None lets a match fall through to the next
     screen (a PIN gate before a signing film). typed is what the demo
     dials on this try; the attempt's state follows it, so --end sorts the
-    GIF into success/ (a match) or cancel/ (a miss)."""
+    GIF into success/ (a match) or cancel/ (a miss).
+
+    A try that must carry a warning overrides its caption — busy="LAST
+    ATTEMPT" instead of the default ENTER PIN — so the warning lives on the
+    row the user is typing, not on a verdict that leaves on a clock (audit
+    A11-03)."""
     if match == "unlocked":
         match = unlocked()
     d = screens.spec("pin_entering", pin=pin, typed=typed, exit="submit",

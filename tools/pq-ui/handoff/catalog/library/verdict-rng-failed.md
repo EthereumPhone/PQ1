@@ -33,11 +33,13 @@ RNG failed — the red die rests, tumbles on three axes and lands on 1-2-3.
 > without smearing the faces away: the die is sharp again well before
 > it settles.
 >
-> The die keeps the source's half-edge 21; its resting ink box (64 x 55)
-> centres on the circle grid (214, 72) with a half-pixel nudge right
-> (DIE_DX — the corner view inks 0.5 px left of the cube's centre). The
-> caption is the source's 18 px caps with 0.5 px tracking on the y 128
-> baseline — components.caption.
+> The die's half-edge derives from the sign box (layout.VERDICT_BOX — the
+> source's 21: the corner view inks the box wide, 64 x 55); its resting ink
+> centres on the circle grid (214, 72) with no nudge (DIE_DX 0 — the
+> source's half-pixel bbox nudge pushed the ink centroid the wrong way,
+> audit ICO-04). The
+> caption is the Question caps (typography.SIZE_QUESTION / LS_QUESTION) on
+> the y 128 baseline — components.caption.
 >
 >     screens.spec("rng_failed")
 >     python3 -m screens rng_failed
@@ -51,15 +53,15 @@ object, then turns once on three axes and decelerates into `die3d.REST`, the cor
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 400 | 5.6 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | `status.draw_handoff` veils the resting token; with `handoff` unset the canvas is black |
+| black hold — the flow's token hands over | 429 | 6.0 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | `status.draw_handoff` veils the resting token; with `handoff` unset the canvas is black |
 | the die arrives — fade | 300 | 4.2 | ease_out | `T_IN` | `pq1/verdict.py:42` | alpha 0 to 1 on the face FILLS only; the edge strokes and the pips are drawn flat black at every alpha, so the die reads as a die before it is fully in |
 | the die arrives — rise | 300 | 4.2 | arrive | `T_IN` | `pq1/verdict.py:42` | half-edge `SIZE` 21 px scaled from `ARRIVE_FROM` 0.97 to 1 — well under a pixel |
-| rest on the wound-up die | 350 | 4.9 | — | `T_REST` | `screens/verdict/rng_failed.py:56` | the source's visible hold. The die is still, and still in the wrong pose: it is seen before it is thrown |
-| the tumble | 1500 | 21.0 | decel | `T_TUMBLE` | `screens/verdict/rng_failed.py:57` | three axes unwind at once into `die3d.REST` — pi about X, 1.5 pi about Y, 0.5 pi about Z (`SPIN`) — on decel with p = `DECEL_P` 2.8. At launch that is about 36 degrees a panel frame about Y and 24 about X |
-| motion-blur exposure, re-taken every frame of the tumble | 24.2 | 0.3 | linear | `SHUTTER_MS` | `screens/verdict/rng_failed.py:59` | the die is averaged over the per-axis angles swept in the exposure, one pose per 2 degrees up to `BLUR_SAMPLES_MAX` 48 of them |
-| beat on the settled die | 150 | 2.1 | — | `T_BEAT` | `screens/verdict/rng_failed.py:58` | the corner view is held still before the words |
+| rest on the wound-up die | 350 | 4.9 | — | `T_REST` | `screens/verdict/rng_failed.py:63` | the source's visible hold. The die is still, and still in the wrong pose: it is seen before it is thrown |
+| the tumble | 1500 | 21.0 | decel | `T_TUMBLE` | `screens/verdict/rng_failed.py:64` | three axes unwind at once into `die3d.REST` — pi about X, 1.5 pi about Y, 0.5 pi about Z (`SPIN`) — on decel with p = `DECEL_P` 2.8. At launch that is about 36 degrees a panel frame about Y and 24 about X |
+| motion-blur exposure, re-taken every frame of the tumble | 24.2 | 0.3 | linear | `SHUTTER_MS` | `screens/verdict/rng_failed.py:66` | the die is averaged over the per-axis angles swept in the exposure, one pose per 2 degrees up to `BLUR_SAMPLES_MAX` 48 of them |
+| beat on the settled die | 150 | 2.1 | — | `T_BEAT` | `screens/verdict/rng_failed.py:65` | the corner view is held still before the words |
 | the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | RNG FAILED on the baseline y 128 |
-| resolved — the result hold | 2450 | 34.3 | — | `RESULT_HOLD_MS` | `pq1/status.py:101` | see [result hold](../transitions/result-hold.md) |
+| resolved — the result hold | 2450 | 34.3 | — | `RESULT_HOLD_MS` | `pq1/status.py:107` | see [result hold](../transitions/result-hold.md) |
 
 `T_WAIT` is built from the mechanism — `T_REST + T_TUMBLE + T_BEAT` — so the law's beat and the
 throw are the same window. The mechanism's clock starts at `T_HOLD + T_IN`, after the entrance:
@@ -75,7 +77,7 @@ the edge off the first frames without smearing the faces away. Before the tumble
 ## Geometry
 
 The resting ink box is 64 x 55 px, centred on the circle grid — `layout.CENTER_X`,
-`layout.CIRCLE_CY` — with a half-pixel nudge right (`DIE_DX` 0.5
+`layout.CIRCLE_CY` — with a half-pixel nudge right (`DIE_DX` 0
 px), because the corner view inks slightly left of the cube's true centre. That nudge is a
 constant: it does not scale with the entrance. Faces are back-face culled, rounded, stroked
 black, and the pips are sampled on each face plane and projected, so they foreshorten.
@@ -84,13 +86,13 @@ black, and the pips are sampled on each face plane and projected, so they foresh
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 3000 ms (42.0 f) | 5450 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 3029 ms (42.4 f) | 5479 ms | 2450 ms | no | yes | no | no |
 
 ## Phases
 
 | phase attribute | `(default)` |
 |---|---:|
-| `T_HOLD` | 400 ms (5.6 f) |
+| `T_HOLD` | 429 ms (6.0 f) |
 | `T_IN` | 300 ms (4.2 f) |
 | `T_TEXT` | 300 ms (4.2 f) |
 | `T_WAIT` | 2000 ms (28.0 f) |
@@ -103,7 +105,7 @@ Curves this module calls: `motion.clamp01`, `motion.decel`. The fade and the ris
 | module constant | value |
 |---|---|
 | `DECEL_P` | `2.8` |
-| `DIE_DX` | `0.5` |
+| `DIE_DX` | `0.0` |
 | `SHUTTER_MS` | `24.166666666666668` |
 | `SIZE` | `21.0` |
 | `SPIN` | `[3.141592653589793, 4.71238898038469, 1.5707963267948966]` |

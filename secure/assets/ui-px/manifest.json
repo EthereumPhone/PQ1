@@ -12,8 +12,8 @@
   },
   "outputs": {
     "atlas.pq1a": {
-      "bytes": 75128,
-      "sha256": "4c5e99d5a388f88058715af58bf6f8d6894576b409e89137c802661e7995ac71"
+      "bytes": 75176,
+      "sha256": "51407866fe67e5f00785e373ff4e59263fab9b2d883f61108a958b719c760745"
     },
     "base.a4": {
       "bytes": 346,
@@ -21,7 +21,7 @@
     },
     "blind.a4": {
       "bytes": 144,
-      "sha256": "248b402e423bb8a58952f1936a17827d83005424ff0703bf182f480dcc2de2d7"
+      "sha256": "47ef0655ae2bdfeea36c5df75201617cc69cb1eb050ed5bb09a24d0dccee6640"
     },
     "cowswap.a4": {
       "bytes": 596,
@@ -32,8 +32,8 @@
       "sha256": "676ab532e36156d15d45482cdc192589abe34b321541854ad6b405126cdf26f7"
     },
     "eth.a4": {
-      "bytes": 232,
-      "sha256": "468c9ff58df2483eeab72e0c13f17415a788fa8877fa1526da2b29d971d5885a"
+      "bytes": 278,
+      "sha256": "c00d6ec2b7bc425a79561747fa43031e7be1449e3229743f11ace7016f7a5f5c"
     },
     "fonts.bin": {
       "bytes": 68867,
@@ -41,15 +41,15 @@
     },
     "fprint.a4": {
       "bytes": 296,
-      "sha256": "40aef1b6dabf26bd626fe368572c47d36a9678978fb5cd97ae1946cfad287459"
+      "sha256": "3b6802c73539c35a3bd345f6a9e4ef734da53b82b8619592e8d28fd835e49307"
     },
     "mainnet.a4": {
       "bytes": 278,
-      "sha256": "f6ccde932d874634dfcab97c64aff5c97a0f26147ab525d058913f02ccda62d0"
+      "sha256": "c00d6ec2b7bc425a79561747fa43031e7be1449e3229743f11ace7016f7a5f5c"
     },
     "rotate.a4": {
       "bytes": 296,
-      "sha256": "64bdfb21d0bef46b0810235e7bbcd89dae6aeecbb9c0b8b77e7d786ea2b8efc3"
+      "sha256": "6aca1b76121dfcd9756467b65cd47fb68fda3d5ff07bff4ad6e0f22b62b7663d"
     },
     "safe.a4": {
       "bytes": 1690,

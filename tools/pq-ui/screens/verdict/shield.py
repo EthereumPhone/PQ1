@@ -20,7 +20,7 @@ ARRIVE_MS, no overshoot); then the beat and the caption:
     python3 -m screens no_match --text "NO BACKUP"
 """
 from pq1 import status
-from pq1.layout import CENTER_X, CIRCLE_CY
+from pq1.layout import CENTER_X, CIRCLE_CY, VERDICT_BOX
 from pq1.motion import shake
 from pq1.procedural import marks, shield
 from pq1.verdict import VerdictAnim
@@ -34,11 +34,16 @@ PRESETS = dict(
                   gesture="wiggle"),
 )
 
-SHIELD_H = 62.0    # source height, design box centred on the circle
-MARK_DY = 2.0      # both sources sit the mark 2 px above the shield centre
+# the shield is tall, so its HEIGHT is the sign box (audit ICO-03 /
+# ICO-06), design box centred on the circle. The sources composed the
+# mark on a 62 px shield: its offset and radius ride UNIT — one source
+# px in UI px — and keep their proportion on the boxed shield
+SHIELD_H = float(VERDICT_BOX)
+UNIT = SHIELD_H / 62.0
+MARK_DY = 2.0 * UNIT    # both sources sit the mark 2 px above the shield centre
 # check r from the source; the x source drew diagonals to +/-8.5 px and
 # x_mark's corners sit at 0.30 r
-MARK_R = {"check": 25.0, "x": 8.5 / 0.30}
+MARK_R = {"check": 25.0 * UNIT, "x": 8.5 / 0.30 * UNIT}
 T_BEAT = 450       # the verdict beat before the caption
 # the gestures, on the arrived sign: (axis, excursion px, window ms) — one
 # decaying cycle each (sources: 5 sin(2 pi w)(1 - w) on y; 6 sin(2 pi w)(1 - w)

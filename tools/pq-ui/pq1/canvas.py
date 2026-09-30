@@ -4,7 +4,7 @@ All coordinates are UI pixels (428 x 142); the canvas draws at 3x and
 LANCZOS-downscales in out(). Alpha on text/fills follows the flow idiom of
 scaling the colour toward black, which is exact on the pure-black background;
 the draw context is RGBA-mode so components may also composite true alpha
-(pulse rings, badges).
+(pulse rings).
 """
 import math
 
@@ -61,7 +61,7 @@ class Canvas:
     def text(self, s, x, y, size, alpha=1.0, ls=0.0, color=colors.WHITE,
              baseline=False, weight="regular"):
         """centred text; baseline=True aligns the glyph baseline to y"""
-        if alpha <= 0.01:
+        if alpha <= colors.ALPHA_FLOOR:
             return
         f = typography.font(size, weight)
         col = tuple(int(round(c * alpha)) for c in color)
@@ -85,7 +85,7 @@ class Canvas:
         """fade everything drawn so far toward black by k (0 = untouched,
         1 = black): a black film over the whole frame — the flow's transit
         fade of a screen that owns its canvas (flow.Sim.draw)"""
-        if k <= 0.003:
+        if k <= colors.FILM_FLOOR:
             return
         self.d.rectangle([0, 0, self.w * SUP, self.h * SUP],
                          fill=(0, 0, 0, int(round(255 * min(1.0, k)))))

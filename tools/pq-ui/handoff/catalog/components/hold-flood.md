@@ -7,15 +7,17 @@ A hold fills the disc from the bottom up; three dresses depending on the body un
 
 ## What it is
 
-The progress fill of a hold: a see-through liquid rising inside the token disc from the bottom up, level `k` from 0 to 1. `k` comes from `motion.hold_fill` (`pq1/motion.py:178`); the drawing is `components.hold_flood` (`pq1/components.py:681`).
+The progress fill of a hold: a see-through liquid rising inside the token disc from the bottom up, level `k` from 0 to 1. `k` comes from `motion.hold_fill` (`pq1/motion.py:211`); the drawing is `components.hold_flood` (`pq1/components.py:739`).
 
 ## Geometry
 
-The surface is a horizontal chord of the disc. For level `k` the surface sits `r · (1 − 2k)` below the centre; at `k = 1` the whole disc is covered. Levels under 0.003 draw nothing; over 0.997 draw the full circle.
+The surface is a horizontal chord of the disc. For level `k` the surface sits `r · (1 − 2k)` below the centre; at `k = 1` the whole disc is covered. Levels at or under `LEVEL_EPS` (0.003) draw nothing; levels within `LEVEL_EPS` of 1 draw the full circle. That is a *level*, not an alpha, which is why it is not the panel's `ALPHA_FLOOR`.
+
+The full test is one function, `motion.hold_full` (`pq1/motion.py:247`) — ms since press-down at or past `hold_fill_ms(1 − LEVEL_EPS)`. The draw uses it to paint the whole disc, and the driver and the Sim fire the hold on it, so the first frame that shows a full disc is the frame the hold fires: there is no full-but-not-yet-signed frame in which a release still cancels.
 
 ## Three dresses, one rule
 
-The film's opacity is always `HOLD_OVERLAY_ALPHA` 0.3 alpha. Only its shade follows the body it rises in — resolved in one place, `components.hold_style` (`pq1/components.py:660`):
+The film's opacity is always `HOLD_OVERLAY_ALPHA` 0.3 alpha. Only its shade follows the body it rises in — resolved in one place, `components.hold_style` (`pq1/components.py:718`):
 
 | body under the fill | the film | layer |
 |---|---|---|
@@ -29,9 +31,9 @@ The ring always stays bright; the liquid never paints over the token's identity.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| flat at zero | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | a tap shows no fill |
-| rise to full | 1750 | 24.5 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:171` |  |
-| snap back after an early release | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:173` | from the level it had reached |
+| flat at zero | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | a tap shows no fill |
+| rise to full | 1500 | 21.0 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:195` | drawn full — and the hold fires — from `hold_full`, a hair before the linear rise reaches 1 |
+| snap back after an early release | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:197` | from the level it had reached |
 | fade out after the commit | — | — | spring NAV | — | — | alpha follows the transit's mix spring |
 
 ## Preview
@@ -45,6 +47,7 @@ The ring always stays bright; the liquid never paints over the token's identity.
 - **Do** compute the level from the ms since press-down — never accumulate it per frame.
 - **Don't** ease the rise: it is linear on purpose (a constant-speed gauge).
 - **Don't** draw the fill where the hold is not armed.
+- **Don't** test "full" and "fire" separately: one `hold_full` answers both, or a frame shows a full disc that a release still cancels.
 
 ## Port notes
 

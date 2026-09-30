@@ -35,8 +35,9 @@ screens, their order, labels and sides, never a value. Render with
 """
 from flows.batch import batch_hero, defaults, ends, signed
 
-SYMBOL = "TOSHI"   # a long-tail token: the SOLID placeholder disc + the ramp
-                   # trail hashed from it; a popular symbol would render its
+SYMBOL = "TOSHI"   # a long-tail token: its initial on the SOLID placeholder
+                   # disc + the ramp trail hashed from it (the BATCH screen
+                   # keeps the ether mark); a popular symbol would render its
                    # logo art and hide the treatment a sample exists to show
 TOTAL = 3
 

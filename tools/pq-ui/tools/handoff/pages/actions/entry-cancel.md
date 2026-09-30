@@ -30,7 +30,7 @@ Pressing the **other** button while the left hold is rising makes a [chord](entr
 {{motion-head}}
 {{row:nothing visible: the press may still be a tap | pq1.motion.TAP_MAX_MS | hold | a tap dials; it never flashes a partial fill}}
 {{row:the liquid rises in every ring | pq1.motion.HOLD_COMMIT_MS - pq1.motion.TAP_MAX_MS | linear | constant speed, one shared level}}
-{{row:the cancel fires, measured from press-down | pq1.motion.HOLD_COMMIT_MS | — | only at completion — a release one frame earlier does nothing}}
+{{row:the cancel fires, measured from press-down | pq1.motion.HOLD_COMMIT_MS - pq1.motion.LEVEL_EPS * (pq1.motion.HOLD_COMMIT_MS - pq1.motion.TAP_MAX_MS) | — | only at completion — a release one frame earlier does nothing — `motion.hold_full` ({{loc:pq1.motion.hold_full}}): the first frame drawn full is the frame it fires}}
 {{row:released early: the liquid drains | pq1.motion.HOLD_SNAPBACK_MS | ease_out | from the level it had reached; the row is untouched, the digits are still there}}
 {{row:after the cancel: the whole row fades to black | screens.pin.pin_entering.T_OUT | ease_out | rings, digits, liquid and caption on one alpha. No check beat — that belongs to the submit}}
 
