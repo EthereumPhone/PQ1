@@ -38,7 +38,7 @@ namespace sphincs_c10
 @[global_simps, irreducible] def params.ADRS_WOTS_PK : Std.U32 := 1#u32
 
 /-- [sphincs_c10::wots::pk_from_sig]: loop body 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 157:4-159:5
+    Source: 'sphincs-c10/src/wots.rs', lines 175:4-177:5
     Visibility: public -/
 @[rust_loop_body]
 def wots.pk_from_sig_loop0.body
@@ -58,7 +58,7 @@ def wots.pk_from_sig_loop0.body
     ok (cont (iter1, sum1))
 
 /-- [sphincs_c10::wots::pk_from_sig]: loop 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 157:4-159:5
+    Source: 'sphincs-c10/src/wots.rs', lines 175:4-177:5
     Visibility: public -/
 @[rust_loop]
 def wots.pk_from_sig_loop0
@@ -71,7 +71,7 @@ def wots.pk_from_sig_loop0
     (iter, sum)
 
 /-- [sphincs_c10::wots::pk_from_sig]: loop body 1:
-    Source: 'sphincs-c10/src/wots.rs', lines 166:4-170:5
+    Source: 'sphincs-c10/src/wots.rs', lines 184:4-188:5
     Visibility: public -/
 @[rust_loop_body]
 def wots.pk_from_sig_loop1.body
@@ -102,7 +102,7 @@ def wots.pk_from_sig_loop1.body
     ok (cont (iter1, a2))
 
 /-- [sphincs_c10::wots::pk_from_sig]: loop 1:
-    Source: 'sphincs-c10/src/wots.rs', lines 166:4-170:5
+    Source: 'sphincs-c10/src/wots.rs', lines 184:4-188:5
     Visibility: public -/
 @[rust_loop]
 def wots.pk_from_sig_loop1
@@ -118,7 +118,7 @@ def wots.pk_from_sig_loop1
     (iter, pk_elements)
 
 /-- [sphincs_c10::wots::pk_from_sig]:
-    Source: 'sphincs-c10/src/wots.rs', lines 139:0-173:1
+    Source: 'sphincs-c10/src/wots.rs', lines 157:0-191:1
     Visibility: public -/
 def wots.pk_from_sig
   (seed : Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)
