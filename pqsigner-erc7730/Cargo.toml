@@ -23,7 +23,7 @@ edition.workspace = true
 pqsigner-proto    = { workspace = true }
 pqsigner-tx       = { workspace = true }
 pqsigner-tx-core  = { workspace = true }
-sha2 = { version = "0.10", default-features = false }
+sha2 = { version = "0.11", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 subtle = { version = "2.6", default-features = false }
 
