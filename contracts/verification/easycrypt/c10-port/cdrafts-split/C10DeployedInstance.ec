@@ -274,7 +274,7 @@ qed.
    `emb_in : dgstblock * cntr -> dgst` is the +C hash's message input.  The
    deployment serialises it as NODE || COUNTER: wots_digest's preimage carries
    the 16-byte node and the u32 counter (sphincs-c10/src/hash.rs:350-363,
-   find_count returning u32 at wots.rs:54-60).  So the deployed width is
+   find_count returning u32 at wots.rs:63-71).  So the deployed width is
        dfC = size (emb_in witness) = 8*n + r  with n = 16, r = 32  =>  160.
 
    The development requires FOUR separations of `dfC` from the other collection

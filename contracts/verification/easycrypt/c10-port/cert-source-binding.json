@@ -16,7 +16,7 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Counter.ec": "1c93aa173db90139e6d113311b23a78da77d6cbf67e7fc56fbccc9e5a7445d34",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Bytes.ec": "3d6924904713347fabf77deca15c56d04094c95be8c7130575c02e671e6a563b",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10BoundedGrind.ec": "27e8f6a469bfab0a58b73acfa398155a217f901bd03980a6595006b48ff5c733",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10DeployedInstance.ec": "0a6a70e615c4d74bfa371eaa3d248025b058766badb766bb2a2246199bad94bf",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10DeployedInstance.ec": "f5c35faeb16c8c195062e32aa93eae69ccbe8006e7e6fb5b791b37950eb32309",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/WOTS_C_Real.ec": "0d7b1d82c47ae62e590039dbc2ad0488dfd987bc932454d4c108193a5e8d65de",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Encoding.ec": "b90581c1aa6ee8300763763c8537f32c1f0e642fa13842ea39937786c36390a2",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10DigitUniform.ec": "860dc6c0d296661880a85aac0d930461c481901309958fd45a81fd4f7abf5476",

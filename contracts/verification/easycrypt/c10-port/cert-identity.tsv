@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	06793da6caf1b7efe0ff7b7691927981
+split	fe42e5ad3e1d75566ed80c4c0e0d8c40
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1477,3 +1477,14 @@ fork	9c2d21280c84d52c30b22111151f1135
 # signing-progress callbacks. Proofs, statements, assumptions and controls
 # unchanged. Functional fixture correspondence excludes callback side effects.
 # Split identity 116f7fa68bf756dd0602c916d3eb3959 -> 06793da6caf1b7efe0ff7b7691927981.
+
+# 2026-09-30: COMMENT-ONLY re-baseline. C10DeployedInstance.ec cited
+# `find_count returning u32 at wots.rs:54-60`; the signing-progress callbacks
+# moved that signature to 63-71, so the line range pointed at doc-comment text.
+# The CLAIM was and remains true (find_count still returns u32, so dfC = 8n + r
+# = 160 and the four separations are untouched) - only the pointer was stale.
+# No proof, statement, assumption, control or target changed; the edit is one
+# line range inside a prose block. The sibling citations on the same line
+# (hash.rs:350-363 for wots_digest's NODE||COUNTER preimage) and at :424
+# (wots.rs:16-46 for extract_digits) were checked and are still accurate.
+# Split identity 06793da6caf1b7efe0ff7b7691927981 -> fe42e5ad3e1d75566ed80c4c0e0d8c40.
