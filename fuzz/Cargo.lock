@@ -924,6 +924,7 @@ name = "dbgen"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "k256",
  "pqsigner-erc7730",
  "pqsigner-tx",
  "pqsigner-tx-core",
