@@ -2,9 +2,11 @@
 """port_diff — do a port's constants match the PQ1 spec?
 
     python3 port_diff.py path/to/ui_tokens.h [more files ...] [--spec DIR] [--strict]
+    python3 port_diff.py path/to/ui_colors.h --colors          (the colour table instead)
 
-Reads spec/motion.json (dumped from the live Python by `python3 -m tools.handoff`)
-and the port's own source — C / C++ headers (#define, const, constexpr, enum),
+Reads spec/motion.json — or spec/colors.json with --colors (the base and state
+colours, every ramp stop, the pinned chain discs and marks) — dumped from the
+live Python by `python3 -m tools.handoff`, and the port's own source — C / C++ headers (#define, const, constexpr, enum),
 Rust (const / static), MicroPython / Python (NAME = 300, NAME = const(300)) or a
 JSON file — and compares every token it can pair by name.
 
@@ -14,12 +16,17 @@ JSON file — and compares every token it can pair by name.
             KIOSK spring pace): on the device nothing moves
             without a press                                       -> exit 1
   MISSING   a device token the port does not define (it may be
-            inlined — check by hand; --strict makes this exit 1)
+            inlined — check by hand; --strict makes this exit 1).
+            With --colors: a colour every port names (role "base");
+            ramp stops are counted, and listed with --all / --strict
   EXTRA     a timing-looking constant in the port that the spec
             does not know (a new behaviour? name it in pq1 first)
 
 Names pair case-insensitively after dropping a project prefix (PQ1_, UI_, K_,
 PQ_UI_) — so PQ1_ARRIVE_MS, kArriveMs and arrive_ms all pair with ARRIVE_MS.
+In --colors mode a port value MATCHES when it equals the spec swatch in ANY
+form the panel might store it: 0xRRGGBB, the RGB565 word, or an {r, g, b}
+triple — how it is stored is the port's business, which colour it is is not.
 Stdlib only; imports nothing from the PQ-UI repo, so it runs inside the port.
 """
 import argparse
@@ -72,14 +79,124 @@ def parse_source(path):
     return out
 
 
-def find_spec(arg):
+def find_spec(arg, want="motion.json"):
     cands = [arg] if arg else []
     cands += [os.path.join(HERE, "..", "spec"), os.path.join(HERE, "..", "..", "..", "spec"),
               os.path.join(os.getcwd(), "handoff", "spec"), os.path.join(os.getcwd(), "spec")]
     for c in cands:
-        if c and os.path.exists(os.path.join(c, "motion.json")):
+        if c and os.path.exists(os.path.join(c, want)):
             return os.path.abspath(c)
-    sys.exit("cannot find spec/motion.json — pass --spec <folder holding motion.json>")
+    sys.exit(f"cannot find spec/{want} — pass --spec <folder holding {want}>")
+
+
+# ------------------------------------------------------------------ colours --
+COLOR_PATTERNS = [
+    # #define NAME 0xRRGGBB | 0xRGB565 | 0xAARRGGBB
+    re.compile(r"^\s*#\s*define\s+(\w+)\s+\(?\s*(0[xX][0-9A-Fa-f]{4,8})\s*\)?"),
+    # const uint16_t NAME = 0x1234;  /  static NAME: u32 = 0xRRGGBB;
+    re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:static\s+|const\s+|constexpr\s+|inline\s+)+"
+               r"[\w:<>\s*&]*?\b(\w+)\s*(?::\s*[\w:<>]+\s*)?=\s*(0[xX][0-9A-Fa-f]{4,8})"),
+    # NAME = (r, g, b) | {r, g, b} | [r, g, b]
+    re.compile(r"^\s*(?:#\s*define\s+|(?:pub\s+)?(?:static\s+|const\s+|constexpr\s+)*"
+               r"[\w:<>\s*&]*?\b)(\w+)\s*(?::\s*[\w:<>\[\]; ]+)?\s*=?\s*"
+               r"[({\[]\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*[)}\]]"),
+    # NAME = "#RRGGBB"
+    re.compile(r"^\s*(?:#\s*define\s+)?(\w+)\s*=?\s*[\"']#([0-9A-Fa-f]{6})[\"']"),
+]
+
+
+def parse_colors(path):
+    """name -> the raw value as written (an int, or an (r, g, b) tuple)"""
+    out = {}
+    if path.endswith(".json"):
+        def walk(d):
+            for k, v in d.items():
+                if isinstance(v, dict):
+                    if "rgb" in v and isinstance(v["rgb"], list):
+                        out[k] = tuple(v["rgb"][:3])
+                    elif "hex" in v and isinstance(v["hex"], str):
+                        out[k] = int(v["hex"].lstrip("#"), 16)
+                    else:
+                        walk(v)
+                elif isinstance(v, str) and re.fullmatch(r"#?[0-9A-Fa-f]{6}", v):
+                    out[k] = int(v.lstrip("#"), 16)
+                elif isinstance(v, list) and len(v) == 3 and all(isinstance(x, int) for x in v):
+                    out[k] = tuple(v)
+        walk(json.load(open(path)))
+        return out
+    for ln in open(path, errors="replace"):
+        for pat in COLOR_PATTERNS:
+            m = pat.match(ln)
+            if not m:
+                continue
+            g = m.groups()
+            if len(g) == 4:
+                out[g[0]] = tuple(int(x) for x in g[1:])
+            elif pat is COLOR_PATTERNS[-1]:
+                out[g[0]] = int(g[1], 16)
+            else:
+                out[g[0]] = int(g[1], 16)
+            break
+    return out
+
+
+def color_forms(ent):
+    """every value a port may legitimately hold for this swatch"""
+    r, g, b = ent["rgb"]
+    return {int(ent["hex"].lstrip("#"), 16),          # 0xRRGGBB
+            ent["rgb565"],                            # the panel word
+            0xFF000000 | (r << 16) | (g << 8) | b,    # 0xAARRGGBB, opaque
+            (r, g, b)}
+
+
+def diff_colors(spec_dir, files, strict, show_all):
+    spec = json.load(open(os.path.join(spec_dir, "colors.json")))["tokens"]
+    by_canon = {canon(k): k for k in spec}
+    port = {}
+    for f in files:
+        for k, v in parse_colors(f).items():
+            port[k] = (v, f)
+    rows, paired = [], set()
+    for pname, (pval, pfile) in sorted(port.items()):
+        sname = by_canon.get(canon(pname))
+        if sname is None:
+            rows.append(("EXTRA", pname, pval, None, os.path.basename(pfile),
+                         "a colour the spec does not know — name it in pq1/colors.py first"))
+            continue
+        paired.add(sname)
+        ent = spec[sname]
+        ok = pval in color_forms(ent)
+        rows.append(("MATCH" if ok else "MISMATCH", pname, pval, ent["hex"],
+                     os.path.basename(pfile), ent.get("source", "")))
+    for sname in sorted(spec):
+        # a "base" colour is one every port names; a ramp stop is usually a table the port
+        # copies whole, so it is only listed on request
+        if sname not in paired and (show_all or strict or spec[sname].get("role") == "base"):
+            rows.append(("MISSING", sname, None, spec[sname]["hex"], "",
+                         spec[sname].get("source", "")))
+    order = {"MISMATCH": 0, "MISSING": 1, "EXTRA": 2, "MATCH": 3}
+    rows.sort(key=lambda r: (order[r[0]], r[1]))
+    counts = {}
+
+    def shown(v):
+        if v is None:
+            return ""
+        if isinstance(v, tuple):
+            return "%d,%d,%d" % v
+        return "0x%X" % v
+    for r in rows:
+        counts[r[0]] = counts.get(r[0], 0) + 1
+        if r[0] == "MATCH" and not show_all:
+            continue
+        print(f"{r[0]:9} {r[1]:28} port={shown(r[2]):>12}  spec={r[3] or '':>9}  {r[4]} {r[5]}")
+    print("\n" + " · ".join(f"{k} {counts.get(k, 0)}" for k in ("MATCH", "MISMATCH", "MISSING", "EXTRA")))
+    if not (show_all or strict):
+        n_ramp = sum(1 for k, v in spec.items() if v.get("role") != "base" and k not in paired)
+        if n_ramp:
+            print(f"({n_ramp} ramp stops unpaired — a port usually copies those as a table; "
+                  f"--all lists them)")
+    bad = counts.get("MISMATCH", 0) + (counts.get("MISSING", 0) if strict else 0)
+    return 1 if bad else 0
 
 
 def spec_tokens(spec_dir):
@@ -105,7 +222,11 @@ def main():
     ap.add_argument("--spec", help="folder holding motion.json (default: the skill's own spec/, or handoff/spec)")
     ap.add_argument("--strict", action="store_true", help="MISSING device timing tokens also exit 1")
     ap.add_argument("--all", action="store_true", help="list MATCH rows too")
+    ap.add_argument("--colors", action="store_true",
+                    help="compare colours against spec/colors.json instead of timings")
     a = ap.parse_args()
+    if a.colors:
+        return diff_colors(find_spec(a.spec, "colors.json"), a.files, a.strict, a.all)
     spec = spec_tokens(find_spec(a.spec))
     by_canon = {canon(k): k for k in spec}
     port = {}

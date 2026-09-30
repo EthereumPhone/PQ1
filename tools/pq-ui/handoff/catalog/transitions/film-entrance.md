@@ -13,40 +13,40 @@ The seed replaced the film's old opening hold, so a film is never handed a cold 
 
 ## When it appears
 
-Every entry into a film whose animation opens on a seed: `StatusAnim.seeds` (`pq1/status.py:255`) says which — the [qubit film](../screen-types/status-qubit.md) and the plain [explosion](../library/fx-explosion.md) do; a [led screen](lead-film.md) seeds when its lead does (`status.seeded`, `pq1/status.py:719`). On a flow that is the sign: [hold right](../actions/hold-right-sign.md) from the ask or the Confirm? into a done ending, and the failure film where a flow names one ([loading loop](loading-loop.md)).
+Every entry into a film whose animation opens on a seed: `StatusAnim.seeds` (`pq1/status.py:287`) says which — the [qubit film](../screen-types/status-qubit.md) and the plain [explosion](../library/fx-explosion.md) do; a [led screen](lead-film.md) seeds when its lead does (`status.seeded`, `pq1/status.py:786`). On a flow that is the sign: [hold right](../actions/hold-right-sign.md) from the ask or the Confirm? into a done ending, and the failure film where a flow names one ([loading loop](loading-loop.md)).
 
 Two entries keep the ordinary leg. A **token-less source** — leaving a PIN row into a film — has no circle to hand over ([token-less transit](tokenless-fade.md)). An explosion with a [side entrance](side-entrance.md) does its own travelling — the entrance IS the travel — so no circle is handed to it either. In both, the film still seeds: in place, at its own centre, from the token's visible radius.
 
 ## How it draws
 
-**The beat — the flow's half.** `Sim.go_to` (`pq1/flow.py:175`) arms no spring when the destination seeds. It records the circle as drawn on that frame — centre, the token's VISIBLE radius (the layout radius 30 less the 1.2 px inset the stroke sits inside), fill, ring, icon and icon colour — and starts one timer: `FADE_MS` 180 ms (2.5 f) of fade, then `SEED_HOLD_MS` 180 ms (2.5 f) of hold. Over it, in `Sim.draw` (`pq1/flow.py:310`):
+**The beat — the flow's half.** `Sim.go_to` (`pq1/flow.py:193`) arms no spring when the destination seeds. It records the circle as drawn on that frame — centre, the token's VISIBLE radius (the layout radius 30 less the 1.2 px inset the stroke sits inside), fill, ring, icon and icon colour — and starts one timer: `FADE_MS` 180 ms (2.5 f) of fade, then `SEED_HOLD_MS` 180 ms (2.5 f) of hold. Over it, in `Sim.draw` (`pq1/flow.py:338`):
 
 - every spring is frozen: the circle does not move, shrink or sweep, and the follower chain stops stepping;
 - the text, the corner chevrons, the trail's palette and a committed hold fill all multiply by `1 − ease_out(k)` — they fade where they stand;
 - the circle itself is drawn at full alpha the whole beat. It is parked, not dissolved;
 - once the fade is done the bare circle **holds** alone on black for `SEED_HOLD_MS` 180 ms (2.5 f) — fade, hold, morph (user rule, Sep 2026).
 
-When the beat ends the pose is handed to the film — `StatusAnim.enter_from` (`pq1/status.py:260`), set once before the film's time 0 so every frame of it stays a pure function of `t` — the current screen snaps to the film, the idle clock restarts (that is the film's time 0) and the chain is dropped. Nothing is drawn differently on that frame: the seed opens on exactly the parked circle.
+When the beat ends the pose is handed to the film — `StatusAnim.enter_from` (`pq1/status.py:292`), set once before the film's time 0 so every frame of it stays a pure function of `t` — the current screen snaps to the film, the idle clock restarts (that is the film's time 0) and the chain is dropped. Nothing is drawn differently on that frame: the seed opens on exactly the parked circle.
 
-**The seed — the film's half.** `loading.qubit_pose` (`pq1/loading.py:98`) owns the morph, which is why a standalone render seeds as well. Over `QubitCfg.T_SEED` 300 ms (4.2 f) one `ease_out` progress drives three things at once: the travel (the source centre to `gc`), the radius (the visible radius to 13 — exactly the qubit's, not area-conserving) and, in `loading.draw_status` (`pq1/loading.py:219`), the body's tint (the token's fill to the film colour). The dress — the token's art, then its stroke over it, the token's own layer order — fades over the first `SEED_ART` 0.5 of the window on **linear time**, not on the eased progress: `ease_out` front-loads, and on it the dress would be gone inside one panel frame. The follower stream is dark over the seed; one arriving body has nothing to trail. The art that leaves is the icon the flow was drawing (the handed-over `icon` / `icon_color`); the film's own icon dresses only a seed nobody handed over.
+**The seed — the film's half.** `loading.qubit_pose` (`pq1/loading.py:99`) owns the morph, which is why a standalone render seeds as well. Over `QubitCfg.T_SEED` 300 ms (4.2 f) one `ease_out` progress drives three things at once: the travel (the source centre to `gc`), the radius (the visible radius to 13 — exactly the qubit's, not area-conserving) and, in `loading.draw_status` (`pq1/loading.py:220`), the body's tint (the token's fill to the film colour). The dress — the token's art, then its stroke over it, the token's own layer order — fades over the first `SEED_ART` 0.5 of the window on **linear time**, not on the eased progress: `ease_out` front-loads, and on it the dress would be gone inside one panel frame. The follower stream is dark over the seed; one arriving body has nothing to trail. The art that leaves is the icon the flow was drawing (the handed-over `icon` / `icon_color`); the film's own icon dresses only a seed nobody handed over.
 
-The split starts the frame the seed lands, and both halves are already a qubit's size (13): the seed IS a qubit, so it divides rather than shrinking as it parts. Every later phase of the film sits `QubitCfg.T_SEED` 300 ms (4.2 f) in, where the hold used to be, and the whole stock film is `STATUS_DWELL` 8650 ms (121.1 f).
+The split starts the frame the seed lands, and both halves are already a qubit's size (13): the seed IS a qubit, so it divides rather than shrinking as it parts. Every later phase of the film sits `QubitCfg.T_SEED` 300 ms (4.2 f) in, where the hold used to be, and the whole stock film is `STATUS_DWELL` 9095 ms (127.3 f).
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the beat — text, chevrons, trail and a hold fill fade, circle PARKED | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:133` | `1 − ease_out(k)` on everything but the circle; no spring moves, the chain stops |
-| the hold — the bare circle alone on black, PARKED | 180 | 2.5 | hold | `SEED_HOLD_MS` | `pq1/motion.py:136` | nothing moves; the screen has gone and the circle waits |
+| the beat — text, chevrons, trail and a hold fill fade, circle PARKED | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:145` | `1 − ease_out(k)` on everything but the circle; no spring moves, the chain stops |
+| the hold — the bare circle alone on black, PARKED | 180 | 2.5 | hold | `SEED_HOLD_MS` | `pq1/motion.py:148` | nothing moves; the screen has gone and the circle waits |
 | the pose is handed over — the film's time 0 | — | — | cut | — | — | `enter_from`, then the snap; the seed opens on the parked circle, so nothing changes on this frame |
-| the seed — travel, shrink and tint | 300 | 4.2 | ease_out | `QubitCfg.T_SEED` | `pq1/loading.py:34` | one progress for all three; lands as one BARE qubit of 13 at `gc` |
-| the dress leaves — art, then ring | 150 | 2.1 | linear | `QubitCfg.T_SEED * SEED_ART` | `pq1/loading.py:34` | the first half of the seed window on raw time — two panel frames |
-| the split begins | 300 | 4.2 | — | `QubitCfg.T_SEED` | `pq1/loading.py:34` | the frame the seed lands — see [the qubit film](../screen-types/status-qubit.md) |
-| the whole entrance — fade, hold, then seed | 660 | 9.2 | — | `FADE_MS + SEED_HOLD_MS + QubitCfg.T_SEED` | `pq1/motion.py:133` | from the commit to two qubits parting |
+| the seed — travel, shrink and tint | 300 | 4.2 | ease_out | `QubitCfg.T_SEED` | `pq1/loading.py:35` | one progress for all three; lands as one BARE qubit of 13 at `gc` |
+| the dress leaves — art, then ring | 150 | 2.1 | linear | `QubitCfg.T_SEED * SEED_ART` | `pq1/loading.py:35` | the first half of the seed window on raw time — two panel frames |
+| the split begins | 300 | 4.2 | — | `QubitCfg.T_SEED` | `pq1/loading.py:35` | the frame the seed lands — see [the qubit film](../screen-types/status-qubit.md) |
+| the whole entrance — fade, hold, then seed | 660 | 9.2 | — | `FADE_MS + SEED_HOLD_MS + QubitCfg.T_SEED` | `pq1/motion.py:145` | from the commit to two qubits parting |
 
 ## Input
 
-The commit that started the beat already made the film the current screen, so the driver reports `resolving` and refuses every press (`pq1/driver.py:230`) — as on any leg into a status screen.
+The commit that started the beat already made the film the current screen, so the driver reports `resolving` and refuses every press (`pq1/driver.py:234`) — as on any leg into a status screen.
 
 ## Preview
 

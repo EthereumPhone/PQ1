@@ -1,19 +1,20 @@
 ## What it is
 
-Two thin rings that are born at the edge of the token, grow a few pixels and fade out, one after the other, for as long as the screen is up. They mark a screen that needs **extra attention** — the user is about to approve something the device cannot fully show. They are an accent on the token, not a state: the screen keeps its normal layout, caption and input.
+Two thin rings that are born at the edge of the token, grow a few pixels and fade out, one after the other, for as long as the screen is up. They mark a screen that needs **extra attention** — the user is about to approve something the device cannot fully show. They carry a **state** colour, not the token's dress, but they change nothing else: the screen keeps its normal layout, caption and input.
 
 The drawing is `components.pulse` ({{loc:pq1.components.pulse}}); `flow.Sim` calls it for every screen whose spec carries `pulse` ({{loc:pq1.flow.Sim.draw}}). Do not confuse it with `motion.attention_pulse` (a verdict icon's scale pulse) or `motion.busy_pulse` (the [busy caption](busy-caption.md)).
 
 ## When it appears
 
-Exactly one live screen uses it today: **BLIND SIGN** in `safe/can_not_decode` ("Can not decode data / Confirm on dapp"), with `pulse: True`, so the rings take the Safe green of the token's fill. The `flows/blind/` family does **not** pulse; it carries the `blind` mark instead. Treat the rings as a rare emphasis a flow author opts into per screen, never as a default.
+Exactly one live screen uses it today: **BLIND SIGN** in `safe/can_not_decode` ("Can not decode data / Confirm on dapp"), with `pulse: True`, so the rings take the WARNING tier — orange around the Safe-green disc, deliberately not the brand's SIGNED green. The `flows/blind/` family does **not** pulse; it carries the `blind` mark instead. Treat the rings as a rare emphasis a flow author opts into per screen, never as a default.
 
 ## Spec
 
 {{fields:pulse}}
 
-- `True` → the rings take the token's resolved **fill** (`token_style_from_spec`), or white when the style has no fill (`_pulse_color`, {{loc:pq1.flow._pulse_color}}).
-- `[r, g, b]` → that colour.
+- `True` → `colors.STATE["warning"]` — the ORANGE warning tier (`_pulse_color`, {{loc:pq1.flow._pulse_color}}).
+- a `colors.STATE` key (`"warning"`, `"failed"`, `"done"`, `"awaiting"`) → that tier's colour.
+- anything else — a raw `[r, g, b]`, an unknown name — **raises**. The rings report a state, so they may not be dressed in an arbitrary colour, and never in the token's own fill.
 - The schema lists `pulse` under detail, but the code reads it on any screen that rests on the token.
 
 ## Geometry
@@ -24,9 +25,9 @@ Both rings share the token's live centre — they travel with it in a transit an
 |---|---|
 | ring count | 2, the second half a period behind the first |
 | outer radius | `r + 1.5 + 7 · phase` — from r + 1.5 to r + 8.5 px, linear |
-| stroke | {{tok:pq1.components.TOKEN_RING_W}} px — the system ring weight — stroked inward from that radius |
+| stroke | {{tok:pq1.components.TOKEN_RING_W}} — the system ring weight — stroked inward from that radius |
 | alpha | `(1 − phase) · 0.4 · screen alpha`, linear; composited with **true alpha**, not scaled toward black |
-| cut-off | a ring under alpha 0.02 is not drawn (the last 5 % of its life) |
+| cut-off | a ring at or under `ALPHA_FLOOR` {{val:pq1.colors.ALPHA_FLOOR}} is not drawn — the panel's first visible alpha, the one floor every fade shares |
 | layer | over the [trail](trail.md) links, under the [token](token-disc.md) |
 
 A newborn ring hugs the token: its stroke spans r − 0.9 to r + 1.5 px, a hair outside the token's visible edge (r − {{val:pq1.components.TOKEN_INSET}}). It appears at its full 0.4 alpha — there is no fade-in.

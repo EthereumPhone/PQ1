@@ -12,7 +12,13 @@ use crate::fixed::{clamp01, exp_neg_q16, lerp, mul_q16, Q16, ONE_Q16};
 
 // ---- gesture timing (DESIGN.md § Input) ----------------------------------
 /// Press-down acknowledgment: the pressed-side chevron nudges.
-pub const PRESS_FEEDBACK_MS: u32 = 120;
+///
+/// 145 ms is the reference's two-panel-frame floor (2 x 71.4286 ms at
+/// `PANEL_FPS` 14): the Sep-27 audit made "no motion or stagger may render in
+/// fewer than two panel frames" a named rule, and 120 ms was below it — the
+/// nudge could resolve inside a single panel frame and never be seen.
+pub const PRESS_FEEDBACK_MS: u32 = 145;
+
 /// Released under this = a tap; held past it = a hold begins.
 /// A release up to this long after the press is a tap; longer is an aborted
 /// hold. The PQ-UI reference says 250 ms; on the pq1's physical switches a

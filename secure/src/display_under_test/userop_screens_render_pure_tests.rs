@@ -458,7 +458,7 @@ fn erc20_known_placeholder_token_transfer_from_screens() {
     assert_eq!(hero.icon(), Some(Icon::Eth));
     assert_eq!(hero.tint(), Some(pqsigner_ui_px::placeholder_ramp(b"TOSHI")));
     assert!(ids(&l.screens).iter().any(|i| i == "FROM"));
-    check("erc20", "pull_toshi", &l, BASE, "erc20_known", "cc51c9349fd511243b08a20ae45f3c0941f3a17a73877f693820e0179334d0ce");
+    check("erc20", "pull_toshi", &l, BASE, "erc20_known", "926a6a4a53f7abd4dee1246064428397b3c933cce9d5971b6ebc5b6f53f6ee54");
 }
 
 #[test]
@@ -469,9 +469,11 @@ fn erc20_unknown_transfer_screens() {
     let r = NameResolver::new();
     let l = lift_userop(&t, &data, None, None, &r, &f);
     assert_eq!(hero_caption(&l), "TRANSFER UNKNOWN TOKEN?");
-    // The design reference's own sample: this contract hashes to ramp 1.
-    assert_eq!(l.screens.as_slice()[0].tint(), Some(1));
-    check("erc20", "transfer_unknown", &l, BASE, "erc20_unknown", "370310fdbf413ecce47d8b847ff3a649e12fff3b11761df2e46bafd52294e97e");
+    // The design reference's own sample. It hashed to ramp 1 while the port
+    // used the wrong modulus (% N_RAMPS); over the reference's 13-ramp hash
+    // space it is ramp 4.
+    assert_eq!(l.screens.as_slice()[0].tint(), Some(4));
+    check("erc20", "transfer_unknown", &l, BASE, "erc20_unknown", "6877ac52f6aed7be8a19985f6795454f16b59c2cc6356429f935bcec2432a03a");
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +509,7 @@ fn typed_call_screens() {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
     assert!(screen_text(&l.screens).contains("stake(address,uint256,bool)") || screen_text(&l.screens).contains("stake(address,"));
-    check("typed_call", "stake", &l, BASE, "typed_call", "3b90f5aa5f01c5ea036bebe45c17c39a1d836ae0ce1151873f3ac43ec8380130");
+    check("typed_call", "stake", &l, BASE, "typed_call", "8af4a71bcd1399fb1aa649e0dfb08779ff15ed6df9771f0ad1f985d3505c2dfb");
 }
 
 #[test]
@@ -519,7 +521,7 @@ fn blind_sign_screens() {
     let l = lift_userop(&t, &data, None, None, &r, &f);
     assert_eq!(hero_caption(&l), "CONFIRM UNKNOWN CALL?");
     assert_eq!(l.screens.as_slice()[0].icon(), Some(Icon::Blind));
-    check("blind_sign", "call_with_value", &l, BASE, "blind_sign", "083a84d04e0b61b59b37198e8e6e755d5007beebf20df90ab0e800b046f7e371");
+    check("blind_sign", "call_with_value", &l, BASE, "blind_sign", "aa747620fc86ca4938b7c5aab31a60f3438ddbe9025b8cef922798f1f4e5e6b4");
 }
 
 #[test]
@@ -539,7 +541,7 @@ fn blind_sign_with_function_name_screens() {
     let l = lift_userop(&t, &data, None, Some(&meta), &r, &f);
     let text = screen_text(&l.screens).replace('\n', "");
     assert!(text.contains("swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"), "{text}");
-    check("blind_sign", "unknown_call_named", &l, BASE, "blind_sign", "4b9461f37a35f60719adaeba3d55d1a8b75ec4033f34db527f651bd69585117d");
+    check("blind_sign", "unknown_call_named", &l, BASE, "blind_sign", "ec2ecc6f4e02cb35777e0704c037cfa09ba9662840d2aa24b9e52cf7ed6107c8");
 }
 
 // ---------------------------------------------------------------------------

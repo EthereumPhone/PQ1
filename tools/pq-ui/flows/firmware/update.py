@@ -4,7 +4,7 @@
   the fingerprint mark) -> the 8 WORDS (the fingerprint, full width) ->
   CONFIRM UPDATE TO 1.0.3? (idle sweep, the hold) -> status (UPDATED by
   default: the major explosion on the long reconnect orbit,
-  "RECONNECTING…", the white disc arrives) — the full walkthrough.
+  "UPDATING…", the white disc arrives) — the full walkthrough.
 
 One viewing screen: below the 7-detail threshold there is no mid-flow
 Confirm? and no `--early` variant (DESIGN.md § Flow shape). The update
@@ -27,7 +27,7 @@ Every screen wears the family identity (flows.firmware.DEFAULTS): the
 download mark BLACK on the WHITE disc, a black edge stroke round it,
 over the default grey trail. Endings (flows.firmware.ends): "FIRMWARE
 UPDATED TO 1.0.3" — the major explosion film on five orbit turns
-(flows.firmware.LOAD_REVS), the busy caption "RECONNECTING…" held until
+(flows.firmware.LOAD_REVS), the busy caption "UPDATING…" held until
 the blast launches, then the white disc with the black check arriving on
 the emptied canvas; "UPDATE DECLINED" — the minor explosion, then the
 red disc with the black X (the cancel circle every family shares).

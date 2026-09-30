@@ -9,9 +9,9 @@ mid-flow Confirm? on its own detail count, never the batch total
 (DESIGN.md § Flow shape, layout._segments).
 
 The BATCH screen is a hero carrying the pager "n/m" top centre — the
-same 12 px / 80 % white spot a paged detail uses, here a POSITION in a
+same Label-face, INK_PAGING spot a paged detail uses, here a POSITION in a
 sequence of asks rather than text pages, so nothing turns (the hero
-"pager" field, DESIGN.md § Typography, Paging). It wears two forms:
+"pager" field, DESIGN.md § Layout grid, Pager). It wears two forms:
 
   announce  "BATCH SIGN TX 1 OF 3"      the caption points on with the
                                         band chevron, corner chevrons
@@ -45,8 +45,9 @@ from pq1 import components
 def defaults(symbol):
     """a batch flow's DEFAULTS — the token it signs for, through the ONE
     switch point (components.token_defaults): a popular symbol wears its
-    logo art, ETH/WETH the ether mark, anything else the solid
-    placeholder disc + trail hashed from the symbol"""
+    logo art, ETH/WETH the ether mark, anything else its initial on the
+    solid placeholder disc + trail hashed from the symbol. The BATCH screen
+    itself keeps the ether mark (batch_hero)"""
     return components.token_defaults(symbol)
 
 
@@ -58,13 +59,17 @@ def batch_hero(tx, total, ask=False):
     ask=True is the ask form: the caption takes the "TX?", the corner
     chevrons come back for tap-nav and hold-right is armed — where the
     transaction is signed. The last transaction wears only this form.
+
+    Both forms wear the ETHER MARK whatever the token (user rule, Sep
+    2026): the batch screen is the session, not a transaction, so it never
+    takes the token's initial — the transaction's own idle screen does.
     """
     caption = f"BATCH SIGN TX {tx} OF {total}"
     if ask:
         return dict(id=f"BATCH {tx} ASK", kind="hero", pager=[tx, total],
-                    bottom=f"{caption} TX?", chev="lr", hint=True)
+                    icon="eth", bottom=f"{caption} TX?", chev="lr", hint=True)
     return dict(id=f"BATCH {tx}", kind="hero", pager=[tx, total],
-                bottom=caption, band_chev=True, commit=False)
+                icon="eth", bottom=caption, band_chev=True, commit=False)
 
 
 def signed(tx, total):

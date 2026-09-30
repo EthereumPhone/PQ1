@@ -319,7 +319,6 @@
    "log": [
     {
      "armed": [
-      "back",
       "decline",
       "forward",
       "sign"
@@ -357,32 +356,30 @@
     ]
    ]
   },
-  "intro leads to the ask": {
+  "intro leads on": {
    "final": {
     "armed": [
      "back",
      "decline",
-     "forward",
-     "sign"
+     "forward"
     ],
     "kind": "hero",
     "page": 0,
-    "screen": "SIGN",
+    "screen": "KEY FINGERPRINT",
     "state": "navigating"
    },
-   "flow": "erc7730/swap",
+   "flow": "firmware/update",
    "log": [
     {
      "armed": [
       "back",
       "decline",
-      "forward",
-      "sign"
+      "forward"
      ],
      "event": "tap right",
      "kind": "hero",
      "result": "enter",
-     "screen": "SIGN",
+     "screen": "KEY FINGERPRINT",
      "state": "navigating",
      "t": 571
     },
@@ -393,9 +390,9 @@
       "forward"
      ],
      "event": "tap right",
-     "kind": "detail",
+     "kind": "value",
      "result": "enter",
-     "screen": "NETWORK",
+     "screen": "WORDS",
      "state": "navigating",
      "t": 1429
     },
@@ -403,13 +400,12 @@
      "armed": [
       "back",
       "decline",
-      "forward",
-      "sign"
+      "forward"
      ],
      "event": "tap left",
      "kind": "hero",
      "result": "back",
-     "screen": "SIGN",
+     "screen": "KEY FINGERPRINT",
      "state": "navigating",
      "t": 2286
     }
@@ -784,7 +780,6 @@
     },
     {
      "armed": [
-      "back",
       "decline",
       "forward",
       "sign"
@@ -798,7 +793,6 @@
     },
     {
      "armed": [
-      "back",
       "decline",
       "forward",
       "sign"
@@ -952,7 +946,6 @@
     },
     {
      "armed": [
-      "back",
       "decline",
       "forward",
       "sign"
@@ -966,7 +959,6 @@
     },
     {
      "armed": [
-      "back",
       "decline",
       "forward",
       "sign"
@@ -1120,7 +1112,6 @@
     },
     {
      "armed": [
-      "back",
       "decline",
       "forward",
       "sign"
@@ -1134,7 +1125,6 @@
     },
     {
      "armed": [
-      "back",
       "decline",
       "forward",
       "sign"

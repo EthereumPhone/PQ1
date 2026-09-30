@@ -13,26 +13,28 @@ It is a *release*, not a curve: after the delay the incoming alpha is an ordinar
 
 ## When it appears
 
-On every screen-to-screen leg of a flow, in both directions, whatever the two screens are — a hero, a detail, a value, the Confirm?, an ending. It is not a property of a screen type; it belongs to the leg. A [token-less transit](tokenless-fade.md) is no exception: the outgoing frame fades to black and the incoming caption still waits out the delay, there is simply no disc leading it.
+On every screen-to-screen leg of a flow, in both directions, whatever the two screens are — a hero, a detail, a value, the Confirm?, an ending. It is not a property of a screen type; it belongs to the leg. Leaving a [token-less](tokenless-fade.md) screen is no exception: the outgoing frame fades to black and the incoming caption still waits out the delay, there is simply no disc leading it.
+
+The one exception is a leg **into** a token-less screen (a verdict sign, a PIN row — `status.rests_on_token` False). Nothing rides the incoming alpha there — a status layout has no text and no token is drawn — so the release is immediate: the leg settles on its *visible* springs and the verdict's clock is not held back behind an invisible one.
 
 ## How it is held
 
-One scalar on the Sim — `text_in_at`, an absolute ms deadline. `go_to` sets it to `now + TEXT_IN_DELAY_MS` and retargets every *other* screen's alpha to 0 straight away (`pq1/flow.py:175`). Each `draw` compares the clock against it and, once past, retargets the **current** screen's alpha to 1 and clears the deadline (`pq1/flow.py:310`).
+One scalar on the Sim — `text_in_at`, an absolute ms deadline. `go_to` sets it to `now + TEXT_IN_DELAY_MS` — or to `now` when the destination is token-less — and retargets every *other* screen's alpha to 0 straight away (`pq1/flow.py:193`). Each `draw` compares the clock against it and, once past, retargets the **current** screen's alpha to 1 and clears the deadline (`pq1/flow.py:338`).
 
 Three consequences a port must reproduce:
 
 - There is only ever **one** pending release. A second press before the deadline overwrites it, so the release lands on whatever screen is current when it finally fires — which is what makes a [reversal](reversal.md) behave: you get the text of where you ended up, not of where you were going.
 - A run of presses closer together than the delay keeps pushing it out. On `send_token`, four taps two panel frames apart never release anything: the caption they left fades out over the first few frames and then the panel shows the travelling disc and **no text at all** until the taps stop.
-- A leg is not settled while a release is pending: `text_in_at is None` is the first clause of the settle test (`pq1/flow.py:304`). Firing it early would end the leg early.
+- A leg is not settled while a release is pending: `text_in_at is None` is the first clause of the settle test (`pq1/flow.py:332`). Firing it early would end the leg early.
 
-The first screen of a flow is exempt: the snap entry writes its alpha straight to 1 and clears the deadline (`pq1/flow.py:152`), so a flow opens with its caption already up.
+The first screen of a flow is exempt: the snap entry writes its alpha straight to 1 and clears the deadline (`pq1/flow.py:169`), so a flow opens with its caption already up.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | outgoing text starts fading | — | — | spring NAV | — | — | when the leg starts, with no delay — every screen but the destination |
-| incoming text held dark | 150 | 2.1 | hold | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | measured from the leg's start, not from the frame that follows it |
+| incoming text held dark | 150 | 2.1 | hold | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | measured from the leg's start, not from the frame that follows it |
 | incoming text fades in | — | — | spring NAV | — | — | an ordinary alpha spring, same profile as the circle |
 
 The deadline is only checked once per frame, so on the panel the real delay is the token value rounded up to the next frame boundary — up to a whole panel frame late. Measured on a hero → detail leg at the NAV pace: the release fires about half a frame late and the incoming alpha is already 0.31 on the frame it first appears, while the outgoing caption is down to 0.15. They are on the glass together for three frames (the outgoing at 0.15, then 0.06, then 0.02) and never cross at full strength.
@@ -45,7 +47,7 @@ The deadline is only checked once per frame, so on the panel the real delay is t
 - **Don't** hold the incoming text for a fixed *total* time and then snap it on. After the delay it is a spring, so it lands with the disc.
 - **Don't** lengthen it to "make the disc read". The delay is short on purpose: long enough to see the disc set off, short enough that the caption is up before the disc stops.
 
-Draw order is text first, disc second: the travelling token paints over any caption it crosses, which is another reason the words are not up yet while it is moving (`pq1/flow.py:310`).
+Draw order is text first, disc second: the travelling token paints over any caption it crosses, which is another reason the words are not up yet while it is moving (`pq1/flow.py:338`).
 
 ## Port notes
 

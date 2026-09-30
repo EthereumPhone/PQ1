@@ -22,17 +22,17 @@ Batch sign — the teal token drifts on the idle sweep, trail following.
 
 There are no phases here. This screen is **ambient**: a loop of physics with no beginning, no resolve and no result. `t_resolve` stays zero, and the class overrides `duration` with its own `LOOP_MS` — one sweep period — instead of the usual resolve-plus-result-hold. The flow Sim dwells exactly that long.
 
-It is also one of only two screens in the library that are **not pure in `t`** ([idle / unknown_token](idle-unknown-token.md) is the other). `draw(cv, t)` advances internal state from the last drawn `t` (`screens/idle/batch_sign.py:77`); a backwards seek resets and replays the whole loop from zero. Everything else in the catalog can be seeked to a single frame — this cannot.
+It is also one of only two screens in the library that are **not pure in `t`** ([idle / unknown_token](idle-unknown-token.md) is the other). `draw(cv, t)` advances internal state from the last drawn `t` (`screens/idle/batch_sign.py:79`); a backwards seek resets and replays the whole loop from zero. Everything else in the catalog can be seeked to a single frame — this cannot.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | the physics slice | 33.3 | 0.5 | — | `STEP_MS` | `screens/idle/batch_sign.py:25` | `step()` advances in chunks of at most this, however long the frame was. The chase is frame-rate independent, so the slice only bounds the error |
-| the disc holds centred before the sweep starts | 1000 | 14.0 | hold | `SWEEP_DELAY_MS` | `pq1/motion.py:204` | the sweep clock is `t` minus this, floored at zero |
-| the sweep target, one full left-right cycle | 5000 | 70.0 | sine | `SWEEP_PERIOD_MS` | `pq1/motion.py:205` | target x offset = minus the sine of the cycle, times 95 px. It is a TARGET, not the disc's position |
-| the disc chases the target | 180 | 2.5 | tau_chase | `OSC_TAU` | `pq1/motion.py:207` | one exponential step per slice. The lag is why the disc never quite reaches the amplitude and why it eases at the turns without an easing curve |
-| each follower chases the link ahead of it | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:213` | deliberately slower than a transit's `CHAIN_TAU` 60 ms (0.8 f), so the streak spreads out. See [trail](../components/trail.md) |
-| the first chevron bob starts | 1400 | 19.6 | — | `1400` | — | a bare literal inside `motion.chevron_hint` (`pq1/motion.py:312`) |
-| the chevron hint cycle | 3600 | 50.4 | ease | `CHEV_HINT_PERIOD_MS` | `pq1/motion.py:308` | rise, bob, fall, then rest for the remainder. The bob is a half sine of amplitude 4 px |
+| the disc holds centred before the sweep starts | 1000 | 14.0 | hold | `SWEEP_DELAY_MS` | `pq1/motion.py:257` | the sweep clock is `t` minus this, floored at zero |
+| the sweep target, one full left-right cycle | 5000 | 70.0 | sine | `SWEEP_PERIOD_MS` | `pq1/motion.py:258` | target x offset = minus the sine of the cycle, times 95 px. It is a TARGET, not the disc's position |
+| the disc chases the target | 180 | 2.5 | tau_chase | `OSC_TAU` | `pq1/motion.py:260` | one exponential step per slice. The lag is why the disc never quite reaches the amplitude and why it eases at the turns without an easing curve |
+| each follower chases the link ahead of it | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:266` | deliberately slower than a transit's `CHAIN_TAU` 60 ms (0.8 f), so the streak spreads out. See [trail](../components/trail.md) |
+| the first chevron bob starts | 1429 | 20.0 | — | `CHEV_HINT_START_MS` | `pq1/motion.py:385` | the hint's one-time lead-in, read by `motion.chevron_hint` (`pq1/motion.py:396`) |
+| the chevron hint cycle | 3571 | 50.0 | ease_out | `CHEV_HINT_PERIOD_MS` | `pq1/motion.py:383` | rise, bob, fall, then rest for the remainder. The bob is a half sine of amplitude 4 px (`CHEV_BOB_PX`) |
 | the loop | 5000 | 70.0 | — | `LOOP_MS` | `screens/idle/batch_sign.py:24` | equals the sweep period, and equals the screen's `duration` |
 
 Two things about that loop, both verified against the running code. The chevron bob closes exactly — its start plus the hint period is the loop length, so the corner is at rest at both ends. The **sweep does not**: because the sweep clock starts `SWEEP_DELAY_MS` 1000 ms (14.0 f) late, the disc is still near its right extreme (about 92 px out) when the loop ends, where at t 0 it was centred. The loop is a window onto continuous physics, not a closed cycle; the CLI's `--loops` keeps stepping the same state rather than restarting it.
@@ -84,7 +84,7 @@ _This screen declares no `T_*` phase attributes; its timeline is in the module c
  'result': None}
 ```
 
-Used in 1 of 31 flows: `unlock_batch`
+Used in 1 of 33 flows: `unlock_batch`
 
 ## Preview
 

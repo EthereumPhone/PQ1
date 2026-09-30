@@ -14,12 +14,17 @@ Sig error — the warning triangle reports a failed check, detail-grid.
 >
 > The detail text is VARIABLE (DESIGN.md § Typography): "lines" (1-3, a str
 > or a {"str", "weight"} name line) and "label" are the screen's content,
-> and "size" is FITTED to the largest tier the longest line fits unless a
-> spec pins it. "side" docks the triangle in either column, the text
+> and "size" is FITTED by the system's one rule (layout.fit_size — the
+> largest tier whose every line MEASURES inside the region, in its own
+> face) unless a spec pins it. "side" docks the triangle in either column, the text
 > opposite. The sample is a placeholder, not content:
 >
->     screens.spec("sig_error", lines=["Sig verify FAIL"])
->     python3 -m screens sig_error --lines "Sig not unlocked &" "Sig verify FAIL"
+>     screens.spec("sig_error", lines=["Signature", "verify failed"], label="SIG CHECK")
+>     python3 -m screens sig_error --lines "Signature" "verify failed"
+>
+> The message is the device's own words, so it follows DESIGN.md § Text
+> rules, Case: sentence case, no shouting, no abbreviation; the label names
+> the check in caps (audit HS-13).
 
 ## Timeline
 
@@ -27,17 +32,17 @@ One variant, no presets — the content varies, the timing does not. `t` is mill
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 350 | 4.9 | ease_out | `T_HOLD` | `screens/verdict/sig_error.py:52` | shorter than the base verdict hold (`T_HOLD` 400 ms (5.6 f)); this is the source timeline that its centred twin [tamper](verdict-tamper.md) also keeps. The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md) |
-| the triangle arrives — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:343` | alpha 0 to 1, height scales 0.97 to 1 in its column. The exclamation scales with it and is drawn opaque black from the first frame |
+| black hold — the flow's token hands over | 429 | 6.0 | ease_out | `T_HOLD` | `screens/verdict/sig_error.py:52` | the law's own hold, `VERDICT_HOLD_MS` 429 ms (6.0 f) — the timeline its centred twin [tamper](verdict-tamper.md) also keeps. The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md) |
+| the triangle arrives — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:431` | alpha 0 to 1, height scales 0.97 to 1 in its column. The exclamation scales with it and is drawn opaque black from the first frame |
 | two decaying attention pulses | 900 | 12.6 | attention_pulse | `T_WAIT` | `screens/verdict/sig_error.py:53` | the height is REPLACED by the pulse: 1 plus 0.09 times a decaying rectified sine at 2.5 half-cycles. It peaks 1.053 about a sixth of the way in and 1.016 past the middle — a 3.2 px swell on a 60 px triangle, mark included |
 | the value lines and the label fade in together | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | one alpha drives both, plus the caption if the spec sets one; nothing staggers |
-| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | see [result hold](../transitions/result-hold.md) |
+| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | see [result hold](../transitions/result-hold.md) |
 
 There is no separate beat: `T_WAIT` is the pulse window and the verdict's beat at once. The pulse is gated `0 < v < 1` and *replaces* the entrance scale rather than multiplying it, so the icon is never scaled twice. Its 2.5 half-cycles leave a third, nearly dead crest (scale 1.005) on the window's last frames, so the triangle snaps back about a third of a pixel when it closes.
 
-**Geometry.** The detail grid, not the circle grid ([detail](../screen-types/detail.md)). `side` docks the triangle in one column — centre x 74 for `"left"`, 352 for `"right"` — and the value goes in the other, centred on x 263 when the triangle is left and x 163 when it is right (`layout.DETAIL_TEXT_CX`, `pq1/layout.py:272`). The triangle sits on the circle row (cy 72) at 60 px tall — shorter than [tamper](verdict-tamper.md)'s centred slot. The 1 to 3 value lines stack on `layout.line_height(size)` about y 72.5. The label sits under the triangle on the shared band baseline, y 128, at the label size with label tracking, centred on the triangle's column — so it reads as a detail label, not as a caption.
+**Geometry.** The detail grid, not the circle grid ([detail](../screen-types/detail.md)). `side` docks the triangle in one column — centre x 74 for `"left"`, 354 for `"right"` — and the value goes in the other, centred on x 263 when the triangle is left and x 163 when it is right (`layout.DETAIL_TEXT_CX`, `pq1/layout.py:325`). The triangle sits on the circle row (cy 72) at 60 px tall — the SAME sign [tamper](verdict-tamper.md) stands in the centre column, one notice height for all three notices; only the column differs. The 1 to 3 value lines stack on `layout.line_height(size)` about y 72.5. The label sits under the triangle on the shared band baseline, y 128, at the label size with label tracking, centred on the triangle's column — so it reads as a detail label, not as a caption.
 
-**The text is data, not decoration.** `lines` and `label` are the screen's content; `size` is FITTED by `fit_size` to the largest tier whose budget the longest line and the line count both fit, unless the spec pins it. The tiers are (size, max characters per line, max lines): see `TIERS` below. A value that fits no tier RAISES — the design system will not shrink or ellipsize a security-relevant string; split it into more lines, or page it. A line may be a plain string or `{"str": NAME, "weight": "semibold"}` for a name inside the value ([detail text](../components/detail-text.md)).
+**The text is data, not decoration.** `lines` and `label` are the screen's content; `size` is FITTED by `fit_size` to the largest tier whose budget the longest line and the line count both fit, unless the spec pins it. The tiers are (size, max lines) and the fit is measured, not counted: see `TIERS` below. A value that fits no tier RAISES — the design system will not shrink or ellipsize a security-relevant string; split it into more lines, or page it. A line may be a plain string or `{"str": NAME, "weight": "semibold"}` for a name inside the value ([detail text](../components/detail-text.md)).
 
 `bottom` defaults to empty on this screen: the bottom band carries the label under the triangle instead of a centred caption. Set both only if you have checked they do not collide — the label is centred in its column, the caption across the whole panel.
 
@@ -45,30 +50,31 @@ There is no separate beat: `T_WAIT` is the pulse window and the verdict's beat a
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 1850 ms (25.9 f) | 4300 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 1929 ms (27.0 f) | 4379 ms | 2450 ms | no | yes | no | no |
+| `type1_sig_fail` | 1929 ms (27.0 f) | 4379 ms | 2450 ms | no | yes | no | no |
 
 ## Phases
 
-| phase attribute | `(default)` |
-|---|---:|
-| `T_HOLD` | 350 ms (4.9 f) |
-| `T_IN` | 300 ms (4.2 f) |
-| `T_TEXT` | 300 ms (4.2 f) |
-| `T_WAIT` | 900 ms (12.6 f) |
+| phase attribute | `(default)` | `type1_sig_fail` |
+|---|---:|---:|
+| `T_HOLD` | 429 ms (6.0 f) | 429 ms (6.0 f) |
+| `T_IN` | 300 ms (4.2 f) | 300 ms (4.2 f) |
+| `T_TEXT` | 300 ms (4.2 f) | 300 ms (4.2 f) |
+| `T_WAIT` | 900 ms (12.6 f) | 900 ms (12.6 f) |
 
 ## Constants
 
 | module constant | value |
 |---|---|
-| `SIDES` | `{"left": 74, "right": 352}` |
-| `TIERS` | `[[36, 12, 1], [32, 14, 1], [28, 16, 2], [22, 21, 3]]` |
-| `TRI_H` | `60` |
+| `SIDES` | `{"left": 74, "right": 354}` |
+| `TIERS` | `[[36, 1], [32, 1], [28, 2], [22, 3]]` |
+| `TRI_H` | `60.0` |
 
-`TRI_H` is the triangle's height in UI pixels. `SIDES` maps `side` to the triangle's column centre x. `TIERS` is the fitting table, largest first.
+`TRI_H` is the ONE notice height, `warning_triangle.NOTICE_H` (`pq1/procedural/warning_triangle.py:20`), derived from the sign box (`VERDICT_BOX` 64) and shared with [tamper](verdict-tamper.md) and [wipe](verdict-wipe.md). `SIDES` maps `side` to the triangle's column centre x. `TIERS` is the fitting table, largest first.
 
 ## Input
 
-None. It is a verdict: an ending accepts no press from its first frame to its last (`pq1/driver.py:230`), and the corner chevrons are hidden. The lines are not paged and not scrollable — whatever the fitted tier shows is the whole value.
+None. It is a verdict: an ending accepts no press from its first frame to its last (`pq1/driver.py:234`), and the corner chevrons are hidden. The lines are not paged and not scrollable — whatever the fitted tier shows is the whole value.
 
 ## Spec a flow splices in
 
@@ -78,21 +84,25 @@ None. It is a verdict: an ending accepts no press from its first frame to its la
  'handoff': True,
  'state': 'failed',
  'bottom': '',
- 'label': 'ERROR',
- 'lines': ['Sig verify FAIL'],
+ 'label': 'SIG CHECK',
+ 'lines': ['Signature', 'verify failed'],
  'side': 'left',
  'result': None}
 ```
 
 Used in: _no live flow yet._
 
-The sample line is a placeholder, never content: `screens.spec("sig_error", lines=["Sig verify FAIL"], label="ERROR", side="right")`. It is a verdict, so it owns its canvas — the flow leaves it by fading to black ([token-less transit](../transitions/tokenless-fade.md)).
+The sample line is a placeholder, never content: `screens.spec("sig_error", lines=["Signature", "verify failed"], label="SIG CHECK", side="right")`. It is a verdict, so it owns its canvas — the flow leaves it by fading to black ([token-less transit](../transitions/tokenless-fade.md)).
 
 ## Preview
 
 **default**
 
 ![default](../../previews/verdict-sig-error.gif)
+
+**type1_sig_fail**
+
+![type1_sig_fail](../../previews/verdict-sig-error--type1_sig_fail.gif)
 
 ## Do / Don't
 

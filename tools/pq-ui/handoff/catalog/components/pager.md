@@ -7,7 +7,7 @@ The small n/m mark: on a paged value it follows the page; on a batch hero it nam
 
 ## What it is
 
-The small `n/m` mark at the top centre of the panel, between the two [corner chevrons](chevrons.md). One drawing, `components.pager` (`pq1/components.py:517`), with two jobs:
+The small `n/m` mark at the top centre of the panel, between the two [corner chevrons](chevrons.md). One drawing, `components.pager` (`pq1/components.py:566`), with two jobs:
 
 | where | `n/m` means | does it change on the screen? |
 |---|---|---|
@@ -24,36 +24,36 @@ On a screen whose spec has `pages` (two or more pages), and on a hero whose spec
 
 | key | form | meaning |
 |---|---|---|
-| `pager` | `[2, 3]` | this hero's position in a sequence of asks — the pager "n/m" in the same top-centre spot a paged detail uses (12 px, 80 % white). A batch's transactions (flows/batch). NOT text pages: nothing flips and the dwell is untouched |
-| `pages` | `[[line, line], [line, line]]` | ONE value too long for its tier's three lines — a full 32-byte hash — shown in 2+ pages of 1-3 lines at the screen's one "size"; the pager "n/m" (12 px, 80 % white, top centre) shows only then. The demo turns a page per detail dwell … (full text: the `pq1/layout.py` docstring) |
+| `pager` | `[2, 3]` | this hero's position in a sequence of asks — the pager "n/m" in the same top-centre spot a paged detail uses (the Label face, INK_PAGING). A batch's transactions (flows/batch). NOT text pages: nothing flips and the dwell is untouched |
+| `pages` | `[[line, line], [line, line]]` | ONE value too long for its tier's three lines — a full 32-byte hash — shown in 2+ pages of 1-3 lines at the screen's one "size"; the pager "n/m" (the Label face, INK_PAGING, top centre) shows only then. The demo turns a page per detail … (full text: the `pq1/layout.py` docstring) |
 
-A hero's `pager` is validated in `normalize_screens` (`pq1/layout.py:510`): two whole numbers, 1 ≤ n ≤ m. On a paged screen there is no field for the pager: `m` is the number of pages and `n` is the page showing.
+A hero's `pager` is validated in `normalize_screens` (`pq1/layout.py:653`): two whole numbers, 1 ≤ n ≤ m. On a paged screen there is no field for the pager: `m` is the number of pages and `n` is the page showing.
 
-Size: the code draws the pager at the **label** size (16), so it reads like the detail label at the other edge of the panel — and `pq1/DESIGN.md` § Typography says the same. The two schema rows above still say the smaller paging size (12): that half-sentence in the `pq1/layout.py` docstring is stale. Port the label size.
+Face: the code draws the pager in the **Label face** — size 16, SemiBold, letter spacing 1 px — so it reads exactly like the detail label at the other edge of the panel (user decision, Sep 2026), and `pq1/DESIGN.md` § Typography says the same. Port the Label face.
 
 ## Geometry
 
 | part | value |
 |---|---|
-| text | `n/m`, Regular weight, letter spacing 1 px |
+| text | `n/m`, the Label face: SemiBold, letter spacing 1 px |
 | centre x | 214 |
 | baseline y | `PAGER_BASELINE` 24 px |
 | size | 16 |
 | colour | white × 0.8 (`PAGER_ALPHA`) — white scaled toward black, then scaled again by the screen's alpha |
 
-The corner chevrons share the top strip (slots (23.5, 19.0) and (403.5, 19.0)); the pager sits centred between them, far from both.
+The corner chevrons share the top strip (slots (23.5, 19.0) and (404.5, 19.0)); the pager sits centred between them, far from both.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | arrives and leaves with its screen | — | — | spring NAV | — | — | drawn under the screen's own text-alpha spring, like every text of that screen — see [spring morph](../transitions/spring-morph.md) |
-| page flip, first half: the old page fades out | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:280` | the code runs it inverted (1 − ease_out); the pager still reads the OLD page, at full strength |
+| page flip, first half: the old page fades out | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:353` | the code runs it inverted (1 − ease_out); the pager still reads the OLD page, at full strength |
 | the number switches | — | — | cut | — | — | on the first frame the old page has reached zero; the pager itself never fades during a flip |
-| page flip, second half: the new page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:280` | the pager already reads the NEW page |
-| demo only: each page holds this long, then turns by itself | 4100 | 57.4 | — | `PAGE_SWAP_MS` | `pq1/motion.py:279` | the demo starts the flip one `PAGE_FADE_MS` BEFORE the slot ends, so the fade-out lands on the boundary; **do not port** — on the device only a tap turns a page |
+| page flip, second half: the new page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:353` | the pager already reads the NEW page |
+| demo only: each page holds this long, then turns by itself | 4100 | 57.4 | — | `PAGE_SWAP_MS` | `pq1/motion.py:352` | the demo starts the flip one `PAGE_FADE_MS` BEFORE the slot ends, so the fade-out lands on the boundary; **do not port** — on the device only a tap turns a page |
 
-The rule in one line: the pager reads the page that is visible. The code is `Sim._draw_pages` (`pq1/flow.py:279`); the envelope is `motion.page_flip` (`pq1/motion.py:283`).
+The rule in one line: the pager reads the page that is visible. The code is `Sim._draw_pages` (`pq1/flow.py:307`); the envelope is `motion.page_flip` (`pq1/motion.py:356`).
 
 On a hero the pager is static. It is drawn by `Sim.draw` under the hero's alpha, so between two screens it simply crossfades with the rest of the text. Nothing turns.
 

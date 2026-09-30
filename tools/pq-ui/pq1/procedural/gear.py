@@ -1,7 +1,8 @@
 """8-tooth factory gear — the signing-machine cog.
 
-Ported from the factory-signing mockup (source drew at R = 32, factory
-blue). Proportions, normalized to r = outer radius including teeth:
+Ported from the factory-signing mockup (source drew at R = 32 in factory
+blue; the screen draws it WHITE since the factory-blue role was retired —
+audit COL-05). Proportions, normalized to r = outer radius including teeth:
 body disc 0.80 r, hole 0.44 r, tooth width = ring thickness (0.36 r),
 tooth height 0.20 r, tooth corner radius 0.08 r, teeth seated 0.125 r
 into the body so the join never shows a seam. The hole is punched with
@@ -75,7 +76,7 @@ def _blurred_teeth(cv, local, cx, cy, r, rot, sweep, col, n):
 def draw(cv, cx, cy, *, r, color, alpha=1.0, rot=0.0, sweep=0.0):
     """8-tooth gear at (cx, cy): body circle + rotated rounded teeth
     (motion-blurred over sweep radians behind rot), hole punched black"""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     col = tuple(int(round(c * alpha)) for c in color)
     body_r = r * 0.80
@@ -103,6 +104,6 @@ def glyph(rot=0.0):
     base = rot
 
     def fn(cv, cx, cy, r, alpha=1.0, color=None, rot=0.0):
-        draw(cv, cx, cy, r=r, color=color or colors.FACTORY_BLUE,
+        draw(cv, cx, cy, r=r, color=color or colors.WHITE,
              alpha=alpha, rot=base + rot)
     return fn

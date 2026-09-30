@@ -25,7 +25,7 @@ BODY = [
     dict(id="SAFE ACCT", kind="detail", side="left", label="SAFE ACCT",
          lines=["0x1111111111222222222", "3333333333444444444aa"], size=22),
     dict(id="NEW", kind="detail", side="right", label="NEW",
-         lines=["0xAAAABBBBCCCCDDDDEEE", "EFFFF0000111122223333"], size=22),
+         lines=["0x8d279925e092FE090A7", "90E9466064B147E26dBe7"], size=22),
     dict(id="SIGNERS", kind="detail", side="left", label="SIGNERS",
          lines=["2 of 3", "Signers required"], size=28),
     dict(id="TX INFO", kind="detail", side="right", label="TX INFO",

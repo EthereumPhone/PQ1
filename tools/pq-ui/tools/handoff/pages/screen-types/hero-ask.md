@@ -12,7 +12,7 @@ First screen of almost every flow (after an [intro](hero-intro.md) when the fami
 
 {{example}}
 
-`commit` defaults to true on a hero: the right hold is armed. `chev` defaults to `"lr"`: taps navigate.
+`commit` defaults to true on a hero: the right hold is armed. `chev` defaults to `"lr"`: taps navigate. Both chevrons show even on the flow's opening ask, where a left tap does nothing (`layout.back_target`).
 
 ## Geometry
 
@@ -27,7 +27,7 @@ The circle never resizes ({{tok:pq1.layout.CIRCLE_R}}, centre y {{val:pq1.layout
 {{row:caption fades in after the circle starts | pq1.motion.TEXT_IN_DELAY_MS | spring NAV | the disc leads, the words follow}}
 {{row:rest before the idle sweep starts | pq1.motion.SWEEP_DELAY_MS | — | }}
 {{row:idle sweep, one full side-to-side cycle | pq1.motion.SWEEP_PERIOD_MS | sine + tau_chase | amplitude {{val:pq1.motion.SWEEP_AMP}} px, smoothed with tau {{val:pq1.motion.OSC_TAU}}; stays inside x {{val:pq1.layout.SWEEP_X_MIN}}–{{val:pq1.layout.SWEEP_X_MAX}}}}
-{{row:chevron hint cycle (only when `hint` is set) | pq1.motion.CHEV_HINT_PERIOD_MS | ease | the chevrons turn up and bob — see [chevrons](../components/chevrons.md)}}
+{{row:chevron hint cycle (only when `hint` is set) | pq1.motion.CHEV_HINT_PERIOD_MS | ease_out + sine | first {{tok:pq1.motion.CHEV_HINT_START_MS}} after settling; the chevrons turn up on the `hint_env` envelope and bob — see [chevrons](../components/chevrons.md)}}
 {{row:trail follows the sweeping disc | pq1.motion.CHAIN_TAU_IDLE | tau_chase | slower chase than in a transit ({{val:pq1.motion.CHAIN_TAU}})}}
 
 A press recentres a sweeping disc: while a hold is live the sweep target is zero, so the disc glides home and the fill rises in a disc that stands still.
@@ -36,7 +36,7 @@ A press recentres a sweeping disc: while a hold is live the sweep target is zero
 
 {{gestures:hero — the ask}}
 
-Either tap enters the details — the ask never regresses to an intro. `hold right` signs; `hold left` declines. See [tap on the ask](../actions/tap-hub.md), [hold right — sign](../actions/hold-right-sign.md).
+A right tap enters the details. A left tap never leads on: it goes back one screen where there is one (the returning ask to the last detail, an ask to its intro) and does nothing on the opening ask. `hold right` signs; `hold left` declines. See [tap on the ask](../actions/tap-hub.md), [hold right — sign](../actions/hold-right-sign.md).
 
 ## Preview
 

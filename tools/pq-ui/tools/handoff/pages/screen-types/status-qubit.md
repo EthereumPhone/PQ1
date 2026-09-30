@@ -27,7 +27,7 @@ All of it is centred on x {{val:pq1.layout.CENTER_X}}, y {{val:pq1.layout.CIRCLE
 | split reach | each qubit travels {{val:qubit:split_x}} px out from the centre, along the centre line |
 | orbit | radius {{val:qubit:orbit_r}}, one turn per {{tok:qubit:rev_ms}} |
 | join ellipse | while the pair is wider than the orbit, its vertical reach is squashed to at most 44 px |
-| flash ring | starts at r {{val:qubit:r_big}}, grows 55 px, 2.5 px stroke, result colour |
+| flash ring | starts at r {{val:qubit:r_big}}, grows 55 px, {{tok:pq1.components.TOKEN_RING_W}} stroke (the system ring), result colour |
 | rings on the single body | 2.4 px stroke; unbranded: 1.2 px inside the body edge; branded (`resting`): flush |
 | caption | 18 px caps, centred, baseline y {{val:pq1.layout.BASELINE_Y}} |
 
@@ -47,14 +47,14 @@ Time 0 is the frame the flow hands its circle over — the end of the entrance b
 {{row:spin: steady orbit — THE LOOP REGION | qubit:T_SPIN | linear | constant speed, the qubits opposite each other; `revs` whole turns of {{tok:qubit:loop_ms}} ({{val:pq1.loading.REVS}} stock). From {{val:qubit:t_orbit}} to {{val:qubit:t5}} the pose is pixel-periodic in one turn: on the device this row repeats, whole turns at a time, until the work answers — [loading loop](../transitions/loading-loop.md)}}
 {{row:spiral: the pair falls into the centre | qubit:T_SPIRAL | linear | hand-rolled: orbit speed plus 2.2 extra turns on the cube of progress; the radius shrinks with the square of progress; the bridge returns as they merge. The spiral is the LATCH: it starts at the first turn boundary after the answer, and its end ({{val:qubit:t6}} on the stock film) is the first frame that differs between check and X}}
 {{row:flash: one body pops, the ring fires | qubit:T_FLASH | back_out + linear | disc radius on `back_out` — the ONE sanctioned overshoot of the system; the flash ring grows and fades linearly from 85 %}}
-{{row:result glyph fades in | 350 | linear | starts when the flash ends. A bare literal in `qubit_pose` — there is no token for it}}
-{{row:caption waits | 120 | hold | counted from the end of the flash; bare literal}}
-{{row:caption fades in | 350 | linear | bare literal}}
+{{row:result glyph fades in | pq1.motion.RESULT_FADE_MS | ease_out | starts when the flash ends — an entrance, on the verdict caption's curve}}
+{{row:caption waits | pq1.motion.RESULT_LAG_MS | hold | counted from the end of the flash: two panel frames, so the mark is read first}}
+{{row:caption fades in | pq1.motion.RESULT_FADE_MS | ease_out | the result has landed at `t_landed` = `t_resolve` + {{tok:pq1.status.RESULT_LANDING_MS}}; the hold counts from there}}
 {{row:resolved, from time 0 | anim:core/qubit:t_resolve | — | hold + split + join + spin + spiral + flash, at the stock turns; on the device add wraps × {{val:qubit:loop_ms}} — `t_resolve` is a property ({{loc:pq1.status.QubitStatus.t_resolve}})}}
 {{row:result hold | pq1.status.RESULT_HOLD_MS | hold | the resting look stays — see [result hold](../transitions/result-hold.md)}}
-{{row:whole screen | anim:core/qubit:duration | — | resolved + result hold}}
+{{row:whole screen | anim:core/qubit:duration | — | resolved + landing + result hold}}
 
-From the first frame of the flash the single body **is** the resting look: the disc in the resting fill (black, or a brand fill) under the ring in the result colour. Check and caption land on it. See [flash ring + result glyphs](../components/flash-ring.md) and [the resting look](resting-look.md). The film rests on that disc (`rests_on_token` stays true), so leaving the ending is an ordinary token transit — the disc morphs into the next screen, it does not fade to black.
+From the first frame of the flash the single body **is** the resting look: the disc in the resting fill (black, or a brand fill) under the ring in the result colour. Check and caption land on it. See [flash ring + result glyphs](../components/flash-ring.md) and [the resting look](resting-look.md). The film rests on that disc (`rests_on_token` stays true), but it shows a result, so leaving the ending is a [fade to black](../transitions/tokenless-fade.md) — the check or X is never dragged into the next screen by the morph.
 
 On the film's first frame the body **is** the circle the flow handed over — same centre, same visible radius ({{val:pq1.components.TOKEN_INSET}} px inside the layout radius), same colour — because that is where the seed starts. The reference this was ported from did neither: it drew the body at the full radius, stepping the edge out by that inset, and wore the film colour from frame 0, so a black-bodied token turned light at once. The seed removes both pops. [The resolve](status-resolve.md) eases out of the token's own look the same way.
 

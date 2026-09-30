@@ -34,34 +34,34 @@ One class, one shield outline, two gestures. `t` is milliseconds since the scree
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 400 | 5.6 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | the base verdict hold; nothing of the shield is drawn yet. The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md) |
-| icon entrance — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:343` | alpha 0 to 1; the outline height and the mark radius both scale 0.97 to 1. The entrance law, no overshoot — see [the verdict law](../transitions/verdict-law.md) |
+| black hold — the flow's token hands over | 429 | 6.0 | ease_out | `T_HOLD` | `pq1/verdict.py:41` | the base verdict hold; nothing of the shield is drawn yet. The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md) |
+| icon entrance — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:431` | alpha 0 to 1; the outline height and the mark radius both scale 0.97 to 1. The entrance law, no overshoot — see [the verdict law](../transitions/verdict-law.md) |
 | the nod — one decaying dip | 700 | 9.8 | shake | `T_WAIT - T_BEAT` | `pq1/verdict.py:43` | `cy` plus 5 px times shake at one cycle. Down first, then up: the realized peaks are 3.8 px down about a fifth of the way in and 1.4 px back up past the middle — the unit curve tops out at 0.77, not 1 |
-| beat before the caption | 450 | 6.3 | — | `T_BEAT` | `screens/verdict/shield.py:42` | the sign rests, dead still |
+| beat before the caption | 450 | 6.3 | — | `T_BEAT` | `screens/verdict/shield.py:47` | the sign rests, dead still |
 | caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | BACKUP OK on the y 128 baseline |
-| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | see [result hold](../transitions/result-hold.md) |
+| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | see [result hold](../transitions/result-hold.md) |
 
 **`no_match` — the x shield shakes its head.** Same phases; only the gesture axis, its excursion and its window change.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold | 400 | 5.6 | ease_out | `T_HOLD` | `pq1/verdict.py:41` |  |
-| icon entrance — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:343` | identical to the nod's |
+| black hold | 429 | 6.0 | ease_out | `T_HOLD` | `pq1/verdict.py:41` |  |
+| icon entrance — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:431` | identical to the nod's |
 | the wiggle — one decaying shake | 420 | 5.9 | shake | `T_WAIT - T_BEAT` | `pq1/verdict.py:43` | `cx` plus 6 px times shake at one cycle. Right first, then left: 4.6 px and 1.7 px realized. Shorter and wider than the nod — a refusal is quicker than an agreement |
-| beat before the caption | 450 | 6.3 | — | `T_BEAT` | `screens/verdict/shield.py:42` |  |
+| beat before the caption | 450 | 6.3 | — | `T_BEAT` | `screens/verdict/shield.py:47` |  |
 | caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | NO MATCH |
-| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` |  |
+| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` |  |
 
 The gesture is gated `0 < w < 1`, so the sign sits exactly on its centre before and after it — no clamping, no residual. `T_WAIT` is not a constant here: the class computes it in `__init__` as the gesture's own window plus `T_BEAT`, so a spec with `gesture: None` is a plain arrival and the screen falls back to the base law's beat (`T_WAIT` 450 ms (6.3 f)) and its default resolve — see [the verdict law](../transitions/verdict-law.md). The `defined at` cell of the gesture rows points at that base declaration; the ms come from the live instance.
 
-**The rig** (`pq1/procedural/shield.py:41`). The outline is the `encrypted.svg` centreline on a 51 x 63 design box, flattened to a point list once at import and drawn as one closed stroked loop with curve joints — never a filled shape. It is 62 px tall, design-box centre on (cx 214, cy 72), stroked 3/63 of its height. The mark is composed on top from `pq1.procedural.marks` — never redrawn locally — sitting 2 px above the shield centre at its own radius, `MARK_R` (check 25 px, x 28.3 px — the second derived so the x's corners land where the source drew its diagonals). Outline and mark share one colour: the screen's `state` through `colors.STATE` — green for done, red for failed — unless the spec pins an explicit `color`, which wins.
+**The rig** (`pq1/procedural/shield.py:41`). The outline is the `encrypted.svg` centreline on a 51 x 63 design box, flattened to a point list once at import and drawn as one closed stroked loop with curve joints — never a filled shape. It is 64 px tall, design-box centre on (cx 214, cy 72), stroked 3/63 of its height. The mark is composed on top from `pq1.procedural.marks` — never redrawn locally — sitting 2.06452 px above the shield centre at its own radius, `MARK_R` (check 25 px, x 28.3 px — the second derived so the x's corners land where the source drew its diagonals). Outline and mark share one colour: the screen's `state` through `colors.STATE` — green for done, red for failed — unless the spec pins an explicit `color`, which wins.
 
 ## Variants
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 2150 ms (30.1 f) | 4600 ms | 2450 ms | no | yes | no | no |
-| `no_match` | 1870 ms (26.2 f) | 4320 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 2179 ms (30.5 f) | 4629 ms | 2450 ms | no | yes | no | no |
+| `no_match` | 1899 ms (26.6 f) | 4349 ms | 2450 ms | no | yes | no | no |
 
 `(default)` is the `backup_ok` preset — the same spec, so the build renders it once.
 
@@ -69,7 +69,7 @@ The gesture is gated `0 < w < 1`, so the sign sits exactly on its centre before 
 
 | phase attribute | `(default)` | `no_match` |
 |---|---:|---:|
-| `T_HOLD` | 400 ms (5.6 f) | 400 ms (5.6 f) |
+| `T_HOLD` | 429 ms (6.0 f) | 429 ms (6.0 f) |
 | `T_IN` | 300 ms (4.2 f) | 300 ms (4.2 f) |
 | `T_TEXT` | 300 ms (4.2 f) | 300 ms (4.2 f) |
 | `T_WAIT` | 1150 ms (16.1 f) | 870 ms (12.2 f) |
@@ -79,16 +79,17 @@ The gesture is gated `0 < w < 1`, so the sign sits exactly on its centre before 
 | module constant | value |
 |---|---|
 | `GESTURES` | `{"nod": ["y", 5.0, 700], "wiggle": ["x", 6.0, 420]}` |
-| `MARK_DY` | `2.0` |
-| `MARK_R` | `{"check": 25.0, "x": 28.333333333333336}` |
-| `SHIELD_H` | `62.0` |
+| `MARK_DY` | `2.064516129032258` |
+| `MARK_R` | `{"check": 25.806451612903224, "x": 29.24731182795699}` |
+| `SHIELD_H` | `64.0` |
 | `T_BEAT` | `450` |
+| `UNIT` | `1.032258064516129` |
 
 `GESTURES` maps a gesture name to (axis, excursion in px, window in ms). `SHIELD_H` and `MARK_DY` are UI pixels; `MARK_R` is the mark radius per result.
 
 ## Input
 
-None. It is a verdict: an ending accepts no press from its first frame to its last (`pq1/driver.py:230`), and the corner chevrons are hidden. It owns its canvas, so the flow leaves it by fading to black — see [token-less transit](../transitions/tokenless-fade.md).
+None. It is a verdict: an ending accepts no press from its first frame to its last (`pq1/driver.py:234`), and the corner chevrons are hidden. It owns its canvas, so the flow leaves it by fading to black — see [token-less transit](../transitions/tokenless-fade.md).
 
 ## Spec a flow splices in
 

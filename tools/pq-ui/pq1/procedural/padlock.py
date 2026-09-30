@@ -13,10 +13,12 @@ down while the shackle flies up, the long leg stretching to stay captive).
 import math
 
 from .. import colors
+from ..layout import STROKE
 
 # source rig constants (lock.py), scaled by f = body_r / BODY_R
 BODY_R = 21.0
-ARM_R, LEG_Y, LW, TAIL = 11.5, 13.5, 5.4, 8.0
+ARM_R, LEG_Y, TAIL = 11.5, 13.5, 8.0
+LW = STROKE["heavy"]    # the shackle: the port's heavy stroke (audit ICO-05)
 HALO = 2.6
 
 # closed-rest centring: with the body at body_y the composite's ink spans
@@ -26,6 +28,13 @@ HALO = 2.6
 # therefore drops BODY_DY below cy (the plan estimated ~5.5; on the y-72
 # grid the source's body_y 82 becomes 78.5).
 BODY_DY = 6.5
+
+# the CLOSED composite's ink height at BODY_R — the arch top including
+# its stroke down to the disc bottom — MEASURED on the 3x grid (200 / 3
+# px, Sep 2026; the geometric span above says 66.3, the stroke's rounding
+# adds the rest). A screen fitting the lock to the sign box scales body_r
+# by box / INK_H (audit ICO-03).
+INK_H = 66.7
 
 
 def draw(cv, cx, cy, *, body_r=BODY_R, color, alpha=1.0, spin=0.0,
@@ -38,7 +47,7 @@ def draw(cv, cx, cy, *, body_r=BODY_R, color, alpha=1.0, spin=0.0,
     shackle keeps its place, so lift + drop is how far the two have parted
     (the unlock snap's reaction); recoil_k: click recoil 0..1 — the
     shackle bites down 0.9 k while the body nudges 0.7 k (lock.py:136-140)."""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     col = tuple(int(round(c * alpha)) for c in color)
     f = body_r / BODY_R

@@ -15,26 +15,26 @@ On **every navigable screen** of a flow that has a failing ending: the [intro](.
 
 Two places it is not the decline:
 
-- **Status screens take no input at all** (`pq1/driver.py:134`) — once an ending is playing, the transaction is already dispatched. Decline has to happen before that.
+- **Status screens take no input at all** (`pq1/driver.py:136`) — once an ending is playing, the transaction is already dispatched. Decline has to happen before that.
 - **On a PIN row the left hold is the cancel**, not a decline: it fills the eight rings instead of a disc and discards the row. See [entry — hold left cancels the row](entry-cancel.md).
 
-`armed()` adds `decline` only when the flow declares a failing ending. `flows.playable` picks it — the `ENDS` entry named `declined` if there is one, else the first by name among the entries whose `state` is not `done` (an entry's own verdicts never count) — and appends it as the last screen so the driver can branch to it from anywhere (`flows/__init__.py:195`). Of the live flows exactly one has none: `pin/unlock`, whose verdicts live inside its entries. Because the decline ending is appended after the last segment it belongs to no segment at all (`pq1/layout.py:590`), so in a [batch](../screen-types/batch-segment.md) it is reachable from transaction 1 and transaction 3 alike.
+`armed()` adds `decline` only when the flow declares a failing ending. `flows.playable` picks it — the `ENDS` entry named `declined` if there is one, else the first by name among the entries whose `state` is not `done` (an entry's own verdicts never count) — and appends it as the last screen so the driver can branch to it from anywhere (`flows/__init__.py:195`). Of the live flows exactly one has none: `pin/unlock`, whose verdicts live inside its entries. Because the decline ending is appended after the last segment it belongs to no segment at all (`pq1/layout.py:807`), so in a [batch](../screen-types/batch-segment.md) it is reachable from transaction 1 and transaction 3 alike.
 
 ## Timeline (ms since press-down)
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| nothing visible: the press may still be a tap | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | a tap never flashes a partial fill |
-| the fill rises | 1750 | 24.5 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:171` | the same constant-speed gauge the sign hold uses — [hold flood](../components/hold-flood.md) |
-| the decline fires, measured from press-down | 2000 | 28.0 | — | `HOLD_COMMIT_MS` | `pq1/motion.py:171` | only at completion; a moment earlier does nothing |
+| nothing visible: the press may still be a tap | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | a tap never flashes a partial fill |
+| the fill rises | 1500 | 21.0 | linear | `HOLD_COMMIT_MS - TAP_MAX_MS` | `pq1/motion.py:195` | the same constant-speed gauge the sign hold uses — [hold flood](../components/hold-flood.md) |
+| the decline fires, measured from press-down | 1995.5 | 27.9 | — | `HOLD_COMMIT_MS - LEVEL_EPS * ( HOLD_COMMIT_MS - TAP_MAX_MS )` | `pq1/motion.py:195` | only at completion; a moment earlier does nothing — `motion.hold_full` (`pq1/motion.py:247`): the first frame drawn full is the frame it fires |
 | the full fill fades out over the leg to the ending | — | — | spring NAV | — | — | [hold commit fade](../transitions/hold-commit-fade.md) |
-| released early: the fill drains | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:173` | [release early](hold-release-early.md) |
+| released early: the fill drains | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:197` | [release early](hold-release-early.md) |
 
-The fill is drawn in whatever token the screen is resting on, in the dress that body asks for (`pq1/components.py:660`) — never a special decline graphic. On a detail it is the same disc as on the ask — radius `CIRCLE_R` 30 px, only docked to the detail's side; the circle never resizes. Both holds fill the same way; the pressed side is what the chevrons say. A sweeping disc glides home while the hold is live.
+The fill is drawn in whatever token the screen is resting on, in the dress that body asks for (`pq1/components.py:718`) — never a special decline graphic. On a detail it is the same disc as on the ask — radius `CIRCLE_R` 30 px, only docked to the detail's side; the circle never resizes. Both holds fill the same way, and both chevrons stay through either one — a hold never fades a chevron. A sweeping disc glides home while the hold is live.
 
 ## The race between the two holds
 
-Only one fill exists at a time: `Sim.hold_begin` keeps the **first** live hold and ignores a second button pressed during it (`pq1/flow.py:244`). But both press clocks keep running, and `FlowDriver.frame` commits whichever reaches `HOLD_COMMIT_MS` 2000 ms (28.0 f) first (`pq1/driver.py:505`).
+Only one fill exists at a time: `Sim.hold_begin` keeps the **first** live hold and ignores a second button pressed during it (`pq1/flow.py:266`). But both press clocks keep running, and `FlowDriver.frame` commits whichever reaches `HOLD_COMMIT_MS` 2000 ms (28.0 f) first (`pq1/driver.py:537`).
 
 Executed: press both buttons in the same instant on the ask and hold them, and the flow **declines** — `frame()` walks the sides in the order left, right, so an exact tie goes to the left. Press right first and left a moment later, and it signs. Whichever fires first ends the screen's input: the other side's pending hold is dropped.
 
@@ -48,19 +48,19 @@ Executed: press both buttons in the same instant on the ask and hold them, and t
 | detail — first of the section | hold right | `None` | NETWORK (detail, p1) | NETWORK (detail, p1) |
 | detail — first of the section | release a hold early (1000 ms) | `snapback` | NETWORK (detail, p1) | NETWORK (detail, p1) |
 | detail — first of the section | both buttons (chord) | `None` | NETWORK (detail, p1) | NETWORK (detail, p1) |
-| detail — first of the section | double press left | `None` | NETWORK (detail, p1) | NETWORK (detail, p1) |
+| detail — first of the section | double press left | `None` | NETWORK (detail, p1) | SEND (hero, p1) |
 | detail — first of the section | double press right | `None` | NETWORK (detail, p1) | VALUE (detail, p1) |
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — an intro (band_chev, commit False) | tap left | `enter` | ERC7730 (hero, p1) | SIGN (hero, p1) |
-| hero — an intro (band_chev, commit False) | tap right | `enter` | ERC7730 (hero, p1) | SIGN (hero, p1) |
-| hero — an intro (band_chev, commit False) | hold left | `fired` | ERC7730 (hero, p1) | DECLINED (status, p1) |
-| hero — an intro (band_chev, commit False) | hold right | `None` | ERC7730 (hero, p1) | ERC7730 (hero, p1) |
-| hero — an intro (band_chev, commit False) | release a hold early (1000 ms) | `snapback` | ERC7730 (hero, p1) | ERC7730 (hero, p1) |
-| hero — an intro (band_chev, commit False) | both buttons (chord) | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
-| hero — an intro (band_chev, commit False) | double press left | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
-| hero — an intro (band_chev, commit False) | double press right | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
+| hero — an intro (band_chev, commit False) | tap left | `back` | KEY FINGERPRINT (hero, p1) | UPDATE (hero, p1) |
+| hero — an intro (band_chev, commit False) | tap right | `enter` | KEY FINGERPRINT (hero, p1) | WORDS (value, p1) |
+| hero — an intro (band_chev, commit False) | hold left | `fired` | KEY FINGERPRINT (hero, p1) | DECLINED (status, p1) |
+| hero — an intro (band_chev, commit False) | hold right | `None` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | release a hold early (1000 ms) | `snapback` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | both buttons (chord) | `None` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | double press left | `None` | KEY FINGERPRINT (hero, p1) | UPDATE (hero, p1) |
+| hero — an intro (band_chev, commit False) | double press right | `None` | KEY FINGERPRINT (hero, p1) | CONFIRM UPDATE (hero, p1) |
 
 The `hold left` row fires from a plain detail and from an intro that arms nothing else.
 

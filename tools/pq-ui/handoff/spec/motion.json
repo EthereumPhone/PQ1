@@ -162,7 +162,7 @@
     1.0
    ],
    "signature": "(t)",
-   "source": "pq1/motion.py:347"
+   "source": "pq1/motion.py:435"
   },
   "attention_pulse": {
    "code": "def attention_pulse(t):\n    \"\"\"decaying scale pulse (1.0-centred) — draws the eye to a settled icon\"\"\"\n    return 1 + 0.09 * math.exp(-3 * t) * abs(math.sin(2.5 * math.pi * t))\n",
@@ -208,7 +208,7 @@
     1.00448
    ],
    "signature": "(t)",
-   "source": "pq1/motion.py:359"
+   "source": "pq1/motion.py:447"
   },
   "back_out": {
    "code": "def back_out(t):\n    c1 = 1.70158\n    c3 = c1 + 1\n    return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2\n",
@@ -301,13 +301,13 @@
     0.0
    ],
    "signature": "(u)",
-   "source": "pq1/motion.py:298"
+   "source": "pq1/motion.py:371"
   },
   "chevron_hint": {
-   "code": "def chevron_hint(idle_ms, period_ms=CHEV_HINT_PERIOD_MS):\n    \"\"\"Chevron hint envelope: (hint_up, y_offset).\n\n    hint_up 0..1 rotates the corner chevrons toward \"up\"; y_offset bobs them\n    while fully up. Starts 1.4 s into the idle and repeats every period_ms —\n    3.6 s on hero screens; confirm screens pass BAND_SWAP_MS so the pointing\n    gesture lands on the band's 5 s beat (their chevrons already rest up,\n    so only the bob shows).\n    \"\"\"\n    hint_up = 0.0\n    y_off = 0.0\n    if idle_ms > 1400:\n        p = (idle_ms - 1400) % period_ms\n        if p < 350:\n            hint_up = ease(p / 350)\n        elif p < 1550:\n            hint_up = 1.0\n            y_off = -4 * math.sin(math.pi * (p - 350) / 1200)\n        elif p < 1900:\n            hint_up = 1 - ease((p - 1550) / 350)\n    return hint_up, y_off\n",
-   "doc": "Chevron hint envelope: (hint_up, y_offset). hint_up 0..1 rotates the corner chevrons toward \"up\"; y_offset bobs them while fully up. Starts 1.4 s into the idle and repeats every period_ms — 3.6 s on hero screens; confirm screens pass BAND_SWAP_MS so the pointing gesture lands on the band's 5 s beat (their chevrons already rest up, so only the bob shows).",
-   "signature": "(idle_ms, period_ms=3600)",
-   "source": "pq1/motion.py:312"
+   "code": "def chevron_hint(idle_ms, period_ms=CHEV_HINT_PERIOD_MS):\n    \"\"\"Chevron hint envelope: (hint_up, y_offset).\n\n    hint_up 0..1 rotates the corner chevrons toward \"up\" — the hint_env\n    envelope (turn up over CHEV_HINT_TURN_MS, rest CHEV_HINT_BOB_MS, turn\n    back); y_offset bobs them while fully up. Starts CHEV_HINT_START_MS into\n    the idle and repeats every period_ms — CHEV_HINT_PERIOD_MS on hero\n    screens; confirm screens pass BAND_SWAP_MS so the pointing gesture lands\n    on the band's 5 s beat (their chevrons already rest up, so only the bob\n    shows).\n    \"\"\"\n    if idle_ms <= CHEV_HINT_START_MS:\n        return 0.0, 0.0\n    p = (idle_ms - CHEV_HINT_START_MS) % period_ms\n    hint_up = hint_env(p, CHEV_HINT_BOB_MS, CHEV_HINT_TURN_MS)\n    y_off = 0.0\n    if CHEV_HINT_TURN_MS <= p < CHEV_HINT_TURN_MS + CHEV_HINT_BOB_MS:\n        y_off = -CHEV_BOB_PX * math.sin(math.pi * (p - CHEV_HINT_TURN_MS)\n                                        / CHEV_HINT_BOB_MS)\n    return hint_up, y_off\n",
+   "doc": "Chevron hint envelope: (hint_up, y_offset). hint_up 0..1 rotates the corner chevrons toward \"up\" — the hint_env envelope (turn up over CHEV_HINT_TURN_MS, rest CHEV_HINT_BOB_MS, turn back); y_offset bobs them while fully up. Starts CHEV_HINT_START_MS into the idle and repeats every period_ms — CHEV_HINT_PERIOD_MS on hero screens; confirm screens pass BAND_SWAP_MS so the pointing gesture lands on the band's 5 s beat (their chevrons already rest up, so only the bob shows).",
+   "signature": "(idle_ms, period_ms=3571)",
+   "source": "pq1/motion.py:396"
   },
   "clamp01": {
    "code": "def clamp01(t):\n    return max(0.0, min(1.0, t))\n",
@@ -316,10 +316,56 @@
    "source": "pq1/motion.py:11"
   },
   "confirm_band": {
-   "code": "def confirm_band(idle_ms):\n    \"\"\"Confirm-screen band alternation -> (a_more, a_back): the \"OR VIEW\n    MORE\" unit holds for BAND_SWAP_MS, fades away over BAND_FADE_MS, and\n    \"TO GO BACK\" fades in for the next slot — a sequential swap every 5 s\n    while the screen idles. Alphas multiply the screen's own alpha.\"\"\"\n    p = idle_ms % (2 * BAND_SWAP_MS)\n    t = p % BAND_SWAP_MS\n    a = (ease_out(clamp01(t / BAND_FADE_MS))\n         * (1 - ease_out(clamp01((t - (BAND_SWAP_MS - BAND_FADE_MS))\n                                 / BAND_FADE_MS))))\n    return (a, 0.0) if p < BAND_SWAP_MS else (0.0, a)\n",
+   "code": "def confirm_band(idle_ms):\n    \"\"\"Confirm-screen band alternation -> (a_more, a_back): the \"OR VIEW\n    MORE\" unit holds for BAND_SWAP_MS, fades away over BAND_FADE_MS, and\n    \"TO GO BACK\" fades in for the next slot — a sequential swap every 5 s\n    while the screen idles. Alphas multiply the screen's own alpha.\"\"\"\n    p = idle_ms % (2 * BAND_SWAP_MS)\n    a = hint_env(p % BAND_SWAP_MS, BAND_SWAP_MS - 2 * BAND_FADE_MS, BAND_FADE_MS)\n    return (a, 0.0) if p < BAND_SWAP_MS else (0.0, a)\n",
    "doc": "Confirm-screen band alternation -> (a_more, a_back): the \"OR VIEW MORE\" unit holds for BAND_SWAP_MS, fades away over BAND_FADE_MS, and \"TO GO BACK\" fades in for the next slot — a sequential swap every 5 s while the screen idles. Alphas multiply the screen's own alpha.",
    "signature": "(idle_ms)",
-   "source": "pq1/motion.py:265"
+   "source": "pq1/motion.py:341"
+  },
+  "confirm_hold": {
+   "code": "def confirm_hold(move):\n    \"\"\"the Confirm? prompt's alpha from how far a hold has drawn the disc\n    toward the panel centre (move 0..1). The disc itself travels like the\n    idle hero's circle under a hold — a tau-chase on OSC_TAU from\n    press-down, chasing back on release (pq1.flow.Sim) — and the prompt and\n    its band fade out over the first half of that travel, gone before the\n    disc reaches the text's column; let go and both come back\"\"\"\n    return 1 - ease_out(clamp01(move * 2))\n",
+   "doc": "the Confirm? prompt's alpha from how far a hold has drawn the disc toward the panel centre (move 0..1). The disc itself travels like the idle hero's circle under a hold — a tau-chase on OSC_TAU from press-down, chasing back on release (pq1.flow.Sim) — and the prompt and its band fade out over the first half of that travel, gone before the disc reaches the text's column; let go and both come back",
+   "range": [
+    0.0,
+    1.0
+   ],
+   "role": "accent",
+   "samples_u0_to_u1_33": [
+    1.0,
+    0.82397,
+    0.66992,
+    0.53638,
+    0.42188,
+    0.32495,
+    0.24414,
+    0.17798,
+    0.125,
+    0.08374,
+    0.05273,
+    0.03052,
+    0.01562,
+    0.00659,
+    0.00195,
+    0.00024,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "signature": "(move)",
+   "source": "pq1/motion.py:231"
   },
   "decel": {
    "code": "def decel(t, p=2.6):\n    \"\"\"simple power deceleration 1-(1-t)^p — tumbles, reels, ring growth\"\"\"\n    return 1 - (1 - t) ** p\n",
@@ -366,7 +412,7 @@
     1.0
    ],
    "signature": "(t, p=2.6)",
-   "source": "pq1/motion.py:389"
+   "source": "pq1/motion.py:477"
   },
   "ease": {
    "code": "def ease(t):\n    \"\"\"cubic in-out\"\"\"\n    return 4 * t * t * t if t < 0.5 else 1 - (-2 * t + 2) ** 3 / 2\n",
@@ -507,7 +553,7 @@
     1.0
    ],
    "signature": "(t, k=4.2)",
-   "source": "pq1/motion.py:384"
+   "source": "pq1/motion.py:472"
   },
   "heartbeat": {
    "code": "def heartbeat(t, pumps=3.0, amp=0.22, decay=4.0):\n    \"\"\"decaying pump train (1.0-centred) — last-attempt heart\"\"\"\n    return 1 + amp * math.exp(-decay * t) * abs(math.sin(pumps * math.pi * t))\n",
@@ -553,19 +599,71 @@
     1.0
    ],
    "signature": "(t, pumps=3.0, amp=0.22, decay=4.0)",
-   "source": "pq1/motion.py:364"
+   "source": "pq1/motion.py:452"
+  },
+  "hint_env": {
+   "code": "def hint_env(p, show_ms, fade_ms):\n    \"\"\"a text that APPEARS IN PLACE, rests, and goes: alpha at p ms into its\n    slot — fades in over fade_ms, holds show_ms, fades out over fade_ms, then\n    0 (the confirm band's slot, the busy caption, the PIN hints, the corner\n    chevrons' turn up)\"\"\"\n    return (ease_out(clamp01(p / fade_ms))\n            * (1 - ease_out(clamp01((p - fade_ms - show_ms) / fade_ms))))\n",
+   "doc": "a text that APPEARS IN PLACE, rests, and goes: alpha at p ms into its slot — fades in over fade_ms, holds show_ms, fades out over fade_ms, then 0 (the confirm band's slot, the busy caption, the PIN hints, the corner chevrons' turn up)",
+   "signature": "(p, show_ms, fade_ms)",
+   "source": "pq1/motion.py:317"
   },
   "hold_fill": {
    "code": "def hold_fill(t_since_press, t_release=None):\n    \"\"\"Hold progress 0..1 — DESIGN.md § Input made code.\n\n    Flat 0 until TAP_MAX_MS (a tap never flashes a partial arc — the fill's\n    appearance IS the \"this became a hold\" signal), then linear to 1 at\n    HOLD_COMMIT_MS from press-down, exactly when the hold action fires.\n    t_release (ms since press at which the button came up, before commit)\n    freezes the fill at its release value and snaps it back with ease_out\n    over HOLD_SNAPBACK_MS. A pure function of time, so any frame is seekable.\n    The visual is components.hold_flood; pq1.flow.Sim and the library's\n    hold_to_confirm screen both draw through it.\"\"\"\n    def k_at(t):\n        return clamp01((t - TAP_MAX_MS) / (HOLD_COMMIT_MS - TAP_MAX_MS))\n    if t_release is None:\n        return k_at(t_since_press)\n    k = k_at(min(t_since_press, t_release))\n    return k * (1 - ease_out(clamp01((t_since_press - t_release)\n                                     / HOLD_SNAPBACK_MS)))\n",
    "doc": "Hold progress 0..1 — DESIGN.md § Input made code. Flat 0 until TAP_MAX_MS (a tap never flashes a partial arc — the fill's appearance IS the \"this became a hold\" signal), then linear to 1 at HOLD_COMMIT_MS from press-down, exactly when the hold action fires. t_release (ms since press at which the button came up, before commit) freezes the fill at its release value and snaps it back with ease_out over HOLD_SNAPBACK_MS. A pure function of time, so any frame is seekable. The visual is components.hold_flood; pq1.flow.Sim and the library's hold_to_confirm screen both draw through it.",
    "signature": "(t_since_press, t_release=None)",
-   "source": "pq1/motion.py:178"
+   "source": "pq1/motion.py:211"
   },
   "hold_fill_ms": {
    "code": "def hold_fill_ms(k):\n    \"\"\"inverse of hold_fill's rising edge: ms since press at which the fill\n    reaches k (hold_fill_ms(1.0) == HOLD_COMMIT_MS)\"\"\"\n    return TAP_MAX_MS + k * (HOLD_COMMIT_MS - TAP_MAX_MS)\n",
    "doc": "inverse of hold_fill's rising edge: ms since press at which the fill reaches k (hold_fill_ms(1.0) == HOLD_COMMIT_MS)",
    "signature": "(k)",
-   "source": "pq1/motion.py:198"
+   "source": "pq1/motion.py:241"
+  },
+  "hold_full": {
+   "code": "def hold_full(t_since_press):\n    \"\"\"True once a held button's fill is FULL — the one test the draw and the\n    fire share (components.hold_flood draws the whole disc from here, pq1.driver\n    and pq1.flow.Sim fire the hold on it), so the frame that shows a full disc\n    is the frame the hold fires: there is no full-but-not-yet-signed frame in\n    which a release still cancels. Gesture windows are timed from button\n    edges, never frame ticks (DESIGN.md § Input).\"\"\"\n    return t_since_press >= hold_fill_ms(1 - LEVEL_EPS)\n",
+   "doc": "True once a held button's fill is FULL — the one test the draw and the fire share (components.hold_flood draws the whole disc from here, pq1.driver and pq1.flow.Sim fire the hold on it), so the frame that shows a full disc is the frame the hold fires: there is no full-but-not-yet-signed frame in which a release still cancels. Gesture windows are timed from button edges, never frame ticks (DESIGN.md § Input).",
+   "range": [
+    0,
+    0
+   ],
+   "role": "accent",
+   "samples_u0_to_u1_33": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "signature": "(t_since_press)",
+   "source": "pq1/motion.py:247"
   },
   "lerp": {
    "code": "def lerp(a, b, t):\n    return a + (b - a) * t\n",
@@ -574,10 +672,10 @@
    "source": "pq1/motion.py:31"
   },
   "page_flip": {
-   "code": "def page_flip(t_ms):\n    \"\"\"Paged-detail swap envelope -> (a_out, a_in) for a flip that began\n    t_ms ago (DESIGN.md § Motion, Page flip): the outgoing page fades away\n    over PAGE_FADE_MS on the ease-out curve, THEN the incoming page fades\n    in over the next PAGE_FADE_MS on the ease curve — a sequential swap on\n    the confirm band's timing; the pager number switches between the two\n    phases. Alphas multiply the screen's own alpha.\"\"\"\n    if t_ms < PAGE_FADE_MS:\n        return 1.0 - ease_out(clamp01(t_ms / PAGE_FADE_MS)), 0.0\n    return 0.0, ease(clamp01((t_ms - PAGE_FADE_MS) / PAGE_FADE_MS))\n",
-   "doc": "Paged-detail swap envelope -> (a_out, a_in) for a flip that began t_ms ago (DESIGN.md § Motion, Page flip): the outgoing page fades away over PAGE_FADE_MS on the ease-out curve, THEN the incoming page fades in over the next PAGE_FADE_MS on the ease curve — a sequential swap on the confirm band's timing; the pager number switches between the two phases. Alphas multiply the screen's own alpha.",
+   "code": "def page_flip(t_ms):\n    \"\"\"Paged-detail swap envelope -> (a_out, a_in) for a flip that began\n    t_ms ago (DESIGN.md § Motion, Page flip): the outgoing page fades away\n    over PAGE_FADE_MS on ease-out, THEN the incoming page fades in over\n    the next PAGE_FADE_MS on ease-out too — an arriving page is an\n    ENTRANCE like every other (DESIGN.md § Motion, the role table; it\n    read `ease` until Sep 2026) — a sequential swap on\n    the confirm band's timing; the pager number switches between the two\n    phases. Alphas multiply the screen's own alpha.\"\"\"\n    return seq_swap(t_ms, PAGE_FADE_MS)\n",
+   "doc": "Paged-detail swap envelope -> (a_out, a_in) for a flip that began t_ms ago (DESIGN.md § Motion, Page flip): the outgoing page fades away over PAGE_FADE_MS on ease-out, THEN the incoming page fades in over the next PAGE_FADE_MS on ease-out too — an arriving page is an ENTRANCE like every other (DESIGN.md § Motion, the role table; it read `ease` until Sep 2026) — a sequential swap on the confirm band's timing; the pager number switches between the two phases. Alphas multiply the screen's own alpha.",
    "signature": "(t_ms)",
-   "source": "pq1/motion.py:283"
+   "source": "pq1/motion.py:356"
   },
   "pop": {
    "code": "def pop(t):\n    \"\"\"springy overshoot with one designed wobble — an opt-in celebration\n    accent, no longer any entrance (the verdict sign arrives, above)\"\"\"\n    return 1 - math.exp(-5 * t) * math.cos(2.2 * math.pi * t)\n",
@@ -624,7 +722,7 @@
     0.99455
    ],
    "signature": "(t)",
-   "source": "pq1/motion.py:353"
+   "source": "pq1/motion.py:441"
   },
   "recoil": {
    "code": "def recoil(t):\n    \"\"\"mechanical click recoil, unit amplitude — rises and dies within t\"\"\"\n    return math.sin(math.pi * t) * (1 - t)\n",
@@ -670,7 +768,59 @@
     0.0
    ],
    "signature": "(t)",
-   "source": "pq1/motion.py:379"
+   "source": "pq1/motion.py:467"
+  },
+  "seq_swap": {
+   "code": "def seq_swap(t_ms, fade_ms):\n    \"\"\"a SEQUENTIAL SWAP that began t_ms ago -> (a_out, a_in): the showing\n    text fades away over fade_ms, THEN the next fades in over the next\n    fade_ms — never a crossfade of two texts in one place (the page flip,\n    the PIN row's caption and label swaps)\"\"\"\n    return (1.0 - ease_out(clamp01(t_ms / fade_ms)),\n            ease_out(clamp01((t_ms - fade_ms) / fade_ms)))\n",
+   "doc": "a SEQUENTIAL SWAP that began t_ms ago -> (a_out, a_in): the showing text fades away over fade_ms, THEN the next fades in over the next fade_ms — never a crossfade of two texts in one place (the page flip, the PIN row's caption and label swaps)",
+   "signature": "(t_ms, fade_ms)",
+   "source": "pq1/motion.py:326"
+  },
+  "settle_ms": {
+   "code": "def settle_ms(px, profile=NAV, eps=0.3):\n    \"\"\"whole ms at which a spring_travel over px has settled to within eps px\n    — a travel's length is DERIVED from the spring, never typed: duration\n    never scales with distance or size, one pace moves everything on the\n    device (DESIGN.md § Motion). procedural.burst.ENTER_MS reads it.\"\"\"\n    t = 0\n    while (1.0 - spring_travel(t, profile)) * px > eps:\n        t += 1\n    return t\n",
+   "doc": "whole ms at which a spring_travel over px has settled to within eps px — a travel's length is DERIVED from the spring, never typed: duration never scales with distance or size, one pace moves everything on the device (DESIGN.md § Motion). procedural.burst.ENTER_MS reads it.",
+   "range": [
+    0,
+    156
+   ],
+   "role": "accent",
+   "samples_u0_to_u1_33": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    20,
+    40,
+    53,
+    64,
+    73,
+    81,
+    88,
+    95,
+    101,
+    106,
+    111,
+    116,
+    121,
+    125,
+    129,
+    133,
+    137,
+    140,
+    144,
+    147,
+    150,
+    153,
+    156
+   ],
+   "signature": "(px, profile={'response': 0.4, 'damping': 1.0}, eps=0.3)",
+   "source": "pq1/motion.py:125"
   },
   "shake": {
    "code": "def shake(t, cycles=2.5):\n    \"\"\"decaying error shake, unit amplitude — multiply by the px excursion\"\"\"\n    return math.sin(2 * math.pi * cycles * t) * (1 - t)\n",
@@ -716,28 +866,28 @@
     0.0
    ],
    "signature": "(t, cycles=2.5)",
-   "source": "pq1/motion.py:369"
+   "source": "pq1/motion.py:457"
   },
   "spring_travel": {
-   "code": "def spring_travel(t_ms, profile=KIOSK):\n    \"\"\"progress 0 -> 1 of a critically damped spring released from rest at\n    t = 0 — Spring.step's closed form, 1 - (1 + wt) e^-wt, as a pure function\n    of t: a film's circle travels exactly like a flow transition's\"\"\"\n    if t_ms <= 0:\n        return 0.0\n    wt = 2 * math.pi / profile[\"response\"] * t_ms / 1000.0\n    return 1.0 - (1.0 + wt) * math.exp(-wt)\n",
+   "code": "def spring_travel(t_ms, profile=NAV):\n    \"\"\"progress 0 -> 1 of a critically damped spring released from rest at\n    t = 0 — Spring.step's closed form, 1 - (1 + wt) e^-wt, as a pure function\n    of t: a film's circle travels exactly like a flow transition's\"\"\"\n    if t_ms <= 0:\n        return 0.0\n    wt = 2 * math.pi / profile[\"response\"] * t_ms / 1000.0\n    return 1.0 - (1.0 + wt) * math.exp(-wt)\n",
    "default_profile": "KIOSK",
    "default_profile_scope": "demo",
    "doc": "progress 0 -> 1 of a critically damped spring released from rest at t = 0 — Spring.step's closed form, 1 - (1 + wt) e^-wt, as a pure function of t: a film's circle travels exactly like a flow transition's",
    "note": "the exported default is the DEMO pace; the device always passes NAV (pq1/driver.py). Reproduce NAV per panel frame from springs.NAV.",
-   "signature": "(t_ms, profile={'response': 0.55, 'damping': 1.0})",
+   "signature": "(t_ms, profile={'response': 0.4, 'damping': 1.0})",
    "source": "pq1/motion.py:115"
   },
   "tau_chase": {
    "code": "def tau_chase(current, target, dt_ms, tau_ms):\n    \"\"\"one tau-chase step: move current toward target by 1 - exp(-dt/tau) --\n    THE ambient-motion idiom (idle sweep, follower chain); DESIGN.md S Motion\"\"\"\n    return current + (target - current) * tau_k(dt_ms, tau_ms)\n",
    "doc": "one tau-chase step: move current toward target by 1 - exp(-dt/tau) -- THE ambient-motion idiom (idle sweep, follower chain); DESIGN.md S Motion",
    "signature": "(current, target, dt_ms, tau_ms)",
-   "source": "pq1/motion.py:221"
+   "source": "pq1/motion.py:274"
   },
   "tau_k": {
    "code": "def tau_k(dt_ms, tau_ms):\n    \"\"\"per-frame coefficient of the frame-rate-independent tau-chase\"\"\"\n    return 1.0 - math.exp(-dt_ms / tau_ms)\n",
    "doc": "per-frame coefficient of the frame-rate-independent tau-chase",
    "signature": "(dt_ms, tau_ms)",
-   "source": "pq1/motion.py:216"
+   "source": "pq1/motion.py:269"
   },
   "wobble": {
    "code": "def wobble(t, decay=3.0):\n    \"\"\"decaying settle oscillation, unit amplitude\"\"\"\n    return math.exp(-decay * t) * math.sin(2 * math.pi * t)\n",
@@ -783,7 +933,7 @@
     -0.0
    ],
    "signature": "(t, decay=3.0)",
-   "source": "pq1/motion.py:374"
+   "source": "pq1/motion.py:462"
   }
  },
  "envelopes": {
@@ -1101,364 +1251,80 @@
      0.0
     ],
     [
-     0.012,
+     0.166,
      0.0
     ],
     [
-     0.093,
+     0.486,
      0.0
     ],
     [
-     0.315,
+     0.711,
      0.0
     ],
     [
-     0.685,
+     0.859,
      0.0
     ],
     [
-     0.907,
+     0.945,
      0.0
     ],
     [
-     0.988,
+     0.986,
      0.0
     ],
     [
-     1.0,
-     -0.0
-    ],
-    [
-     1.0,
-     -0.52
-    ],
-    [
-     1.0,
-     -1.04
-    ],
-    [
-     1.0,
-     -1.53
-    ],
-    [
-     1.0,
-     -2.0
-    ],
-    [
-     1.0,
-     -2.44
-    ],
-    [
-     1.0,
-     -2.83
-    ],
-    [
-     1.0,
-     -3.17
-    ],
-    [
-     1.0,
-     -3.46
-    ],
-    [
-     1.0,
-     -3.7
-    ],
-    [
-     1.0,
-     -3.86
-    ],
-    [
-     1.0,
-     -3.97
-    ],
-    [
-     1.0,
-     -4.0
-    ],
-    [
-     1.0,
-     -3.97
-    ],
-    [
-     1.0,
-     -3.86
-    ],
-    [
-     1.0,
-     -3.7
-    ],
-    [
-     1.0,
-     -3.46
-    ],
-    [
-     1.0,
-     -3.17
-    ],
-    [
-     1.0,
-     -2.83
-    ],
-    [
-     1.0,
-     -2.44
-    ],
-    [
-     1.0,
-     -2.0
-    ],
-    [
-     1.0,
-     -1.53
-    ],
-    [
-     1.0,
-     -1.04
-    ],
-    [
-     1.0,
-     -0.52
-    ],
-    [
-     1.0,
-     0.0
-    ],
-    [
-     0.988,
-     0.0
-    ],
-    [
-     0.907,
-     0.0
-    ],
-    [
-     0.685,
-     0.0
-    ],
-    [
-     0.315,
-     0.0
-    ],
-    [
-     0.093,
-     0.0
-    ],
-    [
-     0.012,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.0,
-     0.0
-    ],
-    [
-     0.012,
-     0.0
-    ],
-    [
-     0.093,
-     0.0
-    ],
-    [
-     0.315,
-     0.0
-    ],
-    [
-     0.685,
-     0.0
-    ],
-    [
-     0.907,
-     0.0
-    ],
-    [
-     0.988,
+     0.999,
      0.0
     ],
     [
      1.0,
-     -0.0
+     -0.14
     ],
     [
      1.0,
-     -0.52
+     -0.66
     ],
     [
      1.0,
-     -1.04
+     -1.16
     ],
     [
      1.0,
-     -1.53
+     -1.65
     ],
     [
      1.0,
-     -2.0
+     -2.1
     ],
     [
      1.0,
-     -2.44
+     -2.53
     ],
     [
      1.0,
-     -2.83
+     -2.9
     ],
     [
      1.0,
-     -3.17
+     -3.23
     ],
     [
      1.0,
-     -3.46
+     -3.51
     ],
     [
      1.0,
-     -3.7
+     -3.73
     ],
     [
      1.0,
-     -3.86
+     -3.88
     ],
     [
      1.0,
-     -3.97
+     -3.98
     ],
     [
      1.0,
@@ -1466,43 +1332,43 @@
     ],
     [
      1.0,
-     -3.97
+     -3.96
     ],
     [
      1.0,
-     -3.86
+     -3.85
     ],
     [
      1.0,
-     -3.7
+     -3.67
     ],
     [
      1.0,
-     -3.46
+     -3.44
     ],
     [
      1.0,
-     -3.17
+     -3.15
     ],
     [
      1.0,
-     -2.83
+     -2.8
     ],
     [
      1.0,
-     -2.44
+     -2.41
     ],
     [
      1.0,
-     -2.0
+     -1.98
     ],
     [
      1.0,
-     -1.53
+     -1.51
     ],
     [
      1.0,
-     -1.04
+     -1.02
     ],
     [
      1.0,
@@ -1513,27 +1379,311 @@
      0.0
     ],
     [
-     0.988,
+     0.636,
      0.0
     ],
     [
-     0.907,
+     0.373,
      0.0
     ],
     [
-     0.685,
+     0.195,
      0.0
     ],
     [
-     0.315,
+     0.085,
      0.0
     ],
     [
-     0.093,
+     0.027,
      0.0
     ],
     [
-     0.012,
+     0.004,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.364,
+     0.0
+    ],
+    [
+     0.627,
+     0.0
+    ],
+    [
+     0.805,
+     0.0
+    ],
+    [
+     0.915,
+     0.0
+    ],
+    [
+     0.973,
+     0.0
+    ],
+    [
+     0.996,
+     0.0
+    ],
+    [
+     1.0,
+     0.0
+    ],
+    [
+     1.0,
+     -0.44
+    ],
+    [
+     1.0,
+     -0.95
+    ],
+    [
+     1.0,
+     -1.45
+    ],
+    [
+     1.0,
+     -1.92
+    ],
+    [
+     1.0,
+     -2.35
+    ],
+    [
+     1.0,
+     -2.75
+    ],
+    [
+     1.0,
+     -3.1
+    ],
+    [
+     1.0,
+     -3.4
+    ],
+    [
+     1.0,
+     -3.65
+    ],
+    [
+     1.0,
+     -3.83
+    ],
+    [
+     1.0,
+     -3.95
+    ],
+    [
+     1.0,
+     -4.0
+    ],
+    [
+     1.0,
+     -3.98
+    ],
+    [
+     1.0,
+     -3.9
+    ],
+    [
+     1.0,
+     -3.75
+    ],
+    [
+     1.0,
+     -3.55
+    ],
+    [
+     1.0,
+     -3.28
+    ],
+    [
+     1.0,
+     -2.95
+    ],
+    [
+     1.0,
+     -2.58
+    ],
+    [
+     1.0,
+     -2.16
+    ],
+    [
+     1.0,
+     -1.71
+    ],
+    [
+     1.0,
+     -1.23
+    ],
+    [
+     1.0,
+     -0.73
+    ],
+    [
+     1.0,
+     -0.22
+    ],
+    [
+     0.776,
+     0.0
+    ],
+    [
+     0.472,
+     0.0
+    ],
+    [
+     0.26,
+     0.0
+    ],
+    [
+     0.124,
+     0.0
+    ],
+    [
+     0.046,
+     0.0
+    ],
+    [
+     0.01,
      0.0
     ],
     [
@@ -2085,40 +2235,40 @@
     0.0,
     0.0,
     0.0,
-    0.0286,
-    0.0571,
-    0.0857,
-    0.1143,
-    0.1429,
-    0.1714,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0333,
+    0.0667,
+    0.1,
+    0.1333,
+    0.1667,
     0.2,
-    0.2286,
-    0.2571,
-    0.2857,
-    0.3143,
-    0.3429,
-    0.3714,
+    0.2333,
+    0.2667,
+    0.3,
+    0.3333,
+    0.3667,
     0.4,
-    0.4286,
-    0.4571,
-    0.4857,
-    0.5143,
-    0.5429,
-    0.5714,
+    0.4333,
+    0.4667,
+    0.5,
+    0.5333,
+    0.5667,
     0.6,
-    0.6286,
-    0.6571,
-    0.6857,
-    0.7143,
-    0.7429,
-    0.7714,
+    0.6333,
+    0.6667,
+    0.7,
+    0.7333,
+    0.7667,
     0.8,
-    0.8286,
-    0.8571,
-    0.8857,
-    0.9143,
-    0.9429,
-    0.9714,
+    0.8333,
+    0.8667,
+    0.9,
+    0.9333,
+    0.9667,
     1.0,
     1.0,
     1.0,
@@ -2175,14 +2325,14 @@
   },
   "hold_fill_released_at_1000": {
    "k": [
-    0.4286,
-    0.2871,
-    0.1808,
-    0.1046,
-    0.0536,
-    0.0226,
-    0.0067,
-    0.0008,
+    0.3333,
+    0.2233,
+    0.1406,
+    0.0814,
+    0.0417,
+    0.0176,
+    0.0052,
+    0.0007,
     0.0,
     0.0,
     0.0
@@ -2257,47 +2407,47 @@
     ],
     [
      0.0,
-     0.0023
+     0.2297
     ],
     [
      0.0,
-     0.0185
+     0.4213
     ],
     [
      0.0,
-     0.0625
+     0.5781
     ],
     [
      0.0,
-     0.1481
+     0.7037
     ],
     [
      0.0,
-     0.2894
+     0.8015
     ],
     [
      0.0,
-     0.5
+     0.875
     ],
     [
      0.0,
-     0.7106
+     0.9277
     ],
     [
      0.0,
-     0.8519
+     0.963
     ],
     [
      0.0,
-     0.9375
+     0.9844
     ],
     [
      0.0,
-     0.9815
+     0.9954
     ],
     [
      0.0,
-     0.9977
+     0.9994
     ],
     [
      0.0,
@@ -2347,15 +2497,15 @@
  "handoff_span": {
   "declared_at": [
    "pq1/verdict.py:41",
-   "pq1/status.py:535",
-   "pq1/status.py:578"
+   "pq1/status.py:575",
+   "pq1/status.py:625"
   ],
   "easing": "ease_out",
-  "frames_14": 5.6,
-  "led_ending_span": 400,
+  "frames_14": 6.0,
+  "led_ending_span": 429,
   "note": "three unlinked declarations of one span (audit D4-02); a led ending uses LedAnim.HANDOFF_MS, every other screen its own T_HOLD, so the crossfade runs at 250-500 ms depending on the screen (audit X3-11)",
   "unit": "ms",
-  "value": 400,
+  "value": 429,
   "when": "t 0..T_HOLD of any status screen whose spec carries handoff=True: the resting token the flow was drawing crossfades out instead of popping to black"
  },
  "note": "All durations are milliseconds. frames_14 = ms / (1000/14). Check every token's `scope` before porting it, and read `expr` where present: a token with an expr is DERIVED from another and the two must move together.",
@@ -2462,7 +2612,7 @@
     "expr": "(None, \"left\", \"right\", \"sides\")",
     "reader_count": 1,
     "readers": [
-     "pq1/procedural/burst.py:86"
+     "pq1/procedural/burst.py:92"
     ],
     "scope": "device",
     "source": "pq1/procedural/burst.py:65",
@@ -2473,13 +2623,31 @@
      "sides"
     ]
    },
+   "ENTER_MS": {
+    "comment": "",
+    "do_not_port": false,
+    "expr": "settle_ms(abs(loading.QubitCfg().gc[0] - VALUE_PARK_X), NAV)",
+    "frames_14": 8.1,
+    "reader_count": 3,
+    "readers": [
+     "pq1/motion.py:129",
+     "pq1/procedural/burst.py:89",
+     "pq1/procedural/burst.py:95"
+    ],
+    "scope": "spec-only",
+    "scope_reason": "the explosion's side entrance; no live flow sets enter=, so the path is exercised only by the screens library",
+    "source": "pq1/procedural/burst.py:71",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 582
+   },
    "HOLD_END": {
     "comment": "",
     "do_not_port": true,
     "frames_14": 19.6,
     "reader_count": 1,
     "readers": [
-     "pq1/procedural/burst.py:153"
+     "pq1/procedural/burst.py:159"
     ],
     "scope": "dead",
     "scope_reason": "documented in a burst.py comment, read by nothing (audit D8-09)",
@@ -2494,7 +2662,7 @@
     "reader_count": 4,
     "readers": [
      "pq1/procedural/burst.py:12",
-     "pq1/procedural/burst.py:216",
+     "pq1/procedural/burst.py:222",
      "screens/fx/explosion.py:55",
      "flows/firmware/__init__.py:27"
     ],
@@ -2561,13 +2729,13 @@
    },
    "MINOR": {
     "comment": "",
-    "expr": "BurstCfg(rings=2, stagger_ms=145, t_clump=800, t_boom=750, squeeze=0.22, jitter=(0.8, 1.6), intensity=(0.5, 1.0), bloom=(240, 22), ring_span=(62, -16), aspect=0.9, grow_p=2.4, ring_w=(2.4, -0.5), ring_a=0.85)",
+    "expr": "BurstCfg(rings=2, stagger_ms=145, t_clump=800, t_boom=750, squeeze=0.22, jitter=(0.8, 1.6), intensity=(0.5, 1.0), bloom=(240, 22), ring_span=(62, -16), aspect=0.9, grow_p=2.4, ring_w=(2.4, -0.5), ring_a=colors.FLASH_ALPHA)",
     "reader_count": 6,
     "readers": [
      "pq1/procedural/burst.py:12",
-     "screens/confirm/hold_to_confirm.py:18",
-     "screens/confirm/hold_to_confirm.py:83",
-     "screens/confirm/hold_to_confirm.py:129",
+     "screens/confirm/hold_to_confirm.py:22",
+     "screens/confirm/hold_to_confirm.py:88",
+     "screens/confirm/hold_to_confirm.py:149",
      "screens/fx/explosion.py:55",
      "flows/firmware/__init__.py:37"
     ],
@@ -2636,20 +2804,21 @@
     "comment": "radius easing exponent (flat onto the orbit)",
     "reader_count": 1,
     "readers": [
-     "pq1/procedural/burst.py:108"
+     "pq1/procedural/burst.py:114"
     ],
     "scope": "device",
-    "source": "pq1/procedural/burst.py:77",
+    "source": "pq1/procedural/burst.py:83",
     "value": 3
    },
    "SIDES_R0": {
     "comment": "start radius: both qubits fully off the panel",
     "reader_count": 1,
     "readers": [
-     "pq1/procedural/burst.py:101"
+     "pq1/procedural/burst.py:107"
     ],
     "scope": "device",
-    "source": "pq1/procedural/burst.py:75",
+    "source": "pq1/procedural/burst.py:81",
+    "unit": "px",
     "value": 240.0
    },
    "SIDES_TURN": {
@@ -2657,45 +2826,95 @@
     "expr": "2 * math.pi",
     "reader_count": 2,
     "readers": [
-     "pq1/procedural/burst.py:107",
-     "pq1/procedural/burst.py:123"
+     "pq1/procedural/burst.py:113",
+     "pq1/procedural/burst.py:129"
     ],
     "scope": "device",
-    "source": "pq1/procedural/burst.py:76",
+    "source": "pq1/procedural/burst.py:82",
     "value": 6.283185307179586
    },
    "SIDES_V0": {
     "comment": "entry speed, in orbit speeds",
     "reader_count": 2,
     "readers": [
-     "pq1/procedural/burst.py:118",
-     "pq1/procedural/burst.py:177"
+     "pq1/procedural/burst.py:124",
+     "pq1/procedural/burst.py:183"
     ],
     "scope": "device",
-    "source": "pq1/procedural/burst.py:79",
+    "source": "pq1/procedural/burst.py:85",
     "value": 2.5
    },
    "SIDES_Y_MAX": {
     "comment": "vertical reach cap (loading's join ellipse)",
     "reader_count": 1,
     "readers": [
-     "pq1/procedural/burst.py:102"
+     "pq1/procedural/burst.py:108"
     ],
     "scope": "device",
-    "source": "pq1/procedural/burst.py:78",
+    "source": "pq1/procedural/burst.py:84",
     "value": 44.0
    }
   },
   "components": {
+   "CHEV_HALF_W": {
+    "comment": "4.2: the base half-width",
+    "expr": "max(abs(x) for x, _ in CHEV_PTS)",
+    "reader_count": 4,
+    "readers": [
+     "screens/pin/pin_entering.py:117",
+     "screens/pin/pin_entering.py:118",
+     "screens/pin/pin_entering.py:407",
+     "screens/pin/pin_entering.py:409"
+    ],
+    "scope": "device",
+    "source": "pq1/components.py:520",
+    "value": 4.2
+   },
+   "CHEV_PTS": {
+    "comment": "",
+    "expr": "((0, -4), (-4.2, 3.2), (4.2, 3.2))",
+    "reader_count": 2,
+    "readers": [
+     "pq1/components.py:520",
+     "pq1/components.py:529"
+    ],
+    "scope": "device",
+    "source": "pq1/components.py:518",
+    "value": [
+     [
+      0,
+      -4
+     ],
+     [
+      -4.2,
+      3.2
+     ],
+     [
+      4.2,
+      3.2
+     ]
+    ]
+   },
+   "CHEV_STROKE": {
+    "comment": "4.5",
+    "expr": "STROKE[\"sign\"]",
+    "reader_count": 1,
+    "readers": [
+     "pq1/components.py:534"
+    ],
+    "scope": "device",
+    "source": "pq1/components.py:519",
+    "value": 4.5
+   },
    "ETHER_SYMBOLS": {
     "comment": "ether and its ERC-20 wrapper wear the ether mark",
     "expr": "(\"ETH\", \"WETH\")",
     "reader_count": 1,
     "readers": [
-     "pq1/components.py:323"
+     "pq1/components.py:331"
     ],
     "scope": "device",
-    "source": "pq1/components.py:302",
+    "source": "pq1/components.py:307",
     "value": [
      "ETH",
      "WETH"
@@ -2703,20 +2922,20 @@
    },
    "GLYPHS": {
     "comment": "",
-    "expr": "{ \"eth\": image_glyph(ETH_LOGO, recolor_white=True), \"mainnet\": eth_logo.glyph(), # rounded-edge eth, black on chain discs # the chain marks — every network the device can name, traced from its # logo (pq1/procedural/chains.py). Registered EAGERLY here, never from a # flow package: the legal icon set the handoff spec publishes must not # depend on which flows happened to be imported (audit G17-07). Ethereum # mainnet is not in the set — chain id 1 wears \"mainnet\" above. **{n: chain_marks.glyph(n) for n in chain_marks.NAMES}, \"blind\": blind_mark.glyph(), # blind-signing mark (assets/blind_icon.svg traced) \"dev\": dev_mark.glyph(), # ERC-7730 intro mark (assets/dev_icon.svg traced) \"rotate\": rotate_mark.glyph(), # slot-rotation mark (assets/rotate_icon.svg traced) \"fingerprint\": fingerprint_mark.glyph(), # digest mark (assets/fingerprint.svg traced) \"download\": download_mark.glyph(), # firmware-update mark (assets/download_icon.svg traced) \"check\": check, \"x\": x_mark, \"exclamation\": exclamation, \"plus\": plus, # the entry signs beside the corner chevrons \"minus\": minus, }",
-    "reader_count": 26,
+    "expr": "{ \"eth\": _ETHER, # the schema default and the fallback (DESIGN.md § Components) \"mainnet\": _ETHER, # chain id 1 — the same art under the chain family's name # the chain marks — every network the device can name, traced from its # logo (pq1/procedural/chains.py). Registered EAGERLY here, never from a # flow package: the legal icon set the handoff spec publishes must not # depend on which flows happened to be imported (audit G17-07). Ethereum # mainnet is not in the set — chain id 1 wears \"mainnet\" above. **{n: chain_marks.glyph(n) for n in chain_marks.NAMES}, \"blind\": blind_mark.glyph(), # blind-signing mark (assets/blind_icon.svg traced) \"dev\": dev_mark.glyph(), # ERC-7730 intro mark (assets/dev_icon.svg traced) \"rotate\": rotate_mark.glyph(), # slot-rotation mark (assets/rotate_icon.svg traced) \"fingerprint\": fingerprint_mark.glyph(), # digest mark (assets/fingerprint.svg traced) \"download\": download_mark.glyph(), # firmware-update mark (assets/download_icon.svg traced) \"check\": check, \"x\": x_mark, \"exclamation\": exclamation, \"dots\": dots, # the 3 x 3 dot grid — the setup family's mark \"plus\": plus, # the entry signs beside the corner chevrons \"minus\": minus, }",
+    "reader_count": 27,
     "readers": [
-     "pq1/components.py:210",
-     "pq1/components.py:229",
-     "pq1/components.py:234",
-     "pq1/components.py:235",
-     "pq1/components.py:262",
-     "pq1/components.py:289",
-     "pq1/layout.py:27",
-     "pq1/loading.py:323"
+     "pq1/components.py:207",
+     "pq1/components.py:226",
+     "pq1/components.py:231",
+     "pq1/components.py:232",
+     "pq1/components.py:257",
+     "pq1/components.py:268",
+     "pq1/components.py:294",
+     "pq1/layout.py:27"
     ],
     "scope": "device",
-    "source": "pq1/components.py:180",
+    "source": "pq1/components.py:176",
     "value": {
      "arbitrum": "<pq1.procedural.chains.glyph.<locals>.fn>",
      "avalanche": "<pq1.procedural.chains.glyph.<locals>.fn>",
@@ -2727,8 +2946,9 @@
      "cowswap": "<pq1.components.resolve_glyph.<locals>.<lambda>>",
      "dai": "<pq1.components.resolve_glyph.<locals>.<lambda>>",
      "dev": "<pq1.procedural.dev.glyph.<locals>.fn>",
+     "dots": "<pq1.procedural.marks.dots>",
      "download": "<pq1.procedural.download.glyph.<locals>.fn>",
-     "eth": "<pq1.components.image_glyph.<locals>.draw>",
+     "eth": "<pq1.procedural.eth.glyph.<locals>.fn>",
      "exclamation": "<pq1.procedural.marks.exclamation>",
      "fingerprint": "<pq1.procedural.fingerprint.glyph.<locals>.fn>",
      "linea": "<pq1.procedural.chains.glyph.<locals>.fn>",
@@ -2752,65 +2972,68 @@
     "expr": "\"TO GO BACK\"",
     "reader_count": 1,
     "readers": [
-     "pq1/components.py:561"
+     "pq1/components.py:617"
     ],
     "scope": "device",
-    "source": "pq1/components.py:530",
+    "source": "pq1/components.py:580",
     "value": "TO GO BACK"
    },
    "HOLD_DARK_BODY": {
     "comment": "body luma below this = a black body: the film goes white",
     "reader_count": 1,
     "readers": [
-     "pq1/components.py:675"
+     "pq1/components.py:733"
     ],
     "scope": "device",
-    "source": "pq1/components.py:657",
+    "source": "pq1/components.py:715",
     "value": 0.15
    },
    "HOLD_OVERLAY_ALPHA": {
     "comment": "the film's opacity — black over colour, white in black",
     "reader_count": 1,
     "readers": [
-     "pq1/components.py:673"
+     "pq1/components.py:731"
     ],
     "scope": "device",
-    "source": "pq1/components.py:656",
+    "source": "pq1/components.py:714",
     "unit": "alpha",
     "value": 0.3
    },
    "LETTER_PREFIX": {
-    "comment": "pq1.chains — an unknown chain wears its initial",
+    "comment": "an unknown chain (pq1.chains) or a long-tail",
     "expr": "\"letter:\"",
-    "reader_count": 4,
+    "reader_count": 5,
     "readers": [
      "pq1/chains.py:45",
      "pq1/chains.py:73",
-     "pq1/components.py:221",
-     "pq1/components.py:222"
+     "pq1/components.py:218",
+     "pq1/components.py:219",
+     "pq1/components.py:334"
     ],
     "scope": "device",
-    "source": "pq1/components.py:203",
+    "source": "pq1/components.py:199",
     "value": "letter:"
    },
    "MONOGRAM_SCALE": {
     "comment": "cap height ~= a chain mark's, so a letter disc and a",
     "reader_count": 1,
     "readers": [
-     "pq1/components.py:174"
+     "pq1/components.py:162"
     ],
     "scope": "device",
-    "source": "pq1/components.py:161",
+    "source": "pq1/components.py:126",
+    "unit": "factor",
     "value": 1.34
    },
    "PAGER_ALPHA": {
-    "comment": "80 % white (DESIGN.md § Typography, Paging)",
+    "comment": "the pager's ink tint (DESIGN.md § Color)",
+    "expr": "colors.INK_PAGING",
     "reader_count": 1,
     "readers": [
-     "pq1/components.py:526"
+     "pq1/components.py:576"
     ],
     "scope": "device",
-    "source": "pq1/components.py:514",
+    "source": "pq1/components.py:563",
     "unit": "alpha",
     "value": 0.8
    },
@@ -2818,10 +3041,10 @@
     "comment": "the pager's top-centre spot, between the corner chevrons",
     "reader_count": 1,
     "readers": [
-     "pq1/components.py:525"
+     "pq1/components.py:574"
     ],
     "scope": "device",
-    "source": "pq1/components.py:513",
+    "source": "pq1/components.py:562",
     "unit": "px",
     "value": 24
    },
@@ -2829,29 +3052,30 @@
     "comment": "master-tile radius (= layout.CIRCLE_R); discs resize from it",
     "reader_count": 2,
     "readers": [
-     "pq1/components.py:35",
-     "pq1/components.py:38"
+     "pq1/components.py:37",
+     "pq1/components.py:40"
     ],
     "scope": "device",
-    "source": "pq1/components.py:30",
+    "source": "pq1/components.py:32",
     "unit": "px",
     "value": 30.0
    },
    "TOKEN_INSET": {
     "comment": "disc, ring AND full-bleed art sit inside the layout radius",
-    "reader_count": 11,
+    "reader_count": 8,
     "readers": [
-     "pq1/components.py:246",
-     "pq1/components.py:337",
-     "pq1/components.py:604",
-     "pq1/components.py:607",
-     "pq1/components.py:618",
-     "pq1/flow.py:191",
-     "pq1/loading.py:120",
-     "pq1/status.py:484"
+     "pq1/components.py:348",
+     "pq1/components.py:355",
+     "pq1/components.py:358",
+     "pq1/components.py:659",
+     "pq1/flow.py:209",
+     "pq1/procedural/burst.py:201",
+     "screens/confirm/hold_to_confirm.py:99",
+     "screens/confirm/hold_to_confirm.py:156"
     ],
     "scope": "device",
-    "source": "pq1/components.py:330",
+    "source": "pq1/components.py:340",
+    "unit": "px",
     "value": 1.2
    },
    "TOKEN_LOGOS": {
@@ -2859,16 +3083,16 @@
     "expr": "{\"USDC\": \"usdc\", \"USDT\": \"tether\", \"DAI\": \"dai\"}",
     "reader_count": 7,
     "readers": [
-     "pq1/components.py:292",
-     "pq1/components.py:298",
-     "pq1/components.py:299",
-     "pq1/components.py:308",
+     "pq1/components.py:297",
+     "pq1/components.py:303",
+     "pq1/components.py:304",
+     "pq1/components.py:313",
      "flows/approve_token.py:27",
      "flows/send_token_named.py:50",
      "flows/transfer_token.py:25"
     ],
     "scope": "device",
-    "source": "pq1/components.py:274",
+    "source": "pq1/components.py:279",
     "value": {
      "DAI": "dai",
      "USDC": "usdc",
@@ -2876,56 +3100,45 @@
     }
    },
    "TOKEN_RING_W": {
-    "comment": "white ring stroke width",
-    "reader_count": 10,
+    "comment": "the token ring — the \"ring\" weight of layout.STROKE",
+    "expr": "STROKE[\"ring\"]",
+    "reader_count": 11,
     "readers": [
-     "pq1/components.py:337",
-     "pq1/components.py:630",
-     "pq1/components.py:642",
-     "pq1/loading.py:310",
-     "pq1/loading.py:321",
-     "pq1/status.py:507",
-     "pq1/status.py:560",
-     "screens/confirm/hold_to_confirm.py:139"
+     "pq1/components.py:358",
+     "pq1/components.py:685",
+     "pq1/components.py:697",
+     "pq1/components.py:700",
+     "pq1/loading.py:311",
+     "pq1/loading.py:322",
+     "pq1/status.py:537",
+     "pq1/status.py:600"
     ],
     "scope": "device",
-    "source": "pq1/components.py:329",
+    "source": "pq1/components.py:339",
+    "unit": "px",
     "value": 2.4
    },
    "TRANSITION_GAP": {
     "comment": "chevron centre past each value's edge, per text px",
-    "reader_count": 1,
-    "readers": [
-     "pq1/components.py:574"
-    ],
-    "scope": "device",
-    "source": "pq1/components.py:564",
-    "unit": "px",
-    "value": 0.5
-   },
-   "VECTOR_SYMBOLS": {
-    "comment": "",
-    "expr": "{\"ETH\": eth_mark}",
     "reader_count": 2,
     "readers": [
-     "pq1/components.py:248",
-     "pq1/components.py:249"
+     "pq1/components.py:630",
+     "pq1/layout.py:424"
     ],
     "scope": "device",
-    "source": "pq1/components.py:200",
-    "value": {
-     "ETH": "<pq1.components.eth_mark>"
-    }
+    "source": "pq1/components.py:620",
+    "unit": "px",
+    "value": 0.5
    },
    "VIEW_MORE_CHEV_CY": {
     "comment": "optical centre of question caps on baseline 128",
     "reader_count": 2,
     "readers": [
-     "pq1/components.py:548",
-     "pq1/components.py:551"
+     "pq1/components.py:604",
+     "pq1/components.py:607"
     ],
     "scope": "device",
-    "source": "pq1/components.py:533",
+    "source": "pq1/components.py:585",
     "unit": "px",
     "value": 121.5
    },
@@ -2933,35 +3146,23 @@
     "comment": "chevron centre this far past the text edge",
     "reader_count": 2,
     "readers": [
-     "pq1/components.py:547",
-     "pq1/components.py:550"
+     "pq1/components.py:603",
+     "pq1/components.py:606"
     ],
     "scope": "device",
-    "source": "pq1/components.py:532",
+    "source": "pq1/components.py:584",
     "unit": "px",
     "value": 13
-   },
-   "VIEW_MORE_CX": {
-    "comment": "unit nudged left so text + chevron read centred",
-    "reader_count": 2,
-    "readers": [
-     "pq1/components.py:536",
-     "pq1/components.py:592"
-    ],
-    "scope": "device",
-    "source": "pq1/components.py:531",
-    "unit": "px",
-    "value": 206
    },
    "VIEW_MORE_TEXT": {
     "comment": "",
     "expr": "\"OR VIEW MORE\"",
     "reader_count": 1,
     "readers": [
-     "pq1/components.py:560"
+     "pq1/components.py:616"
     ],
     "scope": "device",
-    "source": "pq1/components.py:529",
+    "source": "pq1/components.py:579",
     "value": "OR VIEW MORE"
    }
   },
@@ -2971,10 +3172,10 @@
     "expr": "105, 129",
     "reader_count": 1,
     "readers": [
-     "pq1/layout.py:274"
+     "pq1/layout.py:338"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:274",
+    "source": "pq1/layout.py:338",
     "unit": "px",
     "value": 129
    },
@@ -2983,46 +3184,46 @@
     "expr": "105, 129",
     "reader_count": 1,
     "readers": [
-     "pq1/layout.py:274"
+     "pq1/layout.py:338"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:274",
+    "source": "pq1/layout.py:338",
     "unit": "px",
     "value": 105
    },
    "BASELINE_Y": {
     "comment": "all bottom-band text baselines",
-    "reader_count": 10,
+    "reader_count": 9,
     "readers": [
-     "pq1/components.py:23",
-     "pq1/components.py:509",
-     "pq1/components.py:542",
-     "pq1/layout.py:374",
-     "pq1/layout.py:396",
-     "pq1/layout.py:405",
+     "pq1/components.py:25",
+     "pq1/components.py:558",
+     "pq1/components.py:598",
+     "pq1/layout.py:506",
+     "pq1/layout.py:551",
      "pq1/loading.py:21",
-     "pq1/loading.py:328"
+     "pq1/loading.py:329",
+     "screens/verdict/sig_error.py:23"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:275",
+    "source": "pq1/layout.py:339",
     "unit": "px",
     "value": 128
    },
    "CENTER_X": {
     "comment": "",
-    "reader_count": 63,
+    "reader_count": 64,
     "readers": [
-     "pq1/components.py:23",
-     "pq1/components.py:509",
-     "pq1/components.py:525",
-     "pq1/components.py:592",
-     "pq1/layout.py:296",
-     "pq1/layout.py:370",
+     "pq1/components.py:25",
+     "pq1/components.py:558",
+     "pq1/components.py:574",
+     "pq1/flow.py:30",
+     "pq1/flow.py:463",
+     "pq1/layout.py:346",
      "pq1/layout.py:373",
-     "pq1/layout.py:374"
+     "pq1/layout.py:497"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:261",
+    "source": "pq1/layout.py:293",
     "unit": "px",
     "value": 214
    },
@@ -3030,102 +3231,119 @@
     "comment": "chain screen: the FIXED air between the caption's",
     "reader_count": 4,
     "readers": [
-     "pq1/layout.py:477",
-     "pq1/layout.py:479",
-     "pq1/layout.py:499",
-     "pq1/layout.py:507"
+     "pq1/layout.py:621",
+     "pq1/layout.py:622",
+     "pq1/layout.py:643",
+     "pq1/layout.py:650"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:289",
+    "source": "pq1/layout.py:366",
     "unit": "px",
     "value": 18
    },
    "CHEV_LEFT": {
-    "comment": "corner chevron slots",
+    "comment": "corner chevron slots ...",
     "expr": "(23.5, 19.0)",
-    "reader_count": 7,
+    "reader_count": 8,
     "readers": [
-     "pq1/components.py:23",
-     "pq1/components.py:503",
+     "pq1/components.py:25",
+     "pq1/components.py:551",
+     "pq1/layout.py:349",
      "screens/pin/pin_entering.py:67",
-     "screens/pin/pin_entering.py:113",
-     "screens/pin/pin_entering.py:422",
-     "screens/pin/pin_entering.py:424",
-     "screens/pin/pin_entering.py:430"
+     "screens/pin/pin_entering.py:117",
+     "screens/pin/pin_entering.py:407",
+     "screens/pin/pin_entering.py:410",
+     "screens/pin/pin_entering.py:417"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:277",
+    "source": "pq1/layout.py:348",
     "value": [
      23.5,
      19.0
     ]
    },
    "CHEV_RIGHT": {
-    "comment": "",
-    "expr": "(403.5, 19.0)",
+    "comment": "... (404.5, 19): the mirror",
+    "expr": "(W - CHEV_LEFT[0], CHEV_LEFT[1])",
     "reader_count": 9,
     "readers": [
-     "pq1/components.py:23",
-     "pq1/components.py:504",
+     "pq1/components.py:25",
+     "pq1/components.py:552",
      "screens/idle/batch_sign.py:19",
-     "screens/idle/batch_sign.py:74",
+     "screens/idle/batch_sign.py:76",
      "screens/idle/unknown_token.py:25",
-     "screens/idle/unknown_token.py:75",
+     "screens/idle/unknown_token.py:77",
      "screens/pin/pin_entering.py:67",
-     "screens/pin/pin_entering.py:114"
+     "screens/pin/pin_entering.py:118"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:278",
+    "source": "pq1/layout.py:349",
     "value": [
-     403.5,
+     404.5,
      19.0
+    ]
+   },
+   "CHEV_STATES": {
+    "comment": "the corner-chevron states (normalize_screens)",
+    "expr": "(\"lr\", \"up\", None)",
+    "reader_count": 2,
+    "readers": [
+     "pq1/layout.py:681",
+     "pq1/layout.py:684"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:790",
+    "value": [
+     "lr",
+     "up",
+     null
     ]
    },
    "CIRCLE_CY": {
     "comment": "main circle vertical centre",
     "reader_count": 64,
     "readers": [
-     "pq1/layout.py:370",
-     "pq1/layout.py:373",
-     "pq1/layout.py:384",
-     "pq1/layout.py:398",
-     "pq1/layout.py:408",
-     "pq1/status.py:174",
-     "pq1/status.py:177",
-     "pq1/procedural/pin_pill.py:16"
+     "pq1/layout.py:497",
+     "pq1/layout.py:504",
+     "pq1/layout.py:519",
+     "pq1/layout.py:531",
+     "pq1/layout.py:538",
+     "pq1/layout.py:554",
+     "pq1/status.py:197",
+     "pq1/status.py:200"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:262",
+    "source": "pq1/layout.py:294",
     "unit": "px",
     "value": 72
    },
    "CIRCLE_R": {
     "comment": "diameter 60, never resizes",
-    "reader_count": 26,
+    "reader_count": 28,
     "readers": [
-     "pq1/layout.py:297",
-     "pq1/layout.py:370",
-     "pq1/layout.py:373",
-     "pq1/layout.py:384",
-     "pq1/layout.py:398",
-     "pq1/layout.py:408",
-     "pq1/layout.py:479",
-     "pq1/layout.py:507"
+     "pq1/layout.py:335",
+     "pq1/layout.py:374",
+     "pq1/layout.py:497",
+     "pq1/layout.py:504",
+     "pq1/layout.py:519",
+     "pq1/layout.py:531",
+     "pq1/layout.py:538",
+     "pq1/layout.py:554"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:263",
+    "source": "pq1/layout.py:295",
     "unit": "px",
     "value": 30
    },
    "COL_LEFT": {
-    "comment": "detail circle column, left",
-    "do_not_port": true,
+    "comment": "detail circle column, left (pixel columns)",
     "expr": "(24, 123)",
-    "reader_count": 0,
-    "readers": [],
-    "scope": "dead",
-    "scope_reason": "no reader found in pq1/, screens/ or flows/",
-    "source": "pq1/layout.py:268",
+    "reader_count": 1,
+    "readers": [
+     "pq1/layout.py:322"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:321",
     "value": [
      24,
      123
@@ -3133,141 +3351,186 @@
    },
    "COL_LEFT_CX": {
     "comment": "",
-    "reader_count": 3,
+    "reader_count": 5,
     "readers": [
-     "pq1/layout.py:402",
-     "screens/verdict/sig_error.py:18",
-     "screens/verdict/sig_error.py:31"
+     "pq1/layout.py:324",
+     "pq1/layout.py:335",
+     "pq1/layout.py:547",
+     "screens/verdict/sig_error.py:23",
+     "screens/verdict/sig_error.py:46"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:270",
+    "source": "pq1/layout.py:323",
     "unit": "px",
     "value": 74
    },
    "COL_RIGHT": {
-    "comment": "detail circle column, right",
+    "comment": "(304, 403)",
     "do_not_port": true,
-    "expr": "(303, 402)",
+    "expr": "(W - 1 - COL_LEFT[1], W - 1 - COL_LEFT[0])",
     "reader_count": 0,
     "readers": [],
     "scope": "dead",
     "scope_reason": "no reader found in pq1/, screens/ or flows/",
-    "source": "pq1/layout.py:269",
+    "source": "pq1/layout.py:322",
     "value": [
-     303,
-     402
+     304,
+     403
     ]
    },
    "COL_RIGHT_CX": {
-    "comment": "",
+    "comment": "354",
+    "expr": "W - COL_LEFT_CX",
     "reader_count": 3,
     "readers": [
-     "pq1/layout.py:402",
-     "screens/verdict/sig_error.py:18",
-     "screens/verdict/sig_error.py:31"
+     "pq1/layout.py:547",
+     "screens/verdict/sig_error.py:23",
+     "screens/verdict/sig_error.py:46"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:271",
+    "source": "pq1/layout.py:324",
     "unit": "px",
-    "value": 352
+    "value": 354
    },
    "CONFIRM_CIRCLE_X": {
-    "comment": "confirm circle right of centre ...",
-    "reader_count": 1,
-    "readers": [
-     "pq1/layout.py:384"
-    ],
-    "scope": "device",
-    "source": "pq1/layout.py:287",
+    "comment": "... and the disc, CHAIN_GAP past the prompt's edge",
+    "do_not_port": true,
+    "reader_count": 0,
+    "readers": [],
+    "scope": "dead",
+    "scope_reason": "no reader found in pq1/, screens/ or flows/",
+    "source": "pq1/layout.py:365",
     "unit": "px",
-    "value": 291
+    "value": 297
    },
    "CONFIRM_INDEX": {
     "comment": "",
     "reader_count": 3,
     "readers": [
-     "pq1/layout.py:608",
-     "pq1/layout.py:631",
-     "pq1/layout.py:636"
+     "pq1/layout.py:825",
+     "pq1/layout.py:848",
+     "pq1/layout.py:853"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:285",
+    "source": "pq1/layout.py:356",
     "value": 5
    },
    "CONFIRM_MIN_DETAILS": {
     "comment": "",
     "reader_count": 3,
     "readers": [
-     "pq1/layout.py:607",
-     "pq1/layout.py:628",
-     "pq1/layout.py:637"
+     "pq1/layout.py:824",
+     "pq1/layout.py:845",
+     "pq1/layout.py:854"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:284",
+    "source": "pq1/layout.py:355",
     "value": 7
    },
    "CONFIRM_TEXT_X": {
-    "comment": "... prompt centred to its left (the CHAIN nudges)",
-    "reader_count": 1,
-    "readers": [
-     "pq1/layout.py:386"
-    ],
-    "scope": "device",
-    "source": "pq1/layout.py:288",
+    "comment": "prompt centre ...",
+    "do_not_port": true,
+    "reader_count": 0,
+    "readers": [],
+    "scope": "dead",
+    "scope_reason": "no reader found in pq1/, screens/ or flows/",
+    "source": "pq1/layout.py:364",
     "unit": "px",
     "value": 175
    },
    "DETAIL_TEXT_CX": {
-    "comment": "text centre opposite the circle",
-    "expr": "{\"left\": 263, \"right\": 163}",
-    "reader_count": 3,
+    "comment": "text centre opposite the",
+    "expr": "{\"left\": 263, \"right\": W - 263}",
+    "reader_count": 5,
     "readers": [
-     "pq1/layout.py:407",
-     "screens/verdict/sig_error.py:19",
+     "pq1/layout.py:334",
+     "pq1/layout.py:335",
+     "pq1/layout.py:548",
+     "screens/verdict/sig_error.py:24",
      "screens/verdict/sig_error.py:67"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:272",
+    "source": "pq1/layout.py:325",
     "value": {
      "left": 263,
-     "right": 163
+     "right": 165
     }
+   },
+   "GO_BACK_CX": {
+    "comment": "222: the mirror, chevron before it",
+    "expr": "2 * CENTER_X - VIEW_MORE_CX",
+    "reader_count": 3,
+    "readers": [
+     "pq1/components.py:25",
+     "pq1/components.py:591",
+     "pq1/components.py:597"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:346",
+    "unit": "px",
+    "value": 222
    },
    "H": {
     "comment": "",
     "expr": "428, 142",
-    "reader_count": 33,
+    "reader_count": 34,
     "readers": [
      "pq1/__init__.py:38",
      "pq1/canvas.py:14",
      "pq1/canvas.py:20",
-     "pq1/layout.py:256",
+     "pq1/components.py:164",
+     "pq1/layout.py:288",
      "pq1/procedural/__init__.py:12",
-     "pq1/procedural/blind.py:20",
-     "pq1/procedural/blind.py:34",
-     "pq1/procedural/blind.py:36"
+     "pq1/procedural/blind.py:25",
+     "pq1/procedural/blind.py:47"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:256",
+    "source": "pq1/layout.py:288",
     "unit": "px",
     "value": 142
    },
    "MARGIN": {
     "comment": "",
     "do_not_port": false,
-    "reader_count": 1,
+    "reader_count": 4,
     "readers": [
-     "pq1/layout.py:492"
+     "pq1/layout.py:334",
+     "pq1/layout.py:335",
+     "pq1/layout.py:336",
+     "pq1/layout.py:635"
     ],
     "scope": "contract",
     "scope_reason": "the static grid margin; the moving art is not clamped to it (audit X6-08)",
-    "source": "pq1/layout.py:258",
+    "source": "pq1/layout.py:290",
     "unit": "px",
     "value": 12
    },
+   "STROKE": {
+    "comment": "",
+    "expr": "dict(hair=2.0, ring=2.4, sign=4.5, heavy=5.4)",
+    "reader_count": 20,
+    "readers": [
+     "pq1/components.py:25",
+     "pq1/components.py:339",
+     "pq1/components.py:519",
+     "pq1/status.py:38",
+     "pq1/procedural/die3d.py:10",
+     "pq1/procedural/die3d.py:30",
+     "pq1/procedural/die3d.py:100",
+     "pq1/procedural/die3d.py:131"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:313",
+    "value": {
+     "hair": 2.0,
+     "heavy": 5.4,
+     "ring": 2.4,
+     "sign": 4.5
+    }
+   },
    "SUP": {
     "comment": "supersample factor; all APIs take UI pixels",
-    "reader_count": 96,
+    "reader_count": 102,
     "readers": [
      "pq1/__init__.py:38",
      "pq1/canvas.py:14",
@@ -3279,7 +3542,7 @@
      "pq1/canvas.py:50"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:257",
+    "source": "pq1/layout.py:289",
     "unit": "factor",
     "value": 3
    },
@@ -3289,11 +3552,11 @@
     "expr": "89, 339",
     "reader_count": 1,
     "readers": [
-     "pq1/layout.py:266"
+     "pq1/layout.py:315"
     ],
     "scope": "contract",
     "scope_reason": "a stated bound; nothing clamps to it (audit X6-02)",
-    "source": "pq1/layout.py:266",
+    "source": "pq1/layout.py:315",
     "value": 339
    },
    "SWEEP_X_MIN": {
@@ -3302,42 +3565,65 @@
     "expr": "89, 339",
     "reader_count": 1,
     "readers": [
-     "pq1/layout.py:266"
+     "pq1/layout.py:315"
     ],
     "scope": "contract",
     "scope_reason": "a stated bound; nothing clamps to it (audit X6-02)",
-    "source": "pq1/layout.py:266",
+    "source": "pq1/layout.py:315",
     "value": 89
    },
    "TEXT_CY": {
     "comment": "vertical centre of detail text blocks",
     "reader_count": 6,
     "readers": [
-     "pq1/layout.py:334",
-     "pq1/layout.py:339",
-     "pq1/layout.py:386",
-     "screens/verdict/sig_error.py:19",
-     "screens/verdict/sig_error.py:85",
-     "screens/verdict/sig_error.py:89"
+     "pq1/layout.py:461",
+     "pq1/layout.py:466",
+     "pq1/layout.py:520",
+     "screens/verdict/sig_error.py:24",
+     "screens/verdict/sig_error.py:87",
+     "screens/verdict/sig_error.py:91"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:264",
+    "source": "pq1/layout.py:296",
     "unit": "px",
     "value": 72.5
+   },
+   "TEXT_REGION_FULL_W": {
+    "comment": "a value screen: no circle to clear",
+    "expr": "W - 2 * MARGIN",
+    "reader_count": 1,
+    "readers": [
+     "pq1/layout.py:445"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:336",
+    "value": 404
+   },
+   "TEXT_REGION_W": {
+    "comment": "",
+    "expr": "2 * min(W - MARGIN - DETAIL_TEXT_CX[\"left\"], DETAIL_TEXT_CX[\"left\"] - (COL_LEFT_CX + CIRCLE_R + MARGIN))",
+    "reader_count": 1,
+    "readers": [
+     "pq1/layout.py:445"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:334",
+    "value": 294
    },
    "VALUE_PARK_X": {
     "comment": "... its token parked off the panel to the left",
     "expr": "-2 * CIRCLE_R",
-    "reader_count": 5,
+    "reader_count": 6,
     "readers": [
-     "pq1/layout.py:178",
-     "pq1/layout.py:391",
+     "pq1/layout.py:186",
+     "pq1/layout.py:525",
      "pq1/procedural/burst.py:23",
-     "pq1/procedural/burst.py:167",
-     "pq1/procedural/burst.py:190"
+     "pq1/procedural/burst.py:71",
+     "pq1/procedural/burst.py:173",
+     "pq1/procedural/burst.py:196"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:297",
+    "source": "pq1/layout.py:374",
     "unit": "px",
     "value": -60
    },
@@ -3346,29 +3632,61 @@
     "expr": "CENTER_X",
     "reader_count": 1,
     "readers": [
-     "pq1/layout.py:391"
+     "pq1/layout.py:525"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:296",
+    "source": "pq1/layout.py:373",
     "unit": "px",
     "value": 214
+   },
+   "VERDICT_BOX": {
+    "comment": "",
+    "reader_count": 12,
+    "readers": [
+     "pq1/procedural/warning_triangle.py:11",
+     "pq1/procedural/warning_triangle.py:20",
+     "screens/verdict/factory_signing.py:26",
+     "screens/verdict/factory_signing.py:38",
+     "screens/verdict/factory_signing.py:55",
+     "screens/verdict/padlock.py:26",
+     "screens/verdict/padlock.py:54",
+     "screens/verdict/rng_failed.py:29"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:305",
+    "value": 64
+   },
+   "VIEW_MORE_CX": {
+    "comment": "text centre, chevron after it: nudged left",
+    "reader_count": 5,
+    "readers": [
+     "pq1/components.py:26",
+     "pq1/components.py:590",
+     "pq1/components.py:597",
+     "pq1/layout.py:346",
+     "pq1/layout.py:505"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:345",
+    "unit": "px",
+    "value": 206
    },
    "W": {
     "comment": "",
     "expr": "428, 142",
-    "reader_count": 25,
+    "reader_count": 34,
     "readers": [
      "pq1/__init__.py:38",
      "pq1/canvas.py:14",
      "pq1/canvas.py:20",
-     "pq1/layout.py:256",
-     "pq1/layout.py:492",
-     "pq1/procedural/blind.py:20",
-     "pq1/procedural/blind.py:36",
-     "pq1/procedural/blind.py:39"
+     "pq1/layout.py:288",
+     "pq1/layout.py:322",
+     "pq1/layout.py:324",
+     "pq1/layout.py:325",
+     "pq1/layout.py:334"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:256",
+    "source": "pq1/layout.py:288",
     "unit": "px",
     "value": 428
    },
@@ -3377,12 +3695,12 @@
     "expr": "((88, 98), (272, 282))",
     "reader_count": 3,
     "readers": [
-     "pq1/layout.py:194",
-     "pq1/layout.py:308",
-     "pq1/layout.py:356"
+     "pq1/layout.py:206",
+     "pq1/layout.py:385",
+     "pq1/layout.py:483"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:305",
+    "source": "pq1/layout.py:382",
     "value": [
      [
       88,
@@ -3395,26 +3713,29 @@
     ]
    },
    "WORDS_MAX": {
-    "comment": "",
+    "comment": "words on ONE page of the grid",
     "expr": "len(WORDS_COLS) * len(WORDS_ROWS)",
-    "reader_count": 2,
+    "reader_count": 4,
     "readers": [
-     "pq1/layout.py:547",
-     "pq1/layout.py:549"
+     "pq1/layout.py:530",
+     "pq1/layout.py:536",
+     "pq1/layout.py:537",
+     "pq1/layout.py:715"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:308",
+    "source": "pq1/layout.py:385",
     "value": 8
    },
    "WORDS_NUM_ALPHA": {
     "comment": "the numbers' grey (the design's ~50 % GRAY)",
+    "expr": "colors.INK_MUTED",
     "reader_count": 2,
     "readers": [
-     "pq1/layout.py:201",
-     "pq1/layout.py:354"
+     "pq1/layout.py:213",
+     "pq1/layout.py:481"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:307",
+    "source": "pq1/layout.py:384",
     "unit": "alpha",
     "value": 0.5
    },
@@ -3423,13 +3744,13 @@
     "expr": "(32, 58, 84, 110)",
     "reader_count": 4,
     "readers": [
-     "pq1/layout.py:199",
-     "pq1/layout.py:308",
-     "pq1/layout.py:353",
-     "pq1/layout.py:357"
+     "pq1/layout.py:211",
+     "pq1/layout.py:385",
+     "pq1/layout.py:480",
+     "pq1/layout.py:484"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:304",
+    "source": "pq1/layout.py:381",
     "value": [
      32,
      58,
@@ -3439,19 +3760,33 @@
    },
    "WORDS_SIZE": {
     "comment": "the words' and numbers' one size: the Default tier",
-    "reader_count": 6,
+    "expr": "typography.SIZE_BODY",
+    "reader_count": 11,
     "readers": [
-     "pq1/layout.py:202",
-     "pq1/layout.py:358",
-     "pq1/layout.py:359",
-     "pq1/layout.py:360",
-     "pq1/layout.py:361",
-     "pq1/layout.py:552"
+     "pq1/layout.py:214",
+     "pq1/layout.py:485",
+     "pq1/layout.py:486",
+     "pq1/layout.py:487",
+     "pq1/layout.py:488",
+     "pq1/layout.py:717",
+     "screens/pin/check_word.py:9",
+     "screens/pin/check_word.py:34"
     ],
     "scope": "device",
-    "source": "pq1/layout.py:306",
+    "source": "pq1/layout.py:383",
     "unit": "px",
     "value": 22
+   },
+   "WORDS_TOTAL_MAX": {
+    "comment": "a longer list pages in WORDS_MAX (a 24-word",
+    "reader_count": 2,
+    "readers": [
+     "pq1/layout.py:711",
+     "pq1/layout.py:713"
+    ],
+    "scope": "device",
+    "source": "pq1/layout.py:386",
+    "value": 24
    }
   },
   "loading": {
@@ -3459,13 +3794,13 @@
     "comment": "the stock orbit: whole turns before the spiral (a signature)",
     "reader_count": 4,
     "readers": [
-     "pq1/loading.py:39",
-     "pq1/status.py:82",
-     "pq1/status.py:422",
+     "pq1/loading.py:40",
+     "pq1/status.py:88",
+     "pq1/status.py:452",
      "screens/fx/explosion.py:33"
     ],
     "scope": "device",
-    "source": "pq1/loading.py:26",
+    "source": "pq1/loading.py:27",
     "unit": "turns",
     "value": 3
    },
@@ -3473,12 +3808,12 @@
     "comment": "a loading that must endure (the firmware reboot, the wipe):",
     "reader_count": 3,
     "readers": [
-     "pq1/status.py:82",
-     "screens/verdict/wipe.py:34",
+     "pq1/status.py:88",
+     "screens/verdict/wipe.py:32",
      "flows/firmware/__init__.py:55"
     ],
     "scope": "device",
-    "source": "pq1/loading.py:27",
+    "source": "pq1/loading.py:28",
     "unit": "turns",
     "value": 5
    },
@@ -3487,10 +3822,10 @@
     "frames_14": 11.9,
     "reader_count": 1,
     "readers": [
-     "pq1/loading.py:39"
+     "pq1/loading.py:40"
     ],
     "scope": "device",
-    "source": "pq1/loading.py:29",
+    "source": "pq1/loading.py:30",
     "under_two_frames": false,
     "unit": "ms",
     "value": 850
@@ -3501,29 +3836,29 @@
     "comment": "the entrance scale starts here and settles on 1.0",
     "reader_count": 2,
     "readers": [
-     "pq1/motion.py:348",
-     "pq1/motion.py:350"
+     "pq1/motion.py:436",
+     "pq1/motion.py:438"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:344",
+    "source": "pq1/motion.py:432",
     "value": 0.97
    },
    "ARRIVE_MS": {
     "comment": "the verdict sign's entrance (fade + arrive) — never longer",
     "frames_14": 4.2,
-    "reader_count": 24,
+    "reader_count": 27,
     "readers": [
-     "pq1/status.py:528",
-     "pq1/status.py:536",
+     "pq1/status.py:568",
+     "pq1/status.py:576",
      "pq1/verdict.py:16",
      "pq1/verdict.py:26",
      "pq1/verdict.py:36",
      "pq1/verdict.py:42",
-     "screens/confirm/hold_to_confirm.py:47",
+     "screens/confirm/hold_to_confirm.py:51",
      "screens/verdict/duress_differ.py:34"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:343",
+    "source": "pq1/motion.py:431",
     "under_two_frames": false,
     "unit": "ms",
     "value": 300
@@ -3531,16 +3866,14 @@
    "BAND_FADE_MS": {
     "comment": "... and fades away / back in over this",
     "frames_14": 4.2,
-    "reader_count": 5,
+    "reader_count": 3,
     "readers": [
-     "pq1/motion.py:267",
-     "pq1/motion.py:272",
-     "pq1/motion.py:273",
-     "pq1/motion.py:274",
-     "pq1/motion.py:280"
+     "pq1/motion.py:343",
+     "pq1/motion.py:347",
+     "pq1/motion.py:353"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:261",
+    "source": "pq1/motion.py:337",
     "under_two_frames": false,
     "unit": "ms",
     "value": 300
@@ -3548,19 +3881,18 @@
    "BAND_SWAP_MS": {
     "comment": "confirm band: each message holds this long",
     "frames_14": 70.0,
-    "reader_count": 8,
+    "reader_count": 7,
     "readers": [
-     "pq1/flow.py:411",
-     "pq1/motion.py:262",
-     "pq1/motion.py:267",
-     "pq1/motion.py:270",
-     "pq1/motion.py:271",
-     "pq1/motion.py:273",
-     "pq1/motion.py:275",
-     "pq1/motion.py:317"
+     "pq1/flow.py:443",
+     "pq1/motion.py:338",
+     "pq1/motion.py:343",
+     "pq1/motion.py:346",
+     "pq1/motion.py:347",
+     "pq1/motion.py:348",
+     "pq1/motion.py:403"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:260",
+    "source": "pq1/motion.py:336",
     "under_two_frames": false,
     "unit": "ms",
     "value": 5000
@@ -3570,11 +3902,11 @@
     "frames_14": 28.0,
     "reader_count": 2,
     "readers": [
-     "pq1/status.py:348",
-     "pq1/status.py:394"
+     "pq1/status.py:380",
+     "pq1/status.py:424"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:295",
+    "source": "pq1/motion.py:368",
     "under_two_frames": false,
     "unit": "ms",
     "value": 2000
@@ -3585,11 +3917,11 @@
     "reader_count": 3,
     "readers": [
      "pq1/flow.py:31",
-     "pq1/flow.py:474",
-     "pq1/motion.py:238"
+     "pq1/flow.py:537",
+     "pq1/motion.py:291"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:212",
+    "source": "pq1/motion.py:265",
     "under_two_frames": true,
     "unit": "ms",
     "value": 60.0
@@ -3600,42 +3932,103 @@
     "reader_count": 4,
     "readers": [
      "pq1/flow.py:31",
-     "pq1/flow.py:474",
+     "pq1/flow.py:537",
      "screens/idle/batch_sign.py:60",
      "screens/idle/unknown_token.py:62"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:213",
+    "source": "pq1/motion.py:266",
     "under_two_frames": false,
     "unit": "ms",
     "value": 150.0
    },
-   "CHEV_HINT_PERIOD_MS": {
-    "comment": "hero hint cycle; confirm screens run the",
-    "frames_14": 50.4,
+   "CHEV_BOB_PX": {
+    "comment": "the hint bob's amplitude: the chevrons lift this",
     "reader_count": 1,
     "readers": [
-     "pq1/motion.py:312"
+     "pq1/motion.py:413"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:308",
+    "source": "pq1/motion.py:388",
+    "value": 4
+   },
+   "CHEV_HINT_BOB_MS": {
+    "comment": "... and bob once while up, 17 F",
+    "frames_14": 17.0,
+    "reader_count": 4,
+    "readers": [
+     "pq1/motion.py:400",
+     "pq1/motion.py:410",
+     "pq1/motion.py:412",
+     "pq1/motion.py:414"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:387",
     "under_two_frames": false,
     "unit": "ms",
-    "value": 3600
+    "value": 1214
+   },
+   "CHEV_HINT_PERIOD_MS": {
+    "comment": "hero hint cycle, 50 F; confirm screens run the",
+    "frames_14": 50.0,
+    "reader_count": 2,
+    "readers": [
+     "pq1/motion.py:396",
+     "pq1/motion.py:402"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:383",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 3571
+   },
+   "CHEV_HINT_START_MS": {
+    "comment": "the first hint waits this long into the idle, 20 F",
+    "frames_14": 20.0,
+    "reader_count": 3,
+    "readers": [
+     "pq1/motion.py:401",
+     "pq1/motion.py:407",
+     "pq1/motion.py:409"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:385",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 1429
+   },
+   "CHEV_HINT_TURN_MS": {
+    "comment": "the chevrons turn up (and back) over this, 5 F",
+    "frames_14": 5.0,
+    "reader_count": 4,
+    "readers": [
+     "pq1/motion.py:400",
+     "pq1/motion.py:410",
+     "pq1/motion.py:412",
+     "pq1/motion.py:413"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:386",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 357
    },
    "CHORD_MS": {
     "comment": "both buttons: a press on one side within this of the other",
     "frames_14": 2.1,
-    "reader_count": 5,
+    "reader_count": 9,
     "readers": [
-     "pq1/driver.py:376",
-     "pq1/driver.py:395",
+     "pq1/driver.py:382",
+     "pq1/driver.py:401",
+     "screens/pin/check_word.py:20",
+     "screens/pin/check_word.py:35",
+     "screens/pin/check_word.py:127",
+     "screens/pin/check_word.py:143",
      "screens/pin/pin_entering.py:35",
-     "screens/pin/pin_entering.py:68",
-     "screens/pin/pin_entering.py:173"
+     "screens/pin/pin_entering.py:68"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:169",
+    "source": "pq1/motion.py:193",
     "under_two_frames": false,
     "unit": "ms",
     "value": 150
@@ -3647,14 +4040,27 @@
     "frames_14": 140.0,
     "reader_count": 1,
     "readers": [
-     "pq1/flow.py:357"
+     "pq1/flow.py:385"
     ],
     "scope": "demo",
     "scope_reason": "demo auto-advance",
-    "source": "pq1/motion.py:262",
+    "source": "pq1/motion.py:338",
     "under_two_frames": false,
     "unit": "ms",
     "value": 10000
+   },
+   "DEBOUNCE_MS": {
+    "comment": "scope: DEVICE. An edge within this of the previous edge",
+    "do_not_port": false,
+    "frames_14": 0.4,
+    "reader_count": 0,
+    "readers": [],
+    "scope": "spec-only",
+    "scope_reason": "contact-bounce rejection on a raw button edge: the reference driver is handed clean edges, so nothing in the Python filters them — the port (or the HAL, or the button itself) implements it from the spec",
+    "source": "pq1/motion.py:198",
+    "under_two_frames": true,
+    "unit": "ms",
+    "value": 30
    },
    "DETAIL_DWELL": {
     "comment": "detail screens idle time",
@@ -3663,12 +4069,12 @@
     "reader_count": 3,
     "readers": [
      "pq1/flow.py:31",
-     "pq1/flow.py:359",
-     "pq1/motion.py:279"
+     "pq1/flow.py:387",
+     "pq1/motion.py:352"
     ],
     "scope": "demo",
     "scope_reason": "demo auto-advance",
-    "source": "pq1/motion.py:154",
+    "source": "pq1/motion.py:174",
     "under_two_frames": false,
     "unit": "ms",
     "value": 4100
@@ -3678,51 +4084,52 @@
     "frames_14": 3.5,
     "reader_count": 5,
     "readers": [
-     "pq1/driver.py:378",
-     "pq1/driver.py:405",
+     "pq1/driver.py:384",
+     "pq1/driver.py:411",
      "screens/pin/pin_entering.py:36",
      "screens/pin/pin_entering.py:68",
-     "screens/pin/pin_entering.py:173"
+     "screens/pin/pin_entering.py:176"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:168",
+    "source": "pq1/motion.py:192",
     "under_two_frames": false,
     "unit": "ms",
     "value": 250
    },
-   "ENTER_MS": {
-    "comment": "a film's side entrance (off-panel -> centre) at KIOSK pace:",
-    "do_not_port": false,
-    "frames_14": 11.2,
-    "reader_count": 3,
-    "readers": [
-     "pq1/procedural/burst.py:24",
-     "pq1/procedural/burst.py:83",
-     "pq1/procedural/burst.py:89"
-    ],
-    "scope": "spec-only",
-    "scope_reason": "the explosion's side entrance; no live flow sets enter=, so the path is exercised only by the screens library",
-    "source": "pq1/motion.py:125",
-    "under_two_frames": false,
-    "unit": "ms",
-    "value": 800
-   },
    "FADE_MS": {
     "comment": "the scripted serial fade: text and trail away before a",
     "frames_14": 2.5,
-    "reader_count": 5,
+    "reader_count": 9,
     "readers": [
-     "pq1/flow.py:322",
-     "pq1/flow.py:329",
-     "screens/confirm/hold_to_confirm.py:46",
-     "screens/confirm/hold_to_confirm.py:104",
+     "pq1/flow.py:350",
+     "pq1/flow.py:357",
+     "screens/confirm/hold_to_confirm.py:16",
+     "screens/confirm/hold_to_confirm.py:47",
+     "screens/confirm/hold_to_confirm.py:50",
+     "screens/confirm/hold_to_confirm.py:116",
+     "screens/confirm/hold_to_confirm.py:120",
      "screens/confirm/hold_to_confirm.py:122"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:133",
+    "source": "pq1/motion.py:145",
     "under_two_frames": false,
     "unit": "ms",
     "value": 180
+   },
+   "FRAME_MS": {
+    "comment": "this far apart (71.43 ms). Durations that should",
+    "expr": "1000 / PANEL_FPS",
+    "frames_14": 1.0,
+    "reader_count": 2,
+    "readers": [
+     "pq1/motion.py:426",
+     "pq1/motion.py:429"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:138",
+    "under_two_frames": true,
+    "unit": "ms",
+    "value": 71.42857142857143
    },
    "HERO_DWELL": {
     "comment": "hero screens idle time (one full sweep)",
@@ -3731,11 +4138,11 @@
     "reader_count": 2,
     "readers": [
      "pq1/flow.py:31",
-     "pq1/flow.py:358"
+     "pq1/flow.py:386"
     ],
     "scope": "demo",
     "scope_reason": "demo auto-advance — on the device nothing moves without a press",
-    "source": "pq1/motion.py:153",
+    "source": "pq1/motion.py:173",
     "under_two_frames": false,
     "unit": "ms",
     "value": 5000
@@ -3745,17 +4152,17 @@
     "frames_14": 28.0,
     "reader_count": 17,
     "readers": [
-     "pq1/driver.py:16",
-     "pq1/driver.py:506",
-     "pq1/driver.py:512",
+     "pq1/driver.py:17",
+     "pq1/driver.py:539",
      "pq1/flow.py:20",
      "pq1/flow.py:32",
-     "pq1/flow.py:264",
-     "pq1/flow.py:270",
-     "pq1/flow.py:375"
+     "pq1/flow.py:286",
+     "pq1/flow.py:292",
+     "pq1/flow.py:403",
+     "pq1/flow.py:404"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:171",
+    "source": "pq1/motion.py:195",
     "under_two_frames": false,
     "unit": "ms",
     "value": 2000
@@ -3766,15 +4173,15 @@
     "reader_count": 7,
     "readers": [
      "pq1/flow.py:32",
-     "pq1/flow.py:253",
-     "pq1/flow.py:333",
-     "pq1/motion.py:186",
-     "pq1/motion.py:195",
-     "screens/confirm/hold_to_confirm.py:46",
-     "screens/confirm/hold_to_confirm.py:103"
+     "pq1/flow.py:275",
+     "pq1/flow.py:361",
+     "pq1/motion.py:219",
+     "pq1/motion.py:228",
+     "screens/confirm/hold_to_confirm.py:50",
+     "screens/confirm/hold_to_confirm.py:121"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:173",
+    "source": "pq1/motion.py:197",
     "under_two_frames": false,
     "unit": "ms",
     "value": 200
@@ -3783,14 +4190,11 @@
     "comment": "demo-loop pace; the Sim default",
     "do_not_port": true,
     "expr": "dict(response=0.55, damping=1.0)",
-    "reader_count": 6,
+    "reader_count": 3,
     "readers": [
      "pq1/flow.py:32",
-     "pq1/flow.py:47",
-     "pq1/flow.py:510",
-     "pq1/motion.py:115",
-     "pq1/procedural/burst.py:168",
-     "screens/fx/explosion.py:14"
+     "pq1/flow.py:57",
+     "pq1/flow.py:573"
     ],
     "scope": "demo",
     "scope_reason": "demo-loop spring pace — the device uses NAV",
@@ -3803,29 +4207,43 @@
    "LEFT": {
     "comment": "the two buttons (pq1.driver re-exports them)",
     "expr": "\"left\", \"right\"",
-    "reader_count": 22,
+    "reader_count": 23,
     "readers": [
-     "pq1/driver.py:38",
-     "pq1/driver.py:96",
-     "pq1/driver.py:97",
+     "pq1/driver.py:5",
+     "pq1/driver.py:39",
      "pq1/driver.py:98",
      "pq1/driver.py:99",
-     "pq1/driver.py:146",
-     "pq1/driver.py:241",
-     "pq1/driver.py:281"
+     "pq1/driver.py:100",
+     "pq1/driver.py:101",
+     "pq1/driver.py:148",
+     "pq1/driver.py:245"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:175",
+    "source": "pq1/motion.py:208",
     "value": "left"
+   },
+   "LEVEL_EPS": {
+    "comment": "a hold fill's LEVEL (0..1) under this draws nothing, over",
+    "reader_count": 4,
+    "readers": [
+     "pq1/components.py:745",
+     "pq1/components.py:751",
+     "pq1/motion.py:254",
+     "pq1/procedural/pin_slots.py:90"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:205",
+    "unit": "level",
+    "value": 0.003
    },
    "MAX_GAP": {
     "comment": "px cap between consecutive links",
     "reader_count": 1,
     "readers": [
-     "pq1/motion.py:234"
+     "pq1/motion.py:287"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:211",
+    "source": "pq1/motion.py:264",
     "unit": "px",
     "value": 30.0
    },
@@ -3837,7 +4255,7 @@
     "readers": [],
     "scope": "dead",
     "scope_reason": "a pre-spring span estimate; nothing reads it (audit D4-12)",
-    "source": "pq1/motion.py:151",
+    "source": "pq1/motion.py:171",
     "under_two_frames": false,
     "unit": "ms",
     "value": 900
@@ -3845,9 +4263,16 @@
    "NAV": {
     "comment": "hardware button pace (Apple \"move\")",
     "expr": "dict(response=0.40, damping=1.0)",
-    "reader_count": 1,
+    "reader_count": 8,
     "readers": [
-     "pq1/driver.py:54"
+     "pq1/driver.py:56",
+     "pq1/motion.py:115",
+     "pq1/motion.py:125",
+     "pq1/procedural/burst.py:24",
+     "pq1/procedural/burst.py:71",
+     "pq1/procedural/burst.py:174",
+     "pq1/procedural/burst.py:197",
+     "screens/fx/explosion.py:14"
     ],
     "scope": "device",
     "source": "pq1/motion.py:111",
@@ -3859,15 +4284,17 @@
    "OSC_TAU": {
     "comment": "easing constant chasing the sweep target",
     "frames_14": 2.5,
-    "reader_count": 4,
+    "reader_count": 6,
     "readers": [
      "pq1/flow.py:32",
-     "pq1/flow.py:449",
+     "pq1/flow.py:468",
+     "pq1/flow.py:508",
+     "pq1/motion.py:234",
      "screens/idle/batch_sign.py:58",
      "screens/idle/unknown_token.py:60"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:207",
+    "source": "pq1/motion.py:260",
     "under_two_frames": false,
     "unit": "ms",
     "value": 180.0
@@ -3876,17 +4303,15 @@
     "comment": "... the showing page fades away / the next in over this",
     "expr": "BAND_FADE_MS",
     "frames_14": 4.2,
-    "reader_count": 6,
+    "reader_count": 4,
     "readers": [
-     "pq1/flow.py:366",
-     "pq1/motion.py:286",
-     "pq1/motion.py:287",
-     "pq1/motion.py:290",
-     "pq1/motion.py:291",
-     "pq1/motion.py:292"
+     "pq1/flow.py:394",
+     "pq1/motion.py:359",
+     "pq1/motion.py:360",
+     "pq1/motion.py:365"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:280",
+    "source": "pq1/motion.py:353",
     "under_two_frames": false,
     "unit": "ms",
     "value": 300
@@ -3898,46 +4323,107 @@
     "frames_14": 57.4,
     "reader_count": 1,
     "readers": [
-     "pq1/flow.py:367"
+     "pq1/flow.py:395"
     ],
     "scope": "demo",
     "scope_reason": "demo page-turn clock — on the device only a tap turns a page",
-    "source": "pq1/motion.py:279",
+    "source": "pq1/motion.py:352",
     "under_two_frames": false,
     "unit": "ms",
     "value": 4100
    },
-   "PRESS_FEEDBACK_MS": {
-    "comment": "press-down acknowledgment nudge on the pressed-side chevron",
-    "do_not_port": false,
-    "frames_14": 1.7,
+   "PANEL_FPS": {
+    "comment": "the NV3007's frame rate: every device frame is",
     "reader_count": 1,
     "readers": [
-     "pq1/driver.py:32"
+     "pq1/motion.py:138"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:137",
+    "value": 14
+   },
+   "PIN_HOLD_MS": {
+    "comment": "... the PIN screens' shorter hold (a PIN",
+    "expr": "round(4 * FRAME_MS)",
+    "frames_14": 4.0,
+    "reader_count": 4,
+    "readers": [
+     "screens/verdict/duress_differ.py:34",
+     "screens/verdict/duress_differ.py:51",
+     "screens/verdict/pin_mismatch.py:31",
+     "screens/verdict/pin_mismatch.py:51"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:429",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 286
+   },
+   "PRESS_FEEDBACK_MS": {
+    "comment": "press-down acknowledgment nudge on the pressed-side chevron —",
+    "do_not_port": false,
+    "frames_14": 2.0,
+    "reader_count": 1,
+    "readers": [
+     "pq1/driver.py:33"
     ],
     "scope": "spec-only",
     "scope_reason": "the press-down chevron nudge: specified in DESIGN.md § Input, rendered by nothing in the Python — the port implements it from the spec",
-    "source": "pq1/motion.py:166",
-    "under_two_frames": true,
+    "source": "pq1/motion.py:186",
+    "under_two_frames": false,
     "unit": "ms",
-    "value": 120
+    "value": 145
+   },
+   "RESULT_FADE_MS": {
+    "comment": "a film's RESULT lands as an ENTRANCE: the check or the",
+    "frames_14": 4.2,
+    "reader_count": 6,
+    "readers": [
+     "pq1/loading.py:22",
+     "pq1/loading.py:169",
+     "pq1/loading.py:170",
+     "pq1/status.py:110",
+     "pq1/status.py:546",
+     "pq1/status.py:549"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:163",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 300
+   },
+   "RESULT_LAG_MS": {
+    "comment": "... and the caption follows this far behind the glyph,",
+    "frames_14": 2.0,
+    "reader_count": 4,
+    "readers": [
+     "pq1/loading.py:22",
+     "pq1/loading.py:170",
+     "pq1/status.py:110",
+     "pq1/status.py:548"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:168",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 145
    },
    "RIGHT": {
     "comment": "the two buttons (pq1.driver re-exports them)",
     "expr": "\"left\", \"right\"",
-    "reader_count": 28,
+    "reader_count": 31,
     "readers": [
-     "pq1/driver.py:38",
-     "pq1/driver.py:96",
-     "pq1/driver.py:97",
+     "pq1/driver.py:4",
+     "pq1/driver.py:39",
      "pq1/driver.py:98",
      "pq1/driver.py:99",
-     "pq1/driver.py:144",
-     "pq1/driver.py:226",
-     "pq1/driver.py:241"
+     "pq1/driver.py:100",
+     "pq1/driver.py:101",
+     "pq1/driver.py:146",
+     "pq1/driver.py:230"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:175",
+    "source": "pq1/motion.py:208",
     "value": "right"
    },
    "SEED_ART": {
@@ -3945,23 +4431,25 @@
     "reader_count": 4,
     "readers": [
      "pq1/loading.py:22",
-     "pq1/loading.py:105",
-     "pq1/loading.py:126",
-     "pq1/loading.py:244"
+     "pq1/loading.py:106",
+     "pq1/loading.py:127",
+     "pq1/loading.py:245"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:146",
+    "source": "pq1/motion.py:158",
     "value": 0.5
    },
    "SEED_HOLD_MS": {
     "comment": "... then the bare circle HOLDS, parked alone on black,",
     "frames_14": 2.5,
-    "reader_count": 1,
+    "reader_count": 3,
     "readers": [
-     "pq1/flow.py:322"
+     "pq1/flow.py:350",
+     "screens/confirm/hold_to_confirm.py:16",
+     "screens/confirm/hold_to_confirm.py:47"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:136",
+    "source": "pq1/motion.py:148",
     "under_two_frames": false,
     "unit": "ms",
     "value": 180
@@ -3972,11 +4460,11 @@
     "reader_count": 3,
     "readers": [
      "pq1/loading.py:22",
-     "pq1/loading.py:38",
+     "pq1/loading.py:39",
      "pq1/procedural/burst.py:6"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:140",
+    "source": "pq1/motion.py:152",
     "under_two_frames": false,
     "unit": "ms",
     "value": 300
@@ -3984,30 +4472,30 @@
    "STATUS_DWELL": {
     "comment": "the qubit status animation's duration (loading +",
     "do_not_port": true,
-    "frames_14": 121.1,
+    "frames_14": 127.3,
     "reader_count": 1,
     "readers": [
-     "pq1/status.py:763"
+     "pq1/status.py:839"
     ],
     "scope": "demo",
     "scope_reason": "demo auto-advance; also the documented invariant QubitCfg().t7 + RESULT_HOLD_MS (asserted at pq1/status.py)",
-    "source": "pq1/motion.py:155",
+    "source": "pq1/motion.py:175",
     "under_two_frames": false,
     "unit": "ms",
-    "value": 8650
+    "value": 9095
    },
    "SWEEP_AMP": {
     "comment": "sweep amplitude (px)",
     "reader_count": 5,
     "readers": [
      "pq1/flow.py:33",
-     "pq1/flow.py:445",
-     "screens/confirm/hold_to_confirm.py:50",
+     "pq1/flow.py:504",
+     "screens/confirm/hold_to_confirm.py:54",
      "screens/idle/batch_sign.py:56",
      "screens/idle/unknown_token.py:58"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:206",
+    "source": "pq1/motion.py:259",
     "unit": "px",
     "value": 95
    },
@@ -4017,12 +4505,12 @@
     "reader_count": 4,
     "readers": [
      "pq1/flow.py:33",
-     "pq1/flow.py:443",
+     "pq1/flow.py:502",
      "screens/idle/batch_sign.py:54",
      "screens/idle/unknown_token.py:56"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:204",
+    "source": "pq1/motion.py:257",
     "under_two_frames": false,
     "unit": "ms",
     "value": 1000
@@ -4033,36 +4521,36 @@
     "reader_count": 5,
     "readers": [
      "pq1/flow.py:33",
-     "pq1/flow.py:445",
-     "screens/confirm/hold_to_confirm.py:113",
+     "pq1/flow.py:504",
+     "screens/confirm/hold_to_confirm.py:133",
      "screens/idle/batch_sign.py:55",
      "screens/idle/unknown_token.py:57"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:205",
+    "source": "pq1/motion.py:258",
     "under_two_frames": false,
     "unit": "ms",
     "value": 5000
    },
    "TAP_MAX_MS": {
-    "comment": "released under this = tap; held past it = hold begins",
-    "frames_14": 3.5,
+    "comment": "released under this = tap; held past it = hold begins.",
+    "frames_14": 7.0,
     "reader_count": 9,
     "readers": [
-     "pq1/driver.py:16",
-     "pq1/driver.py:246",
-     "pq1/driver.py:256",
-     "pq1/driver.py:435",
-     "pq1/flow.py:254",
-     "pq1/motion.py:181",
-     "pq1/motion.py:190",
-     "pq1/motion.py:201"
+     "pq1/driver.py:17",
+     "pq1/driver.py:250",
+     "pq1/driver.py:260",
+     "pq1/driver.py:441",
+     "pq1/flow.py:276",
+     "pq1/motion.py:214",
+     "pq1/motion.py:223",
+     "pq1/motion.py:244"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:167",
+    "source": "pq1/motion.py:188",
     "under_two_frames": false,
     "unit": "ms",
-    "value": 250
+    "value": 500
    },
    "TEXT_IN_DELAY_MS": {
     "comment": "incoming text starts its alpha spring this long after",
@@ -4070,10 +4558,10 @@
     "reader_count": 2,
     "readers": [
      "pq1/flow.py:34",
-     "pq1/flow.py:229"
+     "pq1/flow.py:251"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:130",
+    "source": "pq1/motion.py:142",
     "under_two_frames": false,
     "unit": "ms",
     "value": 150
@@ -4082,10 +4570,10 @@
     "comment": "follower circles in the streak chain",
     "reader_count": 1,
     "readers": [
-     "pq1/motion.py:234"
+     "pq1/motion.py:287"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:210",
+    "source": "pq1/motion.py:263",
     "value": 5
    },
    "VERDICT_ACCENT_MIN_MS": {
@@ -4093,20 +4581,41 @@
     "frames_14": 2.0,
     "reader_count": 8,
     "readers": [
-     "screens/pin/pin_differ.py:18",
-     "screens/verdict/duress_differ.py:20",
-     "screens/verdict/factory_signing.py:31",
-     "screens/verdict/factory_signing.py:47",
-     "screens/verdict/padlock.py:11",
+     "pq1/status.py:116",
+     "screens/verdict/duress_differ.py:21",
+     "screens/verdict/factory_signing.py:39",
+     "screens/verdict/factory_signing.py:63",
+     "screens/verdict/padlock.py:12",
      "screens/verdict/pin_mismatch.py:18",
-     "screens/verdict/rng_failed.py:42",
-     "screens/verdict/rng_failed.py:59"
+     "screens/verdict/rng_failed.py:44",
+     "screens/verdict/rng_failed.py:66"
     ],
     "scope": "device",
-    "source": "pq1/motion.py:396",
+    "source": "pq1/motion.py:484",
     "under_two_frames": false,
     "unit": "ms",
     "value": 145
+   },
+   "VERDICT_HOLD_MS": {
+    "comment": "a verdict's black hold before its sign",
+    "expr": "round(6 * FRAME_MS)",
+    "frames_14": 6.0,
+    "reader_count": 13,
+    "readers": [
+     "pq1/status.py:569",
+     "pq1/status.py:575",
+     "pq1/status.py:625",
+     "pq1/verdict.py:26",
+     "pq1/verdict.py:41",
+     "screens/verdict/factory_signing.py:39",
+     "screens/verdict/factory_signing.py:78",
+     "screens/verdict/padlock.py:27"
+    ],
+    "scope": "device",
+    "source": "pq1/motion.py:426",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 429
    }
   },
   "status": {
@@ -4115,17 +4624,18 @@
     "expr": "{}",
     "reader_count": 5,
     "readers": [
-     "pq1/status.py:674",
-     "pq1/status.py:690",
-     "pq1/status.py:692",
-     "pq1/status.py:693",
+     "pq1/status.py:741",
+     "pq1/status.py:757",
+     "pq1/status.py:759",
+     "pq1/status.py:760",
      "screens/__init__.py:12"
     ],
     "scope": "device",
-    "source": "pq1/status.py:668",
+    "source": "pq1/status.py:735",
     "value": {
      "arrive": "<class pq1.status.ArriveStatus>",
      "batch_sign": "<class screens.idle.batch_sign.BatchSign>",
+     "check_word": "<class screens.pin.check_word.CheckWord>",
      "duress_differ": "<class screens.verdict.duress_differ.DuressDiffer>",
      "explosion": "<class screens.fx.explosion.Explosion>",
      "factory_signing": "<class screens.verdict.factory_signing.FactorySigning>",
@@ -4142,6 +4652,7 @@
      "rng_failed": "<class screens.verdict.rng_failed.RngFailed>",
      "shield": "<class screens.verdict.shield.Shield>",
      "sig_error": "<class screens.verdict.sig_error.SigError>",
+     "slot_registered": "<class screens.verdict.slot_registered.SlotRegistered>",
      "tamper": "<class screens.verdict.tamper.Tamper>",
      "unknown_token": "<class screens.idle.unknown_token.UnknownToken>",
      "wipe": "<class screens.verdict.wipe.Wipe>"
@@ -4150,19 +4661,19 @@
    "BUSY_FADE_MS": {
     "comment": "busy-caption fade in / out (ease-out both ways)",
     "frames_14": 4.2,
-    "reader_count": 14,
+    "reader_count": 12,
     "readers": [
-     "pq1/status.py:362",
-     "pq1/status.py:371",
-     "pq1/status.py:382",
-     "pq1/status.py:383",
-     "pq1/status.py:384",
-     "pq1/status.py:386",
-     "pq1/status.py:391",
-     "pq1/status.py:397"
+     "pq1/status.py:394",
+     "pq1/status.py:403",
+     "pq1/status.py:414",
+     "pq1/status.py:416",
+     "pq1/status.py:421",
+     "pq1/status.py:427",
+     "pq1/status.py:429",
+     "screens/confirm/hold_to_confirm.py:140"
     ],
     "scope": "device",
-    "source": "pq1/status.py:103",
+    "source": "pq1/status.py:119",
     "under_two_frames": false,
     "unit": "ms",
     "value": 300
@@ -4173,24 +4684,65 @@
     "reader_count": 4,
     "readers": [
      "pq1/status.py:65",
-     "pq1/status.py:355",
-     "pq1/status.py:372",
+     "pq1/status.py:387",
+     "pq1/status.py:404",
      "screens/fx/explosion.py:21"
     ],
     "scope": "device",
-    "source": "pq1/status.py:107",
+    "source": "pq1/status.py:123",
     "under_two_frames": false,
     "unit": "ms",
     "value": 2000
+   },
+   "FLASH_IN_MS": {
+    "comment": "",
+    "expr": "motion.VERDICT_ACCENT_MIN_MS",
+    "frames_14": 2.0,
+    "reader_count": 1,
+    "readers": [
+     "pq1/status.py:543"
+    ],
+    "scope": "device",
+    "source": "pq1/status.py:116",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 145
+   },
+   "HANDOFF_WASH_R": {
+    "comment": "",
+    "expr": "layout.CIRCLE_R + 2.5",
+    "reader_count": 1,
+    "readers": [
+     "pq1/status.py:200"
+    ],
+    "scope": "device",
+    "source": "pq1/status.py:186",
+    "unit": "px",
+    "value": 32.5
+   },
+   "LEAD_CLEAR_MS": {
+    "comment": "a led screen's sign starts to fade in this long after",
+    "frames_14": -2.5,
+    "reader_count": 3,
+    "readers": [
+     "pq1/status.py:80",
+     "pq1/status.py:622",
+     "pq1/status.py:633"
+    ],
+    "scope": "device",
+    "source": "pq1/status.py:113",
+    "under_two_frames": true,
+    "unit": "ms",
+    "value": -180
    },
    "RESOLVE_ART": {
     "comment": "the film-less resolve: its token glyph leaves over this",
     "reader_count": 1,
     "readers": [
-     "pq1/status.py:495"
+     "pq1/status.py:525"
     ],
     "scope": "device",
-    "source": "pq1/status.py:104",
+    "source": "pq1/status.py:120",
     "value": 0.45
    },
    "RESULTS": {
@@ -4198,140 +4750,109 @@
     "expr": "(\"check\", \"x\")",
     "reader_count": 2,
     "readers": [
-     "pq1/status.py:132",
-     "pq1/status.py:134"
+     "pq1/status.py:148",
+     "pq1/status.py:150"
     ],
     "scope": "device",
-    "source": "pq1/status.py:111",
+    "source": "pq1/status.py:127",
     "value": [
      "check",
      "x"
     ]
    },
    "RESULT_HOLD_MS": {
-    "comment": "result shown before the flow moves on; with the qubit",
+    "comment": "result shown before the flow moves on, counted from",
     "frames_14": 34.3,
     "reader_count": 4,
     "readers": [
-     "pq1/status.py:249",
-     "pq1/status.py:763",
-     "pq1/verdict.py:13",
-     "screens/pin/pin_differ.py:49"
+     "pq1/status.py:273",
+     "pq1/status.py:281",
+     "pq1/status.py:838",
+     "pq1/verdict.py:13"
     ],
     "scope": "device",
-    "source": "pq1/status.py:101",
+    "source": "pq1/status.py:107",
     "under_two_frames": false,
     "unit": "ms",
     "value": 2450
+   },
+   "RESULT_LANDING_MS": {
+    "comment": "",
+    "expr": "motion.RESULT_LAG_MS + motion.RESULT_FADE_MS",
+    "frames_14": 6.2,
+    "reader_count": 3,
+    "readers": [
+     "pq1/status.py:447",
+     "pq1/status.py:491",
+     "pq1/status.py:838"
+    ],
+    "scope": "device",
+    "source": "pq1/status.py:110",
+    "under_two_frames": false,
+    "unit": "ms",
+    "value": 445
    }
   },
   "verdict": {}
  },
  "verdict_law": {
   "T_HOLD": {
-   "default": 400,
-   "frames_14": 5.6,
+   "default": 429,
+   "frames_14": 6.0,
    "overridden_by": [
+    "pin/pin_differ",
     "verdict/duress_differ",
-    "verdict/factory_signing",
-    "verdict/padlock",
-    "verdict/padlock|lock",
-    "verdict/padlock|unlock",
     "verdict/pin_mismatch",
-    "verdict/pin_mismatch|wrong_pin",
-    "verdict/sig_error",
-    "verdict/tamper"
+    "verdict/pin_mismatch|wrong_pin"
    ],
    "source": "pq1/verdict.py:41",
    "unanimous": false,
    "unit": "ms",
    "values": {
-    "250": [
+    "286": [
+     "pin/pin_differ",
      "verdict/duress_differ",
      "verdict/pin_mismatch",
      "verdict/pin_mismatch|wrong_pin"
     ],
-    "350": [
-     "verdict/factory_signing",
-     "verdict/sig_error",
-     "verdict/tamper"
-    ],
-    "400": [
+    "429": [
      "core/arrive",
+     "verdict/factory_signing",
      "verdict/firmware_verified",
      "verdict/headshake",
      "verdict/headshake|canceled",
      "verdict/headshake|wrong_seed_phrase",
      "verdict/last_attempt",
+     "verdict/padlock",
+     "verdict/padlock|lock",
+     "verdict/padlock|unlock",
      "verdict/rng_failed",
      "verdict/shield",
      "verdict/shield|backup_ok",
      "verdict/shield|no_match",
+     "verdict/sig_error",
+     "verdict/sig_error|sig_verify_fail",
+     "verdict/sig_error|type1_sig_fail",
+     "verdict/slot_registered",
+     "verdict/tamper",
+     "verdict/tamper|firmware_tampered",
      "verdict/wipe",
-     "verdict/wipe|wallet_wiped",
      "verdict/wipe|wallet_wiped_anim",
      "verdict/wipe|wallet_wiped_explosion"
-    ],
-    "500": [
-     "verdict/padlock",
-     "verdict/padlock|lock",
-     "verdict/padlock|unlock"
     ]
    }
   },
   "T_IN": {
    "default": 300,
    "frames_14": 4.2,
-   "overridden_by": [
-    "verdict/padlock",
-    "verdict/padlock|lock",
-    "verdict/padlock|unlock"
-   ],
-   "source": "pq1/verdict.py:42",
-   "unanimous": false,
-   "unit": "ms",
-   "values": {
-    "1070": [
-     "verdict/padlock",
-     "verdict/padlock|lock"
-    ],
-    "1600": [
-     "verdict/padlock|unlock"
-    ],
-    "300": [
-     "core/arrive",
-     "verdict/duress_differ",
-     "verdict/factory_signing",
-     "verdict/firmware_verified",
-     "verdict/headshake",
-     "verdict/headshake|canceled",
-     "verdict/headshake|wrong_seed_phrase",
-     "verdict/last_attempt",
-     "verdict/pin_mismatch",
-     "verdict/pin_mismatch|wrong_pin",
-     "verdict/rng_failed",
-     "verdict/shield",
-     "verdict/shield|backup_ok",
-     "verdict/shield|no_match",
-     "verdict/sig_error",
-     "verdict/tamper",
-     "verdict/wipe",
-     "verdict/wipe|wallet_wiped",
-     "verdict/wipe|wallet_wiped_anim",
-     "verdict/wipe|wallet_wiped_explosion"
-    ]
-   }
-  },
-  "T_TEXT": {
-   "default": 300,
-   "frames_14": 4.2,
    "overridden_by": [],
-   "source": "pq1/verdict.py:44",
+   "source": "pq1/verdict.py:42",
    "unanimous": true,
    "unit": "ms",
    "values": {
     "300": [
      "core/arrive",
+     "pin/pin_differ",
      "verdict/duress_differ",
      "verdict/factory_signing",
      "verdict/firmware_verified",
@@ -4349,9 +4870,51 @@
      "verdict/shield|backup_ok",
      "verdict/shield|no_match",
      "verdict/sig_error",
+     "verdict/sig_error|sig_verify_fail",
+     "verdict/sig_error|type1_sig_fail",
+     "verdict/slot_registered",
      "verdict/tamper",
+     "verdict/tamper|firmware_tampered",
      "verdict/wipe",
-     "verdict/wipe|wallet_wiped",
+     "verdict/wipe|wallet_wiped_anim",
+     "verdict/wipe|wallet_wiped_explosion"
+    ]
+   }
+  },
+  "T_TEXT": {
+   "default": 300,
+   "frames_14": 4.2,
+   "overridden_by": [],
+   "source": "pq1/verdict.py:44",
+   "unanimous": true,
+   "unit": "ms",
+   "values": {
+    "300": [
+     "core/arrive",
+     "pin/pin_differ",
+     "verdict/duress_differ",
+     "verdict/factory_signing",
+     "verdict/firmware_verified",
+     "verdict/headshake",
+     "verdict/headshake|canceled",
+     "verdict/headshake|wrong_seed_phrase",
+     "verdict/last_attempt",
+     "verdict/padlock",
+     "verdict/padlock|lock",
+     "verdict/padlock|unlock",
+     "verdict/pin_mismatch",
+     "verdict/pin_mismatch|wrong_pin",
+     "verdict/rng_failed",
+     "verdict/shield",
+     "verdict/shield|backup_ok",
+     "verdict/shield|no_match",
+     "verdict/sig_error",
+     "verdict/sig_error|sig_verify_fail",
+     "verdict/sig_error|type1_sig_fail",
+     "verdict/slot_registered",
+     "verdict/tamper",
+     "verdict/tamper|firmware_tampered",
+     "verdict/wipe",
      "verdict/wipe|wallet_wiped_anim",
      "verdict/wipe|wallet_wiped_explosion"
     ]
@@ -4361,6 +4924,7 @@
    "default": 450,
    "frames_14": 6.3,
    "overridden_by": [
+    "pin/pin_differ",
     "verdict/duress_differ",
     "verdict/factory_signing",
     "verdict/headshake",
@@ -4377,9 +4941,11 @@
     "verdict/shield|backup_ok",
     "verdict/shield|no_match",
     "verdict/sig_error",
+    "verdict/sig_error|sig_verify_fail",
+    "verdict/sig_error|type1_sig_fail",
     "verdict/tamper",
+    "verdict/tamper|firmware_tampered",
     "verdict/wipe",
-    "verdict/wipe|wallet_wiped",
     "verdict/wipe|wallet_wiped_anim",
     "verdict/wipe|wallet_wiped_explosion"
    ],
@@ -4387,42 +4953,43 @@
    "unanimous": false,
    "unit": "ms",
    "values": {
-    "0": [
-     "verdict/padlock",
-     "verdict/padlock|lock",
-     "verdict/padlock|unlock"
-    ],
     "1150": [
      "verdict/shield",
      "verdict/shield|backup_ok"
-    ],
-    "1200": [
-     "verdict/wipe",
-     "verdict/wipe|wallet_wiped"
     ],
     "1220": [
      "verdict/pin_mismatch",
      "verdict/pin_mismatch|wrong_pin"
     ],
-    "1470": [
-     "verdict/duress_differ"
+    "1300": [
+     "verdict/padlock|unlock"
     ],
     "1650": [
      "verdict/factory_signing"
     ],
     "1700": [
+     "verdict/wipe",
      "verdict/wipe|wallet_wiped_anim",
      "verdict/wipe|wallet_wiped_explosion"
     ],
     "2000": [
      "verdict/rng_failed"
     ],
+    "2040": [
+     "pin/pin_differ",
+     "verdict/duress_differ"
+    ],
     "3800": [
      "verdict/last_attempt"
     ],
     "450": [
      "core/arrive",
-     "verdict/firmware_verified"
+     "verdict/firmware_verified",
+     "verdict/slot_registered"
+    ],
+    "770": [
+     "verdict/padlock",
+     "verdict/padlock|lock"
     ],
     "870": [
      "verdict/headshake",
@@ -4432,7 +4999,10 @@
     ],
     "900": [
      "verdict/sig_error",
-     "verdict/tamper"
+     "verdict/sig_error|sig_verify_fail",
+     "verdict/sig_error|type1_sig_fail",
+     "verdict/tamper",
+     "verdict/tamper|firmware_tampered"
     ]
    }
   },

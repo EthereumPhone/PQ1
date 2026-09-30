@@ -21,6 +21,9 @@ FRAME_MS = 1000.0 / PANEL_FPS
 from pq1 import (colors, components, driver, flow, layout, loading,  # noqa: E402
                  motion, status, typography, verdict)
 from pq1.procedural import burst                                    # noqa: E402
+from pq1.canvas import Canvas                                       # noqa: E402
+from pq1.procedural import (blind, chains, dev, download, eth,      # noqa: E402
+                            fingerprint, marks, rotate)
 import flows                                                        # noqa: E402
 import screens                                                      # noqa: E402
 
@@ -46,6 +49,9 @@ SPEC_ONLY_TOKENS = {     # specified, but no live screen or flow reaches the pat
                          "rendered by nothing in the Python — the port implements it from the spec",
     "ENTER_MS": "the explosion's side entrance; no live flow sets enter=, so the path is "
                 "exercised only by the screens library",
+    "DEBOUNCE_MS": "contact-bounce rejection on a raw button edge: the reference driver is "
+                   "handed clean edges, so nothing in the Python filters them — the port (or "
+                   "the HAL, or the button itself) implements it from the spec",
 }
 CONTRACT_TOKENS = {      # a stated design bound that no code enforces
     "SWEEP_X_MIN": "a stated bound; nothing clamps to it (audit X6-02)",
@@ -53,14 +59,17 @@ CONTRACT_TOKENS = {      # a stated design bound that no code enforces
     "MARGIN": "the static grid margin; the moving art is not clamped to it (audit X6-08)",
 }
 # never exported: build-machine paths cannot travel and would break a byte-identical dump
-NONPORTABLE = {"ASSET_DIR": "an absolute path on the build machine",
-               "ETH_LOGO": "an absolute path on the build machine"}
+NONPORTABLE = {"ASSET_DIR": "an absolute path on the build machine"}
 # units the name alone does not imply
 NAME_UNITS = {"HOLD_END": "ms", "PAGER_BASELINE": "px", "PAGER_ALPHA": "alpha",
               "REVS": "turns", "REVS_LONG": "turns",
               "R_MASTER": "px", "W": "px", "H": "px", "MARGIN": "px",
               "BAND_TOP": "px", "BAND_BOTTOM": "px", "BASELINE_Y": "px",
-              "SUP": "factor", "WORDS_SIZE": "px", "WORDS_NUM_ALPHA": "alpha"}
+              "SUP": "factor", "WORDS_SIZE": "px", "WORDS_NUM_ALPHA": "alpha",
+              # geometry tokens whose names imply no unit (audit RAD-03)
+              "TOKEN_RING_W": "px", "TOKEN_INSET": "px", "SIDES_R0": "px",
+              "MONOGRAM_SCALE": "factor", "LEVEL_EPS": "level",
+              "ALPHA_FLOOR": "alpha", "FILM_FLOOR": "alpha"}
 
 _WARM = False
 
@@ -649,6 +658,45 @@ def _enum_enforcement():
     return out
 
 
+def typography_spec():
+    """the type system as a port needs it — the faces, the scale as roles, the
+    detail ladder the fit rule climbs, the regions it measures against and each
+    rule in one sentence — generated from pq1/typography.py and pq1/layout.py,
+    never typed (audit TY-06 / TY-09)"""
+    px_token = {v: k for k, v in vars(typography).items() if k.startswith("SIZE_")}
+    scale = [dict(role=r["role"], token=px_token[r["px"]], px=r["px"], weight=r["weight"],
+                  tracking=r["tracking"], leading=layout.line_height(r["px"]), use=r["use"])
+             for r in typography.ROLES]
+    tiers = [dict(px=px, token=px_token[px], max_lines=rows) for px, rows in layout.fit_tiers()]
+    return dict(
+        family="Aileron",
+        faces={w: names[0] for w, names in typography._FONT_NAMES.items()},
+        floor_px=typography.SIZE_LABEL,
+        scale=scale,
+        label_face=dict(px=typography.SIZE_LABEL, weight=typography.WEIGHT_LABEL,
+                        tracking=typography.LS_LABEL,
+                        wearers=["detail label", "pager n/m", "PIN hints", "verdict label"]),
+        tracking=dict(question=typography.LS_QUESTION, label=typography.LS_LABEL),
+        leading=dict(rule="layout.line_height(size): the size itself on the one-line Big "
+                          "tiers, size + 8 below",
+                     px={str(px): layout.line_height(px) for px, _ in layout.fit_tiers()}),
+        tiers=tiers,
+        regions=dict(detail=layout.TEXT_REGION_W, value=layout.TEXT_REGION_FULL_W,
+                     rule="detail: the text beside a docked token; value: full width between "
+                          "the margins (layout.TEXT_REGION_W / TEXT_REGION_FULL_W)"),
+        fit="layout.fit_size: the largest tier whose every line, measured in its own face "
+            "(typography.text_width), fits the region within the tier's line cap; nothing "
+            "fits -> split or page the value, never shrink or ellipsize",
+        monogram=dict(weight="bold", scale=components.MONOGRAM_SCALE,
+                      px_at_rest=round(components.MONOGRAM_SCALE * layout.CIRCLE_R, 2),
+                      rule="a lone letter on a disc (an unknown chain's initial): "
+                           "MONOGRAM_SCALE x the disc radius, so it shrinks with the disc"),
+        glyphs="proportional advances (Aileron's own); the ten digits share one advance, so "
+               "amounts, the PIN reel and the pager align without a tabular face",
+        source=dict(typography=rel(typography.__file__), layout=rel(layout.__file__)),
+    )
+
+
 def screens_schema():
     warm_registries()
     kinds = ("hero", "detail", "value", "confirm", "status")
@@ -661,6 +709,14 @@ def screens_schema():
     for k in kinds:
         n = layout.normalize_screens([copy.deepcopy(minimal[k])])[0]
         defaults[k] = jsonable({f: v for f, v in n.items() if f not in minimal[k] or f == "kind"})
+        if k in ("detail", "value"):
+            # There is NO default size: an absent size is FITTED from the
+            # content (layout.fit_size — the largest tier whose every line
+            # measures inside the region, in its own face). The probe above
+            # would otherwise publish its own sample's answer as a constant
+            # and teach a port to hard-code it.
+            defaults[k]["size"] = (f"<fitted: layout.fit_size(lines, "
+                                   f"full={k == 'value'})>")
     bad = {
         "unknown kind": [dict(kind="banner")],
         "unknown size": [dict(kind="detail", label="TO", lines=["x"], size=30)],
@@ -697,13 +753,14 @@ def screens_schema():
         enums=dict(result=list(status.RESULTS) + [None], state=sorted(colors.STATE),
                    anim=sorted(status.ANIMS), icon=sorted(components.GLYPHS),
                    # resolved by shape, not registered: an unknown chain's initial
-                   # (components.letter_glyph). No live flow uses one, so the icon
-                   # enum above would never teach a port the rule exists.
+                   # (components.letter_glyph). Only the chains bench flow renders
+                   # one (flows/chains.py, the unknown-id screen), so the icon
+                   # enum above alone would never teach a port the rule exists.
                    icon_namespaces=["letter:<CHAR>"],
                    chev=["lr", "up", None], side=["left", "right"],
-                   size=[typography.SIZE_XL, typography.SIZE_L, typography.SIZE_M, typography.SIZE_BODY],
+                   size=[px for px, _ in layout.fit_tiers()],
                    brand=sorted(colors.BRAND_GRADIENTS)),
-        type_scale={k: v for k, v in vars(typography).items() if k.startswith("SIZE_")},
+        typography=typography_spec(),
         layout_tokens=_tokens(layout),
         flow_shape=dict(CONFIRM_MIN_DETAILS=layout.CONFIRM_MIN_DETAILS,
                         CONFIRM_INDEX=layout.CONFIRM_INDEX,
@@ -739,7 +796,7 @@ def flows_spec():
                          t_resolve=an.t_resolve, duration=an.duration)
                 if s.get("lead"):
                     r["lead"] = s["lead"].get("anim")
-                    r["lead_gap"] = s.get("lead_gap")
+                    r["lead_clear"] = s.get("lead_clear")
                 if s.get("busy"):
                     r["busy"] = jsonable(s["busy"])
             rows.append(r)
@@ -861,7 +918,7 @@ class Bench:
 
 CONTEXTS = [  # (context, flow, setup gestures)
     ("hero — the ask (flow has details)", "send_token", []),
-    ("hero — an intro (band_chev, commit False)", "erc7730/swap", []),
+    ("hero — an intro (band_chev, commit False)", "firmware/update", [("tap", R)]),
     ("detail — first of the section", "send_token", [("tap", R)]),
     ("detail — middle", "send_token", [("tap", R), ("tap", R)]),
     ("detail — paged, on page 1", "eip1271/personal_counterfactual_hash", "to_paged"),
@@ -922,7 +979,7 @@ def gestures_spec():
     keymap = next((ast.literal_eval(n.value) for n in ast.parse(src).body
                    if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "KEYMAP"), "")
     tok = _tokens(motion, lambda n: n in ("PRESS_FEEDBACK_MS", "TAP_MAX_MS", "DOUBLE_TAP_MS", "CHORD_MS",
-                                          "HOLD_COMMIT_MS", "HOLD_SNAPBACK_MS"))
+                                          "HOLD_COMMIT_MS", "HOLD_SNAPBACK_MS", "DEBOUNCE_MS"))
     return dict(schema_version=SCHEMA_VERSION, tokens=tok,
                 rule="a press <= TAP_MAX_MS is a tap and fires on RELEASE; a hold fires only when the "
                      "fill completes at HOLD_COMMIT_MS from press-down; an early release snaps back "
@@ -950,7 +1007,7 @@ def traces_spec():
                     "decline from a detail": run("send_token", [("tap", R), ("tap", R), ("hold", L)]),
                     "early release snaps back": run("send_token", [("hold", R, 1200), ("tap", R)]),
                     "right hold where commit is not armed": run("send_token", [("tap", R), ("hold", R)]),
-                    "intro leads to the ask": run("erc7730/swap", [("tap", R), ("tap", R), ("tap", L)]),
+                    "intro leads on": run("firmware/update", [("tap", R), ("tap", R), ("tap", L)]),
                     "paged detail: page first, then screen": run(
                         "eip1271/personal_counterfactual_hash", [("tap", R)] * 9 + [("tap", L)] * 3),
                     "PIN: three digits, back, next": run(
@@ -963,6 +1020,574 @@ def traces_spec():
                     "sign, the host answers no": run(
                         "send", fwd + [("tap", L)] * 3 + [("hold", R), ("run", 6000), ("answer", False), ("run", 6000)]),
                 })
+
+
+# ------------------------------------------------------------- colors.json --
+# Colour is the other half of the design system the port has to reproduce, and
+# until now it reached the firmware developer as hand-typed prose: the spec
+# published no colour value at all (audit COL-02). Everything the renderer can
+# paint is dumped here from the live module — every ramp stop, every pin, every
+# tint — each swatch in the three forms a port might want (rgb, hex, and the
+# RGB565 the NV3007 actually takes).
+def rgb565(rgb):
+    """(r, g, b) -> the 16-bit word the panel takes (5 red, 6 green, 5 blue)"""
+    r, g, b = (max(0, min(255, int(round(c)))) for c in rgb[:3])
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+
+
+def swatch(c):
+    """one colour in every form a port may need"""
+    rgb = colors.hex_to_rgb(c) if isinstance(c, str) else tuple(int(round(x)) for x in c[:3])
+    return dict(rgb=list(rgb), hex="#%02X%02X%02X" % rgb, rgb565=rgb565(rgb),
+                rgb565_hex="0x%04X" % rgb565(rgb))
+
+
+def _ramp(stops):
+    """a six-stop ramp as the screen reads it: stop 6 is the token, 5..1 the trail"""
+    fill, trail = colors._ramp_to_palette(stops)
+    return dict(stops=[swatch(h) for h in stops], fill=swatch(fill),
+                trail=[swatch(c) for c in trail],
+                note="stop 6 = the token disc, stop 5 = the nearest follower … stop 1 = the "
+                     "farthest; fill = ramp[-1] and trail = ramp[-2::-1] unless a palette "
+                     "override below pins the disc")
+
+
+def colors_spec():
+    warm_registries()
+    from pq1 import layout as _layout
+
+    base = {}
+    for name in ("BLACK", "WHITE", "YELLOW", "GREEN", "RED", "ORANGE", "COWSWAP_DARK"):
+        v = getattr(colors, name)
+        line = _assign_lines(colors).get(name, (0, "", ""))
+        base[name] = dict(swatch(v), source=f"{rel(colors.__file__)}:{line[0]}", comment=line[1])
+
+    placeholder = []
+    for i, stops in enumerate(colors.PLACEHOLDER_GRADIENTS):
+        ent = _ramp(stops)
+        ent["index"] = i
+        fill = colors.PLACEHOLDER_PALETTES[i][0]          # the OVERRIDE, where there is one
+        if list(fill) != ent["fill"]["rgb"]:
+            ent["fill_override"] = dict(swatch(fill),
+                                        why="the mono entry fills BLACK: a token with a logo "
+                                            "keeps the black body + white ring")
+        if i == colors.MONO_RAMP:
+            ent["role"] = "mono — the recognized-logo treatment; OUTSIDE the hash space"
+        elif i == colors.NEUTRAL_RAMP:
+            ent["role"] = "neutral grey — the keyless-unknown fallback (token_ramp's last resort)"
+        placeholder.append(ent)
+
+    brand = {k: _ramp(g) for k, g in sorted(colors.BRAND_GRADIENTS.items())}
+    for k, pal in colors.BRAND_PALETTES.items():          # ROTATE/ERC7730 black, FINGERPRINT white, chain pins
+        if list(pal[0]) != brand[k]["fill"]["rgb"]:
+            brand[k]["fill_override"] = swatch(pal[0])
+    for k in brand:
+        brand[k]["pinned_by_name"] = True
+
+    chain = dict(
+        colors={k: swatch(v) for k, v in sorted(colors.CHAIN_COLORS.items())},
+        disc_fill={k: swatch(v) for k, v in sorted(colors.CHAIN_DISC_FILL.items())},
+        mark_colors={k: swatch(v) for k, v in sorted(colors.CHAIN_MARK_COLORS.items())},
+        dark_mark_luma=colors.CHAIN_DARK_MARK_LUMA,
+        mark_rule="the mark a chain disc knocks out is WHITE, or BLACK once luma(fill) > "
+                  "dark_mark_luma — read off the disc's ACTUAL fill (disc_fill where pinned, "
+                  "else the ramp's stop 6); a chain in mark_colors pins its own instead",
+        luma_weights=[0.2126, 0.7152, 0.0722],
+        key_rule="keys are namespaced CHAIN:<NAME> because OP, BNB, BASE and SCROLL are also "
+                 "token tickers and token_ramp resolves any palette string matching a brand key",
+        source=f"{rel(colors.__file__)}:{_assign_lines(colors).get('CHAIN_COLORS', (0,))[0]}")
+
+    _colors_line = _assign_lines(colors)
+
+    def _ink(name, note):
+        v = getattr(colors, name)
+        return dict(value=v, of="WHITE", swatch=swatch(colors.scale(colors.WHITE, v)),
+                    source=f"{rel(colors.__file__)}:{_colors_line[name][0]}", note=note)
+
+    tints = dict(
+        # the three tiers, all owned by pq1/colors.py since audit COL-06
+        INK_SECONDARY=_ink("INK_SECONDARY", "the PIN idle ring — ink that is not text"),
+        INK_PAGING=_ink("INK_PAGING", "the n/m pager and the PIN hint labels"),
+        INK_MUTED=_ink("INK_MUTED", "the seed-word numbers beside their words"),
+        # the two module-level aliases a port already knows by name; they
+        # carry the same values, read from the tokens above
+        WORDS_NUM_ALPHA=dict(value=_layout.WORDS_NUM_ALPHA, of="WHITE", alias_of="INK_MUTED",
+                             swatch=swatch(colors.scale(colors.WHITE, _layout.WORDS_NUM_ALPHA)),
+                             source=f"{rel(_layout.__file__)}:{_assign_lines(_layout)['WORDS_NUM_ALPHA'][0]}",
+                             note="the seed-word numbers' grey"),
+        PAGER_ALPHA=dict(value=components.PAGER_ALPHA, of="WHITE", alias_of="INK_PAGING",
+                         swatch=swatch(colors.scale(colors.WHITE, components.PAGER_ALPHA)),
+                         source=f"{rel(components.__file__)}:{_assign_lines(components)['PAGER_ALPHA'][0]}",
+                         note="the n/m pager's 80 % white"),
+        # not a tint of WHITE: a true-alpha value composited over the panel
+        PULSE_PEAK_ALPHA=dict(value=colors.PULSE_PEAK_ALPHA, of=None,
+                              source=f"{rel(colors.__file__)}:{_colors_line['PULSE_PEAK_ALPHA'][0]}",
+                              note="the pulse ring's peak alpha, decaying to 0 across its life"),
+    )
+    # Real tints with no constant of their own — a port still has to draw
+    # them. EMPTY is the goal state (audit COL-06 emptied it); the key stays
+    # so a port that reads this spec keeps its shape, and so the next stray
+    # hand-typed tint has somewhere to show up. C-INK keeps it empty.
+    unnamed = {}
+
+    hold = dict(
+        HOLD_OVERLAY_ALPHA=dict(value=components.HOLD_OVERLAY_ALPHA,
+                                source=f"{rel(components.__file__)}:{_assign_lines(components)['HOLD_OVERLAY_ALPHA'][0]}",
+                                note="the hold film's opacity — black over a coloured body, "
+                                     "white inside a black one"),
+        HOLD_DARK_BODY=dict(value=components.HOLD_DARK_BODY,
+                            source=f"{rel(components.__file__)}:{_assign_lines(components)['HOLD_DARK_BODY'][0]}",
+                            note="body luma below this counts as a black body, so the film goes white"),
+    )
+
+    # the flat table port_diff pairs against a ui_colors.h
+    # role says what a port OWES for this colour, the way motion.json's scope does:
+    # "base" every port defines by name (port_diff reports it MISSING); a ramp stop is
+    # more often a table the port copies wholesale than a named constant, so those are
+    # listed only on request (audit COL-02).
+    flat = {}
+
+    def add(name, sw, role, source=None):
+        flat[name] = dict(rgb=sw["rgb"], hex=sw["hex"], rgb565=sw["rgb565"], role=role)
+        if source:
+            flat[name]["source"] = source
+
+    for name, ent in base.items():
+        add(name, ent, "base", ent["source"])
+    for i, ent in enumerate(placeholder):
+        for j, st in enumerate(ent["stops"], start=1):
+            add(f"RAMP_{i:02d}_STOP_{j}", st, "ramp")
+        add(f"RAMP_{i:02d}_FILL", ent.get("fill_override", ent["fill"]), "ramp")
+    for k, ent in brand.items():
+        key = k.replace("CHAIN:", "CHAIN_")
+        for j, st in enumerate(ent["stops"], start=1):
+            add(f"{key}_STOP_{j}", st, "ramp")
+        add(f"{key}_FILL", ent.get("fill_override", ent["fill"]), "ramp")
+    for k, sw in chain["mark_colors"].items():
+        add(k.replace("CHAIN:", "CHAIN_") + "_MARK", sw, "base")
+
+    return dict(
+        schema_version=SCHEMA_VERSION,
+        note="Every colour the renderer can paint, dumped from pq1/colors.py. Each swatch carries "
+             "rgb, hex and the RGB565 word the NV3007 takes. `tokens` is the flat table "
+             "scripts/port_diff.py pairs against a port's ui_colors.h (each row's `role`: \"base\" a "
+             "colour every port defines by name, \"ramp\" one stop of a table it more likely "
+             "copies whole); everything else is the "
+             "structure a screen reads. Colour is identity on a signing screen: a ramp stop that "
+             "differs changes what the user checks.",
+        base=base,
+        state={k: dict(name=[n for n in base if base[n]["rgb"] == list(v)][0], **swatch(v))
+               for k, v in sorted(colors.STATE.items())},
+        state_source=f"{rel(colors.__file__)}:{_assign_lines(colors).get('STATE', (0,))[0]}",
+        hash_rule=dict(
+            function="placeholder_index", expr="zlib.crc32(str(key).upper().encode()) % MONO_RAMP",
+            space=colors.MONO_RAMP, ramps=len(colors.PLACEHOLDER_GRADIENTS),
+            mono_ramp=colors.MONO_RAMP, neutral_ramp=colors.NEUTRAL_RAMP,
+            source=locate("pq1.colors.placeholder_index"),
+            rule="a string (symbol, name or contract address) hashes over ramps 0..mono_ramp-1, "
+                 "so an unrecognized token can never wear the recognized-token look; an int wraps "
+                 "over all of them, so token={'palette': MONO_RAMP} is the one way in. Resolution "
+                 "order is palette -> address -> symbol -> the screen's icon -> neutral_ramp "
+                 "(components.token_ramp); a palette naming a brand ramp is pinned by name, "
+                 "never hashed. Enforced by the checker rule C-RAMP."),
+        placeholder_ramps=placeholder,
+        contrast_floors=dict(
+            placeholder_fill_vs_white=colors.PLACEHOLDER_MIN_CONTRAST,
+            mark_vs_disc=3.0,
+            rule="a placeholder disc's fill stop must read at least "
+                 f"{colors.PLACEHOLDER_MIN_CONTRAST:g}:1 against WHITE (it carries the white "
+                 "ring and a white mark, so the mark is read as a glyph); any mark must read "
+                 "3:1 against the disc it lands on, the bar for a meaningful graphic. WCAG "
+                 "relative luminance, sRGB-linearized — NOT colors.luma, which is the "
+                 "un-linearized dark/light test mark_color uses and understates a mid-tone "
+                 "disc by roughly half. Ported colours must be re-measured after RGB565 "
+                 "quantisation, which only eats margin. Enforced by C-CONTRAST and "
+                 "F-MARKCONTRAST.",
+            source=locate("pq1.colors.PLACEHOLDER_MIN_CONTRAST")),
+        brand_ramps=brand,
+        token_ramp_colors={k: swatch(v) for k, v in sorted(colors.TOKEN_COLORS.items())},
+        ramp_steps=list(colors.RAMP_STEPS),
+        ramp_steps_note="a six-stop ramp derived from one colour (colors.ramp_from): stop 6 is "
+                        "the colour, stops 5..1 scale it toward black by these factors",
+        chains=chain,
+        ink_tints=dict(named=tints, unnamed=unnamed,
+                       rule="a tint is the colour scaled toward black (colors.scale) on the "
+                            "pure-black panel — the system's alpha idiom"),
+        hold_film=hold,
+        tokens=flat,
+    )
+
+
+# --------------------------------------------------------------- icons.json --
+# The band today's disc marks sit in, as a fraction of the token's VISIBLE disc
+# (audit ICO-07): extent is a mark's largest ink dimension over that diameter,
+# ink the area it covers over that disc's area. The bounds are the owner's and
+# carry headroom over the measured set — a new mark outside them is not a bug,
+# it is a decision to take with the designer instead of by eye.
+MARK_BAND = dict(extent_pct=(39.0, 60.0), ink_pct=(4.5, 12.5))
+
+# Line weights that are a recorded decision OFF layout.STROKE (audit ICO-05).
+# Each row CITES the line that sets it and the spec carries that line's own
+# text, so a width cannot move and leave this table claiming otherwise. A
+# dotted path names a token; a (function, substring) pair names a width written
+# at the draw site, which has no token of its own.
+STROKE_EXCEPTIONS = (
+    ("the plus / minus entry hints", "screens.pin.pin_entering.HINT_STROKE",
+     "a fraction of the hint sign's radius. The signs are smaller than the x mark and read "
+     "heavy at its stroke, so they are drawn on the hair weight instead"),
+    ("the PIN pill", "pq1.procedural.pin_pill.STROKE",
+     "the pill is a container the width of a caption, not a sign: on the ring weight its "
+     "outline vanished, on the sign weight it read as a button"),
+    ("the PIN pill's scan line", "pq1.procedural.pin_pill.SCAN_STROKE",
+     "a moving hairline INSIDE the pill — necessarily thinner than the pill it travels in"),
+    ("the active PIN ring", "pq1.procedural.pin_slots.ACTIVE_LW",
+     "a FULL panel pixel over the hair weight the resting rings take (2 -> 3), because the "
+     "dialling ring has to read as the live one without changing size — and the hue step that "
+     "used to carry that job alone measures 1.21:1 against the idle grey, near-isoluminant on "
+     "black glass. It was +0.5 until Sep 2026; 0.047 mm is not a cue (audit A11-10)"),
+    ("the result marks and the entry signs", "pq1.procedural.marks.SIGN_STROKE",
+     "a fraction of r, not a width: check, x, plus and minus are drawn at whatever radius "
+     "they are handed, so their stroke scales with them"),
+    ("the shield outline", ("pq1.procedural.shield.draw", "lw if lw is not None"),
+     "the traced source's own stroke, scaled with the drawn height. The shield keeps its "
+     "OUTLINE — the one written exception to a sign being a filled silhouette with a black "
+     "knock-out — because the shield is the container and the mark inside it is the verdict "
+     "(owner, Sep 2026)"),
+    ("the exclamation bar", ("pq1.procedural.marks.exclamation", "mw = "),
+     "a fraction of r: the notice mark is drawn at the radius its triangle gives it"),
+)
+# What each named weight is FOR. Keyed by layout.STROKE, so a new weight with
+# no sentence here fails the build rather than shipping unexplained.
+STROKE_DRAWS = dict(hair="the PIN rings at rest and the die's edges",
+                    ring="the token ring (components.TOKEN_RING_W) and the resolve flash",
+                    sign="the corner chevrons",
+                    heavy="the padlock's shackle")
+ICON_PAD = 24      # probe-canvas margin: room for the widest mark and its rotation
+
+
+def _doc1(obj):
+    """the first paragraph of a docstring, collapsed onto one line"""
+    return " ".join((inspect.getdoc(obj) or "").split("\n\n")[0].split())
+
+
+def _source_line(where):
+    """the exact line of code at 'file:line', stripped.
+
+    A citation, not a copy: a width or a scale that moves rewrites the spec on
+    the next build, which is the contract handoff/ exists to keep (audit
+    ICO-14)."""
+    path, ln = where.rsplit(":", 1)
+    return open(os.path.join(REPO, path)).read().splitlines()[int(ln) - 1].strip()
+
+
+def _line_in(func_path, needle):
+    """'file:line' of the line inside a function that carries `needle` — the
+    address of a constant written at the draw site, which has no token"""
+    fn = resolve(func_path)
+    src, first = inspect.getsourcelines(fn)
+    for i, ln in enumerate(src):
+        if needle in ln:
+            return f"{rel(inspect.getsourcefile(fn))}:{first + i}"
+    raise ValueError(f"{func_path} no longer carries {needle!r}: the stroke-exception table "
+                     f"in {rel(__file__)} cites a line that moved")
+
+
+def _logo_asset(fn):
+    """the PNG a full-bleed logo glyph closes over, repo-relative — the art IS
+    its source, and ASSET_DIR itself is a build-machine path that never travels"""
+    for name, cell in zip(fn.__code__.co_freevars, fn.__closure__ or ()):
+        if name == "path":
+            return rel(cell.cell_contents)
+    return None
+
+
+def _ink_stats(fn, r):
+    """one glyph drawn alone, white on black: its ink box, the box's mid and the
+    luminance centroid as offsets from the glyph's own centre, and the ink area
+    — all in UI px.
+
+    Box edges are EXCLUSIVE (min, max + 1). Inclusive indices put the mid of an
+    ink span half a pixel up and left whenever it spans an even number of
+    supersampled pixels, and that phantom offset is what audit ICO-09 chased
+    through six modules before it measured the measurement itself."""
+    side = int(2 * (r + ICON_PAD))
+    cv = Canvas(side, side, colors.BLACK)
+    c = side / 2.0
+    fn(cv, c, c, r, alpha=1.0, color=colors.WHITE)
+    px = cv.img.convert("L").load()
+    n, mid, s = side * layout.SUP, c * layout.SUP, float(layout.SUP)
+    x0, x1, y0, y1 = n, -1, n, -1
+    ink = sx = sy = 0.0
+    for y in range(n):
+        for x in range(n):
+            v = px[x, y]
+            if not v:
+                continue
+            x0, x1 = min(x0, x), max(x1, x)
+            y0, y1 = min(y0, y), max(y1, y)
+            ink += v
+            sx += v * (x + 0.5)
+            sy += v * (y + 0.5)
+    if x1 < 0:
+        raise ValueError("a glyph inked nothing at full alpha")
+    return dict(ink_w=round((x1 - x0 + 1) / s, 2), ink_h=round((y1 - y0 + 1) / s, 2),
+                bbox_mid_dx=round(((x0 + x1 + 1) / 2 - mid) / s, 2),
+                bbox_mid_dy=round(((y0 + y1 + 1) / 2 - mid) / s, 2),
+                centroid_dx=round((sx / ink - mid) / s, 2),
+                centroid_dy=round((sy / ink - mid) / s, 2),
+                ink_area=round(ink / 255.0 / (s * s), 1))
+
+
+def _measured(fn):
+    """_ink_stats at the disc's own radius, plus the two fractions of the
+    visible disc the mark band is written in"""
+    d = 2.0 * components.visible_r(layout.CIRCLE_R)
+    m = _ink_stats(fn, layout.CIRCLE_R)
+    m["extent_pct"] = round(100.0 * max(m["ink_w"], m["ink_h"]) / d, 1)
+    m["ink_pct"] = round(100.0 * m["ink_area"] / (math.pi * (d / 2.0) ** 2), 1)
+    return m
+
+
+def _icon_entry(name, fn):
+    """one row of the legal icon set: where the art comes from, how it is
+    scaled, how it composites, and what it measures at rest on the disc"""
+    mod = importlib.import_module(fn.__module__)
+    ent = dict(source=f"{rel(inspect.getsourcefile(fn))}:{inspect.getsourcelines(fn)[1]}",
+               full_bleed=bool(getattr(fn, "full_bleed", False)),
+               # ONE compositing model for a mark that rests on a disc (audit
+               # ICO-01). Only the marks that never rest on one scale their
+               # colour toward black instead, which is exact on the black panel.
+               compositing=("scaled" if fn in (marks.exclamation, marks.plus, marks.minus)
+                            else "mask"),
+               brand=False, fill_rule=None)
+    if mod is chains:
+        lines = _assign_lines(chains)
+        stem, scale, axis = chains.MARKS[name]
+        ent.update(kind="traced", brand=True, note=_doc1(chains.draw),
+                   svg=f"reference/logos/{stem}.svg",
+                   viewbox=dict(w=chains.W, h=chains.H,
+                                source=f"{rel(chains.__file__)}:{lines['W'][0]}",
+                                rule="the art is centred on the viewBox centre"),
+                   path=[dict(d=d, fill_rule=rule) for d, rule in chains.PATHS[name]],
+                   path_source=f"{rel(chains.__file__)}:{lines['PATHS'][0]}",
+                   fill="subpaths XOR within one <path> element, elements union — a counter "
+                        "reads as a hole",
+                   scale=dict(value=scale, axis=dict(w="width", h="height")[axis],
+                              token=f"chains.MARKS[{name!r}]",
+                              source=f"{rel(chains.__file__)}:{lines['MARKS'][0]}",
+                              rule="half-extent = scale x the glyph r, on that axis of the "
+                                   "ART's own span (not of the viewBox)"))
+        if name in chains.NUDGE:
+            nx, ny = chains.NUDGE[name]
+            ent["nudge"] = dict(x=nx, y=ny, unit="SVG units, y down",
+                                source=f"{rel(chains.__file__)}:{lines['NUDGE'][0]}",
+                                rule="optical centring: the mark's MASS is put on the disc "
+                                     "centre, so its BOX is deliberately off")
+    elif hasattr(mod, "PATH") and hasattr(mod, "MARK_SCALE"):
+        lines = _assign_lines(mod)
+        short = mod.__name__.rsplit(".", 1)[-1]
+        # the scale axis is the one the draw divides by: the dev mark is wide
+        # and scales off half its WIDTH, the rest off half height
+        axis = "width" if re.search(r"/ W\b", inspect.getsource(mod.draw)) else "height"
+        ent.update(kind="traced", note=_doc1(mod.draw),
+                   viewbox=dict(w=mod.W, h=mod.H,
+                                source=f"{rel(mod.__file__)}:{lines['W'][0]}",
+                                rule="the art is scaled by the whole viewBox, so the padding "
+                                     "in the box is part of the mark's size"),
+                   path=[dict(d=mod.PATH, fill_rule=None)],
+                   path_source=f"{rel(mod.__file__)}:{lines['PATH'][0]}",
+                   fill="the flattened subpaths are disjoint, so the mark is their union "
+                        "(geometry.svg_subpaths)",
+                   scale=dict(value=mod.MARK_SCALE, axis=axis, token=f"{short}.MARK_SCALE",
+                              source=f"{rel(mod.__file__)}:{lines['MARK_SCALE'][0]}",
+                              rule=f"half-{axis} = scale x the glyph r, over the viewBox"))
+    elif mod is eth:
+        lines = _assign_lines(eth)
+        ent.update(kind="geometry", note=_doc1(eth.draw),
+                   geometry=dict(upper=eth.UPPER, lower=eth.LOWER, round=eth.ROUND,
+                                 round_tip=eth.ROUND_TIP, upper_rr=eth.UPPER_RR,
+                                 lower_rr=eth.LOWER_RR,
+                                 source=f"{rel(eth.__file__)}:{lines['UPPER'][0]}",
+                                 rule="two polygons in half-height units about the centre "
+                                      "(x right, y down), corners trimmed by ROUND and the "
+                                      "two points by ROUND_TIP, both fractions of the "
+                                      "half-height"),
+                   fill="the two polygons are disjoint — their union is the mark",
+                   scale=dict(value=eth.LOGO_SCALE, axis="height", token="eth.LOGO_SCALE",
+                              source=f"{rel(eth.__file__)}:{lines['LOGO_SCALE'][0]}",
+                              rule="half-height = scale x the glyph r. The owner kept the "
+                                   "PROCEDURAL height when the raster mark was deleted "
+                                   "(audit ICO-02), so the mark grew on every default disc"))
+    elif mod is marks:
+        lines = _assign_lines(marks)
+        ent.update(kind="geometry", note=_doc1(fn),
+                   geometry=dict(sign_stroke=marks.SIGN_STROKE,
+                                 source=f"{rel(marks.__file__)}:{lines['SIGN_STROKE'][0]}",
+                                 rule="arms and stroke are fractions of r, listed in the "
+                                      "note — there is no path to trace"),
+                   scale=dict(value=1.0, axis="radius", token=None,
+                              source=f"{rel(marks.__file__)}:{inspect.getsourcelines(fn)[1]}",
+                              rule="drawn at the r it is handed; on a disc that is the "
+                                   "disc's own radius, so the mark fills the face"))
+    elif ent["full_bleed"]:
+        ent.update(kind="logo", brand=True,
+                   note="full-bleed art: the disc WEARS the logo, circle-masked to the "
+                        "token's visible edge, and an explicit ring may be stroked over it",
+                   art=_logo_asset(fn),
+                   fill="the PNG's own alpha",
+                   scale=dict(value=1.0, axis="diameter", token=None,
+                              source=locate("pq1.components.resolve_glyph"),
+                              rule="the art fills the token's VISIBLE disc "
+                                   "(components.visible_r), never the layout radius"))
+    else:
+        raise ValueError(f"icon {name!r} ({fn.__module__}) matches no known kind — describe "
+                         f"it in _icon_entry before it can be published")
+    # the band is a weight rule for marks that REST on a disc: a brand's own
+    # logo and a mark drawn on black are outside it by construction
+    ent["in_band"] = ent["compositing"] == "mask" and not ent["brand"]
+    ent["measured"] = _measured(fn)
+    return ent
+
+
+def icons_spec():
+    """The icon set as a port re-draws it (audit ICO-07): every name in
+    components.GLYPHS plus the letter namespace, each with its art, its scale,
+    its compositing model and what it measures on the disc — and the three laws
+    around them, the sign box, the stroke vocabulary and the mark band."""
+    warm_registries()
+    icons = {n: _icon_entry(n, fn) for n, fn in sorted(components.GLYPHS.items())}
+    sample = "A"
+    icons[components.LETTER_PREFIX + "<CHAR>"] = dict(
+        kind="text", namespace=True, brand=False, full_bleed=False, fill_rule=None,
+        compositing="mask", in_band=False, sample=sample,
+        source=locate("pq1.components.monogram"),
+        # the whole docstring, not just its first line: why the letter is the
+        # one Bold glyph on the device is the part a port needs
+        note=" ".join((inspect.getdoc(components.monogram) or "").split()),
+        fill="the font's own rasterization, inked into the mask like any other mark",
+        scale=dict(value=components.MONOGRAM_SCALE, axis="cap height",
+                   token="components.MONOGRAM_SCALE",
+                   source=locate("pq1.components.MONOGRAM_SCALE"),
+                   rule="the font size is scale x the glyph r, so the letter shrinks with "
+                        "the disc and carries a mark's weight, not running text's"),
+        rule="resolved by SHAPE at draw time, never a GLYPHS entry: registering letters "
+             "lazily would make the published icon set depend on render order "
+             "(components.letter_glyph, audit G17-07). screens.schema.json publishes it as "
+             "enums.icon_namespaces.",
+        measured=_measured(components.letter_glyph(components.LETTER_PREFIX + sample)))
+
+    band = [n for n, e in sorted(icons.items()) if e["in_band"]]
+
+    def _edge(key, lowest):
+        vals = [(icons[n]["measured"][key], n) for n in band]
+        v, n = (min(vals) if lowest else max(vals))
+        return dict(value=v, icon=n)
+
+    exceptions = []
+    for label, where, why in STROKE_EXCEPTIONS:
+        loc = _line_in(*where) if isinstance(where, tuple) else locate(where)
+        val = None if isinstance(where, tuple) else resolve(where)
+        exceptions.append(dict(name=label, value=val, source=loc, code=_source_line(loc),
+                               reason=why))
+    return dict(
+        schema_version=SCHEMA_VERSION,
+        measured_at=dict(
+            r=layout.CIRCLE_R, disc=round(2.0 * components.visible_r(layout.CIRCLE_R), 2),
+            supersample=layout.SUP,
+            rule="each glyph drawn alone, white on black, at the disc's layout radius; the "
+                 "ink box and both centres in UI px about the glyph's own centre. Box edges "
+                 "are EXCLUSIVE (min, max + 1) — inclusive indices read a phantom half-pixel "
+                 "offset whenever the ink spans an even number of supersampled pixels "
+                 "(audit ICO-09)."),
+        compositing=dict(
+            mask=dict(model="an L mask inked at the mark's alpha, pasted in the mark's "
+                            "colour; the tile side is EVEN and the paste is rounded",
+                      source=locate("pq1.procedural.marks.base_mark"),
+                      note=_doc1(marks.base_mark),
+                      applies="every mark that rests on a disc — check, x and the monogram "
+                              "through base_mark itself, the traced marks building the same "
+                              "tile, the logos through their PNG's alpha"),
+            scaled=dict(model="the mark's colour scaled toward black by alpha, drawn straight "
+                              "onto the canvas",
+                        source=locate("pq1.procedural.marks.exclamation"),
+                        applies="the exclamation inside its own triangle and the plus / minus "
+                                "entry signs on the black panel — the only two places a mark "
+                                "never meets a lit body"),
+            rule="ONE model for a mark on a disc (audit ICO-01): colour-scaling is exact only "
+                 "against black, so a scaled check on the SAFE green stayed green-black at "
+                 "alpha 0 and cut in at full strength on frame one while the caption faded."),
+        optical_centre=dict(
+            rule="a mark's ink sits on the circle grid in the resting frame: the box is "
+                 "centred by construction, and where the ink is lopsided the art is nudged "
+                 "until the MASS lands there instead.",
+            exceptions=[
+                "chains.NUDGE — avalanche and linea centre their mass, so their box is "
+                "deliberately off centre",
+                f"{components.LETTER_PREFIX}<CHAR> — a letter is text, centred by the font's "
+                "metrics rather than by its ink",
+                "screens/verdict/last_attempt.py — the display digit and the heart are "
+                "composed as a pair by the type tier (owner, Sep 2026)"]),
+        verdict_box=dict(
+            value=layout.VERDICT_BOX, unit="px", source=locate("pq1.layout.VERDICT_BOX"),
+            readers=_readers("VERDICT_BOX", rel(layout.__file__))[:12],
+            rule="a verdict SIGN — a triangle, a padlock, a shield, a gear, a die — inks its "
+                 "LARGEST dimension to VERDICT_BOX and centres it on the circle grid. One "
+                 "size for every sign that stands where the token would; tools/check rule "
+                 "V-BOX measures the resting frame.",
+            exempt=[
+                dict(what="screens/verdict/firmware_verified.py",
+                     art="the token's own disc, filled white",
+                     size=2.0 * layout.CIRCLE_R,
+                     why="a disc ending IS the token, not a sign — it already carries the "
+                         "system's one radius"),
+                dict(what="screens/verdict/headshake.py",
+                     art="the token's visible disc, ringed in the state colour",
+                     size=round(2.0 * components.visible_r(layout.CIRCLE_R), 2),
+                     why="a ring ending is the token's visible disc; the ring is the verdict"),
+                dict(what="screens/verdict/padlock.py, the unlock rest", art="the open padlock",
+                     size=None,
+                     why="the shackle is sprung at rest, so the OPEN pose stands taller than "
+                         "the box the closed one fits"),
+                dict(what="screens/verdict/last_attempt.py",
+                     art="a display digit beside the heart", size=None,
+                     why="composed by the type tier, not drawn as a sign (owner, Sep 2026)"),
+                dict(what="screens/verdict/pin_mismatch.py, screens/verdict/duress_differ.py",
+                     art="the PIN pill", size=None,
+                     why="the pill is the row the user typed into, not a sign")]),
+        stroke=dict(
+            widths=dict(sorted(layout.STROKE.items())), unit="px",
+            draws={k: STROKE_DRAWS[k] for k in sorted(layout.STROKE)},
+            source=locate("pq1.layout.STROKE"),
+            readers=[h for h in _readers("STROKE", rel(layout.__file__))
+                     if "STROKE[" in _source_line(h)][:12],
+            rule="every line weight the port draws, by name. A width off this scale is a "
+                 "recorded decision, named where it is drawn.",
+            not_an_exception=[
+                dict(name="the resolve flash ring", source=locate("pq1.components.flash_ring"),
+                     note="it takes the system ring weight by default (components."
+                          "TOKEN_RING_W); it used to carry a width of its own and no "
+                          "longer does")],
+            exceptions=exceptions),
+        mark_band=dict(
+            extent_pct=list(MARK_BAND["extent_pct"]), ink_pct=list(MARK_BAND["ink_pct"]),
+            of="the token's VISIBLE disc, 2 x components.visible_r(layout.CIRCLE_R)",
+            source=f"{rel(__file__)}:{_assign_lines(importlib.import_module(__name__))['MARK_BAND'][0]}",
+            rule="every mark that RESTS on a disc and is not a brand's own logo sits inside "
+                 "the band. It is a weight rule, not a size law — the sign box above is what "
+                 "fixes a verdict's size.",
+            members=band,
+            measured=dict(extent_pct=dict(min=_edge("extent_pct", True),
+                                          max=_edge("extent_pct", False)),
+                          ink_pct=dict(min=_edge("ink_pct", True),
+                                       max=_edge("ink_pct", False))),
+            exempt=[
+                "chain brand logos — their proportions are the network's, not ours",
+                "full-bleed token art — the art IS the disc",
+                f"{components.LETTER_PREFIX}<CHAR> — a letter is sized by the font's cap "
+                "height",
+                "exclamation, plus and minus — they never rest on a disc"]),
+        icons=icons,
+    )
 
 
 # -------------------------------------------------------------- build.json --
@@ -985,8 +1610,10 @@ def source_hash():
 SPECS = {
     "build.json": source_hash,
     "motion.json": motion_spec,
+    "colors.json": colors_spec,
     "anims.json": anims_spec,
     "screens.schema.json": screens_schema,
+    "icons.json": icons_spec,
     "flows.json": flows_spec,
     "gestures.json": gestures_spec,
     "traces.json": traces_spec,

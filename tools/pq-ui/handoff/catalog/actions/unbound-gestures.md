@@ -13,7 +13,7 @@ Everything below is executed against the reference driver, not read off the spec
 
 ## Outside an entry there is no chord and no double-tap
 
-`FlowDriver.press` and `FlowDriver.release` route to the entry grammar only on an entry screen (`pq1/driver.py:230`). On a hero, a detail, a value or a Confirm? there is no recognizer for "both buttons" and none for "twice": every press starts its own tap-or-hold clock, and every release inside `TAP_MAX_MS` 250 ms (3.5 f) fires its own tap.
+`FlowDriver.press` and `FlowDriver.release` route to the entry grammar only on an entry screen (`pq1/driver.py:234`). On a hero, a detail, a value or a Confirm? there is no recognizer for "both buttons" and none for "twice": every press starts its own tap-or-hold clock, and every release inside `TAP_MAX_MS` 500 ms (7.0 f) fires its own tap.
 
 | what the user does | what the device does |
 |---|---|
@@ -26,12 +26,12 @@ The tables prove it. On the ask, `both buttons (chord)` and `double press right`
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — the ask (flow has details) | tap left | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
+| hero — the ask (flow has details) | tap left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | tap right | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | hold left | `fired` | SEND (hero, p1) | DECLINED (status, p1) |
 | hero — the ask (flow has details) | hold right | `fired` | SEND (hero, p1) | SUCCESSFUL (status, p1) |
 | hero — the ask (flow has details) | release a hold early (1000 ms) | `snapback` | SEND (hero, p1) | SEND (hero, p1) |
-| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | TO (detail, p1) |
+| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | double press left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | double press right | `None` | SEND (hero, p1) | TO (detail, p1) |
 
@@ -56,19 +56,19 @@ This is deliberate. Binding a double-tap on a navigation screen would force ever
 
 `commit` is false on every detail, every value and every [intro](../screen-types/hero-intro.md). There the right hold is unbound, and unbound means **invisible**:
 
-- `press()` starts the fill only when the side's action is in `armed()` (`pq1/driver.py:230`), so `Sim.hold` is never created — **no fill is drawn at any point**.
-- At `HOLD_COMMIT_MS` 2000 ms (28.0 f) the pending hold is offered to `_hold()`, which finds no `commit` and returns nothing (`pq1/driver.py:472`).
+- `press()` starts the fill only when the side's action is in `armed()` (`pq1/driver.py:234`), so `Sim.hold` is never created — **no fill is drawn at any point**.
+- When the fill would be drawn full (`motion.hold_full`, a hair before `HOLD_COMMIT_MS` 2000 ms (28.0 f)) the pending hold is offered to `_hold()`, which finds no `commit` and returns nothing (`pq1/driver.py:504`).
 - The release then reports `snapback` anyway — the driver returns that string for any press past the tap window that did not fire. **`snapback` here does not mean anything drained**; nothing was ever on screen. Do not use the result string to decide whether to draw.
 
 Executed on a detail: press right, hold past the commit, release — the screen does not change and the token never fills.
 
-The **entry** is the fourth place the right hold is unbound, and it draws nothing there either. The PIN row's fill is the left hold's cancel; its liquid function returns nothing for the right side (`screens/pin/pin_entering.py:433`), so a right hold on an open row is two seconds of nothing. See [entry — hold left cancels the row](entry-cancel.md).
+The **entry** is the fourth place the right hold is unbound, and it draws nothing there either. The PIN row's fill is the left hold's cancel; its liquid function returns nothing for the right side (`screens/pin/pin_entering.py:421`), so a right hold on an open row is two seconds of nothing. See [entry — hold left cancels the row](entry-cancel.md).
 
 ## During an ending, every input is ignored
 
 A looping ending is no exception: the bench's `y` / `n` are not gestures, they are the host answering the film ([bench keys](bench-keys.md), [loading loop](../transitions/loading-loop.md)).
 
-Once a status screen is on the panel the flow is dispatched and the buttons are dead — `armed()` returns an empty set for a status screen (`pq1/driver.py:134`), and `press`, `enter`, `double_tap` and `hold` all return immediately while the state is not `navigating`, and `release` fires nothing because no press was ever recorded.
+Once a status screen is on the panel the flow is dispatched and the buttons are dead — `armed()` returns an empty set for a status screen (`pq1/driver.py:136`), and `press`, `enter`, `double_tap` and `hold` all return immediately while the state is not `navigating`, and `release` fires nothing because no press was ever recorded.
 
 Executed on the ending of `send_token`, both while it is `resolving` and once it is `finished`: press left, release left, both buttons, a double press and a full hold all return nothing, and the ending plays on undisturbed. The corner chevrons are hidden there, which is the visible half of the same rule — declining has to happen before dispatch.
 
@@ -76,7 +76,7 @@ The one exception is an **entry**, which is a status-kind screen that is navigab
 
 ## The race between two holds
 
-Only one fill exists at a time: `Sim.hold_begin` keeps the first live hold and ignores a second button pressed during it (`pq1/flow.py:244`). Both press clocks keep running, though, and `FlowDriver.frame` commits whichever reaches `HOLD_COMMIT_MS` 2000 ms (28.0 f) first (`pq1/driver.py:505`). Executed: both buttons pressed in the same instant on the ask and held — the flow **declines**, because `frame()` walks left before right. Press right first and it signs. The loser's pending hold is dropped when the winner leaves the screen.
+Only one fill exists at a time: `Sim.hold_begin` keeps the first live hold and ignores a second button pressed during it (`pq1/flow.py:266`). Both press clocks keep running, though, and `FlowDriver.frame` commits whichever reaches `HOLD_COMMIT_MS` 2000 ms (28.0 f) first (`pq1/driver.py:537`). Executed: both buttons pressed in the same instant on the ask and held — the flow **declines**, because `frame()` walks left before right. Press right first and it signs. The loser's pending hold is dropped when the winner leaves the screen.
 
 ## Do / Don't
 

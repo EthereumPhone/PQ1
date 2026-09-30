@@ -23,13 +23,13 @@ Centred on x {{val:pq1.layout.CENTER_X}}, y {{val:pq1.layout.CIRCLE_CY}}. It bor
 | part | from (the arrived token) | to (the resting look) |
 |---|---|---|
 | disc radius | {{val:qubit:r_big}} − {{val:pq1.components.TOKEN_INSET}} (the token's visible edge) | {{val:qubit:r_big}} |
-| disc colour | the token's fill (an unknown token: its gradient) | the resting fill — black, or the brand's cancel red |
+| disc colour | the token's fill — always a solid, an unknown token's included | the resting fill — black, or the brand's cancel red |
 | ring colour | the token's ring (white, or its explicit stroke) | the resting ring — the state colour, or black when branded |
 | ring radius | {{val:qubit:r_big}} − {{val:pq1.components.TOKEN_INSET}} | unbranded: the same; branded: flush at {{val:qubit:r_big}} |
 | ring stroke | {{val:pq1.components.TOKEN_RING_W}} px | the same |
 | flash ring | r {{val:qubit:r_big}}, in the flash colour: `color` if set, else a branded ending's resting fill, else the state colour | grown by 55 px, 2.5 px stroke |
 
-For an unknown token the gradient stays underneath and the resting fill fades in over it. See [the resting look](resting-look.md).
+The arrived fill stays underneath and the resting fill fades in over it. See [the resting look](resting-look.md).
 
 ## Motion
 
@@ -38,16 +38,16 @@ Time 0 is the frame on which the transit into the screen has settled. At time 0 
 {{motion-head}}
 {{row:the beat: disc, ring colour and ring radius crossfade | qubit:T_FLASH | ease_out | one linear progress over the film's flash length, passed through `ease_out` for every colour and radius}}
 {{row:the token glyph fades out | qubit:T_FLASH * 0.45 | linear | gone at 45 % of the beat; it does not shrink (in the film it does)}}
-{{row:the flash ring fades in | qubit:T_FLASH * 0.12 | linear | a gate over the first 12 % of the beat: at t 0 there is no ring sitting on the disc edge, and by the next panel frame the gate is already fully open. It is a gate, not an accent — the two-frame minimum does not apply}}
+{{row:the flash ring fades in | pq1.status.FLASH_IN_MS | linear | two panel frames ({{loc:pq1.status.FLASH_IN_MS}}): at t 0 there is no ring sitting on the disc edge — the frame equals the arrived token exactly — and the fade is long enough to be sampled on the panel}}
 {{row:the flash ring grows and fades | qubit:T_FLASH | linear | radius and alpha both linear, alpha from 85 % to nothing — the same ring as the film's}}
-{{row:result glyph fades in | 350 | linear | starts at the end of the beat; the film's own resolve timing — a bare literal, no token}}
-{{row:caption waits | 120 | hold | counted from the end of the beat; bare literal}}
-{{row:caption fades in | 350 | linear | bare literal}}
+{{row:result glyph fades in | pq1.motion.RESULT_FADE_MS | ease_out | starts when the beat ends — an entrance, on the verdict caption's curve}}
+{{row:caption waits | pq1.motion.RESULT_LAG_MS | hold | counted from the end of the beat: two panel frames, so the mark is read first}}
+{{row:caption fades in | pq1.motion.RESULT_FADE_MS | ease_out | the result has landed at `t_landed` = `t_resolve` + {{tok:pq1.status.RESULT_LANDING_MS}}; the hold counts from there}}
 {{row:resolved, from time 0 | anim:core/resolve:t_resolve | — | the beat}}
 {{row:result hold | pq1.status.RESULT_HOLD_MS | hold | the same hold as every ending — see [result hold](../transitions/result-hold.md)}}
-{{row:whole screen | anim:core/resolve:duration | — | resolved + result hold}}
+{{row:whole screen | anim:core/resolve:duration | — | resolved + landing + result hold}}
 
-The disc does not overshoot here: the `back_out` pop belongs to the [film](status-qubit.md) only. See [flash ring + result glyphs](../components/flash-ring.md). Like the film, the resolve rests on the token disc (`rests_on_token` stays true), so leaving it is an ordinary token transit, not a fade to black.
+The disc does not overshoot here: the `back_out` pop belongs to the [film](status-qubit.md) only. See [flash ring + result glyphs](../components/flash-ring.md). Like the film, the resolve rests on the token disc (`rests_on_token` stays true) and shows a result, so leaving it is a [fade to black](../transitions/tokenless-fade.md), not a morph.
 
 ## Input
 

@@ -18,11 +18,11 @@ swallows whatever rolls out, exactly like the source.
 """
 from PIL import Image, ImageChops, ImageDraw
 
-from .. import gradients, typography
+from .. import colors, gradients, typography
 from ..layout import SUP
 
 
-def draw(cv, cx, cy, *, p, size=36, color, alpha=1.0, start=8, end=1,
+def draw(cv, cx, cy, *, p, size, color, alpha=1.0, start=8, end=1,
          weight="regular", travel=1.16, fade=0.28, win_w=1.1, win_up=0.475,
          win_dn=0.30):
     """digit reel rolling start -> end, digit centerline on (cx, cy)
@@ -37,7 +37,7 @@ def draw(cv, cx, cy, *, p, size=36, color, alpha=1.0, start=8, end=1,
     win_up   opaque band above the centerline, x size
     win_dn   opaque band below the centerline, x size
     """
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     col = tuple(int(round(c * alpha)) for c in color)
     s = SUP

@@ -12,15 +12,15 @@ Only on a screen whose dict has `pages` — a [paged detail](../screen-types/det
 
 ## Motion
 
-The envelope is `motion.page_flip(t)` ({{loc:pq1.motion.page_flip}}), a pure function of ms since the flip began returning `(a_out, a_in)`. Both alphas multiply the screen's own text alpha, so a flip caught by a [spring morph](spring-morph.md) simply fades out with the screen.
+The envelope is `motion.page_flip(t)` ({{loc:pq1.motion.page_flip}}), a pure function of ms since the flip began returning `(a_out, a_in)` — it is `motion.seq_swap(t, PAGE_FADE_MS)` ({{loc:pq1.motion.seq_swap}}), the one sequential-swap envelope the PIN row's caption and label swaps use too. Both alphas multiply the screen's own text alpha, so a flip caught by a [spring morph](spring-morph.md) simply fades out with the screen.
 
 {{motion-head}}
 {{row:showing page fades away | pq1.motion.PAGE_FADE_MS | ease_out | inverted — the alpha is `1 − ease_out(t / PAGE_FADE_MS)`, so it drops fast and tails off}}
 {{row:the pager number switches | - | cut | at the boundary between the two halves, while nothing is drawn}}
-{{row:next page fades in | pq1.motion.PAGE_FADE_MS | ease | cubic in-out, from the boundary; the flip is cleared when it reaches 1}}
-{{row:whole swap | 2 * pq1.motion.PAGE_FADE_MS | ease_out + ease | }}
+{{row:next page fades in | pq1.motion.PAGE_FADE_MS | ease_out | from the boundary; an arriving page is an entrance, so it lands fast like every other (DESIGN.md § Motion, the role table). The flip is cleared when it reaches 1}}
+{{row:whole swap | 2 * pq1.motion.PAGE_FADE_MS | ease_out + ease_out | }}
 
-At the boundary both alphas are zero: for a frame or two the value region is **empty** while the label and the pager stay up. That gap is the effect — do not close it. Sampled at the panel's rate from a flip that starts on a frame, the outgoing page reads 0.44, 0.14, 0.02, then the blank frame, then the incoming page 0.03, 0.31, 0.85, 1.00 — the fade-out is nearly done in its first two frames, which is what `ease_out` buys.
+At the boundary both alphas are zero: for a frame or two the value region is **empty** while the label and the pager stay up. That gap is the effect — do not close it. Sampled at the panel's rate from a flip that starts on a frame, the outgoing page reads 0.44, 0.14, 0.02, then the blank frame, then the incoming page 0.47, 0.81, 0.96, 1.00 — each half is nearly done in its first two frames, which is what `ease_out` buys (the incoming page read 0.03, 0.31, 0.85 on `ease` until Sep 2026: half a second where the value was on the glass but not yet readable).
 
 The label and every other fixed text are drawn straight through, at the screen's own alpha ({{loc:pq1.flow.Sim._draw_pages}}). The pager reads the page actually on the glass: the outgoing number while `a_out` is still above zero, the incoming one after.
 

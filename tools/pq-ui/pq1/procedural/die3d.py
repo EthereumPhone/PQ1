@@ -6,8 +6,8 @@ back-face culled; pips are circles sampled on each face plane and
 projected, so they foreshorten correctly. Standard western layout
 (1-2-3 counterclockwise around a corner, opposite faces sum 7). Faces
 are rounded silhouettes with black edge strokes and black pips; the
-source's 3.5 px corner radius and 2 px stroke (at half-edge 21) scale
-with size; the silhouettes use geometry.rounded_polygon (n=6), which
+source's 3.5 px corner radius and 2 px stroke — the port's hair weight,
+layout.STROKE — (both at half-edge 21) scale with size; the silhouettes use geometry.rounded_polygon (n=6), which
 matches the source's rounded_poly exactly except that its corner-trim
 clamp only engages on faces foreshortened below ~7 px, where the
 source's trim would self-cross. rot = (ax, ay, az) radians is the full pose; REST is the
@@ -27,7 +27,7 @@ import math
 from PIL import Image, ImageDraw
 
 from .. import colors
-from ..layout import SUP
+from ..layout import STROKE, SUP
 from .geometry import rounded_polygon
 
 # the source's settled corner view (rotX -0.62, rotY 0.66): three faces
@@ -94,9 +94,10 @@ def _draw_pose(d, cx, cy, size, col, rot, ox=0, oy=0):
         u3, v3, c3 = R(f["u"]), R(f["v"]), n3
         corners = [P(_add(_add(c3, u3, a), v3, b))
                    for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        # the edge is the hair stroke at half-edge 21 (audit ICO-05)
         d.polygon(rounded_polygon(corners, 3.5 * k * SUP, n=6),
                   fill=col, outline=colors.BLACK,
-                  width=int(round(2 * k * SUP)))
+                  width=int(round(STROKE["hair"] * k * SUP)))
         pip_r = 0.185
         spread = 0.78 if f["pips"] == 6 else 0.72
         for pu, pv in _pips(f["pips"]):
@@ -115,7 +116,7 @@ def draw(cv, cx, cy, *, size, color, alpha=1.0, rot=(0.0, 0.0, 0.0),
     """die at (cx, cy): size = half-edge in UI px (source SIZE 21),
     rot = (ax, ay, az) radians applied X then Y then Z, motion-blurred
     over the sweep (per-axis radians) it turned through behind rot"""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     col = tuple(int(round(c * alpha)) for c in color)
     n = min(BLUR_SAMPLES_MAX,
@@ -127,7 +128,7 @@ def draw(cv, cx, cy, *, size, color, alpha=1.0, rot=(0.0, 0.0, 0.0),
     # over a copy of what lies under the die and averaged in — a running
     # mean, the i-th pose blended in at 1 / i — inside the box any pose
     # can reach (the cube's space diagonal plus the stroke)
-    reach = size * math.sqrt(3) + 2.0 * size / 21.0 + 1.0
+    reach = size * math.sqrt(3) + STROKE["hair"] * size / 21.0 + 1.0
     ox = int(math.floor((cx - reach) * SUP))
     oy = int(math.floor((cy - reach) * SUP))
     w = int(math.ceil(2 * reach * SUP)) + 2

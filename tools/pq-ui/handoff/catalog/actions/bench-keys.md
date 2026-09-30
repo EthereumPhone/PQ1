@@ -22,7 +22,7 @@ It exists to answer "does this feel right", not to be ported. Production firmwar
 | `A`, or `a` `a` quickly | left double press | **PIN row only**: BACK, the cursor to the previous digit |
 | `s` / `enter`, held | right hold | sign, on armed screens — [hold right](hold-right-sign.md) |
 | `x` / `backspace`, held | left hold | decline; on a PIN row, cancel — [hold left](hold-left-decline.md) |
-| `y` / `n` | — | **the host, not a button**: answers a looping film — `y` the work succeeded (the check), `n` it failed (the X, on a flow that authors a failure film; elsewhere a notice). The film finishes its current turn and spirals in (`pq1/driver.py:294`). On the device the signing core answers — [loading loop](../transitions/loading-loop.md) |
+| `y` / `n` | — | **the host, not a button**: answers a looping film — `y` the work succeeded (the check), `n` it failed (the X, on a flow that authors a failure film; elsewhere a notice). The film finishes its current turn and spirals in (`pq1/driver.py:298`). On the device the signing core answers — [loading loop](../transitions/loading-loop.md) |
 | `r` | — | jump back to the first screen; it works at any time, and is meant for after an ending |
 | `q` / Ctrl-C | — | quit |
 
@@ -32,12 +32,12 @@ The player's own `KEYMAP` string is copied verbatim into `spec/gestures.json` (`
 
 Five differences to keep in mind while reading the panel:
 
-- **A tap key has no duration.** `d` calls `press` and `release` with the same clock value, so it is always inside `TAP_MAX_MS` 250 ms (3.5 f). Real buttons can be held a little too long and become a hold.
+- **A tap key has no duration.** `d` calls `press` and `release` with the same clock value, so it is always inside `TAP_MAX_MS` 500 ms (7.0 f). Real buttons can be held a little too long and become a hold.
 - **A hold is inferred from key repeat.** Holding `s` produces a stream of repeats; the player treats a gap in that stream as the release — a long gap before the first repeat (the OS's delay-until-repeat, `--initial-gap`) and a short one after (`--repeat-gap`). A release is therefore seen **late**, by up to that gap. Let go just before the fill completes and the bench may commit anyway. Real buttons have exact edges; port from the edges.
-- **`--instant-holds` is not a gesture.** With key repeat off, one press calls `FlowDriver.hold` and fires the whole gesture at once (`pq1/driver.py:260`). The fill still appears full for the commit, because `Sim.hold_commit` back-dates a press by `HOLD_COMMIT_MS` 2000 ms (28.0 f) when there was none (`pq1/flow.py:263`).
-- **`space` is not "both buttons".** It calls `FlowDriver.enter`, which does nothing off an entry (`pq1/driver.py:276`). Pressing `a` and `d` together *does* reach the real grammar — and outside an entry that is two taps, not a chord. See [unbound gestures](unbound-gestures.md). `D` / `A` are the same kind of shortcut for the double press.
-- **`y` / `n` are the host answering.** There is no such button; the port wires the signing core's result to the same `answer`. `--ready MS` is a scripted host that answers "succeeded" MS after the film starts (`pq1/driver.py:315`).
-- **`r` has no hardware equivalent.** `FlowDriver.restart` snaps back to the first screen and drops the built animations so an entry starts empty (`pq1/driver.py:322`). The device has no restart gesture.
+- **`--instant-holds` is not a gesture.** With key repeat off, one press calls `FlowDriver.hold` and fires the whole gesture at once (`pq1/driver.py:264`). The fill still appears full for the commit, because `Sim.hold_commit` back-dates a press by `HOLD_COMMIT_MS` 2000 ms (28.0 f) when there was none (`pq1/flow.py:285`).
+- **`space` is not "both buttons".** It calls `FlowDriver.enter`, which does nothing off an entry (`pq1/driver.py:280`). Pressing `a` and `d` together *does* reach the real grammar — and outside an entry that is two taps, not a chord. See [unbound gestures](unbound-gestures.md). `D` / `A` are the same kind of shortcut for the double press.
+- **`y` / `n` are the host answering.** There is no such button; the port wires the signing core's result to the same `answer`. `--ready MS` is a scripted host that answers "succeeded" MS after the film starts (`pq1/driver.py:319`).
+- **`r` has no hardware equivalent.** `FlowDriver.restart` snaps back to the first screen and drops the built animations so an entry starts empty (`pq1/driver.py:326`). The device has no restart gesture.
 
 ## What the bench gets right
 
@@ -50,7 +50,7 @@ Not simulated: the press-feedback chevron nudge ([press feedback](../components/
 
 ## Reading the status line
 
-Every frame the player rewrites one line: the screen's index and id, its page when it has more than one, its kind, the driver's state (`navigating` / `resolving` / `finished`; on a looping film the kind field reads `waiting (y ok / n fail)` until the answer, then `answered → check` / `x`), and the list of gestures armed right now — `<-tap`, `tap->`, `hold-R sign`, `hold-L decline`, and on a PIN row `tap-L −`, `tap-R +`, `both enter`, `2x-L back`, `2x-R next`, `hold-L cancel`. On an entry the kind field carries the digits typed so far. While a hold is live the line appends the fill percentage; the player adds the measured frame rate at the end. It is the fastest way to see what the grammar thinks is armed (`pq1/driver.py:198`).
+Every frame the player rewrites one line: the screen's index and id, its page when it has more than one, its kind, the driver's state (`navigating` / `resolving` / `finished`; on a looping film the kind field reads `waiting (y ok / n fail)` until the answer, then `answered → check` / `x`), and the list of gestures armed right now — `<-tap`, `tap->`, `hold-R sign`, `hold-L decline`, and on a PIN row `tap-L −`, `tap-R +`, `both enter`, `2x-L back`, `2x-R next`, `hold-L cancel`. On an entry the kind field carries the digits typed so far. While a hold is live the line appends the fill percentage; the player adds the measured frame rate at the end. It is the fastest way to see what the grammar thinks is armed (`pq1/driver.py:202`).
 
 ## Running it
 

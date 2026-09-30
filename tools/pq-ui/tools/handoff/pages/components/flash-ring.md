@@ -19,7 +19,7 @@ Exactly twice in the system, and nowhere else:
 
 An ending that arrives after a lead film ([status — arrive](../screen-types/status-arrive.md)) and every [verdict](../transitions/verdict-law.md) have **no flash**: disc, ring and glyph fade in together on the entrance law. Do not add one there.
 
-A screen with `"result": None` shows no glyph at all — the glyph is guarded on it in both places, the flash ring is not, so the beat plays and the disc simply rests empty. No live ending does this today: the two specs that carry `result: None` either override it before the resolve (`hold_to_confirm`) or draw no disc at all (`pin_differ`).
+A screen with `"result": None` shows no glyph at all — the glyph is guarded on it in both places, the flash ring is not, so the beat plays and the disc simply rests empty. No live ending does this today: the one spec that carries `result: None` (`hold_to_confirm`) overrides it before the resolve.
 
 ## Spec
 
@@ -42,7 +42,7 @@ The glyph takes `resting.glyph`, which is **not** the same value on a branded en
 | centre | the disc's — x {{val:pq1.layout.CENTER_X}}, y {{val:pq1.layout.CIRCLE_CY}} |
 | ring start radius | the full disc radius {{val:pq1.layout.CIRCLE_R}} — it leaves the disc edge, it does not appear around it |
 | ring end radius | + 55 px, so it runs past the top and bottom edges of the panel and is clipped |
-| ring stroke | 2.5 px (the function's default), a touch heavier than the system ring {{val:pq1.components.TOKEN_RING_W}} |
+| ring stroke | {{tok:pq1.components.TOKEN_RING_W}} — the system ring weight, the same stroke as the token ring and the pulse rings (owner decision: the flash is not a heavier ring) |
 | ring colour | the flash colour, scaled toward black as it fades |
 | check | a three-point polyline at (−0.40, +0.02) → (−0.10, +0.30) → (+0.44, −0.28) × r, stroked 0.16 r |
 | the caps | the drawing primitive has no round cap: the code fills a circle of half the stroke width at each open end (the check's two ends, the x's four). Port the caps, or the marks read cut off |
@@ -55,14 +55,14 @@ The clock is ms since the screen started; the flash begins when the bodies have 
 
 {{motion-head}}
 {{row:the merged body pops back to the full disc | qubit:T_FLASH | back_out | from r 17 to the disc radius, peaking about 4 % over it (back_out itself overshoots 10 % of the travel) — the ONE sanctioned overshoot in PQ1, a celebration, never navigation}}
-{{row:the ring expands off the disc edge and fades out | qubit:T_FLASH | linear | radius + 55 px, alpha 0.85 → 0; it is at full strength on its first frame}}
-{{row:a cancel resolve instead fades the ring IN first | qubit:T_FLASH * 0.12 | linear | so frame 0 of the beat equals the arrived token exactly — no coloured pop on the disc edge; it is shorter than one panel frame, so what it buys is that clean first frame, not a visible fade}}
+{{row:the ring expands off the disc edge and fades out | qubit:T_FLASH | linear | radius + 55 px, alpha `FLASH_ALPHA` {{val:pq1.colors.FLASH_ALPHA}} → 0; it is at full strength on its first frame}}
+{{row:a cancel resolve instead fades the ring IN first | pq1.status.FLASH_IN_MS | linear | so frame 0 of the beat equals the arrived token exactly — no coloured pop on the disc edge; two panel frames, so the panel samples the fade}}
 {{row:a cancel resolve: under it, the token becomes the resting look | qubit:T_FLASH | ease_out | disc fill, stroke colour and stroke radius cross over together; the token's own glyph hands off at the film's split rate ({{loc:pq1.status.ResolveStatus.draw}})}}
-{{row:the result glyph fades in, from the moment the screen resolves | 350 | linear | an unnamed literal, written out in {{loc:pq1.loading.qubit_pose}} and again in {{loc:pq1.status.ResolveStatus.draw}}}}
-{{row:the caption starts behind the glyph | 120 | linear | same two places; the caption then uses the same ramp}}
+{{row:the result glyph fades in, from the moment the screen resolves | pq1.motion.RESULT_FADE_MS | ease_out | an entrance — read by {{loc:pq1.loading.qubit_pose}} and {{loc:pq1.status.ResolveStatus.draw}}}}
+{{row:the caption starts behind the glyph | pq1.motion.RESULT_LAG_MS | ease_out | same two places; the caption then uses the same fade. The result has landed {{tok:pq1.status.RESULT_LANDING_MS}} after the resolve}}
 {{row:the ending rests before the flow moves on | pq1.status.RESULT_HOLD_MS | hold | every ending, the same — see [result hold](../transitions/result-hold.md)}}
 
-Those two literals are the only durations in the resolve that have no name; the conformance checker carries all four copies as known exceptions (rule `M-DIVLIT`). **Give them names in the port** and use the same pair in both places.
+Both come from the two named tokens in `pq1/motion.py`; **port the same pair** and read it in both places — the film and the film-less resolve land their result identically.
 
 Both ramps are linear, and both are pure functions of the elapsed ms: any frame of the resolve can be recomputed from the clock alone, which is what makes the film seekable and resumable on the panel.
 

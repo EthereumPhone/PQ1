@@ -1,7 +1,7 @@
 """PIN entering — the eight-ring input, typed with the two buttons.
 
 The 8 idle rings (procedural.pin_slots) fade in on the cy 72 row. The
-active slot eases idle -> YELLOW and lifts 3 px; a tap dials its digit
+active slot eases idle -> YELLOW and lifts pin_slots.ACTIVE_LIFT; a tap dials its digit
 (right +1, left -1, 0..9 wrapping) with a 220 ms micro-bounce; BOTH
 buttons together ENTER the digit (the ring turns white, the cursor
 advances); a double press only moves the cursor over entered digits —
@@ -64,8 +64,8 @@ rests T_BLACK on black).
 import math
 
 from pq1 import colors, components, motion, status, typography
-from pq1.layout import CENTER_X, CHEV_LEFT, CHEV_RIGHT, CIRCLE_CY, CIRCLE_R
-from pq1.motion import CHORD_MS, DOUBLE_TAP_MS, LEFT, RIGHT, clamp01, ease, ease_out
+from pq1.layout import CENTER_X, CHEV_LEFT, CHEV_RIGHT, CIRCLE_CY, STROKE
+from pq1.motion import CHORD_MS, DOUBLE_TAP_MS, RIGHT, clamp01, ease, ease_out
 from pq1.procedural import marks, pin_slots
 
 ANIM = "pin_entering"
@@ -83,7 +83,7 @@ STEP_TICK = 260               # per +1 tick while dialing a digit
 STEP_SETTLE = 420             # pause on the digit, before the commit
 STEP_ADV = 240                # commit + cursor advance
 REST_MS = 2600                # exit="rest": rest on "PIN ENTERED" (the source loop tail)
-ACT_MS = 400                  # idle -> active ring ease + 3 px lift
+ACT_MS = 400                  # idle -> active ring ease + the cursor lift
 BOUNCE_MS = 220               # per-tick micro-bounce
 CHEV_STAGGER = 250            # chevrons trail the instruction labels
 SWAP_MS = status.BUSY_FADE_MS  # a caption / label swap: out, then in
@@ -93,8 +93,9 @@ T_OUT = T_FADE                # the row leaves: rings, labels, chevrons fade to 
 T_BLACK = 400                 # a tail-less submit rests on black this long
 
 # instruction labels pulse: each hint 3 s on (fading in and out), 3 s off,
-# then the next (user request, Sep 2026)
-L_SHOW, L_FADE, L_GAP = 2000, 500, 3000
+# then the next (user request, Sep 2026) — on the band's text fade (300,
+# motion.hint_env), the rest held so a hint still reads 3 s: 300 + 2400 + 300
+L_SHOW, L_FADE, L_GAP = 2400, status.BUSY_FADE_MS, 3000
 L_SLOT = L_SHOW + L_FADE * 2 + L_GAP
 PAIRS = (("−", "+"), ("ENTER (BOTH)",),      # a 1-tuple is centred between the chevrons
          ("BACK (2X)", "NEXT (2X)"))
@@ -102,20 +103,22 @@ DONE_PAIR = ()                # the 8th digit entered: no hint — the PIN is be
                               # (user request, Sep 2026: no BACK, then no CONFIRM)
 
 # labels keep the source's 8.8 px chevron-to-label gap, measured off the
-# pq1 corner slots (chevron half-width 4.2). The caps labels wear the
-# LABEL size (16 — the band-edge annotation size the pager wears too),
+# pq1 corner slots (components.CHEV_HALF_W, the polygon's base half-width
+# — the up-pose extent, kept as the anchor although the PIN chevrons rest
+# "lr"; the gaps were tuned against it). The caps labels wear the
+# LABEL face (SIZE_LABEL, SemiBold, LS_LABEL — the band-edge annotation
+# face the detail label and the pager wear too; user decision, Sep 2026),
 # centred on the chevron line by their measured ink box; the − / + signs
 # are MARKS (procedural.marks.minus / plus — typed signs were too thin to
 # read on glass; user request, Sep 2026) on the chevron line, their arm
 # span SIGN_R * 0.6, a lighter stroke than the x mark's and a wider gap
 # to the chevron (user request, Sep 2026)
 LBL_GAP = 8.8
-LBL_L = CHEV_LEFT[0] + 4.2 + LBL_GAP
-LBL_R = CHEV_RIGHT[0] - 4.2 - LBL_GAP
-LBL_LS = 0.5
+LBL_L = CHEV_LEFT[0] + components.CHEV_HALF_W + LBL_GAP
+LBL_R = CHEV_RIGHT[0] - components.CHEV_HALF_W - LBL_GAP
 LBL_SIZE = typography.SIZE_LABEL     # ENTER (BOTH), BACK (2X), NEXT (2X), …
 SIGN_R = 19.0                        # − / + : arm span 11.4 (the caps' height)
-SIGN_STROKE = 0.11                   # ... on a 2.1 px stroke (the x mark's is 3)
+HINT_STROKE = STROKE["hair"] / SIGN_R   # ... on the hair stroke, 2 px (the x mark's is 3)
 SIGN_GAP = 22.0                      # ... this far from the chevron's edge
 SIGNS = {"−": marks.minus, "-": marks.minus, "+": marks.plus}
 
@@ -221,29 +224,7 @@ def _round(t0, digits=DIGITS):
 
 def seg_alpha(p):
     """label alpha in one rotation slot: fade in, hold, fade out, gap"""
-    if p < 0:
-        return 0.0
-    if p < L_FADE:
-        return ease_out(p / L_FADE)
-    if p < L_FADE + L_SHOW:
-        return 1.0
-    if p < L_FADE + L_SHOW + L_FADE:
-        return 1 - ease_out((p - L_FADE - L_SHOW) / L_FADE)
-    return 0.0
-
-
-_LIFT = {}
-
-
-def _ink_lift(s, size):
-    """baseline offset (px) that centres the string's ink box on a line —
-    caps and the − / + symbols alike, measured once per (string, size)"""
-    key = (s, size)
-    if key not in _LIFT:
-        from pq1.layout import SUP
-        x0, y0, x1, y1 = typography.font(size).getbbox(s, anchor="ls")
-        _LIFT[key] = -(y0 + y1) / 2 / SUP
-    return _LIFT[key]
+    return 0.0 if p < 0 else motion.hint_env(p, L_SHOW, L_FADE)
 
 
 def swap(t, t_swap):
@@ -251,8 +232,7 @@ def swap(t, t_swap):
     over SWAP_MS, then the new fades in"""
     if t_swap is None:
         return 1.0, 0.0
-    return (1 - ease_out(clamp01((t - t_swap) / SWAP_MS)),
-            ease_out(clamp01((t - t_swap - SWAP_MS) / SWAP_MS)))
+    return motion.seq_swap(t - t_swap, SWAP_MS)
 
 
 class PinEntering(status.StatusAnim):
@@ -264,6 +244,13 @@ class PinEntering(status.StatusAnim):
         self.pin = self._digits(spec.get("pin", SPEC["pin"]), "pin")
         typed = spec.get("typed")
         self.typed = self.pin if typed is None else self._digits(typed, "typed")
+        # CHOOSING a PIN (flows/setup) instead of checking one: accept="any"
+        # takes whatever is entered (SET PIN); forbid=<pin> takes anything
+        # BUT it (the duress PIN must differ from the PIN) — both read only
+        # when present, so a checking entry is untouched
+        self.accept = spec.get("accept")
+        forbid = spec.get("forbid")
+        self.forbid = None if forbid is None else self._digits(forbid, "forbid")
         self.exit = spec.get("exit", "rest")
         if self.exit not in EXITS:
             raise ValueError(f"pin_entering exit is one of {', '.join(EXITS)}; "
@@ -297,7 +284,12 @@ class PinEntering(status.StatusAnim):
         "cancel" once cancelled (until a restart opens a fresh round)"""
         st = self.final
         if st["submit"] is not None:
-            return "match" if "".join(map(str, st["values"])) == self.pin else "miss"
+            entered = "".join(map(str, st["values"]))
+            if self.accept == "any":
+                return "match"
+            if self.forbid is not None:
+                return "miss" if entered == self.forbid else "match"
+            return "match" if entered == self.pin else "miss"
         if st["cancel"] is not None:
             return "cancel"
         return None
@@ -392,17 +384,10 @@ class PinEntering(status.StatusAnim):
     # ------------------------------------------------------------ drawing --
     def draw_handoff(self, cv, t):
         """flow splicing: the incoming resting token crossfades out under
-        the ring fade (spec handoff=True — the verdict idiom)"""
-        if not self.spec.get("handoff"):
-            return
-        k = ease_out(clamp01(t / T_FADE))
-        if k >= 1.0:
-            return
-        components.token_from_spec(cv, CENTER_X, CIRCLE_CY, CIRCLE_R,
-                                   self.spec, glyph_a=self.style["icon"])
-        if k > 0.003:
-            cv.circle(CENTER_X, CIRCLE_CY, CIRCLE_R + 2.5,
-                      (*colors.BLACK, int(round(255 * k))))
+        the ring fade (spec handoff=True — the verdict idiom): the ONE
+        wash, status.draw_handoff, over this screen's own span (audit
+        RAD-07 / D1-07 — this used to re-type it)"""
+        status.draw_handoff(cv, self.spec, self.style, t, T_FADE)
 
     def _pair(self, cv, pair, a):
         """a hint: a 1-tuple centred between the chevrons, a pair beside
@@ -414,21 +399,24 @@ class PinEntering(status.StatusAnim):
             self._label(cv, pair[1], a, "right")
 
     def _label(self, cv, s, a, side):
-        if a <= 0.01 or not s:
+        if a <= colors.ALPHA_FLOOR or not s:
             return
-        col = colors.scale(colors.WHITE, 0.8)
+        col = colors.scale(colors.WHITE, colors.INK_PAGING)
         if s in SIGNS:                       # the − / + marks
             w = 0.6 * SIGN_R
-            x = (CHEV_LEFT[0] + 4.2 + SIGN_GAP + w / 2 if side == "left"
-                 else CHEV_RIGHT[0] - 4.2 - SIGN_GAP - w / 2)
+            x = (CHEV_LEFT[0] + components.CHEV_HALF_W + SIGN_GAP + w / 2
+                 if side == "left"
+                 else CHEV_RIGHT[0] - components.CHEV_HALF_W - SIGN_GAP - w / 2)
             SIGNS[s](cv, x, CHEV_LEFT[1], SIGN_R, a, color=col,
-                     stroke=SIGN_STROKE)
+                     stroke=HINT_STROKE)
             return
-        w = typography.text_width(s, LBL_SIZE) + LBL_LS * (len(s) - 1)
+        w = (typography.text_width(s, LBL_SIZE, typography.WEIGHT_LABEL)
+             + typography.LS_LABEL * (len(s) - 1))
         x = (LBL_L + w / 2 if side == "left" else LBL_R - w / 2
              if side == "right" else CENTER_X)
-        cv.text(s, x, CHEV_LEFT[1] + _ink_lift(s, LBL_SIZE), LBL_SIZE, a,
-                ls=LBL_LS, color=col, baseline=True)
+        cv.text(s, x, CHEV_LEFT[1] + typography.ink_lift(s, LBL_SIZE, typography.WEIGHT_LABEL),
+                LBL_SIZE, a, ls=typography.LS_LABEL, weight=typography.WEIGHT_LABEL,
+                color=col, baseline=True)
 
     def _fill(self, st, t):
         """(level, presence) of the hold liquid in the rings — the left
@@ -459,8 +447,9 @@ class PinEntering(status.StatusAnim):
             exit_a = 1 - ease_out(clamp01((t - st["submit"] - T_CHECK) / T_OUT))
         elif st["cancel"] is not None:
             exit_a = 1 - ease_out(clamp01((t - st["cancel"]) / T_OUT))
-        row_a = ease(clamp01(tr / T_FADE)) * exit_a
-        act_a = ease(clamp01((tr - T_UI) / ACT_MS))
+        row_a = ease_out(clamp01(tr / T_FADE)) * exit_a
+        act_k = ease(clamp01((tr - T_UI) / ACT_MS))   # a ring already on screen
+                                                      # changing: in-out is right
         cursor, n = st["cursor"], st["n"]
         fill, fill_a = self._fill(st, t)
         row = []
@@ -470,8 +459,8 @@ class PinEntering(status.StatusAnim):
             slot = dict(a=row_a, fill=fill, fill_a=fill_a)
             if active:
                 slot["digit"] = st["shown"]
-                slot["active"] = act_a
-                slot["lift"] = 3.0 * act_a
+                slot["active"] = act_k
+                slot["lift"] = pin_slots.ACTIVE_LIFT * act_k
                 b = t - st["bump"]
                 if 0 <= b < BOUNCE_MS:
                     slot["bounce"] = 2.5 * math.sin(math.pi * b / BOUNCE_MS)
@@ -480,6 +469,11 @@ class PinEntering(status.StatusAnim):
                 slot["committed"] = True
             elif st["touched"][i]:       # dialed, not entered: pending in its grey ring
                 slot["digit"] = st["values"][i]
+                # ... and its digit wears the ring's own grey, so a 100 %
+                # white digit means the cursor or an entered slot and never
+                # a slot the user walked away from (audit A11-10)
+                slot["digit_ink"] = colors.scale(colors.WHITE,
+                                                 colors.INK_SECONDARY)
             row.append(slot)
         pin_slots.draw(cv, slots=row)
         self.draw_row(cv, t, st, tr, row_a)
@@ -492,14 +486,16 @@ class PinEntering(status.StatusAnim):
         follows (spec `done_labels` can name one — it pulses in after the
         sequential swap)"""
         ui_a = ease_out(clamp01((tr - T_UI) / T_TEXT)) * row_a
-        if ui_a <= 0.01:
+        if ui_a <= colors.ALPHA_FLOOR:
             return
         chev_a = ease_out(clamp01((tr - T_UI - CHEV_STAGGER) / T_TEXT)) * row_a
+        # both chevrons stay through the cancel hold (§ Input: a hold
+        # never fades a chevron)
         components.chevron_pair(cv, *components.chevron_angles("lr"),
                                 alpha=chev_a)
         a_old, a_new = swap(t, st["t_swap"])
         a_rot = 1.0 if st["t_swap"] is None else a_old if st["done"] else a_new
-        if a_rot > 0.01:                # the 8th entry: the hints leave at once
+        if a_rot > colors.ALPHA_FLOOR:                # the 8th entry: the hints leave at once
             ph = (tr - T_UI) % (L_SLOT * len(self.labels))
             slot = int(ph // L_SLOT)
             self._pair(cv, self.labels[slot],
@@ -523,7 +519,7 @@ class PinEntering(status.StatusAnim):
         else:
             a_busy, a_done = a_new, a_old
         busy = self.style["busy"]
-        if busy and a_busy * ui_a > 0.01:
+        if busy and a_busy * ui_a > colors.ALPHA_FLOOR:
             components.caption(cv, busy, a_busy * ui_a)
         self.draw_caption(cv, a_done * ui_a)
 

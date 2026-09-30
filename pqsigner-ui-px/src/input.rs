@@ -28,7 +28,14 @@ use crate::driver::Btn;
 use crate::motion::{CHORD_MS, DOUBLE_TAP_MS, HOLD_COMMIT_MS, TAP_MAX_MS};
 
 /// Debounce lockout after an accepted edge.
-pub const DEBOUNCE_MS: u32 = 25;
+///
+/// 30 ms is `pq1/motion.py`'s `DEBOUNCE_MS`. The port invented this constant
+/// before the reference named it (it was an `EXTRA` row in `port_diff`), so
+/// the old 25 ms carried no decision and no silicon evidence — the Sep-27
+/// spec named it and the port follows. NOT re-validated on glass; the SysTick
+/// sampler in `secure/src/ui/px/lcd.rs` imports this one constant, so there is
+/// no second copy to drift.
+pub const DEBOUNCE_MS: u32 = 30;
 
 /// A gesture the FSM emits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -20,16 +20,18 @@ Inside the detail section, wherever a detail could be. {{used-in}}
 - `icon` and `token` still matter: the disc is off the panel at rest, but it is the same disc that travels in and out, with the flow's trail colours.
 - A `label` on a value screen without `words` is ignored: `layout_of` never reads it.
 
-### Full-width budgets (the design rule — the Python does not enforce it)
+### Full-width budgets (measured — `normalize_screens` runs this rule)
 
 The [detail](detail.md) budgets times 1.45:
 
-| size | max characters per line | max lines |
+| size | max lines | typical characters per line |
 |---|---|---|
-| 36 | 17 | 1 |
-| 32 | 20 | 1 |
-| 28 | 23 | 2 |
-| 22 | 30 | 3 |
+| {{val:pq1.typography.SIZE_XL}} | 1 | ~17 |
+| {{val:pq1.typography.SIZE_L}} | 1 | ~20 |
+| {{val:pq1.typography.SIZE_M}} | 2 | ~23 |
+| {{val:pq1.typography.SIZE_BODY}} | 3 | ~30 |
+
+A value screen measures against {{val:pq1.layout.TEXT_REGION_FULL_W}} px — the panel less its two margins, with no circle to clear. The counts are a sighting shot; `layout.fit_size(lines, full=True)` decides.
 
 ## Geometry
 
@@ -57,7 +59,7 @@ At rest nothing moves.
 
 {{gestures:value — full-width}}
 
-- Taps are a detail's: left back, right forward. In the live flows the value is the only screen of its section, so both neighbours are the ask — and either tap on the ask comes back here.
+- Taps are a detail's: left back, right forward. In the live flows the value is the only screen of its section, so both neighbours are the ask — a right tap on either ask comes back here, and a left tap on the returning ask.
 - `hold right` is unbound. `hold left` declines.
 - **Gap to know:** the hold fill is drawn inside the token disc ([hold flood](../components/hold-flood.md)), and here the disc is parked off the panel. In the reference a `hold left` on a value screen therefore shows **no progress at all** until it fires — the frames are pixel-identical to the resting screen. This is not a stated design decision. Raise it with the designer before porting; do not invent a fill.
 

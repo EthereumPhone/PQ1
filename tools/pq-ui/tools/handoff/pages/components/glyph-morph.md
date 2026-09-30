@@ -23,9 +23,9 @@ With `m` the mix clamped to 0–1:
 | outgoing (`glyph_a`) | `max(0, 1 − 2m)` — gone when `m` reaches one half |
 | incoming (`glyph_b`) | `max(0, 2m − 1)` — starts at one half, full at 1 |
 
-The two never overlap. At `m` = one half the disc carries **no glyph** for an instant. When both screens name the same glyph it is drawn once at full alpha — no dip.
+The two never overlap. At `m` = one half the disc carries **no glyph** for an instant. When both screens name the same glyph it is drawn once at full alpha — no dip. Two *names* that draw the same function count as the same glyph: `eth` and `mainnet` are one mark, so a leg between the ask and the Mainnet chain screen holds the ether mark at full alpha throughout instead of fading it out and back in (`components.same_art`, {{loc:pq1.components.same_art}}).
 
-A token glyph fades by **true alpha** over the body: image glyphs and the traced marks (`mainnet`, the chain marks, `blind`, `dev`, `rotate`, `fingerprint`, `download`) composite an alpha mask, because the body may be coloured and a mark merely darkened toward black would show as a dark shape on it ({{loc:pq1.procedural.chains.draw}}). The fallback `eth_mark` diamond, the monogram (an unknown chain's `letter:X`) and the check / X marks scale their colour toward black instead — exact only on a black body. A glyph under alpha 0.01 is not drawn.
+Every glyph that rests on a disc fades by **true alpha**: the shape is inked into a mask and the mask is pasted in the glyph's colour, because the body may be coloured and a mark merely darkened toward black would show as a dark shape on it ({{loc:pq1.procedural.marks.base_mark}}). That is the **one** model — `check`, the X and the monogram (an unknown chain's or a long-tail token's `letter:X`) go through `base_mark` itself, the traced marks build the same tile, and logo art carries its own alpha. Only the two marks that never meet a lit body still scale their colour toward black, and neither is ever a token glyph: the exclamation inside its warning triangle and the plus / minus entry signs. See [icons](icons.md). A glyph under alpha {{val:pq1.colors.ALPHA_FLOOR}} is not drawn.
 
 ## The body: a cut at one half
 

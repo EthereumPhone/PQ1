@@ -5,12 +5,12 @@ One module per design aspect:
 
     layout      the 428x142 grid, layout_of(), the screen-dict schema
     colors      solid palette + semantic states; placeholder ramps (the
-                per-token unknown gradients + placeholder palettes)
+                per-token solid fills + their trails)
     typography  Aileron loader + the PQ1 type scale
     motion      easing, timing constants, follower chain
     canvas      the 3x supersampled drawing surface
     components  token, glyphs/circle image, chevrons, caption, trails,
-                pulse, pills/badges
+                pulse, the pager
     loading     the qubit status film (pose math + drawing)
     status      status-screen engine — one resting look, pluggable
                 animations ("qubit" for done endings, the film-less

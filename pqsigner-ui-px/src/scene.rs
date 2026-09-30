@@ -297,7 +297,7 @@ pub struct DiscStyle {
 /// the token (stop 6 = the disc; ramp 13 is the mono entry, whose disc the
 /// design overrides to black).
 pub const PLACEHOLDER_RAMPS: [[Rgb; 6]; N_RAMPS as usize] = [
-    [Rgb::new(0x41, 0x3D, 0x2E), Rgb::new(0x48, 0x42, 0x2C), Rgb::new(0x5C, 0x52, 0x23), Rgb::new(0x75, 0x64, 0x00), Rgb::new(0x7D, 0x65, 0x00), Rgb::new(0x8A, 0x75, 0x00)],
+    [Rgb::new(0x41, 0x3D, 0x2E), Rgb::new(0x4F, 0x48, 0x2C), Rgb::new(0x5D, 0x53, 0x29), Rgb::new(0x6C, 0x5E, 0x23), Rgb::new(0x7B, 0x69, 0x19), Rgb::new(0x8A, 0x75, 0x00)],
     [Rgb::new(0x64, 0x12, 0x20), Rgb::new(0x85, 0x18, 0x2A), Rgb::new(0xA7, 0x1E, 0x34), Rgb::new(0xB2, 0x1E, 0x35), Rgb::new(0xC7, 0x1F, 0x37), Rgb::new(0xE0, 0x1E, 0x37)],
     [Rgb::new(0x05, 0x19, 0x23), Rgb::new(0x00, 0x2E, 0x4A), Rgb::new(0x00, 0x4F, 0x75), Rgb::new(0x00, 0x60, 0x97), Rgb::new(0x00, 0x74, 0xB1), Rgb::new(0x00, 0x7E, 0xB2)],
     [Rgb::new(0x38, 0x16, 0x0D), Rgb::new(0x4C, 0x26, 0x1B), Rgb::new(0x56, 0x2F, 0x21), Rgb::new(0x60, 0x37, 0x28), Rgb::new(0x6A, 0x3F, 0x2F), Rgb::new(0x7E, 0x50, 0x3C)],
@@ -309,7 +309,7 @@ pub const PLACEHOLDER_RAMPS: [[Rgb; 6]; N_RAMPS as usize] = [
     [Rgb::new(0x7C, 0x05, 0x0A), Rgb::new(0x8C, 0x19, 0x17), Rgb::new(0x9B, 0x27, 0x23), Rgb::new(0xAA, 0x35, 0x2F), Rgb::new(0xBA, 0x42, 0x39), Rgb::new(0xCA, 0x4D, 0x45)],
     [Rgb::new(0x26, 0x26, 0x2C), Rgb::new(0x2F, 0x30, 0x37), Rgb::new(0x39, 0x3A, 0x41), Rgb::new(0x4B, 0x4C, 0x52), Rgb::new(0x5B, 0x5C, 0x62), Rgb::new(0x6A, 0x6B, 0x70)],
     [Rgb::new(0x11, 0x00, 0x1C), Rgb::new(0x22, 0x07, 0x32), Rgb::new(0x37, 0x17, 0x4C), Rgb::new(0x5C, 0x31, 0x7E), Rgb::new(0x6F, 0x40, 0x97), Rgb::new(0x8C, 0x57, 0xBC)],
-    [Rgb::new(0x07, 0x23, 0x8B), Rgb::new(0x15, 0x37, 0x9A), Rgb::new(0x24, 0x48, 0xA9), Rgb::new(0x32, 0x58, 0xB8), Rgb::new(0x40, 0x67, 0xC4), Rgb::new(0x4C, 0x73, 0xCF)],
+    [Rgb::new(0x0E, 0x1A, 0x06), Rgb::new(0x1A, 0x2B, 0x0F), Rgb::new(0x25, 0x3D, 0x13), Rgb::new(0x31, 0x51, 0x16), Rgb::new(0x3D, 0x65, 0x19), Rgb::new(0x4A, 0x7A, 0x1C)],
     [Rgb::new(0x05, 0x05, 0x05), Rgb::new(0x2E, 0x2E, 0x2E), Rgb::new(0x5C, 0x5C, 0x5C), Rgb::new(0x8F, 0x8F, 0x8F), Rgb::new(0xC4, 0xC4, 0xC4), Rgb::new(0xF4, 0xF4, 0xF4)],
 ];
 /// `TOKEN_GRADIENTS["USDC"]` (`ramp_from(#2775CA)`).
@@ -1416,6 +1416,34 @@ mod tests {
         assert!(f.items().iter().any(|i| matches!(i, Item::Check { .. })));
         assert!(f.items().iter().any(|i| matches!(i, Item::Disc { color, .. } if *color == Rgb::SAFE_FILL)));
         assert!(!f.items().iter().any(|i| matches!(i, Item::Chevron { .. })), "no input on an ending");
+    }
+
+    /// COL-01 at the DISC, not the hash. `token_look` gives every unknown
+    /// token `Icon::Eth` and separates it from real ether by the tint alone,
+    /// so `tinted_style(t)` for a HASHED `t` must never render the same disc
+    /// as `mono_style()`. It is not enough that the hash avoids 13: this
+    /// asserts the thing the user actually sees.
+    #[test]
+    fn no_hashed_tint_renders_the_ether_disc() {
+        let eth = disc_style(Some(Icon::Eth), None);
+        for t in 0..crate::screen::MONO_RAMP {
+            let d = disc_style(Some(Icon::Eth), Some(t));
+            assert_ne!(
+                (d.fill, d.ring, d.mark, d.trail, d.film, d.film_white),
+                (eth.fill, eth.ring, eth.mark, eth.trail, eth.film, eth.film_white),
+                "ramp {t} renders pixel-identical to the ether disc"
+            );
+        }
+        // POSITIVE CONTROL: the mono ramp DOES render the ether disc — which
+        // is exactly why a hashed key must not reach it. If this ever stops
+        // holding, the test above has become vacuous for a different reason
+        // and the COL-01 argument needs re-checking.
+        let mono = disc_style(Some(Icon::Eth), Some(crate::screen::MONO_RAMP));
+        assert_eq!(
+            (mono.fill, mono.ring, mono.mark, mono.trail, mono.film, mono.film_white),
+            (eth.fill, eth.ring, eth.mark, eth.trail, eth.film, eth.film_white),
+            "the mono ramp no longer equals the ether disc — re-check COL-01"
+        );
     }
 
     #[test]

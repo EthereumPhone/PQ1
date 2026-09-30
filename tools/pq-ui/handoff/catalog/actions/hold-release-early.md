@@ -17,33 +17,33 @@ Any press on an armed side that comes up after the tap window and before the com
 
 ## The curve
 
-One pure function covers the whole gesture, rise and retreat: `motion.hold_fill(t_since_press, t_release)` (`pq1/motion.py:178`).
+One pure function covers the whole gesture, rise and retreat: `motion.hold_fill(t_since_press, t_release)` (`pq1/motion.py:211`).
 
 - The level is frozen at the value it had at the release — `k_at(min(t, t_release))` — so nothing jumps at the moment the button comes up.
 - That frozen level is then multiplied by `1 − ease_out(elapsed / HOLD_SNAPBACK_MS)`: a release at a quarter full drains a quarter of the disc, in the same time a release at nine tenths drains nine tenths. The snap-back is a **constant duration, not a constant speed**.
 - Both arguments are ms since press-down. Any frame can be recomputed from the two press edges alone; nothing accumulates.
 
-`Sim.hold_release` records the release and `Sim.draw` drops the hold once the snap-back has run (`pq1/flow.py:251`).
+`Sim.hold_release` records the release and `Sim.draw` drops the hold once the snap-back has run (`pq1/flow.py:273`).
 
 ## Timeline (ms since press-down)
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| released inside the tap window: it was a tap | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | no fill was ever drawn, so there is nothing to drain — the hold record clears at once and the tap fires |
+| released inside the tap window: it was a tap | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | no fill was ever drawn, so there is nothing to drain — the hold record clears at once and the tap fires |
 | released mid-rise: the level freezes | — | — | hold | — | — | the level is whatever the linear rise had reached |
-| the fill drains from there to empty | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:173` | measured from the RELEASE, not from the press |
-| for comparison, a completed hold | 2000 | 28.0 | linear | `HOLD_COMMIT_MS` | `pq1/motion.py:171` | the action fires only here — [hold right](hold-right-sign.md) |
+| the fill drains from there to empty | 200 | 2.8 | ease_out | `HOLD_SNAPBACK_MS` | `pq1/motion.py:197` | measured from the RELEASE, not from the press |
+| for comparison, a completed hold | 2000 | 28.0 | linear | `HOLD_COMMIT_MS` | `pq1/motion.py:195` | the action fires only once the fill is drawn full (`motion.hold_full`) — [hold right](hold-right-sign.md) |
 
 ## Input
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — the ask (flow has details) | tap left | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
+| hero — the ask (flow has details) | tap left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | tap right | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | hold left | `fired` | SEND (hero, p1) | DECLINED (status, p1) |
 | hero — the ask (flow has details) | hold right | `fired` | SEND (hero, p1) | SUCCESSFUL (status, p1) |
 | hero — the ask (flow has details) | release a hold early (1000 ms) | `snapback` | SEND (hero, p1) | SEND (hero, p1) |
-| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | TO (detail, p1) |
+| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | double press left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | double press right | `None` | SEND (hero, p1) | TO (detail, p1) |
 
@@ -61,19 +61,19 @@ One pure function covers the whole gesture, rise and retreat: `motion.hold_fill(
 Two things to read carefully in those rows:
 
 - On the ask, `release a hold early` returns `snapback` and the screen is unchanged. A near-complete hold is worth no more than a hold that barely started.
-- On a detail the same row **also** says `snapback` — but the right hold is not armed there, so no fill was ever drawn. The driver returns the string for any press past `TAP_MAX_MS` 250 ms (3.5 f) that did not fire (`pq1/driver.py:245`). The result is not evidence the signer saw anything; see [unbound gestures](unbound-gestures.md).
+- On a detail the same row **also** says `snapback` — but the right hold is not armed there, so no fill was ever drawn. The driver returns the string for any press past `TAP_MAX_MS` 500 ms (7.0 f) that did not fire (`pq1/driver.py:249`). The result is not evidence the signer saw anything; see [unbound gestures](unbound-gestures.md).
 
 ## A gap in the reference driver — fix it in the port
 
 Press again **while the previous fill is still draining** and the reference driver shows no rising fill, yet still commits.
 
-`Sim.hold_begin` keeps only one hold record and refuses a new one while the old is present (`pq1/flow.py:244`); the drained record is not dropped until `Sim.draw` sees the snap-back finish, `HOLD_SNAPBACK_MS` 200 ms (2.8 f) after the release. The second press therefore never gets a record of its own. The driver's own press clock has no such guard: it starts fresh, and at `HOLD_COMMIT_MS` 2000 ms (28.0 f) the action fires.
+`Sim.hold_begin` keeps only one hold record and refuses a new one while the old is present (`pq1/flow.py:266`); the drained record is not dropped until `Sim.draw` sees the snap-back finish, `HOLD_SNAPBACK_MS` 200 ms (2.8 f) after the release. The second press therefore never gets a record of its own. The driver's own press clock has no such guard: it starts fresh, and at `HOLD_COMMIT_MS` 2000 ms (28.0 f) the action fires.
 
 Executed — hold right on the ask, release at about half fill, press right again a frame later:
 
 1. The old fill finishes draining, as if the button were still up.
 2. The disc then sits **empty for the whole** `HOLD_COMMIT_MS` 2000 ms (28.0 f) of the second press. Nothing rises, nothing hints that a hold is running.
-3. At the commit the flow signs — and because `Sim.hold_commit` finds no live hold it back-dates one (`pq1/flow.py:263`), so the disc jumps straight to **full** and fades out over the leg.
+3. At the commit the flow signs — and because `Sim.hold_commit` finds no live hold it back-dates one (`pq1/flow.py:285`), so the disc jumps straight to **full** and fades out over the leg.
 
 On the device that is a signature announced by a fill that appears only after the fact. Start the new fill from zero on the new press-down instead, and drop whatever is left of the old one.
 

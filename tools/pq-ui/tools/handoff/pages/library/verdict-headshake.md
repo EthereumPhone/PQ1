@@ -14,7 +14,7 @@ Both presets have exactly the same timing — only the caption differs. `t` is m
 
 `T_WAIT` is the shake window plus the beat — a class attribute here, not computed per spec. The shake window is gated `0 < w < 1`, so the offset is exactly zero before and after it: no clamping, no residual.
 
-**The rig.** There is no procedural art on this screen. It draws the *resting look* itself — the same three layers every unbranded ending lands on ([the resting look](../screen-types/resting-look.md), `status.ArriveStatus`), on the same geometry: a disc of radius {{tok:pq1.layout.CIRCLE_R}} at (cx {{val:pq1.layout.CENTER_X}}, cy {{val:pq1.layout.CIRCLE_CY}}), a ring of width {{val:pq1.components.TOKEN_RING_W}} px whose radius sits {{val:screens.verdict.headshake.RING_INSET}} px inside the disc edge, and the result glyph from `components.GLYPHS`. Unbranded that is a black disc with the state colour as stroke and x; a spec that carries `resting` (a brand family) fills the disc instead and rides the ring flush at the edge. That is the whole point of the screen: WRONG SEED PHRASE must read as the same refusal as a flow's own CANCELED, because it is the same sign — only shaken.
+**The rig.** There is no procedural art on this screen. It draws the *resting look* itself — the same three layers every unbranded ending lands on ([the resting look](../screen-types/resting-look.md), `status.ArriveStatus`), on the same geometry: a disc of radius {{tok:pq1.layout.CIRCLE_R}} at (cx {{val:pq1.layout.CENTER_X}}, cy {{val:pq1.layout.CIRCLE_CY}}), a ring of width {{val:pq1.components.TOKEN_RING_W}} px whose radius sits `TOKEN_INSET` {{val:pq1.components.TOKEN_INSET}} px inside the disc edge (`components.visible_r`), and the result glyph from `components.GLYPHS`. Unbranded that is a black disc with the state colour as stroke and x; a spec that carries `resting` (a brand family) fills the disc instead and rides the ring flush at the edge. That is the whole point of the screen: WRONG SEED PHRASE must read as the same refusal as a flow's own CANCELED, because it is the same sign — only shaken.
 
 ## Variants
 
@@ -30,7 +30,7 @@ Both presets have exactly the same timing — only the caption differs. `t` is m
 
 {{constants}}
 
-`SHAKE_PX` and `RING_INSET` are UI pixels; `T_SHAKE` and `T_BEAT` sum to `T_WAIT`.
+`SHAKE_PX` is UI pixels; `T_SHAKE` and `T_BEAT` sum to `T_WAIT`.
 
 ## Input
 

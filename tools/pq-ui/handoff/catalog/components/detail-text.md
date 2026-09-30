@@ -7,11 +7,11 @@ The value block: size tiers, the SemiBold name line, the old-to-new transition r
 
 ## What it is
 
-The reading half of a [detail](../screen-types/detail.md) or [value](../screen-types/value.md) screen: one value, one to three lines, centred in the region the token does not occupy. On a detail a caps **label** names the field in the band; a value screen carries the lines alone — `layout_of` draws a label there only on a [words grid](words-grid.md) (`pq1/layout.py:365`).
+The reading half of a [detail](../screen-types/detail.md) or [value](../screen-types/value.md) screen: one value, one to three lines, centred in the region the token does not occupy. On a detail a caps **label** names the field in the band; a value screen carries the lines alone — `layout_of` draws a label there only on a [words grid](words-grid.md) (`pq1/layout.py:492`).
 
 The label says what it is; the lines say what it is worth. Nothing else sits in the block — one value at the largest tier, one label, and if a screen needs two values of equal weight it is two screens.
 
-Everything here is laid out by `layout_of` (`pq1/layout.py:365`) into flat text specs and drawn by `components.draw_text` (`pq1/components.py:581`).
+Everything here is laid out by `layout_of` (`pq1/layout.py:492`) into flat text specs and drawn by `components.draw_text` (`pq1/components.py:637`).
 
 ## When it appears
 
@@ -21,11 +21,9 @@ On every `detail` screen, and on a `value` screen (the same block, full width, w
 
 | key | form | meaning |
 |---|---|---|
-| `detail.label` | `"MAX FEE"` | 16 px SEMIBOLD caps, baseline y 128 |
+| `detail.label` | `"MAX FEE"` | the Label face (SIZE_LABEL SEMIBOLD caps), baseline y 128 |
 | `detail.lines` | `["45.5 gwei", "Tip: 2 gwei"]` | detail value, 1-3 lines; a line is a str, or {"str": …, "weight": "semibold"} — a NAME inside the value (the resolved contract / recipient / spender identity) rides SemiBold over its Regular address lines (DESIGN.md § Text rules, … (full text: the `pq1/layout.py` docstring) |
-| `detail.size` | `36 \| 32 \| 28 \| 22` | largest tier that fits |
-| `detail.text_x` | `175` | optional nudge |
-| `detail.circle_x` | `291` | optional nudge off the column |
+| `detail.size` | `36 \| 32 \| 28 \| 22` | largest tier that fits (no per-screen x nudges: a detail sits on the column grid; a chain screen composes itself — chain_compose) |
 
 A line takes one of three forms:
 
@@ -33,9 +31,9 @@ A line takes one of three forms:
 |---|---|---|
 | `"45.5 gwei"` | a plain value line, Regular | `cv.text` |
 | `{"str": "USD Coin", "weight": "semibold"}` | a **name**: the identity the device resolved, SemiBold over its Regular address lines | `cv.text`, semibold face |
-| `{"transition": ["Slot 3", "Slot 4"]}` | one value **becoming** another, on one row, a chevron between them | `components.transition_row` (`pq1/components.py:567`) |
+| `{"transition": ["Slot 3", "Slot 4"]}` | one value **becoming** another, on one row, a chevron between them | `components.transition_row` (`pq1/components.py:623`) |
 
-`layout.line_str` (`pq1/layout.py:317`) flattens any of them to text (a transition reads `Slot 3 ▸ Slot 4`) and `layout.line_weight` (`pq1/layout.py:325`) gives the face. Both are what you measure with.
+`layout.line_str` (`pq1/layout.py:396`) flattens any of them to text (a transition reads `Slot 3 ▸ Slot 4`) and `layout.line_weight` (`pq1/layout.py:404`) gives the face. Both are what you measure with.
 
 Live example — `approve_token` / CONTRACT, a name over its address halves at the Default tier:
 
@@ -49,31 +47,33 @@ lines = [{"str": "USD Coin", "weight": "semibold"},
 
 | part | value |
 |---|---|
-| lines centred on x | `DETAIL_TEXT_CX` {'left': 263, 'right': 163} — keyed by the side the **circle** is docked on, so the text sits in the other region; a value screen uses `VALUE_TEXT_CX` 214 |
+| lines centred on x | `DETAIL_TEXT_CX` {'left': 263, 'right': 165} — keyed by the side the **circle** is docked on, so the text sits in the other region; a value screen uses `VALUE_TEXT_CX` 214 |
 | block centred on y | 72.5 (`TEXT_CY`) |
-| line `i` of `n` | `TEXT_CY − (n−1)·lh/2 + i·lh`, vertically centred on that y (`pq1/layout.py:332`) |
-| leading `lh` | `line_height(size)` (`pq1/layout.py:312`): the size itself at 36 and 32, size + 8 at 28 and 22 |
+| line `i` of `n` | `TEXT_CY − (n−1)·lh/2 + i·lh`, vertically centred on that y (`pq1/layout.py:459`) |
+| leading `lh` | `line_height(size)` (`pq1/layout.py:391`): the size itself at 36 and 32, size + 8 at 28 and 22 |
 | label | size 16, SemiBold, caps, tracking 1 px, centred on the **circle's** x, baseline y 128 |
-| circle column | left `COL_LEFT` spans (24, 123), centre x 74; right `COL_RIGHT` spans (303, 402), centre x 352 |
-| nudges | `circle_x` / `text_x` move the pair off the column; the CHAIN / NETWORK detail carries both, at the Confirm? screen's coordinates 291 / 175 (a confirm screen does not read the fields — `layout_of` pins it there) |
+| circle column | left `COL_LEFT` spans (24, 123), centre x 74; right `COL_RIGHT` spans (304, 403), centre x 354 |
+| nudges | none — there are no per-screen x keys; `normalize_screens` rejects `circle_x` / `text_x`. A detail sits on its column. The CHAIN / NETWORK detail composes caption + 18 px + disc as one group centred on x 214 (`chain_compose`, `pq1/layout.py:640`), so its disc moves with the network's name; the Confirm? screen is composed the same way |
 | transition row | old value, chevron, new value, the whole run centred on the text x; the chevron centre sits `0.5 × size` past each value's edge |
 
 Three lines at the Default tier land on y 42.5 / 72.5 / 102.5, so the third dips into the band's y range. That is intended and safe: the label is over in the circle's column, far to the side.
 
 ### The tiers
 
-Always the largest tier whose content fits. Measure the longest unbreakable run with `typography.text_width` (`pq1/typography.py:100`), in the face that line will use.
+Always the largest tier whose content fits. Measure the longest unbreakable run with `typography.text_width` (`pq1/typography.py:137`), in the face that line will use.
 
-| tier | max characters per line | max lines | full-width (value screens) |
+| tier | max lines | typical chars/line | full-width |
 |---|---|---|---|
-| 36 | 12 | 1 | 17 |
-| 32 | 14 | 1 | 20 |
-| 28 | 16 | 2 | 23 |
-| 22 | 21 | 3 | 30 |
+| 36 | 1 | ~12 | ~17 |
+| 32 | 1 | ~14 | ~20 |
+| 28 | 2 | ~16 | ~23 |
+| 22 | 3 | ~21 | ~30 |
+
+The region is 294 px, or 404 px on a value screen. The character counts are a sighting shot for an author writing a sample — the measure decides.
 
 Does not fit at the Default tier? Split it across two screens — or, when it is ONE value that must stay whole (a 32-byte hash), page it inside its screen ([detail — paged](../screen-types/detail-paged.md)). Never below the Default tier, never truncated, never an ellipsis.
 
-The reference **does not fit at runtime**: `size` is written in the flow and `normalize_screens` accepts it as given — even an off-scale one (`pq1/layout.py:510`; a known gap in the checker's baseline). On the device the value is real data, so the firmware has to run the rule itself and pick the tier per transaction.
+The reference **does fit**: `normalize_screens` (`pq1/layout.py:653`) runs `fit_size` (`pq1/layout.py:434`) for every screen that does not pin a `size`, and raises when no tier holds the value. A typed `size` is the author's pin and is taken as given — the checker measures it separately (T-WIDTH), so a pinned line that would clip fails the build rather than the panel. A pin must still be ON the ladder: an off-scale size now raises, because it is a typo rather than a decision. On the device the value is real data, so the firmware has to run the rule itself and pick the tier per transaction.
 
 SemiBold runs wider than Regular — about 3 % on the live name lines, more on some strings — so measure a name in its own face (`typography.text_width(name, size, "semibold")`), not in Regular.
 
@@ -84,11 +84,11 @@ The block does not animate. It arrives and leaves with its screen.
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | outgoing block starts fading as the leg begins | — | — | spring NAV | — | — | the screen's own alpha spring, label and lines together |
-| incoming block is released after | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the token leads, the text lands just after — see [text-in delay](../transitions/text-in-delay.md) |
+| incoming block is released after | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the token leads, the text lands just after — see [text-in delay](../transitions/text-in-delay.md) |
 | no stagger inside the block | — | — | cut | — | — | all lines share one alpha; they never come in one by one |
-| a paged value: the showing page fades out | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:280` | sequential, never a crossfade — see [page flip](../transitions/page-flip.md) |
-| … then the next page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:280` | the incoming half of the same swap (`pq1/motion.py:283`); the pager's number switches between the two |
-| demo only: a detail advances itself after | 4100 | 57.4 | — | `DETAIL_DWELL` | `pq1/motion.py:154` | **do not port** — on the device a detail waits for a press |
+| a paged value: the showing page fades out | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:353` | sequential, never a crossfade — see [page flip](../transitions/page-flip.md) |
+| … then the next page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:353` | the incoming half of the same swap (`pq1/motion.py:356`); the pager's number switches between the two |
+| demo only: a detail advances itself after | 4100 | 57.4 | — | `DETAIL_DWELL` | `pq1/motion.py:174` | **do not port** — on the device a detail waits for a press |
 
 Nothing reflows, ever. A value is laid out once, from the screen's own `size`, and then only its alpha changes.
 

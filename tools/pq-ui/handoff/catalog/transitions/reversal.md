@@ -11,7 +11,7 @@ A press that arrives while a [spring morph](spring-morph.md) is still running. I
 
 ## What the press does to the springs
 
-`go_to` (`pq1/flow.py:175`) first drops a press that targets the screen already current — that one is a genuine no-op. Otherwise it takes one of three branches, named by the morph's two endpoints `a` and `b` (`mix` runs `0` → `a`, `1` → `b`):
+`go_to` (`pq1/flow.py:193`) first drops a press that targets the screen already current — that one is a genuine no-op. Otherwise it takes one of three branches, named by the morph's two endpoints `a` and `b` (`mix` runs `0` → `a`, `1` → `b`):
 
 | the press targets | branch | what happens to `mix` |
 |---|---|---|
@@ -33,7 +33,7 @@ The current screen index changes at the press, not at the settle. So while you c
 - `armed()` reads the destination, so a hold started mid-flight is armed (or not) by the screen you are heading to, and its fill dress is that screen's;
 - the fill draws on the travelling disc, not on a parked one.
 
-Once a hold commits, the destination is a status screen and the driver's state turns `resolving`: an ending's transit cannot be reversed (`pq1/driver.py:230`).
+Once a hold commits, the destination is a status screen and the driver's state turns `resolving`: an ending's transit cannot be reversed (`pq1/driver.py:234`).
 
 ## Motion
 
@@ -42,7 +42,7 @@ Once a hold commits, the destination is a status screen and the driver's state t
 | circle keeps travelling toward the new target | — | — | spring NAV | — | — | velocity carried through the retarget; measured mid-leg at a few hundred px/s |
 | mix reverses (branch 1 and 2) | — | — | spring NAV | — | — | live value and velocity kept |
 | mix rebases (branch 3) | — | — | cut | — | — | value and velocity forced to 0 in one frame |
-| incoming text release, re-armed by the new leg | 150 | 2.1 | hold | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | a run of presses faster than this keeps postponing it |
+| incoming text release, re-armed by the new leg | 150 | 2.1 | hold | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | a run of presses faster than this keeps postponing it |
 | whole set declared settled | — | — | — | — | — | tolerances in [spring morph](spring-morph.md); the idle clock starts here |
 
 ## Input

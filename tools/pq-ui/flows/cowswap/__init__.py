@@ -39,7 +39,10 @@ def ends():
     (status.default_anim): the token resolves in place onto the ONE
     cancel circle every family shares — #FF423D disc, black edge
     stroke, black X — the SAFE cancel look; the navy mark colours
-    SIGNED only"""
+    SIGNED only; FAILED is the one X ending that plays the film — the work
+    was dispatched and FAILED (the host answered "no"): the same qubit
+    loading, colliding into the shared red cancel disc (flows/send.py's
+    pattern, audit HS-02)"""
     return copy.deepcopy({
         "signed": dict(id="SIGNED", kind="status",
                        bottom="COWSWAP SIGNED",
@@ -50,4 +53,8 @@ def ends():
                          result="x", state="failed",
                          bottom="COWSWAP DECLINED",
                          resting=status.branded_resting(colors.RED)),
+        "failed": dict(id="FAILED", kind="status", anim="qubit",
+                       result="x", state="failed",
+                       bottom="COWSWAP FAILED",
+                       resting=status.branded_resting(colors.RED)),
     })

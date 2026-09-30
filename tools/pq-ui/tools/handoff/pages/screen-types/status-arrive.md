@@ -14,7 +14,7 @@ Never by default: `status.default_anim` only picks the [qubit film](status-qubit
 
 {{example}}
 
-`lead` (and `lead_gap`, `handoff`) are documented in the `pq1/status.py` docstring and on [status — led by a film](status-led.md). `result` and `state` work as on every status screen; `resting` brands the look (a filled disc under a flush black ring). Without `resting` the look is the default one: black disc, ring and glyph in the state colour.
+`lead` (and `lead_clear`, `handoff`) are documented in the `pq1/status.py` docstring and on [status — led by a film](status-led.md). `result` and `state` work as on every status screen; `resting` brands the look (a filled disc under a flush black ring). Without `resting` the look is the default one: black disc, ring and glyph in the state colour.
 
 ## Geometry
 
@@ -31,10 +31,10 @@ Disc, ring and glyph share **one** alpha and **one** scale. Nothing inside the l
 
 ## Motion
 
-Time 0 is the start of the screen's own animation. Under a lead that is the moment the lead resolves (plus any gap) — see [led](status-led.md).
+Time 0 is the start of the screen's own animation. Under a lead it is placed from the lead's tail: the black hold ends `lead_clear` ms after the last ring clears (default {{tok:pq1.status.LEAD_CLEAR_MS}} — the look rises as the blast clears) — see [led](status-led.md).
 
 {{motion-head}}
-{{row:black hold | pq1.status.ArriveStatus.T_HOLD | hold | the screen draws nothing; under a lead the film's last rings keep fading here (a major blast's tail outlasts this hold — see [led](status-led.md)). With `handoff` and no lead, the flow's token crossfades out over this span on `ease_out`}}
+{{row:black hold | pq1.status.ArriveStatus.T_HOLD | hold | the screen draws nothing; under a lead the film's last rings keep fading here (the hold is placed against the tail's clearance — see [led](status-led.md)). With `handoff` and no lead, the flow's token crossfades out over this span on `ease_out`}}
 {{row:entrance: the look fades in and rises | pq1.status.ArriveStatus.T_IN | ease_out + arrive | alpha on `ease_out`, scale on `motion.arrive` — both from the same linear progress. `T_IN` is {{tok:pq1.motion.ARRIVE_MS}}: the law's maximum, never longer, never an overshoot}}
 {{row:beat | pq1.status.ArriveStatus.T_WAIT | hold | the look stands alone}}
 {{row:caption fades in | pq1.status.ArriveStatus.T_TEXT | ease_out | }}
@@ -44,7 +44,7 @@ Time 0 is the start of the screen's own animation. Under a lead that is the mome
 
 The fade is a colour fade toward black (`colors.scale`), which on this panel's black ground equals alpha.
 
-`ArriveStatus` types the phase lengths itself; they are copies of `VerdictAnim`'s ({{loc:pq1.verdict.VerdictAnim.T_HOLD}}). If you port one table, port them as one.
+`ArriveStatus` reads the hold and the entrance from the same tokens as `VerdictAnim` (`VERDICT_HOLD_MS`, `ARRIVE_MS`) and types the beat and the caption fade beside them — copies of `VerdictAnim`'s ({{loc:pq1.verdict.VerdictAnim.T_HOLD}}). If you port one table, port them as one.
 
 ## Input
 
@@ -52,7 +52,7 @@ None. The chevrons are hidden and every press is ignored for the whole ending, t
 
 ## What it leaves behind
 
-`arrive` rests on the token disc (`rests_on_token` stays true), unlike a verdict icon. Leaving it is an ordinary token transit ([spring morph](../transitions/spring-morph.md)), not the [fade to black](../transitions/tokenless-fade.md) of a screen that owns its canvas.
+`arrive` rests on the token disc (`rests_on_token` stays true), unlike a verdict icon — but it shows a result, so leaving it is the [fade to black](../transitions/tokenless-fade.md), never a [spring morph](../transitions/spring-morph.md) that would drag the check or X into the next screen.
 
 ## Preview
 

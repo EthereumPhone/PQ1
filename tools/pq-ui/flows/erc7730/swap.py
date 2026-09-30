@@ -1,8 +1,7 @@
 """ERC7730 SWAP flow — a call clear-signed from its ERC-7730 descriptor,
 screen content only (grid/type/motion come from pq1).
 
-  ERC-7730 CLEAR SIGNING ▸ (the intro: dev mark, gold trail) -> SIGN SWAP
-  COINBASE UNISWAP V3? (idle sweep) -> NETWORK -> AMOUNT -> FUNCTION
+  SIGN SWAP COINBASE UNISWAP V3? (idle sweep) -> NETWORK -> AMOUNT -> FUNCTION
   -> MAX FEE -> WORST CASE -> DETAIL -> back on the idle hero (every
   detail seen, the ask again) -> status (SIGNED by default) — the full
   walkthrough.
@@ -31,7 +30,7 @@ so the id stays NETWORK: canonical id CHAIN must directly follow TO or
 AMOUNT.
 Render with `python -m flows erc7730/swap --end all`.
 """
-from flows.erc7730 import defaults, ends, intro
+from flows.erc7730 import defaults, ends
 
 # the contract the call goes to (Uniswap V3 SwapRouter02 on Base) —
 # variable content; the disc takes its colour from this address
@@ -40,7 +39,6 @@ CONTRACT = "0x2626664c2603336E57B271c5C0b26F421741e481"
 DEFAULTS = defaults(CONTRACT)
 
 BODY = [
-    intro(),
     dict(id="SIGN", kind="hero", bottom="SIGN SWAP COINBASE UNISWAP V3?", chev="lr", hint=True),
     dict(id="NETWORK", kind="detail", side="right", chain=8453, label=None, chev="lr"),
     dict(id="AMOUNT", kind="detail", side="left", label="AMOUNT",
@@ -57,6 +55,5 @@ BODY = [
 
 ENDS = ends("SWAP")
 DEFAULT_END = "signed"
-# the full walkthrough: every detail, back on the ask (BODY[1] — never the
-# intro), then the ending plays
-SCREENS = BODY + [dict(BODY[1]), ENDS[DEFAULT_END]]
+# the full walkthrough: every detail, back on the ask, then the ending plays
+SCREENS = BODY + [dict(BODY[0]), ENDS[DEFAULT_END]]

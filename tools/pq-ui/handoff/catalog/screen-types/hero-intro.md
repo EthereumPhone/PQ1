@@ -13,14 +13,14 @@ A hero that announces instead of asking. It looks like the [ask](hero-ask.md) �
 - the two corner chevrons are hidden (`chev` defaults to `None` when `band_chev` is set);
 - nothing is signed here: the flow sets `commit` to false, so the right hold is unbound.
 
-The disc wears the family's identity mark, not the token: the dev mark on a black disc over the gold trail (ERC-7730), the fingerprint mark on the white disc (firmware).
+The disc wears the family's identity, not the transaction's token: the fingerprint mark on the white disc (firmware), the setup family's own disc (backup).
 
 ## When it appears
 
-Used in 2 of 31 flows: `erc7730/swap`, `firmware/update`
+Used in 2 of 33 flows: `firmware/update`, `setup/first_run`
 
-- **ERC-7730** — the first screen of the flow, ahead of the ask. Built by `flows.erc7730.intro()` (`flows/erc7730/__init__.py:41`).
 - **Firmware update** — the second screen: after the opening ask, ahead of the [words grid](value-words.md). Built by `flows.firmware.fingerprint_intro()` (`flows/firmware/__init__.py:64`).
+- **Setup** — after the PIN entries, ahead of the seed words. Built by `flows.setup.backup_intro()` (`flows/setup/__init__.py:75`).
 
 A batch's announce screen is the same idiom plus a pager — see [hero — batch position](hero-pager.md).
 
@@ -37,31 +37,32 @@ A batch's announce screen is the same idiom plus a pager — see [hero — batch
 | `token` | `{"variant": "solid" \| "unknown", "fill": [r, g, b], "ring": [r, g, b], "palette": 0-13 …` | (optional; default "solid") solid fill colour ring colour; an explicit ring strokes INSIDE the disc edge and draws over logo art placeholder ramp pin: fill + from colors.PLACEHOLDER_ GRADIENTS (13 = MONO_RAMP, the recognized-logo look: … (full text: the `pq1/layout.py` docstring) |
 | `sweep` | `True \| False` | idle side-to-side sweep (default: hero screens only) |
 
-Screen 1 of flow `erc7730/swap`, as the design system normalizes it (defaults filled in):
+Screen 2 of flow `firmware/update`, as the design system normalizes it (defaults filled in):
 
 ```python
-{'id': 'ERC7730',
+{'id': 'KEY FINGERPRINT',
  'kind': 'hero',
- 'icon': 'dev',
- 'token': {'palette': 'ERC7730'},
- 'bottom': 'ERC-7730 CLEAR SIGNING',
+ 'icon': 'fingerprint',
+ 'bottom': 'FIRMWARE KEY FINGERPRINT',
  'band_chev': True,
  'commit': False,
+ 'icon_color': [0, 0, 0],
+ 'token': {'palette': 'FIRMWARE', 'ring': [0, 0, 0]},
  'chev': None}
 ```
 
-**`band_chev` does not switch `commit` off.** `normalize_screens` arms every hero by default (`pq1/layout.py:510`); only `chev` follows `band_chev`. An intro must carry `commit: False` itself — both family helpers do. An intro left armed would sign on a right hold.
+**`band_chev` does not switch `commit` off.** `normalize_screens` arms every hero by default (`pq1/layout.py:653`); only `chev` follows `band_chev`. An intro must carry `commit: False` itself — both family helpers do. An intro left armed would sign on a right hold.
 
-**`chev: None` hides the chevrons; it does not disable input.** The schema note above reads "None = no input", but the reference driver never looks at `chev` (`pq1/driver.py:134`): an intro takes both taps and the left hold with no corner chevrons on the panel. What is armed follows `kind` and `commit`.
+**`chev: None` hides the chevrons; it does not disable input.** The schema note above reads "None = no input", but the reference driver never looks at `chev` (`pq1/driver.py:136`): an intro takes both taps and the left hold with no corner chevrons on the panel. What is armed follows `kind` and `commit`.
 
 ## Geometry
 
 | part | value |
 |---|---|
 | circle | centre x 214, y 72, r 30 |
-| text `ERC-7730 CLEAR SIGNING` | x 214, y 128, size 18 |
+| text `FIRMWARE KEY FINGERPRINT` | x 206, y 128, size 18 |
 
-The layout reports the caption at x 214, but the drawing shifts a band-chevron caption: the text is centred on x 206, so text plus chevron read centred (`draw_text`, `pq1/components.py:581`). The chevron's centre sits 13 px past the right edge of the text, at y 121.5, pointing right. The text width counts the letter spacing (0.5 px per gap, size 18). It is the same unit the [Confirm? band](../components/confirm-band.md) draws for OR VIEW MORE: `_band_unit`, `pq1/components.py:536`.
+A band-chevron caption's text is centred on x 206, left of the panel centre, so text plus chevron read centred — the layout reports that x and `draw_text` draws there (`pq1/components.py:637`). The chevron's centre sits 13 px past the right edge of the text, at y 121.5, pointing right. The text width counts the letter spacing (0.5 px per gap, size 18). It is the same unit the [Confirm? band](../components/confirm-band.md) draws for OR VIEW MORE: `_band_unit`, `pq1/components.py:588`.
 
 The chevron position depends on the caption's width, so measure the text on the device; never fix the x.
 
@@ -70,11 +71,11 @@ The chevron position depends on the caption's width, so measure the text on the 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | arrive from the previous screen | — | — | spring NAV | — | — | the same spring set as every screen change — see [spring morph](../transitions/spring-morph.md) |
-| caption and band chevron fade in, after the disc starts | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the chevron is drawn with the caption's alpha; it never moves on its own |
+| caption and band chevron fade in, after the disc starts | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the chevron is drawn with the caption's alpha; it never moves on its own |
 | corner chevrons fade out on the way in, back in on the way out | — | — | spring NAV | — | — | their alpha follows the glyph mix spring between a screen that shows them and the intro |
-| the disc body and the trail colours change | — | — | cut | — | — | they switch in one step when the mix spring passes one half; only the glyph crossfades (dev mark to ether mark) |
-| rest before the idle sweep starts | 1000 | 14.0 | — | `SWEEP_DELAY_MS` | `pq1/motion.py:204` | an intro sweeps like any hero unless `sweep` is false |
-| idle sweep, one full side-to-side cycle | 5000 | 70.0 | sine + tau_chase | `SWEEP_PERIOD_MS` | `pq1/motion.py:205` | see [idle sweep](../components/idle-sweep.md); the caption and its chevron stay still |
+| the disc body and the trail colours change | — | — | cut | — | — | they switch in one step when the mix spring passes one half; only the glyph crossfades |
+| rest before the idle sweep starts | 1000 | 14.0 | — | `SWEEP_DELAY_MS` | `pq1/motion.py:257` | an intro sweeps like any hero unless `sweep` is false |
+| idle sweep, one full side-to-side cycle | 5000 | 70.0 | sine + tau_chase | `SWEEP_PERIOD_MS` | `pq1/motion.py:258` | see [idle sweep](../components/idle-sweep.md); the caption and its chevron stay still |
 
 The band chevron has no hint bob. `motion.chevron_hint` moves the corner pair only, and an intro sets no `hint`.
 
@@ -82,36 +83,36 @@ The band chevron has no hint bob. `motion.chevron_hint` moves the corner pair on
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — an intro (band_chev, commit False) | tap left | `enter` | ERC7730 (hero, p1) | SIGN (hero, p1) |
-| hero — an intro (band_chev, commit False) | tap right | `enter` | ERC7730 (hero, p1) | SIGN (hero, p1) |
-| hero — an intro (band_chev, commit False) | hold left | `fired` | ERC7730 (hero, p1) | DECLINED (status, p1) |
-| hero — an intro (band_chev, commit False) | hold right | `None` | ERC7730 (hero, p1) | ERC7730 (hero, p1) |
-| hero — an intro (band_chev, commit False) | release a hold early (1000 ms) | `snapback` | ERC7730 (hero, p1) | ERC7730 (hero, p1) |
-| hero — an intro (band_chev, commit False) | both buttons (chord) | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
-| hero — an intro (band_chev, commit False) | double press left | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
-| hero — an intro (band_chev, commit False) | double press right | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
+| hero — an intro (band_chev, commit False) | tap left | `back` | KEY FINGERPRINT (hero, p1) | UPDATE (hero, p1) |
+| hero — an intro (band_chev, commit False) | tap right | `enter` | KEY FINGERPRINT (hero, p1) | WORDS (value, p1) |
+| hero — an intro (band_chev, commit False) | hold left | `fired` | KEY FINGERPRINT (hero, p1) | DECLINED (status, p1) |
+| hero — an intro (band_chev, commit False) | hold right | `None` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | release a hold early (1000 ms) | `snapback` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | both buttons (chord) | `None` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | double press left | `None` | KEY FINGERPRINT (hero, p1) | UPDATE (hero, p1) |
+| hero — an intro (band_chev, commit False) | double press right | `None` | KEY FINGERPRINT (hero, p1) | CONFIRM UPDATE (hero, p1) |
 
-- **Either tap leads on.** The rule is `_hub_target` (`pq1/driver.py:338`): when the next screen is a hero, a tap goes to it; otherwise it goes to the section's first screen — the segment's first detail, value or Confirm?. So the ERC-7730 intro leads to the ask, and the firmware intro leads to the words, which are a value screen.
+- **A right tap leads on; a left tap never does.** The rule is `_hub_target` (`pq1/driver.py:342`): when the next screen is a hero, a right tap goes to it; otherwise it goes to the section's first screen — the segment's first detail, value or Confirm?. So the firmware intro leads to the words, which are a value screen.
 - **Hold right is unbound.** No fill is drawn, nothing fires. The `snapback` on the early-release row is only the driver's return value: there is no fill to drain.
-- **Hold left declines**, as on every navigable screen. The [fill](../components/hold-flood.md) rises in the intro's own disc: the white film inside the black ERC-7730 disc, the black film over the white firmware disc.
+- **Hold left declines**, as on every navigable screen. The [fill](../components/hold-flood.md) rises in the intro's own disc: the black film over the white firmware disc.
 - The chord and the double press are not bound here. The bench sends them as two presses, and each one counts as a tap — that is why those rows travel two screens. Do not port that as a shortcut.
 
-Coming back: in ERC-7730 the walk never returns to the intro. A left tap on the first detail goes to the ask before it, and the ask's taps go into the details. In the firmware flow the intro sits between the opening ask and the words, so a left tap on the words **does** return to the intro; the opening ask is the screen that is never seen again.
+Coming back: a left tap goes back one screen (`layout.back_target`, `pq1/layout.py:793`). In the firmware flow the intro sits between the opening ask and the words, so a left tap on the words returns to the intro and a left tap on the intro to the opening ask.
 
 ## Preview
 
 The clip is the demo walk: dwell timers advance it, at the KIOSK pace. On the device each step waits for a tap and moves on the NAV spring.
 
-**in flow erc7730/swap**
+**in flow firmware/update**
 
-![in flow erc7730/swap](../../previews/hero-intro.gif)
+![in flow firmware/update](../../previews/hero-intro.gif)
 
 ## Do / Don't
 
-- **Do** keep the caption a family constant. The two live captions are `INTRO_CAPTION` and `FINGERPRINT_CAPTION`; they are not per-transaction data.
+- **Do** keep the caption a family constant. `FINGERPRINT_CAPTION` is not per-transaction data; the backup caption carries only the word count.
 - **Do** keep the corner chevrons hidden while the band chevron shows. One screen never shows both.
 - **Don't** arm the right hold on an intro.
-- **Don't** port the dwell timer (`HERO_DWELL` 5000 ms (70.0 f)) or the demo loop's wrap from the ending back to the intro. On the device the intro waits for a tap.
+- **Don't** port the dwell timer (`HERO_DWELL` 5000 ms (70.0 f)) or the demo loop's wrap from the ending. On the device the intro waits for a tap.
 
 ## Port notes
 
@@ -123,5 +124,5 @@ The clip is the demo walk: dwell timers advance it, at the KIOSK pace. On the de
 
 - `pq1/layout.py`
 - `pq1/components.py`
-- `flows/erc7730/__init__.py`
 - `flows/firmware/__init__.py`
+- `flows/setup/__init__.py`

@@ -13,23 +13,23 @@ The remaining details exist for verification, not as a toll on signing. Holding 
 
 ## When it appears
 
-No flow needs to author this screen. `layout.insert_confirm` (`pq1/layout.py:603`) adds it when the flow is built:
+No flow needs to author this screen. `layout.insert_confirm` (`pq1/layout.py:820`) adds it when the flow is built:
 
-- A **segment** is one run of screens up to a status screen (`pq1/layout.py:590`). An ordinary flow is one segment; a [batch](batch-segment.md) has one per transaction.
+- A **segment** is one run of screens up to a status screen (`pq1/layout.py:807`). An ordinary flow is one segment; a [batch](batch-segment.md) has one per transaction.
 - A segment with 7 or more `detail` / `value` screens takes a `confirm` screen at index 5 of the segment — its 6th screen. In today's flows that is the ask plus four details, then Confirm?.
 - The index counts **every** screen of the segment, heroes included. A segment that opens with an [intro](hero-intro.md) ahead of its ask gets Confirm? after three details, not four. No live flow does this today; keep the rule as the code has it.
 - Each segment counts its own details, never the batch total.
 - A flow may spell the screen out itself, but only at that same index: a `confirm` screen anywhere else in such a segment, or a second one, is rejected when the flow is built. A segment under the threshold is not checked at all: never author one by hand there.
 - The screen is inserted **before** the flow's defaults are applied, so it wears the flow's own icon and token.
 
-Used in 13 of 31 flows: `approve_token`, `blind/bare_call`, `blind/call_with_value`, `blind/typed_call/sign_with_args`, `blind/unknown_call`, `cowswap/address_mode`, `cowswap/swap`, `eip1271/personal_counterfactual` … and 5 more (see the matrix in [INDEX](../INDEX.md))
+Used in 14 of 33 flows: `approve_token`, `blind/bare_call`, `blind/call_with_value`, `blind/typed_call/sign_with_args`, `blind/unknown_call`, `chains`, `cowswap/address_mode`, `cowswap/swap` … and 6 more (see the matrix in [INDEX](../INDEX.md))
 
 ## Spec
 
 | key | form | meaning |
 |---|---|---|
 | `kind` | `"hero" \| "detail" \| "value" \| "confirm" \| "status"` |  |
-| `confirm.bottom` | `"Confirm?"` | (default) 36 px prompt |
+| `confirm.bottom` | `"Confirm?"` | (default) the prompt at SIZE_XL |
 | `confirm.commit` | `True` | (default) hold-right sign armed |
 | `chev` | `"lr" \| "up" \| None` | "lr" tap-nav available, "up" hold armed, None = no input |
 | `icon` | `"eth" \| "blind" \| "rotate" \| "dev" \| "fingerprint" \| "download" \| a chain mark ("base",…` | glyph inside the circle (components.GLYPHS; a popular token's logo art comes via components.token_defaults; "letter:X" draws that initial — an unknown chain, pq1.chains) |
@@ -49,19 +49,19 @@ Screen 6 of flow `blind/unknown_call`, as the design system normalizes it (defau
  'commit': True}
 ```
 
-`chev` defaults to `"up"` on this kind (`pq1/layout.py:510`). `next` and `dwell` drive the demo loop only — see Do / Don't.
+`chev` defaults to `"up"` on this kind (`pq1/layout.py:653`). `next` and `dwell` drive the demo loop only — see Do / Don't.
 
 ## Geometry
 
 | part | value |
 |---|---|
-| circle | centre x 291, y 72, r 30 |
+| circle | centre x 297, y 72, r 30 |
 | text `Confirm?` | x 175, y 72.5, size 36 |
 
-- Disc centre x 291, y 72, radius 30. The disc does not sweep here.
+- Disc centre x 297, y 72, radius 30. The disc does not sweep here. The prompt and the disc are composed like the [chain screen](chain.md): one group centred on the panel with 18 px of air between the prompt's edge and the disc (`chain_compose`; checker rule G-CONFIRM holds the two pinned values to it).
 - Prompt: 36 px Regular, mixed case, centred on x 175, vertical centre y 72.5.
-- Band: 18 px caps, letter spacing 0.5, baseline y 128, text centred on x 206 (nudged left of the panel centre so text plus chevron read centred). The band chevron's centre sits 13 px past the text edge at y 121.5: after the text pointing right for VIEW MORE, before the text pointing left for GO BACK. Details: [confirm band](../components/confirm-band.md).
-- Corner chevrons: the usual slots (`pq1/layout.py:277`), both pointing up.
+- Band: 18 px caps, letter spacing 0.5, baseline y 128, OR VIEW MORE's text centred on x 206, TO GO BACK's on the mirror x 222, so each unit (text plus chevron) reads centred on the panel. The band chevron's centre sits 13 px past the text edge at y 121.5: after the text pointing right for VIEW MORE, before the text pointing left for GO BACK. Details: [confirm band](../components/confirm-band.md).
+- Corner chevrons: the usual slots (`pq1/layout.py:348`), both pointing up.
 
 ## Motion
 
@@ -70,13 +70,13 @@ All band and chevron clocks count from the moment the arriving transit **settles
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | arrive from a neighbour screen | — | — | spring NAV | — | — | the disc travels to its dock; the corner chevrons turn from sideways to up on the mix spring — see [spring morph](../transitions/spring-morph.md) |
-| the prompt fades in after the disc starts | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | see [text-in delay](../transitions/text-in-delay.md) |
-| band message fades in, once settled | 300 | 4.2 | ease_out | `BAND_FADE_MS` | `pq1/motion.py:261` | the band is not drawn during the transit at all |
-| band message holds at full | 4400 | 61.6 | hold | `BAND_SWAP_MS - 2 * BAND_FADE_MS` | `pq1/motion.py:260` |  |
-| band message fades out | 300 | 4.2 | ease_out | `BAND_FADE_MS` | `pq1/motion.py:261` | alpha reaches zero exactly on the slot boundary; then the other message fades in — out, then in, never a crossfade |
-| one message slot | 5000 | 70.0 | — | `BAND_SWAP_MS` | `pq1/motion.py:260` | VIEW MORE takes the even slots, GO BACK the odd ones |
-| full band cycle | 10000 | 140.0 | — | `2 * BAND_SWAP_MS` | `pq1/motion.py:260` | `motion.confirm_band(ms at rest)` is a pure function: `pq1/motion.py:265` |
-| corner chevrons bob, once per slot | 5000 | 70.0 | sine | `BAND_SWAP_MS` | `pq1/motion.py:260` | `motion.chevron_hint` with the band slot as its period; half a sine up and back, peak 4 px. The envelope's own literals: first bob 1750 ms after settling, 1200 ms long — see [chevrons](../components/chevrons.md) |
+| the prompt fades in after the disc starts | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | see [text-in delay](../transitions/text-in-delay.md) |
+| band message fades in, once settled | 300 | 4.2 | ease_out | `BAND_FADE_MS` | `pq1/motion.py:337` | the band is not drawn during the transit at all |
+| band message holds at full | 4400 | 61.6 | hold | `BAND_SWAP_MS - 2 * BAND_FADE_MS` | `pq1/motion.py:336` |  |
+| band message fades out | 300 | 4.2 | ease_out | `BAND_FADE_MS` | `pq1/motion.py:337` | alpha reaches zero exactly on the slot boundary; then the other message fades in — out, then in, never a crossfade |
+| one message slot | 5000 | 70.0 | — | `BAND_SWAP_MS` | `pq1/motion.py:336` | VIEW MORE takes the even slots, GO BACK the odd ones |
+| full band cycle | 10000 | 140.0 | — | `2 * BAND_SWAP_MS` | `pq1/motion.py:336` | `motion.confirm_band(ms at rest)` is a pure function: `pq1/motion.py:341` |
+| corner chevrons bob, once per slot | 5000 | 70.0 | sine | `BAND_SWAP_MS` | `pq1/motion.py:336` | `motion.chevron_hint` with the band slot as its period; half a sine up and back, peak 4 px. The envelope's own tokens: the first bob starts `CHEV_HINT_START_MS` + `CHEV_HINT_TURN_MS` after settling and lasts `CHEV_HINT_BOB_MS` 1214 ms (17.0 f) — see [chevrons](../components/chevrons.md) |
 | leaving: the prompt fades, the disc travels | — | — | spring NAV | — | — |  |
 | leaving: the band | — | — | cut | — | — | it is drawn only while the screen is settled and current, so it disappears on the first frame of the transit |
 

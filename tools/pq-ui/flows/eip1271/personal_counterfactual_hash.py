@@ -15,10 +15,10 @@ becomes HASH — the 32-byte message hash the account signs, read IN FULL.
 is ONE value, so the screen turns PAGES rather than splitting into two
 screens or shortening (DESIGN.md § Text rules, Pages): `pages` — two
 pages of two byte-aligned lines at 22 (page 1 "0x" + 8 bytes / 8 bytes,
-page 2 8 bytes / 8 bytes), the pager "1/2" / "2/2" (12 px, 80 % white,
-top centre) signalling the second page. The demo turns the page on the
-detail dwell — the first half fades away over 300 ms on the ease-out
-curve, then the second half fades in over 300 ms on the ease curve
+page 2 8 bytes / 8 bytes), the pager "1/2" / "2/2" (the Label face,
+INK_PAGING, top centre) signalling the second page. The demo turns the page on the
+detail dwell — the first half fades away over 300 ms on ease-out,
+then the second half fades in over 300 ms on ease-out too
 (motion.page_flip, the confirm band's rhythm); on the bench (pq1.driver)
 a right tap turns the page before it advances, a left tap turns it back.
 

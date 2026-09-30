@@ -18,7 +18,7 @@ Setting `band_chev` makes `chev` default to `None` ({{loc:pq1.layout.normalize_s
 
 | part | value |
 |---|---|
-| caption centre x | {{val:pq1.components.VIEW_MORE_CX}} — the panel centre ({{val:pq1.layout.CENTER_X}}) nudged left, so text plus chevron read centred together |
+| caption centre x | {{val:pq1.layout.VIEW_MORE_CX}} — the panel centre ({{val:pq1.layout.CENTER_X}}) nudged left, so text plus chevron read centred together |
 | caption baseline y | {{val:pq1.layout.BASELINE_Y}}, the shared band baseline |
 | caption type | the question caps: size {{val:pq1.typography.SIZE_QUESTION}}, letter spacing {{val:pq1.typography.LS_QUESTION}}, white |
 | chevron centre x | right edge of the text + {{val:pq1.components.VIEW_MORE_CHEV_GAP}} px |
@@ -27,7 +27,7 @@ Setting `band_chev` makes `chev` default to `None` ({{loc:pq1.layout.normalize_s
 
 The text width used for the chevron's x is the sum of the glyph advances plus the letter spacing between glyphs. The caption is data, so the chevron's x is computed per caption, never fixed. With the live captions it lands between x 316 and x 347.
 
-The nudge is applied in `components.draw_text` ({{loc:pq1.components.draw_text}}): a caption whose layout text carries `band_chev` is shifted by the difference between the two centres and drawn as a band unit. The layout marks the text in `layout_of` ({{loc:pq1.layout.layout_of}}).
+The nudge is part of the layout: `layout_of` ({{loc:pq1.layout.layout_of}}) places a `band_chev` caption on {{val:pq1.layout.VIEW_MORE_CX}} and marks it, and `components.draw_text` ({{loc:pq1.components.draw_text}}) draws it there as a band unit — the reported x is the drawn x.
 
 ## Motion
 

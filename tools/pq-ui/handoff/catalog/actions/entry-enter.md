@@ -9,7 +9,7 @@ The chord enters the digit and moves on; the chord that completes the row submit
 
 **Both buttons together** — the chord — is ENTER on an entry. It accepts the digit the active ring is showing: the ring turns white, the cursor steps forward one slot, and the dial picks up whatever that next slot already holds. The driver returns `enter` (`submit` on the eighth).
 
-The chord that accepts the **eighth** digit is different: it **submits**. The PIN is checked at once — no hold, no confirm screen, no second gesture (`pq1/driver.py:284`). That is the whole submit path on the device.
+The chord that accepts the **eighth** digit is different: it **submits**. The PIN is checked at once — no hold, no confirm screen, no second gesture (`pq1/driver.py:288`). That is the whole submit path on the device.
 
 ## When it is armed
 
@@ -17,10 +17,10 @@ On the [PIN row](../components/pin-row.md), always, from the empty row to the la
 
 ## The two ways a chord forms
 
-The reference implementation is `pq1/driver.py:374`:
+The reference implementation is `pq1/driver.py:380`:
 
 1. **The other button is still down.** Its press is spent: its hold clock stops there — a rising cancel fill drains from where it got to — and its release later is not another tap. Neither button ever dialed, so the digit entered is the digit on screen.
-2. **The other button was tapped within `CHORD_MS` 150 ms (2.1 f).** Measured from that tap's *release* to this press-down. The first tap already fired, so it is **undone** — `screens/pin/pin_entering.py:364` deletes it from the event log, and because the digit had not landed yet (see [dial](entry-dial.md)) nothing was ever shown that is now taken back.
+2. **The other button was tapped within `CHORD_MS` 150 ms (2.1 f).** Measured from that tap's *release* to this press-down. The first tap already fired, so it is **undone** — `screens/pin/pin_entering.py:356` deletes it from the event log, and because the digit had not landed yet (see [dial](entry-dial.md)) nothing was ever shown that is now taken back.
 
 Both paths enter the digit as it stood **before** the chord's first half. A porter must implement the undo: without it, a fast two-finger press dials +1 and then enters the wrong number.
 
@@ -90,7 +90,7 @@ The strip under the panel is a reading aid (which button is down) — it is not 
 - **Do** clear both sides' last-tap memory when a chord fires: after it, the next tap starts a fresh window and neither release counts as a tap.
 - **Don't** swap the caption to PIN ENTERED on a device submit, and don't show a BACK or CONFIRM hint on the full row. That state only exists in the `exit="rest"` demo, which never submits.
 - **Don't** let the chord window depend on which button came first. Either side may open it.
-- **Don't** port `FlowDriver.enter` (`pq1/driver.py:276`): it is the bench player's `space` / `e` shortcut for harnesses with no two-edge keys, and it skips the chord detection entirely — see [bench keys](bench-keys.md). Real buttons give you the two press edges.
+- **Don't** port `FlowDriver.enter` (`pq1/driver.py:280`): it is the bench player's `space` / `e` shortcut for harnesses with no two-edge keys, and it skips the chord detection entirely — see [bench keys](bench-keys.md). Real buttons give you the two press edges.
 
 ## Port notes
 

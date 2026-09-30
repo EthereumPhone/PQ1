@@ -21,7 +21,7 @@ import math
 
 from .. import colors, components, gradients, loading
 from ..layout import SUP, VALUE_PARK_X, W
-from ..motion import ENTER_MS, clamp01, ease, spring_travel
+from ..motion import NAV, clamp01, ease, settle_ms, spring_travel
 
 
 class BurstCfg:
@@ -54,7 +54,7 @@ MAJOR = BurstCfg(rings=5, stagger_ms=145, t_clump=1100, t_boom=900,
 MINOR = BurstCfg(rings=2, stagger_ms=145, t_clump=800, t_boom=750,
                  squeeze=0.22, jitter=(0.8, 1.6), intensity=(0.5, 1.0),
                  bloom=(240, 22), ring_span=(62, -16), aspect=0.9,
-                 grow_p=2.4, ring_w=(2.4, -0.5), ring_a=0.85)
+                 grow_p=2.4, ring_w=(2.4, -0.5), ring_a=colors.FLASH_ALPHA)
 
 # the sources' post-boom rest (ms): the staggered late rings finish within
 # 600 ms of t_resolve, so a dwell of HOLD_END after t_resolve matches the
@@ -63,6 +63,12 @@ HOLD_END = 1400
 
 
 ENTERS = (None, "left", "right", "sides")
+
+# a side entrance: the circle slides in from VALUE_PARK_X to the film's centre
+# on the device's NAV spring — the pace of every other move (duration never
+# scales with distance, DESIGN.md § Motion). Its length is DERIVED: the
+# spring's settle over the trip, to 0.3 px, then it snaps (~582 ms)
+ENTER_MS = settle_ms(abs(loading.QubitCfg().gc[0] - VALUE_PARK_X), NAV)
 
 # enter="sides": the two qubits fly in from both edges and spiral straight
 # onto the orbit — no rest, no split. The path is laid out first (a polar
@@ -165,7 +171,7 @@ def pose(t, cfg, enter=None, seed=None):
     """loading-leg bodies at t: the side entrance (enter="left"/"right":
     one full-size body travelling in from off the panel — the value
     screen's park spot, layout.VALUE_PARK_X, mirrored for "right" — on
-    the flows' KIOSK spring, motion.spring_travel; enter="sides": the two
+    the device's NAV spring, motion.spring_travel; enter="sides": the two
     qubits spiralling in from both edges onto the orbit) then the qubit
     pose"""
     q = cfg.qubit
@@ -188,7 +194,7 @@ def pose(t, cfg, enter=None, seed=None):
     if t0 and t < t0:
         gx, gy = q.gc
         x0 = VALUE_PARK_X if enter == "left" else W - VALUE_PARK_X
-        k = spring_travel(t)
+        k = spring_travel(t, NAV)
         # the body slides in at the token's VISIBLE radius: the seed it lands
         # on opens there (loading.qubit_pose), so the edge never steps out
         return dict(bodies=[dict(x=x0 + (gx - x0) * k, y=gy,
@@ -252,7 +258,10 @@ def draw(cv, t, cfg=MAJOR, *, trail=None, body=colors.WHITE,
                 pts.append(p)
                 prev = p
             for j in range(len(pts) - 1, -1, -1):
-                f = 1 - (j + 1) / 6.5
+                # the film's own trail steps, nearest follower first
+                # (colors.RAMP_STEPS 0.86 -> 0.15): the explosion's stream
+                # darkens exactly like every ramp (audit RAD-05)
+                f = colors.RAMP_STEPS[len(colors.RAMP_STEPS) - 2 - j]
                 cv.circle(pts[j]["x"], pts[j]["y"], b["r"],
                           gradients.scale(trail, f))
         if P["bind"] and len(P["bodies"]) == 2:

@@ -11,9 +11,9 @@ One fact of the transaction per screen — the network, the recipient, the amoun
 
 ## When it appears
 
-Every screen between the [ask](hero-ask.md) and its return. Used in 25 of 31 flows: `approve_token` ×6, `batch/transfers` ×15, `batch/transfers_declined` ×10, `blind/bare_call` ×7, `blind/call_with_value` ×7, `blind/typed_call/sign_with_args` ×10, `blind/unknown_call` ×8, `contract_call` ×5 … and 17 more (see the matrix in [INDEX](../INDEX.md))
+Every screen between the [ask](hero-ask.md) and its return. Used in 25 of 33 flows: `approve_token` ×6, `batch/transfers` ×15, `batch/transfers_declined` ×10, `blind/bare_call` ×7, `blind/call_with_value` ×7, `blind/typed_call/sign_with_args` ×10, `blind/unknown_call` ×8, `contract_call` ×5 … and 17 more (see the matrix in [INDEX](../INDEX.md))
 
-- Sides alternate, so the disc crosses the panel on every step. Flows set `side` explicitly; when absent it falls out of the screen's index (even = left, odd = right — `normalize_screens`, `pq1/layout.py:510`).
+- Sides alternate, so the disc crosses the panel on every step. Flows set `side` explicitly; when absent it falls out of the screen's index (even = left, odd = right — `normalize_screens`, `pq1/layout.py:653`).
 - A segment with 7 or more details (value screens count) gets a [Confirm?](confirm.md) inserted at the segment's index 5 — its 6th screen.
 - A value too long for three lines becomes a [paged detail](detail-paged.md); a value that needs the whole width becomes a [value screen](value.md).
 
@@ -22,13 +22,11 @@ Every screen between the [ask](hero-ask.md) and its return. Used in 25 of 31 flo
 | key | form | meaning |
 |---|---|---|
 | `kind` | `"hero" \| "detail" \| "value" \| "confirm" \| "status"` |  |
-| `side` | `"left" \| "right"` |  |
-| `label` | `"MAX FEE"` | 16 px SEMIBOLD caps, baseline y 128 |
+| `side` | `"left" \| "right"` | (default: the opposite of the previous detail in the segment, the first on the left — details alternate columns) |
+| `label` | `"MAX FEE"` | the Label face (SIZE_LABEL SEMIBOLD caps), baseline y 128 |
 | `lines` | `["45.5 gwei", "Tip: 2 gwei"]` | detail value, 1-3 lines; a line is a str, or {"str": …, "weight": "semibold"} — a NAME inside the value (the resolved contract / recipient / spender identity) rides SemiBold over its Regular address lines (DESIGN.md § Text rules, … (full text: the `pq1/layout.py` docstring) |
-| `size` | `36 \| 32 \| 28 \| 22` | largest tier that fits |
-| `circle_x` | `291` | optional nudge off the column |
-| `text_x` | `175` | optional nudge |
-| `pulse` | `True \| [r, g, b]` | pulsating rings around the token (components.pulse; True = token fill colour) |
+| `size` | `36 \| 32 \| 28 \| 22` | largest tier that fits (no per-screen x nudges: a detail sits on the column grid; a chain screen composes itself — chain_compose) |
+| `pulse` | `True \| <STATE key>` | pulsating rings around the token (components.pulse; True = STATE["warning"]) |
 | `icon` | `"eth" \| "blind" \| "rotate" \| "dev" \| "fingerprint" \| "download" \| a chain mark ("base",…` | glyph inside the circle (components.GLYPHS; a popular token's logo art comes via components.token_defaults; "letter:X" draws that initial — an unknown chain, pq1.chains) |
 | `chev` | `"lr" \| "up" \| None` | "lr" tap-nav available, "up" hold armed, None = no input |
 
@@ -42,25 +40,26 @@ Screen 3 of flow `send_token`, as the design system normalizes it (defaults fill
  'lines': ['0x78D8526282Ac09f1885', 'D0F39B8875a0180Fc081e'],
  'size': 22,
  'chev': 'lr',
- 'icon': 'eth',
+ 'icon': 'letter:T',
  'token': {'palette': 'TOSHI'}}
 ```
 
 - `kind` defaults to `"detail"`, `label` to none, `size` to 28, `chev` to `"lr"`.
 - A line is a plain string, a **name** line `{"str": NAME, "weight": "semibold"}`, or a **transition** row `{"transition": [old, new]}` drawn as `old ▸ new` on one row. See [detail text](../components/detail-text.md).
-- `circle_x` / `text_x` nudge the disc and the text off the column grid. A **chain badge** sets neither: it says `chain=<id>` and composes itself — see [chain badge](chain.md).
+- There are no x nudges: a detail's disc and text sit on the column grid, the right-docked pair the exact mirror of the left one. A **chain badge** says `chain=<id>` and composes itself — see [chain badge](chain.md).
+- `side` may be left out: details then alternate columns within a segment, the first on the left (`normalize_screens`, `pq1/layout.py:653`). Every live flow writes it.
 - `pulse` adds the attention rings around the docked disc — see [pulse rings](../components/pulse-rings.md).
 
-### Choosing the tier (the design rule — the Python does not enforce it)
+### Choosing the tier (measured — `normalize_screens` runs this rule)
 
-| size | max characters per line | max lines |
+| size | max lines | typical characters per line |
 |---|---|---|
-| 36 | 12 | 1 |
-| 32 | 14 | 1 |
-| 28 | 16 | 2 |
-| 22 | 21 | 3 |
+| 36 | 1 | ~12 |
+| 32 | 1 | ~14 |
+| 28 | 2 | ~16 |
+| 22 | 3 | ~21 |
 
-Use the largest tier that fits. Never below 22, never truncate, never ellipsize. `layout_of` does not measure, clip or shrink the value: `size` is whatever the flow wrote. On the device every value line is per-transaction data, so **the firmware must run this rule itself**.
+Use the largest tier whose every line MEASURES inside the 294 px region (404 px full-width). The character counts are a sighting shot, not the rule: a count is not a width, so each line is measured in the face it will be drawn in (`layout.fit_size`, `pq1/layout.py:434`). Never below the Default tier, never truncate, never ellipsize — a value that fits no tier RAISES. `normalize_screens` fits any screen that does not pin a `size`; a typed `size` is the author's pin, and the checker's T-WIDTH measures it anyway. `layout_of` still does not clip or shrink. On the device every value line is per-transaction data, so **the firmware must run this rule itself**.
 
 ## Geometry
 
@@ -73,9 +72,9 @@ Use the largest tier that fits. Never below 22, never truncate, never ellipsize.
 
 A [chain badge](chain.md) composes its own anchors; an ordinary detail sits on the column grid:
 
-- Disc column centre: x 74 (side left) or x 352 (side right); centre y 72, `CIRCLE_R` 30 px. It never resizes.
-- Text centre: x 263 when the disc is left, x 163 when it is right (`DETAIL_TEXT_CX`, `pq1/layout.py:272`) — always the region opposite the disc.
-- The block is centred on `TEXT_CY` 72.5 px. Line pitch is `line_height(size)` (`pq1/layout.py:312`): the size itself at 32 and 36, size + 8 below (28 → 36, 22 → 30). Line `i` of `n` sits at `TEXT_CY − (n − 1) · pitch / 2 + i · pitch`; each line is centred on its own x and y (`_value_texts`, `pq1/layout.py:332`).
+- Disc column centre: x 74 (side left) or x 354 (side right); centre y 72, `CIRCLE_R` 30 px. It never resizes.
+- Text centre: x 263 when the disc is left, x 163 when it is right (`DETAIL_TEXT_CX`, `pq1/layout.py:325`) — always the region opposite the disc.
+- The block is centred on `TEXT_CY` 72.5 px. Line pitch is `line_height(size)` (`pq1/layout.py:391`): the size itself at 32 and 36, size + 8 below (28 → 36, 22 → 30). Line `i` of `n` sits at `TEXT_CY − (n − 1) · pitch / 2 + i · pitch`; each line is centred on its own x and y (`_value_texts`, `pq1/layout.py:459`).
 - The label is 16 px SemiBold caps, tracking +1 px, centred on the **disc's** x, baseline y 128. Value lines carry no tracking.
 - Three lines at 22 put the third line's centre at y 102.5: it reaches into the bottom band on the text side. That is allowed — the label sits on the other side.
 
@@ -85,9 +84,9 @@ A [chain badge](chain.md) composes its own anchors; an ordinary detail sits on t
 |---|---:|---:|---|---|---|---|
 | arrive: the disc travels to its column | — | — | spring NAV | — | — | circle x / y / r, glyph mix and every screen's text alpha are one spring set — see [spring morph](../transitions/spring-morph.md) |
 | the previous screen's text fades out | — | — | spring NAV | — | — | starts on the press, not after the disc lands |
-| label + value are released | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the wait before the text's alpha spring gets its target, so the disc leads — see [text-in delay](../transitions/text-in-delay.md) |
-| the trail chases the travelling disc | 60 | 0.8 | tau_chase | `CHAIN_TAU` | `pq1/motion.py:212` | per link, links at most 30 px apart — see [trail](../components/trail.md) |
-| DEMO ONLY: rest, then auto-advance | 4100 | 57.4 | hold | `DETAIL_DWELL` | `pq1/motion.py:154` | counted from spring settle; do not port |
+| label + value are released | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the wait before the text's alpha spring gets its target, so the disc leads — see [text-in delay](../transitions/text-in-delay.md) |
+| the trail chases the travelling disc | 60 | 0.8 | tau_chase | `CHAIN_TAU` | `pq1/motion.py:265` | per link, links at most 30 px apart — see [trail](../components/trail.md) |
+| DEMO ONLY: rest, then auto-advance | 4100 | 57.4 | hold | `DETAIL_DWELL` | `pq1/motion.py:174` | counted from spring settle; do not port |
 
 At rest a detail stands still: no sweep (heroes only), no chevron hint. Only `pulse` rings move. A text fade is the text colour multiplied by the alpha — the ground is black, so no blending is needed; text under alpha 0.01 is not drawn (`pq1/canvas.py:61`).
 
@@ -122,7 +121,7 @@ Walked by the demo loop (KIOSK pace, dwell timers) — the device moves only on 
 
 - **Do** render a value exactly as supplied: never re-case, re-punctuate or reformat it.
 - **Do** keep one tier for the whole screen — a SemiBold name line and its Regular address lines share the size.
-- **Do** break an address mid-string into centred lines of 21 characters or fewer; the full value must be verifiable.
+- **Do** break an address mid-string into centred lines that measure inside the region — typically 21 characters or fewer, but the measure decides; the full value must be verifiable.
 - **Don't** fix a sample value into firmware: `lines` in a flow module are placeholders that exercise the tier rule.
 - **Don't** port `DETAIL_DWELL` 4100 ms (57.4 f) or the KIOSK spring pace.
 

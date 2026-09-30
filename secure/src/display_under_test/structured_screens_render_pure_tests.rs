@@ -210,7 +210,7 @@ fn erc7730_uniswap_exact_input_screens() {
     assert!(hero_caption(&l).starts_with("SIGN "), "{text}");
     assert!(ids(&l.screens).iter().any(|i| i == "INTENT"), "{text}");
     assert!(ids(&l.screens).iter().any(|i| i == "NETWORK"), "{text}");
-    check("erc7730", "uniswap_exact_input", &l, 1, "erc7730", "185ff1127b4ee59e3f39f61245361f0d266576ef7f2120939d374341459ab66f");
+    check("erc7730", "uniswap_exact_input", &l, 1, "erc7730", "0fa49fa8f5f42d26dcffd91e120a9cbc19114e172eee647488cbb870a6c34ac4");
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +304,7 @@ fn offchain_personal_sign_counterfactual_screens() {
     let text = screen_text(&l.screens).replace('\n', "");
     assert!(text.contains("app.example.com?") && text.contains("8f3a9c2e1b"), "{text}");
     assert!(l.screens.as_slice().iter().any(|s| s.label() == b"! UNDEPLOYED" && s.pulse()));
-    check("eip1271", "personal_counterfactual", &l, 8453, "personal", "c27c4fc07dbe9a757373bbbfe8ff2940542b2d9175bfb049dff12a3f8d40465c");
+    check("eip1271", "personal_counterfactual", &l, 8453, "personal", "068653ad7d18335c708294025b23ecfc760f17a075a78002458c6e3ec12a0a02");
 }
 
 #[test]
@@ -370,7 +370,7 @@ fn offchain_eip712_typed_screens() {
     };
     let l = finish_ref(pinned, &inputs, "typed");
     assert!(hero_caption(&l).starts_with("SIGN "));
-    check("eip1271", "typed_ballot", &l, 1, "typed", "264f114942d8b13de5d6067718734c4222eb8b76ca3d820699e831fd543246ba");
+    check("eip1271", "typed_ballot", &l, 1, "typed", "ef936f088279001aff59a87c66d044518a8e2870a1711d075363f91a1f413254");
 }
 
 
@@ -542,7 +542,7 @@ fn erc7730_userop_envelope_screens() {
     let l = lift_erc7730(&t, &data, &verified);
     let nonce_screen = l.screens.as_slice().iter().find(|s| s.id() == b"NONCE").expect("one NONCE screen");
     assert_eq!(nonce_screen.npages(), 2);
-    check("erc7730", "uniswap_userop", &l, 1, "erc7730", "022852fcbc64508cc5ae7602d66ba4bd9da79bfa7d54e4e524f60367e669a9a0");
+    check("erc7730", "uniswap_userop", &l, 1, "erc7730", "a7fc58916918a153ad87392aa327f279111a0c4c39e2dc2c47362eade4f969a2");
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,8 @@ Modules
               reference/logos/ — one module for the whole set (pq1.chains
               maps chain id -> mark). Ethereum mainnet is eth.py
     marks     check, x (cancel), exclamation — the result/notice marks;
-              plus, minus — the entry signs beside the corner chevrons
+              plus, minus — the entry signs beside the corner chevrons;
+              dots — the setup family's 3 x 3 dot grid
     blind     the blind-signing mark (assets/blind_icon.svg traced)
     dev       the ERC-7730 intro mark (assets/dev_icon.svg traced)
     rotate    the slot-rotation mark (assets/rotate_icon.svg traced)

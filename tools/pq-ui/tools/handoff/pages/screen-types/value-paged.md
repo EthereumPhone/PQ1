@@ -47,7 +47,7 @@ The executed truth table has no paged value, because no live flow has one. The r
 {{gestures:detail — paged}}
 
 - Right tap: next page, then the next screen. Left tap: previous page, then the previous screen.
-- Stepping back onto it from a later screen enters on the **last** page. Entering from an ask — either tap, the opening or the returning one — always opens page 1. When the value is the only screen of its section, its right neighbour is the returning ask, so the last-page entry never happens there.
+- Stepping back onto it from a later screen enters on the **last** page. Entering from an ask — a right tap, the opening or the returning one — always opens page 1. When the value is the only screen of its section, its right neighbour is the returning ask, so the last-page entry never happens there.
 - `hold left` declines but shows no fill: the disc is off the panel. See the gap noted on [value](value.md).
 
 See [tap on a paged screen](../actions/tap-page.md).

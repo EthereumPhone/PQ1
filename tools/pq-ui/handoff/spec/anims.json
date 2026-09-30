@@ -13,7 +13,7 @@
     "hold_fill_ms"
    ],
    "doc": "Hold to confirm — a hold fills the token's ring; confirm or cancel.",
-   "duration": 12710,
+   "duration": 13255,
    "entrance_window_ms": 300,
    "exceptions": [
     {
@@ -24,8 +24,8 @@
     }
    ],
    "frames_14": {
-    "duration": 177.9,
-    "t_resolve": 143.6
+    "duration": 185.6,
+    "t_resolve": 145.0
    },
    "interactive": false,
    "is_verdict": false,
@@ -40,23 +40,23 @@
     ],
     "RELEASE_K": 0.6,
     "T_COMMIT": 3800,
-    "T_FADE": 260,
     "T_IDLE": 1800,
     "T_IN": 300,
-    "T_POP": 3480,
+    "T_POP": 3580,
     "T_RECENTER": 300,
-    "T_REL": 3100,
+    "T_REL": 3200,
+    "T_SEED": 4160,
     "T_TEXT": 300,
     "T_WAIT": 450
    },
    "phases": {},
    "previews": [
-    2925,
-    12110
+    3050,
+    12655
    ],
    "rests_on_token": true,
-   "result_hold": 2450,
-   "source": "screens/confirm/hold_to_confirm.py:54",
+   "result_hold": 2895,
+   "source": "screens/confirm/hold_to_confirm.py:58",
    "spec": {
     "anim": "hold_to_confirm",
     "busy": "HOLD TO CONFIRM",
@@ -70,7 +70,7 @@
     0,
     3800
    ],
-   "t_resolve": 10260,
+   "t_resolve": 10360,
    "t_tail": null
   },
   "confirm/hold_to_confirm|hold_confirm_cancel": {
@@ -86,7 +86,7 @@
     "hold_fill_ms"
    ],
    "doc": "Hold to confirm — a hold fills the token's ring; confirm or cancel.",
-   "duration": 6980,
+   "duration": 7080,
    "entrance_window_ms": 300,
    "exceptions": [
     {
@@ -97,8 +97,8 @@
     }
    ],
    "frames_14": {
-    "duration": 97.7,
-    "t_resolve": 63.4
+    "duration": 99.1,
+    "t_resolve": 64.8
    },
    "interactive": false,
    "is_verdict": false,
@@ -113,23 +113,23 @@
     ],
     "RELEASE_K": 0.6,
     "T_COMMIT": 3800,
-    "T_FADE": 260,
     "T_IDLE": 1800,
     "T_IN": 300,
-    "T_POP": 3480,
+    "T_POP": 3580,
     "T_RECENTER": 300,
-    "T_REL": 3100,
+    "T_REL": 3200,
+    "T_SEED": 4160,
     "T_TEXT": 300,
     "T_WAIT": 450
    },
    "phases": {},
    "previews": [
-    2925,
-    6380
+    3050,
+    6480
    ],
    "rests_on_token": true,
    "result_hold": 2450,
-   "source": "screens/confirm/hold_to_confirm.py:54",
+   "source": "screens/confirm/hold_to_confirm.py:58",
    "spec": {
     "anim": "hold_to_confirm",
     "busy": "HOLD TO CONFIRM",
@@ -141,9 +141,9 @@
    },
    "t_busy": [
     0,
-    3100
+    3200
    ],
-   "t_resolve": 4530,
+   "t_resolve": 4630,
    "t_tail": null
   },
   "confirm/hold_to_confirm|hold_confirm_success": {
@@ -159,7 +159,7 @@
     "hold_fill_ms"
    ],
    "doc": "Hold to confirm — a hold fills the token's ring; confirm or cancel.",
-   "duration": 12710,
+   "duration": 13255,
    "entrance_window_ms": 300,
    "exceptions": [
     {
@@ -170,8 +170,8 @@
     }
    ],
    "frames_14": {
-    "duration": 177.9,
-    "t_resolve": 143.6
+    "duration": 185.6,
+    "t_resolve": 145.0
    },
    "interactive": false,
    "is_verdict": false,
@@ -186,23 +186,23 @@
     ],
     "RELEASE_K": 0.6,
     "T_COMMIT": 3800,
-    "T_FADE": 260,
     "T_IDLE": 1800,
     "T_IN": 300,
-    "T_POP": 3480,
+    "T_POP": 3580,
     "T_RECENTER": 300,
-    "T_REL": 3100,
+    "T_REL": 3200,
+    "T_SEED": 4160,
     "T_TEXT": 300,
     "T_WAIT": 450
    },
    "phases": {},
    "previews": [
-    2925,
-    12110
+    3050,
+    12655
    ],
    "rests_on_token": true,
-   "result_hold": 2450,
-   "source": "screens/confirm/hold_to_confirm.py:54",
+   "result_hold": 2895,
+   "source": "screens/confirm/hold_to_confirm.py:58",
    "spec": {
     "anim": "hold_to_confirm",
     "busy": "HOLD TO CONFIRM",
@@ -216,7 +216,7 @@
     0,
     3800
    ],
-   "t_resolve": 10260,
+   "t_resolve": 10360,
    "t_tail": null
   },
   "core/arrive": {
@@ -229,14 +229,15 @@
     "busy_pulse",
     "clamp01",
     "ease_out",
+    "hint_env",
     "lerp"
    ],
-   "duration": 3900,
+   "duration": 3929,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 54.6,
-    "t_resolve": 20.3
+    "duration": 55.0,
+    "t_resolve": 20.7
    },
    "interactive": false,
    "is_verdict": false,
@@ -244,18 +245,18 @@
    "loop_ms": null,
    "loops": false,
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 450
    },
    "previews": [
-    550,
-    3300
+    579,
+    3329
    ],
    "rests_on_token": true,
    "result_hold": 2450,
-   "source": "pq1/status.py:520",
+   "source": "pq1/status.py:560",
    "spec": {
     "anim": "arrive",
     "bottom": "UPDATED",
@@ -268,7 +269,7 @@
     "state": "done"
    },
    "t_busy": null,
-   "t_resolve": 1450,
+   "t_resolve": 1479,
    "t_tail": null
   },
   "core/qubit": {
@@ -281,13 +282,14 @@
     "busy_pulse",
     "clamp01",
     "ease_out",
+    "hint_env",
     "lerp"
    ],
-   "duration": 8650,
+   "duration": 9095,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 121.1,
+    "duration": 127.3,
     "t_resolve": 86.8
    },
    "interactive": false,
@@ -304,8 +306,8 @@
     6850
    ],
    "rests_on_token": true,
-   "result_hold": 2450,
-   "source": "pq1/status.py:409",
+   "result_hold": 2895,
+   "source": "pq1/status.py:438",
    "spec": {
     "anim": "qubit",
     "bottom": "CONFIRMED",
@@ -334,13 +336,14 @@
     "busy_pulse",
     "clamp01",
     "ease_out",
+    "hint_env",
     "lerp"
    ],
-   "duration": 8650,
+   "duration": 9095,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 121.1,
+    "duration": 127.3,
     "t_resolve": 86.8
    },
    "interactive": false,
@@ -357,8 +360,8 @@
     6850
    ],
    "rests_on_token": true,
-   "result_hold": 2450,
-   "source": "pq1/status.py:409",
+   "result_hold": 2895,
+   "source": "pq1/status.py:438",
    "spec": {
     "anim": "qubit",
     "bottom": "FAILED",
@@ -387,13 +390,14 @@
     "busy_pulse",
     "clamp01",
     "ease_out",
+    "hint_env",
     "lerp"
    ],
-   "duration": 2850,
+   "duration": 3295,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 39.9,
+    "duration": 46.1,
     "t_resolve": 5.6
    },
    "interactive": false,
@@ -407,8 +411,8 @@
     1600
    ],
    "rests_on_token": true,
-   "result_hold": 2450,
-   "source": "pq1/status.py:452",
+   "result_hold": 2895,
+   "source": "pq1/status.py:480",
    "spec": {
     "anim": "resolve",
     "bottom": "DECLINED",
@@ -1074,55 +1078,131 @@
    "t_resolve": 0,
    "t_tail": null
   },
-  "pin/pin_differ": {
-   "anim": "pin_differ",
+  "pin/check_word": {
+   "anim": "check_word",
    "busy_pulse": false,
    "can_lead": false,
-   "cls": "PinDiffer",
+   "cls": "CheckWord",
    "curves_used": [
     "clamp01",
-    "ease",
-    "ease_out",
-    "shake"
+    "ease_out"
    ],
-   "doc": "Duress PIN differ — the PIN pill is scanned, rejected by a shake.",
-   "duration": 4795,
+   "doc": "Check word — pick the backup word asked for, out of nine.",
+   "duration": 3100,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 67.1,
-    "t_resolve": 32.8
+    "duration": 43.4,
+    "t_resolve": 37.8
    },
-   "interactive": false,
+   "interactive": true,
    "is_verdict": false,
    "loop": null,
    "loop_ms": null,
    "loops": false,
    "module_constants": {
-    "SCAN_CYCLES": 1.5,
-    "SHAKE_CYCLES": 2.0,
-    "SHAKE_PX": 7.0,
-    "T_FILL": 200,
-    "T_FILLED": 200,
-    "T_HOLD": 250,
-    "T_SCAN": 975,
-    "T_SHAKE": 420,
+    "CHEVRON_DX": 15,
+    "CHOICES": 9,
+    "COLS": 3,
+    "DEFAULT_WORDS": [
+     "close",
+     "agent",
+     "own",
+     "deputy",
+     "grape",
+     "though",
+     "sail",
+     "simple",
+     "ribbon",
+     "cactus",
+     "noble",
+     "violet",
+     "ember",
+     "lucky",
+     "orbit",
+     "pencil",
+     "tundra",
+     "mimic",
+     "gravel",
+     "spice",
+     "fetch",
+     "cabin",
+     "motor",
+     "dawn"
+    ],
+    "GLIDE_MS": 220,
+    "ROW_Y": [
+     27,
+     55,
+     83
+    ],
+    "SELECT_ANG": 1.5707963267948966,
+    "STEP_MS": 420,
+    "STEP_SETTLE": 600,
+    "T_SETTLE": 600,
     "T_TEXT": 300
    },
+   "phases": {},
+   "previews": [
+    1700,
+    2000
+   ],
+   "rests_on_token": false,
+   "result_hold": 400,
+   "source": "screens/pin/check_word.py:179",
+   "spec": {
+    "anim": "check_word",
+    "busy": null,
+    "candidates": null,
+    "exit": "submit",
+    "handoff": true,
+    "kind": "status",
+    "match": null,
+    "miss": null,
+    "n": 5,
+    "result": null,
+    "typed": null,
+    "words": null
+   },
+   "t_busy": null,
+   "t_resolve": 2700,
+   "t_tail": null
+  },
+  "pin/pin_differ": {
+   "anim": "pin_differ",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "PinDiffer",
+   "curves_used": [],
+   "doc": "Duress PIN differ — the pin-category name for the duress_differ film.",
+   "duration": 5376,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 75.3,
+    "t_resolve": 41.0
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {},
    "phases": {
-    "T0_FILL": 250,
-    "T0_FILLED": 450,
-    "T0_SCAN": 650,
-    "T0_SHAKE": 1625,
-    "T0_TEXT": 2045
+    "T0_SCAN": 280,
+    "T0_SHAKE": 1180,
+    "T_HOLD": 286,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 2040
    },
    "previews": [
-    1137,
-    4195
+    436,
+    4776
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/pin/pin_differ.py:40",
+   "source": "screens/pin/pin_differ.py:21",
    "spec": {
     "anim": "pin_differ",
     "bottom": "DURESS PIN MUST DIFFER",
@@ -1132,7 +1212,7 @@
     "state": "warning"
    },
    "t_busy": null,
-   "t_resolve": 2345,
+   "t_resolve": 2926,
    "t_tail": null
   },
   "pin/pin_entering": {
@@ -1144,19 +1224,14 @@
     "clamp01",
     "ease",
     "ease_out",
-    "hold_fill"
+    "hint_env",
+    "hold_fill",
+    "seq_swap"
    ],
    "doc": "PIN entering — the eight-ring input, typed with the two buttons.",
    "duration": 17600,
    "entrance_window_ms": 300,
-   "exceptions": [
-    {
-     "audit": "D1-11",
-     "key": "hold=2840",
-     "reason": "the PIN entry is an ENTRY, not an ending: its duration is the typed row plus whichever verdict tail follows, so the 2450 ms result hold does not apply to the screen as a whole (the tail inside it does rest 2450). The rule should arguably skip interactive screens.",
-     "rule": "V-HOLD"
-    }
-   ],
+   "exceptions": [],
    "frames_14": {
     "duration": 246.4,
     "t_resolve": 206.6
@@ -1176,14 +1251,14 @@
      "rest",
      "submit"
     ],
+    "HINT_STROKE": 0.10526315789473684,
     "LBL_GAP": 8.8,
     "LBL_L": 36.5,
-    "LBL_LS": 0.5,
-    "LBL_R": 390.5,
+    "LBL_R": 391.5,
     "LBL_SIZE": 16,
-    "L_FADE": 500,
+    "L_FADE": 300,
     "L_GAP": 3000,
-    "L_SHOW": 2000,
+    "L_SHOW": 2400,
     "L_SLOT": 6000,
     "PAIRS": [
      [
@@ -1206,7 +1281,6 @@
     },
     "SIGN_GAP": 22.0,
     "SIGN_R": 19.0,
-    "SIGN_STROKE": 0.11,
     "STEP_ADV": 240,
     "STEP_SETTLE": 420,
     "STEP_TICK": 260,
@@ -1226,7 +1300,7 @@
    ],
    "rests_on_token": false,
    "result_hold": 2840,
-   "source": "screens/pin/pin_entering.py:258",
+   "source": "screens/pin/pin_entering.py:238",
    "spec": {
     "anim": "pin_entering",
     "bottom": "PIN ENTERED",
@@ -1255,12 +1329,12 @@
     "shake"
    ],
    "doc": "Duress PIN must differ — the pill is scanned, the rule refuses it.",
-   "duration": 4770,
+   "duration": 5376,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 66.8,
-    "t_resolve": 32.5
+    "duration": 75.3,
+    "t_resolve": 41.0
    },
    "interactive": false,
    "is_verdict": true,
@@ -1271,22 +1345,22 @@
     "SCAN_CYCLES": 1.0,
     "SHAKE_CYCLES": 2.0,
     "SHAKE_PX": 7.0,
-    "T_BEAT": 200,
-    "T_FILLED": 200,
-    "T_SCAN": 650,
-    "T_SHAKE": 420
+    "T_BEAT": 280,
+    "T_FILLED": 280,
+    "T_SCAN": 900,
+    "T_SHAKE": 580
    },
    "phases": {
-    "T0_SCAN": 200,
-    "T0_SHAKE": 850,
-    "T_HOLD": 250,
+    "T0_SCAN": 280,
+    "T0_SHAKE": 1180,
+    "T_HOLD": 286,
     "T_IN": 300,
     "T_TEXT": 300,
-    "T_WAIT": 1470
+    "T_WAIT": 2040
    },
    "previews": [
-    400,
-    4170
+    436,
+    4776
    ],
    "rests_on_token": false,
    "result_hold": 2450,
@@ -1300,7 +1374,7 @@
     "state": "warning"
    },
    "t_busy": null,
-   "t_resolve": 2320,
+   "t_resolve": 2926,
    "t_tail": null
   },
   "verdict/factory_signing": {
@@ -1312,13 +1386,13 @@
     "clamp01",
     "freewheel"
    ],
-   "doc": "Factory signing — the blue signing-machine gear coasts to a stop.",
-   "duration": 5050,
+   "doc": "Factory signing — the white signing-machine gear coasts to a stop.",
+   "duration": 5129,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 70.7,
-    "t_resolve": 36.4
+    "duration": 71.8,
+    "t_resolve": 37.5
    },
    "interactive": false,
    "is_verdict": true,
@@ -1327,39 +1401,39 @@
    "loops": false,
    "module_constants": {
     "DECAY_K": 4.2,
-    "GEAR_R": 32,
+    "GEAR_R": 32.0,
     "SHUTTER_MS": 72.5,
     "TOTAL_TURNS": 1.0,
     "T_BEAT": 150,
     "T_SPIN": 1800
    },
    "phases": {
-    "T_HOLD": 350,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 1650
    },
    "previews": [
-    950,
-    4450
+    1029,
+    4529
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/factory_signing.py:61",
+   "source": "screens/verdict/factory_signing.py:77",
    "spec": {
     "anim": "factory_signing",
-    "bottom": "FACTORY SIGNING SLOT - 0",
+    "bottom": "FACTORY SIGNING SLOT 0",
     "color": [
-     74,
-     159,
-     240
+     255,
+     255,
+     255
     ],
     "handoff": true,
     "kind": "status",
     "result": null
    },
    "t_busy": null,
-   "t_resolve": 2600,
+   "t_resolve": 2679,
    "t_tail": null
   },
   "verdict/firmware_verified": {
@@ -1369,12 +1443,12 @@
    "cls": "FirmwareVerified",
    "curves_used": [],
    "doc": "Firmware verified — a white disc arrives carrying a black check.",
-   "duration": 3900,
+   "duration": 3929,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 54.6,
-    "t_resolve": 20.3
+    "duration": 55.0,
+    "t_resolve": 20.7
    },
    "interactive": false,
    "is_verdict": true,
@@ -1383,14 +1457,14 @@
    "loops": false,
    "module_constants": {},
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 450
    },
    "previews": [
-    550,
-    3300
+    579,
+    3329
    ],
    "rests_on_token": false,
    "result_hold": 2450,
@@ -1408,7 +1482,7 @@
     "result": null
    },
    "t_busy": null,
-   "t_resolve": 1450,
+   "t_resolve": 1479,
    "t_tail": null
   },
   "verdict/headshake": {
@@ -1420,12 +1494,12 @@
     "shake"
    ],
    "doc": "Headshake — the X ring arrives and shakes its head once: no.",
-   "duration": 4320,
+   "duration": 4349,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 60.5,
-    "t_resolve": 26.2
+    "duration": 60.9,
+    "t_resolve": 26.6
    },
    "interactive": false,
    "is_verdict": true,
@@ -1433,24 +1507,23 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
-    "RING_INSET": 1.2,
     "SHAKE_PX": 6.0,
     "T_BEAT": 450,
     "T_SHAKE": 420
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 870
    },
    "previews": [
-    550,
-    3720
+    579,
+    3749
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/headshake.py:42",
+   "source": "screens/verdict/headshake.py:40",
    "spec": {
     "anim": "headshake",
     "bottom": "CANCELED",
@@ -1460,7 +1533,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 1870,
+   "t_resolve": 1899,
    "t_tail": null
   },
   "verdict/headshake|canceled": {
@@ -1472,12 +1545,12 @@
     "shake"
    ],
    "doc": "Headshake — the X ring arrives and shakes its head once: no.",
-   "duration": 4320,
+   "duration": 4349,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 60.5,
-    "t_resolve": 26.2
+    "duration": 60.9,
+    "t_resolve": 26.6
    },
    "interactive": false,
    "is_verdict": true,
@@ -1485,24 +1558,23 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
-    "RING_INSET": 1.2,
     "SHAKE_PX": 6.0,
     "T_BEAT": 450,
     "T_SHAKE": 420
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 870
    },
    "previews": [
-    550,
-    3720
+    579,
+    3749
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/headshake.py:42",
+   "source": "screens/verdict/headshake.py:40",
    "spec": {
     "anim": "headshake",
     "bottom": "CANCELED",
@@ -1512,7 +1584,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 1870,
+   "t_resolve": 1899,
    "t_tail": null
   },
   "verdict/headshake|wrong_seed_phrase": {
@@ -1524,12 +1596,12 @@
     "shake"
    ],
    "doc": "Headshake — the X ring arrives and shakes its head once: no.",
-   "duration": 4320,
+   "duration": 4349,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 60.5,
-    "t_resolve": 26.2
+    "duration": 60.9,
+    "t_resolve": 26.6
    },
    "interactive": false,
    "is_verdict": true,
@@ -1537,24 +1609,23 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
-    "RING_INSET": 1.2,
     "SHAKE_PX": 6.0,
     "T_BEAT": 450,
     "T_SHAKE": 420
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 870
    },
    "previews": [
-    550,
-    3720
+    579,
+    3749
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/headshake.py:42",
+   "source": "screens/verdict/headshake.py:40",
    "spec": {
     "anim": "headshake",
     "bottom": "WRONG SEED PHRASE",
@@ -1564,7 +1635,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 1870,
+   "t_resolve": 1899,
    "t_tail": null
   },
   "verdict/last_attempt": {
@@ -1578,12 +1649,19 @@
     "wobble"
    ],
    "doc": "Last attempt — the attempt counter reels down to 1 beside a red heart.",
-   "duration": 7250,
+   "duration": 7279,
    "entrance_window_ms": 300,
-   "exceptions": [],
+   "exceptions": [
+    {
+     "audit": "ICO-04",
+     "key": "centroid",
+     "reason": "LAST ATTEMPT is not a sign at all: a display digit beside a heart, composed as a PAIR on the type tier and centred by their box. The digit carries most of the ink, so the mass leans ~5 px toward it. Composed the way the type tier composes (owner decision).",
+     "rule": "V-CENTRE"
+    }
+   ],
    "frames_14": {
-    "duration": 101.5,
-    "t_resolve": 67.2
+    "duration": 101.9,
+    "t_resolve": 67.6
    },
    "interactive": false,
    "is_verdict": true,
@@ -1593,7 +1671,7 @@
    "module_constants": {
     "BOUNCE": 0.18,
     "DIGIT_DY": -0.8,
-    "DIGIT_PX": 40.0,
+    "DIGIT_PX": 40,
     "DIGIT_WEIGHT": "semibold",
     "HEART_DX": 34.0,
     "HEART_H": 30.0,
@@ -1605,18 +1683,18 @@
     "WIN_DN": 0.4
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 3800
    },
    "previews": [
-    2100,
-    6650
+    2129,
+    6679
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/last_attempt.py:64",
+   "source": "screens/verdict/last_attempt.py:74",
    "spec": {
     "anim": "last_attempt",
     "attempts": 8,
@@ -1627,7 +1705,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 4800,
+   "t_resolve": 4829,
    "t_tail": null
   },
   "verdict/padlock": {
@@ -1636,32 +1714,18 @@
    "can_lead": false,
    "cls": "Padlock",
    "curves_used": [
-    "arrive",
     "clamp01",
     "ease",
     "ease_out",
     "recoil"
    ],
    "doc": "Padlock — the shackle turns in and clicks shut, or springs open.",
-   "duration": 4320,
+   "duration": 4249,
    "entrance_window_ms": 300,
-   "exceptions": [
-    {
-     "audit": "D1-06",
-     "key": "arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))",
-     "reason": "the padlock re-derives the entrance inline because it overrides T_IN to its whole mechanism window (1070 lock / 1600 unlock), so VerdictAnim's u is the mechanism's progress, not the entrance's. The fix is the same as V-TIN's: move the mechanism into T_WAIT and let the inherited entrance() run. Output is identical today — this is a structural exception, not a visual one.",
-     "rule": "V-ENTRANCE"
-    },
-    {
-     "audit": "D1-06",
-     "key": "T_IN=1070",
-     "reason": "padlock lock spends its whole mechanism (turn-in 520 -> drop 260 -> click 290) inside T_IN instead of T_WAIT, so T_IN reads as a 1070 ms entrance. The icon's own fade + rise still finish within ARRIVE_MS — the law is obeyed on screen, only the bookkeeping differs.",
-     "rule": "V-TIN"
-    }
-   ],
+   "exceptions": [],
    "frames_14": {
-    "duration": 60.5,
-    "t_resolve": 26.2
+    "duration": 59.5,
+    "t_resolve": 25.2
    },
    "interactive": false,
    "is_verdict": true,
@@ -1669,11 +1733,12 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
+    "BOX_FIT": 0.95952023988006,
     "DIRECTIONS": [
      "lock",
      "unlock"
     ],
-    "KICK": 10.0,
+    "KICK": 6.0,
     "OPEN_LIFT": 9.0,
     "T_CLICK": 290,
     "T_DROP": 260,
@@ -1686,18 +1751,18 @@
     "T_TURN_OUT": 800
    },
    "phases": {
-    "T_HOLD": 500,
-    "T_IN": 1070,
+    "T_HOLD": 429,
+    "T_IN": 300,
     "T_TEXT": 300,
-    "T_WAIT": 0
+    "T_WAIT": 770
    },
    "previews": [
-    1035,
-    3720
+    579,
+    3649
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/padlock.py:48",
+   "source": "screens/verdict/padlock.py:57",
    "spec": {
     "anim": "padlock",
     "bottom": "LOCKED",
@@ -1708,7 +1773,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 1870,
+   "t_resolve": 1799,
    "t_tail": null
   },
   "verdict/padlock|lock": {
@@ -1717,26 +1782,18 @@
    "can_lead": false,
    "cls": "Padlock",
    "curves_used": [
-    "arrive",
     "clamp01",
     "ease",
     "ease_out",
     "recoil"
    ],
    "doc": "Padlock — the shackle turns in and clicks shut, or springs open.",
-   "duration": 4320,
+   "duration": 4249,
    "entrance_window_ms": 300,
-   "exceptions": [
-    {
-     "audit": "D1-06",
-     "key": "arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))",
-     "reason": "the padlock re-derives the entrance inline because it overrides T_IN to its whole mechanism window (1070 lock / 1600 unlock), so VerdictAnim's u is the mechanism's progress, not the entrance's. The fix is the same as V-TIN's: move the mechanism into T_WAIT and let the inherited entrance() run. Output is identical today — this is a structural exception, not a visual one.",
-     "rule": "V-ENTRANCE"
-    }
-   ],
+   "exceptions": [],
    "frames_14": {
-    "duration": 60.5,
-    "t_resolve": 26.2
+    "duration": 59.5,
+    "t_resolve": 25.2
    },
    "interactive": false,
    "is_verdict": true,
@@ -1744,11 +1801,12 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
+    "BOX_FIT": 0.95952023988006,
     "DIRECTIONS": [
      "lock",
      "unlock"
     ],
-    "KICK": 10.0,
+    "KICK": 6.0,
     "OPEN_LIFT": 9.0,
     "T_CLICK": 290,
     "T_DROP": 260,
@@ -1761,18 +1819,18 @@
     "T_TURN_OUT": 800
    },
    "phases": {
-    "T_HOLD": 500,
-    "T_IN": 1070,
+    "T_HOLD": 429,
+    "T_IN": 300,
     "T_TEXT": 300,
-    "T_WAIT": 0
+    "T_WAIT": 770
    },
    "previews": [
-    1035,
-    3720
+    579,
+    3649
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/padlock.py:48",
+   "source": "screens/verdict/padlock.py:57",
    "spec": {
     "anim": "padlock",
     "bottom": "LOCKED",
@@ -1783,7 +1841,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 1870,
+   "t_resolve": 1799,
    "t_tail": null
   },
   "verdict/padlock|unlock": {
@@ -1792,32 +1850,25 @@
    "can_lead": false,
    "cls": "Padlock",
    "curves_used": [
-    "arrive",
     "clamp01",
     "ease",
     "ease_out",
     "recoil"
    ],
    "doc": "Padlock — the shackle turns in and clicks shut, or springs open.",
-   "duration": 4850,
+   "duration": 4779,
    "entrance_window_ms": 300,
    "exceptions": [
     {
-     "audit": "D1-06",
-     "key": "arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))",
-     "reason": "the padlock re-derives the entrance inline because it overrides T_IN to its whole mechanism window (1070 lock / 1600 unlock), so VerdictAnim's u is the mechanism's progress, not the entrance's. The fix is the same as V-TIN's: move the mechanism into T_WAIT and let the inherited entrance() run. Output is identical today — this is a structural exception, not a visual one.",
-     "rule": "V-ENTRANCE"
-    },
-    {
-     "audit": "D1-06",
-     "key": "T_IN=1600",
-     "reason": "as above, for unlock (snap 145 -> kick 250 -> pause 250 -> swing 800).",
-     "rule": "V-TIN"
+     "audit": "ICO-04",
+     "key": "centroid",
+     "reason": "the unlock preset RESTS OPEN — the shackle has sprung up and clear of the body, so the open pose's mass sits right of and above the circle. The CLOSED rest, which the bare padlock and its lock preset show, is what the centre law governs, and it passes.",
+     "rule": "V-CENTRE"
     }
    ],
    "frames_14": {
-    "duration": 67.9,
-    "t_resolve": 33.6
+    "duration": 66.9,
+    "t_resolve": 32.6
    },
    "interactive": false,
    "is_verdict": true,
@@ -1825,11 +1876,12 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
+    "BOX_FIT": 0.95952023988006,
     "DIRECTIONS": [
      "lock",
      "unlock"
     ],
-    "KICK": 10.0,
+    "KICK": 6.0,
     "OPEN_LIFT": 9.0,
     "T_CLICK": 290,
     "T_DROP": 260,
@@ -1842,18 +1894,18 @@
     "T_TURN_OUT": 800
    },
    "phases": {
-    "T_HOLD": 500,
-    "T_IN": 1600,
+    "T_HOLD": 429,
+    "T_IN": 300,
     "T_TEXT": 300,
-    "T_WAIT": 0
+    "T_WAIT": 1300
    },
    "previews": [
-    1300,
-    4250
+    579,
+    4179
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/padlock.py:48",
+   "source": "screens/verdict/padlock.py:57",
    "spec": {
     "anim": "padlock",
     "bottom": "UNLOCKED",
@@ -1864,7 +1916,7 @@
     "state": "done"
    },
    "t_busy": null,
-   "t_resolve": 2400,
+   "t_resolve": 2329,
    "t_tail": null
   },
   "verdict/pin_mismatch": {
@@ -1875,15 +1927,16 @@
    "curves_used": [
     "clamp01",
     "ease",
+    "ease_out",
     "shake"
    ],
    "doc": "PIN mismatch — the entered PIN fills the pill, turns red, is shaken off.",
-   "duration": 4520,
+   "duration": 4556,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 63.3,
-    "t_resolve": 29.0
+    "duration": 63.8,
+    "t_resolve": 29.5
    },
    "interactive": false,
    "is_verdict": true,
@@ -1902,14 +1955,14 @@
    "phases": {
     "T0_SHAKE": 600,
     "T0_TURN": 400,
-    "T_HOLD": 250,
+    "T_HOLD": 286,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 1220
    },
    "previews": [
-    400,
-    3920
+    436,
+    3956
    ],
    "rests_on_token": false,
    "result_hold": 2450,
@@ -1923,7 +1976,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 2070,
+   "t_resolve": 2106,
    "t_tail": null
   },
   "verdict/pin_mismatch|wrong_pin": {
@@ -1934,15 +1987,16 @@
    "curves_used": [
     "clamp01",
     "ease",
+    "ease_out",
     "shake"
    ],
    "doc": "PIN mismatch — the entered PIN fills the pill, turns red, is shaken off.",
-   "duration": 4520,
+   "duration": 4556,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 63.3,
-    "t_resolve": 29.0
+    "duration": 63.8,
+    "t_resolve": 29.5
    },
    "interactive": false,
    "is_verdict": true,
@@ -1961,14 +2015,14 @@
    "phases": {
     "T0_SHAKE": 600,
     "T0_TURN": 400,
-    "T_HOLD": 250,
+    "T_HOLD": 286,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 1220
    },
    "previews": [
-    400,
-    3920
+    436,
+    3956
    ],
    "rests_on_token": false,
    "result_hold": 2450,
@@ -1982,7 +2036,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 2070,
+   "t_resolve": 2106,
    "t_tail": null
   },
   "verdict/rng_failed": {
@@ -1995,12 +2049,12 @@
     "decel"
    ],
    "doc": "RNG failed — the red die rests, tumbles on three axes and lands on 1-2-3.",
-   "duration": 5450,
+   "duration": 5479,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 76.3,
-    "t_resolve": 42.0
+    "duration": 76.7,
+    "t_resolve": 42.4
    },
    "interactive": false,
    "is_verdict": true,
@@ -2009,7 +2063,7 @@
    "loops": false,
    "module_constants": {
     "DECEL_P": 2.8,
-    "DIE_DX": 0.5,
+    "DIE_DX": 0.0,
     "SHUTTER_MS": 24.166666666666668,
     "SIZE": 21.0,
     "SPIN": [
@@ -2022,18 +2076,18 @@
     "T_TUMBLE": 1500
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 2000
    },
    "previews": [
-    1800,
-    4850
+    1829,
+    4879
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/rng_failed.py:69",
+   "source": "screens/verdict/rng_failed.py:76",
    "spec": {
     "anim": "rng_failed",
     "bottom": "RNG FAILED",
@@ -2043,7 +2097,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 3000,
+   "t_resolve": 3029,
    "t_tail": null
   },
   "verdict/shield": {
@@ -2055,12 +2109,19 @@
     "shake"
    ],
    "doc": "Shield — the backup shield arrives with its mark and nods yes, or shakes no.",
-   "duration": 4600,
+   "duration": 4629,
    "entrance_window_ms": 300,
-   "exceptions": [],
+   "exceptions": [
+    {
+     "audit": "ICO-04",
+     "key": "centroid",
+     "reason": "both sources sit the mark about 2 px above the shield's centre, and the shield keeps its OUTLINE — it is the container, the mark inside it is the verdict (the one written exception to the filled-silhouette rule, owner decision, Sep 2026). Centring the mass would drop the mark onto the shield's lower lobe, where the outline narrows.",
+     "rule": "V-CENTRE"
+    }
+   ],
    "frames_14": {
-    "duration": 64.4,
-    "t_resolve": 30.1
+    "duration": 64.8,
+    "t_resolve": 30.5
    },
    "interactive": false,
    "is_verdict": true,
@@ -2080,27 +2141,28 @@
       420
      ]
     },
-    "MARK_DY": 2.0,
+    "MARK_DY": 2.064516129032258,
     "MARK_R": {
-     "check": 25.0,
-     "x": 28.333333333333336
+     "check": 25.806451612903224,
+     "x": 29.24731182795699
     },
-    "SHIELD_H": 62.0,
-    "T_BEAT": 450
+    "SHIELD_H": 64.0,
+    "T_BEAT": 450,
+    "UNIT": 1.032258064516129
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 1150
    },
    "previews": [
-    550,
-    4000
+    579,
+    4029
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/shield.py:52",
+   "source": "screens/verdict/shield.py:57",
    "spec": {
     "anim": "shield",
     "bottom": "BACKUP OK",
@@ -2111,7 +2173,7 @@
     "state": "done"
    },
    "t_busy": null,
-   "t_resolve": 2150,
+   "t_resolve": 2179,
    "t_tail": null
   },
   "verdict/shield|backup_ok": {
@@ -2123,12 +2185,12 @@
     "shake"
    ],
    "doc": "Shield — the backup shield arrives with its mark and nods yes, or shakes no.",
-   "duration": 4600,
+   "duration": 4629,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 64.4,
-    "t_resolve": 30.1
+    "duration": 64.8,
+    "t_resolve": 30.5
    },
    "interactive": false,
    "is_verdict": true,
@@ -2148,27 +2210,28 @@
       420
      ]
     },
-    "MARK_DY": 2.0,
+    "MARK_DY": 2.064516129032258,
     "MARK_R": {
-     "check": 25.0,
-     "x": 28.333333333333336
+     "check": 25.806451612903224,
+     "x": 29.24731182795699
     },
-    "SHIELD_H": 62.0,
-    "T_BEAT": 450
+    "SHIELD_H": 64.0,
+    "T_BEAT": 450,
+    "UNIT": 1.032258064516129
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 1150
    },
    "previews": [
-    550,
-    4000
+    579,
+    4029
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/shield.py:52",
+   "source": "screens/verdict/shield.py:57",
    "spec": {
     "anim": "shield",
     "bottom": "BACKUP OK",
@@ -2179,7 +2242,7 @@
     "state": "done"
    },
    "t_busy": null,
-   "t_resolve": 2150,
+   "t_resolve": 2179,
    "t_tail": null
   },
   "verdict/shield|no_match": {
@@ -2191,12 +2254,19 @@
     "shake"
    ],
    "doc": "Shield — the backup shield arrives with its mark and nods yes, or shakes no.",
-   "duration": 4320,
+   "duration": 4349,
    "entrance_window_ms": 300,
-   "exceptions": [],
+   "exceptions": [
+    {
+     "audit": "ICO-04",
+     "key": "centroid",
+     "reason": "the same shield carrying the X instead of the check — the same 2 px, same reason.",
+     "rule": "V-CENTRE"
+    }
+   ],
    "frames_14": {
-    "duration": 60.5,
-    "t_resolve": 26.2
+    "duration": 60.9,
+    "t_resolve": 26.6
    },
    "interactive": false,
    "is_verdict": true,
@@ -2216,27 +2286,28 @@
       420
      ]
     },
-    "MARK_DY": 2.0,
+    "MARK_DY": 2.064516129032258,
     "MARK_R": {
-     "check": 25.0,
-     "x": 28.333333333333336
+     "check": 25.806451612903224,
+     "x": 29.24731182795699
     },
-    "SHIELD_H": 62.0,
-    "T_BEAT": 450
+    "SHIELD_H": 64.0,
+    "T_BEAT": 450,
+    "UNIT": 1.032258064516129
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 870
    },
    "previews": [
-    550,
-    3720
+    579,
+    3749
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/shield.py:52",
+   "source": "screens/verdict/shield.py:57",
    "spec": {
     "anim": "shield",
     "bottom": "NO MATCH",
@@ -2247,7 +2318,7 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 1870,
+   "t_resolve": 1899,
    "t_tail": null
   },
   "verdict/sig_error": {
@@ -2261,12 +2332,19 @@
     "ease_out"
    ],
    "doc": "Sig error — the warning triangle reports a failed check, detail-grid.",
-   "duration": 4300,
+   "duration": 4379,
    "entrance_window_ms": 300,
-   "exceptions": [],
+   "exceptions": [
+    {
+     "audit": "ICO-04",
+     "key": "centroid",
+     "reason": "the same notice triangle, docked in a detail column instead of centred — it is measured against its own column centre and reads identically to tamper's (ICO-06 closed the gap between them). Box-centred by the same decision.",
+     "rule": "V-CENTRE"
+    }
+   ],
    "frames_14": {
-    "duration": 60.2,
-    "t_resolve": 25.9
+    "duration": 61.3,
+    "t_resolve": 27.0
    },
    "interactive": false,
    "is_verdict": true,
@@ -2276,41 +2354,37 @@
    "module_constants": {
     "SIDES": {
      "left": 74,
-     "right": 352
+     "right": 354
     },
     "TIERS": [
      [
       36,
-      12,
       1
      ],
      [
       32,
-      14,
       1
      ],
      [
       28,
-      16,
       2
      ],
      [
       22,
-      21,
       3
      ]
     ],
-    "TRI_H": 60
+    "TRI_H": 60.0
    },
    "phases": {
-    "T_HOLD": 350,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 900
    },
    "previews": [
-    500,
-    3700
+    579,
+    3779
    ],
    "rests_on_token": false,
    "result_hold": 2450,
@@ -2320,16 +2394,231 @@
     "bottom": "",
     "handoff": true,
     "kind": "status",
-    "label": "ERROR",
+    "label": "SIG CHECK",
     "lines": [
-     "Sig verify FAIL"
+     "Signature",
+     "verify failed"
     ],
     "result": null,
     "side": "left",
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 1850,
+   "t_resolve": 1929,
+   "t_tail": null
+  },
+  "verdict/sig_error|sig_verify_fail": {
+   "anim": "sig_error",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "SigError",
+   "curves_used": [
+    "attention_pulse",
+    "clamp01",
+    "ease_out"
+   ],
+   "doc": "Sig error — the warning triangle reports a failed check, detail-grid.",
+   "duration": 4379,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 61.3,
+    "t_resolve": 27.0
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "SIDES": {
+     "left": 74,
+     "right": 354
+    },
+    "TIERS": [
+     [
+      36,
+      1
+     ],
+     [
+      32,
+      1
+     ],
+     [
+      28,
+      2
+     ],
+     [
+      22,
+      3
+     ]
+    ],
+    "TRI_H": 60.0
+   },
+   "phases": {
+    "T_HOLD": 429,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 900
+   },
+   "previews": [
+    579,
+    3779
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/sig_error.py:51",
+   "spec": {
+    "anim": "sig_error",
+    "bottom": "",
+    "handoff": true,
+    "kind": "status",
+    "label": "SIG CHECK",
+    "lines": [
+     "Signature",
+     "verify failed"
+    ],
+    "result": null,
+    "side": "left",
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1929,
+   "t_tail": null
+  },
+  "verdict/sig_error|type1_sig_fail": {
+   "anim": "sig_error",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "SigError",
+   "curves_used": [
+    "attention_pulse",
+    "clamp01",
+    "ease_out"
+   ],
+   "doc": "Sig error — the warning triangle reports a failed check, detail-grid.",
+   "duration": 4379,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "HS-10",
+     "key": "centroid",
+     "reason": "sig_error's own docked triangle with other lines (TYPE 1 SIG) — the anim:verdict/sig_error row's decision, not a new exception: box-centred, never nudged.",
+     "rule": "V-CENTRE"
+    }
+   ],
+   "frames_14": {
+    "duration": 61.3,
+    "t_resolve": 27.0
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "SIDES": {
+     "left": 74,
+     "right": 354
+    },
+    "TIERS": [
+     [
+      36,
+      1
+     ],
+     [
+      32,
+      1
+     ],
+     [
+      28,
+      2
+     ],
+     [
+      22,
+      3
+     ]
+    ],
+    "TRI_H": 60.0
+   },
+   "phases": {
+    "T_HOLD": 429,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 900
+   },
+   "previews": [
+    579,
+    3779
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/sig_error.py:51",
+   "spec": {
+    "anim": "sig_error",
+    "bottom": "",
+    "handoff": true,
+    "kind": "status",
+    "label": "TYPE 1 SIG",
+    "lines": [
+     "Type 1 signature",
+     "failed"
+    ],
+    "result": null,
+    "side": "left",
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1929,
+   "t_tail": null
+  },
+  "verdict/slot_registered": {
+   "anim": "slot_registered",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "SlotRegistered",
+   "curves_used": [],
+   "doc": "Slot registered — a white disc arrives carrying the black rotate mark.",
+   "duration": 3929,
+   "entrance_window_ms": 300,
+   "exceptions": [],
+   "frames_14": {
+    "duration": 55.0,
+    "t_resolve": 20.7
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {},
+   "phases": {
+    "T_HOLD": 429,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 450
+   },
+   "previews": [
+    579,
+    3329
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/slot_registered.py:32",
+   "spec": {
+    "anim": "slot_registered",
+    "bottom": "SLOT 0 REGISTERED",
+    "color": [
+     255,
+     255,
+     255
+    ],
+    "handoff": true,
+    "kind": "status",
+    "result": null
+   },
+   "t_busy": null,
+   "t_resolve": 1479,
    "t_tail": null
   },
   "verdict/tamper": {
@@ -2341,12 +2630,19 @@
     "attention_pulse"
    ],
    "doc": "Tamper detected — the warning triangle's exclamation, centred, sounds the alarm.",
-   "duration": 4300,
+   "duration": 4379,
    "entrance_window_ms": 300,
-   "exceptions": [],
+   "exceptions": [
+    {
+     "audit": "ICO-04",
+     "key": "centroid",
+     "reason": "the notice triangle is BOX-centred: its bounding box sits on the circle, and two thirds of a triangle's area lies in its lower half, so the mass measures ~10 px low. Centring the mass instead would float the apex above the grid every other sign sits on, and the three notices would stop lining up with each other.",
+     "rule": "V-CENTRE"
+    }
+   ],
    "frames_14": {
-    "duration": 60.2,
-    "t_resolve": 25.9
+    "duration": 61.3,
+    "t_resolve": 27.0
    },
    "interactive": false,
    "is_verdict": true,
@@ -2354,21 +2650,21 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
-    "TRI_H": 64
+    "TRI_H": 60.0
    },
    "phases": {
-    "T_HOLD": 350,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 900
    },
    "previews": [
-    500,
-    3700
+    579,
+    3779
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/tamper.py:20",
+   "source": "screens/verdict/tamper.py:26",
    "spec": {
     "anim": "tamper",
     "bottom": "TAMPER DETECTED",
@@ -2378,7 +2674,63 @@
     "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 1850,
+   "t_resolve": 1929,
+   "t_tail": null
+  },
+  "verdict/tamper|firmware_tampered": {
+   "anim": "tamper",
+   "busy_pulse": false,
+   "can_lead": false,
+   "cls": "Tamper",
+   "curves_used": [
+    "attention_pulse"
+   ],
+   "doc": "Tamper detected — the warning triangle's exclamation, centred, sounds the alarm.",
+   "duration": 4379,
+   "entrance_window_ms": 300,
+   "exceptions": [
+    {
+     "audit": "HS-10",
+     "key": "centroid",
+     "reason": "tamper's own triangle under a second caption (FIRMWARE TAMPERED) — the anim:verdict/tamper row's decision, not a new exception: box-centred, never nudged.",
+     "rule": "V-CENTRE"
+    }
+   ],
+   "frames_14": {
+    "duration": 61.3,
+    "t_resolve": 27.0
+   },
+   "interactive": false,
+   "is_verdict": true,
+   "loop": null,
+   "loop_ms": null,
+   "loops": false,
+   "module_constants": {
+    "TRI_H": 60.0
+   },
+   "phases": {
+    "T_HOLD": 429,
+    "T_IN": 300,
+    "T_TEXT": 300,
+    "T_WAIT": 900
+   },
+   "previews": [
+    579,
+    3779
+   ],
+   "rests_on_token": false,
+   "result_hold": 2450,
+   "source": "screens/verdict/tamper.py:26",
+   "spec": {
+    "anim": "tamper",
+    "bottom": "FIRMWARE TAMPERED",
+    "handoff": true,
+    "kind": "status",
+    "result": null,
+    "state": "failed"
+   },
+   "t_busy": null,
+   "t_resolve": 1929,
    "t_tail": null
   },
   "verdict/wipe": {
@@ -2386,16 +2738,21 @@
    "busy_pulse": false,
    "can_lead": false,
    "cls": "Wipe",
-   "curves_used": [
-    "attention_pulse"
-   ],
-   "doc": "Wallet wiped — the warning triangle carries the brush, two treatments.",
-   "duration": 4650,
+   "curves_used": [],
+   "doc": "Wallet wiped — the warning triangle carries the brush.",
+   "duration": 5179,
    "entrance_window_ms": 300,
-   "exceptions": [],
+   "exceptions": [
+    {
+     "audit": "ICO-04",
+     "key": "centroid",
+     "reason": "WALLET WIPED's triangle, box-centred like tamper's; it sits a touch higher because the wipe mark inside it carries ink the exclamation does not.",
+     "rule": "V-CENTRE"
+    }
+   ],
    "frames_14": {
-    "duration": 65.1,
-    "t_resolve": 30.8
+    "duration": 72.5,
+    "t_resolve": 38.2
    },
    "interactive": false,
    "is_verdict": true,
@@ -2403,104 +2760,36 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
-    "ACCENT": {
-     "pulse": 900,
-     "sweep": 1400
-    },
-    "BRUSH_DY": 9,
-    "BRUSH_W": 30,
-    "TREATMENTS": [
-     "pulse",
-     "sweep"
-    ],
-    "TRI_H": 64,
-    "T_MARK": 300
+    "ACCENT": 1400,
+    "BRUSH_DY": 8.4375,
+    "BRUSH_W": 28.125,
+    "TRI_H": 60.0,
+    "T_MARK": 300,
+    "UNIT": 0.9375
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
-    "T_WAIT": 1200
+    "T_WAIT": 1700
    },
    "previews": [
-    550,
-    4050
+    579,
+    4579
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/wipe.py:51",
+   "source": "screens/verdict/wipe.py:55",
    "spec": {
     "anim": "wipe",
     "bottom": "WALLET WIPED",
     "handoff": true,
     "kind": "status",
     "result": null,
-    "state": "failed",
-    "treatment": "pulse"
+    "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 2200,
-   "t_tail": null
-  },
-  "verdict/wipe|wallet_wiped": {
-   "anim": "wipe",
-   "busy_pulse": false,
-   "can_lead": false,
-   "cls": "Wipe",
-   "curves_used": [
-    "attention_pulse"
-   ],
-   "doc": "Wallet wiped — the warning triangle carries the brush, two treatments.",
-   "duration": 4650,
-   "entrance_window_ms": 300,
-   "exceptions": [],
-   "frames_14": {
-    "duration": 65.1,
-    "t_resolve": 30.8
-   },
-   "interactive": false,
-   "is_verdict": true,
-   "loop": null,
-   "loop_ms": null,
-   "loops": false,
-   "module_constants": {
-    "ACCENT": {
-     "pulse": 900,
-     "sweep": 1400
-    },
-    "BRUSH_DY": 9,
-    "BRUSH_W": 30,
-    "TREATMENTS": [
-     "pulse",
-     "sweep"
-    ],
-    "TRI_H": 64,
-    "T_MARK": 300
-   },
-   "phases": {
-    "T_HOLD": 400,
-    "T_IN": 300,
-    "T_TEXT": 300,
-    "T_WAIT": 1200
-   },
-   "previews": [
-    550,
-    4050
-   ],
-   "rests_on_token": false,
-   "result_hold": 2450,
-   "source": "screens/verdict/wipe.py:51",
-   "spec": {
-    "anim": "wipe",
-    "bottom": "WALLET WIPED",
-    "handoff": true,
-    "kind": "status",
-    "result": null,
-    "state": "failed",
-    "treatment": "pulse"
-   },
-   "t_busy": null,
-   "t_resolve": 2200,
+   "t_resolve": 2729,
    "t_tail": null
   },
   "verdict/wipe|wallet_wiped_anim": {
@@ -2508,16 +2797,14 @@
    "busy_pulse": false,
    "can_lead": false,
    "cls": "Wipe",
-   "curves_used": [
-    "attention_pulse"
-   ],
-   "doc": "Wallet wiped — the warning triangle carries the brush, two treatments.",
-   "duration": 5150,
+   "curves_used": [],
+   "doc": "Wallet wiped — the warning triangle carries the brush.",
+   "duration": 5179,
    "entrance_window_ms": 300,
    "exceptions": [],
    "frames_14": {
-    "duration": 72.1,
-    "t_resolve": 37.8
+    "duration": 72.5,
+    "t_resolve": 38.2
    },
    "interactive": false,
    "is_verdict": true,
@@ -2525,43 +2812,36 @@
    "loop_ms": null,
    "loops": false,
    "module_constants": {
-    "ACCENT": {
-     "pulse": 900,
-     "sweep": 1400
-    },
-    "BRUSH_DY": 9,
-    "BRUSH_W": 30,
-    "TREATMENTS": [
-     "pulse",
-     "sweep"
-    ],
-    "TRI_H": 64,
-    "T_MARK": 300
+    "ACCENT": 1400,
+    "BRUSH_DY": 8.4375,
+    "BRUSH_W": 28.125,
+    "TRI_H": 60.0,
+    "T_MARK": 300,
+    "UNIT": 0.9375
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 1700
    },
    "previews": [
-    550,
-    4550
+    579,
+    4579
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/wipe.py:51",
+   "source": "screens/verdict/wipe.py:55",
    "spec": {
     "anim": "wipe",
     "bottom": "WALLET WIPED",
     "handoff": true,
     "kind": "status",
     "result": null,
-    "state": "failed",
-    "treatment": "sweep"
+    "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 2700,
+   "t_resolve": 2729,
    "t_tail": null
   },
   "verdict/wipe|wallet_wiped_explosion": {
@@ -2569,22 +2849,27 @@
    "busy_pulse": false,
    "can_lead": false,
    "cls": "Wipe",
-   "curves_used": [
-    "attention_pulse"
-   ],
-   "doc": "Wallet wiped — the warning triangle carries the brush, two treatments.",
-   "duration": 14598,
+   "curves_used": [],
+   "doc": "Wallet wiped — the warning triangle carries the brush.",
+   "duration": 14778,
    "entrance_window_ms": 300,
-   "exceptions": [],
+   "exceptions": [
+    {
+     "audit": "ICO-04",
+     "key": "centroid",
+     "reason": "the same triangle led by the explosion film; the blast is long gone by the resting frame, so what is measured is wipe's pose.",
+     "rule": "V-CENTRE"
+    }
+   ],
    "frames_14": {
-    "duration": 204.4,
-    "t_resolve": 170.1
+    "duration": 206.9,
+    "t_resolve": 172.6
    },
    "interactive": false,
    "is_verdict": true,
    "lead": {
     "anim": "explosion",
-    "main_starts_at": 9448,
+    "main_starts_at": 9599,
     "t_resolve": 8748,
     "t_tail": 580
    },
@@ -2595,32 +2880,26 @@
    "loop_ms": 850,
    "loops": true,
    "module_constants": {
-    "ACCENT": {
-     "pulse": 900,
-     "sweep": 1400
-    },
-    "BRUSH_DY": 9,
-    "BRUSH_W": 30,
-    "TREATMENTS": [
-     "pulse",
-     "sweep"
-    ],
-    "TRI_H": 64,
-    "T_MARK": 300
+    "ACCENT": 1400,
+    "BRUSH_DY": 8.4375,
+    "BRUSH_W": 28.125,
+    "TRI_H": 60.0,
+    "T_MARK": 300,
+    "UNIT": 0.9375
    },
    "phases": {
-    "T_HOLD": 400,
+    "T_HOLD": 429,
     "T_IN": 300,
     "T_TEXT": 300,
     "T_WAIT": 1700
    },
    "previews": [
     2248,
-    13998
+    14178
    ],
    "rests_on_token": false,
    "result_hold": 2450,
-   "source": "screens/verdict/wipe.py:51",
+   "source": "screens/verdict/wipe.py:55",
    "spec": {
     "anim": "wipe",
     "bottom": "WALLET WIPED",
@@ -2662,13 +2941,12 @@
       61
      ]
     },
-    "lead_gap": 700,
+    "lead_clear": 700,
     "result": null,
-    "state": "failed",
-    "treatment": "sweep"
+    "state": "failed"
    },
    "t_busy": null,
-   "t_resolve": 12148,
+   "t_resolve": 12328,
    "t_tail": null
   }
  },

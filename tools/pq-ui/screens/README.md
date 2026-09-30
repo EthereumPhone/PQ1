@@ -13,10 +13,10 @@ status-kind screen dict.
 |---|---|---|---|
 | `firmware_verified` | verdict | white disc + black check | — |
 | `shield` | verdict | the backup shield arrives with its mark and nods yes (check: one decaying dip, ±5 px over 700 ms) or shakes its head no (x: one decaying wiggle, ±6 px over 420 ms) | `backup_ok`, `no_match`; `--text` |
-| `wipe` | verdict | warning triangle + brush | `wallet_wiped` (pulse), `wallet_wiped_anim` (sweep), `wallet_wiped_explosion` (sweep led by the major explosion: red qubits flying in from both sides, "WIPING…" / "DO NOT POWER OFF" alternating until the blast, the sign 700 ms after the boom); `--treatment` |
+| `wipe` | verdict | warning triangle + brush | `wallet_wiped_anim` (the sweep — the one WALLET WIPED sign), `wallet_wiped_explosion` (sweep led by the major explosion: red qubits flying in from both sides, "WIPING…" / "DO NOT POWER OFF" alternating until the blast, the sign 700 ms after the boom) |
 | `tamper` | verdict | warning triangle + exclamation, centred | — |
 | `padlock` | verdict | padlock locking / unlocking | `lock`, `unlock`; `--dir` |
-| `factory_signing` | verdict | the factory-blue gear arrives spinning and coasts to a tooth-aligned stop (1 turn over 1.8 s), its teeth motion-blurred over one panel frame so the fast launch never aliases backwards at 14 fps | — |
+| `factory_signing` | verdict | the white gear arrives spinning and coasts to a tooth-aligned stop (1 turn over 1.8 s), its teeth motion-blurred over one panel frame so the fast launch never aliases backwards at 14 fps | — |
 | `rng_failed` | verdict | the red die at rest, then thrown: a short three-axis tumble (half a turn / three quarters / a quarter, 1.5 s) decelerating onto the 1-2-3 corner, lightly motion-blurred over a third of a panel frame so the launch never strobes at 14 fps | — |
 | `last_attempt` | verdict | the attempt counter at rest, then reeling down to 1 beside the heart, which pumps | `--attempts` (1-9, default 8) |
 | `sig_error` | verdict | detail-grid error notice, variable detail text | `--lines`, `--label`, `--side`, `--size` |
@@ -25,7 +25,7 @@ status-kind screen dict.
 | `duress_differ` | verdict | the PIN pill is scanned and the duress rule refuses it | — |
 | `explosion` | fx | qubit split → clump → blast; can lead another screen (a verdict, or an ending arriving — `busy` rides the orbit, a spec naming an icon hands the flow token off into the split) | `major_explosion`, `minor_explosion`; `--severity`, `--enter left\|right\|sides`, colour flags; `--revs N` (whole orbit turns before the spiral, `loading.REVS` 3 — the film's minimum: it loops on the bench until the host answers; `--ready MS` renders that); spec `busy_until` (`"spiral"` / `"boom"`) |
 | `pin_entering` | pin | the eight-ring PIN input, typed with the two buttons (tap ±1, both buttons ENTER the digit — the 8th checks the PIN directly (a 200 ms beat), no hold —, double press NEXT / BACK over entered digits, hold left cancels; the hints pulse 3 s on / 3 s off; no hint and no PIN ENTERED swap on a submit); the demo dials `typed` and, with `exit="submit"`, submits on the 8th digit and fades the row out so the verdict its digits earn (`miss` / `match`) plays in the same screen | `--pin`, `--typed`, `--exit rest\|submit`; spec `miss=` / `match=` (screen dicts), `labels=` |
-| `pin_differ` | pin | duress-PIN mismatch error (the plain-screen twin of `duress_differ`) | — |
+| `pin_differ` | pin | duress-PIN mismatch error (the same animation as `duress_differ`, pin-category name) | — |
 | `unknown_token` | idle | a solid token drifting on the idle sweep, its ramp trailing (the default demo) | `--ramp 0-13`, `--symbol`, `--address` |
 | `batch_sign` | idle | drifting teal token + pager | `--tx`, `--total` |
 | `hold_to_confirm` | confirm | the system hold fill (the disc filling up) → confirm / cancel; honours the spec's token + `resting` branding | `hold_confirm_success`, `hold_confirm_cancel`; `--ending`, `--family safe` (pair with `-o`) |
@@ -45,7 +45,7 @@ python3 -m screens explosion --severity minor --ring '#FF4B42'
 python3 -m screens explosion --enter left   # the circle slides in from the left first
 python3 -m screens explosion --enter sides  # two qubits fly in from both edges onto the orbit
 python3 -m screens wallet_wiped_explosion   # explosion lead -> WALLET WIPED sweep
-python3 -m screens sig_error --lines "Sig not unlocked &" "Sig verify FAIL"
+python3 -m screens sig_error --lines "Signature" "verify failed"
 python3 -m screens pin_entering --pin 19580324 --fps 14 --frames renders/screens/pin_entering_frames
 python3 -m screens hold_to_confirm --ending cancel --at 2600 --scale 3
 ```
@@ -81,16 +81,17 @@ A status screen may open on a film that ends on an empty canvas — the
 `lead` field (`pq1.status.LedAnim`). The lead plays first; the screen's
 own animation starts when the lead resolves, the lead's tail (the
 explosion's late rings) fading underneath; durations add, so the flow
-dwells for the whole sequence; `lead_gap` (ms) holds the screen back
-further; a looping lead (the film waiting for the host's answer) carries the led
+dwells for the whole sequence; the screen's sign starts to fade in
+`lead_clear` ms after the lead's tail clears (default
+`status.LEAD_CLEAR_MS`, as the blast clears); a looping lead (the film waiting for the host's answer) carries the led
 screen with it — `t_start` follows the lead's `t_resolve`. The explosion's `enter="left"` / `"right"` slides its circle in
-from that side on the flows' KIOSK spring; `enter="sides"` flies two
+from that side on the device's NAV spring (`burst.ENTER_MS`, derived); `enter="sides"` flies two
 qubits in from both edges straight onto the orbit, their speed only
 falling onto the orbit's:
 
 ```python
 screens.spec("wipe", preset="wallet_wiped_explosion")
-# == screens.spec("wipe", treatment="sweep", lead_gap=700,
+# == screens.spec("wipe", treatment="sweep", lead_clear=700,
 #                 lead=dict(anim="explosion", severity="major", enter="sides",
 #                           busy=["WIPING…", "DO NOT POWER OFF"], busy_until="boom",
 #                           revs=5,                        # two extra orbit turns

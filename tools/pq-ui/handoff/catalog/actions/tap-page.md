@@ -9,7 +9,7 @@ Right: next page until the last, then the next screen. Left: previous page, then
 
 A screen whose value needs more room than three lines holds **pages** ([detail — paged](../screen-types/detail-paged.md), [value — paged](../screen-types/value-paged.md)). On such a screen a tap turns the page **before** it moves the flow: the pages are walked first, and only at the end of them does the same button leave for the next screen.
 
-The rule is the first branch of `FlowDriver._tap` (`pq1/driver.py:349`); the flip itself is `Sim.flip_page` (`pq1/flow.py:232`).
+The rule is the first branch of `FlowDriver._tap` (`pq1/driver.py:353`); the flip itself is `Sim.flip_page` (`pq1/flow.py:254`).
 
 ## When it appears
 
@@ -22,9 +22,9 @@ Wherever a screen's layout resolves to more than one page. Today one live flow h
 | right | not on the last page → next page | on the last page → next screen | `page`, then `forward` |
 | left | not on the first page → previous page | on the first page → previous screen, **entered on its LAST page** | `page`, then `back` |
 
-The back edge is the point of it: **left undoes right.** `Sim.go_to(..., back=True)` sets the arriving screen to its last page, so walking backwards through a two-page hash shows page 2, then page 1, then the screen before it. Every other arrival — a forward tap, a [hub tap](tap-hub.md) from an ask, a restart — opens the screen on page 1. The page is never remembered between visits; it is set on arrival (`pq1/flow.py:175`).
+The back edge is the point of it: **left undoes right.** `Sim.go_to(..., back=True)` sets the arriving screen to its last page, so walking backwards through a two-page hash shows page 2, then page 1, then the screen before it. Every other arrival — a forward tap, a [hub tap](tap-hub.md) from an ask, a restart — opens the screen on page 1. The page is never remembered between visits; it is set on arrival (`pq1/flow.py:193`).
 
-Forward and back stay armed for the pages as well as the screens: `armed()` adds `back` when there is a page behind *or* a screen behind, and `forward` when there is a page ahead *or* a screen ahead (`pq1/driver.py:134`).
+Forward and back stay armed for the pages as well as the screens: `armed()` adds `back` when there is a page behind *or* a screen behind, and `forward` when there is a page ahead *or* a screen ahead (`pq1/driver.py:136`).
 
 ## Motion
 
@@ -32,10 +32,10 @@ A page turn is the only navigation that moves no disc. The token stays exactly w
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the showing page fades away | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:280` | `motion.page_flip` first half — `pq1/motion.py:283` |
-| the new page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:280` | the pager number switches between the two halves, at the moment the panel is blank |
+| the showing page fades away | 300 | 4.2 | ease_out | `PAGE_FADE_MS` | `pq1/motion.py:353` | `motion.page_flip` first half — `pq1/motion.py:356` |
+| the new page fades in | 300 | 4.2 | ease | `PAGE_FADE_MS` | `pq1/motion.py:353` | the pager number switches between the two halves, at the moment the panel is blank |
 | a screen change instead, at the end of the pages | — | — | spring NAV | — | — | the ordinary leg — [spring morph](../transitions/spring-morph.md) |
-| demo only: each page holds by itself | 4100 | 57.4 | — | `PAGE_SWAP_MS` | `pq1/motion.py:279` | DO NOT PORT — the flip starts one fade early so it lands on the slot boundary; the driver pins the dwell to infinity |
+| demo only: each page holds by itself | 4100 | 57.4 | — | `PAGE_SWAP_MS` | `pq1/motion.py:352` | DO NOT PORT — the flip starts one fade early so it lands on the slot boundary; the driver pins the dwell to infinity |
 
 Two consequences worth knowing:
 

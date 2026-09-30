@@ -18,15 +18,15 @@ Duress PIN must differ — the pill is scanned, the rule refuses it.
 > (one ping-pong cycle over T_SCAN, ending where it started), finds the
 > same PIN, and the row shakes it off. Then the beat and the rule:
 >
->     hold 250 -> arrive 300 (pill + dots) -> hold 200 -> scan 650
->              -> shake 420 -> beat 200 -> caption 300      t_resolve 2320
+>     hold 286 -> arrive 300 (pill + dots) -> hold 280 -> scan 900
+>              -> shake 580 -> beat 280 -> caption 300      t_resolve 2926
 >
-> Pace (user, Sep 2026, settled over three passes — twice "too slow", then
-> "a bit slower"): the source's 1500 ms sweep is 650, the bar crossing in
-> 325 ms each way (four and a half frames at the NV3007's 14 fps), and the
-> beats sit at 200 ms rather than on VERDICT_ACCENT_MIN_MS (145 — two
-> frames, the floor a beat can hold and still be seen), which read as
-> rushed.
+> Pace (user, Sep 2026, settled over four passes — twice "too slow", then
+> "a bit slower", then "slower" again on 2026-09-26, about 1.4x): the
+> source's 1500 ms sweep is 900, the bar crossing in 450 ms each way
+> (six and a half frames at the NV3007's 14 fps), and the beats sit at
+> 280 ms rather than on VERDICT_ACCENT_MIN_MS (145 — two frames, the floor
+> a beat can hold and still be seen), which read as rushed.
 >
 > The art is pq1.procedural.pin_pill, shared with pin_mismatch (the same
 > pill refused for the other reason — that one still fills after the pill
@@ -42,7 +42,7 @@ arrives whole — outline and all 4 dots already in the warning
 orange — and the mechanism is the device *checking* it: a scanline crosses the pill and comes back,
 finds the same PIN, and the row shakes it off.
 
-Everything is in `state="warning"` (orange 245 160 51). The art is the shared
+Everything is in `state="warning"` (orange #F5A033). The art is the shared
 `pq1.procedural.pin_pill` (`pq1/procedural/pin_pill.py:33`), plus its scanline
 (`pq1/procedural/pin_pill.py:51`): a bar 4 px to each
 side of its centre, overhanging the pill 7 px top and bottom,
@@ -55,15 +55,15 @@ entrance ends — at `T_HOLD` + `T_IN` on the screen's clock.
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 250 | 3.5 | ease_out | `T_HOLD` | `screens/verdict/duress_differ.py:51` | the resting token is drawn, and a black disc of FIXED radius — the token's (30 px) plus a hair — fades in over it; the disc never grows (`pq1/status.py:166`); with no token before it, plain black |
+| black hold — the flow's token hands over | 286 | 4.0 | ease_out | `T_HOLD` | `screens/verdict/duress_differ.py:51` | `PIN_HOLD_MS` 286 ms (4.0 f), four panel frames — a PIN outcome answers a keypress. The resting token is drawn, and a black disc of FIXED radius — the token's (30 px) plus a hair — fades in over it; the disc never grows (`pq1/status.py:189`); with no token before it, plain black |
 | pill AND dots arrive together | 300 | 4.2 | ease_out + arrive | `T_IN` | `screens/verdict/duress_differ.py:52` | the entrance law: one alpha over outline and dots, scale 0.97 to 1, no overshoot. Already orange — there is no normal state to recap |
-| the filled row holds | 200 | 2.8 | hold | `T_FILLED` | `screens/verdict/duress_differ.py:41` | the beat before the check |
-| the scanline crosses and comes back | 650 | 9.1 | raised cosine | `T_SCAN` | `screens/verdict/duress_differ.py:42` | position is 0.5 − 0.5·cos(2π·u) for 1 cycle, so the bar eases at each end, travels 92 px each way and ENDS WHERE IT STARTED. Each traverse is half this |
-| … and the bar fades out over the sweep's tail | 65 | 0.9 | ease_out | `T_SCAN * SCAN_FADE` | `screens/verdict/duress_differ.py:42` | the last tenth of the sweep — the fraction is `SCAN_FADE` 0.1. Shorter than ONE panel frame: on glass the bar all but cuts out |
-| the row shakes the duress PIN off | 420 | 5.9 | shake | `T_SHAKE` | `screens/verdict/duress_differ.py:43` | horizontal only. Centre x moves by 7 px times a decaying sine of 2 cycles — first swing about 6.1 px, then nothing. The scanline is already gone |
-| the verdict beat | 200 | 2.8 | hold | `T_BEAT` | `screens/verdict/duress_differ.py:44` | the pill sits still before the rule is named |
+| the filled row holds | 280 | 3.9 | hold | `T_FILLED` | `screens/verdict/duress_differ.py:41` | the beat before the check |
+| the scanline crosses and comes back | 900 | 12.6 | raised cosine | `T_SCAN` | `screens/verdict/duress_differ.py:42` | position is 0.5 − 0.5·cos(2π·u) for 1 cycle, so the bar eases at each end, travels 92 px each way and ENDS WHERE IT STARTED. Each traverse is half this |
+| … and the bar fades out over the sweep's tail | 90 | 1.3 | ease_out | `T_SCAN * SCAN_FADE` | `screens/verdict/duress_differ.py:42` | the last tenth of the sweep — the fraction is `SCAN_FADE` 0.1. Shorter than ONE panel frame: on glass the bar all but cuts out |
+| the row shakes the duress PIN off | 580 | 8.1 | shake | `T_SHAKE` | `screens/verdict/duress_differ.py:43` | horizontal only. Centre x moves by 7 px times a decaying sine of 2 cycles — first swing about 6.1 px, then nothing. The scanline is already gone |
+| the verdict beat | 280 | 3.9 | hold | `T_BEAT` | `screens/verdict/duress_differ.py:44` | the pill sits still before the rule is named |
 | the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | DURESS PIN MUST DIFFER on the shared baseline y 128 |
-| the verdict rests | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | from `t_resolve` 2320 to the end |
+| the verdict rests | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | from `t_resolve` 2926 to the end |
 
 The sweep and the shake never overlap: the scanline is drawn only while its progress is strictly
 inside 0 to 1, which ends exactly when the shake begins. No result glyph, no flash ring —
@@ -73,18 +73,18 @@ inside 0 to 1, which ends exactly when the shake begins. No result glyph, no fla
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 2320 ms (32.5 f) | 4770 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 2926 ms (41.0 f) | 5376 ms | 2450 ms | no | yes | no | no |
 
 ## Phases
 
 | phase attribute | `(default)` |
 |---|---:|
-| `T0_SCAN` | 200 ms (2.8 f) |
-| `T0_SHAKE` | 850 ms (11.9 f) |
-| `T_HOLD` | 250 ms (3.5 f) |
+| `T0_SCAN` | 280 ms (3.9 f) |
+| `T0_SHAKE` | 1180 ms (16.5 f) |
+| `T_HOLD` | 286 ms (4.0 f) |
 | `T_IN` | 300 ms (4.2 f) |
 | `T_TEXT` | 300 ms (4.2 f) |
-| `T_WAIT` | 1470 ms (20.6 f) |
+| `T_WAIT` | 2040 ms (28.6 f) |
 
 ## Constants
 
@@ -93,10 +93,10 @@ inside 0 to 1, which ends exactly when the shake begins. No result glyph, no fla
 | `SCAN_CYCLES` | `1.0` |
 | `SHAKE_CYCLES` | `2.0` |
 | `SHAKE_PX` | `7.0` |
-| `T_BEAT` | `200` |
-| `T_FILLED` | `200` |
-| `T_SCAN` | `650` |
-| `T_SHAKE` | `420` |
+| `T_BEAT` | `280` |
+| `T_FILLED` | `280` |
+| `T_SCAN` | `900` |
+| `T_SHAKE` | `580` |
 
 ## Spec a flow splices in
 
@@ -112,8 +112,7 @@ inside 0 to 1, which ends exactly when the shake begins. No result glyph, no fla
 Used in: _no live flow yet._
 
 No flow splices it yet — it is the library answer for a duress-PIN rule, ready for the flow that
-sets one. Its plain (non-verdict) twin, [pin / pin_differ](pin-pin-differ.md), states the same rule
-with a longer sweep and no entrance.
+sets one. [pin / pin_differ](pin-pin-differ.md) is this same animation under its pin-category name.
 
 ## Preview
 

@@ -34,7 +34,7 @@ A mechanism plays on the **arrived** icon. Its own window may be as long as the 
 
 | phase | may a screen change it? |
 |---|---|
-| `T_HOLD` | yes — {{val:anim:verdict/pin_mismatch:T_HOLD}} to {{val:anim:verdict/padlock:T_HOLD}} across the library. It is also the [handoff](handoff.md) span, so a longer hold means a slower token crossfade |
+| `T_HOLD` | only between the two named holds: {{tok:pq1.motion.VERDICT_HOLD_MS}} (six panel frames, every verdict) and {{tok:pq1.motion.PIN_HOLD_MS}} (four, the PIN outcomes — they answer a keypress). Both sit on the panel's frame grid, so every entrance starts on a frame. It is also the [handoff](handoff.md) span |
 | `T_IN` | **no.** It is {{tok:pq1.motion.ARRIVE_MS}}, the law's maximum. A mechanism belongs in `T_WAIT` |
 | `T_WAIT` | yes, freely — this is where mechanisms live. Zero is legal |
 | `T_TEXT` | no screen changes it; it is the caption fade |
@@ -42,7 +42,7 @@ A mechanism plays on the **arrived** icon. Its own window may be as long as the 
 
 The conformance checker enforces exactly this: `V-TIN` (an error when `T_IN` exceeds `ARRIVE_MS`), `V-SUM` (`t_resolve` is the sum), `V-HOLD` (the rest is `RESULT_HOLD_MS`), `V-ENTRANCE` (no second copy of the two entrance lines), and `V-PHASEVAR`, which simply records the screens with a non-default `T_HOLD` / `T_WAIT`.
 
-One screen breaks the phase bookkeeping on purpose and is baselined: the **padlock** puts its whole mechanism inside `T_IN` and then recomputes the entrance inline against `ARRIVE_MS`. What you see obeys the law; the phase table does not. Port the padlock's mechanism as a `T_WAIT`, not as a long `T_IN`.
+The **padlock** is the model for a mechanism that starts under the entrance: its `T_IN` is `ARRIVE_MS` like everyone's, its `T_WAIT` is the rest of the mechanism window (`T_MECH − ARRIVE_MS`, the unlock's own longer window likewise), and its scale comes from `self.entrance(u)` — the phase table and what you see agree.
 
 ## Every verdict in the library
 
@@ -61,17 +61,16 @@ Phase lengths per instance, in ms; the machine-readable copy is `spec/anims.json
 | [rng failed](../library/verdict-rng-failed.md) | {{val:anim:verdict/rng_failed:T_HOLD}} | {{val:anim:verdict/rng_failed:T_IN}} | {{val:anim:verdict/rng_failed:T_WAIT}} | {{val:anim:verdict/rng_failed:t_resolve}} | {{val:anim:verdict/rng_failed:duration}} | the die rests, tumbles on three axes, lands, beat |
 | [sig error](../library/verdict-sig-error.md) | {{val:anim:verdict/sig_error:T_HOLD}} | {{val:anim:verdict/sig_error:T_IN}} | {{val:anim:verdict/sig_error:T_WAIT}} | {{val:anim:verdict/sig_error:t_resolve}} | {{val:anim:verdict/sig_error:duration}} | two decaying attention pulses (on the detail grid) |
 | [tamper](../library/verdict-tamper.md) | {{val:anim:verdict/tamper:T_HOLD}} | {{val:anim:verdict/tamper:T_IN}} | {{val:anim:verdict/tamper:T_WAIT}} | {{val:anim:verdict/tamper:t_resolve}} | {{val:anim:verdict/tamper:duration}} | the same two pulses, centred |
-| [wipe](../library/verdict-wipe.md) — `wallet_wiped` | {{val:anim:verdict/wipe@wallet_wiped:T_HOLD}} | {{val:anim:verdict/wipe@wallet_wiped:T_IN}} | {{val:anim:verdict/wipe@wallet_wiped:T_WAIT}} | {{val:anim:verdict/wipe@wallet_wiped:t_resolve}} | {{val:anim:verdict/wipe@wallet_wiped:duration}} | the brush mark, then the pulse treatment |
-| wipe — `wallet_wiped_anim` | {{val:anim:verdict/wipe@wallet_wiped_anim:T_HOLD}} | {{val:anim:verdict/wipe@wallet_wiped_anim:T_IN}} | {{val:anim:verdict/wipe@wallet_wiped_anim:T_WAIT}} | {{val:anim:verdict/wipe@wallet_wiped_anim:t_resolve}} | {{val:anim:verdict/wipe@wallet_wiped_anim:duration}} | the brush mark, then the sweep treatment |
+| [wipe](../library/verdict-wipe.md) — `wallet_wiped_anim` | {{val:anim:verdict/wipe@wallet_wiped_anim:T_HOLD}} | {{val:anim:verdict/wipe@wallet_wiped_anim:T_IN}} | {{val:anim:verdict/wipe@wallet_wiped_anim:T_WAIT}} | {{val:anim:verdict/wipe@wallet_wiped_anim:t_resolve}} | {{val:anim:verdict/wipe@wallet_wiped_anim:duration}} | the brush mark, then the swiffle |
 | wipe — `wallet_wiped_explosion` | {{val:anim:verdict/wipe@wallet_wiped_explosion:T_HOLD}} | {{val:anim:verdict/wipe@wallet_wiped_explosion:T_IN}} | {{val:anim:verdict/wipe@wallet_wiped_explosion:T_WAIT}} | {{val:anim:verdict/wipe@wallet_wiped_explosion:t_resolve}} | {{val:anim:verdict/wipe@wallet_wiped_explosion:duration}} | the same verdict, after a [lead film](lead-film.md) — the phases are unchanged, the clock starts later |
 | [duress differ](../library/verdict-duress-differ.md) | {{val:anim:verdict/duress_differ:T_HOLD}} | {{val:anim:verdict/duress_differ:T_IN}} | {{val:anim:verdict/duress_differ:T_WAIT}} | {{val:anim:verdict/duress_differ:t_resolve}} | {{val:anim:verdict/duress_differ:duration}} | the row holds, the scanline crosses and returns, the shake, beat |
 | [factory signing](../library/verdict-factory-signing.md) | {{val:anim:verdict/factory_signing:T_HOLD}} | {{val:anim:verdict/factory_signing:T_IN}} | {{val:anim:verdict/factory_signing:T_WAIT}} | {{val:anim:verdict/factory_signing:t_resolve}} | {{val:anim:verdict/factory_signing:duration}} | the gear coasts to a stop — it is already turning as it arrives — then a beat |
 
 ## Who else obeys it
 
-[arrive](../screen-types/status-arrive.md) — an ending with no film of its own — uses the same four phases and the same entrance for the resting look instead of an icon. It types the numbers out again rather than inheriting them; they are the same numbers and should be one table in a port.
+[arrive](../screen-types/status-arrive.md) — an ending with no film of its own — uses the same four phases and the same entrance for the resting look instead of an icon. Its hold and entrance read the same tokens (`VERDICT_HOLD_MS`, `ARRIVE_MS`); its beat and caption fade are typed again beside them — the same numbers, and one table in a port.
 
-Not under the law: the [qubit film](../screen-types/status-qubit.md), the [resolve](../screen-types/status-resolve.md), the [explosion](../library/fx-explosion.md) and the hold demo — those are films, with timelines of their own. Note that `pin/pin_differ` is a verdict-shaped screen that is **not** a `VerdictAnim`: it fades its pill in with `ease` over its own hold, with no rise and no handoff. Its twin `verdict/duress_differ` is the one to copy.
+Not under the law: the [qubit film](../screen-types/status-qubit.md), the [resolve](../screen-types/status-resolve.md), the [explosion](../library/fx-explosion.md) and the hold demo — those are films, with timelines of their own. `pin/pin_differ` is `verdict/duress_differ` under its pin-category name, so it is under the law too.
 
 ## Input
 

@@ -32,7 +32,7 @@ This is deliberate. Binding a double-tap on a navigation screen would force ever
 `commit` is false on every detail, every value and every [intro](../screen-types/hero-intro.md). There the right hold is unbound, and unbound means **invisible**:
 
 - `press()` starts the fill only when the side's action is in `armed()` ({{loc:pq1.driver.FlowDriver.press}}), so `Sim.hold` is never created — **no fill is drawn at any point**.
-- At {{tok:pq1.motion.HOLD_COMMIT_MS}} the pending hold is offered to `_hold()`, which finds no `commit` and returns nothing ({{loc:pq1.driver.FlowDriver._hold}}).
+- When the fill would be drawn full (`motion.hold_full`, a hair before {{tok:pq1.motion.HOLD_COMMIT_MS}}) the pending hold is offered to `_hold()`, which finds no `commit` and returns nothing ({{loc:pq1.driver.FlowDriver._hold}}).
 - The release then reports `snapback` anyway — the driver returns that string for any press past the tap window that did not fire. **`snapback` here does not mean anything drained**; nothing was ever on screen. Do not use the result string to decide whether to draw.
 
 Executed on a detail: press right, hold past the commit, release — the screen does not change and the token never fills.

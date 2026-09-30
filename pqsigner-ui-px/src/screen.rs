@@ -117,6 +117,22 @@ const OFF_TINT: usize = OFF_LINES + LINE_REC - 1;
 /// Number of placeholder ramps (`colors.PLACEHOLDER_GRADIENTS`).
 pub const N_RAMPS: u8 = 14;
 
+/// `colors.MONO_RAMP` — the index of the mono ramp, and the size of the
+/// hash space below it.
+///
+/// The mono entry is the treatment for a token the device RECOGNIZES: black
+/// body, white ring, white mark, grey trail. `token_look` pins ETH and WETH
+/// to it. A *hashed* key must therefore never land here, or an unrecognized
+/// token renders identically to ether on a signing screen — the reference
+/// calls this audit COL-01 (`pq1/colors.py:299`).
+///
+/// An explicit pin (`Look { tint: Some(MONO_RAMP) }`, `Screen::tint`) still
+/// reaches it: that pin is the one way to the mono look, and it is not
+/// attacker-derived.
+pub const MONO_RAMP: u8 = 13;
+
+const _: () = assert!(MONO_RAMP < N_RAMPS);
+
 const _: () = assert!(OFF_ID + ID_LEN == OFF_LABEL);
 const _: () = assert!(OFF_LABEL + LABEL_LEN == OFF_CAPTION);
 const _: () = assert!(OFF_CAPTION + CAPTION_LEN == OFF_LINES);
@@ -319,9 +335,12 @@ impl Look {
 }
 
 /// `colors.placeholder_index(key)` for a string key: CRC-32 (IEEE) of the
-/// ASCII-uppercased bytes, modulo the fourteen ramps — so the same token
+/// ASCII-uppercased bytes, modulo [`MONO_RAMP`] — so the same token
 /// (contract address, or symbol) always wears the same ramp as on the
 /// design reference.
+///
+/// The modulus is `MONO_RAMP` (13), **not** `N_RAMPS` (14). The hash space
+/// stops short of the mono ramp on purpose; see [`MONO_RAMP`].
 #[must_use]
 pub fn placeholder_ramp(key: &[u8]) -> u8 {
     let mut crc: u32 = 0xFFFF_FFFF;
@@ -332,7 +351,7 @@ pub fn placeholder_ramp(key: &[u8]) -> u8 {
             crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
         }
     }
-    ((!crc) % u32::from(N_RAMPS)) as u8
+    ((!crc) % u32::from(MONO_RAMP)) as u8
 }
 
 /// Which column the disc docks on (record byte 2).
@@ -1527,10 +1546,66 @@ mod tests {
 
     #[test]
     fn placeholder_ramp_matches_the_reference_hash() {
-        // `zlib.crc32(key.upper().encode()) % 14` on the design reference.
-        assert_eq!(placeholder_ramp(b"0x3cA9e5F1b72D04E8a6c1D9B3f57E28a0C4d6B1e9"), 1);
-        assert_eq!(placeholder_ramp(b"TOSHI"), 5);
-        assert_eq!(placeholder_ramp(b"0x9E3b5c0f7A1d24e86C3F0b7d5a2E4c6F8b1D3a7c"), 6);
+        // `zlib.crc32(key.upper().encode()) % MONO_RAMP` on the design
+        // reference (`pq1/colors.py:299`), evaluated with the reference
+        // itself. These values CHANGED when the modulus was corrected from
+        // 14 to 13; under the old modulus they were 1 / 5 / 6.
+        assert_eq!(placeholder_ramp(b"0x3cA9e5F1b72D04E8a6c1D9B3f57E28a0C4d6B1e9"), 4);
+        assert_eq!(placeholder_ramp(b"TOSHI"), 12);
+        assert_eq!(placeholder_ramp(b"0x9E3b5c0f7A1d24e86C3F0b7d5a2E4c6F8b1D3a7c"), 2);
+    }
+
+    /// COL-01. A hashed key must never reach the mono ramp, because
+    /// `token_look` dresses EVERY unknown token in the ether mark and uses
+    /// the tint as the only thing that tells it apart from ether. Landing on
+    /// the mono ramp erases that one discriminator.
+    ///
+    /// Four real ERC-20 symbols hashed to the mono ramp under the old
+    /// modulus, so this is a witness list, not a hypothetical.
+    #[test]
+    fn a_hashed_key_never_reaches_the_mono_ramp() {
+        for sym in [&b"ARB"[..], b"RPL", b"SAND", b"GMX"] {
+            assert!(
+                placeholder_ramp(sym) < MONO_RAMP,
+                "{}: a hashed symbol reached the mono ramp — it now renders as ether",
+                core::str::from_utf8(sym).unwrap()
+            );
+        }
+        // The address form is the attacker-controlled one: a deployer picks
+        // the contract address (CREATE2 salt), and 1 in 14 landed on mono.
+        for a in 0u32..20_000 {
+            let mut addr = [0u8; 20];
+            addr[16..].copy_from_slice(&a.to_be_bytes());
+            let mut key = [0u8; 42];
+            key[0] = b'0';
+            key[1] = b'x';
+            for (i, b) in addr.iter().enumerate() {
+                key[2 + i * 2] = b"0123456789abcdef"[usize::from(b >> 4)];
+                key[3 + i * 2] = b"0123456789abcdef"[usize::from(b & 0xF)];
+            }
+            assert!(
+                placeholder_ramp(&key) < MONO_RAMP,
+                "address 0x{a:040x} hashed to the mono ramp"
+            );
+        }
+    }
+
+    /// ANTI-VACUITY for the sweep above: the hash must still USE its whole
+    /// space. A `placeholder_ramp` that returned a constant would satisfy
+    /// `< MONO_RAMP` everywhere.
+    #[test]
+    fn the_hash_still_covers_every_ramp_below_mono() {
+        let mut seen = [false; MONO_RAMP as usize];
+        for a in 0u32..20_000 {
+            let mut key = [0u8; 10];
+            key[0] = b'T';
+            for (i, b) in a.to_be_bytes().iter().enumerate() {
+                key[1 + i * 2] = b"0123456789abcdef"[usize::from(b >> 4)];
+                key[2 + i * 2] = b"0123456789abcdef"[usize::from(b & 0xF)];
+            }
+            seen[usize::from(placeholder_ramp(&key))] = true;
+        }
+        assert!(seen.iter().all(|&s| s), "the hash does not reach every ramp below mono: {seen:?}");
     }
 
     #[test]

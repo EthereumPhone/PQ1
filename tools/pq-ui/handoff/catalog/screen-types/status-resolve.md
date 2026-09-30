@@ -9,11 +9,11 @@ A cancel does no work, so there is no film: the token resolves in place to the f
 
 The ending of a flow that was cancelled. A cancel does no work, so it shows no loading: there is **no film**. The token that arrived at the centre resolves in place over one flash beat — its glyph fades, the disc and ring crossfade into the resting look, the flash ring fires in the result colour — then the X and the caption land. It is the **default** cancel choreography and the only film-less one: there is no other spinner. A failure the device learns of AFTER the hold — the host rejects what was signed — is not a cancel: that ending names the [qubit film](status-qubit.md) and collides into the X (`send`'s TRANSACTION FAILED). A flow may still name something else for its failing ending — a verdict (`unlock_batch` ends on the padlock LOCKED) or an ending led by a film (the firmware `DECLINED`) — but it must say so.
 
-It is a `status` screen whose animation is `"resolve"` — the default for every ending whose `state` is **not** `"done"` (`status.default_anim`, `pq1/status.py:677`). The class is `ResolveStatus` (`pq1/status.py:452`).
+It is a `status` screen whose animation is `"resolve"` — the default for every ending whose `state` is **not** `"done"` (`status.default_anim`, `pq1/status.py:744`). The class is `ResolveStatus` (`pq1/status.py:480`).
 
 ## When it appears
 
-After a completed [hold left](../actions/hold-left-decline.md) — armed on every navigable screen of a flow that has a failing ending — and on any other ending the device reaches whose `state` is not `"done"` and that names no film — a decline, a rejection before dispatch. The token first travels to the centre on the normal [spring morph](../transitions/spring-morph.md); the resolve starts when that transit has settled. Used in 27 of 31 flows: `approve_token`, `batch/transfers`, `batch/transfers_declined`, `blind/bare_call`, `blind/call_with_value`, `blind/typed_call/sign_with_args`, `blind/unknown_call`, `contract_call` … and 19 more (see the matrix in [INDEX](../INDEX.md))
+After a completed [hold left](../actions/hold-left-decline.md) — armed on every navigable screen of a flow that has a failing ending — and on any other ending the device reaches whose `state` is not `"done"` and that names no film — a decline, a rejection before dispatch. The token first travels to the centre on the normal [spring morph](../transitions/spring-morph.md); the resolve starts when that transit has settled. Used in 27 of 33 flows: `approve_token`, `batch/transfers`, `batch/transfers_declined`, `blind/bare_call`, `blind/call_with_value`, `blind/typed_call/sign_with_args`, `blind/unknown_call`, `contract_call` … and 19 more (see the matrix in [INDEX](../INDEX.md))
 
 ## Spec
 
@@ -45,18 +45,18 @@ The **state** picks the animation, not the glyph: any state other than `"done"` 
 
 ## Geometry
 
-Centred on x 214, y 72. It borrows the film's geometry (`QubitCfg`, `pq1/loading.py:34`) so both endings rest on the same disc.
+Centred on x 214, y 72. It borrows the film's geometry (`QubitCfg`, `pq1/loading.py:35`) so both endings rest on the same disc.
 
 | part | from (the arrived token) | to (the resting look) |
 |---|---|---|
 | disc radius | 30 − 1.2 (the token's visible edge) | 30 |
-| disc colour | the token's fill (an unknown token: its gradient) | the resting fill — black, or the brand's cancel red |
+| disc colour | the token's fill — always a solid, an unknown token's included | the resting fill — black, or the brand's cancel red |
 | ring colour | the token's ring (white, or its explicit stroke) | the resting ring — the state colour, or black when branded |
 | ring radius | 30 − 1.2 | unbranded: the same; branded: flush at 30 |
 | ring stroke | 2.4 px | the same |
 | flash ring | r 30, in the flash colour: `color` if set, else a branded ending's resting fill, else the state colour | grown by 55 px, 2.5 px stroke |
 
-For an unknown token the gradient stays underneath and the resting fill fades in over it. See [the resting look](resting-look.md).
+The arrived fill stays underneath and the resting fill fades in over it. See [the resting look](resting-look.md).
 
 ## Motion
 
@@ -64,18 +64,18 @@ Time 0 is the frame on which the transit into the screen has settled. At time 0 
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the beat: disc, ring colour and ring radius crossfade | 400 | 5.6 | ease_out | `QubitCfg.T_FLASH` | `pq1/loading.py:34` | one linear progress over the film's flash length, passed through `ease_out` for every colour and radius |
-| the token glyph fades out | 180 | 2.5 | linear | `QubitCfg.T_FLASH * 0.45` | `pq1/loading.py:34` | gone at 45 % of the beat; it does not shrink (in the film it does) |
-| the flash ring fades in | 48 | 0.7 | linear | `QubitCfg.T_FLASH * 0.12` | `pq1/loading.py:34` | a gate over the first 12 % of the beat: at t 0 there is no ring sitting on the disc edge, and by the next panel frame the gate is already fully open. It is a gate, not an accent — the two-frame minimum does not apply |
-| the flash ring grows and fades | 400 | 5.6 | linear | `QubitCfg.T_FLASH` | `pq1/loading.py:34` | radius and alpha both linear, alpha from 85 % to nothing — the same ring as the film's |
-| result glyph fades in | 350 | 4.9 | linear | `350` | — | starts at the end of the beat; the film's own resolve timing — a bare literal, no token |
-| caption waits | 120 | 1.7 | hold | `120` | — | counted from the end of the beat; bare literal |
-| caption fades in | 350 | 4.9 | linear | `350` | — | bare literal |
-| resolved, from time 0 | 400 | 5.6 | — | `t_resolve` | `pq1/status.py:469` | the beat |
-| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | the same hold as every ending — see [result hold](../transitions/result-hold.md) |
-| whole screen | 2850 | 39.9 | — | `duration` | `pq1/status.py:246` | resolved + result hold |
+| the beat: disc, ring colour and ring radius crossfade | 400 | 5.6 | ease_out | `QubitCfg.T_FLASH` | `pq1/loading.py:35` | one linear progress over the film's flash length, passed through `ease_out` for every colour and radius |
+| the token glyph fades out | 180 | 2.5 | linear | `QubitCfg.T_FLASH * 0.45` | `pq1/loading.py:35` | gone at 45 % of the beat; it does not shrink (in the film it does) |
+| the flash ring fades in | 145 | 2.0 | linear | `FLASH_IN_MS` | `pq1/status.py:116` | two panel frames (`pq1/status.py:116`): at t 0 there is no ring sitting on the disc edge — the frame equals the arrived token exactly — and the fade is long enough to be sampled on the panel |
+| the flash ring grows and fades | 400 | 5.6 | linear | `QubitCfg.T_FLASH` | `pq1/loading.py:35` | radius and alpha both linear, alpha from 85 % to nothing — the same ring as the film's |
+| result glyph fades in | 300 | 4.2 | ease_out | `RESULT_FADE_MS` | `pq1/motion.py:163` | starts when the beat ends — an entrance, on the verdict caption's curve |
+| caption waits | 145 | 2.0 | hold | `RESULT_LAG_MS` | `pq1/motion.py:168` | counted from the end of the beat: two panel frames, so the mark is read first |
+| caption fades in | 300 | 4.2 | ease_out | `RESULT_FADE_MS` | `pq1/motion.py:163` | the result has landed at `t_landed` = `t_resolve` + `RESULT_LANDING_MS` 445 ms (6.2 f); the hold counts from there |
+| resolved, from time 0 | 400 | 5.6 | — | `t_resolve` | `pq1/status.py:499` | the beat |
+| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | the same hold as every ending — see [result hold](../transitions/result-hold.md) |
+| whole screen | 3295 | 46.1 | — | `duration` | `pq1/status.py:278` | resolved + landing + result hold |
 
-The disc does not overshoot here: the `back_out` pop belongs to the [film](status-qubit.md) only. See [flash ring + result glyphs](../components/flash-ring.md). Like the film, the resolve rests on the token disc (`rests_on_token` stays true), so leaving it is an ordinary token transit, not a fade to black.
+The disc does not overshoot here: the `back_out` pop belongs to the [film](status-qubit.md) only. See [flash ring + result glyphs](../components/flash-ring.md). Like the film, the resolve rests on the token disc (`rests_on_token` stays true) and shows a result, so leaving it is a [fade to black](../transitions/tokenless-fade.md), not a morph.
 
 ## Input
 

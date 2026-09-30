@@ -11,8 +11,8 @@
 # `./sync.sh --check` (make pq-ui-check) verifies the vendored bytes and file
 # set against MANIFEST.sha256.
 repo   = https://github.com/EthereumPhone/PQ-UI
-commit = 0b3ca4950243304942f32be1e79e783a00ce500b
-date   = 2026-09-22T14:25:12+02:00
+commit = 198bbcb96ebcb3ad585789487a1c50e609a46c06
+date   = 2026-09-28T11:57:46+02:00
 # Deliberate local deviation: upstream ships pq1/assets/OFL.txt, which is the
 # Chakra Petch OFL text (wrong file); Aileron is CC0 — see LICENSES/Aileron.md.
 # Device-side deviations from the reference input model (TAP_MAX_MS, the

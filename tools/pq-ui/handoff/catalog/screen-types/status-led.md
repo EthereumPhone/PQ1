@@ -7,13 +7,13 @@ One screen made of two animations: a film that ends on an empty canvas, a gap of
 
 ## What it is
 
-One status screen made of **two** animations played in a row: a **lead** film that ends on an empty canvas, an optional **gap** of black, then the screen's own animation — the **main**. The lead shows the work (the explosion: the token loads, clumps and blows apart). The main states the result: [arrive](status-arrive.md) for an ending, or a verdict icon such as WALLET WIPED.
+One status screen made of **two** animations played in a row: a **lead** film that ends on an empty canvas, then the screen's own animation — the **main**, placed against the moment the lead's tail clears. The lead shows the work (the explosion: the token loads, clumps and blows apart). The main states the result: [arrive](status-arrive.md) for an ending, or a verdict icon such as WALLET WIPED.
 
-Any `status` screen whose spec carries `lead` becomes one. `status.anim_for` (`pq1/status.py:737`) builds both animations and wraps them in `LedAnim` (`pq1/status.py:568`). It is still **one** screen: one entry in the flow, one dwell, no input from the first frame of the lead to the end of the result hold.
+Any `status` screen whose spec carries `lead` becomes one. `status.anim_for` (`pq1/status.py:812`) builds both animations and wraps them in `LedAnim` (`pq1/status.py:614`). It is still **one** screen: one entry in the flow, one dwell, no input from the first frame of the lead to the end of the result hold.
 
 ## When it appears
 
-Where the work is destructive or long enough to deserve its own film. Today: both firmware endings (`flows/firmware/__init__.py`) — `UPDATED` after the major explosion, `DECLINED` after the minor one — and the library preset `wallet_wiped_explosion` ([verdict / wipe](../library/verdict-wipe.md)). The firmware `DECLINED` is the one cancel in the live flows that plays a film (`send`'s FAILED is the other film ending on a failure — the [qubit film](status-qubit.md) into the X, a failure after dispatch rather than a cancel); every other cancel either resolves in place ([the resolve](status-resolve.md), the default) or ends on a verdict (`unlock_batch` → LOCKED). Used in 1 of 31 flows: `firmware/update` ×2
+Where the work is destructive or long enough to deserve its own film. Today: both firmware endings (`flows/firmware/__init__.py`) — `UPDATED` after the major explosion, `DECLINED` after the minor one — and the library preset `wallet_wiped_explosion` ([verdict / wipe](../library/verdict-wipe.md)). The firmware `DECLINED` is the one cancel in the live flows that plays a film (`send`'s FAILED is the other film ending on a failure — the [qubit film](status-qubit.md) into the X, a failure after dispatch rather than a cancel); every other cancel either resolves in place ([the resolve](status-resolve.md), the default) or ends on a verdict (`unlock_batch` → LOCKED). Used in 1 of 33 flows: `firmware/update` ×3
 
 ## Spec
 
@@ -30,7 +30,7 @@ Three more keys describe the lead. They are not in the `pq1/layout.py` schema; t
 | key | form | meaning |
 |---|---|---|
 | `lead` | `dict(anim="explosion", severity="major", …)` | a full status spec of its own, played first. It carries the film's knobs — `severity`, `enter`, `revs`, `busy`, `busy_until`, colours — see [fx / explosion](../library/fx-explosion.md) |
-| `lead_gap` | ms, default 0 | extra black between the lead resolving and the main starting |
+| `lead_clear` | ms, default `LEAD_CLEAR_MS` (-180) | when the main's sign starts to fade in, measured from the lead's tail clearing — negative: it rises as the blast clears; positive: black first |
 | `handoff` | `True` | the flow's resting token crossfades out **under the lead**, from the screen's first frame — never after it |
 
 Screen 5 of flow `firmware/update`, as the design system normalizes it (defaults filled in):
@@ -46,7 +46,7 @@ Screen 5 of flow `firmware/update`, as the design system normalizes it (defaults
           'severity': 'major',
           'revs': 5,
           'busy_until': 'boom',
-          'busy': 'RECONNECTING…'},
+          'busy': 'UPDATING…'},
  'resting': {'fill': [255, 255, 255], 'ring': [0, 0, 0], 'glyph': [0, 0, 0]},
  'bottom': 'FIRMWARE UPDATED TO 1.0.3',
  'chev': None,
@@ -68,28 +68,29 @@ Screen 5 of flow `firmware/update`, as the design system normalizes it (defaults
 |---|---|---|
 | 0 | | the lead, on `t` |
 | the lead resolves | `lead.t_resolve` — the boom lands, the first ring is done | the lead's **tail**: late rings still fading |
-| the main starts | `t_start` = `lead.t_resolve` + `lead_gap` | the main, on its own clock `t − t_start`, drawn **over** the tail |
+| the main starts | `t_start` = `lead.t_resolve` + `lead.t_tail` + `lead_clear` − `main.T_HOLD` | the main, on its own clock `t − t_start`, drawn **over** the tail — its black hold ends `lead_clear` ms after the tail clears |
 | the tail ends | `lead.t_resolve` + `lead.t_tail` | the lead stops drawing |
 | resolved | `t_start` + `main.t_resolve` | |
 | the screen ends | `t_start` + `main.duration` | |
 
-What rests on the canvas, the screen's name and whether it is interactive are all the **main's**. So a led `arrive` leaves a token disc; a led verdict owns its canvas ([token-less transit](../transitions/tokenless-fade.md)).
+What rests on the canvas, the screen's name and whether it is interactive are all the **main's**. So a led `arrive` rests on a token disc and a led verdict owns its canvas — and both leave on the [fade to black](../transitions/tokenless-fade.md), because both show a result.
 
 ## Motion
 
-The firmware `UPDATED` ending — a major explosion on a longer orbit (`flows.firmware.LOAD_REVS` = 5 turns), no gap, then `arrive`:
+The firmware `UPDATED` ending — a major explosion on a longer orbit (`flows.firmware.LOAD_REVS` = 5 turns), the default clearance, then `arrive`:
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | the lead film, to the boom | 9500 | 133.0 | — | `t_resolve - QubitCfg.T_SPIN + LOAD_REVS * QubitCfg.rev_ms` | `screens/fx/explosion.py:124` | the stock major film with its steady orbit swapped for the longer one; phase by phase on [fx / explosion](../library/fx-explosion.md) |
-| the lead's tail, under the main | 580 | 8.1 | — | `t_tail` | `pq1/status.py:204` | ring stagger × (rings − 1): 5 rings launched 145 ms apart. The minor pop has 2 rings, so its tail is 145 ms |
-| the main's black hold | 400 | 5.6 | hold | `T_HOLD` | `pq1/status.py:535` | the tail fades through it. A major tail is LONGER than this hold: with no gap its last faint ring overlaps the start of the entrance |
-| flow-token handoff, when `handoff` is set | 400 | 5.6 | ease_out | `HANDOFF_MS` | `pq1/status.py:578` | runs from the screen's time 0, under the lead |
-| the main, to its resolve | 1450 | 20.3 | ease_out + arrive | `t_resolve` | `pq1/status.py:546` | see [arrive](status-arrive.md) |
-| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | once, after the main |
-| whole screen | 13400 | 187.6 | — | `t_resolve - QubitCfg.T_SPIN + LOAD_REVS * QubitCfg.rev_ms + duration` | `screens/fx/explosion.py:124` | durations add |
+| the lead's tail, under the main | 580 | 8.1 | — | `t_tail` | `pq1/status.py:230` | ring stagger × (rings − 1): 5 rings launched 145 ms apart. The minor pop has 2 rings, so its tail is 145 ms |
+| the main starts — its black hold begins | 9471 | 132.6 | — | `t_resolve - QubitCfg.T_SPIN + LOAD_REVS * QubitCfg.rev_ms + t_tail + LEAD_CLEAR_MS - T_HOLD` | `screens/fx/explosion.py:124` | `t_start`: placed from the tail's clearance, not from the boom |
+| the main's black hold | 429 | 6.0 | hold | `T_HOLD` | `pq1/status.py:575` | the tail fades through it; it ends `LEAD_CLEAR_MS` -180 ms (-2.5 f) after the tail clears, so the last faint ring overlaps the start of the entrance. UPDATE DECLINED (the minor lead) sits on the same clearance |
+| flow-token handoff, when `handoff` is set | 429 | 6.0 | ease_out | `HANDOFF_MS` | `pq1/status.py:625` | runs from the screen's time 0, under the lead |
+| the main, to its resolve | 1479 | 20.7 | ease_out + arrive | `t_resolve` | `pq1/status.py:586` | see [arrive](status-arrive.md) |
+| result hold | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | once, after the main |
+| whole screen | 13400 | 187.6 | — | `t_resolve - QubitCfg.T_SPIN + LOAD_REVS * QubitCfg.rev_ms + t_tail + LEAD_CLEAR_MS - T_HOLD + duration` | `screens/fx/explosion.py:124` | durations add |
 
-WALLET WIPED is the other reference: its lead enters from both sides, its preset sets a `lead_gap` so the sign waits for the blast to clear, and the whole screen resolves at `t_resolve` 12148 ms (170.1 f) and ends at `duration` 14598 ms (204.4 f). See [lead film, tail and gap](../transitions/lead-film.md) and [side entrance](../transitions/side-entrance.md).
+WALLET WIPED is the other reference: its lead enters from both sides, its preset passes `lead_clear=700` so the sign waits for the blast to be gone, and the whole screen resolves at `t_resolve` 12328 ms (172.6 f) and ends at `duration` 14778 ms (206.9 f). See [lead film, tail and clearance](../transitions/lead-film.md) and [side entrance](../transitions/side-entrance.md).
 
 The lead's `busy` caption breathes like the film's ([busy caption](../components/busy-caption.md)). With `busy_until="boom"` it stays up through the spiral and the clump and is gone as the blast launches. The turns above are the minimum: on the device the lead loops while the reboot is outstanding and the led screen's start moves with it ([loading loop](../transitions/loading-loop.md)).
 
@@ -106,7 +107,7 @@ None, for the whole sequence ([unbound gestures](../actions/unbound-gestures.md)
 ## Do / Don't
 
 - **Do** keep it one screen with one clock. Never split the film and its result into two status screens: two dwells, and a black transit between them.
-- **Do** draw the main over the lead's tail; do not wait for the tail unless `lead_gap` says so.
+- **Do** draw the main over the lead's tail, placed from the tail's clearance (`lead_clear`); wait past it only when `lead_clear` is positive.
 - **Do** lengthen the loading with whole turns (`revs`), at the same spin speed — and let the loop add turns beyond that while the work is outstanding.
 - **Don't** let a film that rests on a look lead. Refuse it at build time, as the reference does.
 - **Don't** port the demo's dwell: the Sim waits for the summed `duration` and then advances by itself. The driver freezes the finished ending on its resting frame.

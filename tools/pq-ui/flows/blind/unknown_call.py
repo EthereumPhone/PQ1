@@ -32,7 +32,7 @@ TO the router address alone (the address treatment, two <= 21-char
 halves at 22); AMOUNT the ether the call carries ("0 ETH" — a token
 swap sends none); DATA HASH the calldata hash SHORTENED to its first 12
 and last 12 characters around a single "…" (a real Aileron glyph) —
-the ONE sanctioned departure from DESIGN.md § Text rules "no ellipsis":
+one of the two sanctioned shortenings in DESIGN.md § Text rules:
 the hash is a fingerprint to match against the dapp, not a value to
 read in full, and the full 66-char hash would need four 22 px lines;
 MAX FEE the fee cap per gas + the priority tip; WORST CASE the max

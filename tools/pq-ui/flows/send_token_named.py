@@ -42,8 +42,8 @@ opening or the returning one.
 Render with `python -m flows send_token_named --end all`.
 
 The token treatment is send_token's: components.token_defaults(SYMBOL)
-is the switch — the long-tail sample takes the placeholder look, a SOLID
-disc, never the gradient, in the fill of the six-stop ramp hashed from
+is the switch — the long-tail sample takes the placeholder look, its
+initial on a SOLID disc, never the gradient, in the fill of the six-stop ramp hashed from
 the symbol (token "palette" -> components.token_ramp, crc32, never
 fixed), its trail the same ramp darkening away from the token — so this
 token always wears the same colour as it does in send_token; on device

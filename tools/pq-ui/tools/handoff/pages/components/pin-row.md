@@ -36,7 +36,7 @@ The entry's own keys ride along on the same dict (`screens.spec("pin_entering", 
 | digit | {{val:pq1.typography.SIZE_BODY}} px {{val:pq1.procedural.pin_slots.DIGIT_WEIGHT}}, centred in the ring and nudged 1.5 px down (optical centring, not a baseline) |
 | caption | ENTER PIN on the shared baseline y {{val:pq1.layout.BASELINE_Y}} |
 | hint labels | {{val:screens.pin.pin_entering.LBL_SIZE}} px caps at 80 % white on the chevron line (the corner slots, {{loc:pq1.layout.CHEV_LEFT}}), each label's edge facing its chevron at x {{val:screens.pin.pin_entering.LBL_L}} (left) / {{val:screens.pin.pin_entering.LBL_R}} (right), ink-box centred on the line |
-| − / + marks | `procedural.marks.minus` / `plus`, bar span 0.6 × {{val:screens.pin.pin_entering.SIGN_R}} px, stroke {{val:screens.pin.pin_entering.SIGN_STROKE}} × that radius (lighter than the x mark's), {{val:screens.pin.pin_entering.SIGN_GAP}} px from the chevron edge |
+| − / + marks | `procedural.marks.minus` / `plus`, bar span 0.6 × {{val:screens.pin.pin_entering.SIGN_R}} px, stroke `HINT_STROKE` {{val:screens.pin.pin_entering.HINT_STROKE}} × that radius — the hair stroke over the sign radius (lighter than the x mark's), {{val:screens.pin.pin_entering.SIGN_GAP}} px from the chevron edge |
 
 The signs are **marks, not text**: typed − and + are too thin to read on this glass.
 
@@ -55,17 +55,17 @@ The liquid is **not** the token's see-through film: in the rings it is opaque wh
 ## Motion
 
 {{motion-head}}
-{{row:the rings fade in | screens.pin.pin_entering.T_FADE | ease | the round's own clock: a restart replays this in place}}
+{{row:the rings fade in | screens.pin.pin_entering.T_FADE | ease_out | the round's own clock: a restart replays this in place}}
 {{row:the token handed over fades to black under them | screens.pin.pin_entering.T_FADE | ease_out | only when the screen before rests on a token (a hero): the resting disc is drawn and blackened as the rings come up ({{loc:screens.pin.pin_entering.PinEntering.draw_handoff}}). After another token-less screen the handoff is dropped and the row opens on black}}
 {{row:captions and hints follow the rings | screens.pin.pin_entering.T_TEXT | ease_out | released at {{tok:screens.pin.pin_entering.T_UI}}, once the rings have settled}}
 {{row:the chevrons trail the hints | screens.pin.pin_entering.CHEV_STAGGER | ease_out | the same fade, started this much later}}
 {{row:the first ring becomes active | screens.pin.pin_entering.ACT_MS | ease | colour 70 % white to YELLOW, stroke 2 to 2.5 px, lift 0 to 3 px, on one curve. This ramp runs ONCE, from {{tok:screens.pin.pin_entering.T_UI}} on the round's clock — it is not per slot}}
 {{row:every later cursor move | - | cut | the leaving ring is white and the arriving ring fully yellow in the same frame; only the bounce softens it}}
 {{row:micro-bounce on every dial, enter and move | screens.pin.pin_entering.BOUNCE_MS | sine | the ACTIVE ring only — a half sine: up 2.5 px at the midpoint, back to the lift}}
-{{row:one hint: fade in, hold, fade out | screens.pin.pin_entering.L_FADE * 2 + screens.pin.pin_entering.L_SHOW | ease_out | {{tok:screens.pin.pin_entering.L_FADE}} in, {{tok:screens.pin.pin_entering.L_SHOW}} lit, {{tok:screens.pin.pin_entering.L_FADE}} out}}
+{{row:one hint: fade in, hold, fade out | screens.pin.pin_entering.L_FADE * 2 + screens.pin.pin_entering.L_SHOW | ease_out | {{tok:screens.pin.pin_entering.L_FADE}} in, {{tok:screens.pin.pin_entering.L_SHOW}} lit, {{tok:screens.pin.pin_entering.L_FADE}} out — `motion.hint_env` ({{loc:screens.pin.pin_entering.seg_alpha}}), the band's text fade, so a hint still reads as three seconds on}}
 {{row:then nothing, before the next hint | screens.pin.pin_entering.L_GAP | hold | one hint slot is {{tok:screens.pin.pin_entering.L_SLOT}}; three slots make the cycle}}
-{{row:a caption or hint swap | screens.pin.pin_entering.SWAP_MS * 2 | ease_out | sequential: the old fades fully out, then the new fades in ({{loc:screens.pin.pin_entering.swap}})}}
-{{row:the row leaves | screens.pin.pin_entering.T_OUT | ease_out | rings, digits, captions, liquid — one alpha, one piece}}
+{{row:a caption or hint swap | screens.pin.pin_entering.SWAP_MS * 2 | ease_out | sequential: the old fades fully out, then the new fades in — `motion.seq_swap`, the page flip's envelope ({{loc:screens.pin.pin_entering.swap}})}}
+{{row:the row leaves | screens.pin.pin_entering.T_OUT | ease_out | rings, digits, captions, liquid — one alpha, one piece. Longer than the flow's {{tok:pq1.motion.FADE_MS}} exit on purpose: the documented exception to the one-hold-exit rule ([hold commit fade](../transitions/hold-commit-fade.md))}}
 
 ## Input
 

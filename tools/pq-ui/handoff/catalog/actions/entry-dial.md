@@ -17,11 +17,11 @@ On the [PIN row](../components/pin-row.md) while it is open — `inc` and `dec` 
 
 ## The tap itself
 
-A press under `TAP_MAX_MS` 250 ms (3.5 f) is a tap and fires on **release**, exactly as everywhere else in this UI (`pq1/driver.py:419`). Past that the press is a hold and the dial never turns: on the left the cancel fill starts rising, on the right nothing is drawn at all. Releasing a hold before it completes returns `snapback` and leaves the row exactly as it was.
+A press under `TAP_MAX_MS` 500 ms (7.0 f) is a tap and fires on **release**, exactly as everywhere else in this UI (`pq1/driver.py:425`). Past that the press is a hold and the dial never turns: on the left the cancel fill starts rising, on the right nothing is drawn at all. Releasing a hold before it completes returns `snapback` and leaves the row exactly as it was.
 
 ## What the eye sees, and when
 
-The ring **bounces at the tap**. The **digit lands a beat later**. That gap is deliberate: a second press can still convert the tap into something else, and a digit that appears and is then taken back reads as a glitch (`screens/pin/pin_entering.py:139` keeps the tap pending until its window closes).
+The ring **bounces at the tap**. The **digit lands a beat later**. That gap is deliberate: a second press can still convert the tap into something else, and a digit that appears and is then taken back reads as a glitch (`screens/pin/pin_entering.py:142` keeps the tap pending until its window closes).
 
 How long the digit waits depends on what could still take the tap away. The wait is measured from the **release** — the moment the tap fired:
 
@@ -31,7 +31,7 @@ How long the digit waits depends on what could still take the tap away. The wait
 | left tap on the first ring | only the chord | `CHORD_MS` 150 ms (2.1 f) |
 | any tap on a side a double press could move — left: not the first ring; right: an entered digit ahead | the chord or the double press | `DOUBLE_TAP_MS` 250 ms (3.5 f) |
 
-So on the frontier slot a right tap shows its digit sooner than a left tap does — right cannot move forward past what is entered, left can always go BACK. Odd but correct: the wait is exactly as long as the ambiguity (`screens/pin/pin_entering.py:382`), so the conversion window and the pending window always end together and a converted tap is never flashed.
+So on the frontier slot a right tap shows its digit sooner than a left tap does — right cannot move forward past what is entered, left can always go BACK. Odd but correct: the wait is exactly as long as the ambiguity (`screens/pin/pin_entering.py:374`), so the conversion window and the pending window always end together and a converted tap is never flashed.
 
 An ENTER or a move lands whatever is pending at once — no digit is ever lost by moving on.
 
@@ -39,11 +39,11 @@ An ENTER or a move lands whatever is pending at once — no digit is ever lost b
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| press-down acknowledgment on the pressed chevron | 120 | 1.7 | ease_out | `PRESS_FEEDBACK_MS` | `pq1/motion.py:166` | SPEC-ONLY: see [press feedback](../components/press-feedback.md); the Python does not draw it yet |
-| the tap fires on release, under this | 250 | 3.5 | cut | `TAP_MAX_MS` | `pq1/motion.py:167` | past it the press is a hold instead |
+| press-down acknowledgment on the pressed chevron | 145 | 2.0 | ease_out | `PRESS_FEEDBACK_MS` | `pq1/motion.py:186` | SPEC-ONLY: see [press feedback](../components/press-feedback.md); the Python does not draw it yet |
+| the tap fires on release, under this | 500 | 7.0 | cut | `TAP_MAX_MS` | `pq1/motion.py:188` | past it the press is a hold instead |
 | ring micro-bounce, from the tap | 220 | 3.1 | sine | `BOUNCE_MS` | `screens/pin/pin_entering.py:87` | up 2.5 px at the midpoint, back to the 3 px active lift: `2.5 · sin(π · b / BOUNCE_MS)` |
-| the digit lands — nowhere for the cursor to move that way | 150 | 2.1 | cut | `CHORD_MS` | `pq1/motion.py:169` | measured from the release; the number changes in one frame, it does not fade |
-| the digit lands — a double press on that side could move | 250 | 3.5 | cut | `DOUBLE_TAP_MS` | `pq1/motion.py:168` | the longer wait, because there are two ways to take the tap back |
+| the digit lands — nowhere for the cursor to move that way | 150 | 2.1 | cut | `CHORD_MS` | `pq1/motion.py:193` | measured from the release; the number changes in one frame, it does not fade |
+| the digit lands — a double press on that side could move | 250 | 3.5 | cut | `DOUBLE_TAP_MS` | `pq1/motion.py:192` | the longer wait, because there are two ways to take the tap back |
 
 The bounce fires on the tap, not on the landing: the row answers the button immediately, then tells the truth about the value.
 
@@ -74,7 +74,7 @@ The bounce fires on the tap, not on the landing: the row answers the button imme
 - **Do** repeat freely: a fast run of taps on a fresh slot is a run of dials, never a move. The conversion only bites where the cursor could actually go.
 - **Don't** draw the new digit at the press. Bounce at the tap, land the value when the window closes.
 - **Don't** accumulate the dial per frame. The value is a replay of the event log; any frame must be recomputable from the log alone.
-- **Don't** copy the log's `tick` event: that is the scripted demo's dial and it changes the digit at once. A live button writes `tap`, the one that waits (`screens/pin/pin_entering.py:354`).
+- **Don't** copy the log's `tick` event: that is the scripted demo's dial and it changes the digit at once. A live button writes `tap`, the one that waits (`screens/pin/pin_entering.py:346`).
 
 ## Port notes
 

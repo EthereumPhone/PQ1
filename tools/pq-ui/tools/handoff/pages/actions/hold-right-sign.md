@@ -11,7 +11,7 @@ Only where the screen's `commit` is true — the [ask](../screen-types/hero-ask.
 {{motion-head}}
 {{row:nothing visible: the press may still be a tap | pq1.motion.TAP_MAX_MS | hold | a tap never flashes a partial fill}}
 {{row:the fill rises | pq1.motion.HOLD_COMMIT_MS - pq1.motion.TAP_MAX_MS | linear | constant speed: progress you can trust}}
-{{row:the action fires, measured from press-down | pq1.motion.HOLD_COMMIT_MS | — | only at completion}}
+{{row:the action fires, measured from press-down | pq1.motion.HOLD_COMMIT_MS - pq1.motion.LEVEL_EPS * (pq1.motion.HOLD_COMMIT_MS - pq1.motion.TAP_MAX_MS) | — | only at completion — `motion.hold_full` ({{loc:pq1.motion.hold_full}}): the first frame drawn full is the frame it fires}}
 {{row:the full fill fades out | - | spring NAV | it rides the transit's own spring — see [hold commit fade](../transitions/hold-commit-fade.md)}}
 {{row:released early: the fill drains | pq1.motion.HOLD_SNAPBACK_MS | ease_out | see [release early](hold-release-early.md)}}
 

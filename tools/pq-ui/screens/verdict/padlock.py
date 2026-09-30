@@ -2,7 +2,8 @@
 
 Merged port of lock.py + unlock.py on the procedural padlock rig. Each
 direction fills its own mechanism window after the hold, then the
-caption:
+caption. The sign arrives on the verdict law (T_IN = ARRIVE_MS); the rest
+of the mechanism runs on in T_WAIT:
 
     lock    arrive 300 under the turn-in 520 -> drop 260 -> click 290      1070
     unlock  arrive 300 (closed) -> snap 145 under the kick 250 -> pause 250
@@ -15,13 +16,15 @@ T_SNAP) while the body takes the reaction — knocked down on the recoil
 curve and back at rest before the shackle swings out. The swing itself is
 unhurried: a beat after the kick, then 800 ms out (the user asked for a
 slower UNLOCKED, the padlock part above all, Sep 2026 — the snap stays
-fast; it is what reads as a real lock).
+fast; it is what reads as a real lock). The lock's click answers it: the
+seated shackle drives the whole lock down on the same recoil kick and it
+bobs back to rest inside the click window (user, Sep 2026).
 """
 import math
 
 from pq1 import status
-from pq1.layout import CENTER_X, CIRCLE_CY
-from pq1.motion import ARRIVE_MS, arrive, clamp01, ease, ease_out, recoil
+from pq1.layout import CENTER_X, CIRCLE_CY, VERDICT_BOX
+from pq1.motion import ARRIVE_MS, VERDICT_HOLD_MS, clamp01, ease, ease_out, recoil
 from pq1.procedural import padlock
 from pq1.verdict import VerdictAnim
 
@@ -40,15 +43,21 @@ T_PAUSE, T_TURN_OUT = 250, 800            # unlock: the beat after the kick,
 T_MECH = T_TURN + T_DROP + T_CLICK        # the lock's window
 T_MECH_UNLOCK = ARRIVE_MS + T_KICK + T_PAUSE + T_TURN_OUT   # the unlock's
 OPEN_LIFT = 9.0     # the open shackle's rest raise (px)
-KICK = 10.0         # the body's kick amplitude on recoil's unit curve
-                    # (peaks ~5.7 px down a third of the way into T_KICK)
+KICK = 6.0          # the body's kick amplitude on recoil's unit curve
+                    # (peaks ~3.4 px down a third of the way into T_KICK;
+                    # 10 -> 6, the user asked for a smaller bob, Sep 2026);
+                    # the lock's click bobs the whole lock by the same
 DIRECTIONS = ("lock", "unlock")
+# the closed lock fits the sign box (audit ICO-03): the rig at BODY_R inks
+# INK_H tall, so the body is drawn at BODY_R * BOX_FIT and the whole
+# composite scales with it (the open rest, lifted OPEN_LIFT, stands taller)
+BOX_FIT = VERDICT_BOX / padlock.INK_H
 
 
 class Padlock(VerdictAnim):
-    T_HOLD = 500
-    T_IN = T_MECH                         # the whole mechanism window
-    T_WAIT = 0
+    T_HOLD = VERDICT_HOLD_MS              # the verdict law's hold
+    T_IN = ARRIVE_MS                      # the entrance law: fade + rise
+    T_WAIT = T_MECH - ARRIVE_MS           # ... the mechanism runs on past it
 
     def __init__(self, spec):
         super().__init__(spec)
@@ -58,15 +67,17 @@ class Padlock(VerdictAnim):
                              f"{self.direction!r}; expected one of "
                              f"{', '.join(DIRECTIONS)}")
         if self.direction == "unlock":
-            self.T_IN = T_MECH_UNLOCK     # its own, longer window
+            self.T_WAIT = T_MECH_UNLOCK - ARRIVE_MS   # its own, longer window
 
     def _pose_lock(self, tm):
         """arrive under the turn-in, drop, click -> seated rest"""
         a = ease_out(clamp01(tm / ARRIVE_MS))
         spin = math.pi * (1 - ease(clamp01(tm / T_TURN)))
         lift = OPEN_LIFT * (1 - ease_out(clamp01((tm - T_TURN) / T_DROP)))
-        k = recoil(clamp01((tm - T_TURN - T_DROP) / T_CLICK))
-        return a, spin, lift, 0.0, k
+        tc = tm - T_TURN - T_DROP             # the click starts on the seat
+        k = recoil(clamp01(tc / T_CLICK))
+        bob = KICK * recoil(clamp01(tc / T_KICK))   # the whole lock, pushed in
+        return a, spin, lift, 0.0, k, bob
 
     def _pose_unlock(self, tm):
         """the closed lock arrives; the shackle springs up while the body
@@ -77,14 +88,15 @@ class Padlock(VerdictAnim):
         lift = OPEN_LIFT * ease_out(clamp01(ts / T_SNAP))
         drop = KICK * recoil(clamp01(ts / T_KICK))
         spin = math.pi * ease(clamp01((ts - T_KICK - T_PAUSE) / T_TURN_OUT))
-        return a, spin, lift, drop, 0.0
+        return a, spin, lift, drop, 0.0, 0.0
 
     def draw_icon(self, cv, t, u):
         pose = (self._pose_lock if self.direction == "lock"
                 else self._pose_unlock)
-        a, spin, lift, drop, k = pose(t - self.T_HOLD)
-        s = arrive(clamp01((t - self.T_HOLD) / ARRIVE_MS))   # the entrance law
-        padlock.draw(cv, CENTER_X, CIRCLE_CY, body_r=padlock.BODY_R * s,
+        a, spin, lift, drop, k, bob = pose(t - self.T_HOLD)
+        _, s = self.entrance(u)                    # the entrance law
+        padlock.draw(cv, CENTER_X, CIRCLE_CY + bob,
+                     body_r=padlock.BODY_R * BOX_FIT * s,
                      color=self.style["color"], alpha=a, spin=spin, lift=lift,
                      drop=drop, recoil_k=k)
 

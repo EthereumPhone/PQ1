@@ -9,7 +9,7 @@ Eight rings; the active one dials a digit; − / + marks and pulsing instruction
 
 The device's keypad, reduced to two buttons: 8 rings on one row, one per digit. Exactly one ring is **active** — it carries the dial the buttons turn; the rings before it hold entered digits; the rings after it are empty, except one that was dialed and left behind (it keeps its digit in a grey ring). There is **no token disc** at rest on this screen. The row is the whole picture (`rests_on_token` is False), so it is also what the cancel hold fills, and leaving it fades to black — see [token-less transit](../transitions/tokenless-fade.md).
 
-Two files own it: `pq1/procedural/pin_slots.py` draws a row from one dict per slot and knows nothing about time (`pq1/procedural/pin_slots.py:43`); `screens/pin/pin_entering.py` holds the state and hands it the dicts. The state is an **event log** — `[(t, kind, arg)]` replayed by `entry_state` (`screens/pin/pin_entering.py:139`) — so every frame of an entry is a pure function of time, exactly like every other screen here.
+Two files own it: `pq1/procedural/pin_slots.py` draws a row from one dict per slot and knows nothing about time (`pq1/procedural/pin_slots.py:60`); `screens/pin/pin_entering.py` holds the state and hands it the dicts. The state is an **event log** — `[(t, kind, arg)]` replayed by `entry_state` (`screens/pin/pin_entering.py:142`) — so every frame of an entry is a pure function of time, exactly like every other screen here.
 
 ## When it appears
 
@@ -47,8 +47,8 @@ The entry's own keys ride along on the same dict (`screens.spec("pin_entering", 
 | stroke | 2 px idle and entered, 2.5 px fully active |
 | digit | 22 px semibold, centred in the ring and nudged 1.5 px down (optical centring, not a baseline) |
 | caption | ENTER PIN on the shared baseline y 128 |
-| hint labels | 16 px caps at 80 % white on the chevron line (the corner slots, `pq1/layout.py:277`), each label's edge facing its chevron at x 36.5 (left) / 390.5 (right), ink-box centred on the line |
-| − / + marks | `procedural.marks.minus` / `plus`, bar span 0.6 × 19 px, stroke 0.11 × that radius (lighter than the x mark's), 22 px from the chevron edge |
+| hint labels | 16 px caps at 80 % white on the chevron line (the corner slots, `pq1/layout.py:348`), each label's edge facing its chevron at x 36.5 (left) / 391.5 (right), ink-box centred on the line |
+| − / + marks | `procedural.marks.minus` / `plus`, bar span 0.6 × 19 px, stroke `HINT_STROKE` 0.105263 × that radius — the hair stroke over the sign radius (lighter than the x mark's), 22 px from the chevron edge |
 
 The signs are **marks, not text**: typed − and + are too thin to read on this glass.
 
@@ -68,17 +68,17 @@ The liquid is **not** the token's see-through film: in the rings it is opaque wh
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the rings fade in | 500 | 7.0 | ease | `T_FADE` | `screens/pin/pin_entering.py:79` | the round's own clock: a restart replays this in place |
-| the token handed over fades to black under them | 500 | 7.0 | ease_out | `T_FADE` | `screens/pin/pin_entering.py:79` | only when the screen before rests on a token (a hero): the resting disc is drawn and blackened as the rings come up (`screens/pin/pin_entering.py:393`). After another token-less screen the handoff is dropped and the row opens on black |
+| the rings fade in | 500 | 7.0 | ease_out | `T_FADE` | `screens/pin/pin_entering.py:79` | the round's own clock: a restart replays this in place |
+| the token handed over fades to black under them | 500 | 7.0 | ease_out | `T_FADE` | `screens/pin/pin_entering.py:79` | only when the screen before rests on a token (a hero): the resting disc is drawn and blackened as the rings come up (`screens/pin/pin_entering.py:385`). After another token-less screen the handoff is dropped and the row opens on black |
 | captions and hints follow the rings | 300 | 4.2 | ease_out | `T_TEXT` | `screens/pin/pin_entering.py:79` | released at `T_UI` 500 ms (7.0 f), once the rings have settled |
 | the chevrons trail the hints | 250 | 3.5 | ease_out | `CHEV_STAGGER` | `screens/pin/pin_entering.py:88` | the same fade, started this much later |
 | the first ring becomes active | 400 | 5.6 | ease | `ACT_MS` | `screens/pin/pin_entering.py:86` | colour 70 % white to YELLOW, stroke 2 to 2.5 px, lift 0 to 3 px, on one curve. This ramp runs ONCE, from `T_UI` 500 ms (7.0 f) on the round's clock — it is not per slot |
 | every later cursor move | — | — | cut | — | — | the leaving ring is white and the arriving ring fully yellow in the same frame; only the bounce softens it |
 | micro-bounce on every dial, enter and move | 220 | 3.1 | sine | `BOUNCE_MS` | `screens/pin/pin_entering.py:87` | the ACTIVE ring only — a half sine: up 2.5 px at the midpoint, back to the lift |
-| one hint: fade in, hold, fade out | 3000 | 42.0 | ease_out | `L_FADE * 2 + L_SHOW` | `screens/pin/pin_entering.py:97` | `L_FADE` 500 in, `L_SHOW` 2000 lit, `L_FADE` 500 out |
-| then nothing, before the next hint | 3000 | 42.0 | hold | `L_GAP` | `screens/pin/pin_entering.py:97` | one hint slot is `L_SLOT` 6000; three slots make the cycle |
-| a caption or hint swap | 600 | 8.4 | ease_out | `SWAP_MS * 2` | `screens/pin/pin_entering.py:89` | sequential: the old fades fully out, then the new fades in (`screens/pin/pin_entering.py:249`) |
-| the row leaves | 500 | 7.0 | ease_out | `T_OUT` | `screens/pin/pin_entering.py:92` | rings, digits, captions, liquid — one alpha, one piece |
+| one hint: fade in, hold, fade out | 3000 | 42.0 | ease_out | `L_FADE * 2 + L_SHOW` | `screens/pin/pin_entering.py:98` | `L_FADE` 300 in, `L_SHOW` 2400 lit, `L_FADE` 300 out — `motion.hint_env` (`screens/pin/pin_entering.py:225`), the band's text fade, so a hint still reads as three seconds on |
+| then nothing, before the next hint | 3000 | 42.0 | hold | `L_GAP` | `screens/pin/pin_entering.py:98` | one hint slot is `L_SLOT` 6000; three slots make the cycle |
+| a caption or hint swap | 600 | 8.4 | ease_out | `SWAP_MS * 2` | `screens/pin/pin_entering.py:89` | sequential: the old fades fully out, then the new fades in — `motion.seq_swap`, the page flip's envelope (`screens/pin/pin_entering.py:230`) |
+| the row leaves | 500 | 7.0 | ease_out | `T_OUT` | `screens/pin/pin_entering.py:92` | rings, digits, captions, liquid — one alpha, one piece. Longer than the flow's `FADE_MS` 180 ms (2.5 f) exit on purpose: the documented exception to the one-hold-exit rule ([hold commit fade](../transitions/hold-commit-fade.md)) |
 
 ## Input
 
@@ -88,7 +88,7 @@ The row is navigable: taps dial, the chord enters, a double press moves, the lef
 
 - **Do** keep the row a replay of an event log. Every visit starts empty; the driver drops the log on arrival, never on leaving, so the transit still fades the frame the row rested on.
 - **Do** draw the dial in the ring it belongs to. Moving the cursor never takes a digit away: a dialed-but-not-entered digit stays visible in its grey ring.
-- **Don't** port the dial pace — `T_SETTLE` 600 ms (8.4 f) before the typing starts, then `STEP_TICK` 260 ms per tick, `STEP_SETTLE` 420 ms on the digit, `STEP_ADV` 240 ms to advance — or `REST_MS` 2600 ms (36.4 f): that is the scripted demo dialing itself for the GIF (`screens/pin/pin_entering.py:123`). On the device only a button moves the row.
+- **Don't** port the dial pace — `T_SETTLE` 600 ms (8.4 f) before the typing starts, then `STEP_TICK` 260 ms per tick, `STEP_SETTLE` 420 ms on the digit, `STEP_ADV` 240 ms to advance — or `REST_MS` 2600 ms (36.4 f): that is the scripted demo dialing itself for the GIF (`screens/pin/pin_entering.py:126`). On the device only a button moves the row.
 - **Don't** show PIN ENTERED on a device submit. The caption only swaps in the `exit="rest"` preview, which never submits.
 
 ## Port notes

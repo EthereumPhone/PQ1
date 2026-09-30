@@ -19,13 +19,13 @@ On a screen whose spec has `pages` (two or more pages), and on a hero whose spec
 
 A hero's `pager` is validated in `normalize_screens` ({{loc:pq1.layout.normalize_screens}}): two whole numbers, 1 ≤ n ≤ m. On a paged screen there is no field for the pager: `m` is the number of pages and `n` is the page showing.
 
-Size: the code draws the pager at the **label** size ({{val:pq1.typography.SIZE_LABEL}}), so it reads like the detail label at the other edge of the panel — and `pq1/DESIGN.md` § Typography says the same. The two schema rows above still say the smaller paging size ({{val:pq1.typography.SIZE_PAGING}}): that half-sentence in the `pq1/layout.py` docstring is stale. Port the label size.
+Face: the code draws the pager in the **Label face** — size {{val:pq1.typography.SIZE_LABEL}}, SemiBold, letter spacing {{val:pq1.typography.LS_LABEL}} px — so it reads exactly like the detail label at the other edge of the panel (user decision, Sep 2026), and `pq1/DESIGN.md` § Typography says the same. Port the Label face.
 
 ## Geometry
 
 | part | value |
 |---|---|
-| text | `n/m`, Regular weight, letter spacing 1 px |
+| text | `n/m`, the Label face: SemiBold, letter spacing {{val:pq1.typography.LS_LABEL}} px |
 | centre x | {{val:pq1.layout.CENTER_X}} |
 | baseline y | {{tok:pq1.components.PAGER_BASELINE}} |
 | size | {{val:pq1.typography.SIZE_LABEL}} |

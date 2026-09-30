@@ -3,7 +3,8 @@
 The standalone demo of the design system's hold gesture (DESIGN.md § Input).
 A teal placeholder token drifts on a scaled-down idle sweep under "HOLD TO
 CONFIRM" with the chevrons in the up (hold-armed) pose; the press lands at
-T_IDLE and the system hold fill rises from TAP_MAX_MS after it to a full
+T_IDLE (this demo holds the right button — BOTH chevrons stay, a hold never
+fades one), and the system hold fill rises from TAP_MAX_MS after it to a full
 disc at HOLD_COMMIT_MS — the same components.hold_flood on the same
 motion.hold_fill curve that pq1.flow.Sim draws on a flow's commit screens:
 a 30 % see-through liquid rising from the bottom of the disc — black over
@@ -11,8 +12,11 @@ the teal art and glyph, under the white ring (a black body such as the ETH
 mono token gets the white film inside instead). The spec's token / icon /
 resting fields are honoured, so a SAFE-pinned spec renders the Safe disc,
 black flush ring and the same dark film rising over the logo (`--family safe`).
-ending="confirm": the token fades and the inner qubit status film plays on
-the token's palette to "TRANSACTION CONFIRMED" — a branded spec lands on its
+ending="confirm": the committed fill, the chevrons and the caption fade
+over FADE_MS with the disc held, the bare disc holds SEED_HOLD_MS, then the
+inner qubit film opens ON that disc (enter_from — flow.Sim's own
+fade-hold-seed beat, never a black frame or a cold seed) and plays on the
+token's palette to "TRANSACTION CONFIRMED" — a branded spec lands on its
 filled resting disc. ending="cancel": the hold releases at 60 %, snaps back,
 the token fades, and the failed resting look pops in over procedural.burst's
 MINOR boom — burst.draw is called at an offset entering its boom phase, so
@@ -40,7 +44,7 @@ ENDINGS = ("confirm", "cancel")
 # timeline (ms): idle drift, the system hold fill, then the ending's tail
 T_IDLE = 1800                                   # phase a: gentle drift, then the press
 T_COMMIT = T_IDLE + motion.HOLD_COMMIT_MS       # 3800: the disc is full, commit fires
-T_FADE = 260                                    # confirm: token fade-out
+T_SEED = T_COMMIT + motion.FADE_MS + motion.SEED_HOLD_MS   # confirm: the film's t 0
 RELEASE_K = 0.6                                 # cancel: released at 60 % fill
 T_REL = T_IDLE + int(motion.hold_fill_ms(RELEASE_K))        # 3100
 T_POP = T_REL + motion.HOLD_SNAPBACK_MS + motion.FADE_MS   # 3480
@@ -61,7 +65,7 @@ class HoldToConfirm(status.StatusAnim):
                              f"expected one of {', '.join(ENDINGS)}")
         if self.ending == "confirm":
             super().__init__(spec)
-            self.t_c = T_COMMIT + T_FADE
+            self.t_c = T_SEED
             # the whole spec rides into the film — resting / icon / icon_color
             # / token survive, so a branded ending lands on its filled disc;
             # busy stays out: "HOLD TO CONFIRM" must not caption the spin
@@ -71,6 +75,7 @@ class HoldToConfirm(status.StatusAnim):
                          bottom=spec.get("bottom") or "TRANSACTION CONFIRMED")
             self.inner = status.QubitStatus(inner)
             self.t_resolve = self.t_c + self.inner.t_resolve
+            self.landing_ms = self.inner.landing_ms
             self.t_busy = (0, T_COMMIT)
         else:
             cancel = dict(spec, state="failed", result="x")
@@ -85,6 +90,16 @@ class HoldToConfirm(status.StatusAnim):
             self.t_busy = (0, T_REL)
         self.tok = components.token_style_from_spec(spec)
         self.hold = components.hold_style(self.tok)
+        if self.ending == "confirm":
+            # the film opens on the parked disc (drift recentred long before
+            # the commit), at the token's VISIBLE radius — the seed flow.Sim
+            # hands over; set here so draw(t) stays seekable
+            tok = self.tok
+            self.inner.enter_from(dict(
+                x=CENTER_X, y=CIRCLE_CY, r=CIRCLE_R - components.TOKEN_INSET,
+                fill=tok["fill"] if tok["variant"] != "unknown" else None,
+                ring=tok["ring"], icon=self.style["icon"],
+                icon_color=tok["icon_color"]))
 
     @property
     def previews(self):
@@ -97,16 +112,21 @@ class HoldToConfirm(status.StatusAnim):
                                 T_REL - T_IDLE if self.ending == "cancel" else None)
 
     def _hold_alpha(self, t):
-        """the hold composition's fade-out per ending"""
+        """(disc, dress) alphas of the hold composition. confirm: the
+        committed fill, chevrons and caption leave over FADE_MS while the
+        disc stays — it is the seed the film opens on; cancel: everything
+        fades after the snap-back"""
         if self.ending == "confirm":
-            return 1 - ease_out(clamp01((t - T_COMMIT) / T_FADE))
+            return 1.0, 1 - ease_out(clamp01((t - T_COMMIT) / motion.FADE_MS))
         t0 = T_REL + motion.HOLD_SNAPBACK_MS
-        return 1 - ease_out(clamp01((t - t0) / motion.FADE_MS))
+        a = 1 - ease_out(clamp01((t - t0) / motion.FADE_MS))
+        return a, a
 
     def _draw_hold(self, cv, t):
-        self.draw_busy(cv, t)
-        a = self._hold_alpha(t)
-        if a <= 0.01:
+        a, da = self._hold_alpha(t)
+        if da > colors.ALPHA_FLOOR:
+            self.draw_busy(cv, t)
+        if a <= colors.ALPHA_FLOOR:
             return
         drift = 1 - ease_out(clamp01((t - T_IDLE) / T_RECENTER))
         cx = CENTER_X + DRIFT_AMP * drift * math.sin(
@@ -116,11 +136,11 @@ class HoldToConfirm(status.StatusAnim):
         components.token_styled(cv, cx, CIRCLE_CY, CIRCLE_R, self.tok,
                                 glyph_a=icon, glyph_b=icon, alpha=a,
                                 hold=dict(k=self._fill(t), placement=placement,
-                                          color=col, alpha=a))
-        ca = a * ease_out(clamp01(t / status.BUSY_FADE_MS))
+                                          color=col, alpha=da))
+        ca = da * ease_out(clamp01(t / status.BUSY_FADE_MS))
         if self.ending == "cancel":
             ca *= 1 - ease_out(clamp01((t - T_REL) / motion.FADE_MS))
-        components.chevron_pair(cv, 0, 0, alpha=ca)
+        components.chevron_pair(cv, 0, 0, alpha=ca)   # both, through the hold
 
     def _draw_cancel(self, cv, t):
         e = t - T_POP

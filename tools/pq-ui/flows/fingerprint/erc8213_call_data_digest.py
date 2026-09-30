@@ -21,7 +21,7 @@ FULL: at the 22 tier a full-width line holds up to 13 bytes
 11 bytes / 11 bytes / 10 bytes — and shows plain, without the pager. A
 digest that overflows the three lines turns PAGES rather than splitting
 into two screens or shortening (DESIGN.md § Text rules, Pages): the
-pager "n/m" (12 px, 80 % white, top centre between the chevrons) comes
+pager "n/m" (the Label face, INK_PAGING, top centre between the chevrons) comes
 with them, the demo turns the page on the dwell (motion.page_flip); on
 the bench (pq1.driver) a right tap turns the page before it advances.
 

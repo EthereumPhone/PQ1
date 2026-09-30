@@ -74,9 +74,15 @@ Fields (all optional):
                                                 raises. "handoff" crossfades
                                                 the flow token out under the
                                                 lead, never after it
-    "lead_gap" : 700                            ms of black between the lead
-                                                resolving and the screen
-                                                starting (default 0)
+    "lead_clear": 700                           ms between the lead's tail
+                                                clearing and the screen's
+                                                sign starting to fade in
+                                                (default LEAD_CLEAR_MS)
+    "film_fail": True                           a led failed ending IS the
+                                                flow's film failure — the
+                                                host's "no" over the lead
+                                                lands this look (firmware
+                                                UPDATE FAILED; film_failure)
     "revs"   : 3                                whole orbit turns of a qubit /
                                                 explosion film before the
                                                 spiral (loading.REVS; REVS_LONG
@@ -98,8 +104,18 @@ import math
 from . import colors, components, layout, loading, motion
 from .motion import clamp01, ease_out
 
-RESULT_HOLD_MS = 2450   # result shown before the flow moves on; with the qubit
+RESULT_HOLD_MS = 2450   # result shown before the flow moves on, counted from
+                        # t_landed (the result fully visible); with the qubit
                         # resolve at t7 6200 ms this reproduces motion.STATUS_DWELL
+RESULT_LANDING_MS = motion.RESULT_LAG_MS + motion.RESULT_FADE_MS
+                        # a film's result is fully visible this long after
+                        # t_resolve: the glyph lands, the caption follows
+LEAD_CLEAR_MS = -180    # a led screen's sign starts to fade in this long after
+                        # its lead's tail clears — negative: it rises AS the
+                        # blast clears (status.LedAnim, "lead_clear")
+FLASH_IN_MS = motion.VERDICT_ACCENT_MIN_MS
+                        # the resolve flash fades in over two panel frames: at
+                        # t 0 the frame equals the arrived token exactly
 BUSY_FADE_MS = 300      # busy-caption fade in / out (ease-out both ways)
 RESOLVE_ART = 0.45      # the film-less resolve: its token glyph leaves over this
                         # fraction of the flash beat (linear) — the qubit film's
@@ -163,6 +179,13 @@ def style_of(spec):
                 bottom=spec.get("bottom", ""), busy=spec.get("busy"))
 
 
+# The handoff wash: a black disc laid over the resting token at rising alpha.
+# It measures from the LAYOUT radius (it leaves the token, components.visible_r)
+# and reaches 2.5 px past it — 3.7 px past the token's visible edge — so the
+# ring is covered whole; any radius past about 28.8 renders the same (RAD-07).
+HANDOFF_WASH_R = layout.CIRCLE_R + 2.5
+
+
 def draw_handoff(cv, spec, style, t, span):
     """flow splicing: with spec handoff=True the resting token Sim was
     drawing crossfades out over span ms instead of popping to black"""
@@ -173,8 +196,8 @@ def draw_handoff(cv, spec, style, t, span):
         return
     components.token_from_spec(cv, layout.CENTER_X, layout.CIRCLE_CY,
                                layout.CIRCLE_R, spec, glyph_a=style["icon"])
-    if k > 0.003:
-        cv.circle(layout.CENTER_X, layout.CIRCLE_CY, layout.CIRCLE_R + 2.5,
+    if k > colors.FILM_FLOOR:
+        cv.circle(layout.CENTER_X, layout.CIRCLE_CY, HANDOFF_WASH_R,
                   (*colors.BLACK, int(round(255 * k))))
 
 
@@ -199,6 +222,9 @@ class StatusAnim:
 
     name = None
     t_resolve = 0
+    landing_ms = 0      # t_landed - t_resolve: how long the result takes to be
+                        # fully visible once resolved (RESULT_LANDING_MS on the
+                        # two core endings, whose result fades in after t_resolve)
     t_busy = None
     busy_pulse = False  # True on a loading film: the busy caption breathes
     t_tail = None       # None: the film rests on a look — it cannot lead
@@ -243,10 +269,16 @@ class StatusAnim:
         self.t_ready = None if ready is None else float(ready)
 
     @property
+    def t_landed(self):
+        """ms at which the result is fully visible — RESULT_HOLD_MS counts
+        from here, so every ending rests on its full result for the same time"""
+        return self.t_resolve + self.landing_ms
+
+    @property
     def duration(self):
         """total ms — the screen's default dwell (inf on a live film until
         the host answers)"""
-        return self.t_resolve + RESULT_HOLD_MS
+        return self.t_landed + RESULT_HOLD_MS
 
     def draw(self, cv, t):
         raise NotImplementedError
@@ -379,9 +411,7 @@ class StatusAnim:
             if self.busy_pulse:
                 a = motion.busy_pulse((t - t0) / slot)
             else:
-                a = (ease_out(clamp01((t - t0) / BUSY_FADE_MS))
-                     * (1 - ease_out(clamp01((t - (t0 + slot - BUSY_FADE_MS))
-                                             / BUSY_FADE_MS))))
+                a = motion.hint_env(t - t0, slot - 2 * BUSY_FADE_MS, BUSY_FADE_MS)
             if k >= n:                           # a slot the loop added, cut by the spiral
                 a *= 1 - ease_out(clamp01((t - (t_end - BUSY_FADE_MS)) / BUSY_FADE_MS))
             components.caption(cv, s[k % len(s)], a)
@@ -396,13 +426,12 @@ class StatusAnim:
             if t > t_cut:                      # the breath freezes where the spiral
                 a *= 1 - ease_out(clamp01((t - t_cut) / BUSY_FADE_MS))   # catches it, and fades
         else:
-            a = (ease_out(clamp01((t - t_in) / BUSY_FADE_MS))
-                 * (1 - ease_out(clamp01((t - t_out) / BUSY_FADE_MS))))
+            a = motion.hint_env(t - t_in, t_out - t_in - BUSY_FADE_MS, BUSY_FADE_MS)
         components.caption(cv, s, a)
 
     def draw_caption(self, cv, alpha):
         """the resolved caption ("bottom") on the y 128 baseline"""
-        if alpha > 0.01:
+        if alpha > colors.ALPHA_FLOOR:
             components.caption(cv, self.style["bottom"], alpha)
 
 
@@ -415,6 +444,7 @@ class QubitStatus(StatusAnim):
     busy_pulse = True   # the busy caption breathes over the orbit
     loops = True        # the orbit repeats until the host answers
     seeded = True       # the flow's circle becomes the first qubit
+    landing_ms = RESULT_LANDING_MS   # check / X, then the caption, after t7
 
     def __init__(self, spec):
         super().__init__(spec)
@@ -434,9 +464,7 @@ class QubitStatus(StatusAnim):
         return (3500, self.t_resolve + 650)             # mid-spin, resolved
 
     def restyle(self, spec):
-        new = {k: v for k, v in self.spec.items() if k not in self.RESTYLE}
-        new.update({k: spec[k] for k in self.RESTYLE if k in spec})
-        self.spec, self.style = new, style_of(new)
+        self.spec, self.style = swap_look(self.spec, spec)
 
     def draw(self, cv, t):
         st = self.style
@@ -460,6 +488,8 @@ class ResolveStatus(StatusAnim):
     the result glyph and caption land on the film's own resolve timing.
     default_anim picks this for every non-done ending."""
 
+    landing_ms = RESULT_LANDING_MS
+
     def __init__(self, spec):
         super().__init__(spec)
         self.cfg = loading.QubitCfg()      # geometry + the resolve beat
@@ -481,10 +511,10 @@ class ResolveStatus(StatusAnim):
 
         # disc: token body -> resting fill, edge easing out to the film's
         # full resting radius
-        disc_r = motion.lerp(c.r_big - components.TOKEN_INSET, c.r_big, u)
+        disc_r = motion.lerp(components.visible_r(c.r_big), c.r_big, u)
         if st["variant"] == "unknown":     # gradient base, resting fades over
             components.unknown_disc(cv, gx, gy, disc_r, st["ramp"])
-            if u > 0.004:
+            if u > colors.FILM_FLOOR:
                 cv.circle(gx, gy, disc_r, (*rest["fill"], int(round(255 * u))))
         else:
             tok_fill = st["fill"] if st["fill"] is not None else colors.BLACK
@@ -493,7 +523,7 @@ class ResolveStatus(StatusAnim):
         # beat, on linear time — this film-less ending's own dress fade (the
         # qubit film's rides its seed window, motion.SEED_ART)
         ga = clamp01(1 - lu / RESOLVE_ART)
-        if ga > 0.01:
+        if ga > colors.ALPHA_FLOOR:
             components.glyph(cv, st["icon"], gx, gy, c.r_big, ga,
                              color=st["icon_color"])
         # ring: the token stroke -> the resting ring. Every token stroke —
@@ -501,20 +531,30 @@ class ResolveStatus(StatusAnim):
         # (r_big - TOKEN_INSET, components.token); a branded resting ring
         # rides flush at the film's full resting radius
         ring_from = st["ring"] if st["ring"] is not None else colors.WHITE
-        r0 = c.r_big - components.TOKEN_INSET
-        r1 = c.r_big if rest["flush"] else c.r_big - 1.2
+        r0 = components.visible_r(c.r_big)
+        r1 = c.r_big if rest["flush"] else r0
         cv.ring(gx, gy, motion.lerp(r0, r1, u), mix(ring_from, rest["ring"]),
                 components.TOKEN_RING_W)
-        # flash fades IN over the first 12% of the beat: at t 0 the frame
-        # equals the arrived token exactly (no red pop on the disc edge),
-        # then the ring detaches and fades like the film's
+        # flash fades IN over FLASH_IN_MS (two panel frames): at t 0 the
+        # frame equals the arrived token exactly (no red pop on the disc
+        # edge), then the ring detaches and fades like the film's
         components.flash_ring(cv, gx, gy, c.r_big + 55 * lu, st["color"],
-                              (1 - lu) * 0.85 * clamp01(lu / 0.12))
+                              (1 - lu) * colors.FLASH_ALPHA
+                              * clamp01(t / FLASH_IN_MS))
         e = t - self.t_resolve
         if st["result"] is not None and e > 0:
-            components.GLYPHS[st["result"]](cv, gx, gy, c.r_big,
-                                            clamp01(e / 350), rest["glyph"])
-        self.draw_caption(cv, clamp01((e - 120) / 350))
+            ra = ease_out(clamp01(e / motion.RESULT_FADE_MS))
+            components.GLYPHS[st["result"]](cv, gx, gy, c.r_big, ra, rest["glyph"])
+        self.draw_caption(cv, ease_out(clamp01((e - motion.RESULT_LAG_MS)
+                                               / motion.RESULT_FADE_MS)))
+
+
+def swap_look(old, spec):
+    """(spec, style) with the failure look's RESTYLE keys swapped into old —
+    the ending's identity and landing, never its token, icon or busy"""
+    new = {k: v for k, v in old.items() if k not in StatusAnim.RESTYLE}
+    new.update({k: spec[k] for k in StatusAnim.RESTYLE if k in spec})
+    return new, style_of(new)
 
 
 class ArriveStatus(StatusAnim):
@@ -526,13 +566,13 @@ class ArriveStatus(StatusAnim):
     token — the resting disc, its ring and the result glyph together —
     fades in and rises 0.97 -> 1 on the verdict entrance law (motion.arrive
     within ARRIVE_MS, never an overshoot), a beat, then the caption. The
-    verdict phases (T_HOLD 400 / T_IN 300 / T_WAIT 450 / T_TEXT 300 —
-    pq1.verdict.VerdictAnim), so t_resolve is 1450 and the screen dwells
-    3900. Branded: the filled disc under the flush ring (the firmware
+    verdict phases (T_HOLD VERDICT_HOLD_MS 429 / T_IN 300 / T_WAIT 450 /
+    T_TEXT 300 — pq1.verdict.VerdictAnim), so t_resolve is 1479 and the
+    screen dwells 3929. Branded: the filled disc under the flush ring (the firmware
     endings — green disc + black check, red disc + black X); unbranded:
     the black disc under the state-colour stroke."""
 
-    T_HOLD = 400
+    T_HOLD = motion.VERDICT_HOLD_MS
     T_IN = motion.ARRIVE_MS
     T_WAIT = 450
     T_TEXT = 300
@@ -556,13 +596,19 @@ class ArriveStatus(StatusAnim):
             a, s = ease_out(u), motion.arrive(u)     # the entrance law
             r = c.r_big * s
             cv.circle(gx, gy, r, colors.scale(rest["fill"], a))
-            cv.ring(gx, gy, r if rest["flush"] else r - 1.2,
+            cv.ring(gx, gy, r if rest["flush"] else components.visible_r(r),
                     colors.scale(rest["ring"], a), components.TOKEN_RING_W)
             if st["result"] is not None:
                 components.GLYPHS[st["result"]](cv, gx, gy, r, a, rest["glyph"])
         ta = ease_out(clamp01((t - (self.T_HOLD + self.T_IN + self.T_WAIT))
                               / self.T_TEXT))
         self.draw_caption(cv, ta)
+
+    def restyle(self, spec):
+        """the led film-failure look (firmware UPDATE FAILED): the arrival
+        lands the failure's disc, glyph and caption — its timing never
+        reads the style, so the seams stay where they were"""
+        self.spec, self.style = swap_look(self.spec, spec)
 
 
 class LedAnim(StatusAnim):
@@ -571,18 +617,20 @@ class LedAnim(StatusAnim):
     while the lead's tail finishes underneath — the explosion's late rings
     fade through a verdict's black hold as the icon pops in. Built by
     anim_for when a spec carries "lead"; durations add, so a flow dwells
-    for the whole sequence. "lead_gap" (ms, default 0) holds the screen
-    back that much longer after the lead resolves — WALLET WIPED waits
-    for the blast to clear."""
+    for the whole sequence. ONE clearance places every led screen: its
+    sign starts to fade in "lead_clear" ms after the lead's tail has
+    cleared (default LEAD_CLEAR_MS: the sign rises as the blast clears) —
+    WALLET WIPED passes 700 and waits for the blast to be gone."""
 
-    HANDOFF_MS = 400    # the verdict handoff span (verdict.VerdictAnim.T_HOLD)
+    HANDOFF_MS = motion.VERDICT_HOLD_MS   # the verdict handoff span (VerdictAnim.T_HOLD)
 
     def __init__(self, spec, lead, main):
         self.lead = lead            # before the base: loops reads the lead
         self.main = main
         super().__init__(spec)
         self.name = main.name
-        self.gap = spec.get("lead_gap") or 0
+        clear = spec.get("lead_clear")
+        self.clear = LEAD_CLEAR_MS if clear is None else clear
 
     # a led screen waits while its lead does: the loop is the lead's
     @property
@@ -614,12 +662,31 @@ class LedAnim(StatusAnim):
         return None if self.lead.pending else self.style["result"]
 
     def resolve(self, t, spec=None):
-        return self.lead.resolve(t, spec)
+        """the host's answer goes to the lead — the film that waits. A
+        failure look (spec) restyles what LANDS, the led screen's own
+        animation; the lead film has no look to swap (it ends on an empty
+        canvas), so it only latches"""
+        if spec is None:
+            return self.lead.resolve(t)
+        ok = self.lead.resolve(t)
+        if ok:
+            self.restyle(spec)
+        return ok
+
+    def restyle(self, spec):
+        self.spec, self.style = swap_look(self.spec, spec)
+        self.main.restyle(spec)
 
     @property
     def t_start(self):
-        """when the led screen's own animation begins"""
-        return self.lead.t_resolve + self.gap
+        """when the led screen's own animation begins: its black hold
+        (main.T_HOLD) ends `clear` ms after the lead's tail has cleared"""
+        return (self.lead.t_resolve + self.lead.t_tail + self.clear
+                - getattr(self.main, "T_HOLD", self.HANDOFF_MS))
+
+    @property
+    def landing_ms(self):
+        return self.main.landing_ms
 
     @property
     def t_resolve(self):
@@ -728,10 +795,18 @@ def seeded(spec):
 def film_failure(spec):
     """the one X ending that plays a film: work that was done and FAILED —
     the screen's OWN animation loops (send's TRANSACTION FAILED,
-    anim="qubit"). A decline led by a film (firmware) is not one: its own
-    animation arrives"""
-    return (spec.get("state", "done") != "done"
-            and bool(anim_class(spec).loops))
+    anim="qubit"), or a led ending that OPTS IN with film_fail=True and
+    whose lead loops (firmware's UPDATE FAILED: the reconnect film, then
+    the red arrival — audit HS-12). A decline led by a film (firmware
+    DECLINED) is not one: every explosion loops, so the lead alone never
+    makes a failure film — only the flag does"""
+    if spec.get("state", "done") == "done":
+        return False
+    if anim_class(spec).loops:
+        return True
+    lead = spec.get("lead")
+    return bool(spec.get("film_fail") and lead is not None
+                and anim_class(lead).loops)
 
 
 def anim_for(spec):
@@ -760,4 +835,5 @@ register("resolve", ResolveStatus)
 register("arrive", ArriveStatus)
 
 # the default animation's duration IS the documented status dwell
-assert loading.QubitCfg().t7 + RESULT_HOLD_MS == motion.STATUS_DWELL
+assert (loading.QubitCfg().t7 + RESULT_LANDING_MS + RESULT_HOLD_MS
+        == motion.STATUS_DWELL)

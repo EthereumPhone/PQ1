@@ -7,10 +7,10 @@ Between two screens the glyph inside the disc and the corner chevrons crossfade 
 
 ## What it is
 
-What happens **inside** the disc and in the two corners while the disc travels from one screen to the next. One spring, `Sim.mix` (`pq1/flow.py:46`), runs from 0 (the screen being left, `a`) to 1 (the screen being entered, `b`). Everything on this page is a plain function of that one number:
+What happens **inside** the disc and in the two corners while the disc travels from one screen to the next. One spring, `Sim.mix` (`pq1/flow.py:56`), runs from 0 (the screen being left, `a`) to 1 (the screen being entered, `b`). Everything on this page is a plain function of that one number:
 
-- the glyph of `a` fades out, then the glyph of `b` fades in (`components.token`, `pq1/components.py:336`);
-- the corner chevrons turn and fade between the two screens' resting poses (`pq1/flow.py:310`);
+- the glyph of `a` fades out, then the glyph of `b` fades in (`components.token`, `pq1/components.py:357`);
+- the corner chevrons turn and fade between the two screens' resting poses (`pq1/flow.py:338`);
 - the disc's body, ring, glyph colour and the trail palette switch from `a` to `b`.
 
 It is part of the [spring morph](../transitions/spring-morph.md): the mix spring is created with the same profile as the position springs and is stepped with them.
@@ -30,9 +30,9 @@ With `m` the mix clamped to 0–1:
 | outgoing (`glyph_a`) | `max(0, 1 − 2m)` — gone when `m` reaches one half |
 | incoming (`glyph_b`) | `max(0, 2m − 1)` — starts at one half, full at 1 |
 
-The two never overlap. At `m` = one half the disc carries **no glyph** for an instant. When both screens name the same glyph it is drawn once at full alpha — no dip.
+The two never overlap. At `m` = one half the disc carries **no glyph** for an instant. When both screens name the same glyph it is drawn once at full alpha — no dip. Two *names* that draw the same function count as the same glyph: `eth` and `mainnet` are one mark, so a leg between the ask and the Mainnet chain screen holds the ether mark at full alpha throughout instead of fading it out and back in (`components.same_art`, `pq1/components.py:261`).
 
-A token glyph fades by **true alpha** over the body: image glyphs and the traced marks (`mainnet`, the chain marks, `blind`, `dev`, `rotate`, `fingerprint`, `download`) composite an alpha mask, because the body may be coloured and a mark merely darkened toward black would show as a dark shape on it (`pq1/procedural/chains.py:269`). The fallback `eth_mark` diamond, the monogram (an unknown chain's `letter:X`) and the check / X marks scale their colour toward black instead — exact only on a black body. A glyph under alpha 0.01 is not drawn.
+Every glyph that rests on a disc fades by **true alpha**: the shape is inked into a mask and the mask is pasted in the glyph's colour, because the body may be coloured and a mark merely darkened toward black would show as a dark shape on it (`pq1/procedural/marks.py:30`). That is the **one** model — `check`, the X and the monogram (an unknown chain's or a long-tail token's `letter:X`) go through `base_mark` itself, the traced marks build the same tile, and logo art carries its own alpha. Only the two marks that never meet a lit body still scale their colour toward black, and neither is ever a token glyph: the exclamation inside its warning triangle and the plus / minus entry signs. See [icons](icons.md). A glyph under alpha 0.0137 is not drawn.
 
 ## The body: a cut at one half
 
@@ -40,7 +40,7 @@ The style of the disc is not blended. `Sim.draw` picks **one** screen's resolved
 
 ## The chevrons
 
-Each screen has a resting pose (`components.chevron_angles`, `pq1/components.py:494`): `"lr"` points the left chevron left and the right one right (−π/2, +π/2); `"up"` points both up (0, 0); `None` is the `"lr"` pose at alpha 0.
+Each screen has a resting pose (`components.chevron_angles`, `pq1/components.py:537`): `"lr"` points the left chevron left and the right one right (−π/2, +π/2); `"up"` points both up (0, 0); `None` is the `"lr"` pose at alpha 0.
 
 - angle = `lerp(angle_a, angle_b, m)` per chevron — `"lr"` → `"up"` is a quarter turn;
 - alpha = `lerp(shown_a, shown_b, m)` with shown = 1 or 0 — so the chevrons fade out on the way into a status ending or a band-chevron intro, and fade in on the way out.
@@ -55,13 +55,13 @@ The hint rotation and bob are added on top, only at rest — see [chevrons](chev
 | incoming glyph fades in | — | — | spring NAV | — | — | alpha follows 2·mix − 1; from mix one half to 1 |
 | body, ring, glyph colour and trail palette switch | — | — | cut | — | — | the frame the mix reaches one half |
 | chevron angle and alpha | — | — | spring NAV | — | — | linear in the mix |
-| incoming text is released | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | not part of the mix — each screen's text has its own alpha spring, see [text-in delay](../transitions/text-in-delay.md) |
+| incoming text is released | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | not part of the mix — each screen's text has its own alpha spring, see [text-in delay](../transitions/text-in-delay.md) |
 
 There is no duration to port. The mix is a critically damped spring released from rest: progress = `1 − (1 + ωt)·e^(−ωt)`, ω = 2π / response (`motion.spring_travel`, `pq1/motion.py:115`). It reaches one half when ωt ≈ 1.678, that is 0.267 × the response time after the leg starts. The device profile is `NAV` (`pq1/motion.py:111`) — the pair {'response': 0.4, 'damping': 1.0}, `response` in seconds and `damping` the ratio. Damping is 1: the mix never overshoots, and it is clamped to 0–1 before use.
 
 ## A press during the morph
 
-Presses are never dropped (`pq1/flow.py:175`); see [reversal](../transitions/reversal.md).
+Presses are never dropped (`pq1/flow.py:193`); see [reversal](../transitions/reversal.md).
 
 - **Back to where it came from** (the new target is `a` or `b`): the mix is retargeted to 0 or 1. Its value and velocity are kept, so the glyphs and chevrons run back through the same states.
 - **On to a third screen**: the pair is rebased. `a` becomes the dominant endpoint (`b` if the mix is past one half, else `a`), `b` becomes the new target, and the mix is reset to 0 with zero velocity. The disc keeps its position and speed, but the glyph **jumps** to the dominant screen's glyph at full alpha, and the chevrons jump to that screen's pose. This is the reference behaviour; keep it.

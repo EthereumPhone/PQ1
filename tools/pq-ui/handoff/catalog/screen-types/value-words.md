@@ -11,7 +11,7 @@ A [value screen](value.md) whose value is a list of up to 8 short words, laid on
 
 ## When it appears
 
-Used in 1 of 31 flows: `firmware/update`
+Used in 2 of 33 flows: `firmware/update`, `setup/first_run`
 
 In `firmware/update` it follows the [intro](hero-intro.md) captioned FIRMWARE KEY FINGERPRINT and comes before the CONFIRM UPDATE [ask](hero-ask.md). The helper is `flows/firmware` `words(values, label=None)` (`flows/firmware/__init__.py:72`).
 
@@ -20,8 +20,7 @@ In `firmware/update` it follows the [intro](hero-intro.md) captioned FIRMWARE KE
 | key | form | meaning |
 |---|---|---|
 | `kind` | `"hero" \| "detail" \| "value" \| "confirm" \| "status"` |  |
-| `words` | `["close", "agent", …]` | a NUMBERED WORD GRID in place of lines: up to 8 short words on the seed- words grid — two columns of four (WORDS_COLS: the number right-aligned, the word left-aligned beside it), numbered 1-4 down the left, 5-8 down the right, rows on … (full text: the `pq1/layout.py` docstring) |
-| `value.label` | `"KEY FINGERPRINT"` | with words only (optional): a caps label centred on the bottom baseline |
+| `words` | `["close", "agent", …]` | a NUMBERED WORD GRID in place of lines: up to 8 a page (up to 24, paged in 8s under the n/m pager, the numbers counting on — the setup seed), short words on the seed- words grid — two columns of four (WORDS_COLS: the number … (full text: the `pq1/layout.py` docstring) |
 | `chev` | `"lr" \| "up" \| None` | "lr" tap-nav available, "up" hold armed, None = no input |
 
 Screen 3 of flow `firmware/update`, as the design system normalizes it (defaults filled in):
@@ -30,7 +29,6 @@ Screen 3 of flow `firmware/update`, as the design system normalizes it (defaults
 {'id': 'WORDS',
  'kind': 'value',
  'words': ['close', 'agent', 'own', 'deputy', 'grape', 'though', 'sail', 'simple'],
- 'label': None,
  'chev': 'lr',
  'icon': 'download',
  'icon_color': [0, 0, 0],
@@ -39,10 +37,10 @@ Screen 3 of flow `firmware/update`, as the design system normalizes it (defaults
  'lines': []}
 ```
 
-- `words` is the screen's **whole** value: `normalize_screens` raises `ValueError` if it sits on a `"detail"`, if `lines` or `pages` sit beside it, or if the count is outside 1–8 (`pq1/layout.py:510`). On any other kind — a hero, a status — `words` is **silently ignored**, never drawn: only a value screen has the grid.
+- `words` is the screen's **whole** value: `normalize_screens` raises `ValueError` if it sits on a `"detail"`, if `lines` or `pages` sit beside it, or if the count is outside 1–8 (`pq1/layout.py:653`). On any other kind — a hero, a status — `words` is **silently ignored**, never drawn: only a value screen has the grid.
 - `size` is forced to `WORDS_SIZE` 22 px; every entry is turned into a string. `lines` stays empty.
 - The words are data. The flow carries a sample; the Python defines no wordlist and no key-to-words mapping — that is the firmware's.
-- `label` is optional and the live flow passes none. Leave it out — see Geometry.
+- There is no `label`: a words grid has no caption, and `normalize_screens` rejects one on any value screen. The intro before it names the words.
 
 ## Geometry
 
@@ -66,22 +64,22 @@ Screen 3 of flow `firmware/update`, as the design system normalizes it (defaults
 | text `8` | x 265.62, y 110, size 22 |
 | text `simple` | x 314.549, y 110, size 22 |
 
-The table shows **centre** x values because the Python canvas only draws centred text: `_words_texts` turns each edge into a centre with the measured half width (`pq1/layout.py:347`). On the device draw from the edges directly:
+The table shows **centre** x values because the Python canvas only draws centred text: `_words_texts` turns each edge into a centre with the measured half width (`pq1/layout.py:474`). On the device draw from the edges directly:
 
 | part | rule |
 |---|---|
 | word `k` (0-based) | column `k // 4`, row `k % 4` |
-| row centre lines, y | (32, 58, 84, 110) (`pq1/layout.py:304`) |
+| row centre lines, y | (32, 58, 84, 110) (`pq1/layout.py:381`) |
 | (number **right** edge x, word **left** edge x) per column | ((88, 98), (272, 282)) |
-| number | `k + 1`, right-aligned so digits line up, white at `WORDS_NUM_ALPHA` 0.5 alpha — grey (128, 128, 128) |
+| number | `k + 1`, right-aligned so digits line up, white at `WORDS_NUM_ALPHA` 0.5 alpha — `colors.scale(WHITE, WORDS_NUM_ALPHA)`, the design's half-grey |
 | word | left-aligned, white, as supplied |
 | face | both 22 px Regular, vertically centred on the row line |
 
 - The row pitch is the grid's own (26 px). It is **not** `line_height(22)`.
 - A short list is not re-centred: five words fill the left column and the first row of the right.
 - Nothing measures the words. A left-column word has the space up to the right column's numbers; a right-column word has the space up to the margin. Keep them short.
-- The disc is parked at `VALUE_PARK_X` -60 px; the corner chevrons stay (`pq1/layout.py:277`).
-- **`label` collides.** When set it is drawn as a detail label — 16 px SemiBold caps, centred x 214, baseline y 128. Row 4 (centre y 110) carries ink down to y 126 on a descender, and a label such as KEY FINGERPRINT spans x 138–292 from y 114: it overlaps the fourth left word and the `8`. DESIGN.md says the grid has no caption. Do not use `label` with a full grid.
+- The disc is parked at `VALUE_PARK_X` -60 px; the corner chevrons stay (`pq1/layout.py:348`).
+- **No label.** The band under the grid stays empty: row 4 (centre y 110) inks down into the band on a descender, so a caption there would overprint the fourth words. The schema rejects a label on a value screen.
 
 ## Motion
 
@@ -91,9 +89,9 @@ Exactly a [value screen](value.md): the disc leaves by the left edge on the posi
 |---|---:|---:|---|---|---|---|
 | the disc travels off the left edge | — | — | spring NAV | — | — | see [spring morph](../transitions/spring-morph.md) |
 | the previous screen's text fades out | — | — | spring NAV | — | — | starts on the press |
-| numbers + words are released together | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | one alpha for the whole grid — see [text-in delay](../transitions/text-in-delay.md) |
-| the trail follows the disc out | 60 | 0.8 | tau_chase | `CHAIN_TAU` | `pq1/motion.py:212` | visible only while the disc travels |
-| DEMO ONLY: rest, then auto-advance | 4100 | 57.4 | hold | `DETAIL_DWELL` | `pq1/motion.py:154` | do not port |
+| numbers + words are released together | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | one alpha for the whole grid — see [text-in delay](../transitions/text-in-delay.md) |
+| the trail follows the disc out | 60 | 0.8 | tau_chase | `CHAIN_TAU` | `pq1/motion.py:265` | visible only while the disc travels |
+| DEMO ONLY: rest, then auto-advance | 4100 | 57.4 | hold | `DETAIL_DWELL` | `pq1/motion.py:174` | do not port |
 
 At rest nothing moves.
 
@@ -109,10 +107,10 @@ The grammar is the value screen's; the executed rows for that context:
 | value — full-width text | hold right | `None` | HASH (value, p1) | HASH (value, p1) |
 | value — full-width text | release a hold early (1000 ms) | `snapback` | HASH (value, p1) | HASH (value, p1) |
 | value — full-width text | both buttons (chord) | `None` | HASH (value, p1) | HASH (value, p1) |
-| value — full-width text | double press left | `None` | HASH (value, p1) | HASH (value, p1) |
+| value — full-width text | double press left | `None` | HASH (value, p1) | SAFE TX HASH FINGERPRINT (hero, p1) |
 | value — full-width text | double press right | `None` | HASH (value, p1) | HASH (value, p1) |
 
-Probed on `firmware/update`: on WORDS a left tap goes back to the KEY FINGERPRINT intro, a right tap goes forward to the CONFIRM UPDATE ask. Either tap on that ask, or on the intro, enters WORDS again. `hold right` is unbound here — the words are read, not signed. `hold left` declines, with **no visible fill** because the disc is off the panel: see the gap noted on [value](value.md).
+Probed on `firmware/update`: on WORDS a left tap goes back to the KEY FINGERPRINT intro, a right tap goes forward to the CONFIRM UPDATE ask. A right tap on that ask, or on the intro, enters WORDS again; a left tap on the returning ask steps back onto WORDS, and a left tap on the intro goes back to the opening ask. `hold right` is unbound here — the words are read, not signed. `hold left` declines, with **no visible fill** because the disc is off the panel: see the gap noted on [value](value.md).
 
 ## Preview
 

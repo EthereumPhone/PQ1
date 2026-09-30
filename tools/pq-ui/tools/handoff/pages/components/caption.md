@@ -42,7 +42,7 @@ Alpha is not compositing: a colour is scaled toward black and drawn ({{loc:pq1.c
 | `components.caption` ({{loc:pq1.components.caption}}) | called by the animation with an alpha | every status / verdict / PIN screen |
 | `loading.draw_status` ({{loc:pq1.loading.draw_status}}) | its own text call at the end of the frame | the qubit film's resolved caption |
 
-All three draw the same thing, but the size and tracking are re-typed as bare numbers in the layout and the film instead of being read from `pq1.typography`. **Port one caption routine** and call it from all three places; do not copy the duplication.
+All three draw the same thing and all three read the size and tracking from `pq1.typography` (`SIZE_QUESTION`, `LS_QUESTION`) — the checker's T-TOKEN rule keeps it that way. **Port one caption routine** and call it from all three places.
 
 ## Motion
 
@@ -52,10 +52,10 @@ The caption has no motion of its own. It fades with whatever owns it.
 {{row:navigable screens: the outgoing caption starts fading the instant a leg begins | - | spring NAV | its screen's alpha spring is retargeted to 0 — see [spring morph](../transitions/spring-morph.md)}}
 {{row:the incoming caption is released this long after the leg begins | pq1.motion.TEXT_IN_DELAY_MS | spring NAV | the disc leads, the words land just after it — see [text-in delay](../transitions/text-in-delay.md)}}
 {{row:both captions are on screen together during a leg | - | spring NAV | a crossfade, not a sequential swap (the [page flip](../transitions/page-flip.md) is the sequential one)}}
-{{row:a qubit or resolve ending: the caption lands behind the result glyph | 120 | linear | an unnamed literal in {{loc:pq1.loading.qubit_pose}} — see [flash ring](flash-ring.md)}}
-{{row:… and fades in over | 350 | linear | the same literal, twice more in {{loc:pq1.status.ResolveStatus.draw}}}}
+{{row:a qubit or resolve ending: the caption lands behind the result glyph | pq1.motion.RESULT_LAG_MS | hold | read in {{loc:pq1.loading.qubit_pose}} and {{loc:pq1.status.ResolveStatus.draw}} — see [flash ring](flash-ring.md)}}
+{{row:… and fades in over | pq1.motion.RESULT_FADE_MS | ease_out | the glyph's own fade}}
 {{row:a verdict or an arriving ending: the caption fades in after the beat | pq1.verdict.VerdictAnim.T_TEXT | ease_out | the verdict law's last phase — see [verdict law](../transitions/verdict-law.md); an arriving ending re-declares the same span in `status.ArriveStatus.T_TEXT` ({{loc:pq1.status.ArriveStatus}}) — port ONE token}}
-{{row:leaving an ending that rests on the token: the caption is cut | - | cut | the film stops being drawn on the first frame of the transit; the disc morphs on without it}}
+{{row:leaving an ending that shows a result: the caption fades with its frame | - | spring NAV | the resting frame fades to black on the outgoing alpha — see [fade to black](../transitions/tokenless-fade.md)}}
 {{row:leaving a screen that owns its canvas (verdict, PIN row): the whole frame dims | - | spring NAV | caption included — see [token-less transit](../transitions/tokenless-fade.md)}}
 {{row:demo only: a hero holds its caption this long, then advances itself | pq1.motion.HERO_DWELL | — | **do not port** — on the device nothing moves without a press}}
 

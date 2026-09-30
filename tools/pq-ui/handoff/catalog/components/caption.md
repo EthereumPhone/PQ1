@@ -18,9 +18,9 @@ Two other things live in the same band and are **not** this: the detail [label](
 - a `hero` screen's `bottom` — the ask, or an intro's line
 - a `status` screen's `bottom` — the resolved caption, drawn by the animation when it resolves
 - a `busy` line while a film runs — see [busy caption](busy-caption.md)
-- library idle screens (the unknown-token and batch-sign rests) draw it at alpha 1 every frame — no fade in, no fade out (`pq1/components.py:507`)
+- library idle screens (the unknown-token and batch-sign rests) draw it at alpha 1 every frame — no fade in, no fade out (`pq1/components.py:555`)
 
-A `detail` screen has no caption: its band carries the [label](detail-text.md) instead. A `value` screen's band is empty — `layout_of` lays a label out only on a `words` value (`pq1/layout.py:365`), and the live firmware screen leaves even that off.
+A `detail` screen has no caption: its band carries the [label](detail-text.md) instead. A `value` screen's band is empty — `layout_of` lays a label out only on a `words` value (`pq1/layout.py:492`), and the live firmware screen leaves even that off.
 
 ## Spec
 
@@ -48,11 +48,11 @@ Alpha is not compositing: a colour is scaled toward black and drawn (`pq1/canvas
 
 | who draws it | how | used by |
 |---|---|---|
-| `layout_of` → `components.draw_text` (`pq1/components.py:581`) | a text spec in the screen's own text list, under that screen's alpha | hero, intro |
-| `components.caption` (`pq1/components.py:507`) | called by the animation with an alpha | every status / verdict / PIN screen |
-| `loading.draw_status` (`pq1/loading.py:219`) | its own text call at the end of the frame | the qubit film's resolved caption |
+| `layout_of` → `components.draw_text` (`pq1/components.py:637`) | a text spec in the screen's own text list, under that screen's alpha | hero, intro |
+| `components.caption` (`pq1/components.py:555`) | called by the animation with an alpha | every status / verdict / PIN screen |
+| `loading.draw_status` (`pq1/loading.py:220`) | its own text call at the end of the frame | the qubit film's resolved caption |
 
-All three draw the same thing, but the size and tracking are re-typed as bare numbers in the layout and the film instead of being read from `pq1.typography`. **Port one caption routine** and call it from all three places; do not copy the duplication.
+All three draw the same thing and all three read the size and tracking from `pq1.typography` (`SIZE_QUESTION`, `LS_QUESTION`) — the checker's T-TOKEN rule keeps it that way. **Port one caption routine** and call it from all three places.
 
 ## Motion
 
@@ -61,14 +61,14 @@ The caption has no motion of its own. It fades with whatever owns it.
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | navigable screens: the outgoing caption starts fading the instant a leg begins | — | — | spring NAV | — | — | its screen's alpha spring is retargeted to 0 — see [spring morph](../transitions/spring-morph.md) |
-| the incoming caption is released this long after the leg begins | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the disc leads, the words land just after it — see [text-in delay](../transitions/text-in-delay.md) |
+| the incoming caption is released this long after the leg begins | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the disc leads, the words land just after it — see [text-in delay](../transitions/text-in-delay.md) |
 | both captions are on screen together during a leg | — | — | spring NAV | — | — | a crossfade, not a sequential swap (the [page flip](../transitions/page-flip.md) is the sequential one) |
-| a qubit or resolve ending: the caption lands behind the result glyph | 120 | 1.7 | linear | `120` | — | an unnamed literal in `pq1/loading.py:98` — see [flash ring](flash-ring.md) |
-| … and fades in over | 350 | 4.9 | linear | `350` | — | the same literal, twice more in `pq1/status.py:472` |
-| a verdict or an arriving ending: the caption fades in after the beat | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | the verdict law's last phase — see [verdict law](../transitions/verdict-law.md); an arriving ending re-declares the same span in `status.ArriveStatus.T_TEXT` (`pq1/status.py:520`) — port ONE token |
-| leaving an ending that rests on the token: the caption is cut | — | — | cut | — | — | the film stops being drawn on the first frame of the transit; the disc morphs on without it |
+| a qubit or resolve ending: the caption lands behind the result glyph | 145 | 2.0 | hold | `RESULT_LAG_MS` | `pq1/motion.py:168` | read in `pq1/loading.py:99` and `pq1/status.py:502` — see [flash ring](flash-ring.md) |
+| … and fades in over | 300 | 4.2 | ease_out | `RESULT_FADE_MS` | `pq1/motion.py:163` | the glyph's own fade |
+| a verdict or an arriving ending: the caption fades in after the beat | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | the verdict law's last phase — see [verdict law](../transitions/verdict-law.md); an arriving ending re-declares the same span in `status.ArriveStatus.T_TEXT` (`pq1/status.py:560`) — port ONE token |
+| leaving an ending that shows a result: the caption fades with its frame | — | — | spring NAV | — | — | the resting frame fades to black on the outgoing alpha — see [fade to black](../transitions/tokenless-fade.md) |
 | leaving a screen that owns its canvas (verdict, PIN row): the whole frame dims | — | — | spring NAV | — | — | caption included — see [token-less transit](../transitions/tokenless-fade.md) |
-| demo only: a hero holds its caption this long, then advances itself | 5000 | 70.0 | — | `HERO_DWELL` | `pq1/motion.py:153` | **do not port** — on the device nothing moves without a press |
+| demo only: a hero holds its caption this long, then advances itself | 5000 | 70.0 | — | `HERO_DWELL` | `pq1/motion.py:173` | **do not port** — on the device nothing moves without a press |
 
 The cut is real and verifiable: leave a `qubit` ending and the band is black on the next frame, while the incoming caption only starts at `TEXT_IN_DELAY_MS` 150 ms (2.1 f). It shows as a short blank band between two screens. Keep it, or fade it with the screen, but decide it with the designer — do not let it fall out of the port by accident.
 

@@ -4,28 +4,28 @@
 
 One class, two directions, two mechanism windows. `t` is milliseconds since the screen's own t 0. Everything below is a pure function of `t` — no frame counting, no accumulation.
 
-**`lock` (the default) — the shackle turns in and seats.** The mechanism window is `T_MECH`; the entrance runs *inside* it, under the turn-in.
+**`lock` (the default) — the shackle turns in and seats.** The mechanism window is `T_MECH`, starting with the entrance: the sign arrives on the verdict law (`T_IN` = `ARRIVE_MS`) under the turn-in, and the rest of the mechanism runs on in `T_WAIT` = `T_MECH − ARRIVE_MS`.
 
 {{motion-head}}
-{{row:black hold — the flow's token hands over | screens.verdict.padlock.Padlock.T_HOLD | ease_out | no padlock on the canvas yet; longer than the base verdict hold ({{tok:pq1.verdict.VerdictAnim.T_HOLD}}). The token crossfade runs only where the spec's `handoff` survives — in the PIN ladder it is dropped and the hold is plain black — see [handoff](../transitions/handoff.md)}}
-{{row:icon entrance — fade + rise | pq1.motion.ARRIVE_MS | ease_out + arrive | alpha 0 to 1; the WHOLE composite scales {{val:pq1.motion.ARRIVE_FROM}} to 1 via `body_r`. Starts at the same instant as the turn-in, so the lock is already mid-turn when it becomes solid}}
+{{row:black hold — the flow's token hands over | screens.verdict.padlock.Padlock.T_HOLD | ease_out | no padlock on the canvas yet; the law's own hold, {{tok:pq1.motion.VERDICT_HOLD_MS}}. The token crossfade runs only where the spec's `handoff` survives — in the PIN ladder it is dropped and the hold is plain black — see [handoff](../transitions/handoff.md)}}
+{{row:icon entrance — fade + rise | screens.verdict.padlock.Padlock.T_IN | ease_out + arrive | alpha 0 to 1; the WHOLE composite scales {{val:pq1.motion.ARRIVE_FROM}} to 1 via `body_r`, the scale from `self.entrance(u)`. Starts at the same instant as the turn-in, so the lock is already mid-turn when it becomes solid}}
 {{row:shackle turns in | screens.verdict.padlock.T_TURN | ease | `spin` pi to 0 rad: fully open-mirrored to seated. The spin is a z-rotation about the seated right leg, drawn as horizontal foreshortening x' = px + (x - px) cos(spin), floor 0.06 so it is never edge-on}}
 {{row:shackle drops onto the body | screens.verdict.padlock.T_DROP | ease_out | `lift` {{val:screens.verdict.padlock.OPEN_LIFT}} px to 0 — the open shackle's rest raise falls away}}
 {{row:the click | screens.verdict.padlock.T_CLICK | recoil | the shackle bites down 0.9 px and the body nudges 0.7 px, both times the unit curve, which peaks at 0.58 about a third of the way in — so about half a pixel and four tenths of one: a settle, not a jolt}}
-{{row:beat before the caption — none on this screen | screens.verdict.padlock.Padlock.T_WAIT | — | the click IS the beat; the caption starts the instant the mechanism ends}}
+{{row:the mechanism past the entrance | screens.verdict.padlock.Padlock.T_WAIT | — | `T_MECH − ARRIVE_MS`: the rest of the turn-in, the drop and the click. The click IS the beat; the caption starts the instant the mechanism ends}}
 {{row:caption fades in | pq1.verdict.VerdictAnim.T_TEXT | ease_out | LOCKED on the y {{val:pq1.layout.BASELINE_Y}} baseline}}
 {{row:rest, then the flow moves on | pq1.status.RESULT_HOLD_MS | hold | see [result hold](../transitions/result-hold.md)}}
 
-**`unlock` — the lock arrives shut and springs open.** Here the mechanism window *adds* the entrance: `T_MECH_UNLOCK` = entrance + kick + pause + swing, and nothing moves until the lock has arrived.
+**`unlock` — the lock arrives shut and springs open.** Here the mechanism window *adds* the entrance: `T_MECH_UNLOCK` = entrance + kick + pause + swing, and nothing moves until the lock has arrived. `T_IN` is `ARRIVE_MS` again; `T_WAIT` = `T_MECH_UNLOCK − ARRIVE_MS`, set in `__init__`.
 
 {{motion-head}}
 {{row:black hold — the flow's token hands over | screens.verdict.padlock.Padlock.T_HOLD | ease_out | identical to `lock`; this is the one screen in the live flows whose handoff actually runs (`unlock_batch`)}}
-{{row:icon entrance — the CLOSED lock fades + rises | pq1.motion.ARRIVE_MS | ease_out + arrive | `spin` 0, `lift` 0: a seated padlock. The mechanism clock starts only when this ends}}
+{{row:icon entrance — the CLOSED lock fades + rises | anim:verdict/padlock@unlock:T_IN | ease_out + arrive | `spin` 0, `lift` 0: a seated padlock. The mechanism clock starts only when this ends}}
 {{row:shackle snaps up | screens.verdict.padlock.T_SNAP | ease_out | `lift` 0 to {{val:screens.verdict.padlock.OPEN_LIFT}} px. Exactly {{tok:pq1.motion.VERDICT_ACCENT_MIN_MS}} — two panel frames, the shortest accent allowed}}
-{{row:the body takes the reaction | screens.verdict.padlock.T_KICK | recoil | `drop` = {{val:screens.verdict.padlock.KICK}} px times the unit curve: the body is knocked down, peaking 5.8 px about a third in, and is back at rest before the swing. Runs from the same instant as the snap, and only the body moves — the shackle keeps its place, so the two visibly part}}
+{{row:the body takes the reaction | screens.verdict.padlock.T_KICK | recoil | `drop` = {{val:screens.verdict.padlock.KICK}} px times the unit curve: the body is knocked down, peaking about a third in, and is back at rest before the swing. Runs from the same instant as the snap, and only the body moves — the shackle keeps its place, so the two visibly part}}
 {{row:pause — the beat after the kick | screens.verdict.padlock.T_PAUSE | — | nothing moves; the shackle sits raised and seated. Measured from the end of the kick, not of the snap}}
 {{row:shackle swings out | screens.verdict.padlock.T_TURN_OUT | ease | `spin` 0 to pi rad, the unhurried mirror of the lock's turn-in}}
-{{row:beat before the caption — none on this screen | screens.verdict.padlock.Padlock.T_WAIT | — | the swing's own ease-in-out tail is the beat}}
+{{row:the mechanism past the entrance | anim:verdict/padlock@unlock:T_WAIT | — | snap, kick, pause and swing; the swing's own ease-in-out tail is the beat}}
 {{row:caption fades in | pq1.verdict.VerdictAnim.T_TEXT | ease_out | UNLOCKED}}
 {{row:rest, then the flow moves on | pq1.status.RESULT_HOLD_MS | hold | }}
 
@@ -45,7 +45,7 @@ One class, two directions, two mechanism windows. `t` is milliseconds since the 
 
 {{constants}}
 
-`OPEN_LIFT` and `KICK` are UI pixels; `T_MECH` and `T_MECH_UNLOCK` are the two `T_IN` values (`T_IN` is set per direction in `__init__`), derived from the phases above — do not re-type them, sum them.
+`OPEN_LIFT` and `KICK` are UI pixels; `T_MECH` and `T_MECH_UNLOCK` are the two mechanism windows, derived from the phases above — do not re-type them, sum them. Each one is split on the law: `T_IN` = `ARRIVE_MS`, `T_WAIT` = the window less it (set per direction in `__init__`).
 
 ## Input
 
@@ -68,6 +68,6 @@ None. It is a verdict: an ending accepts no press from its first frame to its la
 - **Do** keep the snap at `T_SNAP` and the kick on `recoil`. The two panel frames of spring-up against the body's dip are what make it read as a real padlock letting go; slow the snap and it becomes a slide.
 - **Do** run the lock's entrance *under* the turn-in and the unlock's *before* the snap. That asymmetry is deliberate: LOCKED arrives already moving, UNLOCKED arrives still.
 - **Don't** round the click away. Its amplitudes are sub-pixel; the panel shows it only because the rig is drawn supersampled ({{val:pq1.layout.SUP}}x) and downsampled. Draw at 1x with integer coordinates and the click disappears.
-- **Don't** give this screen a beat: `T_WAIT` is zero in both directions and the caption follows the mechanism immediately.
+- **Don't** give this screen an extra beat: `T_WAIT` is the mechanism's own tail in both directions, and the caption follows the mechanism immediately.
 
 {{partial:port-notes}}

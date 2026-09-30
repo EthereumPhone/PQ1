@@ -20,7 +20,8 @@ SYMBOL below), sitting exactly on the 36-tier budget (12 chars). The
 sample is a LONG-TAIL token on purpose — never a popular one with a logo
 asset (USDC, USDT, DAI, ETH) — so this module shows the placeholder look.
 components.token_defaults(SYMBOL) resolves the treatment from the symbol:
-here a SOLID disc, never the gradient, in the fill of the six-stop ramp
+here the symbol's initial ("T", the Bold monogram) on a SOLID disc,
+never the gradient, in the fill of the six-stop ramp
 hashed from the symbol (token "palette" -> components.token_ramp, crc32,
 never fixed), its trail the same ramp darkening away from the token — so
 this token always wears the same colour. On device the same switch puts a

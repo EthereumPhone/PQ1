@@ -29,9 +29,9 @@ No flow needs to author this screen. `layout.insert_confirm` ({{loc:pq1.layout.i
 
 {{geometry}}
 
-- Disc centre x {{val:pq1.layout.CONFIRM_CIRCLE_X}}, y {{val:pq1.layout.CIRCLE_CY}}, radius {{val:pq1.layout.CIRCLE_R}}. The disc does not sweep here.
+- Disc centre x {{val:pq1.layout.CONFIRM_CIRCLE_X}}, y {{val:pq1.layout.CIRCLE_CY}}, radius {{val:pq1.layout.CIRCLE_R}}. The disc does not sweep here. The prompt and the disc are composed like the [chain screen](chain.md): one group centred on the panel with {{val:pq1.layout.CHAIN_GAP}} px of air between the prompt's edge and the disc (`chain_compose`; checker rule G-CONFIRM holds the two pinned values to it).
 - Prompt: {{val:pq1.typography.SIZE_XL}} px Regular, mixed case, centred on x {{val:pq1.layout.CONFIRM_TEXT_X}}, vertical centre y {{val:pq1.layout.TEXT_CY}}.
-- Band: {{val:pq1.typography.SIZE_QUESTION}} px caps, letter spacing {{val:pq1.typography.LS_QUESTION}}, baseline y {{val:pq1.layout.BASELINE_Y}}, text centred on x {{val:pq1.components.VIEW_MORE_CX}} (nudged left of the panel centre so text plus chevron read centred). The band chevron's centre sits {{val:pq1.components.VIEW_MORE_CHEV_GAP}} px past the text edge at y {{val:pq1.components.VIEW_MORE_CHEV_CY}}: after the text pointing right for VIEW MORE, before the text pointing left for GO BACK. Details: [confirm band](../components/confirm-band.md).
+- Band: {{val:pq1.typography.SIZE_QUESTION}} px caps, letter spacing {{val:pq1.typography.LS_QUESTION}}, baseline y {{val:pq1.layout.BASELINE_Y}}, OR VIEW MORE's text centred on x {{val:pq1.layout.VIEW_MORE_CX}}, TO GO BACK's on the mirror x {{val:pq1.layout.GO_BACK_CX}}, so each unit (text plus chevron) reads centred on the panel. The band chevron's centre sits {{val:pq1.components.VIEW_MORE_CHEV_GAP}} px past the text edge at y {{val:pq1.components.VIEW_MORE_CHEV_CY}}: after the text pointing right for VIEW MORE, before the text pointing left for GO BACK. Details: [confirm band](../components/confirm-band.md).
 - Corner chevrons: the usual slots ({{loc:pq1.layout.CHEV_LEFT}}), both pointing up.
 
 ## Motion
@@ -46,7 +46,7 @@ All band and chevron clocks count from the moment the arriving transit **settles
 {{row:band message fades out | pq1.motion.BAND_FADE_MS | ease_out | alpha reaches zero exactly on the slot boundary; then the other message fades in — out, then in, never a crossfade}}
 {{row:one message slot | pq1.motion.BAND_SWAP_MS | — | VIEW MORE takes the even slots, GO BACK the odd ones}}
 {{row:full band cycle | 2 * pq1.motion.BAND_SWAP_MS | — | `motion.confirm_band(ms at rest)` is a pure function: {{loc:pq1.motion.confirm_band}}}}
-{{row:corner chevrons bob, once per slot | pq1.motion.BAND_SWAP_MS | sine | `motion.chevron_hint` with the band slot as its period; half a sine up and back, peak 4 px. The envelope's own literals: first bob {{lit:1750 ms}} after settling, {{lit:1200 ms}} long — see [chevrons](../components/chevrons.md)}}
+{{row:corner chevrons bob, once per slot | pq1.motion.BAND_SWAP_MS | sine | `motion.chevron_hint` with the band slot as its period; half a sine up and back, peak 4 px. The envelope's own tokens: the first bob starts `CHEV_HINT_START_MS` + `CHEV_HINT_TURN_MS` after settling and lasts {{tok:pq1.motion.CHEV_HINT_BOB_MS}} — see [chevrons](../components/chevrons.md)}}
 {{row:leaving: the prompt fades, the disc travels | - | spring NAV | }}
 {{row:leaving: the band | - | cut | it is drawn only while the screen is settled and current, so it disappears on the first frame of the transit}}
 

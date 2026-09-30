@@ -6,11 +6,13 @@ It is a *release*, not a curve: after the delay the incoming alpha is an ordinar
 
 ## When it appears
 
-On every screen-to-screen leg of a flow, in both directions, whatever the two screens are — a hero, a detail, a value, the Confirm?, an ending. It is not a property of a screen type; it belongs to the leg. A [token-less transit](tokenless-fade.md) is no exception: the outgoing frame fades to black and the incoming caption still waits out the delay, there is simply no disc leading it.
+On every screen-to-screen leg of a flow, in both directions, whatever the two screens are — a hero, a detail, a value, the Confirm?, an ending. It is not a property of a screen type; it belongs to the leg. Leaving a [token-less](tokenless-fade.md) screen is no exception: the outgoing frame fades to black and the incoming caption still waits out the delay, there is simply no disc leading it.
+
+The one exception is a leg **into** a token-less screen (a verdict sign, a PIN row — `status.rests_on_token` False). Nothing rides the incoming alpha there — a status layout has no text and no token is drawn — so the release is immediate: the leg settles on its *visible* springs and the verdict's clock is not held back behind an invisible one.
 
 ## How it is held
 
-One scalar on the Sim — `text_in_at`, an absolute ms deadline. `go_to` sets it to `now + TEXT_IN_DELAY_MS` and retargets every *other* screen's alpha to 0 straight away ({{loc:pq1.flow.Sim.go_to}}). Each `draw` compares the clock against it and, once past, retargets the **current** screen's alpha to 1 and clears the deadline ({{loc:pq1.flow.Sim.draw}}).
+One scalar on the Sim — `text_in_at`, an absolute ms deadline. `go_to` sets it to `now + TEXT_IN_DELAY_MS` — or to `now` when the destination is token-less — and retargets every *other* screen's alpha to 0 straight away ({{loc:pq1.flow.Sim.go_to}}). Each `draw` compares the clock against it and, once past, retargets the **current** screen's alpha to 1 and clears the deadline ({{loc:pq1.flow.Sim.draw}}).
 
 Three consequences a port must reproduce:
 

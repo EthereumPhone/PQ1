@@ -7,7 +7,7 @@ Read this page first — every other verdict is this skeleton with a mechanism d
 beat. The whole screen is a pure function of `t`, so any frame can be recomputed from scratch.
 
 {{motion-head}}
-{{row:black hold — the flow's token hands over | pq1.verdict.VerdictAnim.T_HOLD | ease_out | a black disc of radius {{val:pq1.layout.CIRCLE_R}} + 2.5 px is laid over the resting token at rising alpha (`status.draw_handoff`); with `handoff` unset the canvas is simply black}}
+{{row:black hold — the flow's token hands over | pq1.verdict.VerdictAnim.T_HOLD | ease_out | a black disc of radius `HANDOFF_WASH_R` {{val:pq1.status.HANDOFF_WASH_R}} px is laid over the resting token at rising alpha (`status.draw_handoff`); with `handoff` unset the canvas is simply black}}
 {{row:the disc arrives — fade | pq1.verdict.VerdictAnim.T_IN | ease_out | white, alpha 0 to 1. The colour is multiplied by alpha before drawing, not composited}}
 {{row:the disc arrives — rise | pq1.verdict.VerdictAnim.T_IN | arrive | radius {{tok:pq1.layout.CIRCLE_R}} scaled from {{tok:pq1.motion.ARRIVE_FROM}} to 1 — under a pixel of growth, and never an overshoot}}
 {{row:beat on the arrived sign | pq1.verdict.VerdictAnim.T_WAIT | — | nothing moves. The disc is simply seen before it is named}}

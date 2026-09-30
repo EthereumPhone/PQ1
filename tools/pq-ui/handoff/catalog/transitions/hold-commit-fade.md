@@ -15,11 +15,13 @@ When the ending is a loading film there is no leg to ride: the fill fades over t
 
 Every time a hold completes on a screen that arms one: [hold right — sign](../actions/hold-right-sign.md) from the [ask](../screen-types/hero-ask.md) or [Confirm?](../screen-types/confirm.md), and [hold left — decline](../actions/hold-left-decline.md) from any navigable screen of a flow that has a failing ending. An early release is a different thing entirely — it drains ([release early](../actions/hold-release-early.md)).
 
-An entry (the PIN row) is the exception: its hold-left cancel fills the rings, not a token disc, and it never goes through this fade — the row plays its own outcome in place ([hold left cancels the row](../actions/entry-cancel.md)).
+The library's standalone [hold to confirm](../library/confirm-hold-to-confirm.md) demo commits the same way as a flow into a film: on confirm its fill, chevrons and caption fade over `FADE_MS` 180 ms (2.5 f) with the disc held at full alpha, the bare disc holds `SEED_HOLD_MS` 180 ms (2.5 f), and its inner qubit film opens **on** that disc (`enter_from`) — the Sim's own fade-hold-seed beat, with no cut, no black frame and no cold seed.
+
+An entry (the PIN row) is the one exception: its hold-left cancel fills the rings, not a token disc, and it never goes through this fade — the row plays its own outcome in place, and leaves on its own longer exit (`T_OUT` 500 ms (7.0 f)), the documented exception to the one-hold-exit rule ([hold left cancels the row](../actions/entry-cancel.md)).
 
 ## How the alpha is driven
 
-`hold_commit` (`pq1/flow.py:263`) calls `go_to` first, then marks the hold `done` and records `mix_dir` — the morph spring's **new** target, i.e. the direction the leg it just started points in. Read it before the `go_to` and you get the previous leg's direction, which makes the fade run backwards whenever the two differ. The draw then reads the fill's alpha straight off that spring (`pq1/flow.py:310`):
+`hold_commit` (`pq1/flow.py:285`) calls `go_to` first, then marks the hold `done` and records `mix_dir` — the morph spring's **new** target, i.e. the direction the leg it just started points in. Read it before the `go_to` and you get the previous leg's direction, which makes the fade run backwards whenever the two differ. The draw then reads the fill's alpha straight off that spring (`pq1/flow.py:338`):
 
 ```
 ha = 1 - (m if mix_dir >= 0.5 else 1 - m)      # m = the morph spring, clamped 0..1
@@ -27,36 +29,36 @@ ha = 1 - (m if mix_dir >= 0.5 else 1 - m)      # m = the morph spring, clamped 0
 
 Into a seeded film the same alpha is the beat's fade instead — `1 − ease_out(k)` over `FADE_MS` 180 ms (2.5 f), the factor the text and chevrons take ([entering a film](film-entrance.md)). On every other leg the fade has **no duration of its own**. It is the leg's progress, inverted, and it works in either direction. Measured on `send_token` at the `NAV` pace, the fill's alpha over the first panel frames of the leg: 0.69, 0.34, 0.15, 0.06, 0.02 — essentially gone in under half a leg, while the disc is still moving.
 
-The fill *level* does not move: `motion.hold_fill` clamps at 1 past the commit (`pq1/motion.py:178`), so the liquid never appears to fall back. Only opacity changes. When the leg settles, the hold record is discarded.
+The fill *level* does not move: `motion.hold_fill` clamps at 1 past the commit (`pq1/motion.py:211`), so the liquid never appears to fall back. Only opacity changes. When the leg settles, the hold record is discarded.
 
 Two details worth copying exactly:
 
-- the fill's **dress** (black film over a coloured disc, white inside a dark one) is the one resolved for the screen the hold *started* on, not for the disc now being drawn — the disc's own style swaps to the destination's at the morph's halfway point. The two agree on every live commit path but one: on `erc7730/swap` a hold-left from the intro (a black disc, so a **white** film) declines into DECLINED, whose disc is a coloured solid, and the white film rides on over it for the frame or two before it fades. Resolve the dress once, at the hold's start, and keep it;
+- the fill's **dress** (black film over a coloured disc, white inside a dark one) is the one resolved for the screen the hold *started* on, not for the disc now being drawn — the disc's own style swaps to the destination's at the morph's halfway point. The two can disagree: a hold-left from a black disc (so a **white** film) that declines into an ending whose disc is a coloured solid keeps the white film riding over it for the frame or two before it fades. Resolve the dress once, at the hold's start, and keep it;
 - a commit whose target is the screen already current simply clears the hold: no leg, no fade.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| the hold fires, measured from press-down | 2000 | 28.0 | — | `HOLD_COMMIT_MS` | `pq1/motion.py:171` | only at completion; a release a moment earlier does nothing |
+| the hold fires, measured from press-down | 1995.5 | 27.9 | — | `HOLD_COMMIT_MS - LEVEL_EPS * ( HOLD_COMMIT_MS - TAP_MAX_MS )` | `pq1/motion.py:195` | `motion.hold_full` (`pq1/motion.py:247`): the frame that first draws the full disc is the frame it fires — the driver, the Sim and `hold_flood` share the one test; a release a moment earlier does nothing |
 | the leg to the ending starts, same frame | — | — | spring NAV | — | — | an ordinary [spring morph](spring-morph.md) |
 | the full fill fades out | — | — | spring NAV | — | — | alpha = the morph spring, inverted — no timer of its own |
-| into a film: the fill fades over the entrance beat instead | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:133` | the disc is parked, the fill goes with the text — [entering a film](film-entrance.md) |
+| into a film: the fill fades over the entrance beat instead | 180 | 2.5 | ease_out | `FADE_MS` | `pq1/motion.py:145` | the disc is parked, the fill goes with the text — [entering a film](film-entrance.md) |
 | the fill level holds at full | — | — | hold | — | — | clamped; the liquid never drains after a commit |
 | the hold record is dropped | — | — | — | — | — | when every spring in the set has settled |
 
-From the commit on, the screen is input-dead: the current index is already the status screen, so the driver reports `resolving` and refuses presses (`pq1/driver.py:230`).
+From the commit on, the screen is input-dead: the current index is already the status screen, so the driver reports `resolving` and refuses presses (`pq1/driver.py:234`).
 
 ## Input
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — the ask (flow has details) | tap left | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
+| hero — the ask (flow has details) | tap left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | tap right | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | hold left | `fired` | SEND (hero, p1) | DECLINED (status, p1) |
 | hero — the ask (flow has details) | hold right | `fired` | SEND (hero, p1) | SUCCESSFUL (status, p1) |
 | hero — the ask (flow has details) | release a hold early (1000 ms) | `snapback` | SEND (hero, p1) | SEND (hero, p1) |
-| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | TO (detail, p1) |
+| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | double press left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | double press right | `None` | SEND (hero, p1) | TO (detail, p1) |
 

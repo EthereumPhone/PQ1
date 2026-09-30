@@ -9,8 +9,8 @@ pill and dots turn white -> the state red, and the row shakes the PIN off
 (motion.shake, at the source's 210 ms per cycle). Then the beat and the
 caption:
 
-    hold 250 -> arrive 300 -> fill 200 -> hold 200 -> turn 200
-             -> shake 420 -> beat 200 -> caption 300      t_resolve 2070
+    hold 286 -> arrive 300 -> fill 200 -> hold 200 -> turn 200
+             -> shake 420 -> beat 200 -> caption 300      t_resolve 2106
 
 Pace (user, Sep 2026, settled over three passes — twice "too slow", then
 "a bit slower"): roughly half the source's timings. The beats sit at
@@ -28,7 +28,7 @@ pill refused for the other reason).
 """
 from pq1 import colors, gradients, status
 from pq1.layout import CENTER_X, CIRCLE_CY
-from pq1.motion import ARRIVE_MS, clamp01, ease, shake
+from pq1.motion import ARRIVE_MS, PIN_HOLD_MS, clamp01, ease, ease_out, shake
 from pq1.procedural import pin_pill
 from pq1.verdict import VerdictAnim
 
@@ -48,7 +48,7 @@ SHAKE_PX = 7.0    # the source's excursion
 
 
 class PinMismatch(VerdictAnim):
-    T_HOLD = 250
+    T_HOLD = PIN_HOLD_MS        # a PIN outcome answers a keypress: 4 frames
     T_IN = ARRIVE_MS            # the empty pill arrives — the entrance law
     T_WAIT = T_FILL + T_FILLED + T_TURN + T_SHAKE + T_BEAT
 
@@ -64,7 +64,7 @@ class PinMismatch(VerdictAnim):
         w = (tm - self.T0_SHAKE) / T_SHAKE
         if 0.0 < w < 1.0:
             cx += SHAKE_PX * shake(w, cycles=SHAKE_CYCLES)
-        dots = [ease(clamp01(tm / T_FILL))] * pin_pill.SLOTS
+        dots = [ease_out(clamp01(tm / T_FILL))] * pin_pill.SLOTS
         pin_pill.draw(cv, cx, CIRCLE_CY, color=col, alpha=a, scale=s,
                       dots=dots)
 

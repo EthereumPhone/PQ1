@@ -11,9 +11,9 @@ A value shown alone: 1–3 centred lines across the whole panel, **no token disc
 
 ## When it appears
 
-Inside the detail section, wherever a detail could be. Used in 2 of 31 flows: `fingerprint/erc8213_call_data_digest`, `fingerprint/safe_tx_hash_fingerprint`
+Inside the detail section, wherever a detail could be. Used in 2 of 33 flows: `fingerprint/erc8213_call_data_digest`, `fingerprint/safe_tx_hash_fingerprint`
 
-- It counts as a detail for the [Confirm?](confirm.md) rule (`pq1/layout.py:603`), and the driver treats it as one: it can be the section's first screen.
+- It counts as a detail for the [Confirm?](confirm.md) rule (`pq1/layout.py:820`), and the driver treats it as one: it can be the section's first screen.
 - The live use is the fingerprint family: `flows/fingerprint` `digest(value)` splits a hex string into balanced lines of at most 13 bytes, the `0x` riding on the first (`flows/fingerprint/__init__.py:51`). A 32-byte digest is three lines of 11 / 11 / 10 bytes at 22. Over 3 lines it returns `pages` instead — see [value — paged](value-paged.md).
 - A value made of numbered words is its own page: [value — words grid](value-words.md).
 
@@ -45,16 +45,18 @@ Screen 2 of flow `fingerprint/erc8213_call_data_digest`, as the design system no
 - `icon` and `token` still matter: the disc is off the panel at rest, but it is the same disc that travels in and out, with the flow's trail colours.
 - A `label` on a value screen without `words` is ignored: `layout_of` never reads it.
 
-### Full-width budgets (the design rule — the Python does not enforce it)
+### Full-width budgets (measured — `normalize_screens` runs this rule)
 
 The [detail](detail.md) budgets times 1.45:
 
-| size | max characters per line | max lines |
+| size | max lines | typical characters per line |
 |---|---|---|
-| 36 | 17 | 1 |
-| 32 | 20 | 1 |
-| 28 | 23 | 2 |
-| 22 | 30 | 3 |
+| 36 | 1 | ~17 |
+| 32 | 1 | ~20 |
+| 28 | 2 | ~23 |
+| 22 | 3 | ~30 |
+
+A value screen measures against 404 px — the panel less its two margins, with no circle to clear. The counts are a sighting shot; `layout.fit_size(lines, full=True)` decides.
 
 ## Geometry
 
@@ -65,9 +67,9 @@ The [detail](detail.md) budgets times 1.45:
 | text `d1c7a4f8036e5b1d9a2c7f` | x 214, y 72.5, size 22, weight regular |
 | text `4e8b0d6a3c1f9e2b5d78` | x 214, y 102.5, size 22, weight regular |
 
-- Text centre x 214 — the panel's centre — across the full region between the margins (428 − 2 × 12 px wide). Block centred on `TEXT_CY` 72.5 px, stacked with `line_height(size)` exactly as a detail (`pq1/layout.py:332`).
+- Text centre x 214 — the panel's centre — across the full region between the margins (428 − 2 × 12 px wide). Block centred on `TEXT_CY` 72.5 px, stacked with `line_height(size)` exactly as a detail (`pq1/layout.py:459`).
 - The disc is **parked** at `VALUE_PARK_X` -60 px (minus one diameter), centre y 72, radius unchanged. Its right edge rests one radius outside the panel; the trail links rest under it, so nothing of the token shows.
-- Corner chevrons in their usual slots (`pq1/layout.py:277`).
+- Corner chevrons in their usual slots (`pq1/layout.py:348`).
 
 ## Motion
 
@@ -77,10 +79,10 @@ The disc does not fade or shrink. It **leaves**: the same position spring that m
 |---|---:|---:|---|---|---|---|
 | the disc travels off the left edge | — | — | spring NAV | — | — | x to the park position; y and r keep their values — see [spring morph](../transitions/spring-morph.md) |
 | the previous screen's text fades out | — | — | spring NAV | — | — | starts on the press |
-| the value lines are released | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the disc leads, the text follows — see [text-in delay](../transitions/text-in-delay.md) |
-| the trail follows the disc out | 60 | 0.8 | tau_chase | `CHAIN_TAU` | `pq1/motion.py:212` | per link; it is visible only while the disc travels |
+| the value lines are released | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the disc leads, the text follows — see [text-in delay](../transitions/text-in-delay.md) |
+| the trail follows the disc out | 60 | 0.8 | tau_chase | `CHAIN_TAU` | `pq1/motion.py:265` | per link; it is visible only while the disc travels |
 | leaving: the disc comes back in from the left | — | — | spring NAV | — | — | towards the next screen's circle x; the value text fades at once |
-| DEMO ONLY: rest, then auto-advance | 4100 | 57.4 | hold | `DETAIL_DWELL` | `pq1/motion.py:154` | do not port |
+| DEMO ONLY: rest, then auto-advance | 4100 | 57.4 | hold | `DETAIL_DWELL` | `pq1/motion.py:174` | do not port |
 
 At rest nothing moves.
 
@@ -94,10 +96,10 @@ At rest nothing moves.
 | value — full-width text | hold right | `None` | HASH (value, p1) | HASH (value, p1) |
 | value — full-width text | release a hold early (1000 ms) | `snapback` | HASH (value, p1) | HASH (value, p1) |
 | value — full-width text | both buttons (chord) | `None` | HASH (value, p1) | HASH (value, p1) |
-| value — full-width text | double press left | `None` | HASH (value, p1) | HASH (value, p1) |
+| value — full-width text | double press left | `None` | HASH (value, p1) | SAFE TX HASH FINGERPRINT (hero, p1) |
 | value — full-width text | double press right | `None` | HASH (value, p1) | HASH (value, p1) |
 
-- Taps are a detail's: left back, right forward. In the live flows the value is the only screen of its section, so both neighbours are the ask — and either tap on the ask comes back here.
+- Taps are a detail's: left back, right forward. In the live flows the value is the only screen of its section, so both neighbours are the ask — a right tap on either ask comes back here, and a left tap on the returning ask.
 - `hold right` is unbound. `hold left` declines.
 - **Gap to know:** the hold fill is drawn inside the token disc ([hold flood](../components/hold-flood.md)), and here the disc is parked off the panel. In the reference a `hold left` on a value screen therefore shows **no progress at all** until it fires — the frames are pixel-identical to the resting screen. This is not a stated design decision. Raise it with the designer before porting; do not invent a fill.
 

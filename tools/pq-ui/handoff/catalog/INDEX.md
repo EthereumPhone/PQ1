@@ -13,7 +13,7 @@ Every kind of screen a flow can contain.
 | [Hero — an intro (band chevron)](screen-types/hero-intro.md) | A hero that introduces instead of asking: the caption carries the chevron, corners hide, nothing to sign here. | PORT |
 | [Hero — batch position (n/m pager)](screen-types/hero-pager.md) | A batch's per-transaction hero: the pager says which transaction of how many; it never turns. | PORT |
 | [Detail](screen-types/detail.md) | One fact of the transaction: circle + label on one side, 1–3 value lines on the other. Sides alternate. | PORT |
-| [Chain badge](screen-types/chain.md) | Which network is being signed for: one chain id becomes the mark, the disc colour, the trail and the caption. | PORT |
+| [Chain screen](screen-types/chain.md) | Which network is being signed for: one chain id becomes the mark, the disc colour, the trail and the caption. | PORT |
 | [Detail — paged (n/m)](screen-types/detail-paged.md) | A value too long for three lines: pages of 1–3 lines, a pager, and taps that turn the page before the screen. | PORT |
 | [Value — full-width text](screen-types/value.md) | A value shown alone and centred across the panel; the token disc parks off-canvas. | PORT |
 | [Value — paged](screen-types/value-paged.md) | A full-width value over two or more pages (a full hash), with the n/m pager. | PORT |
@@ -36,10 +36,11 @@ Ready-made status screens (verdicts, films, PIN, idle) a flow splices in — one
 | [fx / explosion](library/fx-explosion.md) | Explosion — the token loads, clumps, and blows apart; major or minor. | PORT |
 | [idle / batch_sign](library/idle-batch-sign.md) | Batch sign — the teal token drifts on the idle sweep, trail following. | PORT |
 | [idle / unknown_token](library/idle-unknown-token.md) | Token idle — a solid token drifts on the idle sweep, its ramp trailing. | PORT |
-| [pin / pin_differ](library/pin-pin-differ.md) | Duress PIN differ — the PIN pill is scanned, rejected by a shake. | PORT |
+| [pin / check_word](library/pin-check-word.md) | Check word — pick the backup word asked for, out of nine. | PORT |
+| [pin / pin_differ](library/pin-pin-differ.md) | Duress PIN differ — the pin-category name for the duress_differ film. | PORT |
 | [pin / pin_entering](library/pin-pin-entering.md) | PIN entering — the eight-ring input, typed with the two buttons. | PORT |
 | [verdict / duress_differ](library/verdict-duress-differ.md) | Duress PIN must differ — the pill is scanned, the rule refuses it. | PORT |
-| [verdict / factory_signing](library/verdict-factory-signing.md) | Factory signing — the blue signing-machine gear coasts to a stop. | PORT |
+| [verdict / factory_signing](library/verdict-factory-signing.md) | Factory signing — the white signing-machine gear coasts to a stop. | PORT |
 | [verdict / firmware_verified](library/verdict-firmware-verified.md) | Firmware verified — a white disc arrives carrying a black check. | PORT |
 | [verdict / headshake](library/verdict-headshake.md) | Headshake — the X ring arrives and shakes its head once: no. | PORT |
 | [verdict / last_attempt](library/verdict-last-attempt.md) | Last attempt — the attempt counter reels down to 1 beside a red heart. | PORT |
@@ -48,8 +49,9 @@ Ready-made status screens (verdicts, films, PIN, idle) a flow splices in — one
 | [verdict / rng_failed](library/verdict-rng-failed.md) | RNG failed — the red die rests, tumbles on three axes and lands on 1-2-3. | PORT |
 | [verdict / shield](library/verdict-shield.md) | Shield — the backup shield arrives with its mark and nods yes, or shakes no. | PORT |
 | [verdict / sig_error](library/verdict-sig-error.md) | Sig error — the warning triangle reports a failed check, detail-grid. | PORT |
+| [verdict / slot_registered](library/verdict-slot-registered.md) | Slot registered — a white disc arrives carrying the black rotate mark. | PORT |
 | [verdict / tamper](library/verdict-tamper.md) | Tamper detected — the warning triangle's exclamation, centred, sounds the alarm. | PORT |
-| [verdict / wipe](library/verdict-wipe.md) | Wallet wiped — the warning triangle carries the brush, two treatments. | PORT |
+| [verdict / wipe](library/verdict-wipe.md) | Wallet wiped — the warning triangle carries the brush. | PORT |
 
 ## Components
 
@@ -58,6 +60,7 @@ The parts screens are made of.
 | page | what it is | port |
 |---|---|---|
 | [Token disc](components/token-disc.md) | The 60 px circle every navigable screen carries: solid, unknown (address-hashed ramp), logo art or monogram. | PORT |
+| [Icon set: marks, signs and the sign box](components/icons.md) | Every icon name the device can draw, how each one is built and scaled, the one compositing model, and the size, centre and stroke laws around them. | PORT |
 | [Glyph + chevron morph](components/glyph-morph.md) | Between two screens the glyph inside the disc and the corner chevrons crossfade on the mix spring. | PORT |
 | [Corner chevrons and the hint bob](components/chevrons.md) | The two corner marks say what the buttons do: lr = taps navigate, up = a hold is armed. They bob to hint. | PORT |
 | [Band chevron](components/band-chevron.md) | An intro's caption carries one chevron beside the text; the corner chevrons hide. | PORT |
@@ -129,12 +132,13 @@ Counts of screens per flow (default ending). Generated from the live flows.
 | `blind/call_with_value` | 2 | · | · | 7 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | · | · |
 | `blind/typed_call/sign_with_args` | 2 | · | · | 10 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | · | · |
 | `blind/unknown_call` | 2 | · | · | 8 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | · | · |
+| `chains` | · | · | · | · | 12 | · | · | · | · | 1 | · | · | · | · | · | · | · |
 | `contract_call` | 2 | · | · | 5 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | · |
 | `cowswap/address_mode` | 2 | · | · | 6 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | 1 | · |
 | `cowswap/swap` | 2 | · | · | 6 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | 1 | · |
 | `eip1271/personal_counterfactual` | 2 | · | · | 6 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | · | · |
 | `eip1271/personal_counterfactual_hash` | 2 | · | · | 5 | 1 | 1 | · | · | · | 1 | · | 1 | · | · | · | · | · |
-| `erc7730/swap` | 2 | 1 | · | 5 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | · |
+| `erc7730/swap` | 2 | · | · | 5 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | · |
 | `fingerprint/erc8213_call_data_digest` | 2 | · | · | · | · | · | 1 | · | · | · | · | 1 | · | · | · | · | · |
 | `fingerprint/safe_tx_hash_fingerprint` | 2 | · | · | · | · | · | 1 | · | · | · | · | 1 | · | · | · | · | · |
 | `firmware/update` | 2 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | 1 | 1 | 1 | · |
@@ -142,14 +146,15 @@ Counts of screens per flow (default ending). Generated from the live flows.
 | `pin/unlock` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | pin_entering |
 | `rotate_slot` | 2 | · | · | 2 | · | · | · | · | · | · | · | 1 | · | · | · | · | · |
 | `safe/add_owner` | 2 | · | · | 4 | 1 | · | · | · | · | · | · | 1 | · | · | · | 1 | · |
-| `safe/can_not_decode` | 2 | · | · | 6 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | 1 | · |
-| `safe/clear_sign` | 2 | · | · | 6 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | 1 | · |
+| `safe/can_not_decode` | 2 | · | · | 5 | 1 | 1 | · | · | · | 1 | · | 1 | · | · | · | 1 | · |
+| `safe/clear_sign` | 2 | · | · | 5 | 1 | 1 | · | · | · | 1 | · | 1 | · | · | · | 1 | · |
 | `safe/enable_module` | 2 | · | · | 4 | 1 | · | · | · | · | · | · | 1 | · | · | · | 1 | · |
 | `safe/erc20_transfer` | 2 | · | · | 6 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | 1 | · |
 | `safe/execute_refund` | 2 | · | · | 5 | 1 | · | · | · | · | · | · | 1 | · | · | · | 1 | · |
 | `send` | 2 | · | · | 4 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | · |
 | `send_token` | 2 | · | · | 5 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | · |
 | `send_token_named` | 2 | · | · | 5 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | · |
+| `setup/first_run` | 2 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | · | · | · | check_word, pin_entering |
 | `transfer_token` | 2 | · | · | 5 | 1 | · | · | · | · | · | · | 1 | · | · | · | · | · |
 | `transfer_unknown_token` | 2 | · | · | 6 | 1 | · | · | · | · | 1 | · | 1 | · | · | · | · | · |
 | `unlock_batch` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | batch_sign, padlock, pin_entering |

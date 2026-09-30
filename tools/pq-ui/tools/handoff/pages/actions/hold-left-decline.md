@@ -18,11 +18,11 @@ Two places it is not the decline:
 {{motion-head}}
 {{row:nothing visible: the press may still be a tap | pq1.motion.TAP_MAX_MS | hold | a tap never flashes a partial fill}}
 {{row:the fill rises | pq1.motion.HOLD_COMMIT_MS - pq1.motion.TAP_MAX_MS | linear | the same constant-speed gauge the sign hold uses — [hold flood](../components/hold-flood.md)}}
-{{row:the decline fires, measured from press-down | pq1.motion.HOLD_COMMIT_MS | — | only at completion; a moment earlier does nothing}}
+{{row:the decline fires, measured from press-down | pq1.motion.HOLD_COMMIT_MS - pq1.motion.LEVEL_EPS * (pq1.motion.HOLD_COMMIT_MS - pq1.motion.TAP_MAX_MS) | — | only at completion; a moment earlier does nothing — `motion.hold_full` ({{loc:pq1.motion.hold_full}}): the first frame drawn full is the frame it fires}}
 {{row:the full fill fades out over the leg to the ending | - | spring NAV | [hold commit fade](../transitions/hold-commit-fade.md)}}
 {{row:released early: the fill drains | pq1.motion.HOLD_SNAPBACK_MS | ease_out | [release early](hold-release-early.md)}}
 
-The fill is drawn in whatever token the screen is resting on, in the dress that body asks for ({{loc:pq1.components.hold_style}}) — never a special decline graphic. On a detail it is the same disc as on the ask — radius {{tok:pq1.layout.CIRCLE_R}}, only docked to the detail's side; the circle never resizes. Both holds fill the same way; the pressed side is what the chevrons say. A sweeping disc glides home while the hold is live.
+The fill is drawn in whatever token the screen is resting on, in the dress that body asks for ({{loc:pq1.components.hold_style}}) — never a special decline graphic. On a detail it is the same disc as on the ask — radius {{tok:pq1.layout.CIRCLE_R}}, only docked to the detail's side; the circle never resizes. Both holds fill the same way, and both chevrons stay through either one — a hold never fades a chevron. A sweeping disc glides home while the hold is live.
 
 ## The race between the two holds
 

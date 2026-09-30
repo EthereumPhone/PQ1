@@ -27,20 +27,30 @@ import math
 import os
 
 from . import canvas, colors, components, motion, status
-from .layout import layout_of
+from .layout import CENTER_X, layout_of
 from .motion import (CHAIN_TAU, CHAIN_TAU_IDLE, DETAIL_DWELL, HERO_DWELL,
                      HOLD_COMMIT_MS, HOLD_SNAPBACK_MS, KIOSK, LEFT, OSC_TAU,
                      RIGHT, SWEEP_AMP, SWEEP_DELAY_MS, SWEEP_PERIOD_MS,
                      TEXT_IN_DELAY_MS, Spring, clamp01, lerp)
 
 
-def _pulse_color(s, st):
-    """ring colour for a screen's optional "pulse" field: an explicit
-    [r, g, b] wins, True takes the token fill; None = no rings"""
+def _pulse_color(s):
+    """ring colour for a screen's optional "pulse" field: True is the
+    warning tier, a STATE key names another one; None = no rings.
+
+    The rings flag a screen the device cannot fully verify, so they carry
+    a STATE colour and never the token's own fill — the token says which
+    asset, the rings say what the device knows about it (DESIGN.md
+    § Color, "Color = state, never decoration")"""
     p = s.get("pulse")
     if not p:
         return None
-    return tuple(p) if isinstance(p, (list, tuple)) else (st["fill"] or colors.WHITE)
+    if p is True:
+        return colors.STATE["warning"]
+    if isinstance(p, str) and p in colors.STATE:
+        return colors.STATE[p]
+    raise ValueError(f"unknown pulse state {p!r} — True or one of "
+                     f"{sorted(colors.STATE)}")
 
 
 class Sim:
@@ -56,6 +66,7 @@ class Sim:
         self.chain = None
         self.osc = 0.0
         self.osc_dir = -1
+        self.conf_dx = 0.0  # a Confirm? hold's pull toward the centre (px)
         self.last_now = 0.0
         self.loops = 0
         self._anims = {}  # idx -> StatusAnim, built lazily per status screen
@@ -64,6 +75,13 @@ class Sim:
         # screen out instead of morphing a token that was never there
         self._tokenless = [s["kind"] == "status" and not status.rests_on_token(s)
                            for s in screens]
+        # status screens that LEAVE ON A FADE: every token-less screen, and
+        # every ending that shows a result (a signing's check / X under its
+        # caption — the trust moment): draw() fades its resting frame out
+        # on the outgoing alpha spring, never a one-frame cut (audit DUR-03)
+        self._fades_out = [t or (s["kind"] == "status"
+                                 and status.style_of(s)["result"] is not None)
+                           for s, t in zip(screens, self._tokenless)]
         # status screens whose film opens on a SEED (status.seeded): leaving
         # for one there is no spring leg — draw() plays one scripted beat:
         # FADE_MS of text, chevrons and trail going out with the circle
@@ -77,8 +95,7 @@ class Sim:
         self._nexts = [self._resolve_next(i) for i in range(len(screens))]
         self._trail_pals = [components.trail_palette_from_spec(s) for s in screens]
         self._tok_styles = [components.token_style_from_spec(s) for s in screens]
-        self._pulse_cols = [_pulse_color(s, st)
-                            for s, st in zip(screens, self._tok_styles)]
+        self._pulse_cols = [_pulse_color(s) for s in screens]
         # the hold gesture: each screen's fill dress (placement + colour) and
         # the hold the demo loop performs before leaving it; the live hold
         self._hold_styles = [components.hold_style(st) for st in self._tok_styles]
@@ -167,6 +184,7 @@ class Sim:
             sp.velocity = 0.0
         self.text_in_at = None
         self.hold = None
+        self.conf_dx = 0.0
         self.seed = None
         self.page = [0] * len(self.screens)
         self._flip = [None] * len(self.screens)
@@ -226,7 +244,11 @@ class Sim:
         for i, sp in enumerate(self.alpha):
             if i != nxt:
                 sp.retarget(0.0)
-        self.text_in_at = now + TEXT_IN_DELAY_MS
+        # into a token-less screen nothing rides the incoming alpha (a status
+        # layout has no text; no token is drawn): release it at once, so the
+        # leg settles on its VISIBLE springs and the verdict's clock is not
+        # held back behind an invisible one (audit DUR-06)
+        self.text_in_at = now + (0 if self._tokenless[nxt] else TEXT_IN_DELAY_MS)
         self.settled = False
 
     def flip_page(self, page, now):
@@ -272,6 +294,12 @@ class Sim:
         if nxt % len(self.screens) == self._cur:
             self.hold = None
             return
+        if self.screens[self._cur]["kind"] == "confirm":
+            # the hold has drawn the disc toward the panel centre
+            # (conf_dx): the leg — or the film's seed — leaves from where
+            # it is, never from the spot it was composed at
+            self.sx.value += self.conf_dx
+            self.conf_dx = 0.0
         self.go_to(nxt, now)
         h["done"] = True
         h["mix_dir"] = self.mix.target   # which way the morph spring reads progress
@@ -374,7 +402,11 @@ class Sim:
             if (side is not None and self.hold is None
                     and now - self.idle_since >= dwell - HOLD_COMMIT_MS):
                 self.hold_begin(side, self.idle_since + dwell - HOLD_COMMIT_MS)
-            if now - self.idle_since > dwell:
+            # a held screen commits the frame its fill is drawn full
+            # (motion.hold_full — the draw's own test); others at dwell
+            due = (motion.hold_full(now - (self.idle_since + dwell - HOLD_COMMIT_MS))
+                   if side is not None else now - self.idle_since > dwell)
+            if due:
                 if side is not None:
                     self.hold_commit(side, self._nexts[self._cur], now)
                 else:
@@ -386,12 +418,12 @@ class Sim:
         m = clamp01(self.mix.value)
 
         # leaving a token-less screen (a verdict, an entry — the endpoint
-        # the morph moves away from): its resting frame fades to black on
+        # the morph moves away from) or a result ending (SIGNED n OF m
+        # before the next transaction): its resting frame fades to black on
         # the outgoing alpha spring — a fade, never a cut — under whatever
-        # the next screen brings in; no token disc rides this transit
-        # (status.rests_on_token; the token was never on that screen)
+        # the next screen brings in; no morph disc rides this transit
         out_idx = self.a if self.mix.target >= 0.5 else self.b
-        leaving = not self.settled and self._tokenless[out_idx]
+        leaving = not self.settled and self._fades_out[out_idx]
         if leaving:
             an = self._anim(out_idx)
             an.draw(cv, an.duration)
@@ -413,12 +445,38 @@ class Sim:
         ang_r = lerp(ca[1], cb[1], m)
         ang_l += (0 - ang_l) * hint_up
         ang_r += (0 - ang_r) * hint_up
+        # a live hold never fades a chevron: both stay (§ Input, user
+        # decision Sep 2026 — the pressed-side fade was retired)
         components.chevron_pair(cv, ang_l, ang_r, chev_y, a_chev * seed_fade)
+
+        # a hold on the Confirm? screen draws the disc to the panel centre
+        # the way a hold on the idle hero pulls its sweeping circle home: a
+        # tau-chase on OSC_TAU from press-down, chasing back on release
+        # (motion.confirm_hold); its prompt fades as the disc leaves. Once
+        # committed the pull is the disc's own pose (hold_commit) and the
+        # prompt stays gone
+        h = self.hold
+        conf_idx, conf_text = None, 1.0
+        conf_target = 0.0
+        if cur_s["kind"] == "confirm":
+            conf_idx = self._cur
+            full = CENTER_X - self._layouts[conf_idx]["circle"]["cx"]
+            live = (h is not None and h["idx"] == conf_idx
+                    and not h["done"] and h["t_rel"] is None)
+            conf_target = full if live else 0.0
+        if self.seed is None:
+            self.conf_dx = motion.tau_chase(self.conf_dx, conf_target, dt, OSC_TAU)
+        if conf_idx is not None:
+            conf_text = motion.confirm_hold(self.conf_dx / full if full else 0.0)
+        if h is not None and h["done"] and self.screens[h["idx"]]["kind"] == "confirm":
+            conf_idx, conf_text = h["idx"], 0.0
 
         # text ---------------------------------------------------------------
         for i, s in enumerate(self.screens):
             al = clamp01(self.alpha[i].value) * seed_fade
-            if al > 0.01:
+            if i == conf_idx:
+                al *= conf_text
+            if al > colors.ALPHA_FLOOR:
                 if self._layouts[i].get("pages"):
                     self._draw_pages(cv, i, al, now)
                 else:
@@ -439,6 +497,7 @@ class Sim:
 
         # circle position ----------------------------------------------------
         c = dict(cx=self.sx.value, cy=self.sy.value, r=self.sr.value)
+        c["cx"] += self.conf_dx
 
         idle_t = max(0.0, now - self.idle_since - SWEEP_DELAY_MS)
         # a live hold pulls a sweeping circle home (the press recentres it)
@@ -457,15 +516,19 @@ class Sim:
         if leaving:
             # into another token-less screen: black until it starts; into
             # a screen that rests on the token (a hero, a detail, a film):
-            # the token fades in with the incoming text, so the screen
-            # opens on the disc it starts from
+            # the token fades in with the incoming text — riding the alpha
+            # spring, so the outgoing result is never covered in one frame —
+            # and the screen opens on the disc it starts from
             self.chain = None
-            if not self._tokenless[self._cur]:
+            a_in = clamp01(self.alpha[self._cur].value)
+            # a token at alpha 0 still paints its black body: it would blot
+            # out the result fading underneath — draw it only once it shows
+            if not self._tokenless[self._cur] and a_in > colors.ALPHA_FLOOR:
                 Lc = self._layouts[self._cur]["circle"]
                 components.token_styled(cv, c["cx"], c["cy"], c["r"],
                                         self._tok_styles[self._cur],
                                         glyph_a=Lc["icon"], glyph_b=Lc["icon"],
-                                        alpha=clamp01(self.alpha[self._cur].value))
+                                        alpha=a_in)
             return cv.out()
 
         # follower chain -----------------------------------------------------
@@ -485,7 +548,7 @@ class Sim:
         for i, col in enumerate(self._pulse_cols):
             if col is not None:
                 al = clamp01(self.alpha[i].value)
-                if al > 0.01:
+                if al > colors.ALPHA_FLOOR:
                     components.pulse(cv, c["cx"], c["cy"], c["r"], now, col, al)
 
         # the hold fill (DESIGN.md § Input): the disc filling from the bottom up

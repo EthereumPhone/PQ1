@@ -9,7 +9,7 @@ On a hero the token drifts side to side after a short rest, inside fixed x bound
 
 A hero that is left alone does not sit still. After a short rest the token drifts slowly to one side, back through the centre, to the other side, and again — with its [trail](trail.md) fanning out behind it. It says "the device is waiting for you" without a word. The sweep moves the disc, its trail and its [pulse rings](pulse-rings.md) and nothing else: the caption does not move with it, and the corner chevrons run their own hint cycle on their own clock (see [chevrons](chevrons.md)) — the two are independent.
 
-It is a few lines in `Sim.draw` (`pq1/flow.py:310`): a sine target, and a first-order chase of that target. The offset is **added to** the x of the position spring, so the sweep and the [spring morph](../transitions/spring-morph.md) never fight.
+It is a few lines in `Sim.draw` (`pq1/flow.py:338`): a sine target, and a first-order chase of that target. The offset is **added to** the x of the position spring, so the sweep and the [spring morph](../transitions/spring-morph.md) never fight.
 
 ## When it appears
 
@@ -36,7 +36,7 @@ disc x = spring x + osc
 "Sweeping" means all three: the flow is **settled** (every transit spring has landed), **no hold is live**, and the screen's `sweep` is true.
 
 - `idle_since` is the moment the arrival springs settled — not the moment of the press. The rest is counted from there.
-- `dir` is the direction of the **last transit**: +1 (first drift to the right) if the token travelled right or did not move in x, −1 if it travelled left. It is set on every leg by `Sim.go_to` (`pq1/flow.py:175`), comparing the two screens' layout x. Before any transit — the opening hero of a flow — it is the constructor's −1, so the first drift is to the left (`pq1/flow.py:46`). The token keeps going the way it arrived.
+- `dir` is the direction of the **last transit**: +1 (first drift to the right) if the token travelled right or did not move in x, −1 if it travelled left. It is set on every leg by `Sim.go_to` (`pq1/flow.py:193`), comparing the two screens' layout x. Before any transit — the opening hero of a flow — it is the constructor's −1, so the first drift is to the left (`pq1/flow.py:56`). The token keeps going the way it arrived.
 - The sine starts at zero, at the centre, at full speed. The chase is what makes the start soft.
 
 ## Geometry
@@ -48,17 +48,17 @@ disc x = spring x + osc
 | amplitude the disc really reaches | about 92.6 px: the chase is a low-pass filter and trims the peak by 2–3 % |
 | bounds | the disc's **outer edge** stays inside x 89–339 = centre ∓ (amplitude + `CIRCLE_R` 30 px) |
 
-`SWEEP_X_MIN` / `SWEEP_X_MAX` (`pq1/layout.py:266`) are a stated contract, not a clamp: nothing in the code reads them. The amplitude is what keeps the disc inside. If you change one, change the other.
+`SWEEP_X_MIN` / `SWEEP_X_MAX` (`pq1/layout.py:315`) are a stated contract, not a clamp: nothing in the code reads them. The amplitude is what keeps the disc inside. If you change one, change the other.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| rest at the centre after the screen settles | 1000 | 14.0 | hold | `SWEEP_DELAY_MS` | `pq1/motion.py:204` | counted from the settle of the arrival, see above |
-| one full cycle: centre, one side, centre, other side, centre | 5000 | 70.0 | sine | `SWEEP_PERIOD_MS` | `pq1/motion.py:205` | hand-rolled in `Sim.draw`: dir · sin(2π·t / period) · amplitude. It loops for as long as the screen rests |
-| the disc chases the sine target | 180 | 2.5 | tau_chase | `OSC_TAU` | `pq1/motion.py:207` | a time constant, not a duration. It softens the start and makes the disc lag the sine by about one tau |
-| a press or a transit: the offset glides home | 180 | 2.5 | tau_chase | `OSC_TAU` | `pq1/motion.py:207` | the target drops to 0 and the same chase brings the offset back; nothing snaps |
-| the trail behind the sweeping disc | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:213` | slower than in a transit (60) so the links separate — see [trail](trail.md) |
+| rest at the centre after the screen settles | 1000 | 14.0 | hold | `SWEEP_DELAY_MS` | `pq1/motion.py:257` | counted from the settle of the arrival, see above |
+| one full cycle: centre, one side, centre, other side, centre | 5000 | 70.0 | sine | `SWEEP_PERIOD_MS` | `pq1/motion.py:258` | hand-rolled in `Sim.draw`: dir · sin(2π·t / period) · amplitude. It loops for as long as the screen rests |
+| the disc chases the sine target | 180 | 2.5 | tau_chase | `OSC_TAU` | `pq1/motion.py:260` | a time constant, not a duration. It softens the start and makes the disc lag the sine by about one tau |
+| a press or a transit: the offset glides home | 180 | 2.5 | tau_chase | `OSC_TAU` | `pq1/motion.py:260` | the target drops to 0 and the same chase brings the offset back; nothing snaps |
+| the trail behind the sweeping disc | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:266` | slower than in a transit (60) so the links separate — see [trail](trail.md) |
 
 ## Input
 

@@ -7,9 +7,9 @@ Either tap on a hero enters the detail section at its first screen; an intro lea
 
 ## What it is
 
-On a hero, **both buttons do the same thing**. A hero has no left and no right: either tap leads on, into the details. That is what "the ask is the hub" means — the signer never has to remember which side goes in.
+On a hero — an idle screen — **right leads on and left never does**. A right tap goes into the details; that is what "the ask is the hub" means. A left tap goes back one screen where there is one and does **nothing** where there is not (user rule, Sep 2026): pressing left must never move the signer forward.
 
-The rule lives in one function, `FlowDriver._hub_target` (`pq1/driver.py:338`), and `_tap` calls it before it looks at the side (`pq1/driver.py:349`).
+Two functions hold the rule. `FlowDriver._hub_target` (`pq1/driver.py:342`) says where a right tap lands, and `layout.back_target` (`pq1/layout.py:793`) says where a left tap lands, or that it lands nowhere. `_tap` reads the side first (`pq1/driver.py:353`). The chevrons do not follow it: a hero keeps **both** corner chevrons even where the left tap does nothing (user decision, Sep 2026).
 
 ## When it appears
 
@@ -17,20 +17,22 @@ On every `hero` screen: the opening [ask](../screen-types/hero-ask.md), the [int
 
 ## Where the tap lands
 
-| the hero | either tap goes to | why |
+| the hero | right tap goes to | left tap goes to |
 |---|---|---|
-| an intro, with a hero right after it | that next hero — the ask | an intro leads on; the walkthrough never comes back to it |
-| any other hero | the **current segment's** first `detail` / `value` / `confirm` screen | `section_start` (`pq1/driver.py:182`) |
-| a hero whose segment has no such screen | nowhere — the tap returns nothing | a flow of an ask and its endings leaves taps unbound |
+| an intro, with a hero right after it | that next hero — the ask | the screen before it, or nothing on the flow's first screen |
+| any other hero | the **current segment's** first `detail` / `value` / `confirm` screen (`section_start`, `pq1/driver.py:186`) | the screen before it — the last detail from the returning ask, the intro or BATCH screen from an opening ask — or nothing |
+| a hero whose segment has no such screen | nowhere — the tap returns nothing | as above |
+
+"Nothing" means the flow's first screen, or the first screen after a status: a mid-batch ending is never walked back into.
 
 Two things follow from reading `section_start` rather than the neighbour:
 
-- **The returning ask restarts the walkthrough.** Standing on the ask at the end of the details, a tap goes back to the *first* detail, not the last one.
+- **The returning ask restarts the walkthrough on the right.** Standing on the ask at the end of the details, a right tap goes back to the *first* detail; a left tap steps back to the *last* one, on its last page.
 - **The section is always entered at its first screen and its first page.** Even when the hub target sits *behind* the current screen, `go_to` is called forward (`back=False`), so a [paged](../screen-types/detail-paged.md) first screen opens on page 1. Only a left tap inside the details enters a screen on its last page — see [tap on a paged screen](tap-page.md).
 
-In a [batch](../screen-types/batch-segment.md) every segment has its own hub: `section_start` and `last_nav` are read from the segment holding the current screen (`pq1/driver.py:165`), so the ask inside transaction 2 enters transaction 2's details and can never reach transaction 1's. In the shipped batch a segment opens on a BATCH n screen with the ask right behind it, so the first rule applies there: a tap on BATCH 2 lands on its ask, and the next tap enters the details.
+In a [batch](../screen-types/batch-segment.md) every segment has its own hub: `section_start` and `last_nav` are read from the segment holding the current screen (`pq1/driver.py:169`), so the ask inside transaction 2 enters transaction 2's details and can never reach transaction 1's. In the shipped batch a segment opens on a BATCH n screen with the ask right behind it, so the first rule applies there: a tap on BATCH 2 lands on its ask, and the next tap enters the details.
 
-Both `back` and `forward` appear in `armed()` on a hero (`pq1/driver.py:134`) whenever a hub target exists. They are not two different moves there — they are the same move, offered on both sides.
+On a hero `armed()` (`pq1/driver.py:136`) lists `forward` when a hub target exists and `back` only when `back_target` finds a screen behind — so the opening ask never lists `back`.
 
 ## Motion
 
@@ -38,35 +40,35 @@ A hub tap is an ordinary forward leg — one [spring morph](../transitions/sprin
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| press-down: the pressed side's chevron nudges | 120 | 1.7 | ease_out | `PRESS_FEEDBACK_MS` | `pq1/motion.py:166` | specified, not rendered here — see [press feedback](../components/press-feedback.md) |
-| nothing else moves: the press may still become a hold | 250 | 3.5 | hold | `TAP_MAX_MS` | `pq1/motion.py:167` | the tap fires on RELEASE, only if the press stayed inside this window |
+| press-down: the pressed side's chevron nudges | 145 | 2.0 | ease_out | `PRESS_FEEDBACK_MS` | `pq1/motion.py:186` | specified, not rendered here — see [press feedback](../components/press-feedback.md) |
+| nothing else moves: the press may still become a hold | 500 | 7.0 | hold | `TAP_MAX_MS` | `pq1/motion.py:188` | the tap fires on RELEASE, only if the press stayed inside this window |
 | the leg — circle x / y / r, glyph mix, text alphas | — | — | spring NAV | — | — | retargeted from the live pose, so a second tap mid-flight is not dropped |
-| the incoming caption is released after the circle | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the disc leads, the words follow |
-| once every spring sleeps, the idle clock restarts | 1000 | 14.0 | — | `SWEEP_DELAY_MS` | `pq1/motion.py:204` | then the [idle sweep](../components/idle-sweep.md) and the chevron hint begin again on the new screen |
+| the incoming caption is released after the circle | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the disc leads, the words follow |
+| once every spring sleeps, the idle clock restarts | 1000 | 14.0 | — | `SWEEP_DELAY_MS` | `pq1/motion.py:257` | then the [idle sweep](../components/idle-sweep.md) and the chevron hint begin again on the new screen |
 
 ## Input
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — the ask (flow has details) | tap left | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
+| hero — the ask (flow has details) | tap left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | tap right | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | hold left | `fired` | SEND (hero, p1) | DECLINED (status, p1) |
 | hero — the ask (flow has details) | hold right | `fired` | SEND (hero, p1) | SUCCESSFUL (status, p1) |
 | hero — the ask (flow has details) | release a hold early (1000 ms) | `snapback` | SEND (hero, p1) | SEND (hero, p1) |
-| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | TO (detail, p1) |
+| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | double press left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | double press right | `None` | SEND (hero, p1) | TO (detail, p1) |
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — an intro (band_chev, commit False) | tap left | `enter` | ERC7730 (hero, p1) | SIGN (hero, p1) |
-| hero — an intro (band_chev, commit False) | tap right | `enter` | ERC7730 (hero, p1) | SIGN (hero, p1) |
-| hero — an intro (band_chev, commit False) | hold left | `fired` | ERC7730 (hero, p1) | DECLINED (status, p1) |
-| hero — an intro (band_chev, commit False) | hold right | `None` | ERC7730 (hero, p1) | ERC7730 (hero, p1) |
-| hero — an intro (band_chev, commit False) | release a hold early (1000 ms) | `snapback` | ERC7730 (hero, p1) | ERC7730 (hero, p1) |
-| hero — an intro (band_chev, commit False) | both buttons (chord) | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
-| hero — an intro (band_chev, commit False) | double press left | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
-| hero — an intro (band_chev, commit False) | double press right | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
+| hero — an intro (band_chev, commit False) | tap left | `back` | KEY FINGERPRINT (hero, p1) | UPDATE (hero, p1) |
+| hero — an intro (band_chev, commit False) | tap right | `enter` | KEY FINGERPRINT (hero, p1) | WORDS (value, p1) |
+| hero — an intro (band_chev, commit False) | hold left | `fired` | KEY FINGERPRINT (hero, p1) | DECLINED (status, p1) |
+| hero — an intro (band_chev, commit False) | hold right | `None` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | release a hold early (1000 ms) | `snapback` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | both buttons (chord) | `None` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | double press left | `None` | KEY FINGERPRINT (hero, p1) | UPDATE (hero, p1) |
+| hero — an intro (band_chev, commit False) | double press right | `None` | KEY FINGERPRINT (hero, p1) | CONFIRM UPDATE (hero, p1) |
 
 Both tables are executed against the reference driver. Read the intro's `hold right` row: `commit` is false there, so the right hold is unbound — see [unbound gestures](unbound-gestures.md).
 
@@ -79,9 +81,9 @@ Both tables are executed against the reference driver. Read the intro's `hold ri
 ## Do / Don't
 
 - **Do** resolve the hub target at the moment of the tap, from the segment the flow is standing in.
-- **Do** fire on release, inside `TAP_MAX_MS` 250 ms (3.5 f).
-- **Don't** make the left tap on a hero mean "back". There is nothing behind an ask: the intro is never returned to, and the first detail is reached by either side.
-- **Don't** read the corner chevrons as the source of truth for what is bound. An intro draws no corner pair — its caption carries the [band chevron](../components/band-chevron.md) instead — and still takes both taps and the left hold.
+- **Do** fire on release, inside `TAP_MAX_MS` 500 ms (7.0 f).
+- **Don't** let a left tap on a hero move forward — ever. It goes back one screen or does nothing.
+- **Don't** read the corner chevrons as the only source of truth for what is bound. An intro draws no corner pair — its caption carries the [band chevron](../components/band-chevron.md) instead — and still takes the right tap and the left hold.
 - **Don't** port the hero dwell (`HERO_DWELL` 5000 ms (70.0 f)): on the device a hero waits forever — see [demo auto-advance](demo-auto-advance.md).
 
 ## Port notes

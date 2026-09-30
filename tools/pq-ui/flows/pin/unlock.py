@@ -21,9 +21,14 @@ BODY = [
     attempt(last_attempt(2), id="TRY 2"),
 ]
 
+# TRY 3 carries the warning in its own caption instead of ENTER PIN: the
+# LAST ATTEMPT verdict is readable for RESULT_HOLD_MS and then the driver
+# moves on by itself (DESIGN.md § Input), so a signer who looked away would
+# otherwise type the locking attempt with nothing on screen saying it is the
+# last one (audit A11-03).
 ENDS = {
-    "unlocked": attempt(locked(), typed=PIN, id="TRY 3"),
-    "locked": attempt(locked(), id="TRY 3"),
+    "unlocked": attempt(locked(), typed=PIN, id="TRY 3", busy="LAST ATTEMPT"),
+    "locked": attempt(locked(), id="TRY 3", busy="LAST ATTEMPT"),
 }
 DEFAULT_END = "unlocked"
 SCREENS = BODY + [ENDS[DEFAULT_END]]

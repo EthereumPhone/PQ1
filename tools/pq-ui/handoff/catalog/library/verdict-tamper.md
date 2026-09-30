@@ -14,19 +14,19 @@ Tamper detected — the warning triangle's exclamation, centred, sounds the alar
 
 ## Timeline
 
-One variant, no presets. `t` is milliseconds since the screen's own t 0. The whole screen is the default `VerdictAnim.draw` — this module only supplies `draw_icon` and two shorter phase lengths.
+One variant, no presets. `t` is milliseconds since the screen's own t 0. The whole screen is the default `VerdictAnim.draw` — this module only supplies `draw_icon` and its phase lengths (the law's hold, a longer beat).
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold — the flow's token hands over | 350 | 4.9 | ease_out | `T_HOLD` | `screens/verdict/tamper.py:21` | shorter than the base verdict hold (`T_HOLD` 400 ms (5.6 f)): this screen keeps the timeline of its detail-grid twin, [sig error](verdict-sig-error.md). The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md) |
-| the triangle arrives — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:343` | alpha 0 to 1, height scales 0.97 to 1. The exclamation scales with it and is drawn opaque black from the first frame |
-| two decaying attention pulses | 900 | 12.6 | attention_pulse | `T_WAIT` | `screens/verdict/tamper.py:22` | the height is REPLACED by the pulse: 1 plus 0.09 times a decaying rectified sine at 2.5 half-cycles. It peaks 1.053 about a sixth of the way in and 1.016 past the middle — a 3.4 px swell on a 64 px triangle, and the mark swells with it |
+| black hold — the flow's token hands over | 429 | 6.0 | ease_out | `T_HOLD` | `screens/verdict/tamper.py:27` | the law's own hold, `VERDICT_HOLD_MS` 429 ms (6.0 f): this screen keeps the timeline of its detail-grid twin, [sig error](verdict-sig-error.md). The token crossfade runs only where the spec's `handoff` survives; otherwise the hold is plain black — see [handoff](../transitions/handoff.md) |
+| the triangle arrives — fade + rise | 300 | 4.2 | ease_out + arrive | `ARRIVE_MS` | `pq1/motion.py:431` | alpha 0 to 1, height scales 0.97 to 1. The exclamation scales with it and is drawn opaque black from the first frame |
+| two decaying attention pulses | 900 | 12.6 | attention_pulse | `T_WAIT` | `screens/verdict/tamper.py:28` | the height is REPLACED by the pulse: 1 plus 0.09 times a decaying rectified sine at 2.5 half-cycles. It peaks 1.053 about a sixth of the way in and 1.016 past the middle — a 3.2 px swell on a 60 px triangle, and the mark swells with it |
 | caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | TAMPER DETECTED on the y 128 baseline |
-| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | see [result hold](../transitions/result-hold.md) |
+| rest, then the flow moves on | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | see [result hold](../transitions/result-hold.md) |
 
 There is no separate beat on this screen: `T_WAIT` is the pulse window AND the verdict's beat, so the caption starts the instant the window closes. The pulse is gated `0 < v < 1`, and it *replaces* the entrance scale rather than multiplying it. The two never overlap — the entrance is finished before `v` goes positive — so the icon is never scaled twice, and after the window the height is exactly `TRI_H`. Note that 2.5 half-cycles put a third, nearly dead crest (scale 1.005) right at the end of the window, so the sign snaps back about a third of a pixel when it closes; close the window on a zero if you ever scale this sign up.
 
-**The rig** (`pq1/procedural/warning_triangle.py:14`). An apex-up filled triangle on a 72 x 64 unit bounding box (half-width 36, half-height 32), corners trimmed by 6/64 of the height and bridged with flattened quadratics whose control point is the original vertex. The un-rounded bounding box is centred on the circle grid (cx 214, cy 72); at `TRI_H` the triangle is 64 px tall and 1.125 times that wide. The exclamation is not part of the triangle — it is `marks.exclamation` composed on top (`pq1/procedural/marks.py:83`), at radius 16 units and 6.4 units below the bbox centre, both scaled by the same factor as the triangle. The triangle takes the screen's `state` colour (failed red); the mark is **always black**.
+**The rig** (`pq1/procedural/warning_triangle.py:23`). An apex-up filled triangle on a 72 x 64 unit bounding box (half-width 36, half-height 32), corners trimmed by 6/64 of the height and bridged with flattened quadratics whose control point is the original vertex. The un-rounded bounding box is centred on the circle grid (cx 214, cy 72); at `TRI_H` the triangle is 60 px tall and 1.125 times that wide. The exclamation is not part of the triangle — it is `marks.exclamation` composed on top (`pq1/procedural/marks.py:132`), at radius 16 units and 6.4 units below the bbox centre, both scaled by the same factor as the triangle. The triangle takes the screen's `state` colour (failed red); the mark is **always black**.
 
 That black is a real detail: the mark is drawn with the icon's alpha but the colour black, so scaling it by alpha leaves it black. During the fade-in the triangle rises out of the background while the exclamation is already a solid hole punched through it. Composite the icon as one layer with a layer alpha and you will get a different — wrong — result.
 
@@ -36,28 +36,29 @@ That black is a real detail: the mark is drawn with the icon's alpha but the col
 
 | variant | resolves at | total | result hold | can lead | owns the canvas | interactive | loops |
 |---|---:|---:|---:|---|---|---|---|
-| `(default)` | 1850 ms (25.9 f) | 4300 ms | 2450 ms | no | yes | no | no |
+| `(default)` | 1929 ms (27.0 f) | 4379 ms | 2450 ms | no | yes | no | no |
+| `firmware_tampered` | 1929 ms (27.0 f) | 4379 ms | 2450 ms | no | yes | no | no |
 
 ## Phases
 
-| phase attribute | `(default)` |
-|---|---:|
-| `T_HOLD` | 350 ms (4.9 f) |
-| `T_IN` | 300 ms (4.2 f) |
-| `T_TEXT` | 300 ms (4.2 f) |
-| `T_WAIT` | 900 ms (12.6 f) |
+| phase attribute | `(default)` | `firmware_tampered` |
+|---|---:|---:|
+| `T_HOLD` | 429 ms (6.0 f) | 429 ms (6.0 f) |
+| `T_IN` | 300 ms (4.2 f) | 300 ms (4.2 f) |
+| `T_TEXT` | 300 ms (4.2 f) | 300 ms (4.2 f) |
+| `T_WAIT` | 900 ms (12.6 f) | 900 ms (12.6 f) |
 
 ## Constants
 
 | module constant | value |
 |---|---|
-| `TRI_H` | `64` |
+| `TRI_H` | `60.0` |
 
-`TRI_H` is the triangle's height in UI pixels, chosen so the icon fills the centred circle slot.
+`TRI_H` is the triangle's height in UI pixels — the ONE notice height, `warning_triangle.NOTICE_H` (`pq1/procedural/warning_triangle.py:20`), derived from the sign box (`VERDICT_BOX` 64) and shared with [sig error](verdict-sig-error.md) and [wipe](verdict-wipe.md).
 
 ## Input
 
-None. It is a verdict: an ending accepts no press from its first frame to its last (`pq1/driver.py:230`), and the corner chevrons are hidden.
+None. It is a verdict: an ending accepts no press from its first frame to its last (`pq1/driver.py:234`), and the corner chevrons are hidden.
 
 ## Spec a flow splices in
 
@@ -79,6 +80,10 @@ Splice it as `screens.spec("tamper")`, or with your own `bottom` for another ala
 **default**
 
 ![default](../../previews/verdict-tamper.gif)
+
+**firmware_tampered**
+
+![firmware_tampered](../../previews/verdict-tamper--firmware_tampered.gif)
 
 ## Do / Don't
 

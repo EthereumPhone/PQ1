@@ -14,7 +14,7 @@ One law, two dresses. **Branding fills the disc; no branding strokes it.**
 | flash ring as the result lands | the state colour | the resting fill — never state green over a brand disc |
 | caption | white | white |
 
-State colours come from `colors.STATE` ({{loc:pq1.colors.STATE}}): done {{val:pq1.colors.GREEN}}, failed {{val:pq1.colors.RED}}, warning {{val:pq1.colors.ORANGE}}, awaiting {{val:pq1.colors.YELLOW}}. Live flows use only done and failed today; warning appears on library screens.
+State colours come from `colors.STATE` ({{loc:pq1.colors.STATE}}): done {{col:pq1.colors.GREEN}}, failed {{col:pq1.colors.RED}}, warning {{col:pq1.colors.ORANGE}}, awaiting {{col:pq1.colors.YELLOW}}. Live flows use only done and failed today; warning appears on library screens.
 
 ## When it appears
 
@@ -24,11 +24,11 @@ Branded: three families today — the three that pass a `resting` override.
 
 | family | SIGNED / done | DECLINED |
 |---|---|---|
-| SAFE ({{loc:flows.safe.ends}}) | `#13FF7F` disc, black check | red disc, black X |
-| CoW Swap ({{loc:flows.cowswap.ends}}) | `#65D9FF` disc, navy check {{val:pq1.colors.COWSWAP_DARK}} | red disc, **black** X |
+| SAFE ({{loc:flows.safe.ends}}) | {{col:pq1.colors.SAFE_GRADIENT[-1]}} disc, black check | red disc, black X |
+| CoW Swap ({{loc:flows.cowswap.ends}}) | {{col:pq1.colors.COWSWAP_GRADIENT[-1]}} disc, navy check {{col:pq1.colors.COWSWAP_DARK}} | red disc, **black** X |
 | firmware ({{loc:flows.firmware.ends}}) | white disc, black check | red disc, black X |
 
-Red is {{val:pq1.colors.RED}}. It is the **one cancel circle every family shares**: a family's own mark colour dresses SIGNED only.
+Red is {{col:pq1.colors.RED}}. It is the **one cancel circle every family shares**: a family's own mark colour dresses SIGNED only.
 
 {{used-in}}
 
@@ -47,7 +47,7 @@ Build the override with `status.branded_resting(fill, mark=BLACK)` ({{loc:pq1.st
 ## Geometry
 
 - Disc: centre x {{val:pq1.layout.CENTER_X}}, y {{val:pq1.layout.CIRCLE_CY}}, the full layout radius {{val:pq1.layout.CIRCLE_R}}.
-- Ring: {{tok:pq1.components.TOKEN_RING_W}} px wide, stroked **inward** from its radius. Unbranded: outer edge {{val:pq1.components.TOKEN_INSET}} px inside the layout radius — exactly where a flow token's ring sits, so the ring does not jump when the token resolves. Branded: outer edge on the layout radius.
+- Ring: {{tok:pq1.components.TOKEN_RING_W}} wide, stroked **inward** from its radius. Unbranded: outer edge {{val:pq1.components.TOKEN_INSET}} px inside the layout radius — exactly where a flow token's ring sits, so the ring does not jump when the token resolves. Branded: outer edge on the layout radius.
 - What shows on the black panel: a black ring over a black ground is invisible. A branded disc therefore reads as a filled disc whose radius is the layout radius minus the ring width. Draw it as the code does — the full disc, then the black ring over its rim — and the size comes out right.
 - Glyph: `check` or `x`, drawn at the disc centre for the full radius ({{loc:pq1.status.RESULTS}}). `result: None` draws no glyph.
 - Caption: see [caption](../components/caption.md). Chevrons are hidden on every status screen ({{loc:pq1.layout.normalize_screens}}); here they are hidden because an ending takes no input.
@@ -57,10 +57,10 @@ Build the override with `status.branded_resting(fill, mark=BLACK)` ({{loc:pq1.st
 The look itself does not move. How it lands depends on the screen's animation; the glyph-then-caption order is the same everywhere.
 
 {{motion-head}}
-{{row:qubit film: the flash beat — the single body returns already wearing the resting fill and ring | qubit:T_FLASH | back_out | radius 17 px to full; the one sanctioned overshoot. Flash ring: radius +55 px, alpha 0.85 to 0, both linear — see [flash ring](../components/flash-ring.md)}}
+{{row:qubit film: the flash beat — the single body returns already wearing the resting fill and ring | qubit:T_FLASH | back_out | radius 17 px to full; the one sanctioned overshoot. Flash ring: radius +55 px, alpha `FLASH_ALPHA` {{val:pq1.colors.FLASH_ALPHA}} to 0, both linear — see [flash ring](../components/flash-ring.md)}}
 {{row:cancel resolve: token disc, ring and radius crossfade into the look | qubit:T_FLASH | ease_out | the resolve runs one flash beat — `ResolveStatus` takes the film's `T_FLASH` as its whole resolve. Fill and ring colours mix; the disc edge eases out to the full radius; a branded (flush) ring travels the inset outward, an unbranded one is already at the token edge and does not move. The token glyph is gone by 45 % of the beat (linear)}}
-{{row:film and resolve: the result glyph fades in | - | linear | starts when the beat ends; length is a literal in the code: {{lit:350 ms}}}}
-{{row:film and resolve: the caption fades in | - | linear | same length, starts {{lit:120 ms}} after the glyph}}
+{{row:film and resolve: the result glyph fades in | pq1.motion.RESULT_FADE_MS | ease_out | starts when the beat ends — an entrance}}
+{{row:film and resolve: the caption fades in | pq1.motion.RESULT_FADE_MS | ease_out | same length, starts {{tok:pq1.motion.RESULT_LAG_MS}} after the glyph; the hold counts from the landing}}
 {{row:arrive: black hold | pq1.status.ArriveStatus.T_HOLD | hold | after a [lead film](../transitions/lead-film.md) emptied the canvas}}
 {{row:arrive: disc, ring and glyph together | pq1.status.ArriveStatus.T_IN | ease_out + arrive | alpha on ease_out, scale {{val:pq1.motion.ARRIVE_FROM}} to 1 on arrive — the [verdict entrance law](../transitions/verdict-law.md); no flash ring}}
 {{row:arrive: beat | pq1.status.ArriveStatus.T_WAIT | hold | }}

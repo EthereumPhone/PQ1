@@ -18,16 +18,16 @@ Two properties, both on `StatusAnim`:
 | `t_tail` set | ms the film keeps drawing past its `t_resolve` | it is the proof that the film **empties** the canvas instead of resting on a look |
 | `rests_on_token` False | the film owns the canvas | nothing of it is left for the flow to morph |
 
-Only the [explosion](../library/fx-explosion.md) qualifies today. `status.anim_for` (`pq1/status.py:737`) tests `t_tail` alone and raises a `ValueError` naming the reason when a spec asks anything else to lead — a build-time refusal, not a runtime fallback. Keep that refusal in a port: a film that rests on a look would leave its token sitting under the sign. (`rests_on_token` is not tested there, because the led screen reports the **main's** flag either way; it is simply true of every film that empties the canvas.)
+Only the [explosion](../library/fx-explosion.md) qualifies today. `status.anim_for` (`pq1/status.py:812`) tests `t_tail` alone and raises a `ValueError` naming the reason when a spec asks anything else to lead — a build-time refusal, not a runtime fallback. Keep that refusal in a port: a film that rests on a look would leave its token sitting under the sign. (`rests_on_token` is not tested there, because the led screen reports the **main's** flag either way; it is simply true of every film that empties the canvas.)
 
 ## The joint
 
-`LedAnim` (`pq1/status.py:568`) holds one clock `t` from the screen's time 0.
+`LedAnim` (`pq1/status.py:614`) holds one clock `t` from the screen's time 0.
 
 | moment | expression |
 |---|---|
-| the lead resolves — the boom lands, the first ring is done | `lead.t_resolve` — a property: a looping lead moves it by its wraps, and `t_start` (`pq1/status.py:620`) follows ([loading loop](loading-loop.md)) |
-| the main starts, on its own clock `t − t_start` | `t_start` = `lead.t_resolve` + `lead_gap` |
+| the lead resolves — the boom lands, the first ring is done | `lead.t_resolve` — a property: a looping lead moves it by its wraps, and `t_start` (`pq1/status.py:681`) follows ([loading loop](loading-loop.md)) |
+| the main starts, on its own clock `t − t_start` | `t_start` = `lead.t_resolve` + `lead.t_tail` + `lead_clear` − `main.T_HOLD` — so the main's black hold ends, and its sign starts to fade in, `lead_clear` ms after the tail has cleared |
 | the lead stops drawing | `lead.t_resolve` + `lead.t_tail` |
 | the screen resolves | `t_start` + `main.t_resolve` |
 | the screen ends | `t_start` + `main.duration` |
@@ -36,21 +36,22 @@ Both draw in the overlap, the main second — so the main is always on top. Ever
 
 ## The tail, and why the overlap is deliberate
 
-The explosion's rings are launched one stagger apart and each flies for the same time, so the last ring lands `(rings − 1) × stagger` after the first — that is `t_tail`. A **major** tail outlasts the black hold that opens a verdict or an [arriving ending](../screen-types/status-arrive.md): with no gap the entrance begins while the last faint ring is still expanding, which is exactly the intended read — the sign appears *as* the blast clears, not after it. That is what the firmware endings show (the major film, then `arrive`).
+The explosion's rings are launched one stagger apart and each flies for the same time, so the last ring lands `(rings − 1) × stagger` after the first — that is `t_tail`. **One clearance places every led screen**: the main is positioned from the moment the tail clears, not from the resolve, so a longer or shorter tail — or a main with a different black hold — never moves the read. The default, `LEAD_CLEAR_MS` -180 ms (-2.5 f) (`pq1/status.py:113`), is negative: the sign starts to fade in while the last faint ring is still expanding, which is exactly the intended read — the sign appears *as* the blast clears, not after it. That is what the firmware endings show (the major film, then `arrive`): FIRMWARE UPDATED and UPDATE DECLINED rise on the same clearance.
 
-`lead_gap` (ms, default 0) pushes the main later and opts out of that overlap. WALLET WIPED sets one longer than the tail, so the blast is completely gone and the panel is black before the verdict's own hold even starts.
+`lead_clear` (spec key, ms) overrides the clearance. WALLET WIPED passes `lead_clear=700` in its preset (`screens/verdict/wipe.py`), so the blast is completely gone and the panel has been black for a beat before its sign arrives.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | the lead plays, to the boom | 7800 | 109.2 | — | `t_resolve` | `screens/fx/explosion.py:124` | the stock major film; `revs` and `enter` move this — see [side entrance](side-entrance.md) |
-| the major tail, drawing past the resolve | 580 | 8.1 | linear + decel | `t_tail` | `pq1/status.py:204` | 5 rings, one launched every 145 ms; each ring's brightness falls linearly over its flight while its radius grows on the inlined power curve `1 − (1 − u)^p`, p 2.6 |
-| the minor tail | 145 | 2.0 | linear + decel | `t_tail` | `pq1/status.py:204` | 2 rings: one stagger |
-| the main's black hold, under the tail | 400 | 5.6 | hold | `T_HOLD` | `pq1/verdict.py:41` | shorter than a major tail — the overlap is by design; an `arrive` ending declares the same span itself (`pq1/status.py:520`) |
-| the flow-token handoff, when `handoff` is set | 400 | 5.6 | ease_out | `HANDOFF_MS` | `pq1/status.py:578` | from the screen's time 0, under the lead — see [handoff crossfade](handoff.md) |
-| WALLET WIPED — where its main starts | 9448 | 132.3 | — | `t_resolve - T_HOLD - T_IN - T_WAIT - T_TEXT` | `pq1/status.py:625` | its `lead_gap` outlasts the tail, so black separates the two |
-| WALLET WIPED — the whole screen | 14598 | 204.4 | — | `duration` | `pq1/status.py:629` | lead + gap + verdict + one result hold |
+| the major tail, drawing past the resolve | 580 | 8.1 | linear + decel | `t_tail` | `pq1/status.py:230` | 5 rings, one launched every 145 ms; each ring's brightness falls linearly over its flight while its radius grows on the inlined power curve `1 − (1 − u)^p`, p 2.6 |
+| the minor tail | 145 | 2.0 | linear + decel | `t_tail` | `pq1/status.py:230` | 2 rings: one stagger |
+| the main's black hold, under the tail | 429 | 6.0 | hold | `VERDICT_HOLD_MS` | `pq1/motion.py:426` | shorter than a major tail — the overlap is by design; placed so it ends `lead_clear` after the tail clears. An `arrive` ending declares the same span itself (`pq1/status.py:560`) |
+| default clearance — sign starts vs. tail cleared | -180 | -2.5 | — | `LEAD_CLEAR_MS` | `pq1/status.py:113` | negative: the sign rises as the blast clears |
+| the flow-token handoff, when `handoff` is set | 429 | 6.0 | ease_out | `HANDOFF_MS` | `pq1/status.py:625` | from the screen's time 0, under the lead — see [handoff crossfade](handoff.md) |
+| WALLET WIPED — where its main starts | 9599 | 134.4 | — | `t_resolve - T_HOLD - T_IN - T_WAIT - T_TEXT` | `pq1/status.py:692` | its `lead_clear` is positive, so black separates the two |
+| WALLET WIPED — the whole screen | 14778 | 206.9 | — | `duration` | `pq1/status.py:696` | lead + tail + clearance + verdict + one result hold |
 
 Durations add, once. The [result hold](result-hold.md) is the main's and is counted once, at the end — never after the lead.
 
@@ -61,7 +62,7 @@ None, from the lead's first frame to the end of the result hold ([unbound gestur
 ## Do / Don't
 
 - **Do** keep it **one** screen. Two status screens would mean two dwells, two result holds and a black transit in the middle.
-- **Do** draw the main over the tail, and only delay it when `lead_gap` says so.
+- **Do** draw the main over the tail, and place it from the tail's clearance (`lead_clear`), never from the resolve plus a gap.
 - **Do** force `handoff=False` on the lead itself: only the outer screen crossfades the flow's token, and it does so under the lead.
 - **Don't** port `burst.HOLD_END` (`pq1/procedural/burst.py:62`). It records the original films' post-boom rest and nothing reads it; the rest that actually plays is `RESULT_HOLD_MS` 2450 ms (34.3 f).
 - **Don't** let a film that rests on a look lead. Refuse it where the screen is built, as the reference does.

@@ -28,8 +28,9 @@ one. Before calling any screen done, run the `pq1-conformance` skill (`skill/pq1
 8. **Hold** = the fill stays empty until {{val:pq1.motion.TAP_MAX_MS}}, then rises **linearly** to full at
    {{tok:pq1.motion.HOLD_COMMIT_MS}} from press-**down**; the action fires only at completion. An early
    release drains it over {{tok:pq1.motion.HOLD_SNAPBACK_MS}} on `ease_out` and does nothing. The first live hold wins.
-9. **Left regresses, right progresses — never flipped.** The ask is the hub: either tap enters the
-   details. Decline (hold left) is armed on every navigable screen; sign (hold right) only where the
+9. **Left regresses, right progresses — never flipped.** The ask is the hub: a right tap enters the
+   details; a left tap on an idle screen goes back one screen or does nothing — never forward — and
+   the hero keeps both chevrons either way (`layout.back_target`). Decline (hold left) is armed on every navigable screen; sign (hold right) only where the
    screen commits (the ask, Confirm?). Endings accept no input.
 10. **A press is never dropped.** Input during a transit retargets the springs from the live pose.
     Nothing moves without a press: dwell timers and auto-advance are demo-only.
@@ -52,7 +53,10 @@ one. Before calling any screen done, run the `pq1-conformance` skill (`skill/pq1
     at y {{val:pq1.layout.CIRCLE_CY}} and never resizes; all band text sits on baseline y {{val:pq1.layout.BASELINE_Y}}.
 18. **Data stays data.** Amounts, symbols, addresses, hashes are per-transaction values — never constants,
     never re-cased. An unknown token wears the gradient hashed from its **address**; the gradient is
-    reserved for unrecognised tokens. Icon art is procedural (traced paths), never a recoloured bitmap.
+    reserved for unrecognised tokens. Icon art is procedural (traced paths), never a recoloured bitmap —
+    a rule that now holds without exception: the raster ether mark is gone, `eth` is the traced mark in
+    `pq1/procedural/eth.py`, and the only bitmaps left are full-bleed brand logos the disc *wears*
+    (`spec/icons.json` publishes the whole set, kind by kind — see `catalog/components/icons.md`).
 19. **Unknown names fail loudly — except the icon.** An unknown `anim`, `state` or `result` raises; never
     invent one. (All three are enforced: see `spec/screens.schema.json` → `enums_enforced`.)
 20. **The Ethereum mark is the deliberate fallback for an icon.** A screen that names no `icon` takes
@@ -66,6 +70,10 @@ one. Before calling any screen done, run the `pq1-conformance` skill (`skill/pq1
     the `letter:` namespace is matched by shape, never a registry entry). Drawing Ethereum's mark
     would name a *different network*, which is the one case where the fallback would state
     something false rather than merely generic. The disc is still never empty.
+    **The fallback is a runtime answer, not a spelling check:** an icon name outside
+    `spec/screens.schema.json` → `enums.icon` and `enums.icon_namespaces` is a firmware **build**
+    error (the design system's own `F-ICON` rule catches it there), so the ether mark is only ever
+    reached for a token whose art this device genuinely lacks — never for a typo, and never for a chain.
 21. **But a name the registry DOES hold must never degrade.** Resolve every brand mark eagerly at
     startup. In the Python the family marks (`safe`, `cowswap`) register when their flow package is
     imported, so `{"icon": "safe"}` can draw the Ethereum mark if that import has not happened — and the

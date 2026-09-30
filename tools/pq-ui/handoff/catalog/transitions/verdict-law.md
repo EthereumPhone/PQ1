@@ -19,20 +19,20 @@ The icon arrives on the circle grid — its resting optical centre on x 214, y 7
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
-| black hold | 400 | 5.6 | hold | `T_HOLD` | `pq1/verdict.py:41` | nothing of the screen draws. With `handoff` the flow's token washes out here — see [handoff crossfade](handoff.md) |
+| black hold | 429 | 6.0 | hold | `T_HOLD` | `pq1/verdict.py:41` | nothing of the screen draws. With `handoff` the flow's token washes out here — see [handoff crossfade](handoff.md) |
 | the icon arrives | 300 | 4.2 | ease_out + arrive | `T_IN` | `pq1/verdict.py:42` | `draw_icon` is called with the raw progress `u` through this window, and only once `u` is past zero |
 | the beat — the mechanism's window | 450 | 6.3 | — | `T_WAIT` | `pq1/verdict.py:43` | the icon stands, or performs: a shake, a tumble, a spin-down. Each verdict fills this itself. `draw_icon` keeps being called for the rest of the screen with `u` clamped at 1, so a mechanism reads the screen clock `t`, never `u` |
 | the caption fades in | 300 | 4.2 | ease_out | `T_TEXT` | `pq1/verdict.py:44` | one line of 18 px caps on the y 128 baseline |
-| resolved | 1450 | 20.3 | — | `T_HOLD + T_IN + T_WAIT + T_TEXT` | `pq1/verdict.py:41` | `t_resolve` is the sum of the four, nothing else |
-| the screen rests | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:101` | the same for every resolving screen |
-| whole screen | 3900 | 54.6 | — | `T_HOLD + T_IN + T_WAIT + T_TEXT + RESULT_HOLD_MS` | `pq1/verdict.py:41` | `duration` = `t_resolve` + the result hold |
+| resolved | 1479 | 20.7 | — | `T_HOLD + T_IN + T_WAIT + T_TEXT` | `pq1/verdict.py:41` | `t_resolve` is the sum of the four, nothing else |
+| the screen rests | 2450 | 34.3 | hold | `RESULT_HOLD_MS` | `pq1/status.py:107` | the same for every resolving screen |
+| whole screen | 3929 | 55.0 | — | `T_HOLD + T_IN + T_WAIT + T_TEXT + RESULT_HOLD_MS` | `pq1/verdict.py:41` | `duration` = `t_resolve` + the result hold |
 
 ## The entrance law
 
 Inside `T_IN`, from the same linear progress `u`, `VerdictAnim.entrance` (`pq1/verdict.py:54`) returns two channels and nothing else:
 
 - **alpha** = `ease_out(u)` — a plain fade in.
-- **scale** = `motion.arrive(u)` (`pq1/motion.py:347`) — `ARRIVE_FROM` 0.97 rising to 1, also on `ease_out`.
+- **scale** = `motion.arrive(u)` (`pq1/motion.py:435`) — `ARRIVE_FROM` 0.97 rising to 1, also on `ease_out`.
 
 A rise of three percent, **never an overshoot**, and never longer than `ARRIVE_MS` 300 ms (4.2 f). `pop` and `back_out` exist for celebrations; they are not entrances. There is one source for these two lines: a verdict calls `self.entrance(u)`, it does not re-derive them.
 
@@ -42,7 +42,7 @@ A mechanism plays on the **arrived** icon. Its own window may be as long as the 
 
 | phase | may a screen change it? |
 |---|---|
-| `T_HOLD` | yes — 250 to 500 across the library. It is also the [handoff](handoff.md) span, so a longer hold means a slower token crossfade |
+| `T_HOLD` | only between the two named holds: `VERDICT_HOLD_MS` 429 ms (6.0 f) (six panel frames, every verdict) and `PIN_HOLD_MS` 286 ms (4.0 f) (four, the PIN outcomes — they answer a keypress). Both sit on the panel's frame grid, so every entrance starts on a frame. It is also the [handoff](handoff.md) span |
 | `T_IN` | **no.** It is `ARRIVE_MS` 300 ms (4.2 f), the law's maximum. A mechanism belongs in `T_WAIT` |
 | `T_WAIT` | yes, freely — this is where mechanisms live. Zero is legal |
 | `T_TEXT` | no screen changes it; it is the caption fade |
@@ -50,7 +50,7 @@ A mechanism plays on the **arrived** icon. Its own window may be as long as the 
 
 The conformance checker enforces exactly this: `V-TIN` (an error when `T_IN` exceeds `ARRIVE_MS`), `V-SUM` (`t_resolve` is the sum), `V-HOLD` (the rest is `RESULT_HOLD_MS`), `V-ENTRANCE` (no second copy of the two entrance lines), and `V-PHASEVAR`, which simply records the screens with a non-default `T_HOLD` / `T_WAIT`.
 
-One screen breaks the phase bookkeeping on purpose and is baselined: the **padlock** puts its whole mechanism inside `T_IN` and then recomputes the entrance inline against `ARRIVE_MS`. What you see obeys the law; the phase table does not. Port the padlock's mechanism as a `T_WAIT`, not as a long `T_IN`.
+The **padlock** is the model for a mechanism that starts under the entrance: its `T_IN` is `ARRIVE_MS` like everyone's, its `T_WAIT` is the rest of the mechanism window (`T_MECH − ARRIVE_MS`, the unlock's own longer window likewise), and its scale comes from `self.entrance(u)` — the phase table and what you see agree.
 
 ## Every verdict in the library
 
@@ -58,28 +58,27 @@ Phase lengths per instance, in ms; the machine-readable copy is `spec/anims.json
 
 | verdict | `T_HOLD` | `T_IN` | `T_WAIT` | resolves | ends | what fills `T_WAIT` |
 |---|---:|---:|---:|---:|---:|---|
-| [firmware verified](../library/verdict-firmware-verified.md) | 400 | 300 | 450 | 1450 | 3900 | nothing — the law untouched |
-| [headshake](../library/verdict-headshake.md) | 400 | 300 | 870 | 1870 | 4320 | one decaying head shake, then a beat |
-| [shield](../library/verdict-shield.md) — `backup_ok` | 400 | 300 | 1150 | 2150 | 4600 | the nod, then a beat |
-| shield — `no_match` | 400 | 300 | 870 | 1870 | 4320 | the wiggle, then a beat |
-| [padlock](../library/verdict-padlock.md) — `lock` | 500 | 1070 | 0 | 1870 | 4320 | turn-in, drop, click — inside `T_IN`, see above |
-| padlock — `unlock` | 500 | 1600 | 0 | 2400 | 4850 | snap, body kick, pause, swing out — likewise |
-| [pin mismatch](../library/verdict-pin-mismatch.md) | 250 | 300 | 1220 | 2070 | 4520 | the row fills, holds, turns red, is shaken off, beat |
-| [last attempt](../library/verdict-last-attempt.md) | 400 | 300 | 3800 | 4800 | 7250 | rest, the reel down to 1, a wobble, the heart's pumps |
-| [rng failed](../library/verdict-rng-failed.md) | 400 | 300 | 2000 | 3000 | 5450 | the die rests, tumbles on three axes, lands, beat |
-| [sig error](../library/verdict-sig-error.md) | 350 | 300 | 900 | 1850 | 4300 | two decaying attention pulses (on the detail grid) |
-| [tamper](../library/verdict-tamper.md) | 350 | 300 | 900 | 1850 | 4300 | the same two pulses, centred |
-| [wipe](../library/verdict-wipe.md) — `wallet_wiped` | 400 | 300 | 1200 | 2200 | 4650 | the brush mark, then the pulse treatment |
-| wipe — `wallet_wiped_anim` | 400 | 300 | 1700 | 2700 | 5150 | the brush mark, then the sweep treatment |
-| wipe — `wallet_wiped_explosion` | 400 | 300 | 1700 | 12148 | 14598 | the same verdict, after a [lead film](lead-film.md) — the phases are unchanged, the clock starts later |
-| [duress differ](../library/verdict-duress-differ.md) | 250 | 300 | 1470 | 2320 | 4770 | the row holds, the scanline crosses and returns, the shake, beat |
-| [factory signing](../library/verdict-factory-signing.md) | 350 | 300 | 1650 | 2600 | 5050 | the gear coasts to a stop — it is already turning as it arrives — then a beat |
+| [firmware verified](../library/verdict-firmware-verified.md) | 429 | 300 | 450 | 1479 | 3929 | nothing — the law untouched |
+| [headshake](../library/verdict-headshake.md) | 429 | 300 | 870 | 1899 | 4349 | one decaying head shake, then a beat |
+| [shield](../library/verdict-shield.md) — `backup_ok` | 429 | 300 | 1150 | 2179 | 4629 | the nod, then a beat |
+| shield — `no_match` | 429 | 300 | 870 | 1899 | 4349 | the wiggle, then a beat |
+| [padlock](../library/verdict-padlock.md) — `lock` | 429 | 300 | 770 | 1799 | 4249 | turn-in, drop, click — inside `T_IN`, see above |
+| padlock — `unlock` | 429 | 300 | 1300 | 2329 | 4779 | snap, body kick, pause, swing out — likewise |
+| [pin mismatch](../library/verdict-pin-mismatch.md) | 286 | 300 | 1220 | 2106 | 4556 | the row fills, holds, turns red, is shaken off, beat |
+| [last attempt](../library/verdict-last-attempt.md) | 429 | 300 | 3800 | 4829 | 7279 | rest, the reel down to 1, a wobble, the heart's pumps |
+| [rng failed](../library/verdict-rng-failed.md) | 429 | 300 | 2000 | 3029 | 5479 | the die rests, tumbles on three axes, lands, beat |
+| [sig error](../library/verdict-sig-error.md) | 429 | 300 | 900 | 1929 | 4379 | two decaying attention pulses (on the detail grid) |
+| [tamper](../library/verdict-tamper.md) | 429 | 300 | 900 | 1929 | 4379 | the same two pulses, centred |
+| [wipe](../library/verdict-wipe.md) — `wallet_wiped_anim` | 429 | 300 | 1700 | 2729 | 5179 | the brush mark, then the swiffle |
+| wipe — `wallet_wiped_explosion` | 429 | 300 | 1700 | 12328 | 14778 | the same verdict, after a [lead film](lead-film.md) — the phases are unchanged, the clock starts later |
+| [duress differ](../library/verdict-duress-differ.md) | 286 | 300 | 2040 | 2926 | 5376 | the row holds, the scanline crosses and returns, the shake, beat |
+| [factory signing](../library/verdict-factory-signing.md) | 429 | 300 | 1650 | 2679 | 5129 | the gear coasts to a stop — it is already turning as it arrives — then a beat |
 
 ## Who else obeys it
 
-[arrive](../screen-types/status-arrive.md) — an ending with no film of its own — uses the same four phases and the same entrance for the resting look instead of an icon. It types the numbers out again rather than inheriting them; they are the same numbers and should be one table in a port.
+[arrive](../screen-types/status-arrive.md) — an ending with no film of its own — uses the same four phases and the same entrance for the resting look instead of an icon. Its hold and entrance read the same tokens (`VERDICT_HOLD_MS`, `ARRIVE_MS`); its beat and caption fade are typed again beside them — the same numbers, and one table in a port.
 
-Not under the law: the [qubit film](../screen-types/status-qubit.md), the [resolve](../screen-types/status-resolve.md), the [explosion](../library/fx-explosion.md) and the hold demo — those are films, with timelines of their own. Note that `pin/pin_differ` is a verdict-shaped screen that is **not** a `VerdictAnim`: it fades its pill in with `ease` over its own hold, with no rise and no handoff. Its twin `verdict/duress_differ` is the one to copy.
+Not under the law: the [qubit film](../screen-types/status-qubit.md), the [resolve](../screen-types/status-resolve.md), the [explosion](../library/fx-explosion.md) and the hold demo — those are films, with timelines of their own. `pin/pin_differ` is `verdict/duress_differ` under its pin-category name, so it is under the law too.
 
 ## Input
 

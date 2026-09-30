@@ -11,7 +11,7 @@ The one question a flow exists to ask — `SEND 12,500 TOSHI?`, `SIGN SAFE TX?`.
 
 ## When it appears
 
-First screen of almost every flow (after an [intro](hero-intro.md) when the family has one), and again as the return point after the last detail. Used in 29 of 31 flows: `approve_token` ×2, `batch/transfers` ×3, `batch/transfers_declined` ×2, `blind/bare_call` ×2, `blind/call_with_value` ×2, `blind/typed_call/sign_with_args` ×2, `blind/unknown_call` ×2, `contract_call` ×2 … and 21 more (see the matrix in [INDEX](../INDEX.md))
+First screen of almost every flow (after an [intro](hero-intro.md) when the family has one), and again as the return point after the last detail. Used in 30 of 33 flows: `approve_token` ×2, `batch/transfers` ×3, `batch/transfers_declined` ×2, `blind/bare_call` ×2, `blind/call_with_value` ×2, `blind/typed_call/sign_with_args` ×2, `blind/unknown_call` ×2, `contract_call` ×2 … and 22 more (see the matrix in [INDEX](../INDEX.md))
 
 ## Spec
 
@@ -34,12 +34,12 @@ Screen 1 of flow `send_token`, as the design system normalizes it (defaults fill
  'bottom': 'SEND 12,500 TOSHI?',
  'chev': 'lr',
  'hint': True,
- 'icon': 'eth',
+ 'icon': 'letter:T',
  'token': {'palette': 'TOSHI'},
  'commit': True}
 ```
 
-`commit` defaults to true on a hero: the right hold is armed. `chev` defaults to `"lr"`: taps navigate.
+`commit` defaults to true on a hero: the right hold is armed. `chev` defaults to `"lr"`: taps navigate. Both chevrons show even on the flow's opening ask, where a left tap does nothing (`layout.back_target`).
 
 ## Geometry
 
@@ -48,18 +48,18 @@ Screen 1 of flow `send_token`, as the design system normalizes it (defaults fill
 | circle | centre x 214, y 72, r 30 |
 | text `SEND 12,500 TOSHI?` | x 214, y 128, size 18 |
 
-The circle never resizes (`CIRCLE_R` 30 px, centre y 72). The caption sits on the shared baseline y 128. Corner chevrons: `pq1/layout.py:277`.
+The circle never resizes (`CIRCLE_R` 30 px, centre y 72). The caption sits on the shared baseline y 128. Corner chevrons: `pq1/layout.py:348`.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | arrive from the previous screen | — | — | spring NAV | — | — | circle x / y / r + glyph mix + text alpha on one spring set — see [spring morph](../transitions/spring-morph.md) |
-| caption fades in after the circle starts | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | the disc leads, the words follow |
-| rest before the idle sweep starts | 1000 | 14.0 | — | `SWEEP_DELAY_MS` | `pq1/motion.py:204` |  |
-| idle sweep, one full side-to-side cycle | 5000 | 70.0 | sine + tau_chase | `SWEEP_PERIOD_MS` | `pq1/motion.py:205` | amplitude 95 px, smoothed with tau 180; stays inside x 89–339 |
-| chevron hint cycle (only when `hint` is set) | 3600 | 50.4 | ease | `CHEV_HINT_PERIOD_MS` | `pq1/motion.py:308` | the chevrons turn up and bob — see [chevrons](../components/chevrons.md) |
-| trail follows the sweeping disc | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:213` | slower chase than in a transit (60) |
+| caption fades in after the circle starts | 150 | 2.1 | spring NAV | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | the disc leads, the words follow |
+| rest before the idle sweep starts | 1000 | 14.0 | — | `SWEEP_DELAY_MS` | `pq1/motion.py:257` |  |
+| idle sweep, one full side-to-side cycle | 5000 | 70.0 | sine + tau_chase | `SWEEP_PERIOD_MS` | `pq1/motion.py:258` | amplitude 95 px, smoothed with tau 180; stays inside x 89–339 |
+| chevron hint cycle (only when `hint` is set) | 3571 | 50.0 | ease_out + sine | `CHEV_HINT_PERIOD_MS` | `pq1/motion.py:383` | first `CHEV_HINT_START_MS` 1429 ms (20.0 f) after settling; the chevrons turn up on the `hint_env` envelope and bob — see [chevrons](../components/chevrons.md) |
+| trail follows the sweeping disc | 150 | 2.1 | tau_chase | `CHAIN_TAU_IDLE` | `pq1/motion.py:266` | slower chase than in a transit (60) |
 
 A press recentres a sweeping disc: while a hold is live the sweep target is zero, so the disc glides home and the fill rises in a disc that stands still.
 
@@ -67,16 +67,16 @@ A press recentres a sweeping disc: while a hold is live the sweep target is zero
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — the ask (flow has details) | tap left | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
+| hero — the ask (flow has details) | tap left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | tap right | `enter` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | hold left | `fired` | SEND (hero, p1) | DECLINED (status, p1) |
 | hero — the ask (flow has details) | hold right | `fired` | SEND (hero, p1) | SUCCESSFUL (status, p1) |
 | hero — the ask (flow has details) | release a hold early (1000 ms) | `snapback` | SEND (hero, p1) | SEND (hero, p1) |
-| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | TO (detail, p1) |
+| hero — the ask (flow has details) | both buttons (chord) | `None` | SEND (hero, p1) | NETWORK (detail, p1) |
 | hero — the ask (flow has details) | double press left | `None` | SEND (hero, p1) | SEND (hero, p1) |
 | hero — the ask (flow has details) | double press right | `None` | SEND (hero, p1) | TO (detail, p1) |
 
-Either tap enters the details — the ask never regresses to an intro. `hold right` signs; `hold left` declines. See [tap on the ask](../actions/tap-hub.md), [hold right — sign](../actions/hold-right-sign.md).
+A right tap enters the details. A left tap never leads on: it goes back one screen where there is one (the returning ask to the last detail, an ask to its intro) and does nothing on the opening ask. `hold right` signs; `hold left` declines. See [tap on the ask](../actions/tap-hub.md), [hold right — sign](../actions/hold-right-sign.md).
 
 ## Preview
 

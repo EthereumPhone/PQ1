@@ -17,8 +17,8 @@ the rest on the arrived sign, so the count is read before it falls:
 Geometry from the source (digit x 199 / heart x 233, 34 px apart, one
 line y 67; 40 px digit, 30 px heart) re-centred so the RESTING sign —
 the 1 and the heart — sits on the circle grid (214, 72). The digit is
-sign art, not type: it keeps the source's 40 px, whose cap height is the
-heart's height, rather than the type scale's 36, and it is SemiBold (the
+sign art, not detail text: it stands on the DISPLAY tier (SIZE_DISPLAY — the
+source's 40 px, whose cap height is the heart's height), and it is SemiBold (the
 600 weight, the label caps' face — user request, Sep 2026; the source's
 own medium weight is not a PQ1 face).
 
@@ -26,7 +26,7 @@ own medium weight is not a PQ1 face).
     screens.spec("last_attempt", attempts=3)    # 3 -> 1
     python3 -m screens last_attempt --attempts 5
 """
-from pq1 import status
+from pq1 import status, typography
 from pq1.layout import CENTER_X, CIRCLE_CY
 from pq1.motion import decel, heartbeat, wobble
 from pq1.procedural import digit_reel, heart
@@ -45,15 +45,25 @@ BOUNCE = 0.18     # settle overshoot in reel steps (source amplitude)
 
 # composition: the source's 34 px digit-to-heart spacing on one line; the
 # resting 1 + heart ink box centred on (CENTER_X, CIRCLE_CY)
-DIGIT_PX = 40.0   # the digit's size — cap height 28.5, the heart's height
+DIGIT_PX = typography.SIZE_DISPLAY   # the Display tier — cap height 28.5, the heart's height
 DIGIT_WEIGHT = "semibold"   # the 600 weight (user request); the ink metrics
                             # below hold for both PQ1 faces
 HEART_H = 30.0    # the heart's height (design box 40 x 34.6)
 HEART_DX = 34.0   # heart centre right of the digit anchor
 NUM_X = 191.5     # digit anchor: Aileron's 1 inks 1 px left of its anchor
-DIGIT_DY = -0.8   # Aileron's digit ink hangs 0.8 px under its em middle
-                  # where the source's Helvetica did not — lifted so the
-                  # digit's foot stays on the heart's tip
+DIGIT_DY = -0.8   # Aileron's digit ink hangs ~1 px under its em middle
+                  # where the source's Helvetica did not — lifted (0.8, by
+                  # eye) so the digit's foot stays on the heart's tip
+
+# NUM_X and DIGIT_DY are optical corrections for ONE glyph in ONE face,
+# typed by eye. Guard them by measurement: if the face changes, the ink
+# moves and the corrections are wrong — fail at import, not on the panel.
+_INK_DX, _INK_DY = typography.ink_offset("1", DIGIT_PX, DIGIT_WEIGHT)
+if abs(_INK_DX - (-0.9)) > 0.3 or abs(_INK_DY - 1.0) > 0.3:
+    raise RuntimeError(
+        f"last_attempt: the digit 1 now inks ({_INK_DX:+.2f}, {_INK_DY:+.2f}) px off "
+        f"its anchor (was about (-0.9, +1.0) in Aileron) — re-derive NUM_X and "
+        f"DIGIT_DY for the new face")
 WIN_DN = 0.40     # the reel window's opaque reach below the digit line, x
                   # size: 16 px, 4 px lower than the source's 12 — the
                   # bottom fade starts past the digit's foot (15.3 px), so

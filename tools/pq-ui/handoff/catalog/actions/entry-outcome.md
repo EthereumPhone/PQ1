@@ -7,7 +7,7 @@ A miss plays its verdict and opens the next attempt; a match continues; a cancel
 
 ## What it is
 
-What happens after the row: the device answers, and the driver decides where to go. An entry has exactly three outcomes (`screens/pin/pin_entering.py:295`):
+What happens after the row: the device answers, and the driver decides where to go. An entry has exactly three outcomes (`screens/pin/pin_entering.py:282`):
 
 | outcome | how it is reached | what the user sees |
 |---|---|---|
@@ -26,13 +26,13 @@ The verdict plays **in the same screen**. One try is one screen: the entry, then
 | the verdict starts, on the empty canvas | — | — | — | — | — | from `t_exit` = submit + `T_CHECK` 200 ms (2.8 f) + `T_OUT` 500 ms (7.0 f); its own hold phase is the black beat before its sign — see [the verdict law](../transitions/verdict-law.md) |
 | a submit with no verdict attached rests on black | 400 | 5.6 | hold | `T_BLACK` | `screens/pin/pin_entering.py:93` | the PIN-gate case (`match=None`): nothing plays, the screen just holds black, then the flow moves on |
 
-The verdict is built with its handoff crossfade switched off (`screens/pin/pin_entering.py:305`): there is no token to hand over, because the entry left nothing on the canvas.
+The verdict is built with its handoff crossfade switched off (`screens/pin/pin_entering.py:297`): there is no token to hand over, because the entry left nothing on the canvas.
 
 A **cancel** has no check beat. The row fades over `T_OUT` 500 ms (7.0 f) from the moment the hold fires, and no verdict follows.
 
 ## Where the driver goes next
 
-Once the verdict has rested (`pq1/driver.py:454`):
+Once the verdict has rested (`pq1/driver.py:460`):
 
 | outcome | next screen | if there is none |
 |---|---|---|

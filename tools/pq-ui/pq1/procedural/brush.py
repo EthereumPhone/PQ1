@@ -17,7 +17,7 @@ from .geometry import bezier, quad_bezier
 def draw(cv, cx, cy, *, w=30, color, alpha=1.0, swivel=0.0, bend=0.0):
     """brush centred on (cx, cy), w px wide; swivel in radians (source
     sweep range ~±0.30), bend is the bristle drag (~±0.28)"""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     col = tuple(int(round(c * alpha)) for c in color)
     k = w / 32.0

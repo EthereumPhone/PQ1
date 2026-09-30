@@ -6,10 +6,16 @@ machine stays in the screen, which passes one dict per slot (every key
 optional):
 
     digit      int | None  digit shown in the ring (None = empty)
+    digit_ink  rgb | None  the digit's colour, default WHITE. A digit dialed
+                           on a fresh slot but not entered takes the grey of
+                           the ring it sits in (colors.INK_SECONDARY), so a
+                           100 % white digit means "the cursor, or entered" —
+                           the third cue (audit A11-10)
     active     0..1        activation ease: ring colour mixes color_idle
-                           -> color_active, stroke 2 -> 2.5 px
+                           -> color_active, stroke STROKE["hair"] ->
+                           ACTIVE_LW (2 -> 3 px)
     committed  bool        digit locked in: ring turns white
-    lift       px          upward offset (the source lifts 3 * active)
+    lift       px          upward offset (ACTIVE_LIFT * active)
     bounce     px          extra upward micro-bounce offset, also up
     a          0..1        per-slot fade, mixed toward black
     fill       0..1        the hold fill's level (motion.hold_fill): the
@@ -29,15 +35,26 @@ active wins over committed (mutually exclusive in the source script).
 Colours follow the port table: active #E8CA20 -> colors.YELLOW, idle
 #6F6F6F -> the 70 % white tint; digits SIZE_BODY SemiBold (the design
 canvas's weight — the user asked for the heavier face, Sep 2026), all
-constants normalized to r (the source proportions hold at r 21)."""
+constants normalized to r (the source proportions hold at r 21). A port
+must carry all three cursor cues — hue, weight + lift, digit ink — not the
+colour alone: see ACTIVE_LW below."""
 from PIL import Image, ImageChops, ImageDraw
 
-from .. import colors, gradients, typography
-from ..layout import CENTER_X, CIRCLE_CY, SUP
+from .. import colors, gradients, motion, typography
+from ..layout import CENTER_X, CIRCLE_CY, STROKE, SUP
 from ..motion import clamp01, lerp
 from ..typography import SIZE_BODY
 
 DIGIT_WEIGHT = "semibold"     # the digit inside the ring: the 600 face
+# The cursor is told apart by THREE cues, never one (audit A11-10): hue
+# (idle grey -> YELLOW), weight + lift, and the digit's ink. The hue step
+# alone measures 1.21:1 — near-isoluminant on black glass — so the other two
+# have to be worth something: the ring at rest and committed is the port's
+# hair stroke (audit ICO-05) and the active ring is a FULL pixel over it
+# (2 -> 3), and it lifts a full 4 px. Both were half that (+0.5, 3 px), i.e.
+# 0.047 mm and 0.28 mm on this panel — a fraction of one panel pixel.
+ACTIVE_LW = STROKE["hair"] + 1.0
+ACTIVE_LIFT = 4.0             # px the cursor ring rides above the row
 
 
 def draw(cv, cx=CENTER_X, cy=CIRCLE_CY, *, slots, r=21.0, pitch=50.0,
@@ -46,31 +63,31 @@ def draw(cv, cx=CENTER_X, cy=CIRCLE_CY, *, slots, r=21.0, pitch=50.0,
     """the slot row (slots = one dict per slot, keyword-only), centred on
     (cx, cy); r scales each ring (stroke and digit follow the source
     proportions for r 21)"""
-    if alpha <= 0.01:
+    if alpha <= colors.ALPHA_FLOOR:
         return
     if color_idle is None:
-        color_idle = colors.scale(colors.WHITE, 0.7)
+        color_idle = colors.scale(colors.WHITE, colors.INK_SECONDARY)
     s = r / 21.0
     x0 = cx - (len(slots) - 1) / 2.0 * pitch
     for i, slot in enumerate(slots):
         a = clamp01(slot.get("a", 1.0)) * alpha
-        if a <= 0.01:
+        if a <= colors.ALPHA_FLOOR:
             continue
         x = x0 + i * pitch
         y = cy - slot.get("lift", 0.0) - slot.get("bounce", 0.0)
         act = clamp01(slot.get("active", 0.0))
         if act > 0:
             col = gradients.mix(color_idle, color_active, act)
-            lw = lerp(2.0, 2.5, act)
+            lw = lerp(STROKE["hair"], ACTIVE_LW, act)
         elif slot.get("committed"):
-            col, lw = colors.WHITE, 2.0
+            col, lw = colors.WHITE, STROKE["hair"]
         else:
-            col, lw = color_idle, 2.0
+            col, lw = color_idle, STROKE["hair"]
         cv.ring(x, y, r, gradients.mix(colors.BLACK, col, a), lw * s)
         k = clamp01(slot.get("fill", 0.0))
         fa = clamp01(slot.get("fill_a", 1.0))
         cap = None
-        if k > 0.003 and fa * a > 0.003:
+        if k > motion.LEVEL_EPS and fa * a > colors.ALPHA_FLOOR:
             # the hold liquid: opaque white rising over the whole ring —
             # stroke included — composited so it fades with the row
             # (components imports this package, so the import stays local)
@@ -79,18 +96,19 @@ def draw(cv, cx=CENTER_X, cy=CIRCLE_CY, *, slots, r=21.0, pitch=50.0,
             cap = (y, r, k, fa)
         digit = slot.get("digit")
         if digit is not None:
-            _digit(cv, x, y + 1.5 * s, SIZE_BODY * s, str(digit), a, cap)
+            _digit(cv, x, y + 1.5 * s, SIZE_BODY * s, str(digit), a, cap,
+                   slot.get("digit_ink") or colors.WHITE)
 
 
-def _digit(cv, x, y, size, ch, a, cap=None):
-    """the slot's digit, centred like cv.text; with a cap ((cy, r, k, fa) —
-    the liquid's circle, level and presence) the glyph is split at the
-    surface: white above it (fading with the slot's a), black inside the
+def _digit(cv, x, y, size, ch, a, cap=None, ink=colors.WHITE):
+    """the slot's digit in `ink`, centred like cv.text; with a cap ((cy, r,
+    k, fa) — the liquid's circle, level and presence) the glyph is split at
+    the surface: `ink` above it (fading with the slot's a), black inside the
     liquid (black stays black while the picture fades)"""
-    if a <= 0.01:
+    if a <= colors.ALPHA_FLOOR:
         return
     if cap is None:
-        cv.text(ch, x, y, size, alpha=a, weight=DIGIT_WEIGHT)
+        cv.text(ch, x, y, size, alpha=a, weight=DIGIT_WEIGHT, color=ink)
         return
     f = typography.font(size, DIGIT_WEIGHT)
     X, Y = x * SUP, y * SUP
@@ -113,5 +131,5 @@ def _digit(cv, x, y, size, ch, a, cap=None):
     white = ImageChops.subtract(glyph, black)
     if a < 1.0:
         white = white.point(lambda v: int(v * a))
-    cv.paste(Image.new("RGB", (w, h), colors.WHITE), x0, y0, white)
+    cv.paste(Image.new("RGB", (w, h), tuple(ink)), x0, y0, white)
     cv.paste(Image.new("RGB", (w, h), colors.BLACK), x0, y0, black)

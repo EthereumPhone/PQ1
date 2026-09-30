@@ -9,7 +9,7 @@ An intro's caption carries one chevron beside the text; the corner chevrons hide
 
 One chevron that sits in the bottom band, right after the caption, pointing right. The caption and the chevron form one unit: `ERC-7730 CLEAR SIGNING ▸`. It says "press on — this screen only introduces". While it shows, the two [corner chevrons](chevrons.md) are hidden.
 
-It is the same unit the [confirm band](confirm-band.md) uses for `OR VIEW MORE ▸`, drawn by the same function, `components._band_unit` (`pq1/components.py:536`). The shape is the corner chevron's shape (`pq1/components.py:479`), not a font glyph.
+It is the same unit the [confirm band](confirm-band.md) uses for `OR VIEW MORE ▸`, drawn by the same function, `components._band_unit` (`pq1/components.py:588`). The shape is the corner chevron's shape (`pq1/components.py:523`), not a font glyph.
 
 ## When it appears
 
@@ -23,7 +23,7 @@ Only on a hero with `band_chev` set — the [intro](../screen-types/hero-intro.m
 | `chev` | `"lr" \| "up" \| None` | "lr" tap-nav available, "up" hold armed, None = no input |
 | `commit` | `True \| False` | hold-right sign/submit armed (optional; DESIGN.md § Input — reference driver: pq1/driver.py; device firmware implements the grammar natively; the demo loop performs the hold — the disc filling up — here before a done ending) |
 
-Setting `band_chev` makes `chev` default to `None` (`pq1/layout.py:510`). A hero's `commit` still defaults to **true**, so `band_chev` does not disarm the sign hold by itself: the flow helpers that build an intro set `commit` false explicitly. An intro asks nothing, so there is nothing to sign on it.
+Setting `band_chev` makes `chev` default to `None` (`pq1/layout.py:653`). A hero's `commit` still defaults to **true**, so `band_chev` does not disarm the sign hold by itself: the flow helpers that build an intro set `commit` false explicitly. An intro asks nothing, so there is nothing to sign on it.
 
 ## Geometry
 
@@ -38,14 +38,14 @@ Setting `band_chev` makes `chev` default to `None` (`pq1/layout.py:510`). A hero
 
 The text width used for the chevron's x is the sum of the glyph advances plus the letter spacing between glyphs. The caption is data, so the chevron's x is computed per caption, never fixed. With the live captions it lands between x 316 and x 347.
 
-The nudge is applied in `components.draw_text` (`pq1/components.py:581`): a caption whose layout text carries `band_chev` is shifted by the difference between the two centres and drawn as a band unit. The layout marks the text in `layout_of` (`pq1/layout.py:365`).
+The nudge is part of the layout: `layout_of` (`pq1/layout.py:492`) places a `band_chev` caption on 206 and marks it, and `components.draw_text` (`pq1/components.py:637`) draws it there as a band unit — the reported x is the drawn x.
 
 ## Motion
 
 | phase | ms | frames @14 fps | easing | token | defined at | notes |
 |---|---:|---:|---|---|---|---|
 | the unit arrives and leaves with its screen | — | — | spring NAV | — | — | text and chevron share ONE alpha: the screen's own text-alpha spring. There is no separate chevron fade |
-| incoming caption waits for the disc | 150 | 2.1 | hold | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | see [text-in delay](../transitions/text-in-delay.md) |
+| incoming caption waits for the disc | 150 | 2.1 | hold | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | see [text-in delay](../transitions/text-in-delay.md) |
 | corner chevrons fade out / in beside it | — | — | spring NAV | — | — | hidden ↔ `"lr"` is a pure fade on the transit's mix spring — see [chevrons](chevrons.md) |
 
 The band chevron itself never moves: no bob, no hint, no pulse. On the way from the intro to the ask, the unit fades out with the intro's caption while the corner pair fades in, already pointing outward.
@@ -54,14 +54,14 @@ The band chevron itself never moves: no bob, no hint, no pulse. On the way from 
 
 | context | gesture | result | from | to |
 |---|---|---|---|---|
-| hero — an intro (band_chev, commit False) | tap left | `enter` | ERC7730 (hero, p1) | SIGN (hero, p1) |
-| hero — an intro (band_chev, commit False) | tap right | `enter` | ERC7730 (hero, p1) | SIGN (hero, p1) |
-| hero — an intro (band_chev, commit False) | hold left | `fired` | ERC7730 (hero, p1) | DECLINED (status, p1) |
-| hero — an intro (band_chev, commit False) | hold right | `None` | ERC7730 (hero, p1) | ERC7730 (hero, p1) |
-| hero — an intro (band_chev, commit False) | release a hold early (1000 ms) | `snapback` | ERC7730 (hero, p1) | ERC7730 (hero, p1) |
-| hero — an intro (band_chev, commit False) | both buttons (chord) | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
-| hero — an intro (band_chev, commit False) | double press left | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
-| hero — an intro (band_chev, commit False) | double press right | `None` | ERC7730 (hero, p1) | NETWORK (detail, p1) |
+| hero — an intro (band_chev, commit False) | tap left | `back` | KEY FINGERPRINT (hero, p1) | UPDATE (hero, p1) |
+| hero — an intro (band_chev, commit False) | tap right | `enter` | KEY FINGERPRINT (hero, p1) | WORDS (value, p1) |
+| hero — an intro (band_chev, commit False) | hold left | `fired` | KEY FINGERPRINT (hero, p1) | DECLINED (status, p1) |
+| hero — an intro (band_chev, commit False) | hold right | `None` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | release a hold early (1000 ms) | `snapback` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | both buttons (chord) | `None` | KEY FINGERPRINT (hero, p1) | KEY FINGERPRINT (hero, p1) |
+| hero — an intro (band_chev, commit False) | double press left | `None` | KEY FINGERPRINT (hero, p1) | UPDATE (hero, p1) |
+| hero — an intro (band_chev, commit False) | double press right | `None` | KEY FINGERPRINT (hero, p1) | CONFIRM UPDATE (hero, p1) |
 
 The chevron points right, but **either** tap leads on: the signer never has to pick a side on a hero. The right hold is unbound here (no fill is drawn). The left hold declines as everywhere. The chord and the double press are not gestures outside a PIN entry: the driver reads them as two plain taps, which is why those rows end two screens on.
 

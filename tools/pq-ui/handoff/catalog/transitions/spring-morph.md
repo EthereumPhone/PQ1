@@ -19,7 +19,7 @@ Three kinds of value ride the set, all on one profile:
 | `mix` | `0` = endpoint `a`, `1` = endpoint `b`: the glyph crossfade inside the disc, the corner chevrons' angle lerp and their alpha when one of the two screens hides them, the token's own style and trail palette (both swap at 0.5) and a committed hold fill's alpha | 0.005 |
 | `alpha[i]`, one per screen | that whole screen's text block — caption, label, value lines, pager, confirm band | 0.005 |
 
-`settled(tol)` is `|value − target| < tol` **and** `|velocity| < tol × 10` (`pq1/flow.py:304`). The leg is over only when all of them pass **and** no text release is still pending ([text-in delay](text-in-delay.md)); then every spring is written exactly onto its target, the idle clock starts and a committed hold fill is dropped.
+`settled(tol)` is `|value − target| < tol` **and** `|velocity| < tol × 10` (`pq1/flow.py:332`). The leg is over only when all of them pass **and** no text release is still pending ([text-in delay](text-in-delay.md)); then every spring is written exactly onto its target, the idle clock starts and a committed hold fill is dropped.
 
 ## The maths a port needs
 
@@ -36,9 +36,9 @@ velocity = (B - w*(x + B*dt)) * e
 
 That is the closed-form solution of the ODE, so it is **exact at any dt**: the panel and a faster offline preview trace the same curve. Do not integrate it per fixed tick.
 
-Released from rest the same thing has a pure form, `1 − (1 + ωt)·e^(−ωt)` — `motion.spring_travel` (`pq1/motion.py:115`), which a film uses so its circle travels like a flow leg. Checked frame by frame against the stepped spring: the same curve. Note its default profile is `KIOSK`, and the film's [side entrance](side-entrance.md) calls it that way — that one is deliberate, not the demo pace leaking in.
+Released from rest the same thing has a pure form, `1 − (1 + ωt)·e^(−ωt)` — `motion.spring_travel` (`pq1/motion.py:115`), which a film uses so its circle travels like a flow leg. Checked frame by frame against the stepped spring: the same curve. Its default profile is `NAV`, and the film's [side entrance](side-entrance.md) runs on it; `motion.settle_ms(px, profile)` (`pq1/motion.py:125`) turns a trip into the whole ms at which it has settled, so a scripted travel's length is derived from the spring, never typed.
 
-Profiles: response 0.40 (`NAV`, `pq1/motion.py:111`) and 0.55 (`KIOSK`, `pq1/motion.py:112`), both at damping 1.0. **Navigation on the device is NAV**; `KIOSK` is the `Sim`'s own default, which the reference driver overrides (`pq1/driver.py:41`), so a port reads NAV for every leg. The per-panel-frame progress ladder for both, and the time to come within 1 px on a short and a full-width trip, are in `spec/motion.json` → `springs` — port from there rather than from a stopwatch.
+Profiles: response 0.40 (`NAV`, `pq1/motion.py:111`) and 0.55 (`KIOSK`, `pq1/motion.py:112`), both at damping 1.0. **Navigation on the device is NAV**; `KIOSK` is the `Sim`'s own default, which the reference driver overrides (`pq1/driver.py:42`), so a port reads NAV for every leg. The per-panel-frame progress ladder for both, and the time to come within 1 px on a short and a full-width trip, are in `spec/motion.json` → `springs` — port from there rather than from a stopwatch.
 
 A spring that lands (inside `SNAP_EPS` 0.001 of its target with velocity under `SNAP_VEL` 0.01) snaps exactly onto the target and sleeps: it costs nothing per frame until the next retarget.
 
@@ -49,15 +49,15 @@ A spring that lands (inside `SNAP_EPS` 0.001 of its target with velocity under `
 | circle travel — cx, cy, r | — | — | spring NAV | — | — | retargeted from the live pose, velocity carried; no duration |
 | glyph + chevron morph, mix 0 → 1 | — | — | spring NAV | — | — | see [glyph morph](../components/glyph-morph.md), [chevrons](../components/chevrons.md) |
 | outgoing text fades | — | — | spring NAV | — | — | every screen but the destination is retargeted to alpha 0 the instant the leg starts |
-| incoming text released after the leg begins | 150 | 2.1 | — | `TEXT_IN_DELAY_MS` | `pq1/motion.py:130` | then its own alpha spring runs — see [text-in delay](text-in-delay.md) |
+| incoming text released after the leg begins | 150 | 2.1 | — | `TEXT_IN_DELAY_MS` | `pq1/motion.py:142` | then its own alpha spring runs — see [text-in delay](text-in-delay.md) |
 | incoming text fades in | — | — | spring NAV | — | — | lands with the disc rather than ahead of it |
-| legacy span bound (pre-spring, do not port) | 1260 | 17.6 | — | `MOVE_MS + 2 * FADE_MS` | `pq1/motion.py:151` | not a timing and nothing waits for it: the window offline renders allot to a leg. A NAV leg settles well inside it |
+| legacy span bound (pre-spring, do not port) | 1260 | 17.6 | — | `MOVE_MS + 2 * FADE_MS` | `pq1/motion.py:171` | not a timing and nothing waits for it: the window offline renders allot to a leg. A NAV leg settles well inside it |
 
-The frame step is clamped (`pq1/flow.py:310`): `dt` is the real gap between draws, capped at 100 ms so a scheduling hitch cannot teleport a spring, and the very first draw assumes 16 ms.
+The frame step is clamped (`pq1/flow.py:338`): `dt` is the real gap between draws, capped at 100 ms so a scheduling hitch cannot teleport a spring, and the very first draw assumes 16 ms.
 
 ## Snapping without animation
 
-Assigning `sim.cur = i` (`pq1/flow.py:152`) teleports: springs are written onto screen `i`'s layout with zero velocity, the pending text release is dropped, pages reset to the first and any live hold is discarded. That is a harness entry point — a port needs the equivalent only for "boot straight into screen N".
+Assigning `sim.cur = i` (`pq1/flow.py:169`) teleports: springs are written onto screen `i`'s layout with zero velocity, the pending text release is dropped, pages reset to the first and any live hold is discarded. That is a harness entry point — a port needs the equivalent only for "boot straight into screen N".
 
 ## Preview
 
@@ -70,7 +70,7 @@ Assigning `sim.cur = i` (`pq1/flow.py:152`) teleports: springs are written onto 
 - **Do** keep one spring object per animated value and step them all once per frame with the measured `dt`.
 - **Do** carry position **and** velocity through a retarget. That is the whole contract.
 - **Don't** replace the spring with duration + easing. A tween cannot be redirected mid-flight without a jump, and § Input promises presses are never dropped.
-- **Don't** navigate at the `KIOSK` pace: it is the demo loop's, and the `Sim` default the driver replaces. Legs are `NAV`. The one KIOSK curve that does reach the device is inside a film's side entrance, through `spring_travel`'s default.
+- **Don't** navigate at the `KIOSK` pace: it is the demo loop's, and the `Sim` default the driver replaces. Legs are `NAV`, and so is every scripted travel on the device — a film's side entrance included.
 - **Don't** spring into a film. That entrance is sequential and the film owns the travel ([entering a film](film-entrance.md)).
 - **Don't** drive the springs from a frame counter. They are dt-exact; a fixed-step port drifts as soon as a frame is late.
 
