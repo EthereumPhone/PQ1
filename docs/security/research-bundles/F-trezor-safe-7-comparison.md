@@ -5390,7 +5390,12 @@ pub(super) fn px_confirm(
     // The endings (decline resolve, signing film) wear this family's disc
     // and captions.
     #[cfg(feature = "ui-lcd")]
-    crate::ui::px::lcd::set_film_look(receipt.family.look, receipt.family.signed, receipt.family.declined);
+    crate::ui::px::lcd::set_film_look(
+        receipt.family.look,
+        receipt.family.signed,
+        receipt.family.declined,
+        receipt.family.failed,
+    );
     let out = crate::ui::px::confirm_screens_checked(screens, &atlas);
     // The transcript holds no secret, but leave nothing stale behind.
     screens.volatile_poison_and_reset();

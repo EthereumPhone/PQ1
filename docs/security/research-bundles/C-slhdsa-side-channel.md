@@ -3299,9 +3299,15 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // The pixel route plays the qubit loading film around the sign (started
     // here, paced by the signer's opaque progress hook, landed at the
     // post-release site below); every other route keeps the progress text.
+    // #773: arm the landing guard with the film. Every way out of this
+    // scope but the success landing below — 25 error returns today, and any
+    // added later — lands the film on the X instead of freezing the orbit.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    let mut film_landing: Option<crate::ui::px::lcd::FilmLanding> = None;
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
     if px_route {
         crate::ui::px::lcd::film_start();
+        film_landing = Some(crate::ui::px::lcd::FilmLanding::armed());
     } else {
         ui::show_progress("Slot C10 sign", 0);
     }
@@ -3509,6 +3515,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // RESULT_HOLD_MS — the film's own hold replaces the legacy spin below.
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
     if px_route {
+        if let Some(g) = film_landing.as_mut() {
+            g.disarm();
+        }
         crate::ui::px::lcd::film_resolve(pqsigner_ui_px::scene::Ending::Signed);
     } else {
         ui::show_status("Signed", "");
