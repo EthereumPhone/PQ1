@@ -22,12 +22,14 @@ pub(crate) const SUMMARY_FAMILY: Family = Family {
     look: Look::plain(Icon::Eth),
     signed: b"BATCH SIGNED",
     declined: b"BATCH DECLINED",
+    failed: b"BATCH FAILED",
 };
 
 /// A member dialog wears its route's disc; declining it declines the batch.
 pub(crate) fn member_family(f: Family) -> Family {
     Family {
         declined: b"BATCH DECLINED",
+        failed: b"BATCH FAILED",
         ..f
     }
 }

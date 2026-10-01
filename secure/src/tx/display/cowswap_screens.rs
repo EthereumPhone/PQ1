@@ -46,6 +46,7 @@ pub(crate) const FAMILY: Family = Family {
     look: Look::COWSWAP,
     signed: b"COWSWAP SIGNED",
     declined: b"COWSWAP DECLINED",
+    failed: b"COWSWAP FAILED",
 };
 
 fn word_at(c: &[u8; 204], off: usize) -> [u8; 32] {

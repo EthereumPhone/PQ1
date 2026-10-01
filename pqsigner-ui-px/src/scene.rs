@@ -523,7 +523,24 @@ pub enum Ending {
     /// Branded fill + black check (Safe: `#13FF7F`), caption `SIGNED SAFE TX`.
     Signed,
     /// Red disc, black ring, black X, caption `SAFE TX DECLINED`.
+    ///
+    /// The user said no. It resolves IN PLACE (`Film::Resolve`) because no
+    /// work was dispatched — spec `ends.declined`: `anim: "resolve"`.
     Declined,
+    /// Red disc, black ring, black X, caption `SAFE TX FAILED`.
+    ///
+    /// The signing core said no AFTER the work was dispatched. Its resting
+    /// look is a decline's — spec `ends.failed` and `ends.declined` share
+    /// `state: "failed"` and `result: "x"` — but it arrives the other way:
+    /// `anim: "qubit"`, so the RUNNING film collides into the X instead of
+    /// freezing mid-orbit (`F-ENDPAIR`: "a failure the host reports after
+    /// dispatch names the film and it collides into the X").
+    ///
+    /// Without this the device had no landing for a signing failure at all:
+    /// `film_tick` is the signer's progress hook, so an error return simply
+    /// stopped calling it and left the last painted orbit frame on the glass
+    /// forever, indistinguishable from "still working" (#773).
+    Failed,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1016,11 +1033,12 @@ impl Anim {
                 }
                 Film::Resolve { film, outcome } => (0, film.pose(now).text_a, Some(outcome)),
             };
-            let (signed, declined) = ending_captions(&self.cur);
+            let (signed, declined, failed) = ending_captions(&self.cur);
             let caption_of = |e: Ending| -> &[u8] {
                 match e {
                     Ending::Signed => signed,
                     Ending::Declined => declined,
+                    Ending::Failed => failed,
                 }
             };
             // The busy line: the film screen's own caption (GENERATING KEYS,
@@ -1128,9 +1146,9 @@ impl Anim {
                 (Rgb::COWSWAP_FILL, Rgb::BLACK, Rgb::COWSWAP_NAVY)
             }
             (Ending::Signed, true) => (Rgb::SAFE_FILL, Rgb::BLACK, Rgb::BLACK),
-            (Ending::Declined, true) => (Rgb::RED, Rgb::BLACK, Rgb::BLACK),
+            (Ending::Declined | Ending::Failed, true) => (Rgb::RED, Rgb::BLACK, Rgb::BLACK),
             (Ending::Signed, false) => (Rgb::BLACK, Rgb::GREEN, Rgb::GREEN),
-            (Ending::Declined, false) => (Rgb::BLACK, Rgb::RED, Rgb::RED),
+            (Ending::Declined | Ending::Failed, false) => (Rgb::BLACK, Rgb::RED, Rgb::RED),
         }
     }
 
@@ -1138,7 +1156,7 @@ impl Anim {
         if k > 0 {
             match e {
                 Ending::Signed => frame.push(Item::Check { cx, cy, r, color: mark_c, k }),
-                Ending::Declined => frame.push(Item::Cross { cx, cy, r, color: mark_c, k }),
+                Ending::Declined | Ending::Failed => frame.push(Item::Cross { cx, cy, r, color: mark_c, k }),
             };
         }
     }
@@ -1158,7 +1176,7 @@ impl Anim {
                 let (fill, ring, mark_c) = Self::resting(outcome, style);
                 let state = match outcome {
                     Ending::Signed => Rgb::GREEN,
-                    Ending::Declined => Rgb::RED,
+                    Ending::Declined | Ending::Failed => Rgb::RED,
                 };
                 let r = lerp(visible_r, CIRCLE_R << 8, p.u);
                 frame.push(Item::Disc { cx, cy, r, color: blend_rgb(style.fill, fill, p.u) });
@@ -1213,7 +1231,7 @@ impl Anim {
                         let (fill, ring, mark_c) = Self::resting(e, style);
                         let state = match e {
                             Ending::Signed => Rgb::GREEN,
-                            Ending::Declined => Rgb::RED,
+                            Ending::Declined | Ending::Failed => Rgb::RED,
                         };
                         let b = p.bodies[0];
                         let u = if p.phase == Phase::Flash { motion::ease_out(motion::phase(ft_of(&film, now), loading::T6, loading::QUBIT_T_FLASH)) } else { ONE_Q16 };
@@ -1234,15 +1252,24 @@ impl Anim {
 /// caption, line 1 = the declined caption. A screen without them (the Safe
 /// flow, a hero the cancel resolves on) gets the Safe family's captions.
 #[must_use]
-pub fn ending_captions(s: &Screen) -> (&[u8], &[u8]) {
+pub fn ending_captions(s: &Screen) -> (&[u8], &[u8], &[u8]) {
     const SIGNED: &[u8] = b"SIGNED SAFE TX";
     const DECLINED: &[u8] = b"SAFE TX DECLINED";
+    const FAILED: &[u8] = b"SAFE TX FAILED";
     if s.kind() != Some(Kind::Status) {
-        return (SIGNED, DECLINED);
+        return (SIGNED, DECLINED, FAILED);
     }
+    // Lines 0 / 1 / 2 of the film screen: signed, declined, failed. The
+    // third is optional so a caller that predates `Ending::Failed` (#773)
+    // still gets a caption rather than an empty one — a blank ending caption
+    // is the failure mode this whole issue is about.
+    let third = match s.line(0, 2) {
+        Some((_, c)) if !c.is_empty() => c,
+        _ => FAILED,
+    };
     match (s.line(0, 0), s.line(0, 1)) {
-        (Some((_, a)), Some((_, b))) if !a.is_empty() && !b.is_empty() => (a, b),
-        _ => (SIGNED, DECLINED),
+        (Some((_, a)), Some((_, b))) if !a.is_empty() && !b.is_empty() => (a, b, third),
+        _ => (SIGNED, DECLINED, FAILED),
     }
 }
 
@@ -1526,17 +1553,64 @@ mod tests {
         assert!(marks.for_icon(Some(Icon::Fingerprint)).is_none());
     }
 
+    /// #773. A signing failure after dispatch is its OWN ending: it rests
+    /// like a decline (spec: `ends.failed` and `ends.declined` share
+    /// `state: "failed"` and `result: "x"`) but it arrives by landing the
+    /// running qubit film rather than resolving in place, and it says
+    /// FAILED, not DECLINED.
+    #[test]
+    fn a_failed_ending_rests_like_a_decline_but_says_failed() {
+        for style in [disc_style(Some(Icon::Safe), None), disc_style(Some(Icon::Eth), None)] {
+            assert_eq!(
+                Anim::resting(Ending::Failed, &style),
+                Anim::resting(Ending::Declined, &style),
+                "a failure rests in the same red/X look as a decline"
+            );
+            assert_ne!(
+                Anim::resting(Ending::Failed, &style),
+                Anim::resting(Ending::Signed, &style),
+                "a failure must never rest in the signed look"
+            );
+        }
+        let film = ScreenBuilder::status(b"SIGN", Icon::Eth, b"", State::Awaiting, ResultMark::None)
+            .line(b"TRANSFER SUCCESSFUL", Weight::Regular)
+            .line(b"TRANSFER DECLINED", Weight::Regular)
+            .line(b"TRANSFER FAILED", Weight::Regular)
+            .finish()
+            .unwrap();
+        let (signed, declined, failed) = ending_captions(&film);
+        assert_eq!(failed, b"TRANSFER FAILED");
+        assert_ne!(failed, declined, "a failure must not be captioned as a decline");
+        assert_ne!(failed, signed);
+    }
+
     #[test]
     fn ending_captions_come_from_the_film_screen() {
-        assert_eq!(ending_captions(&hero()), (&b"SIGNED SAFE TX"[..], &b"SAFE TX DECLINED"[..]));
+        assert_eq!(
+            ending_captions(&hero()),
+            (&b"SIGNED SAFE TX"[..], &b"SAFE TX DECLINED"[..], &b"SAFE TX FAILED"[..])
+        );
         let film = ScreenBuilder::status(b"SIGN", Icon::Eth, b"", State::Awaiting, ResultMark::None)
+            .line(b"TRANSFER SUCCESSFUL", Weight::Regular)
+            .line(b"TRANSFER DECLINED", Weight::Regular)
+            .line(b"TRANSFER FAILED", Weight::Regular)
+            .finish()
+            .unwrap();
+        assert_eq!(
+            ending_captions(&film),
+            (&b"TRANSFER SUCCESSFUL"[..], &b"TRANSFER DECLINED"[..], &b"TRANSFER FAILED"[..])
+        );
+        let bare = ScreenBuilder::status(b"SIGN", Icon::Safe, b"", State::Awaiting, ResultMark::None).finish().unwrap();
+        assert_eq!(ending_captions(&bare).0, b"SIGNED SAFE TX");
+        // #773: a film screen written before `Ending::Failed` existed carries
+        // only two lines. It must still get a caption — a blank one on the
+        // failure ending is the exact silence this issue is about.
+        let two_line = ScreenBuilder::status(b"SIGN", Icon::Eth, b"", State::Awaiting, ResultMark::None)
             .line(b"TRANSFER SUCCESSFUL", Weight::Regular)
             .line(b"TRANSFER DECLINED", Weight::Regular)
             .finish()
             .unwrap();
-        assert_eq!(ending_captions(&film), (&b"TRANSFER SUCCESSFUL"[..], &b"TRANSFER DECLINED"[..]));
-        let bare = ScreenBuilder::status(b"SIGN", Icon::Safe, b"", State::Awaiting, ResultMark::None).finish().unwrap();
-        assert_eq!(ending_captions(&bare).0, b"SIGNED SAFE TX");
+        assert_eq!(ending_captions(&two_line).2, b"SAFE TX FAILED");
         // Resting looks: brand fills, the rest strokes in the state colour.
         let safe = disc_style(Some(Icon::Safe), None);
         let cow = disc_style(Some(Icon::Cowswap), None);

@@ -54,11 +54,13 @@ pub(crate) fn family(body: &OffchainBody<'_>) -> Family {
             look: address_look(Icon::Eth, facts.wallet),
             signed: b"EIP1271 SIGNED",
             declined: b"EIP1271 DECLINED",
+            failed: b"EIP1271 FAILED",
         },
         OffchainBody::Raw32 { .. } => Family {
             look: Look::plain(Icon::Blind),
             signed: b"BLIND HASH SIGNED",
             declined: b"BLIND HASH DECLINED",
+            failed: b"BLIND HASH FAILED",
         },
     }
 }

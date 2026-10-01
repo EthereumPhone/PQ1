@@ -29,6 +29,7 @@ pub(crate) fn family(tx: &Eip1559Tx) -> Family {
         look: target_look(tx),
         signed: b"UNKNOWN CALL SIGNED",
         declined: b"UNKNOWN CALL DECLINED",
+        failed: b"UNKNOWN CALL FAILED",
     }
 }
 

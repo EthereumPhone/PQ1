@@ -1298,9 +1298,15 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
+    // #773: arm the landing guard with the film. Every way out of this
+    // scope but the success landing below — 25 error returns today, and any
+    // added later — lands the film on the X instead of freezing the orbit.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    let mut film_landing: Option<crate::ui::px::lcd::FilmLanding> = None;
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
     if px_owns_ending {
         crate::ui::px::lcd::film_start();
+        film_landing = Some(crate::ui::px::lcd::FilmLanding::armed());
     } else {
         crate::ui::show_progress("EIP-1271 sign", 0);
     }
@@ -1523,6 +1529,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // result hold); every other route keeps the status text.
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
     if px_owns_ending {
+        if let Some(g) = film_landing.as_mut() {
+            g.disarm();
+        }
         crate::ui::px::lcd::film_resolve(pqsigner_ui_px::scene::Ending::Signed);
         crate::ui::show_status("PQSigner OS", "Ready");
         return NscStatus::Ok as u32;

@@ -468,12 +468,14 @@ struct FilmLook {
     look: pqsigner_ui_px::Look,
     signed: &'static [u8],
     declined: &'static [u8],
+    failed: &'static [u8],
 }
 
 const FILM_LOOK_SAFE: FilmLook = FilmLook {
     look: pqsigner_ui_px::Look::SAFE,
     signed: b"SIGNED SAFE TX",
     declined: b"SAFE TX DECLINED",
+    failed: b"SAFE TX FAILED",
 };
 
 static mut FILM_LOOK: FilmLook = FILM_LOOK_SAFE;
@@ -483,10 +485,15 @@ static mut FILM_LOOK: FilmLook = FILM_LOOK_SAFE;
 /// Reset to the Safe look when the film lands, so a stale look never leaks
 /// into the next dialog. A caption that is not printable ASCII or longer
 /// than a line falls back to the Safe captions (the builder refuses it).
-pub fn set_film_look(look: pqsigner_ui_px::Look, signed: &'static [u8], declined: &'static [u8]) {
+pub fn set_film_look(
+    look: pqsigner_ui_px::Look,
+    signed: &'static [u8],
+    declined: &'static [u8],
+    failed: &'static [u8],
+) {
     // SAFETY: single-threaded driver state (no ISR touches it).
     unsafe {
-        *core::ptr::addr_of_mut!(FILM_LOOK) = FilmLook { look, signed, declined };
+        *core::ptr::addr_of_mut!(FILM_LOOK) = FilmLook { look, signed, declined, failed };
     }
 }
 
@@ -498,7 +505,8 @@ fn reset_film_look() {
 }
 
 /// The centred status screen the film plays over: the family's disc, the
-/// two ending captions as lines 0 / 1 (`scene::ending_captions`).
+/// three ending captions as lines 0 / 1 / 2 — signed, declined, failed
+/// (`scene::ending_captions`).
 fn film_screen() -> Screen {
     // SAFETY: single-threaded driver state; copied out.
     let fl = unsafe { *core::ptr::addr_of!(FILM_LOOK) };
@@ -507,6 +515,7 @@ fn film_screen() -> Screen {
             .look_tint(fl.look)
             .line(fl.signed, pqsigner_ui_px::Weight::Regular)
             .line(fl.declined, pqsigner_ui_px::Weight::Regular)
+            .line(fl.failed, pqsigner_ui_px::Weight::Regular)
             .finish()
     };
     build(fl).or_else(|_| build(FILM_LOOK_SAFE)).unwrap_or(Screen::BLANK)
@@ -607,6 +616,52 @@ pub fn film_resolve(e: Ending) {
 #[must_use]
 pub fn film_live() -> bool {
     FILM_LIVE.load(Ordering::Relaxed)
+}
+
+/// Lands the running film on [`Ending::Failed`] if the sign window is left
+/// without landing it — #773.
+///
+/// `film_tick` is the signer's progress hook, so an error return inside the
+/// film window simply stopped calling it and left the last painted orbit
+/// frame on the glass forever: a signing FAILURE, the one event the user
+/// most needs to see, looked identical to "still working". There were 25
+/// such returns across the three sign handlers, and enumerating them is the
+/// kind of fix a future `return` silently undoes.
+///
+/// This is structural instead: arm it next to `film_start()`, `disarm()` it
+/// at the success landing, and every other way out of the scope — including
+/// one added later — lands the film on the X.
+///
+/// Only construct it on a route that actually started a film: with none
+/// running `film_resolve` plays the film-less resolve, which would paint an
+/// ending on a route that never showed one.
+///
+/// RESIDUAL: `panic = abort`, so `Drop` does not run on a panic. A panicking
+/// sign path still leaves the last frame up. That is the device halting, not
+/// a silent wrong answer, and it is out of this guard's scope.
+pub struct FilmLanding {
+    armed: bool,
+}
+
+impl FilmLanding {
+    /// Arm immediately after [`film_start`].
+    #[must_use]
+    pub fn armed() -> Self {
+        Self { armed: true }
+    }
+
+    /// The caller landed the film itself (the success path).
+    pub fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for FilmLanding {
+    fn drop(&mut self) {
+        if self.armed {
+            film_resolve(Ending::Failed);
+        }
+    }
 }
 
 /// Drop a running film without landing it (error paths).

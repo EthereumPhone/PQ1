@@ -40,12 +40,14 @@ pub(crate) fn family(tx: &Eip1559Tx) -> Family {
             look,
             signed: b"CONTRACT CALL SIGNED",
             declined: b"CONTRACT CALL DECLINED",
+            failed: b"CONTRACT CALL FAILED",
         }
     } else {
         Family {
             look,
             signed: b"TRANSACTION SIGNED",
             declined: b"TRANSACTION DECLINED",
+            failed: b"TRANSACTION FAILED",
         }
     }
 }

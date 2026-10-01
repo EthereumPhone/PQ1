@@ -262,6 +262,9 @@ mod cowswap_render_pure_tests;
 mod safe_display_render_pure_tests;
 
 #[cfg(test)]
+mod film_landing_pure_tests;
+
+#[cfg(test)]
 mod safe_screens_render_pure_tests;
 
 #[cfg(test)]

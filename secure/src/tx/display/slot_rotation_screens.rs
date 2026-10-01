@@ -19,6 +19,7 @@ pub(crate) const FAMILY: Family = Family {
     look: Look::plain(Icon::Rotate),
     signed: b"SLOT ROTATED",
     declined: b"ROTATION DECLINED",
+    failed: b"ROTATION FAILED",
 };
 
 pub(crate) fn emit(out: &mut Screens, chain_id: u64, slot_index: u32) -> Result<BodyReceipt, ()> {

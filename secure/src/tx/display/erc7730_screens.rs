@@ -61,11 +61,13 @@ pub(crate) fn family(surface: Surface, contract: &[u8; 20]) -> Family {
             look,
             signed: b"TRANSACTION SIGNED",
             declined: b"TRANSACTION DECLINED",
+            failed: b"TRANSACTION FAILED",
         },
         Surface::Typed => Family {
             look,
             signed: b"MESSAGE SIGNED",
             declined: b"MESSAGE DECLINED",
+            failed: b"MESSAGE FAILED",
         },
     }
 }

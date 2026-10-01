@@ -39,6 +39,11 @@ pub(crate) struct Family {
     pub(crate) look: Look,
     pub(crate) signed: &'static [u8],
     pub(crate) declined: &'static [u8],
+    /// The caption when the signing core fails AFTER dispatch (#773). It is
+    /// a distinct ending from `declined`: same red disc and X, but it lands
+    /// the RUNNING qubit film instead of resolving in place, so the user is
+    /// told the device refused rather than left on a frozen orbit.
+    pub(crate) failed: &'static [u8],
 }
 
 impl Family {
@@ -46,6 +51,7 @@ impl Family {
         look: Look::SAFE,
         signed: b"SIGNED SAFE TX",
         declined: b"SAFE TX DECLINED",
+        failed: b"SAFE TX FAILED",
     };
 }
 

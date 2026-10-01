@@ -31,6 +31,7 @@ pub(crate) fn family(tx: &Eip1559Tx, _meta: &SelectorMeta<'_>) -> Family {
         look: target_look(tx),
         signed: b"CALL SIGNED",
         declined: b"CALL DECLINED",
+        failed: b"CALL FAILED",
     }
 }
 

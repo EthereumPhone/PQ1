@@ -40,30 +40,33 @@ fn recipient_of(call: &Erc20Call) -> [u8; 20] {
     }
 }
 
-fn captions(call: &Erc20Call) -> (&'static [u8], &'static [u8]) {
+fn captions(call: &Erc20Call) -> (&'static [u8], &'static [u8], &'static [u8]) {
     match call {
-        Erc20Call::Approve { amount, .. } if amount.is_zero() => (b"REVOKE SIGNED", b"REVOKE DECLINED"),
-        Erc20Call::Approve { .. } => (b"APPROVAL SIGNED", b"APPROVAL DECLINED"),
-        _ => (b"TRANSFER SIGNED", b"TRANSFER DECLINED"),
+        Erc20Call::Approve { amount, .. } if amount.is_zero() => {
+            (b"REVOKE SIGNED", b"REVOKE DECLINED", b"REVOKE FAILED")
+        }
+        Erc20Call::Approve { .. } => (b"APPROVAL SIGNED", b"APPROVAL DECLINED", b"APPROVAL FAILED"),
+        _ => (b"TRANSFER SIGNED", b"TRANSFER DECLINED", b"TRANSFER FAILED"),
     }
 }
 
 pub(crate) fn known_family(call: &Erc20Call, meta: &Erc20Metadata<'_>) -> Family {
-    let (signed, declined) = captions(call);
+    let (signed, declined, failed) = captions(call);
     Family {
         look: token_look(meta.symbol),
         signed,
         declined,
+        failed,
     }
 }
 
 pub(crate) fn unknown_family(tx: &Eip1559Tx, call: &Erc20Call) -> Family {
-    let (signed, declined) = captions(call);
+    let (signed, declined, failed) = captions(call);
     let look = match &tx.to {
         Some(c) => address_look(Icon::Eth, c),
         None => Look::plain(Icon::Eth),
     };
-    Family { look, signed, declined }
+    Family { look, signed, declined, failed }
 }
 
 /// `FROM` (transferFrom only) and `TO` / `SPENDER`.
