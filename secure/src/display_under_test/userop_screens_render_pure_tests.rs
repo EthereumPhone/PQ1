@@ -387,7 +387,7 @@ fn send_eth_screens() {
     let l = lift_userop(&t, &[], None, None, &r, &f);
     assert_eq!(hero_caption(&l), "SEND 5.250000 ETH?");
     assert_eq!(l.screens.as_slice()[0].icon(), Some(Icon::Eth));
-    check("value_transfer", "send", &l, BASE, "value", "43fda765377fd1867383686e540511d29495a663a143e026adcf7ca44fc72fe3");
+    check("value_transfer", "send", &l, BASE, "value", "360311a2ec6448a1ba9ebfa67592d42b101f4902acc2307993d3b3e908996de6");
 }
 
 #[test]
@@ -397,7 +397,7 @@ fn contract_call_screens() {
     let r = NameResolver::new();
     let l = lift_userop(&t, &[], None, None, &r, &f);
     assert_eq!(hero_caption(&l), "CONFIRM CONTRACT CALL?");
-    check("value_transfer", "contract_call", &l, SEPOLIA, "value", "f2c972e79ffe7a5a6a5a3539d179fcd5d7a852f36d64f6004420e0542d062816");
+    check("value_transfer", "contract_call", &l, SEPOLIA, "value", "340f1a6d0dae57362e8f8c0daf80d89ee2ce4f0fd06f3e20ce5d71d3c34534a3");
 }
 
 #[test]
@@ -411,7 +411,7 @@ fn send_with_every_trailer_screens() {
     for want in ["NATIVE", "PAYMSTR", "SIGNER", "TARGET", "LANE", "GASLANE", "FP8213", "DIGEST", "DEPLOY"] {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
-    check("value_transfer", "send_all_trailers", &l, BASE, "value", "0e715afb7c8c938e5b7b85225af600f367343bd4863212953b040b42639e56b7");
+    check("value_transfer", "send_all_trailers", &l, BASE, "value", "bf2c64238d0d619976f8f4560fda40b964eac88201f3963a2126a0c7999cfafd");
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +428,7 @@ fn erc20_known_transfer_screens() {
     let l = lift_userop(&t, &data, Some(&m), None, &r, &f);
     assert_eq!(hero_caption(&l), "SEND 1250.000000 USDC?");
     assert_eq!(l.screens.as_slice()[0].icon(), Some(Icon::Usdc));
-    check("erc20", "send_usdc", &l, BASE, "erc20_known", "571e4389416083160cb3e74df8e4df815e71e26c2af34758eb44fb6d3af59641");
+    check("erc20", "send_usdc", &l, BASE, "erc20_known", "a2a0f1efc92299ffadf901244c9bd77031e1b86682dc3bbf0b156cee0eec506a");
 }
 
 #[test]
@@ -442,7 +442,7 @@ fn erc20_known_unlimited_approve_screens() {
     let l = lift_userop(&t, &data, Some(&m), None, &r, &f);
     assert_eq!(hero_caption(&l), "APPROVE USDC?");
     assert!(screen_text(&l.screens).contains("unlimited"));
-    check("erc20", "approve_usdc_unlimited", &l, BASE, "erc20_known", "5a25a8e554927c7636e9e545445cfa37adefbbb15a7c68fdbc3c2528d9090aa0");
+    check("erc20", "approve_usdc_unlimited", &l, BASE, "erc20_known", "6bff605c4b3ec512128d6255e7c52ac2f3683d20b485b62531742f176c509ee4");
 }
 
 #[test]
@@ -458,7 +458,7 @@ fn erc20_known_placeholder_token_transfer_from_screens() {
     assert_eq!(hero.icon(), Some(Icon::Eth));
     assert_eq!(hero.tint(), Some(pqsigner_ui_px::placeholder_ramp(b"TOSHI")));
     assert!(ids(&l.screens).iter().any(|i| i == "FROM"));
-    check("erc20", "pull_toshi", &l, BASE, "erc20_known", "926a6a4a53f7abd4dee1246064428397b3c933cce9d5971b6ebc5b6f53f6ee54");
+    check("erc20", "pull_toshi", &l, BASE, "erc20_known", "9d7c3fdac5d09cf3e8e13894bc953d67b80a4ca3dc6e9404facdddd8ae9bc7b8");
 }
 
 #[test]
@@ -473,7 +473,7 @@ fn erc20_unknown_transfer_screens() {
     // used the wrong modulus (% N_RAMPS); over the reference's 13-ramp hash
     // space it is ramp 4.
     assert_eq!(l.screens.as_slice()[0].tint(), Some(4));
-    check("erc20", "transfer_unknown", &l, BASE, "erc20_unknown", "6877ac52f6aed7be8a19985f6795454f16b59c2cc6356429f935bcec2432a03a");
+    check("erc20", "transfer_unknown", &l, BASE, "erc20_unknown", "f262aa0d651e71c6f4fdbc4c29ec4bcd50fa5559bfc45adae2cbb37f5b7dee77");
 }
 
 // ---------------------------------------------------------------------------
@@ -509,7 +509,7 @@ fn typed_call_screens() {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
     assert!(screen_text(&l.screens).contains("stake(address,uint256,bool)") || screen_text(&l.screens).contains("stake(address,"));
-    check("typed_call", "stake", &l, BASE, "typed_call", "8af4a71bcd1399fb1aa649e0dfb08779ff15ed6df9771f0ad1f985d3505c2dfb");
+    check("typed_call", "stake", &l, BASE, "typed_call", "a261eeb87a29012713c66d6ab7650360e20ff0154b2ab280849e28f4a6978fcd");
 }
 
 #[test]
@@ -521,7 +521,7 @@ fn blind_sign_screens() {
     let l = lift_userop(&t, &data, None, None, &r, &f);
     assert_eq!(hero_caption(&l), "CONFIRM UNKNOWN CALL?");
     assert_eq!(l.screens.as_slice()[0].icon(), Some(Icon::Blind));
-    check("blind_sign", "call_with_value", &l, BASE, "blind_sign", "aa747620fc86ca4938b7c5aab31a60f3438ddbe9025b8cef922798f1f4e5e6b4");
+    check("blind_sign", "call_with_value", &l, BASE, "blind_sign", "f0331074343a01117889964207ed6767554fd6c8cee74dc55fac2656a7b3bbcd");
 }
 
 #[test]
@@ -541,7 +541,7 @@ fn blind_sign_with_function_name_screens() {
     let l = lift_userop(&t, &data, None, Some(&meta), &r, &f);
     let text = screen_text(&l.screens).replace('\n', "");
     assert!(text.contains("swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"), "{text}");
-    check("blind_sign", "unknown_call_named", &l, BASE, "blind_sign", "ec2ecc6f4e02cb35777e0704c037cfa09ba9662840d2aa24b9e52cf7ed6107c8");
+    check("blind_sign", "unknown_call_named", &l, BASE, "blind_sign", "88a8a980a0cbcdfd95b61bc6f85afb1b947912948e6c72a429f29b18a79d8d0c");
 }
 
 // ---------------------------------------------------------------------------

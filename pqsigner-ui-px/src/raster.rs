@@ -631,9 +631,14 @@ fn chevron(s: &mut Strip<'_>, cx: Q8, cy: Q8, angle: Q16, color: Rgb) {
         let (rx, ry) = rot(x, y, a);
         (cx + rx, cy + ry)
     };
-    let pts = [p(bl), p(apex), p(br)];
-    // A stroke of half-width 2.25 px around the two arms reads as the
-    // design's rounded chevron.
+    // CLOSED loop: bl -> apex -> br -> bl. `components.chevron` is a FILLED
+    // triangle outlined with a 4.5 px round-joint stroke, so all three
+    // corners are round — not two arms. Stroking the open polyline left the
+    // base edge missing and the interior hollow, which is why every screen
+    // drew `<` where the reference draws a solid rounded triangle. The
+    // triangle is 8.4 x 7.2 px against a 2.25 px stroke half-width, so the
+    // closed loop covers the interior; `chevron_is_solid` pins that.
+    let pts = [p(bl), p(apex), p(br), p(bl)];
     capsules(s, &pts, (9 * ONE_Q8) / 4, color);
 }
 

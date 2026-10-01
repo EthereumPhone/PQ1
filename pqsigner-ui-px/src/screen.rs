@@ -964,7 +964,16 @@ impl ScreenBuilder {
         b.s.0[OFF_COMMIT] = b'Y';
         b.s.0[OFF_TIER] = b'3';
         b.s.0[OFF_TIER + 1] = b'6';
-        b.put(OFF_CAPTION, CAPTION_LEN, b"CONFIRM?");
+        // "Confirm?" in MIXED case, like the design reference — not
+        // "CONFIRM?". `spec/screens.schema.json` pins
+        // `defaults_per_kind.confirm.bottom = "Confirm?"`, and rule G-CONFIRM
+        // composes this screen from `layout.chain_compose("Confirm?",
+        // SIZE_XL)`, so the string is part of the geometry, not just the
+        // wording: measured at tier 36, the uppercase form is 171 px wide and
+        // leaves 3 px before the disc, where the reference's is 144 px and
+        // leaves 23 px. Tier 36 carries the TRIM charset, so lowercase is in
+        // the atlas.
+        b.put(OFF_CAPTION, CAPTION_LEN, b"Confirm?");
         b
     }
 

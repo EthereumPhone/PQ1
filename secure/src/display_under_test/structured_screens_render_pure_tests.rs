@@ -117,7 +117,7 @@ fn cow_direct_decoded_screens() {
     }
     let text = screen_text(&l.screens);
     assert!(text.contains("Wrapped Ether") && text.contains("USD Coin"), "{text}");
-    check("cowswap", "swap", &l, MAINNET, "cow", "589b8768201c58ff511eca72a06e66f5da49b8e3c940c7862bc2fb53517ff6ce");
+    check("cowswap", "swap", &l, MAINNET, "cow", "8411a6c90b41bc74068808d97b164103c6a7cdc75fd36e13663dbff2de2a9aa3");
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn cow_direct_address_mode_screens() {
     for want in ["SELLTOK", "SELLAMT", "BUYTOK", "BUYAMT"] {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
-    check("cowswap", "address_mode", &l, MAINNET, "cow", "864e0b9d03864da2a7bbf6e90a6d3073a6f8651d5f1d014bd9c5c509145625d0");
+    check("cowswap", "address_mode", &l, MAINNET, "cow", "f366018833e32a87ca997ce239332cfd6c9b608e4288d6f43cac1187ed523f82");
 }
 
 #[test]
@@ -210,7 +210,7 @@ fn erc7730_uniswap_exact_input_screens() {
     assert!(hero_caption(&l).starts_with("SIGN "), "{text}");
     assert!(ids(&l.screens).iter().any(|i| i == "INTENT"), "{text}");
     assert!(ids(&l.screens).iter().any(|i| i == "NETWORK"), "{text}");
-    check("erc7730", "uniswap_exact_input", &l, 1, "erc7730", "0fa49fa8f5f42d26dcffd91e120a9cbc19114e172eee647488cbb870a6c34ac4");
+    check("erc7730", "uniswap_exact_input", &l, 1, "erc7730", "a2e58e77753c735306e8cfdb3ca4a4f88610bbffbaa6269922e06285d36fc017");
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +304,7 @@ fn offchain_personal_sign_counterfactual_screens() {
     let text = screen_text(&l.screens).replace('\n', "");
     assert!(text.contains("app.example.com?") && text.contains("8f3a9c2e1b"), "{text}");
     assert!(l.screens.as_slice().iter().any(|s| s.label() == b"! UNDEPLOYED" && s.pulse()));
-    check("eip1271", "personal_counterfactual", &l, 8453, "personal", "068653ad7d18335c708294025b23ecfc760f17a075a78002458c6e3ec12a0a02");
+    check("eip1271", "personal_counterfactual", &l, 8453, "personal", "1076b83796a6e168c2ff56da3033152cf8687539cd058ced5927e9dfe204341c");
 }
 
 #[test]
@@ -327,7 +327,7 @@ fn offchain_raw32_screens() {
     for want in ["BLIND", "HASH", "FP8213", "DIGEST", "FP8213B", "DIGEST2", "OFFSIGNR", "WALLET", "MODE", "KEYS"] {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
-    check("eip1271", "raw32", &l, 8453, "raw32", "e33ec6cc19073648d44699ee7e4129c1d45fa529f80c916e64113ee1f464c609");
+    check("eip1271", "raw32", &l, 8453, "raw32", "319fe0f92bff425107c70872279f9ed92721801c19be37d7a2f0ecd8e19fb6d1");
 }
 
 #[test]
@@ -370,7 +370,7 @@ fn offchain_eip712_typed_screens() {
     };
     let l = finish_ref(pinned, &inputs, "typed");
     assert!(hero_caption(&l).starts_with("SIGN "));
-    check("eip1271", "typed_ballot", &l, 1, "typed", "ef936f088279001aff59a87c66d044518a8e2870a1711d075363f91a1f413254");
+    check("eip1271", "typed_ballot", &l, 1, "typed", "911fc4760b31cc9ebb9fe042b88022cb9acc29eaf8b22e779ed0cd0103d032b5");
 }
 
 
@@ -441,7 +441,7 @@ fn batch_member_screens() {
     // The disc keeps alternating after the inserted position screen.
     let sides: alloc::vec::Vec<_> = l.screens.as_slice().iter().filter_map(|s| s.side()).filter(|s| *s != pqsigner_ui_px::Side::None).collect();
     assert!(sides.windows(2).all(|w| w[0] != w[1]) || sides.len() < 2, "{sides:?}");
-    check("batch", "member_2_of_3", &l, BASE, "batch_member", "397a1690f9538ba8374bf7705b22c1d7a78b4e3ef02e51798dfb2b936dbf9716");
+    check("batch", "member_2_of_3", &l, BASE, "batch_member", "f4e43af499921295b3c1bc571daf0f06c7db9c1ab03465662419de3c27d2be66");
 }
 
 #[test]
@@ -478,7 +478,7 @@ fn batch_summary_screens() {
     for want in ["BATCH", "PAYMSTR", "SIGNER", "LANE", "GASLANE", "FP8213", "DIGEST", "DEPLOY"] {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
-    check("batch", "summary", &l, BASE, "batch_summary", "df927a92246ed289adb9f93ed97c70d347666e703290b346a2b92b9917cd2c08");
+    check("batch", "summary", &l, BASE, "batch_summary", "425da91d2a585da7fc155214caf7d60c75283816eda95c65429d387ebb38cda2");
 }
 
 #[test]
@@ -542,7 +542,7 @@ fn erc7730_userop_envelope_screens() {
     let l = lift_erc7730(&t, &data, &verified);
     let nonce_screen = l.screens.as_slice().iter().find(|s| s.id() == b"NONCE").expect("one NONCE screen");
     assert_eq!(nonce_screen.npages(), 2);
-    check("erc7730", "uniswap_userop", &l, 1, "erc7730", "a7fc58916918a153ad87392aa327f279111a0c4c39e2dc2c47362eade4f969a2");
+    check("erc7730", "uniswap_userop", &l, 1, "erc7730", "954ee31e5cad96c8cab887ed4f9869d66b5687d6a00b6ba1990a1e2582452d48");
 }
 
 // ---------------------------------------------------------------------------

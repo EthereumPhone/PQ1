@@ -13,7 +13,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `SAFEACCT` | 1 | id=SAFEACCT lab="SAFE ACCT" cap="" \| r:0x5a5A5a5a5A5a5a5a5a5 \| r:A5a5A5A5a5a5A5A5A5A5A | ![SAFEACCT](scenario-0h/02-safeacct-p0.png) |
 | 3 | `TXINFO` | 1 | id=TXINFO lab="TX INFO" cap="" \| r:Execute now \| r:Op: Call | ![TXINFO](scenario-0h/03-txinfo-p0.png) |
 | 4 | `EMPTYCAL` | 1 | id=EMPTYCAL lab="EMPTY CALL" cap="" \| r:0xA5A5A5A5A5A5 \| r:A5A5A5A5a5a5a5 \| r:a5a5a5A5a5a5a5 | ![EMPTYCAL](scenario-0h/04-emptycal-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-0h/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-0h/05-confirm-p0.png) |
 | 6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-0h/06-maxfee-p0.png) |
 | 7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-0h/07-worst-p0.png) |
 | 8 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-0h/08-signer-p0.png) |
@@ -40,7 +40,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xabCDEF1234567890ABc \| r:DEF1234567890aBCDeF12 | ![TO](scenario-1/d2-02-to-p0.png) |
 | 2.3 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:1.000000 ETH | ![VALUE](scenario-1/d2-03-value-p0.png) |
 | 2.4 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-1/d2-04-maxfee-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-1/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-1/d2-05-confirm-p0.png) |
 | 2.6 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-1/d2-06-worst-p0.png) |
 | 2.7 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 2 \| r:Data: 0 B | ![DETAILS](scenario-1/d2-07-details-p0.png) |
 | 2.8 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:1.000000 ETH | ![NATIVE](scenario-1/d2-08-native-p0.png) |
@@ -61,7 +61,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xabCDEF1234567890ABc \| r:DEF1234567890aBCDeF12 | ![TO](scenario-2/02-to-p0.png) |
 | 3 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.500000 ETH | ![VALUE](scenario-2/03-value-p0.png) |
 | 4 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-2/04-maxfee-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-2/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-2/05-confirm-p0.png) |
 | 6 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-2/06-worst-p0.png) |
 | 7 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 2 \| r:Data: 0 B | ![DETAILS](scenario-2/07-details-p0.png) |
 | 8 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.500000 ETH | ![NATIVE](scenario-2/08-native-p0.png) |
@@ -89,7 +89,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xabCDEF1234567890ABc \| r:DEF1234567890aBCDeF12 | ![TO](scenario-3/d2-02-to-p0.png) |
 | 2.3 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.250000 ETH | ![VALUE](scenario-3/d2-03-value-p0.png) |
 | 2.4 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-3/d2-04-maxfee-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-3/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-3/d2-05-confirm-p0.png) |
 | 2.6 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-3/d2-06-worst-p0.png) |
 | 2.7 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 4 \| r:Data: 0 B | ![DETAILS](scenario-3/d2-07-details-p0.png) |
 | 2.8 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.250000 ETH | ![NATIVE](scenario-3/d2-08-native-p0.png) |
@@ -117,7 +117,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xabCDEF1234567890ABc \| r:DEF1234567890aBCDeF12 | ![TO](scenario-4/d2-02-to-p0.png) |
 | 2.3 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.100000 ETH | ![VALUE](scenario-4/d2-03-value-p0.png) |
 | 2.4 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-4/d2-04-maxfee-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-4/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-4/d2-05-confirm-p0.png) |
 | 2.6 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-4/d2-06-worst-p0.png) |
 | 2.7 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 2 \| r:Data: 0 B | ![DETAILS](scenario-4/d2-07-details-p0.png) |
 | 2.8 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.100000 ETH | ![NATIVE](scenario-4/d2-08-native-p0.png) |
@@ -138,7 +138,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0x9e3B5c0f7a1d24E86C3 \| r:F0B7d5A2e4C6F8b1D3a7c | ![TO](scenario-4a/02-to-p0.png) |
 | 3 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000000 ETH | ![VALUE](scenario-4a/03-value-p0.png) |
 | 4 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-4a/04-maxfee-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-4a/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-4a/05-confirm-p0.png) |
 | 6 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-4a/06-worst-p0.png) |
 | 7 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 4 \| r:Data: 0 B | ![DETAILS](scenario-4a/07-details-p0.png) |
 | 8 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| s:Signer acct #0 \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-4a/08-signer-p0.png) |
@@ -158,7 +158,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `CONTRACT` | 1 | id=CONTRACT lab="CONTRACT" cap="" \| s:! Unknown token \| r:0x3ca9e5f1B72D04e8A6c \| r:1d9b3f57e28a0c4d6B1e9 | ![CONTRACT](scenario-4b/02-contract-p0.png) |
 | 3 | `AMOUNT` | 1 | id=AMOUNT lab="AMOUNT" cap="" \| r:(RAW) transfer \| r:12345678901234567890 | ![AMOUNT](scenario-4b/03-amount-p0.png) |
 | 4 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xabCDEF1234567890ABc \| r:DEF1234567890aBCDeF12 | ![TO](scenario-4b/04-to-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-4b/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-4b/05-confirm-p0.png) |
 | 6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-4b/06-maxfee-p0.png) |
 | 7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-4b/07-worst-p0.png) |
 | 8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 5 \| r:Data: 68 B | ![DETAILS](scenario-4b/08-details-p0.png) |
@@ -179,7 +179,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xabCDEF1234567890ABc \| r:DEF1234567890aBCDeF12 | ![TO](scenario-4c/02-to-p0.png) |
 | 3 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.010000 ETH | ![VALUE](scenario-4c/03-value-p0.png) |
 | 4 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-4c/04-maxfee-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-4c/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-4c/05-confirm-p0.png) |
 | 6 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-4c/06-worst-p0.png) |
 | 7 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 0 \| r:Data: 0 B | ![DETAILS](scenario-4c/07-details-p0.png) |
 | 8 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.010000 ETH | ![NATIVE](scenario-4c/08-native-p0.png) |
@@ -201,7 +201,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `SAFEACCT` | 1 | id=SAFEACCT lab="SAFE ACCT" cap="" \| r:0x5aFE000000000000000 \| r:000000000000000000001 | ![SAFEACCT](scenario-5/02-safeacct-p0.png) |
 | 3 | `TXINFO` | 1 | id=TXINFO lab="TX INFO" cap="" \| r:Nonce: 17 \| r:Op: Call | ![TXINFO](scenario-5/03-txinfo-p0.png) |
 | 4 | `UNVERIF` | 1 | id=UNVERIF lab="UNVERIFIED" cap="" \| r:ERC-20 call \| r:token unknown | ![UNVERIF](scenario-5/04-unverif-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5/05-confirm-p0.png) |
 | 6 | `RAWAMT` | 1 | id=RAWAMT lab="RAW AMOUNT" cap="" \| r:250000000 units | ![RAWAMT](scenario-5/06-rawamt-p0.png) |
 | 7 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xABaBaBaBABab \| r:ABabAbAbABAbAB \| r:abababaBaBABaB | ![TO](scenario-5/07-to-p0.png) |
 | 8 | `CONTRACT` | 1 | id=CONTRACT lab="CONTRACT" cap="" \| r:0xA0b86991c6218b36c1d \| r:19D4a2e9Eb0cE3606eB48 | ![CONTRACT](scenario-5/08-contract-p0.png) |
@@ -224,7 +224,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `FUNCTION` | 1 | id=FUNCTION lab="FUNCTION" cap="" \| s:! BLIND SIGN \| r:balanceOf(address) | ![FUNCTION](scenario-5b/02-function-p0.png) |
 | 3 | `ARG0` | 1 | id=ARG0 lab="ARG 0" cap="" \| r:0xABaBaBaBABab \| r:ABabAbAbABAbAB \| r:abababaBaBABaB | ![ARG0](scenario-5b/03-arg0-p0.png) |
 | 4 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xfefeFEFeFEFEFEFEFeF \| r:efefefefeFEfEfefefEfe | ![TO](scenario-5b/04-to-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5b/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5b/05-confirm-p0.png) |
 | 6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5b/06-maxfee-p0.png) |
 | 7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-5b/07-worst-p0.png) |
 | 8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 5 \| r:Data: 36 B | ![DETAILS](scenario-5b/08-details-p0.png) |
@@ -252,7 +252,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xCdCDCdCdcdcd \| r:cdCdcDcDCdcDcD \| r:CdCdcdCdcDCDcD | ![TO](scenario-5v/d2-02-to-p0.png) |
 | 2.3 | `AMOUNT` | 1 | id=AMOUNT lab="SEND" cap="" \| r:123.45 TEL | ![AMOUNT](scenario-5v/d2-03-amount-p0.png) |
 | 2.4 | `CONTRACT` | 1 | id=CONTRACT lab="CONTRACT" cap="" \| s:Telcoin \| r:0x09bE1692ca16e06f536 \| r:F0038fF11D1dA8524aDB1 | ![CONTRACT](scenario-5v/d2-04-contract-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5v/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5v/d2-05-confirm-p0.png) |
 | 2.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5v/d2-06-maxfee-p0.png) |
 | 2.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-5v/d2-07-worst-p0.png) |
 | 2.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 7 \| r:Data: 68 B | ![DETAILS](scenario-5v/d2-08-details-p0.png) |
@@ -280,7 +280,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Forward call \| r:PQSigner \| r:NestedForwarder | ![INTENT](scenario-5m-nested/d2-02-intent-p0.png) |
 | 2.3 | `F2` | 1 | id=F2 lab="TARGET" cap="" \| r:0x5656565656565656565 \| r:656565656565656565656 | ![F2](scenario-5m-nested/d2-03-f2-p0.png) |
 | 2.4 | `F3` | 1 | id=F3 lab="CALL CALL" cap="" \| r:0x5656565656565656565 \| r:656565656565656565656 | ![F3](scenario-5m-nested/d2-04-f3-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5m-nested/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5m-nested/d2-05-confirm-p0.png) |
 | 2.6 | `F4` | 1 | id=F4 lab="" cap="" \| s:** DEV BUILD ** \| r:Unattested \| r:descriptor | ![F4](scenario-5m-nested/d2-06-f4-p0.png) |
 | 2.7 | `F5` | 1 | id=F5 lab="TRANSFER" cap="" \| r:PQSigner \| r:NestedToken | ![F5](scenario-5m-nested/d2-07-f5-p0.png) |
 | 2.8 | `F6` | 1 | id=F6 lab="RECIPIENT" cap="" \| r:0x7878787878787878787 \| r:878787878787878787878 | ![F6](scenario-5m-nested/d2-08-f6-p0.png) |
@@ -308,7 +308,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Annotate \| r:PQSigner \| r:MultiTailNotes | ![INTENT](scenario-5m-multi-tail/02-intent-p0.png) |
 | 3 | `F2` | 1 | id=F2 lab="SUBJECT" cap="" \| r:alpha subject \| r:13 bytes | ![F2](scenario-5m-multi-tail/03-f2-p0.png) |
 | 4 | `F3` | 1 | id=F3 lab="MEMO" cap="" \| r:exact memo \| r:10 bytes | ![F3](scenario-5m-multi-tail/04-f3-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5m-multi-tail/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5m-multi-tail/05-confirm-p0.png) |
 | 6 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:Chain 31337 | ![NETWORK](scenario-5m-multi-tail/06-network-p0.png) |
 | 7 | `F5` | 1 | id=F5 lab="MAX FEE/BASE" cap="" \| r:10000000000 \| r:Tip/base: \| r:2000000000 | ![F5](scenario-5m-multi-tail/07-f5-p0.png) |
 | 8 | `F6` | 1 | id=F6 lab="GAS:450000" cap="" \| r:Max total/base: \| r:4500000000000000 | ![F6](scenario-5m-multi-tail/08-f6-p0.png) |
@@ -338,7 +338,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `TO` | 1 | id=TO lab="TO" cap="" \| s:Uniswap V3 Router \| r:0xE592427A0AEce92De3E \| r:dee1F18E0157C05861564 | ![TO](scenario-5w/d2-02-to-p0.png) |
 | 2.3 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000001 ETH | ![VALUE](scenario-5w/d2-03-value-p0.png) |
 | 2.4 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5w/d2-04-maxfee-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5w/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5w/d2-05-confirm-p0.png) |
 | 2.6 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-5w/d2-06-worst-p0.png) |
 | 2.7 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 8 \| r:Data: 0 B | ![DETAILS](scenario-5w/d2-07-details-p0.png) |
 | 2.8 | `NATIVE` | 1 | id=NATIVE lab="NATIVE VALUE" cap="" \| r:! NATIVE ETH \| r:0.000001 ETH | ![NATIVE](scenario-5w/d2-08-native-p0.png) |
@@ -359,7 +359,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `BLINDSGN` | 1 | id=BLINDSGN lab="BLIND SIGN" cap="" \| r:Unknown call \| r:Verify on dapp | ![BLINDSGN](scenario-5c/02-blindsgn-p0.png) |
 | 3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xfefeFEFeFEFEFEFEFeF \| r:efefefefeFEfEfefefEfe | ![TO](scenario-5c/03-to-p0.png) |
 | 4 | `AMOUNT` | 1 | id=AMOUNT lab="AMOUNT" cap="" \| r:0 ETH | ![AMOUNT](scenario-5c/04-amount-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5c/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5c/05-confirm-p0.png) |
 | 6 | `CALLDATA` | 1 | id=CALLDATA lab="CALL DATA" cap="" \| r:Selector: 0x70a08231 \| r:Data: 36 B | ![CALLDATA](scenario-5c/06-calldata-p0.png) |
 | 7 | `DATAHASH` | 1 | id=DATAHASH lab="DATA HASH" cap="" \| r:0xfb7d093103926e09abdf24 \| r:01b035d74cdee4ed9f448c \| r:fea20659cce733370e23 | ![DATAHASH](scenario-5c/07-datahash-p0.png) |
 | 8 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5c/08-maxfee-p0.png) |
@@ -382,7 +382,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `BLINDSGN` | 1 | id=BLINDSGN lab="BLIND SIGN" cap="" \| r:Unknown call \| r:Verify on dapp | ![BLINDSGN](scenario-5d/02-blindsgn-p0.png) |
 | 3 | `FUNCTION` | 1 | id=FUNCTION lab="FUNCTION" cap="" \| r:transfer(address, \| r:uint256) | ![FUNCTION](scenario-5d/03-function-p0.png) |
 | 4 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xfefeFEFeFEFEFEFEFeF \| r:efefefefeFEfEfefefEfe | ![TO](scenario-5d/04-to-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5d/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5d/05-confirm-p0.png) |
 | 6 | `AMOUNT` | 1 | id=AMOUNT lab="AMOUNT" cap="" \| r:0 ETH | ![AMOUNT](scenario-5d/06-amount-p0.png) |
 | 7 | `CALLDATA` | 1 | id=CALLDATA lab="CALL DATA" cap="" \| r:Selector: 0xa9059cbb \| r:Data: 36 B | ![CALLDATA](scenario-5d/07-calldata-p0.png) |
 | 8 | `DATAHASH` | 1 | id=DATAHASH lab="DATA HASH" cap="" \| r:0x7eba394a6103e6585dddbc \| r:83a85e64ec5abdb339bd13 \| r:bf4e995fbcbe4735416a | ![DATAHASH](scenario-5d/08-datahash-p0.png) |
@@ -406,7 +406,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `GUESS` | 1 | id=GUESS lab="GUESS" cap="" \| s:! UNVERIFIED \| r:transfer(uint256) | ![GUESS](scenario-5j/02-guess-p0.png) |
 | 3 | `ARG0` | 1 | id=ARG0 lab="ARG 0" cap="" \| s:uint256: \| r:1000 | ![ARG0](scenario-5j/03-arg0-p0.png) |
 | 4 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xfefeFEFeFEFEFEFEFeF \| r:efefefefeFEfEfefefEfe | ![TO](scenario-5j/04-to-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5j/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5j/05-confirm-p0.png) |
 | 6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5j/06-maxfee-p0.png) |
 | 7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0045 ETH \| r:(gas: 450000) | ![WORST](scenario-5j/07-worst-p0.png) |
 | 8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 8 \| r:Data: 36 B | ![DETAILS](scenario-5j/08-details-p0.png) |
@@ -427,7 +427,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `BLINDSGN` | 1 | id=BLINDSGN lab="BLIND SIGN" cap="" \| r:Unknown call \| r:Verify on dapp | ![BLINDSGN](scenario-5k/02-blindsgn-p0.png) |
 | 3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xfefeFEFeFEFEFEFEFeF \| r:efefefefeFEfEfefefEfe | ![TO](scenario-5k/03-to-p0.png) |
 | 4 | `AMOUNT` | 1 | id=AMOUNT lab="AMOUNT" cap="" \| r:0 ETH | ![AMOUNT](scenario-5k/04-amount-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5k/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5k/05-confirm-p0.png) |
 | 6 | `CALLDATA` | 1 | id=CALLDATA lab="CALL DATA" cap="" \| r:Selector: 0x12514bba \| r:Data: 36 B | ![CALLDATA](scenario-5k/06-calldata-p0.png) |
 | 7 | `DATAHASH` | 1 | id=DATAHASH lab="DATA HASH" cap="" \| r:0x029082bb13b30b74c3c6b9 \| r:743efc970fe06e6782a9e9 \| r:f62d9f75ed5e27ad3ee6 | ![DATAHASH](scenario-5k/07-datahash-p0.png) |
 | 8 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5k/08-maxfee-p0.png) |
@@ -450,7 +450,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 1.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5e/d1-02-network-p0.png) |
 | 1.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xA0a0a0A0A0A0a0a0A0A \| r:0a0A0a0A0a0A0A0A0a0a0 | ![TO](scenario-5e/d1-03-to-p0.png) |
 | 1.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.100000 ETH | ![VALUE](scenario-5e/d1-04-value-p0.png) |
-| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e/d1-05-confirm-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5e/d1-05-confirm-p0.png) |
 | 1.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5e/d1-06-maxfee-p0.png) |
 | 1.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5e/d1-07-worst-p0.png) |
 | 1.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 8 \| r:Data: 0 B | ![DETAILS](scenario-5e/d1-08-details-p0.png) |
@@ -467,7 +467,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5e/d2-02-network-p0.png) |
 | 2.3 | `CONTRACT` | 1 | id=CONTRACT lab="CONTRACT" cap="" \| s:! Unknown token \| r:0xA1A1a1a1A1A1A1A1A1a \| r:1a1a1a1a1A1A1a1A1a1a1 | ![CONTRACT](scenario-5e/d2-03-contract-p0.png) |
 | 2.4 | `AMOUNT` | 1 | id=AMOUNT lab="AMOUNT" cap="" \| r:(RAW) transfer \| r:250000000 | ![AMOUNT](scenario-5e/d2-04-amount-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5e/d2-05-confirm-p0.png) |
 | 2.6 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xABaBaBaBABab \| r:ABabAbAbABAbAB \| r:abababaBaBABaB | ![TO](scenario-5e/d2-06-to-p0.png) |
 | 2.7 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5e/d2-07-maxfee-p0.png) |
 | 2.8 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5e/d2-08-worst-p0.png) |
@@ -484,7 +484,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 3.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5e/d3-02-network-p0.png) |
 | 3.3 | `BLINDSGN` | 1 | id=BLINDSGN lab="BLIND SIGN" cap="" \| r:Unknown call \| r:Verify on dapp | ![BLINDSGN](scenario-5e/d3-03-blindsgn-p0.png) |
 | 3.4 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xa2A2a2A2A2A2A2a2a2a \| r:2a2A2A2A2A2a2A2A2a2a2 | ![TO](scenario-5e/d3-04-to-p0.png) |
-| 3.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e/d3-05-confirm-p0.png) |
+| 3.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5e/d3-05-confirm-p0.png) |
 | 3.6 | `AMOUNT` | 1 | id=AMOUNT lab="AMOUNT" cap="" \| r:0 ETH | ![AMOUNT](scenario-5e/d3-06-amount-p0.png) |
 | 3.7 | `CALLDATA` | 1 | id=CALLDATA lab="CALL DATA" cap="" \| r:Selector: 0x12345678 \| r:Data: 9 B | ![CALLDATA](scenario-5e/d3-07-calldata-p0.png) |
 | 3.8 | `DATAHASH` | 1 | id=DATAHASH lab="DATA HASH" cap="" \| r:0x69f98b03597fd56be5fc3b \| r:54a5fd0e67efc7b9c93cc0 \| r:3cd5130ea7019af14fe9 | ![DATAHASH](scenario-5e/d3-08-datahash-p0.png) |
@@ -516,7 +516,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 1.2 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5e-7730/d1-02-dev-p0.png) |
 | 1.3 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Wrap \| r:WETH \| r:WETH | ![INTENT](scenario-5e-7730/d1-03-intent-p0.png) |
 | 1.4 | `F2` | 1 | id=F2 lab="AMOUNT" cap="" \| r:0.01 ETH | ![F2](scenario-5e-7730/d1-04-f2-p0.png) |
-| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e-7730/d1-05-confirm-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5e-7730/d1-05-confirm-p0.png) |
 | 1.6 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5e-7730/d1-06-network-p0.png) |
 | 1.7 | `F4` | 1 | id=F4 lab="MAX FEE/GWEI" cap="" \| r:10 \| r:Tip/gwei: \| r:2 | ![F4](scenario-5e-7730/d1-07-f4-p0.png) |
 | 1.8 | `F5` | 1 | id=F5 lab="" cap="" \| s:Max total/ETH: \| r:0.0058 \| r:Gas:580000 | ![F5](scenario-5e-7730/d1-08-f5-p0.png) |
@@ -548,7 +548,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 1.2 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5e-rt-erc20/d1-02-dev-p0.png) |
 | 1.3 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Deposit collateral \| r:PositionsManage | ![INTENT](scenario-5e-rt-erc20/d1-03-intent-p0.png) |
 | 1.4 | `F2` | 1 | id=F2 lab="AMOUNT" cap="" \| r:100 USDT | ![F2](scenario-5e-rt-erc20/d1-04-f2-p0.png) |
-| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e-rt-erc20/d1-05-confirm-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5e-rt-erc20/d1-05-confirm-p0.png) |
 | 1.6 | `F3` | 1 | id=F3 lab="" cap="" \| s:Token contract \| r:0x1CDD2EaB61112697626 \| r:F7b4bB0e23Da4FeBF7B7C | ![F3](scenario-5e-rt-erc20/d1-06-f3-p0.png) |
 | 1.7 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Mainnet | ![NETWORK](scenario-5e-rt-erc20/d1-07-network-p0.png) |
 | 1.8 | `F5` | 1 | id=F5 lab="MAX FEE/GWEI" cap="" \| r:10 \| r:Tip/gwei: \| r:2 | ![F5](scenario-5e-rt-erc20/d1-08-f5-p0.png) |
@@ -567,7 +567,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `DEV` | 1 | id=DEV lab="! DEV BUILD" cap="" \| r:Unattested \| r:descriptor | ![DEV](scenario-5e-rt-erc20/d2-02-dev-p0.png) |
 | 2.3 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Deposit collateral \| r:PositionsManage | ![INTENT](scenario-5e-rt-erc20/d2-03-intent-p0.png) |
 | 2.4 | `F2` | 1 | id=F2 lab="AMOUNT" cap="" \| r:100 USDT | ![F2](scenario-5e-rt-erc20/d2-04-f2-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5e-rt-erc20/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5e-rt-erc20/d2-05-confirm-p0.png) |
 | 2.6 | `F3` | 1 | id=F3 lab="" cap="" \| s:Token contract \| r:0xdAC17F958D2ee523a22 \| r:06206994597C13D831ec7 | ![F3](scenario-5e-rt-erc20/d2-06-f3-p0.png) |
 | 2.7 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Mainnet | ![NETWORK](scenario-5e-rt-erc20/d2-07-network-p0.png) |
 | 2.8 | `F5` | 1 | id=F5 lab="MAX FEE/GWEI" cap="" \| r:10 \| r:Tip/gwei: \| r:2 | ![F5](scenario-5e-rt-erc20/d2-08-f5-p0.png) |
@@ -599,7 +599,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 1.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5f/d1-02-network-p0.png) |
 | 1.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xB0B0b0B0B0B0 \| r:B0b0B0B0B0b0b0 \| r:b0b0B0b0b0B0B0 | ![TO](scenario-5f/d1-03-to-p0.png) |
 | 1.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:1 wei | ![VALUE](scenario-5f/d1-04-value-p0.png) |
-| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5f/d1-05-confirm-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5f/d1-05-confirm-p0.png) |
 | 1.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5f/d1-06-maxfee-p0.png) |
 | 1.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5f/d1-07-worst-p0.png) |
 | 1.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 9 \| r:Data: 0 B | ![DETAILS](scenario-5f/d1-08-details-p0.png) |
@@ -629,7 +629,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 1.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5g/d1-02-network-p0.png) |
 | 1.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xC0C0c0c0C0C0 \| r:c0c0c0C0c0C0C0 \| r:C0C0C0C0C0c0c0 | ![TO](scenario-5g/d1-03-to-p0.png) |
 | 1.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000000 ETH | ![VALUE](scenario-5g/d1-04-value-p0.png) |
-| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5g/d1-05-confirm-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5g/d1-05-confirm-p0.png) |
 | 1.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5g/d1-06-maxfee-p0.png) |
 | 1.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5g/d1-07-worst-p0.png) |
 | 1.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 10 \| r:Data: 0 B | ![DETAILS](scenario-5g/d1-08-details-p0.png) |
@@ -645,7 +645,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5g/d2-02-network-p0.png) |
 | 2.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xC1C1c1c1C1C1 \| r:C1c1c1C1C1C1c1 \| r:C1C1C1c1C1c1c1 | ![TO](scenario-5g/d2-03-to-p0.png) |
 | 2.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000001 ETH | ![VALUE](scenario-5g/d2-04-value-p0.png) |
-| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5g/d2-05-confirm-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5g/d2-05-confirm-p0.png) |
 | 2.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5g/d2-06-maxfee-p0.png) |
 | 2.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5g/d2-07-worst-p0.png) |
 | 2.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 10 \| r:Data: 0 B | ![DETAILS](scenario-5g/d2-08-details-p0.png) |
@@ -662,7 +662,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 3.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5g/d3-02-network-p0.png) |
 | 3.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xc2C2C2C2C2C2 \| r:c2c2c2c2C2C2c2 \| r:C2C2C2C2C2c2C2 | ![TO](scenario-5g/d3-03-to-p0.png) |
 | 3.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000002 ETH | ![VALUE](scenario-5g/d3-04-value-p0.png) |
-| 3.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5g/d3-05-confirm-p0.png) |
+| 3.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5g/d3-05-confirm-p0.png) |
 | 3.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5g/d3-06-maxfee-p0.png) |
 | 3.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5g/d3-07-worst-p0.png) |
 | 3.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 10 \| r:Data: 0 B | ![DETAILS](scenario-5g/d3-08-details-p0.png) |
@@ -679,7 +679,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 4.2 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5g/d4-02-network-p0.png) |
 | 4.3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xc3c3c3c3c3c3 \| r:c3c3c3C3C3c3C3 \| r:C3C3c3C3C3c3c3 | ![TO](scenario-5g/d4-03-to-p0.png) |
 | 4.4 | `VALUE` | 1 | id=VALUE lab="VALUE" cap="" \| r:0.000003 ETH | ![VALUE](scenario-5g/d4-04-value-p0.png) |
-| 4.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5g/d4-05-confirm-p0.png) |
+| 4.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5g/d4-05-confirm-p0.png) |
 | 4.6 | `MAXFEE` | 1 | id=MAXFEE lab="MAX FEE" cap="" \| r:Fees: max / tip \| r:10 gwei \| r:2 gwei | ![MAXFEE](scenario-5g/d4-06-maxfee-p0.png) |
 | 4.7 | `WORST` | 1 | id=WORST lab="WORST CASE" cap="" \| r:Worst-case: \| r:0.0058 ETH \| r:(gas: 580000) | ![WORST](scenario-5g/d4-07-worst-p0.png) |
 | 4.8 | `DETAILS` | 1 | id=DETAILS lab="DETAILS" cap="" \| r:Nonce: 10 \| r:Data: 0 B | ![DETAILS](scenario-5g/d4-08-details-p0.png) |
@@ -709,7 +709,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `INTENT` | 1 | id=INTENT lab="INTENT" cap="" \| s:Wrap \| r:WETH \| r:WETH | ![INTENT](scenario-5m/02-intent-p0.png) |
 | 3 | `F2` | 1 | id=F2 lab="AMOUNT" cap="" \| r:0.01 ETH | ![F2](scenario-5m/03-f2-p0.png) |
 | 4 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5m/04-network-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5m/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5m/05-confirm-p0.png) |
 | 6 | `F4` | 1 | id=F4 lab="MAX FEE/GWEI" cap="" \| r:10 \| r:Tip/gwei: \| r:2 | ![F4](scenario-5m/06-f4-p0.png) |
 | 7 | `F5` | 1 | id=F5 lab="" cap="" \| s:Max total/ETH: \| r:0.0045 \| r:Gas:450000 | ![F5](scenario-5m/07-f5-p0.png) |
 | 8 | `NONCE` | 1 | id=NONCE lab="NONCE (HEX)" cap="" \| r:0000000000000000 \| r:0000000000000000 \| r:0000000000000000 | ![NONCE](scenario-5m/08-nonce-p0.png) |
@@ -733,7 +733,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 3 | `F2` | 1 | id=F2 lab="DELEGATEE" cap="" \| r:0x4242424242424242424 \| r:242424242424242424242 | ![F2](scenario-5p/03-f2-p0.png) |
 | 4 | `F3` | 1 | id=F3 lab="NONCE" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![F3](scenario-5p/04-f3-p0.png) |
 | 4 | `F3` | 2 | id=F3 lab="NONCE" cap="" \| r:0000000000000000 \| r:0000000000000007 | ![F3](scenario-5p/04-f3-p1.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5p/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p/05-confirm-p0.png) |
 | 6 | `F5` | 1 | id=F5 lab="EXPIRY" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![F5](scenario-5p/06-f5-p0.png) |
 | 6 | `F5` | 2 | id=F5 lab="EXPIRY" cap="" \| r:0000000000000000 \| r:0000000077359400 | ![F5](scenario-5p/06-f5-p1.png) |
 | 7 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p/07-network-p0.png) |
@@ -753,7 +753,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-personal/02-mode-p0.png) |
 | 3 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-personal/03-account-p0.png) |
 | 4 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5p-personal/04-signer-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5p-personal/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-personal/05-confirm-p0.png) |
 | 6 | `MSG` | 1 | id=MSG lab="MESSAGE" cap="" \| r:Login to app.example. \| r:com? Nonce: \| r:8f3a9c2e1b | ![MSG](scenario-5p-personal/06-msg-p0.png) |
 | 7 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:2/65536 keys used \| r:Gap: 2 | ![KEYS](scenario-5p-personal/07-keys-p0.png) |
 | 8 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5p-personal/08-fp8213-p0.png) |
@@ -769,7 +769,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `BLIND` | 1 | id=BLIND lab="BLIND" cap="" \| s:! BLIND RAW32 \| r:Hash only, no text \| r:Check it on the dapp | ![BLIND](scenario-5p-raw32/02-blind-p0.png) |
 | 3 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-raw32/03-mode-p0.png) |
 | 4 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-raw32/04-account-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5p-raw32/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-raw32/05-confirm-p0.png) |
 | 6 | `HASH` | 1 | id=HASH lab="HASH" cap="" \| r:0x7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d | ![HASH](scenario-5p-raw32/06-hash-p0.png) |
 | 7 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:3/65536 keys used \| r:Gap: 3 | ![KEYS](scenario-5p-raw32/07-keys-p0.png) |
 | 8 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:Raw32 Hash | ![FP8213](scenario-5p-raw32/08-fp8213-p0.png) |
@@ -790,7 +790,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `SAFEACCT` | 1 | id=SAFEACCT lab="SAFE ACCT" cap="" \| r:0x5AFE000000000000000 \| r:000000000000000000002 | ![SAFEACCT](scenario-5q/02-safeacct-p0.png) |
 | 3 | `TXINFO` | 1 | id=TXINFO lab="TX INFO" cap="" \| r:Nonce: 18 \| r:Op: Call | ![TXINFO](scenario-5q/03-txinfo-p0.png) |
 | 4 | `COWORDER` | 1 | id=COWORDER lab="COW ORDER" cap="" \| r:SELL order \| r:owner: this Safe | ![COWORDER](scenario-5q/04-coworder-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5q/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5q/05-confirm-p0.png) |
 | 6 | `SELLTOK` | 1 | id=SELLTOK lab="SELL TOKEN" cap="" \| r:0xA0b86991c6218b36c1d \| r:19D4a2e9Eb0cE3606eB48 | ![SELLTOK](scenario-5q/06-selltok-p0.png) |
 | 7 | `SELLAMT` | 1 | id=SELLAMT lab="SELL" cap="" \| r:0x0000000000000000000000 \| r:0000000000000000000000 \| r:0000000000003b9aca00 | ![SELLAMT](scenario-5q/07-sellamt-p0.png) |
 | 8 | `BUYTOK` | 1 | id=BUYTOK lab="BUY TOKEN" cap="" \| r:0xC02aaA39b223 \| r:FE8D0A0e5C4F27 \| r:eAD9083C756Cc2 | ![BUYTOK](scenario-5q/08-buytok-p0.png) |
@@ -820,7 +820,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `ORDER` | 1 | id=ORDER lab="ORDER" cap="" \| r:SELL order | ![ORDER](scenario-5q-direct/02-order-p0.png) |
 | 3 | `SELLTOK` | 1 | id=SELLTOK lab="SELL TOKEN" cap="" \| r:0xC02aaA39b223 \| r:FE8D0A0e5C4F27 \| r:eAD9083C756Cc2 | ![SELLTOK](scenario-5q-direct/03-selltok-p0.png) |
 | 4 | `SELLAMT` | 1 | id=SELLAMT lab="SELL" cap="" \| r:0x0000000000000000000000 \| r:0000000000000000000000 \| r:000006f05b59d3b20000 | ![SELLAMT](scenario-5q-direct/04-sellamt-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5q-direct/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5q-direct/05-confirm-p0.png) |
 | 6 | `BUYTOK` | 1 | id=BUYTOK lab="BUY TOKEN" cap="" \| r:0xA0b86991c6218b36c1d \| r:19D4a2e9Eb0cE3606eB48 | ![BUYTOK](scenario-5q-direct/06-buytok-p0.png) |
 | 7 | `BUYAMT` | 1 | id=BUYAMT lab="BUY MIN" cap="" \| r:0x0000000000000000000000 \| r:0000000000000000000000 \| r:0000000000006dcf6b70 | ![BUYAMT](scenario-5q-direct/07-buyamt-p0.png) |
 | 8 | `RECEIVER` | 1 | id=RECEIVER lab="RECEIVER" cap="" \| r:0x0000000000000000000 \| r:000000000000000000000 | ![RECEIVER](scenario-5q-direct/08-receiver-p0.png) |
@@ -848,7 +848,7 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 2 | `SAFEACCT` | 1 | id=SAFEACCT lab="SAFE ACCT" cap="" \| r:0x5AFE000000000000000 \| r:000000000000000000002 | ![SAFEACCT](scenario-5s/02-safeacct-p0.png) |
 | 3 | `TXINFO` | 1 | id=TXINFO lab="TX INFO" cap="" \| r:Nonce: 20 \| r:Op: MultiSend x2 | ![TXINFO](scenario-5s/03-txinfo-p0.png) |
 | 4 | `RECORD1` | 1 | id=RECORD1 lab="RECORD 1/2" cap="" \| r:0xA0b86991c6218b36c1d \| r:19D4a2e9Eb0cE3606eB48 | ![RECORD1](scenario-5s/04-record1-p0.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="CONFIRM?" | ![CONFIRM](scenario-5s/05-confirm-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5s/05-confirm-p0.png) |
 | 6 | `UNVERIF` | 1 | id=UNVERIF lab="UNVERIFIED" cap="" \| r:ERC-20 call \| r:token unknown | ![UNVERIF](scenario-5s/06-unverif-p0.png) |
 | 7 | `RAWAMT` | 1 | id=RAWAMT lab="RAW AMOUNT" cap="" \| r:1000000000 units | ![RAWAMT](scenario-5s/07-rawamt-p0.png) |
 | 8 | `SPENDER` | 1 | id=SPENDER lab="SPENDER" cap="" \| s:CoW VaultRelayer \| r:0xC92E8bdf79f0507f65a \| r:392b0ab4667716BFE0110 | ![SPENDER](scenario-5s/08-spender-p0.png) |
