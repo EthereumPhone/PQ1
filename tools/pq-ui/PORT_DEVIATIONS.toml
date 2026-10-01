@@ -55,10 +55,31 @@
 #
 # `components.monogram` sets the initial at `font(MONOGRAM_SCALE * r, "bold")`
 # — 1.34 x the 30 px disc radius, so ~40 px BOLD. The device has neither: the
-# baked atlas tops out at 36 px and carries Regular + SemiBold only. A 40 px
-# Bold tier of A-Z + 0-9 costs roughly 11 KB against the 2,648 B left in the
-# 77,824 B NS atlas window, so it does not fit without reopening the flash
-# lever (port plan § Flash, an owner decision).
+# baked atlas tops out at 36 px and carries Regular + SemiBold only.
+#
+# MEASURED by baking the candidate tiers (A-Z + 0-9, 36 glyphs, bitmap +
+# table), against the 2,648 B left in the 77,824 B NS atlas window:
+#
+#     Bold 40 (what the reference uses)   13,016 B
+#     Bold 36                             10,904 B
+#     SemiBold 36                         10,500 B
+#     Regular 36 as a SEPARATE tier       10,266 B
+#     Regular 36 reusing the shipped tier       0 B   <- what we do
+#
+# The cost is NOT the weight. A controlled pair already in the atlas settles
+# that: Regular 22 and SemiBold 22, same 95-glyph charset, are 7,799 and
+# 8,140 bytes — +4.4 %. At 36 px over the monogram charset Bold is +6.4 %
+# over Regular. Glyphs are stored as their bounding box at 4 bits/px, so
+# bytes track w*h/2; thicker stems widen the box (max glyph 35x28 bold vs
+# 33x28 regular) and that is the whole difference.
+#
+# What costs 13 KB is adding a WHOLE TIER: 36 glyph bitmaps that exist in no
+# face we ship. Regular 36 is free only because the shipped r36 tier already
+# contains A-Z and 0-9 (the TRIM charset). The 40/36 size step is the other
+# 20 % — area scales with the square of the size.
+#
+# So it does not fit without reopening the flash lever (port plan § Flash, an
+# owner decision).
 #
 # The device therefore sets the monogram in Regular 36, the largest face it
 # has. MEASURED on the designer's own `send_token` render against ours, cap
