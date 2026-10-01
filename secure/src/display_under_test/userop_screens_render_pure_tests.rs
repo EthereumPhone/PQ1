@@ -455,10 +455,15 @@ fn erc20_known_placeholder_token_transfer_from_screens() {
     let m = toshi();
     let l = lift_userop(&t, &data, Some(&m), None, &r, &f);
     let hero = &l.screens.as_slice()[0];
-    assert_eq!(hero.icon(), Some(Icon::Eth));
+    // #774: a long-tail token wears its own INITIAL, not the ether mark.
+    // TOSHI is the designer's own sample for this (`flows/send_token`),
+    // and it used to render `Icon::Eth` — the ether mark on a tinted disc,
+    // with the hashed colour as the only thing telling it from ether.
+    assert_eq!(hero.icon(), Some(Icon::Letter));
+    assert_eq!(hero.monogram(), Some(b'T'));
     assert_eq!(hero.tint(), Some(pqsigner_ui_px::placeholder_ramp(b"TOSHI")));
     assert!(ids(&l.screens).iter().any(|i| i == "FROM"));
-    check("erc20", "pull_toshi", &l, BASE, "erc20_known", "9d7c3fdac5d09cf3e8e13894bc953d67b80a4ca3dc6e9404facdddd8ae9bc7b8");
+    check("erc20", "pull_toshi", &l, BASE, "erc20_known", "347f9106d607f3fd0b132f6abc4f6878d5fbe8670aaa909c8545e0ccf7ead7d8");
 }
 
 #[test]

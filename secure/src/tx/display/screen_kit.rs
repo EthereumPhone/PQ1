@@ -578,27 +578,45 @@ pub(crate) fn caption_fits(caption: &[u8]) -> bool {
 
 /// The DESIGN.md look for a token by its verified symbol: logo art for the
 /// tokens the atlas carries, the ether mark on the mono body for ETH /
-/// WETH, otherwise the ether mark on the placeholder ramp hashed from the
-/// symbol (`components.token_defaults`).
+/// WETH, otherwise the token's own INITIAL on the placeholder ramp hashed
+/// from the symbol (`components.token_defaults`).
+///
+/// The last branch is the #774 fix. It used to lend `Icon::Eth` to every
+/// unrecognized token, which left the hashed disc COLOUR as the only thing
+/// separating it from ether. The reference's rule is blunt about why that is
+/// wrong: "a long-tail token names itself rather than borrowing the ether
+/// mark" (user rule, Sep 2026). A symbol with no alphanumeric initial keeps
+/// the ether mark, so the disc is never empty — `Look::monogram` enforces
+/// that, not this match.
 pub(crate) fn token_look(symbol: &[u8]) -> Look {
     match symbol {
         b"USDC" => Look::plain(Icon::Usdc),
         b"USDT" => Look::plain(Icon::Usdt),
         b"DAI" => Look::plain(Icon::Dai),
         b"ETH" | b"WETH" => Look::plain(Icon::Eth),
-        _ => Look {
-            icon: Icon::Eth,
-            tint: Some(pqsigner_ui_px::placeholder_ramp(symbol)),
-        },
+        _ => {
+            let ramp = pqsigner_ui_px::placeholder_ramp(symbol);
+            match symbol.first() {
+                Some(&ch) => Look::monogram(ch, ramp),
+                // No symbol at all: nothing to name it with.
+                None => Look { icon: Icon::Eth, tint: Some(ramp), mono: None },
+            }
+        }
     }
 }
 
 /// The look for a value the device only knows by its address (an unknown
 /// token, an undecoded call's target): the placeholder ramp hashed from the
 /// EIP-55 address string, like the design reference.
+///
+/// No monogram here, deliberately (#774): the reference draws a token's
+/// INITIAL, and a value known only by its address has no symbol to take one
+/// from. The caller's icon stands — `Icon::Blind` on the blind route, the
+/// ether mark where the design's fallback applies.
 pub(crate) fn address_look(icon: Icon, addr: &[u8; 20]) -> Look {
     Look {
         icon,
         tint: Some(pqsigner_ui_px::placeholder_ramp(&addr42(addr))),
+        mono: None,
     }
 }

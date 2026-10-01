@@ -15,7 +15,7 @@
 
 use crate::driver::Btn;
 use crate::fixed::{lerp, q16, Q16, Q8, ONE_Q16, ONE_Q8};
-use crate::font::{Align, Font, TextRun, TierId};
+use crate::font::{px_q8, Align, Font, TextRun, TierId};
 use crate::loading::{self, Body, Phase, QubitFilm, ResolveFilm, TRAIL_COUNT};
 use crate::motion::{
     self, Profile, Spring, CHAIN_GAP_CAP_PX, CHAIN_TAU_IDLE_MS, CHAIN_TAU_MS, HOLD_OVERLAY_A8, OSC_TAU_MS,
@@ -451,6 +451,39 @@ pub fn disc_style(icon: Option<Icon>, tint: Option<u8>) -> DiscStyle {
 }
 
 /// Baked marks the scene may draw.
+/// The tier a monogram is set in.
+///
+/// The reference draws it at `font(MONOGRAM_SCALE * r, "bold")` — 1.34 x the
+/// disc radius 30, so ~40 px BOLD. The device has neither: the atlas tops
+/// out at 36 px and carries Regular + SemiBold only, and a 40 px Bold tier
+/// of A-Z + 0-9 costs roughly 11 KB against the 2,648 B left in the 77,824 B
+/// NS atlas window. Regular 36 is the largest face that exists, and its cap
+/// still lands inside the mark band (`V-MARKBAND`, 39-60 % of the visible
+/// disc) — `monogram_cap_is_inside_the_mark_band` measures it rather than
+/// assuming. Recorded in `tools/pq-ui/PORT_DEVIATIONS.toml`.
+const MONOGRAM_TIER_PX: u8 = 36;
+
+/// A long-tail token's initial as a disc mark (#774).
+///
+/// Returns the glyph as a [`Mask`] — the font's 4-bit rows are byte-identical
+/// in layout to a baked mark's, so this needs no new draw item — together
+/// with the y its BOX must be centred on so the letter's CAP sits on `cy`.
+///
+/// Cap-centred, not box-centred, exactly as `components.monogram`: "the cap
+/// height (not the letter's own box, so a Q's tail never lifts it) is centred
+/// down". A capital with no descender comes out at `cy`; a `Q` sits lower by
+/// half its tail so the cap stays put.
+#[must_use]
+pub fn monogram_mask<'a>(font: &Font<'a>, ch: u8, cy: Q8) -> Option<(Mask<'a>, Q8)> {
+    let tier = font.tier(TierId::regular(MONOGRAM_TIER_PX))?;
+    let g = tier.glyph(ch.to_ascii_uppercase())?;
+    // The cap height is `H`'s ink above the baseline, never this glyph's own
+    // box — that is what keeps a `Q` from riding up.
+    let cap = i32::from(tier.glyph(b'H')?.bearing_top);
+    let box_cy = cy + px_q8(cap / 2 - i32::from(g.bearing_top) + i32::from(g.h) / 2);
+    Some((Mask { w: u16::from(g.w), h: u16::from(g.h), rows: g.rows }, box_cy))
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Marks<'a> {
     pub safe: Option<Mask<'a>>,
@@ -495,7 +528,10 @@ impl<'a> Marks<'a> {
                 | Icon::Gear
                 | Icon::ResultRing
                 | Icon::Verified
-                | Icon::Heart,
+                | Icon::Heart
+                // A monogram is not an atlas mark: it is blitted from the
+                // font by `monogram_mask` (#774).
+                | Icon::Letter,
             )
             | None => None,
         }
@@ -1076,7 +1112,7 @@ impl Anim {
         let cy_q8 = self.sy.value >> 8;
         let visible_r = (CIRCLE_R << 8) - TOKEN_INSET_Q8;
         if let Some(film) = self.film {
-            self.build_film(frame, marks, &style, icon, film, now);
+            self.build_film(frame, marks, font, &style, icon, film, now);
             let _ = font;
             return;
         }
@@ -1109,10 +1145,17 @@ impl Anim {
                                 marks.mainnet
                             }
                         }
+                        // A long-tail token's initial, blitted from the
+                        // font rather than the atlas (#774).
+                        Some(Icon::Letter) => None,
                         other => marks.for_icon(other),
                     };
                     if let Some(m) = mark {
                         frame.push(Item::Mask { cx: cx_q8, cy: cy_q8, mask: m, scale: ONE_Q8, color: style.mark, a: 255 });
+                    } else if let (Some(Icon::Letter), Some(ch)) = (icon, self.cur.monogram()) {
+                        if let Some((m, box_cy)) = monogram_mask(font, ch, cy_q8) {
+                            frame.push(Item::Mask { cx: cx_q8, cy: box_cy, mask: m, scale: ONE_Q8, color: style.mark, a: 255 });
+                        }
                     }
                     // Hold flood: liquid rising from the bottom, 30 % film.
                     if let Some(h) = self.hold {
@@ -1162,9 +1205,26 @@ impl Anim {
     }
 
     /// The status film over the disc (DESIGN.md § Status animations).
-    fn build_film<'a>(&self, frame: &mut Frame<'a>, marks: &Marks<'a>, style: &DiscStyle, icon: Option<Icon>, film: Film, now: u32) {
+    fn build_film<'a>(
+        &self,
+        frame: &mut Frame<'a>,
+        marks: &Marks<'a>,
+        font: &Font<'a>,
+        style: &DiscStyle,
+        icon: Option<Icon>,
+        film: Film,
+        now: u32,
+    ) {
         let visible_r = (CIRCLE_R << 8) - TOKEN_INSET_Q8;
-        let mark = marks.for_icon(icon);
+        // A monogram is a font glyph, and it is CAP-centred, so it carries a
+        // y adjustment an atlas mark does not need (#774).
+        let (mark, mark_dy) = match (icon, self.cur.monogram()) {
+            (Some(Icon::Letter), Some(ch)) => match monogram_mask(font, ch, 0) {
+                Some((m, dy)) => (Some(m), dy),
+                None => (None, 0),
+            },
+            _ => (marks.for_icon(icon), 0),
+        };
         match film {
             Film::Resolve { film, outcome } => {
                 // The arrived disc crossfades to the result look over the
@@ -1181,7 +1241,7 @@ impl Anim {
                 let r = lerp(visible_r, CIRCLE_R << 8, p.u);
                 frame.push(Item::Disc { cx, cy, r, color: blend_rgb(style.fill, fill, p.u) });
                 if let (Some(m), true) = (mark, p.glyph_a > 0) {
-                    frame.push(Item::Mask { cx, cy, mask: m, scale: ONE_Q8, color: style.mark, a: p.glyph_a });
+                    frame.push(Item::Mask { cx, cy: cy + mark_dy, mask: m, scale: ONE_Q8, color: style.mark, a: p.glyph_a });
                 }
                 frame.push(Item::Ring { cx, cy, r, w: TOKEN_RING_W_Q8, color: blend_rgb(style.ring, ring, p.u) });
                 if p.flash_a > 0 {
@@ -1199,7 +1259,8 @@ impl Anim {
                         frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: style.fill });
                         if let (Some(m), true) = (mark, p.glyph_a > 0) {
                             let scale = ((i64::from(b.r) << 8) / i64::from(visible_r.max(1))) as Q8;
-                            frame.push(Item::Mask { cx: b.x, cy: b.y, mask: m, scale, color: style.mark, a: p.glyph_a });
+                            let dy = ((i64::from(mark_dy) * i64::from(scale)) >> 8) as Q8;
+                            frame.push(Item::Mask { cx: b.x, cy: b.y + dy, mask: m, scale, color: style.mark, a: p.glyph_a });
                         }
                         if p.glyph_a > 0 {
                             frame.push(Item::Ring { cx: b.x, cy: b.y, r: b.r, w: TOKEN_RING_W_Q8, color: style.ring.scale(p.glyph_a) });
@@ -1471,6 +1532,83 @@ mod tests {
             (eth.fill, eth.ring, eth.mark, eth.trail, eth.film, eth.film_white),
             "the mono ramp no longer equals the ether disc — re-check COL-01"
         );
+    }
+
+    /// The real baked font, the same bytes the device blits from.
+    fn test_font() -> Font<'static> {
+        const FONTS: &[u8] = include_bytes!("../../secure/assets/ui-px/fonts.bin");
+        Font::parse(FONTS).expect("baked fonts.bin")
+    }
+
+    /// #774 / `V-MARKBAND`. The monogram replaces an atlas mark on the disc,
+    /// so it has to carry the same visual weight: the registered marks span
+    /// 39-60 % of the visible disc, and a letter outside that band reads as
+    /// a different kind of object.
+    ///
+    /// MEASURED from the baked atlas, not asserted from the tier number —
+    /// the reference sets the monogram at 1.34 x the disc radius in BOLD
+    /// (~40 px) and the device has neither that size nor that weight, so the
+    /// question "does Regular 36 still land in the band" has to be answered
+    /// with the real cap height.
+    #[test]
+    fn monogram_cap_is_inside_the_mark_band() {
+        let font = test_font();
+        let tier = font.tier(TierId::regular(MONOGRAM_TIER_PX)).expect("the monogram tier");
+        let cap = f64::from(tier.glyph(b'H').expect("H").bearing_top);
+        let visible = f64::from(2 * (CIRCLE_R - 1)); // 2 * (r - TOKEN_INSET)
+        let pct = 100.0 * cap / visible;
+        assert!(
+            (39.0..=60.0).contains(&pct),
+            "monogram cap is {cap} px on a {visible} px disc = {pct:.1} %, outside V-MARKBAND's \
+             39-60 % — pick another tier or re-open the atlas-budget question (#774)"
+        );
+    }
+
+    /// Cap-centred, not box-centred: `Q` has a descender, `O` does not, and
+    /// the reference centres the CAP so "a Q's tail never lifts it". The two
+    /// must therefore get DIFFERENT box centres, and the one without a tail
+    /// must sit at the disc centre.
+    #[test]
+    fn a_descender_does_not_lift_the_monogram() {
+        let font = test_font();
+        let (_, o_cy) = monogram_mask(&font, b'O', 0).expect("O");
+        let (_, q_cy) = monogram_mask(&font, b'Q', 0).expect("Q");
+        assert!(
+            q_cy > o_cy,
+            "Q's box must sit LOWER than O's so their caps align (Q {q_cy}, O {o_cy})"
+        );
+        // A capital with no descender is cap-high and cap-deep, so its box
+        // centre is the disc centre.
+        assert_eq!(o_cy, 0, "a tail-less capital must centre on the disc");
+    }
+
+    /// The monogram and the tint both ride in line-record PAD bytes (records
+    /// 1 and 0). A line's text is written right up to its pad, so a screen
+    /// that fills its lines must not clobber either — this is exactly the
+    /// "two things sharing a byte" hazard, pinned rather than assumed.
+    #[test]
+    fn line_text_never_clobbers_the_monogram_or_the_tint() {
+        let full = crate::screen::ScreenBuilder::detail(b"TOK", Icon::Letter, crate::screen::Side::Left, b"TOKEN")
+            .look_tint(crate::screen::Look::monogram(b'T', 5))
+            // 30 bytes each: the longest text a line record takes.
+            .line(b"MMMMMMMMMMMMMMMMMMMMMMMMMMMMMM", Weight::Regular)
+            .line(b"MMMMMMMMMMMMMMMMMMMMMMMMMMMMMM", Weight::Regular)
+            .line(b"MMMMMMMMMMMMMMMMMMMMMMMMMMMMMM", Weight::Regular)
+            .finish()
+            .expect("a full three-line detail screen");
+        assert_eq!(full.monogram(), Some(b'T'), "line text overwrote the monogram byte");
+        assert_eq!(full.tint(), Some(5), "line text overwrote the tint byte");
+        assert_eq!(full.icon(), Some(Icon::Letter));
+    }
+
+    /// A non-alphanumeric initial keeps the ether mark, so the disc is never
+    /// empty (the reference's own fallback).
+    #[test]
+    fn a_symbol_with_no_initial_keeps_the_ether_mark() {
+        assert_eq!(crate::screen::Look::monogram(b'?', 3).icon, Icon::Eth);
+        assert_eq!(crate::screen::Look::monogram(b'T', 3).icon, Icon::Letter);
+        assert_eq!(crate::screen::Look::monogram(b't', 3).mono, Some(b'T'), "uppercased");
+        assert_eq!(crate::screen::Look::monogram(b'1', 3).icon, Icon::Letter, "digits are alnum");
     }
 
     #[test]

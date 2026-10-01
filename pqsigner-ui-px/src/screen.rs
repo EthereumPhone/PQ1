@@ -31,6 +31,7 @@
 //! |  32 |  32 | caption | caps, the hero ask / confirm prompt / status caption |
 //! |  64 | 192 | lines   | 6 × { weight `r`/`s`/`t`, 30 bytes text, 1 pad } |
 //! |  95 |   1 | tint    | the pad of line record 0: ` ` = the icon's own look, `a`..`n` = placeholder ramp 0..13 |
+//! | 127 |   1 | monogram | the pad of line record 1: the `Icon::Letter` character, else ` ` |
 //!
 //! The three screens outside the sign dialog (port step 4) reuse the same
 //! fields: a **verdict** (`X`) draws its procedural sign (the icon byte)
@@ -114,6 +115,17 @@ const OFF_CAPTION: usize = 32;
 const OFF_LINES: usize = 64;
 /// The tint rides in the pad byte of line record 0.
 const OFF_TINT: usize = OFF_LINES + LINE_REC - 1;
+/// The monogram character for `Icon::Letter` rides in the pad byte of line
+/// record 1 (#774).
+///
+/// Not the header: it is packed solid (`OFF_NLINES` already spans bytes 10
+/// AND 11, one line count per page). Not the icon byte either — that is one
+/// byte and almost every uppercase code is a family already (`A` is Heart,
+/// `D` is Dai, `3` is Die), so `letter:X` could not be encoded there without
+/// colliding. `Icon::Letter` takes the one free code (`L`) and the character
+/// rides here, the same trick the tint uses one record earlier.
+const OFF_MONOGRAM: usize = OFF_LINES + 2 * LINE_REC - 1;
+const _: () = assert!(OFF_MONOGRAM != OFF_TINT);
 /// Number of placeholder ramps (`colors.PLACEHOLDER_GRADIENTS`).
 pub const N_RAMPS: u8 = 14;
 
@@ -233,6 +245,18 @@ pub enum Icon {
     Rotate,
     /// The CoW Swap family: the navy cow head on the `#65D9FF` brand disc.
     Cowswap,
+    /// A long-tail token's INITIAL, drawn from the font on the hashed
+    /// placeholder disc — `components.token_defaults`' `letter:X` namespace.
+    ///
+    /// The reference's rule, verbatim: "a long-tail token names itself
+    /// rather than borrowing the ether mark" (user rule, Sep 2026). Lending
+    /// `Icon::Eth` to every unrecognized token left the disc colour as the
+    /// only thing telling it from ether, and that colour is hashed from an
+    /// attacker-chosen contract address (#774, and the second half of the
+    /// COL-01 class).
+    ///
+    /// The character itself is in the record's [`OFF_MONOGRAM`] byte.
+    Letter,
     /// Verdict signs (procedural art, `verdict.rs`): the padlock locking /
     /// unlocking, the warning triangle with its exclamation, the triangle
     /// carrying the wipe brush, the backup shield, the PIN pill, the die,
@@ -279,6 +303,7 @@ impl Icon {
             Self::ResultRing => b'M',
             Self::Verified => b'V',
             Self::Heart => b'A',
+            Self::Letter => b'L',
             Self::None => b'-',
         }
     }
@@ -308,6 +333,7 @@ impl Icon {
             b'M' => Some(Self::ResultRing),
             b'V' => Some(Self::Verified),
             b'A' => Some(Self::Heart),
+            b'L' => Some(Self::Letter),
             b'-' => Some(Self::None),
             _ => None,
         }
@@ -320,17 +346,31 @@ impl Icon {
 pub struct Look {
     pub icon: Icon,
     pub tint: Option<u8>,
+    /// The character for [`Icon::Letter`], else `None` (#774).
+    pub mono: Option<u8>,
 }
 
 impl Look {
     /// The Safe family's disc (untinted — its records predate the tint).
-    pub const SAFE: Self = Self { icon: Icon::Safe, tint: None };
+    pub const SAFE: Self = Self { icon: Icon::Safe, tint: None, mono: None };
     /// The CoW Swap family's branded disc.
-    pub const COWSWAP: Self = Self { icon: Icon::Cowswap, tint: None };
+    pub const COWSWAP: Self = Self { icon: Icon::Cowswap, tint: None, mono: None };
 
     #[must_use]
     pub const fn plain(icon: Icon) -> Self {
-        Self { icon, tint: None }
+        Self { icon, tint: None, mono: None }
+    }
+
+    /// A long-tail token's monogram on the ramp hashed from `key` (#774).
+    /// `ch` must be ASCII alphanumeric — the reference keeps the ether mark
+    /// when there is no letter or digit to show, so the disc is never empty.
+    #[must_use]
+    pub fn monogram(ch: u8, ramp: u8) -> Self {
+        if ch.is_ascii_alphanumeric() {
+            Self { icon: Icon::Letter, tint: Some(ramp), mono: Some(ch.to_ascii_uppercase()) }
+        } else {
+            Self { icon: Icon::Eth, tint: Some(ramp), mono: None }
+        }
     }
 }
 
@@ -631,10 +671,19 @@ impl Screen {
         }
     }
 
-    /// The disc look (icon + tint).
+    /// The monogram character for an [`Icon::Letter`] disc (#774).
+    #[must_use]
+    pub fn monogram(&self) -> Option<u8> {
+        match self.0[OFF_MONOGRAM] {
+            b if b.is_ascii_alphanumeric() => Some(b),
+            _ => None,
+        }
+    }
+
+    /// The disc look (icon + tint + monogram).
     #[must_use]
     pub fn look(&self) -> Option<Look> {
-        Some(Look { icon: self.icon()?, tint: self.tint() })
+        Some(Look { icon: self.icon()?, tint: self.tint(), mono: self.monogram() })
     }
 
     #[must_use]
@@ -1107,7 +1156,10 @@ impl ScreenBuilder {
 
     /// Apply a [`Look`]'s tint (its icon is passed to the constructor).
     #[must_use]
-    pub fn look_tint(self, look: Look) -> Self {
+    pub fn look_tint(mut self, look: Look) -> Self {
+        if let Some(ch) = look.mono {
+            self.s.0[OFF_MONOGRAM] = ch.to_ascii_uppercase();
+        }
         match look.tint {
             Some(r) => self.tint(r),
             None => self,
@@ -1623,7 +1675,7 @@ mod tests {
         assert_eq!(plain.tint(), None);
         let t = ScreenBuilder::hero(b"ASK", Icon::Eth, b"ASK?").tint(7).finish().unwrap();
         assert_eq!(t.tint(), Some(7));
-        assert_eq!(t.look(), Some(Look { icon: Icon::Eth, tint: Some(7) }));
+        assert_eq!(t.look(), Some(Look { icon: Icon::Eth, tint: Some(7), mono: None }));
         assert!(t.is_well_formed());
         let mut diff = 0;
         for i in 0..SCREEN_BYTES {

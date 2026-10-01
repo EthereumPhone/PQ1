@@ -50,3 +50,28 @@
 #     (not baked); both fingerprints (image + signing key) get the words grid,
 #     each announced by a detail screen; the returning ask repeats the
 #     opening ask byte-for-byte (the firmware flow rule), not `CONFIRM UPDATE`.
+
+# The long-tail token monogram's face (#774, 2026-10-01).
+#
+# `components.monogram` sets the initial at `font(MONOGRAM_SCALE * r, "bold")`
+# — 1.34 x the 30 px disc radius, so ~40 px BOLD. The device has neither: the
+# baked atlas tops out at 36 px and carries Regular + SemiBold only. A 40 px
+# Bold tier of A-Z + 0-9 costs roughly 11 KB against the 2,648 B left in the
+# 77,824 B NS atlas window, so it does not fit without reopening the flash
+# lever (port plan § Flash, an owner decision).
+#
+# The device therefore sets the monogram in Regular 36, the largest face it
+# has. MEASURED on the designer's own `send_token` render against ours, cap
+# ink inside the disc:
+#
+#     reference (Bold ~40)   28 px = 48 % of the 58 px visible disc
+#     device    (Regular 36) 25 px = 43 %
+#
+# Both sit inside V-MARKBAND's 39-60 %, which is the rule the size has to
+# satisfy; `monogram_cap_is_inside_the_mark_band` measures it from the baked
+# atlas on every run rather than trusting this note. What is lost is the
+# WEIGHT: a Regular letter reads lighter than a mark, and the reference chose
+# bold precisely so "a letter disc and a mark disc carry the same weight in a
+# walk".
+#
+# REVISIT when the atlas window or the flash lever moves.

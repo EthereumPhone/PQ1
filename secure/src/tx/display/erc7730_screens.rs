@@ -55,6 +55,7 @@ pub(crate) fn family(surface: Surface, contract: &[u8; 20]) -> Family {
     let look = Look {
         icon: Icon::Eth,
         tint: Some(pqsigner_ui_px::placeholder_ramp(&addr42(contract))),
+        mono: None,
     };
     match surface {
         Surface::Contract => Family {

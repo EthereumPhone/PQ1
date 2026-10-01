@@ -29,6 +29,7 @@ pub(crate) fn native_look(chain_id: u64) -> Look {
         _ => Look {
             icon: Icon::Eth,
             tint: Some(placeholder_ramp(native_ticker(chain_id))),
+            mono: None,
         },
     }
 }
