@@ -585,6 +585,34 @@ sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C;
 > directory read-only, copies it to a disposable path and runs there. The fork recipe is untouched.
 > `bash cert_gate_split.sh --identity-only` remains available as a fast per-PR identity check that
 > deliberately needs no proof toolchain.
+>
+> **UPDATE 2026-10-01 — the proof phases run in parallel (PQ1 #768).** The gate now executes all
+> PHASE 1 / 1e / 3 EasyCrypt jobs up front via `tools/proof_jobs.py` (### PROOF JOBS), each worker in
+> a private, byte-identical copy of the tree, and the three phases judge the stored results with
+> their unchanged verdict code. Worker count: `PQ_EASYCRYPT_JOBS=N` (passed through by the wrapper);
+> default `min(8, CPUs/2)`; **`PQ_EASYCRYPT_JOBS=1` is the serial reference mode** for diagnosing a
+> suspected load failure. Do not raise the cap casually: Z3's time limit is wall-clock and 12
+> concurrent jobs flipped `StackAlignment.ec:32` on 2026-09-30. The wrapper also takes a host-wide
+> lock (`/tmp/pq-easycrypt-split-gate.lock`), because two gates' containers cannot see each other
+> and would starve each other into solver timeouts. The receipt gains `### PROOF_JOBS`,
+> `### JOB_TIMES` (per-job wall time, worker, exit status and the sha256 of the judged output — the
+> raw outputs die with the container) and `### JOBS_QUEUED/JUDGED` lines; `PQ_EASYCRYPT_JOB_TIMEOUT`
+> (seconds, default 7200, 0 = none) caps any single job; and the wrapper
+> prints `### HOST platform_profile=… governor=…` (with a `WARN` line when not `performance`: the
+> same inputs went RED on 6 cli verdicts under GNOME `power-saver`, GREEN under `performance`); every
+> `OK`/`FAIL` verdict line is unchanged. **Serial re-check (owner decision 2026-10-01):** any job
+> whose verdict would be FAIL is re-run once ALONE — the serial gate's own execution condition — and
+> judged on that run; the receipt prints its parallel verdict (`RECHECK …`) and names every job that
+> failed under load but passed alone (`LOADFLAKE …`, a budget-marginal proof worth fixing). Above 25
+> would-FAIL jobs the re-check is skipped (a mass failure is not load). Measured: under `performance`
+> with 8 workers, `C10CubeConstruction.ec:288` failed its cli leg once and passed alone 3/3.
+> **The re-check never looks at an OK**, which is only sound because load cannot fake one — except for
+> a MUST-FAIL control whose declared reason a solver budget miss can produce (`cannot prove goal`, or a
+> control that swallows an smt failure with `try`/`?`/`do`/`||`): weakened until provable, it would
+> COMPILE alone yet be "rejected for the declared reason" under load. Those (`### SOLO`, 13 today) are
+> selected mechanically, kept out of the parallel batch and only ever run ALONE, cap or no cap.
+> Toolchain-free regression controls:
+> `tools/test_proof_jobs.py` (run by `make verify-easycrypt-split-pins`).
 
 
 `LC_ALL=C` is REQUIRED: identity hashing is collation-sensitive.
@@ -1967,6 +1995,9 @@ The failure **reproduces with zero gate load**, which kills the contention hypot
 outright. And PHASE 1 compiles **sequentially** — a plain `while` loop — so there was
 never file-level contention to blame, a fact available by *reading* the gate before any
 measurement.
+*[UPDATE 2026-10-01: no longer true of the current gate — PHASES 1/1e/3 now execute in
+parallel (### PROOF JOBS, see the 2026-10-01 note near the top). The finding above stands:
+it was measured with zero load.]*
 
 **Why I got it wrong:** my "3/3 clean cold" runs had been given `-timeout 60
 -max-provers 4`, ~20× the default, while the gate passes no flags. I varied **two** things
@@ -2277,6 +2308,9 @@ be a much weaker claim:
 Run **sequentially, not in parallel**: concurrent runs contend for provers, and each
 receipt would then be partly a measurement of the other — the flake class this arc spent a
 long time diagnosing.
+*[UPDATE 2026-10-01: still true for two separate GATE runs, and now enforced for the split
+gate by the wrapper's host lock (`/tmp/pq-easycrypt-split-gate.lock`). It is not a statement
+about the gate's own internal job parallelism, which is bounded and load-checked.]*
 
 Wall-clock moved slightly (4705 → 4467 and 2731 → 2594, both ~5% *faster* on a freshly
 booted machine). That is the only difference, it is not a gated quantity, and the

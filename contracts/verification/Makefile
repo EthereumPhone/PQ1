@@ -2219,8 +2219,9 @@ _extract-slotkdf-impl:
 verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/assumption census and controls
 	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/check_source_binding.py
 	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_split_contract.py
+	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_proof_jobs.py
 	cd easycrypt/c10-port && $(_FV_PYTHON3) -B tools/split_contract.py
 	cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
 
-verify-easycrypt-split: ## Full current split proof replay in the pinned immutable toolchain image
+verify-easycrypt-split: ## Full current split proof replay in the pinned image (parallel; PQ_EASYCRYPT_JOBS=N, 1 = serial)
 	$(_FV_PYTHON3) -B scripts/run_easycrypt_split.py

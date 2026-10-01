@@ -10,7 +10,7 @@
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",
     "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "4f94c928d7219615508675e125ea4915f1644623b0a5c8d7000ad060b5b39bfd",
-    "contracts/verification/scripts/run_easycrypt_split.py": "4568d51ccd1e07082c816cb59432759a60fbe879b66fa72fefeb2a1e410f4487",
+    "contracts/verification/scripts/run_easycrypt_split.py": "0c1a1c78adf7fda78a6c90cfaa0f1582f4ad80e80002178d44b2c174ae30bdc4",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Counter.ec": "1c93aa173db90139e6d113311b23a78da77d6cbf67e7fc56fbccc9e5a7445d34",

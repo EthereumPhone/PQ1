@@ -99,6 +99,9 @@ EXPECT_MARGIN_SELFTESTS=3
 # but it REPRODUCES in isolation with no load -- the earlier "clean cold" runs had
 # silently been given 20x the budget.  PHASE 1 compiles SEQUENTIALLY, so there was
 # never file-level contention to begin with.
+# [UPDATE 2026-10-01, PQ1 #768: no longer sequential -- PHASE 1/1e/3 jobs now run
+# concurrently (### PROOF JOBS), so there IS contention, bounded by the worker cap.  This
+# budget is unchanged and is part of the margin that makes 8 concurrent jobs safe.]
 # -timeout only (NOT -max-provers): -timeout is PER PROVER CALL, so it costs nothing
 # on goals that already close quickly, whereas capping parallel provers would slow
 # all 34 files.  Cost on the marginal file: ~130s -> ~300s.
@@ -156,9 +159,18 @@ for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_I
 # the control inventory and THIS SCRIPT could all be edited with no identity
 # delta.  Blinding the census tool is a strictly easier attack than editing a
 # proof, and PHASE 2b/2c only canary two specific behaviours of it.
-INPUTS_ID=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
-    | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert-source-binding.json tools/check_source_binding.py cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+# ONE LIST, ONE FUNCTION (2026-10-01).  The identity used to be computed by two copies of
+# this command -- here and at the end-of-run re-check -- each with its own literal file
+# list.  Two copies of one list drift apart silently; a file added to only the first would
+# be hashed at the start and never re-checked.  Both call sites now use inputs_id().
+# tools/proof_jobs.py and its tests joined the list the same day: the runner is machinery.
+ID_FILES="$CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert-source-binding.json tools/check_source_binding.py tools/proof_jobs.py tools/test_proof_jobs.py cert_gate_split.sh"
+inputs_id() {
+  { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
+      | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
+    sha256sum $ID_FILES 2>/dev/null; } | sha256sum | cut -c1-32
+}
+INPUTS_ID=$(inputs_id)
 echo "### INPUTS_SHA256 $INPUTS_ID"
 # AND NOW COMPARE IT.  This line was printed and checked by nothing: an identity
 # receipt that no run can fail on is decoration.  The expected value lives in
@@ -234,15 +246,323 @@ echo "### ECO_PURGED=$purged"
 echo "### ECO_REMAINING=$left"
 [ "$left" -eq 0 ] || { echo "FAIL stale .eco survived the purge ($left)"; fail=$((fail+1)); }
 
+# ===========================================================================
+# BEGIN proof-jobs  (executed verbatim, end to end, by tools/test_proof_jobs.py)
+echo "### PROOF JOBS — every PHASE 1 / 1e / 3 EasyCrypt run, executed here, judged below"
+# Added 2026-10-01 (PQ1 #768).  PHASES 1, 1e and 3 used to RUN their EasyCrypt commands
+# inside their own loops, one at a time: 438 compiles + 438 cli runs + 411 controls,
+# 3 h 20 min on the reference host.  Those runs now happen HERE, in parallel, and the
+# three loops below READ the results and judge them with their unchanged verdict code.
+# What did NOT change, and why each still holds:
+#   * the commands.  add_job receives the exact argv the loops used to execute, built
+#     from the same $ECFLAGS / $INC; no flag was added or removed.  Two incidental
+#     differences: compile jobs get /dev/null on stdin (the loops leaked their own input
+#     file to it; `easycrypt compile` never reads stdin), and the working directory is a
+#     copy of this tree at another path (every argv path is tree-relative).
+#   * the verdicts.  Every OK/FAIL line, its order and its rule is the serial gate's.
+#   * the ordering argument.  `require` never reads a dependency's .eco -- it always
+#     re-elaborates the source with checking OFF (ecScope.ml Check_mode.for_loading);
+#     the ONLY .eco EasyCrypt consults is its compile target's own (ec.ml:588-591).  So
+#     no job's verdict depends on another job having run first, with ONE exception that
+#     tools/proof_jobs.py handles exactly: two jobs that share an .eco path.  Today that
+#     is cdrafts-split/C10SpecControls.ec, both a PHASE 1 target and a PHASE 3 MUST-PASS
+#     row; such jobs run in one worker in this manifest order, i.e. the serial order.
+#   * isolation (#768's acceptance criterion).  Each worker runs in a private copy of
+#     this tree, verified byte-identical before any job starts; no job runs in this tree.
+# What the runner adds: a job whose process did not EXIT NORMALLY (timeout, signal, launch
+# error) has no verdict and is FAIL below, even for a MUST-FAIL control; a job with no
+# result is FAIL; a queued job nobody judged is FAIL (end of PHASE 3).
+# LOAD.  Z3's -T limit is wall-clock, so concurrency is a budget question, not only a
+# speed one.  Measured 2026-09-30 (research harness, not this code): 8 concurrent jobs
+# replayed all 1,288 with verdicts identical to the serial receipt; 12 flipped one
+# marginal cli proof (StackAlignment.ec:32).  Default: min(8, CPUs/2).  Override with
+# PQ_EASYCRYPT_JOBS; PQ_EASYCRYPT_JOBS=1 is the serial reference mode for diagnosis.
+JOBS_DIR="$TMPD/jobs"; MANIFEST="$TMPD/jobs.tsv"
+: > "$MANIFEST"
+# `=()` IS LOAD-BEARING.  Under `set -u`, bash treats a declared-but-never-assigned
+# associative array as UNBOUND: `${#JOB_SEEN[@]}` then errors, the `[ .. ] || fail=..`
+# guard at the end of PHASE 3 aborts WITHOUT incrementing $fail, and the gate carries on
+# -- a fail-open on exactly the "nothing was judged" case.  Caught by
+# tools/test_proof_jobs.py before this ever ran.
+declare -A JOB_IDX=() JOB_SEEN=() RECHECKED=() SOLO=()
+JOB_N=0
+RECHECK_DIR="$TMPD/jobs-recheck"
+add_job() { # $1 key  $2 stdin file or '-'  $3.. the exact argv
+  local key="$1" in="$2" IFS=' '; shift 2
+  [ -z "${JOB_IDX[$key]+x}" ] || return 0    # one execution per identical job
+  JOB_IDX[$key]=$JOB_N; JOB_N=$((JOB_N+1))
+  printf '%s\t%s\t%s\n' "$key" "$in" "$*" >> "$MANIFEST"
+}
+while read -r f; do add_job "compile:$f" - easycrypt compile $ECFLAGS $INC "$f"; done < "$TMPD/targets"
+while read -r f; do add_job "cli:$f" "$f" easycrypt cli -iterate $INC; done < "$TMPD/targets"
+while IFS=$'\t' read -r path kind reason; do
+  case "$path" in ''|\#*) continue;; esac
+  if [ -f "$path" ]; then add_job "control:$path" - easycrypt compile $INC "$path"; fi
+done < cert-controls-split.tsv
+# BEGIN solo-select  (executed verbatim by tools/test_proof_jobs.py)
+# CONTROLS THAT MUST NEVER BE JUDGED UNDER LOAD (2026-10-01).  Load can only make a solver
+# MISS its budget.  For compile/cli jobs and MUST-PASS controls that is one-directional --
+# an OK under load is at least as strong as an OK alone -- and the serial re-check below
+# repairs the other direction.  Not for a MUST-FAIL control whose declared reason a budget
+# miss can itself produce: weakened until its goal became provable, it would COMPILE alone
+# (FAIL, the alarm it exists to raise), yet under load miss the budget and be scored
+# "rejected for the DECLARED reason" -- a false OK nothing would re-examine.  Those
+# controls are left out of the parallel batch and only ever run ALONE.  Selected
+# mechanically, so a future control is covered without anyone remembering to list it:
+#   * the declared reason contains `cannot prove goal` (EasyCrypt's smt-failure message);
+#   * or the control, comments stripped, wraps an smt / `/#` call in something that
+#     swallows its failure (try, `?`, do, `||`), so a budget miss can surface as any
+#     later message.  Measured 2026-10-01: 13 rows by the first rule, 0 by the second.
+python3 - "$TMPD/solo.request" <<'PY'
+import re, sys
+def strip(s):
+    out, depth, i = [], 0, 0
+    while i < len(s):
+        if s.startswith('(*', i): depth += 1; i += 2; continue
+        if s.startswith('*)', i) and depth: depth -= 1; i += 2; continue
+        if not depth: out.append(s[i])
+        i += 1
+    return ''.join(out)
+SENT = r'(?:(?!\.(?:\s|$)).)*?'               # within one sentence; qualified names allowed
+CALL = r'(?:\bsmt\b|/#)'
+SWALLOW = re.compile(rf'\btry\b{SENT}{CALL}|{CALL}(?:\([^)]*\))?\s*\?|\bdo\b{SENT}{CALL}'
+                     rf'|\|\|{SENT}{CALL}|{CALL}{SENT}\|\|', re.S)
+keys = []
+for line in open('cert-controls-split.tsv'):
+    f = line.rstrip('\n').split('\t')
+    if not line.strip() or line.startswith('#') or len(f) < 3 or f[1] != 'MUST-FAIL':
+        continue
+    try:
+        text = strip(open(f[0], errors='replace').read())
+    except OSError:
+        continue                                 # PHASE 3 reports the missing file
+    if 'cannot prove goal' in f[2] or SWALLOW.search(text):
+        keys.append('control:' + f[0])
+open(sys.argv[1], 'w').write(''.join(k + '\n' for k in dict.fromkeys(keys)))
+PY
+# END solo-select
+: > "$TMPD/solo.keys"
+runner_rc=0
+python3 tools/proof_jobs.py --manifest "$MANIFEST" --out "$JOBS_DIR" --workers "${PQ_EASYCRYPT_JOBS:-auto}" \
+  --exclude "$TMPD/solo.request" --excluded-out "$TMPD/solo.keys" || runner_rc=$?
+while read -r k; do SOLO[$k]=1; done < "$TMPD/solo.keys"
+n_solo=$(grep -c . "$TMPD/solo.keys" || true)
+if [ "$runner_rc" -eq 0 ]; then
+  # Counts what THIS run executed: the SOLO jobs are deliberately not in it (they run
+  # alone below), so "all $JOB_N queued" would claim 13 executions that had not happened.
+  echo "OK   proof job runner: all $((JOB_N - n_solo)) batch jobs completed ($n_solo SOLO jobs run alone below)"
+elif [ "$runner_rc" -eq 1 ]; then
+  # Some job timed out, was killed or failed to launch.  Not fatal by itself: that job
+  # has no verdict, so it is a re-check candidate below, and FAIL if it fails again.
+  echo "WARN proof job runner: not every queued job completed normally (re-checked below)"
+else
+  # Refused to start or crashed.  Keep going: every phase then prints a FAIL line for
+  # each job it cannot judge, so the receipt names exactly what is missing.
+  echo "FAIL proof job runner exited $runner_rc"
+  fail=$((fail+1))
+fi
+# BEGIN job-result  (executed verbatim by tools/test_proof_jobs.py)
+# A verdict may only be read from a COMPLETED job: queued, both result files present,
+# status `done` (normal exit), numeric exit status.  Anything else returns 1 with the
+# reason in JR_WHY; the caller prints FAIL.  Every lookup is recorded in JOB_SEEN.
+job_result() {
+  local i="${JOB_IDX[$1]:-}" st='' rc='' wall='' wk='' extra='' dir="$JOBS_DIR"
+  JR_RC=''; JR_OUT=''; JR_WHY=''; JOB_SEEN[$1]=1
+  if [ -z "$i" ]; then JR_WHY='never queued'; return 1; fi
+  # A job re-run alone by the serial re-check is judged on THAT run, never on its
+  # parallel one (which the receipt prints as a RECHECK line).
+  if [ -n "${RECHECKED[$1]:-}" ]; then dir="$RECHECK_DIR"; fi
+  if [ ! -f "$dir/$i.res" ] || [ ! -f "$dir/$i.out" ]; then
+    JR_WHY='no result (the job did not run)'; return 1
+  fi
+  read -r st rc wall wk extra < "$dir/$i.res" || true
+  if [ "$st" != done ]; then JR_WHY="job ${st:-unreadable}, no verdict"; return 1; fi
+  # EXACTLY `done <rc> <wall> w<n>`.  `read` collapses empty fields, so a damaged line
+  # such as `done  1 w0` would otherwise yield rc=1 -- a MUST-FAIL "rejection" read out
+  # of a corrupt record.  Every field is checked, and nothing may follow them.
+  case "$rc" in ''|*[!0-9]*) JR_WHY="unreadable exit status '$rc'"; return 1;; esac
+  case "$wall" in ''|*[!0-9.]*) JR_WHY="malformed result record"; return 1;; esac
+  case "$wk" in w|w*[!0-9]*|'') JR_WHY="malformed result record"; return 1;; w*) ;; *) JR_WHY="malformed result record"; return 1;; esac
+  if [ -n "$extra" ]; then JR_WHY="malformed result record"; return 1; fi
+  JR_RC=$rc; JR_OUT="$dir/$i.out"
+}
+# END job-result
+
+cli_bad=0
+cli_run=0
+# BEGIN cli-judge  (executed verbatim by tools/test_proof_jobs.py)
+cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
+  # SPLIT 2026-10-01 (PQ1 #768): cli_one now only EXECUTES, serially, and is used by
+  # PHASE 1f (watched files) alone.  The verdict is cli_judge's, unchanged, which PHASE 1e
+  # applies to the parallel runner's results.  The argv below is the one add_job queues.
+  local lbl="$1" raw="$TMPD/cli_one.out"; shift
+  # NO $ECFLAGS ON THIS LEG -- REMOVED 2026-08-21 AFTER IT COST ~12 HOURS.
+  # I had it here, argued for it on driver comparability, and priced it with a
+  # CONTROLLED A/B that was NOT REPRESENTATIVE: my four sampled files were
+  # GprocT1Opre plus three TINY ones, giving +123 s.  The real leg contains
+  # base/FORS_ES (2191 cmds), base/WOTS_TW_ES (2153) and WOTS_C_Interactive (744).
+  # Measured on the real gate: 12 of 38 files in ~3 h 56 m, projecting ~12 h for the
+  # leg, against 87 min for the ENTIRE gate beforehand.  Run aborted;
+  # scratch/gate_run_defn_ABORTED.log is that receipt.
+  # The comparability argument was also weaker than when I made it: GprocT1Opre's
+  # marginal step is now a named rewrite, so the cli leg no longer needs the budget to
+  # agree with the compile driver.
+  # (superseded) SAME COMMITTED BUDGET AS THE COMPILE DRIVER.
+  # The first observed failure of GprocT1Opre was on THIS leg (473 diagnostics), and
+  # leaving the two drivers on different budgets would mean a reported "driver
+  # disagreement" could be nothing but a BUDGET disagreement -- precisely the
+  # confusion the comment above records this phase already causing once, with
+  # -iterate.  That is a correctness argument, so it needs a cost to weigh against:
+  # controlled A/B on four closure members (ecflags_ab.sh) gives default 125 s vs
+  # -timeout 60 248 s, and the ENTIRE +123 s sits on GprocT1Opre (119->242 s); the
+  # other three are unchanged to within noise (two are marginally FASTER).  ~2 min
+  # on the whole leg buys driver comparability, so it stays.
+  # NOTE for whoever reads this next: that residual concentration means goals in
+  # GprocT1Opre OTHER than the one just made deterministic are still budget-
+  # sensitive under the cli driver.  Not chased here; not load-bearing, since the
+  # leg passes at either budget.
+  if easycrypt cli -iterate "$@" >"$raw" 2>&1; then cli_rc=0; else cli_rc=$?; fi
+  cli_judge "$lbl" "$cli_rc" "$raw"
+}
+cli_judge() { # $1 = label, $2 = exit status of `easycrypt cli -iterate`, $3 = its raw output
+  local lbl="$1" out d pr
+  cli_rc="$2"
+  out=$(tr '\r' '\n' < "$3")
+  d=$(printf '%s\n' "$out" | grep -c '^<tty>:' || true)
+  pr=$(printf '%s\n' "$out" | grep -c '^\[[0-9]*|' || true)
+  cli_run=$((cli_run+1))
+  if [ "$pr" -lt 1 ]; then
+    echo "FAIL $lbl (cli): only $pr commands processed -- the run did not happen"
+    fail=$((fail+1)); cli_bad=$((cli_bad+1)); return
+  fi
+  if [ "$d" -eq 0 ] && [ "$cli_rc" -eq 0 ]; then
+    echo "OK   $lbl (cli, $pr cmds)"
+  else
+    echo "FAIL $lbl (cli): $d diagnostic(s) -- compile accepted what cli rejects"
+    printf '%s\n' "$out" | grep '^<tty>:' | head -2 | sed 's/^/       /'
+    fail=$((fail+1)); cli_bad=$((cli_bad+1))
+  fi
+}
+# END cli-judge
+
+# BEGIN judges  (executed verbatim by tools/test_proof_jobs.py)
+# One verdict rule per phase, used TWICE: silently by the serial re-check below (in a
+# subshell, so no counter moves) and for real by PHASES 1, 1e and 3.  Moved here verbatim
+# from those loops on 2026-10-01; there is no second copy of any rule to drift.
+judge_target() { # $1 = target.  PHASE 1's verdict for one compile job.
+  if ! job_result "compile:$1"; then
+    echo "FAIL target $1: $JR_WHY"; fail=$((fail+1))
+  elif [ "$JR_RC" -eq 0 ]; then
+    echo "OK   target $1"
+  else
+    echo "FAIL target $1"; tail -10 "$JR_OUT"; fail=$((fail+1))
+  fi
+}
+judge_cli() { # $1 = target.  PHASE 1e's verdict for one cli job.
+  if job_result "cli:$1"; then
+    cli_judge "$1" "$JR_RC" "$JR_OUT"
+  else
+    cli_run=$((cli_run+1)); cli_bad=$((cli_bad+1)); fail=$((fail+1))
+    echo "FAIL $1 (cli): $JR_WHY"
+  fi
+}
+judge_control() { # $1 path  $2 polarity  $3 declared reason.  PHASE 3's verdict for one
+  # control job, AFTER that phase's row checks (file present, polarity, declared reason).
+  local path="$1" kind="$2" reason="$3" out rc msg
+  if ! job_result "control:$path"; then echo "FAIL control $path: $JR_WHY"; fail=$((fail+1)); return; fi
+  out=$(cat "$JR_OUT"); rc=$JR_RC
+  msg=$(printf '%s' "$out" | tr '\r' '\n' | grep -a '^\[critical\]' | head -1)
+  if [ $rc -eq 0 ]; then
+    if [ "$kind" = MUST-PASS ]; then echo "OK   control $path (MUST-PASS)"
+    else echo "FAIL control $path: MUST-FAIL but COMPILED"; fail=$((fail+1)); fi
+  else
+    if [ "$kind" = MUST-PASS ]; then echo "FAIL control $path: MUST-PASS but failed -- $msg"; fail=$((fail+1))
+    elif printf '%s' "$msg" | grep -qF "$reason"; then
+      echo "OK   control $path (MUST-FAIL, rejected for the DECLARED reason)"
+    else
+      # POLARITY ALONE IS NOT ENOUGH.  A control that fails for a parse error,
+      # a missing require, or a typo would otherwise score as OK while proving
+      # nothing -- the gate would be theatre.  Added 2026-08-01 after this exact
+      # defect was found in the first version of this script.
+      echo "FAIL control $path: failed for the WRONG reason"; fail=$((fail+1))
+      echo "       declared: $reason"
+      echo "       actual  : $msg"
+    fi
+  fi
+}
+# END judges
+
+# BEGIN serial-recheck  (executed verbatim by tools/test_proof_jobs.py)
+# SERIAL RE-CHECK (2026-10-01, owner decision, PQ1 #768).  Under concurrency a budget-
+# marginal proof step can miss its solver budget: Z3's limit is wall-clock, and the cli
+# leg runs at EasyCrypt's default 3 s.  Measured on the 2026-10-01 full replay (8 workers,
+# `performance` profile): C10CubeConstruction.ec:288 failed its cli leg (71 diagnostics,
+# 237 s) and passed ALONE 3/3 (18 s, 0 diagnostics).  So every job whose verdict would be
+# FAIL is re-run ONCE, ALONE -- the serial gate's exact execution condition -- and judged
+# on that run.  What this can and cannot do:
+#   * for a would-be FAIL it reproduces the serial gate's verdict: the re-run is the
+#     serial gate's own execution of that job, with nothing else running.  It never looks
+#     at an OK -- sound only because load cannot fake an OK, which is exactly why the
+#     SOLO controls (solo-select above) never get a parallel verdict at all;
+#   * a FAIL that also fails alone stays FAIL;
+#   * nothing is hidden: each candidate's parallel verdict is printed (RECHECK), and each
+#     one that passes alone is named (LOADFLAKE) -- a load-marginal proof worth fixing;
+#   * a mass failure is not load: above RECHECK_MAX candidates the re-check is skipped and
+#     the parallel results are judged as executed (re-running hundreds of jobs serially
+#     would just turn a fast RED into a slow one).
+RECHECK_MAX=25
+recheck_scan() { # one line per job whose verdict would be FAIL: key<TAB>first verdict line
+  local f path kind reason v
+  cand() { [ -n "${SOLO[$1]:-}" ] || case "$2" in FAIL*) printf '%s\t%s\n' "$1" "$2";; esac; }
+  while read -r f; do
+    cand "compile:$f" "$(judge_target "$f" | head -1)"
+    cand "cli:$f" "$(judge_cli "$f" | head -1)"
+  done < "$TMPD/targets"
+  while IFS=$'\t' read -r path kind reason; do
+    case "$path" in ''|\#*) continue;; esac
+    [ -f "$path" ] || continue
+    cand "control:$path" "$(judge_control "$path" "$kind" "$reason" | head -1)"
+  done < cert-controls-split.tsv
+}
+recheck_scan | awk -F'\t' '!seen[$1]++' > "$TMPD/recheck.scan"
+n_cand=$(grep -c . "$TMPD/recheck.scan" || true)
+cp "$TMPD/solo.keys" "$TMPD/alone.keys"        # SOLO jobs run alone whatever the cap says
+: > "$TMPD/recheck.keys"
+if [ "$n_cand" -eq 0 ]; then
+  echo "### SERIAL_RECHECK candidates=0"
+elif [ "$n_cand" -gt "$RECHECK_MAX" ]; then
+  echo "### SERIAL_RECHECK skipped: $n_cand would-FAIL jobs exceed RECHECK_MAX=$RECHECK_MAX (not load); judged as executed"
+else
+  echo "### SERIAL_RECHECK candidates=$n_cand -- each re-run ALONE; the verdicts below use that run"
+  while IFS=$'\t' read -r k v; do echo "RECHECK $k: under parallel load -> $v"; done < "$TMPD/recheck.scan"
+  cut -f1 "$TMPD/recheck.scan" > "$TMPD/recheck.keys"
+  cat "$TMPD/recheck.keys" >> "$TMPD/alone.keys"
+fi
+echo "### SOLO jobs=$(grep -c . "$TMPD/solo.keys" || true) (MUST-FAIL controls a budget miss could fake; never judged under load)"
+if [ -s "$TMPD/alone.keys" ]; then
+  rc_re=0
+  python3 tools/proof_jobs.py --manifest "$MANIFEST" --out "$RECHECK_DIR" --recheck "$TMPD/alone.keys" || rc_re=$?
+  # Exit 1 (a job did not complete) needs no action here: job_result reports that job
+  # FAIL.  Anything else means the alone run itself did not happen as specified.
+  if [ "$rc_re" -gt 1 ]; then echo "FAIL alone-run runner exited $rc_re"; fail=$((fail+1)); fi
+  while read -r k; do RECHECKED[$k]=1; done < "$TMPD/alone.keys"
+fi
+if [ -s "$TMPD/recheck.keys" ]; then
+  recheck_scan | cut -f1 > "$TMPD/recheck.still"
+  flakes=0
+  while read -r k; do
+    if ! grep -qxF "$k" "$TMPD/recheck.still"; then echo "LOADFLAKE $k: FAIL under parallel load, OK alone"; flakes=$((flakes+1)); fi
+  done < "$TMPD/recheck.keys"
+  echo "### SERIAL_RECHECK rerun=$n_cand load_flakes=$flakes still_failing=$(grep -c . "$TMPD/recheck.still" || true)"
+fi
+# END serial-recheck
+# END proof-jobs
+
 echo "### PHASE 1 — TARGETS"
 n_seen=0
 while read -r f; do
   n_seen=$((n_seen+1))
-  if easycrypt compile $ECFLAGS $INC "$f" >"$TMPD/compile.log" 2>&1; then
-    echo "OK   target $f"
-  else
-    echo "FAIL target $f"; tail -10 "$TMPD/compile.log"; fail=$((fail+1))
-  fi
+  judge_target "$f"
 done < "$TMPD/targets"
 n_exp=$(wc -l < "$TMPD/targets")
 echo "### CONE_COMPILED=$n_seen EXPECTED=$n_exp"
@@ -311,55 +631,17 @@ echo "### PHASE 1e — BOTH DRIVERS (compile AND cli)"
 # SERIAL BY CONSTRUCTION.  These runs are budget-sensitive; a concurrent compile
 # in this tree has already produced one phantom failure whose reported site was
 # 450 lines from the only edit.  Do not parallelise this phase.
+# [UPDATE 2026-10-01, PQ1 #768: SUPERSEDED in part.  These runs now execute concurrently
+# with PHASE 1 and 3 jobs (### PROOF JOBS above), each in a PRIVATE copy of the tree, so
+# the incident above -- a second compile writing into THIS tree -- cannot recur.  The
+# budget half of the warning stands: concurrency is capped (default min(8, CPUs/2)) because
+# 12 concurrent jobs flipped StackAlignment.ec:32 on this leg on 2026-09-30, and
+# PQ_EASYCRYPT_JOBS=1 restores serial execution for diagnosing a suspected load failure.]
 # COST: roughly doubles the prover work of PHASE 1 (FORS_ES.ec alone is ~7 min).
-cli_bad=0
-cli_run=0
-cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
-  local lbl="$1"; shift
-  local out d pr
-  # NO $ECFLAGS ON THIS LEG -- REMOVED 2026-08-21 AFTER IT COST ~12 HOURS.
-  # I had it here, argued for it on driver comparability, and priced it with a
-  # CONTROLLED A/B that was NOT REPRESENTATIVE: my four sampled files were
-  # GprocT1Opre plus three TINY ones, giving +123 s.  The real leg contains
-  # base/FORS_ES (2191 cmds), base/WOTS_TW_ES (2153) and WOTS_C_Interactive (744).
-  # Measured on the real gate: 12 of 38 files in ~3 h 56 m, projecting ~12 h for the
-  # leg, against 87 min for the ENTIRE gate beforehand.  Run aborted;
-  # scratch/gate_run_defn_ABORTED.log is that receipt.
-  # The comparability argument was also weaker than when I made it: GprocT1Opre's
-  # marginal step is now a named rewrite, so the cli leg no longer needs the budget to
-  # agree with the compile driver.
-  # (superseded) SAME COMMITTED BUDGET AS THE COMPILE DRIVER.
-  # The first observed failure of GprocT1Opre was on THIS leg (473 diagnostics), and
-  # leaving the two drivers on different budgets would mean a reported "driver
-  # disagreement" could be nothing but a BUDGET disagreement -- precisely the
-  # confusion the comment above records this phase already causing once, with
-  # -iterate.  That is a correctness argument, so it needs a cost to weigh against:
-  # controlled A/B on four closure members (ecflags_ab.sh) gives default 125 s vs
-  # -timeout 60 248 s, and the ENTIRE +123 s sits on GprocT1Opre (119->242 s); the
-  # other three are unchanged to within noise (two are marginally FASTER).  ~2 min
-  # on the whole leg buys driver comparability, so it stays.
-  # NOTE for whoever reads this next: that residual concentration means goals in
-  # GprocT1Opre OTHER than the one just made deterministic are still budget-
-  # sensitive under the cli driver.  Not chased here; not load-bearing, since the
-  # leg passes at either budget.
-  if out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n'); then cli_rc=0; else cli_rc=$?; fi
-  d=$(printf '%s\n' "$out" | grep -c '^<tty>:' || true)
-  pr=$(printf '%s\n' "$out" | grep -c '^\[[0-9]*|' || true)
-  cli_run=$((cli_run+1))
-  if [ "$pr" -lt 1 ]; then
-    echo "FAIL $lbl (cli): only $pr commands processed -- the run did not happen"
-    fail=$((fail+1)); cli_bad=$((cli_bad+1)); return
-  fi
-  if [ "$d" -eq 0 ] && [ "$cli_rc" -eq 0 ]; then
-    echo "OK   $lbl (cli, $pr cmds)"
-  else
-    echo "FAIL $lbl (cli): $d diagnostic(s) -- compile accepted what cli rejects"
-    printf '%s\n' "$out" | grep '^<tty>:' | head -2 | sed 's/^/       /'
-    fail=$((fail+1)); cli_bad=$((cli_bad+1))
-  fi
-}
+# cli_bad / cli_run are initialised, and cli_one / cli_judge defined, in ### PROOF JOBS above
+# (moved 2026-10-01: the serial re-check there applies cli_judge before this phase prints).
 while read -r f; do
-  cli_one "$f" $INC < "$f"
+  judge_cli "$f"
 done < "$TMPD/targets"
 echo "### CLI_FILES_RUN=$cli_run CLI_DISAGREEMENTS=$cli_bad"
 [ "$cli_run" -eq "$n_exp" ] || { echo "FAIL cli phase ran $cli_run of $n_exp files"; fail=$((fail+1)); }
@@ -759,25 +1041,14 @@ while IFS=$'\t' read -r path kind reason; do
   #     (C10SpecControls, the sole MUST-PASS, is unaffected: 159 ms -> 151 ms)
   # I had applied ECFLAGS here and asserted the cost was "~nil" from a measurement
   # taken on ONE FILE in a different phase.  It was ~2 HOURS.
-  out=$(easycrypt compile $INC "$path" 2>&1); rc=$?
-  msg=$(printf '%s' "$out" | tr '\r' '\n' | grep -a '^\[critical\]' | head -1)
-  if [ $rc -eq 0 ]; then
-    if [ "$kind" = MUST-PASS ]; then echo "OK   control $path (MUST-PASS)"
-    else echo "FAIL control $path: MUST-FAIL but COMPILED"; fail=$((fail+1)); fi
-  else
-    if [ "$kind" = MUST-PASS ]; then echo "FAIL control $path: MUST-PASS but failed -- $msg"; fail=$((fail+1))
-    elif printf '%s' "$msg" | grep -qF "$reason"; then
-      echo "OK   control $path (MUST-FAIL, rejected for the DECLARED reason)"
-    else
-      # POLARITY ALONE IS NOT ENOUGH.  A control that fails for a parse error,
-      # a missing require, or a typo would otherwise score as OK while proving
-      # nothing -- the gate would be theatre.  Added 2026-08-01 after this exact
-      # defect was found in the first version of this script.
-      echo "FAIL control $path: failed for the WRONG reason"; fail=$((fail+1))
-      echo "       declared: $reason"
-      echo "       actual  : $msg"
-    fi
-  fi
+  # [2026-10-01] That command is now queued by add_job (### PROOF JOBS) with this exact
+  # argv -- still no $ECFLAGS -- and executed there; this loop judges its result.
+  # The 159 ms above was never a compile: PHASE 1 had already written
+  # C10SpecControls.eco, so EasyCrypt's up-to-date check exited 0 before checking
+  # (ec.ml:588-591).  tools/proof_jobs.py keeps that serial order for jobs sharing an
+  # .eco, so this row behaves exactly as before; whether it SHOULD re-check the file at
+  # the default budget is a separate gate-semantics question, not changed here.
+  judge_control "$path" "$kind" "$reason"
 done < cert-controls-split.tsv
 # FAIL-OPEN GUARD: with an empty or truncated control file the loop runs zero
 # controls and the gate still reaches GREEN. Require the expected count.
@@ -794,6 +1065,16 @@ n_ctl=$(printf '%s\n' $ran | sort -u | grep -c .)
 # COUNT RAISED 36 -> 39 (2026-09-14) with the three GprocTCollNamed controls.
 echo "controls executed (unique)=$n_ctl expected=$EXPECT_CTLS"
 [ "$n_ctl" -eq "$EXPECT_CTLS" ] || { echo "FAIL control inventory: ran $n_ctl unique controls, committed expectation is $EXPECT_CTLS"; fail=$((fail+1)); }
+
+# BEGIN jobs-judged  (executed verbatim by tools/test_proof_jobs.py)
+# EVERY QUEUED JOB WAS JUDGED (2026-10-01).  PHASES 1, 1e and 3 judge by walking their
+# own lists; the per-phase counts above prove each list was walked.  This proves the
+# other direction: nothing executed in ### PROOF JOBS escaped judgement.
+unjudged=0
+for k in "${!JOB_IDX[@]}"; do [ -n "${JOB_SEEN[$k]:-}" ] || { echo "FAIL queued job never judged: $k"; unjudged=$((unjudged+1)); }; done
+echo "### JOBS_QUEUED=$JOB_N JOBS_JUDGED=${#JOB_SEEN[@]} UNJUDGED=$unjudged"
+[ "$unjudged" -eq 0 ] && [ "${#JOB_SEEN[@]}" -eq "$JOB_N" ] && [ "$JOB_N" -gt 0 ] || fail=$((fail+1))
+# END jobs-judged
 
 # IDENTITY RE-VERIFICATION AT THE END (run 13, GPT-5.6).  The identity was
 # computed ONCE, before a compile phase that runs for the better part of an
@@ -1019,9 +1300,7 @@ fi
 
 # close a determined TOCTOU race, but it does mean any edit that PERSISTS
 # past the compile is caught, and it costs one second.
-INPUTS_ID_END=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
-    | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert-source-binding.json tools/check_source_binding.py cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+INPUTS_ID_END=$(inputs_id)
 if [ "$INPUTS_ID_END" != "$INPUTS_ID" ]; then
   echo "FAIL inputs CHANGED DURING THE RUN: start $INPUTS_ID, end $INPUTS_ID_END"
   fail=$((fail+1))
