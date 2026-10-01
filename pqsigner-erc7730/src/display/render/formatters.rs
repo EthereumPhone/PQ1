@@ -4741,6 +4741,10 @@ mod kani_harness {
         let mut pages = Pages {
             buf: kani::any(),
             len: kani::any(),
+            // The chrome mask (4d61878a, #751). Symbolic like the rest: these
+            // harnesses prove a formatter never reads out of bounds and never
+            // shrinks `len`, so the mask must be unconstrained too.
+            nav: kani::any(),
         };
         kani::assume(pages.len <= MAX_PAGES);
         let (pi, ri, ci): (usize, usize, usize) = kani::any();
@@ -4786,6 +4790,10 @@ mod kani_harness {
         let mut pages = Pages {
             buf: kani::any(),
             len: kani::any(),
+            // The chrome mask (4d61878a, #751). Symbolic like the rest: these
+            // harnesses prove a formatter never reads out of bounds and never
+            // shrinks `len`, so the mask must be unconstrained too.
+            nav: kani::any(),
         };
         kani::assume(pages.len <= MAX_PAGES);
         let (pi, ri, ci): (usize, usize, usize) = kani::any();
