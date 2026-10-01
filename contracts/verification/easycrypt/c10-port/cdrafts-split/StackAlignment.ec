@@ -29,7 +29,8 @@ proof.
   have hi := carry_push heights h ha hx.
   have hh : 0 <= h by move: ha; rewrite /active_stack; smt().
   have hb : all (fun x => h+1 <= x) heights.
-  + move: hi; rewrite /= allP; smt().
+  + move: hi => /= [_ [hlt _]]; apply/allP => y hy /=.
+    by move/allP: hlt => /(_ y hy) /=; rewrite -ltzE.
   have hd := stack_mass_divisible heights (h+1) _ hb; first by smt().
   rewrite dvdz_modzDl 1:hd pmod_small //.
   have hp := pow2_pos h hh.

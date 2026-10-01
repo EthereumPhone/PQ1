@@ -285,7 +285,9 @@ proof.
   congr.
   + congr; apply eq_in_mkseq => layer hl.
     rewrite /= source_append 1:/#; smt(nth_rcons).
-  rewrite /= source_append 1:/# hr source_last !nth_rcons; smt(size_ge0).
+  have hsrc : layer_source ml (rcons roots root) (size pks) = layer_source ml roots (size pks).
+  + by apply source_append; rewrite hr size_ge0 lezz.
+  by rewrite /= hsrc hr source_last !nth_rcons -hr -hs ltzz.
 qed.
 
 lemma cube_good_append ps ad ml pks sigs leaves roots pk sigc leaf root :

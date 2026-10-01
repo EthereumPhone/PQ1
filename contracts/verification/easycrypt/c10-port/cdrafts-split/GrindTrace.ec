@@ -31,8 +31,14 @@ lemma trial_extends s0 h0 s h random message seed root i :
   trial_random s random message i = trial_random s0 random message i /\
   trial_digest s h random message seed root i = trial_digest s0 h0 random message seed root i.
 proof.
-  rewrite /extends /trial_recorded /trial_random /trial_input /trial_digest.
-  smt(domE).
+  rewrite /extends /trial_recorded => hs hh [hk hm].
+  have hsk := hs _ _ (get_some _ _ hk).
+  have er : trial_random s random message i = trial_random s0 random message i.
+  + by rewrite /trial_random hsk.
+  have ei : trial_input s random message seed root i = trial_input s0 random message seed root i.
+  + by rewrite /trial_input er.
+  have hhk := hh _ _ (get_some _ _ hm).
+  by rewrite /trial_digest ei er domE hsk domE hhk.
 qed.
 
 lemma rejected_prefix_extends s0 h0 s h random message seed root n :
