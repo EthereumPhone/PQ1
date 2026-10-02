@@ -209,6 +209,33 @@ fn emit_inner(
     // ── SAFE ACCT ───────────────────────────────────────────────────
     e.addr(b"SAFEACCT", b"SAFE ACCT", &input.safe_address, resolver)?;
 
+    // The inner ETH value, bound before the inner call because both the
+    // call and the SAFE VALUE screen below read it.
+    let inner_value = U256(input.value);
+
+    // ── Inner call ──────────────────────────────────────────────────
+    let expected_inner = match &sem.inner_kind {
+        InnerKind::MultiSend { count, .. } => {
+            emit_multisend(&mut e, input, *count, cow, erc20, resolver)?
+        }
+        kind => {
+            let ctx = InnerCtx {
+                to: input.to,
+                value: inner_value,
+                data: input.raw_data,
+                data_hash: input.data_hash,
+                erc20,
+            };
+            let before = e.n;
+            emit_inner_kind(&mut e, kind, &ctx, resolver)?;
+            let produced = e.n - before;
+            if produced != inner_kind_screens(kind) {
+                return Err(());
+            }
+            produced
+        }
+    };
+
     // ── TX INFO: nonce / execute-now + honest op row ────────────────
     let first = match input.flavour {
         SafeRenderFlavour::ApproveHash { nonce } => nonce_line(&nonce),
@@ -290,7 +317,6 @@ fn emit_inner(
     }
 
     // ── Inner ETH the Safe forwards (non-inline kinds) ──────────────
-    let inner_value = U256(input.value);
     if sem.show_inner_eth {
         let amt = native_amount(&inner_value, input.chain_id).ok_or(())?;
         e.amount(b"SAFEVAL", b"SAFE VALUE", &amt, false)?;
@@ -311,29 +337,6 @@ fn emit_inner(
             true,
         )?;
     }
-
-    // ── Inner call ──────────────────────────────────────────────────
-    let expected_inner = match &sem.inner_kind {
-        InnerKind::MultiSend { count, .. } => {
-            emit_multisend(&mut e, input, *count, cow, erc20, resolver)?
-        }
-        kind => {
-            let ctx = InnerCtx {
-                to: input.to,
-                value: inner_value,
-                data: input.raw_data,
-                data_hash: input.data_hash,
-                erc20,
-            };
-            let before = e.n;
-            emit_inner_kind(&mut e, kind, &ctx, resolver)?;
-            let produced = e.n - before;
-            if produced != inner_kind_screens(kind) {
-                return Err(());
-            }
-            produced
-        }
-    };
 
     // ── Screen-accounting self-check ────────────────────────────────
     let expected = expected_body_screens(&sem) + expected_inner
@@ -496,15 +499,62 @@ fn emit_erc20(
         Erc20Call::TransferFrom { .. } => b"PULL",
         Erc20Call::Approve { .. } => b"APPROVE",
     };
+    let recipient: [u8; 20] = match call {
+        Erc20Call::Transfer { to, .. } | Erc20Call::TransferFrom { to, .. } => *to,
+        Erc20Call::Approve { spender, .. } => *spender,
+    };
+
+    // ORDER (#770). The reference walks `TO | SEND | CONFIRM? | TOKEN |
+    // CONTRACT` (spec `safe/erc20_transfer`), and `Confirm?` is inserted at
+    // CONFIRM_INDEX 5 — so WHO and HOW MUCH are the two screens that land
+    // before the beat, and the token's identity after it. This emitter used
+    // to run AMOUNT, TOKEN, FROM, TO, CONTRACT, which put the recipient
+    // past the confirm.
+    //
+    // 1. WHO
+    match call {
+        Erc20Call::Approve { .. } if recipient == GPV2_VAULT_RELAYER_ADDRESS => {
+            // Verified human label against the rodata constant.
+            let a = layout_address(&addr42(&recipient));
+            e.addr_lines(b"SPENDER", b"SPENDER", &a, Some(b"CoW VaultRelayer"))?;
+        }
+        Erc20Call::Approve { .. } => e.addr(b"SPENDER", b"SPENDER", &recipient, resolver)?,
+        _ => e.addr(b"TO", b"TO", &recipient, resolver)?,
+    }
+
+    // 2. HOW MUCH — decoded against the verified token, or raw units when
+    //    the device cannot name it.
     match meta {
         Some(m) => {
-            // AMOUNT (labelled by the verb) then the verified token name.
             if unlimited {
                 e.detail(b"AMOUNT", verb, &[(b"unlimited", Weight::Regular)], false)?;
             } else {
                 let amt = token_amount(&amount, m.decimals, m.symbol).ok_or(())?;
                 e.amount(b"AMOUNT", verb, &amt, false)?;
             }
+        }
+        None if unlimited => {
+            e.value(b"RAWAMT", b"RAW AMOUNT", &[(b"unlimited", Weight::Regular)])?;
+        }
+        None => {
+            let amt = raw_units(&amount).ok_or(())?;
+            let lay = layout_amount(amt.digits(), amt.unit(), Region::Full).map_err(|_| ())?;
+            if lay.n == 1 {
+                e.value(b"RAWAMT", b"RAW AMOUNT", &[(lay.lines[0].as_bytes(), Weight::Regular)])?;
+            } else {
+                e.value(
+                    b"RAWAMT",
+                    b"RAW AMOUNT",
+                    &[(lay.lines[0].as_bytes(), Weight::Regular), (lay.lines[1].as_bytes(), Weight::Regular)],
+                )?;
+            }
+        }
+    }
+
+    // 3. WHAT it is — the verified name, or the loud "token unknown" that
+    //    qualifies the raw number above it.
+    match meta {
+        Some(m) => {
             let name_fits = fit_tier(&[(m.name, Weight::SemiBold)], Region::Docked).is_some();
             if name_fits && !m.name.is_empty() {
                 e.detail(b"TOKEN", b"TOKEN", &[(m.name, Weight::SemiBold)], false)?;
@@ -515,45 +565,17 @@ fn emit_erc20(
                 e.detail(b"TOKEN", b"TOKEN", &[(m.symbol, Weight::Regular)], false)?;
             }
         }
-        None => {
-            e.detail(
-                b"UNVERIF",
-                b"UNVERIFIED",
-                &[(b"ERC-20 call", Weight::Regular), (b"token unknown", Weight::Regular)],
-                true,
-            )?;
-            if unlimited {
-                e.value(b"RAWAMT", b"RAW AMOUNT", &[(b"unlimited", Weight::Regular)])?;
-            } else {
-                let amt = raw_units(&amount).ok_or(())?;
-                let lay = layout_amount(amt.digits(), amt.unit(), Region::Full).map_err(|_| ())?;
-                if lay.n == 1 {
-                    e.value(b"RAWAMT", b"RAW AMOUNT", &[(lay.lines[0].as_bytes(), Weight::Regular)])?;
-                } else {
-                    e.value(
-                        b"RAWAMT",
-                        b"RAW AMOUNT",
-                        &[(lay.lines[0].as_bytes(), Weight::Regular), (lay.lines[1].as_bytes(), Weight::Regular)],
-                    )?;
-                }
-            }
-        }
+        None => e.detail(
+            b"UNVERIF",
+            b"UNVERIFIED",
+            &[(b"ERC-20 call", Weight::Regular), (b"token unknown", Weight::Regular)],
+            true,
+        )?,
     }
+
+    // 4. WHOSE balance moves (transferFrom only), then the contract.
     if let Erc20Call::TransferFrom { from, .. } = call {
         e.addr(b"FROM", b"FROM", from, resolver)?;
-    }
-    let recipient: [u8; 20] = match call {
-        Erc20Call::Transfer { to, .. } | Erc20Call::TransferFrom { to, .. } => *to,
-        Erc20Call::Approve { spender, .. } => *spender,
-    };
-    match call {
-        Erc20Call::Approve { .. } if recipient == GPV2_VAULT_RELAYER_ADDRESS => {
-            // Verified human label against the rodata constant.
-            let a = layout_address(&addr42(&recipient));
-            e.addr_lines(b"SPENDER", b"SPENDER", &a, Some(b"CoW VaultRelayer"))?;
-        }
-        Erc20Call::Approve { .. } => e.addr(b"SPENDER", b"SPENDER", &recipient, resolver)?,
-        _ => e.addr(b"TO", b"TO", &recipient, resolver)?,
     }
     e.addr(b"CONTRACT", b"CONTRACT", &ctx.to, resolver)
 }

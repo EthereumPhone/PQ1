@@ -258,7 +258,12 @@ fn erc20_known_transfer_screens() {
     let ids: Vec<&[u8]> = b.screens.as_slice().iter().map(|s| s.id()).collect();
     assert_eq!(
         ids,
-        [&b"APPROVE"[..], b"NETWORK", b"SAFEACCT", b"TXINFO", b"AMOUNT", b"TOKEN", b"TO", b"CONTRACT"]
+        // #770: the reference walks TO | SEND | CONFIRM? | TOKEN | CONTRACT |
+        // TX INFO (spec `safe/erc20_transfer`). `Confirm?` is inserted at
+        // index 5 at render time, so WHO and HOW MUCH are what the user
+        // reaches the beat having seen. This used to read TXINFO, AMOUNT,
+        // TOKEN, TO — the recipient past the confirm.
+        [&b"APPROVE"[..], b"NETWORK", b"SAFEACCT", b"TO", b"AMOUNT", b"TOKEN", b"CONTRACT", b"TXINFO"]
     );
     assert_golden("erc20_known", &b, GOLDEN_ERC20_KNOWN);
 }
@@ -414,15 +419,15 @@ fn every_screen_fits_its_tier_budget() {
 
 // Goldens — bless by copying the value printed in the assertion failure after
 // reviewing `tools/ui_screens_export.py --px` output.
-const GOLDEN_ERC20_KNOWN: &str = "57f08b2e33fce0268ecc501b064ac2f7c0838a882dec2c7898249867c8af608e";
-const GOLDEN_ERC20_UNKNOWN: &str = "9e083da1840ad280f3caf8896b54cd41c50dd964c8dc2354c2f7008eb80600fb";
-const GOLDEN_EMPTY_CALL: &str = "de2b23deff73755f21764265c533ffb8df47f601767665e3f2daf115c94b68b5";
-const GOLDEN_BLIND: &str = "51c6ce0fb72241aac765dd0881d7e40b9ba685490e09d5eeaa305c961aaf9f32";
-const GOLDEN_PLAIN_ETH_GAS: &str = "954789da07742f3e88a6442e6c729586d6e02e9077e522734b7a850caed01184";
-const GOLDEN_REFUND: &str = "eb490a6d8528e87db86f3f2547ae9d900aa68f0b5f0b9dd5f5cc384f3c71d8d5";
-const GOLDEN_COW_DIRECT: &str = "d8cd27c915b2ed64a8a388b65fe99f3fab1fe1bdb4f3b69b910b281c89020701";
-const GOLDEN_MULTISEND: &str = "f270567f77d63ed96d4f19a4dae4f5fd81d90bc66dfa164c11b9725467b6cfd8";
-const GOLDEN_MGMT_ADD_OWNER: &str = "1b2d79da3775b7e39dc384ce9899989b5ae5d39e060e1b429accd7bd87bbbfe5";
+const GOLDEN_ERC20_KNOWN: &str = "335cc493ce23019fd5a910819732b83aa138a2d182eaf4711566147233a92eca";
+const GOLDEN_ERC20_UNKNOWN: &str = "3e4bbe80e90f2ccb4cc8e6619f5dad0b326ee1cfdf728cc2a9252e3f02d9ac83";
+const GOLDEN_EMPTY_CALL: &str = "1f5e84da2a6e92fc685aae309defab6a3f94b0f3676cb7daad93079e11ddd7b9";
+const GOLDEN_BLIND: &str = "d1f65b91734e5455b4da9cc40130333758267152479191ef83fae962b5f96830";
+const GOLDEN_PLAIN_ETH_GAS: &str = "8a2ff55e37c064e9e054a938ebe05338e819da5f1a9a4f806aa89d3d15192030";
+const GOLDEN_REFUND: &str = "567d6e8b775ad4e5bcc229f788ba4086adf14c4f2321f9d9cdc1441e2f2032f9";
+const GOLDEN_COW_DIRECT: &str = "960ff3db77fbf0b9f01f6797ce2d18629e543187fa16f9341bef02ad4e1af4f3";
+const GOLDEN_MULTISEND: &str = "5063f14da0ce37eece26ef54b7c9618256fc38414d44805f7a14a5684805b7d7";
+const GOLDEN_MGMT_ADD_OWNER: &str = "c410e962f07b2cc5bfc8be5046ecaebd69ddb9c14a3405134d7d3d27771c8556";
 
 
 // ---------------------------------------------------------------------------
