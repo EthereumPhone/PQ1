@@ -45,5 +45,6 @@ lemma full_client_unqueried_fresh (A <: FullClient {-FullSession,-Independent}) 
         !List.mem FullSession.signed_messages message =>
         future_fresh Independent.secrethistory random message 0].
 proof.
-  conseq (full_client_messages A); first by smt().
+  conseq (full_client_messages A) => // &hr _ failed sm sh hrh hf random message hsz hn.
+  exact (unqueried_message_fresh sh sm random message (hrh hf) hsz hn).
 qed.

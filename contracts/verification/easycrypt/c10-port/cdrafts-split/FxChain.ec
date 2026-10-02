@@ -2418,7 +2418,9 @@ seq 8 11 : (   ={glob A, ad}
   wp => /=.
   swap{2} [3..3] 3.
   do 3! rnd.
-  by wp; skip => /> *; smt(mem_empty).
+  by wp; skip => /> *; split;
+    [by rewrite /nr_trees; apply IntOrder.expr_ge0
+    |by apply (IntOrder.ler_trans 1) => //; exact ge1_d].
 call (: ={glob O_CMA_SPHINCSPLUSTWC_FS}).
 + by sim.
 call (: ={arg} ==> ={res, glob O_CMA_SPHINCSPLUSTWC_FS}).
@@ -2559,7 +2561,8 @@ seq 8 11 : (   ={glob A, ad}
             rewrite ?negb_or; split.
             + do ? (rewrite negb_exists => ? /=); rewrite ?negb_and -?implybE => * @/psad /=.
               rewrite -HA.eq_adrs_idxsq negb_forall /=; exists 3 => @/HA.eq_idx.
-              rewrite setalladzch_gettypeidx 1..4:// setalladztrhf_gettypeidx //; 2: smt(dist_adrstypes). 
+              rewrite setalladzch_gettypeidx 1..4:// setalladztrhf_gettypeidx //;
+                2: by (have := SPHINCS_PLUS.dist_adrstypes; rewrite /= => -[hc _]; apply/negP => heq; apply: hc; rewrite heq).
               rewrite /valid_tbfidx /nr_nodesf /=; split => [/# | _].
               by rewrite (: k = k - 1 + 1) // mulzDl /= -/t ler_lt_add 1:ler_pmul 4://; smt(ge2_t).
             split.

@@ -24,7 +24,8 @@ lemma padded_pair_injective prefix left1 right1 left2 right2 :
   (left1,right1) = (left2,right2).
 proof.
   move=> hw; rewrite -!catA => he.
-  have hp : pad left1 ++ pad right1 = pad left2 ++ pad right2 by smt(catsI).
+  have hp : pad left1 ++ pad right1 = pad left2 ++ pad right2.
+  + by have := catsI prefix _ _ he; rewrite /pad -!catA.
   have hs : size (pad left1) = size (pad left2) by rewrite /pad !size_cat hw.
   have [hl hr] : pad left1 = pad left2 /\ pad right1 = pad right2 by smt(eqseq_cat).
   move: hl hr; rewrite /pad; smt(catIs).

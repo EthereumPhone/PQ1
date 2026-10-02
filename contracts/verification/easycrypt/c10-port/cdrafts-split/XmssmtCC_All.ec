@@ -6774,7 +6774,7 @@ seq 0 4 : (   #pre
       + by rewrite /nr_trees /l' /l /h -exprD_nneg; smt(ge1_hp ge1_d).
       split; 1: smt(size_ge0 ge1_d).
       by move=> *; smt(size_rcons).
-    by wp; skip => /> *; smt(size_ge0).
+    by wp; skip => /> *; apply (IntOrder.ler_trans 2) => //; exact ge2_l.
   (* ---- (iii) FORGE + RECONSTRUCTION LOOP + trh COLLISION EXTRACTION.
           +C port of MM45 :6127-6298.  STATEMENT NUMBERING (read off the actual
           frontier goal, not guessed): side 1 has 19 statements, side 2 has 25.
@@ -8011,7 +8011,7 @@ rewrite Pr[mu_split EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C.valid_TCRPKCO] RealOrder.le
       + by rewrite /nr_trees /l' /l /h -exprD_nneg; smt(ge1_hp ge1_d).
       split; 1: smt(size_ge0 ge1_d).
       by move=> *; smt(size_rcons).
-    by wp; skip => /> *; smt(size_ge0).
+    by wp; skip => /> *; apply (IntOrder.ler_trans 2) => //; exact ge2_l.
   (* ---- (iii) FORGE + RECONSTRUCTION LOOP + pkco COLLISION EXTRACTION.
           +C port of MM45 :5150-5325.  The SM-DT-TCR-C post carries SIX conjuncts,
           not four: MM45's `conseq` at :5205-5211 states only the four interesting

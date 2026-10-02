@@ -3027,7 +3027,14 @@ seq 4 9 : (   ={glob A, glob O_CMA_Gproc_I}
                           x13 x14 x15 x16 x17.
     (* ENTRY: skFORSl and pkFORSl start [], so the B-level disjunct and the
        B-level nth characterisation are both vacuous. *)
-    split; 1: by rewrite /=; smt(size_ge0).
+    split.
+    + rewrite /=; do! split => //.
+      - move=> adx; rewrite x08; split; first by move=> h; left.
+        case=> [// | [j u v w] [[hj0 hj1] _]].
+        by have := ler_lt_trans _ _ _ hj0 hj1; rewrite ltrr.
+      - move=> j u v w [hj0 hj1].
+        by have := ler_lt_trans _ _ _ hj0 hj1; rewrite ltrr.
+      by apply (ler_trans 2) => //; exact ge2_lp.
     move=> pkL skL twsR tsR pkR skR gL gR [#]
            y01 y02 y03 y04 y05 y06 y07 y08 y09 y10 y11 y12 y13 y14 y15 y16 
            y17 y18 y19 y20.

@@ -113,7 +113,11 @@ lemma carry_push heights h :
   increasing_stack (h::heights).
 proof.
   case heights => //= x rest; rewrite /active_stack /=.
-  smt().
+  move=> [hh [[hx [hxr hinc]] [hhx hhr]]] hne.
+  have hlt : h < x by rewrite ltr_def hne hhx.
+  do! split => //.
+  apply/allP => y hy /=; move/allP: hxr => /(_ y hy) /= hxy.
+  exact (ltr_trans x _ _ hlt hxy).
 qed.
 
 lemma carry_initial heights :

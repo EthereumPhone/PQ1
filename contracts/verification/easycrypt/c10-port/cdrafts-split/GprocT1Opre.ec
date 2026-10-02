@@ -3785,7 +3785,13 @@ split.
       have h := flat_idx_lt i j u v (nr_trees 0) 0 0 0 _ _ _ _ _ _ _;
         1..7: by smt().
       smt().
-    have htw := htwsc i j (u * SPHINCS_PLUS.t + v) _ _ _; 1..3: by smt(ge2_t).
+    have hut : 0 <= u * SPHINCS_PLUS.t + v < k * SPHINCS_PLUS.t.
+    + have ht : 0 <= SPHINCS_PLUS.t by apply (ler_trans 2) => //; exact ge2_t.
+      have [hu0 hult] := hu; have [hv0 hvlt] := hv.
+      split; first by apply addr_ge0 => //; apply mulr_ge0.
+      move=> _; rewrite ltzE -ler_subr_addr.
+      by apply (flat_le SPHINCS_PLUS.t u k v ht hu0 hult hv0); rewrite ler_subr_addr -ltzE.
+    have htw := htwsc i j (u * SPHINCS_PLUS.t + v) hi hj hut.
     rewrite hppg hlvs.
     rewrite (nth_map witness witness); 1: by smt().
     rewrite htsc; 1: by smt().
