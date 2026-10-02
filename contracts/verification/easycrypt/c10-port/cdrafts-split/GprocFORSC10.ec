@@ -1158,7 +1158,13 @@ while (   ps = psi /\ ad = adi
     exists* skFORS, ps, (set_kpidx (set_tidx (set_typeidx ad trhftype) (size skFORSs)) (size skFORSl));
     elim* => sk0 ps0 ad0.
     wp; call (genpkfors_cf_h sk0 ps0 ad0).
-    skip => />; smt(size_rcons nth_rcons size_ge0).
+    skip => /> &hr hsz h0 hle hszs hinv hinvs hlt.
+    split; first by rewrite !size_rcons hsz.
+    split; first by rewrite size_rcons; split => [|_]; [apply addr_ge0 | rewrite -ltzE].
+    move=> j hj0; rewrite size_rcons ltzS => hj1; rewrite !nth_rcons -hsz.
+    case (j < size skFORSl{hr}) => hjl /=; first by apply hinv; rewrite hj0 hjl.
+    have -> : j = size skFORSl{hr} by rewrite eqz_leq hj1 lerNgt hjl.
+    by rewrite /= /pkfors_of.
   by auto => />; smt(ge2_lp size_rcons nth_rcons size_ge0).
 by auto => />; smt(size_ge0 ge2_lp size_rcons nth_rcons IntOrder.expr_gt0).
 qed.
@@ -1204,7 +1210,12 @@ while (   ps = psi /\ ad = adi
     exists* skFORS, ps, (set_kpidx (set_tidx (set_typeidx ad trhftype) (size pkFORSnt)) (size pkFORSlp));
     elim* => sk0 ps0 ad0.
     wp; call (genpkfors_cf_h sk0 ps0 ad0).
-    skip => />; smt(size_rcons nth_rcons size_ge0).
+    skip => /> &hr h0 hle h0nt hnt hinv hinvs hlt.
+    split; first by rewrite size_rcons; split => [|_]; [apply addr_ge0 | rewrite -ltzE].
+    move=> j hj0; rewrite size_rcons ltzS => hj1; rewrite nth_rcons.
+    case (j < size pkFORSlp{hr}) => hjl /=; first by apply hinv; rewrite hj0 hjl.
+    have -> : j = size pkFORSlp{hr} by rewrite eqz_leq hj1 lerNgt hjl.
+    by rewrite /= /pkfors_of.
   by auto => />; smt(ge2_lp size_rcons nth_rcons size_ge0).
 (* the sk cube nest: nothing to establish but ps/ad, four levels deep *)
 wp.
