@@ -139,3 +139,49 @@
 # sb16 is 3,558 B (label caps) and sb22 is 8,900 B, but sb22 carries BOTH the
 # resolved-name signal and the PIN entry digits. The bigger saving is the
 # worse thing to lose.
+
+# setup/first_run — the check-word INPUT METHOD, and slot_registered (#772).
+#
+# Upstream 198bbcb9 added `flows/setup/first_run` and two library screens.
+# Checked against the device wizard step by step (2026-10-02): every step of
+# that flow already exists here.
+#
+#     reference                      device
+#     SET UP PQ1?                    seed_wizard::choose_setup_mode
+#     SET PIN / REPEAT PIN           enter_pin_with_confirm
+#     SET DURESS PIN / REPEAT        collect_duress_pin  ("Set duress PIN?",
+#                                    "must differ", "Same as main",
+#                                    "PIN mismatch") — §32 P4/P5
+#     WRITE DOWN 24 WORDS            "Write 24 words"
+#     the 24 WORDS                   show_mnemonic
+#     WORDS WRITTEN DOWN?            "Words shown"
+#     CHECK 3 / 12 / 22              verify_mnemonic (main.rs:988)
+#     SETUP COMPLETE                 "Backup OK"
+#
+# So the two REAL differences, both presentational:
+#
+# 1. THE CHECK-WORD INPUT. The reference shows the asked word among eight
+#    decoys in a 3x3 grid and the user PICKS; the device has the user ENTER
+#    the word through the legacy entry loop (`enter_single_word`), the same
+#    grammar the PIN and letter rows already deviate on (recorded above).
+#
+#    Kept deliberately. Both put secret material on the glass and both need
+#    the F-24 constant-time cell run, so neither is obviously safer on that
+#    axis — but the device's form renders ONE word where the grid renders
+#    nine, and picking from a visible list is a weaker check of what the user
+#    actually wrote down than reproducing it. The device also picks its three
+#    probes at RANDOM per run (`pick_three_distinct`), where the reference's
+#    3/12/22 are samples its own docstring calls variable.
+#
+#    REVISIT only as a deliberate ceremony change, with the F-24 treatment of
+#    a nine-word grid designed first. It is not a conformance defect.
+#
+# 2. `screens/verdict/slot_registered` (audit HS-10) — a white disc carrying
+#    the black rotate mark, for a slot the device has just registered. The
+#    device states the same fact through the slot-rotation family's own
+#    ending instead (`SLOT ROTATED`, the rotate disc, unbranded green). Using
+#    the library verdict would ADD a screen to the sign flow rather than
+#    re-dress one, which is a flow change, not a port gap.
+#
+# `flows/chains` is a bench / design-review flow by its own docstring ("No
+# ENDS: nothing is signed here"), so it is not a port target at all.
