@@ -78,8 +78,15 @@
 # contains A-Z and 0-9 (the TRIM charset). The 40/36 size step is the other
 # 20 % — area scales with the square of the size.
 #
-# So it does not fit without reopening the flash lever (port plan § Flash, an
-# owner decision).
+# OWNER DECISION 2026-10-02: the device does not use Bold at all. Regular 36
+# stands. This is no longer a budget deferral waiting on the flash lever — if
+# the atlas window grows, do NOT spend it re-adding Bold here.
+#
+# The budget is what RAISED the question; the decision does not rest on it.
+# Bold has exactly one use in the whole design system — this monogram — and
+# it is weight-matching, not meaning. The measurement below shows Regular 36
+# already satisfies the rule the size has to obey, so the only thing bought
+# by 13 KB would be a slightly heavier letter.
 #
 # The device therefore sets the monogram in Regular 36, the largest face it
 # has. MEASURED on the designer's own `send_token` render against ours, cap
@@ -95,4 +102,40 @@
 # bold precisely so "a letter disc and a mark disc carry the same weight in a
 # walk".
 #
-# REVISIT when the atlas window or the flash lever moves.
+# NOT a revisit item. Reopen only if the design system gives Bold a second,
+# load-bearing use — weight alone is not one.
+#
+# ---------------------------------------------------------------------------
+# SemiBold, by contrast, STAYS. Recorded here so a future atlas-budget pass
+# does not read it as the same kind of saving.
+#
+# Asked and answered on the same day (2026-10-02) as the Bold decision above.
+# Dropping sb22 + sb16 would free 12,458 B — but in the NS ATLAS window
+# (2,648 B free today -> 15,106 B), and the atlas has no bytes in the secure
+# image at all (no `include_bytes!` under secure/src/ui/px/; the secure world
+# pins only its SHA-256). What blocks shipping is the SECURE slot, and that
+# saving moves it by zero bytes. It would pay a real cost in the wrong
+# currency.
+#
+# And the cost is real, because SemiBold is the design's semantic axis where
+# Bold was decoration (pq1/typography.py): "Regular for every value; SemiBold
+# for the label caps and every band-edge annotation [...] and for a NAME LINE
+# INSIDE A VALUE".
+#
+# That last clause is load-bearing in the firmware. `screen_kit::addr` renders
+# a SemiBold name over Regular address lines ONLY when the NameResolver
+# verified the name:
+#
+#     Some(name) => [ (name, SemiBold), (addr.lines[0], Regular), ... ]
+#     None       => the address alone
+#
+# So on a signing screen SemiBold means "this human-readable string came from
+# the verified name DB, not from the companion". Dropping the weight folds
+# that provenance cue into the body text. F-ELLIPSIS also makes "a resolved
+# recipient under its SemiBold name" one of exactly TWO sanctioned address
+# shortenings — the weight is what licenses showing a shortened address.
+#
+# If the NS atlas ever does bind, note the asymmetry before reaching for this:
+# sb16 is 3,558 B (label caps) and sb22 is 8,900 B, but sb22 carries BOTH the
+# resolved-name signal and the PIN entry digits. The bigger saving is the
+# worse thing to lose.
