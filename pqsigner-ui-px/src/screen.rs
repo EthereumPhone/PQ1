@@ -1691,3 +1691,48 @@ mod tests {
         }
     }
 }
+
+#[cfg(kani)]
+mod kani_harnesses {
+    use super::*;
+
+    /// `is_printable_ascii` against its spec, on a FULLY SYMBOLIC record.
+    ///
+    /// This is the other half of the #771 fix. The two flow harnesses
+    /// (`check::check_flow_total_and_confirm_rule_exact`,
+    /// `driver::sign_only_from_armed_screens`) stub this function out,
+    /// because unrolling its 256-iteration scan inside their symbolic space
+    /// never finishes — measured at 30 and 27 minutes without reaching the
+    /// solver. Stubbing without this harness would leave the scan proved by
+    /// nothing, so the coverage moves here rather than disappearing.
+    ///
+    /// 257 = `SCREEN_BYTES + 1`: a loop over a fixed-size array has a
+    /// compile-time trip count, so that is the bound which fully unrolls it.
+    /// It is affordable HERE because this harness has exactly one loop and
+    /// no transcript, driver or fit machinery around it.
+    ///
+    /// Both directions are asserted, so the harness cannot pass by the
+    /// function returning a constant.
+    #[kani::proof]
+    #[kani::unwind(257)]
+    fn is_printable_ascii_matches_its_spec() {
+        const _: () = assert!(SCREEN_BYTES + 1 == 257);
+
+        let s = Screen(kani::any());
+        let got = s.is_printable_ascii();
+
+        let i: usize = kani::any();
+        kani::assume(i < SCREEN_BYTES);
+        let byte_ok = (0x20..=0x7E).contains(&s.0[i]);
+
+        // SOUND: if it claims printable, EVERY byte is printable — so the
+        // arbitrary byte `i` is too.
+        if got {
+            assert!(byte_ok, "claimed printable with a non-printable byte at {i}");
+        }
+        // COMPLETE: one non-printable byte is enough to make it false.
+        if !byte_ok {
+            assert!(!got, "a non-printable byte at {i} did not make it false");
+        }
+    }
+}

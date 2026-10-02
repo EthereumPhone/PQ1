@@ -226,11 +226,43 @@ impl FlowDriver {
 #[cfg(kani)]
 mod kani_harnesses {
     use super::*;
-    use crate::screen::{Icon, ScreenBuilder, Side, Weight};
+    use crate::screen::{Icon, Screen, ScreenBuilder, Side, Weight};
+
+    /// The #771 stub — see the harness below for why it is sound here.
+    fn stub_printable(_s: &Screen) -> bool {
+        true
+    }
 
     /// `Sign` is reachable only from a commit-armed hero / confirm, for any
     /// gesture sequence over any small transcript shape.
+    /// #771. `is_printable_ascii` is STUBBED, and `unwind` stays at 14.
+    ///
+    /// This harness reaches that function through `ScreenBuilder::finish`.
+    /// It scans the record's FIXED 256 bytes, so the bound that would unroll
+    /// it is 257 — and at 257 this harness ran 27 minutes at 1.1 GB without
+    /// ever reaching the solver. The bound was never the lever: a global 257
+    /// also inflates the harness's own loops, which `assume` only prunes
+    /// AFTER unwinding.
+    ///
+    /// SOUND, and the argument is narrow: every screen here comes from
+    /// `finish().unwrap()`, and `finish` returns `Ok` only for a well-formed
+    /// record — so inside this harness the scan is provably constant-true.
+    /// `Screens::push` copies the record verbatim (`self.buf[i] = *s`), so
+    /// that property survives into anything downstream. Neither half of this
+    /// harness's claim — that `Sign` is reachable only from a commit-armed
+    /// screen — depends on byte printability.
+    ///
+    /// The stub does NOT drop the coverage:
+    /// `screen::kani_harnesses::is_printable_ascii_matches_its_spec` proves
+    /// the function against its spec on a fully symbolic record at
+    /// unwind(257), both directions. The host test
+    /// `builder_refuses_non_ascii_overlong_and_extra_lines` covers the same
+    /// rejection path concretely.
+    ///
+    /// NOT vacuous: mutating `armed()` to `sign: true` makes this harness
+    /// FAIL (measured 2026-10-02).
     #[kani::proof]
+    #[kani::stub(crate::screen::Screen::is_printable_ascii, stub_printable)]
     #[kani::unwind(14)]
     fn sign_only_from_armed_screens() {
         let n: usize = kani::any();
@@ -269,7 +301,7 @@ mod kani_harnesses {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::screen::{Icon, ScreenBuilder, Side, Weight};
+    use crate::screen::{Icon, Screen, ScreenBuilder, Side, Weight};
 
     fn hero() -> Screen {
         ScreenBuilder::hero(b"ASK", Icon::Safe, b"ASK?").finish().unwrap()

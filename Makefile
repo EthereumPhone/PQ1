@@ -4542,7 +4542,26 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@echo "         + Safe management-op decoder (classify_safe_mgmt: accept => length-exact + selector-match + canonical address words + faithful threshold, reconstructed from original bytes; selector-gating reject + accept/reject controls)"
 	cargo kani -p pqsigner-tx
 	@echo "==> Kani: pixel trusted-UI tier fitter / splitters (total, lossless) + FlowDriver arming"
-	cargo kani -p pqsigner-ui-px
+	@echo "         + is_printable_ascii vs its spec on a FULLY SYMBOLIC record (both directions)"
+	@# -Z stubbing (#771): `sign_only_from_armed_screens` stubs
+	@# `Screen::is_printable_ascii`. That function scans the record's FIXED
+	@# 256 bytes, so the bound that unrolls it is 257 — measured at 257 the
+	@# harness ran 27 min / 1.1 GB WITHOUT reaching the solver, because a
+	@# global bound also inflates the harness's own loops (`assume` prunes
+	@# only AFTER unwinding). The stub is sound there (every screen comes
+	@# from `finish().unwrap()`, which returns Ok only for a well-formed
+	@# record) and costs no coverage: the scan is proved against its spec by
+	@# `is_printable_ascii_matches_its_spec` at unwind(257), where it is the
+	@# only loop. First -Z flag in this target; owner-approved 2026-10-02.
+	@#
+	@# STILL RED, tracked in #771: `check_flow_total_and_confirm_rule_exact`
+	@# fails its unwinding assertion. The stub does NOT rescue it — with the
+	@# scan removed it times out past 30 min on combinatorial breadth (10
+	@# symbolic screens x per-screen tier/line/measure work), so it is left
+	@# failing FAST rather than hanging. Do not "fix" it by shrinking `n`:
+	@# CONFIRM_MIN_DETAILS is 7 and details <= n - 2, so below n = 9 the
+	@# Confirm branch is unreachable and the harness passes vacuously.
+	cargo kani -Z stubbing -p pqsigner-ui-px
 	@echo "==> Kani: ERC-7730 IR header parser (offset-bounds safety)"
 	@echo "         + TLV param parser (panic/OOB-free over symbolic pool+offset; per-tag width/value soundness: enum_ref/decimals/token/visibility; reject unknown-tag + out-of-range visibility byte)"
 	@echo "         + visibility evaluator (should_render_with_mode total + spec-exact over all (visibility,compact))"
