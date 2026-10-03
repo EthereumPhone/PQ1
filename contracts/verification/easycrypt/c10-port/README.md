@@ -3883,7 +3883,7 @@ separation that excludes nothing.
 *"C10's WOTS layer never encodes an adversary-chosen value"* was **retracted on 2026-08-14**
 (`CORRECTION 2026-08-14 (final)`): it holds for the honest signer and is **false at the verifier**,
 which builds the layer-0 WOTS message from FORS secrets and auth paths read out of the signature
-(`sphincs-c10/src/hypertree.rs:386-419`, re-verified). That correction **named
+(`sphincs-c10/src/hypertree.rs:386-419` at the time, `:399-432` since 7edbbe17, re-verified). That correction **named
 `BadEncCountermodel.ec`'s header** as carrying the sentence — and I promoted that file into the
 closure on 2026-08-31 without fixing it. `TCollResEnum.ec` repeated it. Both are corrected at the
 sentence.

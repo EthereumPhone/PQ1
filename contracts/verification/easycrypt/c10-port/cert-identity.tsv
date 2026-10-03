@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	0c33ce064b15ac0f2190f19791dc8370
+split	752436f6bb497485fe11226b2fd47aeb
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1492,3 +1492,36 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 2026-09-30: t1_win uses flat_le and explicit coordinate bounds; flat_decomp
 # rewrites quotient bounds directly. Both replace load-sensitive SMT search.
 # Statements, assumptions, toolchain and solver budgets are unchanged.
+
+# 2026-10-01 (ec8b4bff): parallel proof-job runner (tools/proof_jobs.py, PQ1 #768). Same
+# commands and verdict rules; serial re-check of would-FAILs; SOLO MUST-FAIL controls never
+# judged under load; identity list unified (inputs_id) and extended to the runner + tests.
+# Full replay GREEN, every verdict line identical to the serial receipt.
+# Split identity 3c06760e8d4186532f15afbf86e4ed06 -> cfc77b100cedc35fe3b524cb4520264d.
+
+# 2026-10-02 (08dd9dcf): StackAlignment / GrindTrace / C10CubeConstruction load-flaky cli
+# steps closed without SMT search. Statements, assumptions and controls unchanged.
+# Split identity cfc77b100cedc35fe3b524cb4520264d -> 5f6ecbc8e0b672f1edefc0f75da9343e.
+
+# 2026-10-02 (add9fe72): the ten remaining retry-tax sentences closed without SMT search
+# (XmssmtCC_All x2, FxChain x2, GprocT1Opre, GprocT2Trh, FullMessageHistory, PathInputs,
+# DyadicStack). Statements, assumptions and controls unchanged.
+# Split identity 5f6ecbc8e0b672f1edefc0f75da9343e -> 773209347ad300ad266ed1d53a34a476.
+
+# 2026-10-02 (e1218898): GprocFORSC10's two rcons-invariant steps SMT-free (cli leg flaked
+# under heavy load). Statements, assumptions and controls unchanged.
+# Split identity 773209347ad300ad266ed1d53a34a476 -> 0c33ce064b15ac0f2190f19791dc8370.
+
+# 2026-10-03: re-bind sphincs-c10 lib.rs, hypertree.rs and merkle.rs after upstream
+# 7edbbe17 (keygen progress callbacks for the ui-px busy film). Reviewed: compute_subtree_root
+# gains a ProgressSink + percentage band and calls report() every 16 leaves AFTER the stack
+# push, with a percentage computed from the public leaf counter only; nothing it returns
+# changes. compute_pk_root passes progress_none(); keygen_with_progress mirrors keygen
+# (same sk_seed residue scrub). Evidence: cross-revision differential (7edbbe17^ vs master)
+# of 12 master + 12 slot keypairs with one full signature each - byte-identical; sphincs-c10
+# suite incl. easycrypt_transcript, fullsign model check (5 keygen / 20 signature / 160
+# negative cases), bip39 Trezor vectors and domain suite all pass. Also: the commit shifted
+# hypertree.rs by +13 lines, so the verifier citation in scratch/gtn_ctl{A,B,C}.ec moved
+# 386-419 -> 399-432 (block text byte-identical; comment-only). Proofs, statements,
+# assumptions and control verdicts unchanged.
+# Split identity 0c33ce064b15ac0f2190f19791dc8370 -> 752436f6bb497485fe11226b2fd47aeb.

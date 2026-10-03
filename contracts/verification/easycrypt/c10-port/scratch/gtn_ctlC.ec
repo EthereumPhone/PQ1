@@ -66,7 +66,7 @@
        README, CORRECTION 2026-08-14 (final) and CONCLUSION 2026-08-18).
      * Do NOT read the move as "the deployment keeps the WOTS message key-determined".
        That is FALSE at the verifier: the layer-0 WOTS message is built from FORS secrets
-       and auth paths read out of the signature (sphincs-c10/src/hypertree.rs:386-419).
+       and auth paths read out of the signature (sphincs-c10/src/hypertree.rs:399-432).
      * `T_COLL_RES_ENUM` has NO disjointness conjunct (TCollResEnum.ec, FAITHFULNESS
        NOTES): its win set is LARGER than the S-TCR(+C) template's, so the assumption is
        STRICTLY STRONGER than a THF assumption.  Sound to charge, expensive to believe.
