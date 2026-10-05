@@ -17,13 +17,16 @@ EXTRACTION-READY; the `Chunks` infra step — now DONE.)_
 
 ## Why this rank
 
-`deserialize_pin_state` (`domain/src/lib.rs:739`) is the PIN-state blob parser
+`deserialize_pin_state` (`domain/src/lib.rs:855`) is the PIN-state blob parser
 used by the mock-SE MACD path. It is the highest-value *uncovered* pure-logic
 function in `domain` and exactly the shape that caught a real bug at rank 8
 (`decode_item`'s 32-bit `checked_shl` wrap): a length-validated, `Result`-typed
 byte parser. Proving it **rejects every malformed-length blob** (never proceeds
 to populate the fixed `[[u8;48];10]` array) is a genuine anti-malformed-input
-property. The inverse `serialize_pin_state` (`:717`) gives the round-trip.
+property. The inverse `serialize_pin_state` (`:833`) gives the round-trip.
+_(UPDATE 2026-10-05: line citations re-resolved against current master; they
+read `:739`/`:717`, correct when written in June, before code was added above
+both functions.)_
 
 ## What was validated (this session)
 

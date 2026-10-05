@@ -1,6 +1,6 @@
 /- §33 rank — `domain::deserialize_pin_state` malformed-length rejection.
 
-   `deserialize_pin_state` (`domain/src/lib.rs:739`) is the PIN-state blob parser.
+   `deserialize_pin_state` (`domain/src/lib.rs:855`) is the PIN-state blob parser.
    This rank proves the anti-malformed-input property: every blob whose declared
    length is 0 or exceeds the maximum (`PIN_STATE_MAX_LEN = 1 + MAX_ATTEMPTS *
    PER_SLOT_CT_LEN = 481`) is REJECTED with `Err` — the parser never proceeds to
