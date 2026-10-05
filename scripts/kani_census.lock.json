@@ -18,7 +18,6 @@
     "pqsigner-erc7730/src/render/params.rs": 13,
     "pqsigner-erc7730/src/render/resolve.rs": 21,
     "pqsigner-erc7730/src/render/visibility.rs": 1,
-    "pqsigner-ui-px/src/check.rs": 1,
     "pqsigner-ui-px/src/driver.rs": 1,
     "pqsigner-ui-px/src/fit.rs": 4,
     "pqsigner-ui-px/src/screen.rs": 1,
@@ -161,9 +160,6 @@
     "pqsigner-erc7730/src/render/visibility.rs": [
       "should_render_with_mode_total_and_spec"
     ],
-    "pqsigner-ui-px/src/check.rs": [
-      "check_flow_total_and_confirm_rule_exact"
-    ],
     "pqsigner-ui-px/src/driver.rs": [
       "sign_only_from_armed_screens"
     ],
@@ -279,12 +275,12 @@
     ]
   },
   "totals": {
-    "total_files": 31,
-    "total_harnesses": 180,
+    "total_files": 30,
+    "total_harnesses": 179,
     "mutation_enrolled_files": 22,
     "harnesses_in_enrolled_files": 164,
-    "files_outside_mutation": 9,
-    "harnesses_outside_mutation": 16,
+    "files_outside_mutation": 8,
+    "harnesses_outside_mutation": 15,
     "mutation_groups_total": 43,
     "mutation_groups_by_tier": {
       "quick": 10,
@@ -300,7 +296,6 @@
     "pqsigner-erc7730/src/render/calldata_topology.rs",
     "pqsigner-erc7730/src/render/nested.rs",
     "pqsigner-erc7730/src/render/visibility.rs",
-    "pqsigner-ui-px/src/check.rs",
     "pqsigner-ui-px/src/driver.rs",
     "pqsigner-ui-px/src/fit.rs",
     "pqsigner-ui-px/src/screen.rs"

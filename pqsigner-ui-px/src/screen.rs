@@ -1698,13 +1698,15 @@ mod kani_harnesses {
 
     /// `is_printable_ascii` against its spec, on a FULLY SYMBOLIC record.
     ///
-    /// This is the other half of the #771 fix. The two flow harnesses
-    /// (`check::check_flow_total_and_confirm_rule_exact`,
-    /// `driver::sign_only_from_armed_screens`) stub this function out,
-    /// because unrolling its 256-iteration scan inside their symbolic space
-    /// never finishes — measured at 30 and 27 minutes without reaching the
-    /// solver. Stubbing without this harness would leave the scan proved by
-    /// nothing, so the coverage moves here rather than disappearing.
+    /// This is the other half of the #771 fix. The flow harness
+    /// `driver::sign_only_from_armed_screens` stubs this function out,
+    /// because unrolling its 256-iteration scan inside its symbolic space
+    /// never finishes — measured at 27 minutes without reaching the solver.
+    /// Stubbing without this harness would leave the scan proved by nothing,
+    /// so the coverage moves here rather than disappearing. (The other flow
+    /// harness, `check::check_flow_total_and_confirm_rule_exact`, timed out
+    /// even with the stub and became an exhaustive `#[test]` on 2026-10-05;
+    /// it runs this scan for real on every case.)
     ///
     /// 257 = `SCREEN_BYTES + 1`: a loop over a fixed-size array has a
     /// compile-time trip count, so that is the bound which fully unrolls it.

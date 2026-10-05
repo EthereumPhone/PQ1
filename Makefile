@@ -4584,12 +4584,13 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	cargo kani -p pqsigner-aa
 	@echo "==> Kani: FW-update manifest AUTHORITY gates (rollback-boundary biconditional [pins > not >=]; signed-preimage layout exhaustive) — gate DECISIONS, complementing the proptest/libfuzzer panic-freedom + fuzz coverage of the structural/CRC/crypto gates"
 	cargo kani -p fw-manifest
-	@echo "==> Kani: pixel trusted-UI tier fitter / splitters (total, lossless) + FlowDriver arming"
+	@echo "==> Kani: pixel trusted-UI splitters (lossless) + FlowDriver arming"
 	@echo "         + is_printable_ascii vs its spec on a FULLY SYMBOLIC record (both directions)"
-	@# LAST, deliberately (#776). A red step aborts this recipe, and the ui-px
-	@# step is red (#771, below). While it sat before erc7730 the four crates
-	@# after it ran in none of the 2026-10-02..04 nightlies. Every other crate
-	@# now runs first; `make kani` still exits non-zero until #771 is fixed.
+	@# LAST, deliberately (#776). A red step aborts this recipe: while this
+	@# step sat before erc7730 and carried #771's red harness, the four crates
+	@# after it ran in none of the 2026-10-02..04 nightlies. It is green now
+	@# (below) but stays last, so a future red ui-px harness cannot suppress
+	@# the rest again.
 	@#
 	@# Three `fit` harnesses are compiled OUT here behind the
 	@# `kani-nonterminating` feature (#776): `layout_amount_never_breaks_number`
@@ -4611,13 +4612,13 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@# `is_printable_ascii_matches_its_spec` at unwind(257), where it is the
 	@# only loop. First -Z flag in this target; owner-approved 2026-10-02.
 	@#
-	@# STILL RED, tracked in #771: `check_flow_total_and_confirm_rule_exact`
-	@# fails its unwinding assertion. The stub does NOT rescue it — with the
-	@# scan removed it times out past 30 min on combinatorial breadth (10
-	@# symbolic screens x per-screen tier/line/measure work), so it is left
-	@# failing FAST rather than hanging. Do not "fix" it by shrinking `n`:
-	@# CONFIRM_MIN_DETAILS is 7 and details <= n - 2, so below n = 9 the
-	@# Confirm branch is unreachable and the harness passes vacuously.
+	@# #771 resolved 2026-10-05: `check_flow_total_and_confirm_rule_exact` is
+	@# no longer a Kani harness. Its domain was finite and concrete (n <= 10
+	@# screens, each middle slot one of two fixed records), and the symbolic
+	@# choice between 256-byte records made it time out past 30 min even with
+	@# the scan stubbed. It is now an exhaustive `#[test]` in check.rs over
+	@# n <= 12 (2047 transcripts, run by CI's pure-logic `cargo test`), which
+	@# also reaches the `confirms > 1` clause that n <= 10 never decided.
 	cargo kani -Z stubbing -p pqsigner-ui-px
 	@echo "==> kani: PASS"
 

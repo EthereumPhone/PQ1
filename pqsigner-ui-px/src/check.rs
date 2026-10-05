@@ -293,21 +293,24 @@ mod tests {
         assert_eq!(check_screens(&[to, chain]), Ok(()));
         assert_eq!(check_screens(&[chain, to]), Err(Violation::ChainPlacement(0)));
     }
-}
 
-#[cfg(kani)]
-mod kani_harnesses {
-    use super::*;
-    use crate::screen::{Icon, ScreenBuilder, Side};
-
-    /// The flow checker is total over any small transcript shape built from
-    /// the three record kinds, and accepts exactly the two-sided Confirm?
-    /// rule on well-formed flows.
-    #[kani::proof]
-    #[kani::unwind(12)]
+    /// Every transcript of `n` screens, `n` in `2..=12`: a hero at each end
+    /// and each of the `n - 2` middle slots the fixed Detail or the fixed
+    /// `Confirm?` record — all 2047 of them. The domain is finite and
+    /// concrete, so running each case checks it completely (a panic or an
+    /// overflow fails the test; the crate forbids `unsafe`). This replaces
+    /// a Kani harness of the same name over `n <= 10`, which never finished:
+    /// a symbolic choice between two 256-byte records left every loop in
+    /// `check_screens` with a symbolic bound (#771, #776).
+    ///
+    /// Do not shrink `n`. Below `n = 9` the `Confirm?` branch is unreachable
+    /// (`CONFIRM_MIN_DETAILS` is 7 and `details <= n - 2`), and below
+    /// `n = 11` no flow has seven details AND two `Confirm?` records, so the
+    /// `confirms > 1` clause decides nothing — mutating it to `> 2` survived
+    /// the old `n <= 10` domain. The exact counts at the end make a shrunk
+    /// domain fail loudly.
+    #[test]
     fn check_flow_total_and_confirm_rule_exact() {
-        let n: usize = kani::any();
-        kani::assume((2..=10).contains(&n));
         let hero = ScreenBuilder::hero(b"ASK", Icon::Safe, b"ASK?").finish().unwrap();
         let detail = ScreenBuilder::detail(b"D", Icon::Safe, Side::Left, b"L")
             .tier(Tier::T22)
@@ -315,17 +318,48 @@ mod kani_harnesses {
             .finish()
             .unwrap();
         let confirm = ScreenBuilder::confirm(Icon::Safe).finish().unwrap();
-        let mut s = Screens::blank();
-        s.push(&hero).unwrap();
-        for _ in 1..n - 1 {
-            s.push(if kani::any() { &detail } else { &confirm }).unwrap();
+        let (mut cases, mut accepted_with_confirm, mut accepted_without) = (0usize, 0usize, 0usize);
+        for n in 2..=12usize {
+            let middle = n - 2;
+            for mask in 0u32..(1 << middle) {
+                // Bit i set: slot i + 1 holds the Detail record, else Confirm?.
+                // The expectation is taken from the mask, not by re-parsing
+                // the records `check_flow` reads.
+                let (mut details, mut confirms, mut at) = (0usize, 0usize, None);
+                let mut s = Screens::blank();
+                s.push(&hero).unwrap();
+                for i in 0..middle {
+                    if (mask >> i) & 1 == 1 {
+                        details += 1;
+                        s.push(&detail).unwrap();
+                    } else {
+                        confirms += 1;
+                        at = at.or(Some(i + 1));
+                        s.push(&confirm).unwrap();
+                    }
+                }
+                s.push(&hero).unwrap();
+                let rule_ok = if details >= CONFIRM_MIN_DETAILS {
+                    confirms == 1 && at == Some(CONFIRM_INDEX)
+                } else {
+                    confirms == 0
+                };
+                assert_eq!(check_flow(&s).is_ok(), rule_ok, "n={n} mask={mask:#010b}");
+                cases += 1;
+                if rule_ok {
+                    if confirms == 1 {
+                        accepted_with_confirm += 1;
+                    } else {
+                        accepted_without += 1;
+                    }
+                }
+            }
         }
-        s.push(&hero).unwrap();
-        let r = check_flow(&s);
-        let details = s.as_slice().iter().filter(|x| x.kind() == Some(Kind::Detail)).count();
-        let confirms = s.as_slice().iter().filter(|x| x.kind() == Some(Kind::Confirm)).count();
-        let at = s.as_slice().iter().position(|x| x.kind() == Some(Kind::Confirm));
-        let rule_ok = if details >= CONFIRM_MIN_DETAILS { confirms == 1 && at == Some(CONFIRM_INDEX) } else { confirms == 0 };
-        assert_eq!(r.is_ok(), rule_ok);
+        // The whole domain ran, and both accepting branches were exercised:
+        // one flow per n = 10, 11, 12 with its single Confirm? at index 5
+        // and Details elsewhere, and the seven all-Detail flows with fewer
+        // than seven details (n = 2..=8).
+        assert_eq!(cases, 2047);
+        assert_eq!((accepted_with_confirm, accepted_without), (3, 7));
     }
 }
