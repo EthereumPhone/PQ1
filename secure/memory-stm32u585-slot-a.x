@@ -34,8 +34,19 @@
 
 MEMORY
 {
-    /* Legacy secure slot A: pages 7-64 inclusive = 58 * 8 KB = 464 KB. */
-    FLASH : ORIGIN = 0x0C00E000, LENGTH = 464K
+    /* Secure slot A, per the frozen Section-5 registry: bank-1 pages 7-63
+     * inclusive = 57 * 8 KB = 456 KB = geometry::SECURE_SLOT_SPAN (0x72000).
+     *
+     * This said 464K ("pages 7-64 inclusive = 58 * 8 KB") until 2026-10-05,
+     * one page MORE than the slot owns. Page 64 belongs to
+     * Owner::Route1JournalA, the rollback launch journal. Nothing bound this
+     * LENGTH to the registry, so an image between 466,944 and 475,136 bytes
+     * linked clean and would have overrun that journal at flash time; only
+     * `make size-report-px` checked the real cap, and ordinary hardware builds
+     * do not run it. `make check-slot-linker-span` now pins the two together.
+     *
+     * ORIGIN was already right: page 7 = 0x0C000000 + 7 * 0x2000 = 0x0C00E000. */
+    FLASH : ORIGIN = 0x0C00E000, LENGTH = 456K
 
     /* Secure SRAM: SRAM1 via S alias — same as the monolithic link. */
     RAM   : ORIGIN = 0x30000000, LENGTH = 192K

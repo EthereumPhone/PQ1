@@ -2854,6 +2854,32 @@ size-report: ## Report secure/NS/FSBL image sizes against their flash/SRAM budge
 	  arm-none-eabi-size -B $(FSBL_ELF) | awk 'NR==2 { u=$$1+$$2; printf "    fsbl   : %d B of 32768 B legacy bench region (%.1f%%), %d B free\n", u, u*100.0/32768, 32768-u }'; \
 	fi
 
+# The slot linker scripts must not hand the image more flash than the frozen
+# Section-5 registry gives the slot. Until 2026-10-05 slot A said `LENGTH =
+# 464K` (475,136 B) against a SECURE_SLOT_SPAN of 456 KiB (466,944 B) — one
+# 8-KiB page more than the slot owns, and that page is Owner::Route1JournalA,
+# the rollback launch journal. An image in that 8-KiB window linked clean and
+# would have overrun the journal when flashed; only `size-report-px` checked
+# the real cap, and no ordinary hardware build runs it. These are two settings
+# for one property, written on different dates, so bind them.
+.PHONY: check-slot-linker-span
+check-slot-linker-span: ## Slot linker FLASH region == geometry::SECURE_SLOT_SPAN
+	@span=$$(sed -n 's/^pub const SECURE_SLOT_SPAN: u32 = 0x\([0-9A-Fa-f]*\);$$/\1/p' geometry/src/lib.rs); \
+	case "$$span" in '') echo "check-slot-linker-span: FAIL — could not read SECURE_SLOT_SPAN from geometry/src/lib.rs"; exit 1 ;; esac; \
+	want=$$(printf '%d' "0x$$span"); \
+	wantk=$$((want / 1024)); \
+	if [ $$((wantk * 1024)) -ne $$want ]; then echo "check-slot-linker-span: FAIL — SECURE_SLOT_SPAN $$want B is not a whole number of KiB"; exit 1; fi; \
+	rc=0; \
+	for f in secure/memory-stm32u585-slot-*.x; do \
+	  [ -e "$$f" ] || continue; \
+	  got=$$(sed -n 's/^[[:space:]]*FLASH[[:space:]]*:.*LENGTH[[:space:]]*=[[:space:]]*\([0-9]*\)K.*$$/\1/p' "$$f"); \
+	  case "$$got" in '') echo "    $$f: FAIL — no 'FLASH : ... LENGTH = <n>K' line"; rc=1; continue ;; esac; \
+	  if [ "$$got" -ne "$$wantk" ]; then \
+	    echo "    $$f: FAIL — FLASH LENGTH = $$got""K but geometry::SECURE_SLOT_SPAN = $$wantk""K ($$want B)"; rc=1; \
+	  else echo "    $$f: OK — FLASH LENGTH = $$got""K == SECURE_SLOT_SPAN"; fi; \
+	done; \
+	if [ $$rc -ne 0 ]; then echo "check-slot-linker-span: a slot image could link past the flash the frozen registry gives it"; exit 1; fi
+
 # Pixel trusted-UI flash-budget gate (docs/ui/pixel-ui-port-plan.md § Flash).
 # Builds the nearest BUILDABLE ship-shaped dual-SE image with `ui-px` linked at
 # A/B slot A and measures its physical span with fwmeasure against the frozen
@@ -4443,6 +4469,8 @@ invisible-unicode: ## Refuse zero-width / bidi-override codepoints in tracked te
 	python3 scripts/check_invisible_unicode.py
 
 invariant-gates: ## Local invariant gates (cargo-deny + semgrep + transcription)
+	@echo "==> [0/5] slot linker region == frozen geometry slot span:"
+	$(MAKE) check-slot-linker-span
 	@echo "==> [1/5] supply-chain (deps): cargo deny check advisories bans sources"
 	@echo "    bans=invariant #5 (no classical signer); advisories=real CVEs"
 	@echo "    (unmaintained is workspace-scoped); sources=registry/remote guard."
