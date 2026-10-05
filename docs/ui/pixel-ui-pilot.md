@@ -93,6 +93,75 @@ buildable ship shape: 432,448 B without `ui-px`, **476,160 B with it** —
 still 9.2 KB over the 466,944 B v6 secure slot; the ≥ 40 KB headroom gate is
 not met and the remaining lever (geometry / feature set / deeper diet) is an
 open owner decision.
+
+**UPDATE 2026-10-05 — the 9.2 KB above was Safe-only; all nine families are
+78.5 KB over, and a profile change recovered 82% of it.** Re-measured with
+`make size-report-px BOARD=pq1`, physical span cross-checked against
+`readelf -l` LOAD:
+
+| build | span | vs the 466,944 B slot |
+|---|---:|---:|
+| no `ui-px` | 431,680 B | fits, 35,264 B spare |
+| + `ui-px`, `opt-level = "s"` | 545,504 B | **78,560 B OVER** |
+| + `ui-px`, secure `opt-level = "z"` | 481,376 B | **14,432 B over** |
+| + `ui-px`, everything `"z"` | 475,648 B | 8,704 B over |
+
+At `"s"` the image did not merely exceed the gate, it would not LINK:
+`region FLASH overflowed by 70368 bytes`. Moving `[profile.release]` to `z`
+recovered 64,128 B with no code deleted and no family
+dropped. Crypto stays at opt-level 3 (signing throughput unaffected) and
+`pqsigner-ui-px` stays at `"s"`; the further 5,728 B that `"z"` buys there needs
+an on-panel `ui-px-frametime` run first.
+
+**Frame time is not fenced off by that override, and is unmeasured at `z`.**
+The per-frame work is split across two crates and the slower half is in
+`sphincs-tz-secure`, which moved to `z`: `ui::px::lcd::present_frame_ex` and
+`blit_strip` are the presenter and the SPI push, measured at 24 ms for nine
+strips (~13 ms with unchanged strips skipped) against a 24 ms frame period —
+the bottleneck. The raster and glyph compositing left at `"s"` are only
+8-11 ms. So `z` put the dominant frame cost at `z`. An on-panel
+`ui-px-frametime` run gates shipping it; if the hero sweep regresses, give the
+presenter its own profile override rather than reverting the parent profile,
+which is what makes the image linkable at all.
+
+Where the 113,824 B went, at `"s"`: **.text +103,584 / .rodata +9,472 /
+.data +776 — 91% is code.** Pre-existing functions grew only 8,742 B, and the
+shared `tx::display` decode/classify modules SHRANK 1,482 B: the decode logic
+is genuinely shared and is not the cost. The cost is a second *presentation*
+stack. Largest single items: `scene::Anim::build` 12,090 B (the whole scene
+builder inlines into it), `userop_screens::emit` 7,732, `ui::px::lcd::
+present_frame_ex` 4,310, `px_lift::emit_body` 2,234. For erc7730, userop, cow,
+offchain and the trailers the pixel emitter *adapts* the 16×4 painter's
+`Pages` rather than drawing natively (see the header of
+`tx/display/erc7730_screens.rs`: the planned in-renderer `Screens` sink was
+dropped so the audited renderer stays untouched), `safe_screens` and
+`batch_screens` are native, and `px_lift` is a third layer proving the two
+agree.
+
+Bank occupancy, for the geometry lever: bank 1 has **zero** spare pages — the
+frozen registry owns all 128, and the port plan's "spare bank-1 pages" do not
+exist. The bank-2 NS slot has **275,100 B free** (149,436 B NS image +
+75,176 B atlas, of `NS_SLOT_SPAN` 499,712 B). Bank 2 is likewise fully owned by the
+registry — that 275,100 B is slack INSIDE the two NS slots, not unowned pages —
+so every option below re-lays both banks and needs a bank-2 secure watermark
+(RM0456 allows one per bank), the FSBL reading through the secure alias with
+SAU (the trap that silently hashed 7,488 zero bytes on 2026-09-16), and a
+re-review of the frozen Draft 1.1 registry digest.
+
+At `opt-level = "z"` the image needs 59 pages, not the 67 it needed at `"s"`,
+which changes the shape of the ask: two 59-page secure slots DO fit in bank 1
+(5 FSBL + 2 manifest + 59 + 1 journal + 59 + 1 journal = 127 of 128) if the
+five per-device state pages 123-127 move to bank 2. But 59 pages is 483,328 B
+against a 481,376 B image — about 1.9 KB spare, which is LESS than the "few KB"
+the Makefile itself budgets for `rdp2-self-lock`. So that layout is not
+"fits"; it is arithmetically possible and operationally too tight. Report it
+as a direction, not a solution.
+
+Carve-out: the FSBL draws the boot fingerprint with its own `nv3007` +
+`draw_text` (`fsbl/src/render.rs`) in a separate image capped at
+`FSBL_MAX_LOAD_SPAN` 38,912 B and WRP-frozen at RDP-2. The 37.6 KB pixel
+engine cannot live there, and invariant #10 wants that window visually
+distinctive. "No 16×4 text UI anywhere" excludes the FSBL boot window.
 Strip buffer: 13,696 B BSS on `ui-lcd` builds; the transcript costs no BSS
 (overlay). QEMU e2e stack/BSS: unchanged vs baseline.
 
