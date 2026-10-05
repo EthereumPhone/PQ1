@@ -20,7 +20,7 @@
     "pqsigner-erc7730/src/render/visibility.rs": 1,
     "pqsigner-ui-px/src/check.rs": 1,
     "pqsigner-ui-px/src/driver.rs": 1,
-    "pqsigner-ui-px/src/fit.rs": 3,
+    "pqsigner-ui-px/src/fit.rs": 4,
     "pqsigner-ui-px/src/screen.rs": 1,
     "shared/src/apdu_framing.rs": 4,
     "shared/src/ns_ptr_validate.rs": 8,
@@ -170,6 +170,7 @@
     "pqsigner-ui-px/src/fit.rs": [
       "fit_tier_total",
       "layout_amount_never_breaks_number",
+      "layout_amount_wrapped_is_lossless",
       "splits_are_lossless"
     ],
     "pqsigner-ui-px/src/screen.rs": [
@@ -279,11 +280,11 @@
   },
   "totals": {
     "total_files": 31,
-    "total_harnesses": 179,
+    "total_harnesses": 180,
     "mutation_enrolled_files": 22,
     "harnesses_in_enrolled_files": 164,
     "files_outside_mutation": 9,
-    "harnesses_outside_mutation": 15,
+    "harnesses_outside_mutation": 16,
     "mutation_groups_total": 43,
     "mutation_groups_by_tier": {
       "quick": 10,
