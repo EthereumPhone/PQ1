@@ -44,13 +44,13 @@ def core.slice.iter.Chunks.Insts.CoreIterTraitsIteratorIteratorSharedASlice (T
 @[global_simps, irreducible] def AES_GCM_TAG_LEN : Std.Usize := 16#usize
 
 /-- [pqsigner_domain::PER_SLOT_CT_LEN]
-    Source: 'domain/src/lib.rs', lines 806:0-806:56
+    Source: 'domain/src/lib.rs', lines 827:0-827:56
     Visibility: public -/
 @[global_simps, irreducible]
 def PER_SLOT_CT_LEN : Result Std.Usize := 32#usize + AES_GCM_TAG_LEN
 
 /-- [pqsigner_domain::PIN_STATE_MAX_LEN]
-    Source: 'domain/src/lib.rs', lines 810:0-810:81
+    Source: 'domain/src/lib.rs', lines 831:0-831:81
     Visibility: public -/
 @[global_simps, irreducible]
 def PIN_STATE_MAX_LEN : Result Std.Usize := do
@@ -61,7 +61,7 @@ def PIN_STATE_MAX_LEN : Result Std.Usize := do
   1#usize + i3
 
 /-- [pqsigner_domain::serialize_pin_state]: loop body 0:
-    Source: 'domain/src/lib.rs', lines 819:4-822:5
+    Source: 'domain/src/lib.rs', lines 840:4-843:5
     Visibility: public -/
 @[rust_loop_body]
 def serialize_pin_state_loop.body
@@ -87,7 +87,7 @@ def serialize_pin_state_loop.body
     ok (cont (iter1, buf1, offset1))
 
 /-- [pqsigner_domain::serialize_pin_state]: loop 0:
-    Source: 'domain/src/lib.rs', lines 819:4-822:5
+    Source: 'domain/src/lib.rs', lines 840:4-843:5
     Visibility: public -/
 @[rust_loop]
 def serialize_pin_state_loop
@@ -101,7 +101,7 @@ def serialize_pin_state_loop
     (iter, buf, offset)
 
 /-- [pqsigner_domain::serialize_pin_state]:
-    Source: 'domain/src/lib.rs', lines 812:0-824:1
+    Source: 'domain/src/lib.rs', lines 833:0-845:1
     Visibility: public -/
 def serialize_pin_state
   (next_index : Std.U8) (encrypted_secrets : Slice (Array Std.U8 48#usize))
@@ -115,7 +115,7 @@ def serialize_pin_state
   serialize_pin_state_loop iter s 1#usize
 
 /-- [pqsigner_domain::deserialize_pin_state]: loop body 0:
-    Source: 'domain/src/lib.rs', lines 851:4-853:5
+    Source: 'domain/src/lib.rs', lines 872:4-874:5
     Visibility: public -/
 @[rust_loop_body]
 def deserialize_pin_state_loop.body
@@ -141,7 +141,7 @@ def deserialize_pin_state_loop.body
     ok (cont (iter1, a2))
 
 /-- [pqsigner_domain::deserialize_pin_state]: loop 0:
-    Source: 'domain/src/lib.rs', lines 851:4-853:5
+    Source: 'domain/src/lib.rs', lines 872:4-874:5
     Visibility: public -/
 @[rust_loop]
 def deserialize_pin_state_loop
@@ -155,7 +155,7 @@ def deserialize_pin_state_loop
     (iter, encrypted_secrets)
 
 /-- [pqsigner_domain::deserialize_pin_state]:
-    Source: 'domain/src/lib.rs', lines 834:0-859:1
+    Source: 'domain/src/lib.rs', lines 855:0-880:1
     Visibility: public -/
 def deserialize_pin_state
   (blob : Slice Std.U8) (blob_len : Std.Usize) :

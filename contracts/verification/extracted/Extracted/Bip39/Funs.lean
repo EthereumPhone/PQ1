@@ -49,7 +49,7 @@ def read_11_bits (buf : Slice Std.U8) (bit : Std.Usize) : Result Std.U16 := do
   ok (UScalar.cast .U16 i10)
 
 /-- [sphincs_tz_bip39::full::write_11_bits]:
-    Source: 'bip39/src/full.rs', lines 439:0-450:1 -/
+    Source: 'bip39/src/full.rs', lines 460:0-471:1 -/
 def full.write_11_bits
   (buf : Slice Std.U8) (bit : Std.Usize) (value : Std.U16) :
   Result (Slice Std.U8)
@@ -86,7 +86,7 @@ def full.write_11_bits
   else ok buf2
 
 /-- [sphincs_tz_bip39::full::roundtrip_11]:
-    Source: 'bip39/src/full.rs', lines 431:0-435:1
+    Source: 'bip39/src/full.rs', lines 452:0-456:1
     Visibility: public -/
 def full.roundtrip_11
   (value : Std.U16) (bit : Std.Usize) : Result Std.U16 := do

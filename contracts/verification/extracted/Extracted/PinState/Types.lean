@@ -17,7 +17,7 @@ set_option maxRecDepth 2048
 namespace pqsigner_domain
 
 /-- [pqsigner_domain::PinState]
-    Source: 'domain/src/lib.rs', lines 826:0-832:1
+    Source: 'domain/src/lib.rs', lines 847:0-853:1
     Visibility: public -/
 structure PinState where
   next_index : Std.U8

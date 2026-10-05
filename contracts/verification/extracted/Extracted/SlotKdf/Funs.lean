@@ -38,7 +38,7 @@ def U8.Insts.ZeroizeDefaultIsZeroes : zeroize.DefaultIsZeroes Std.U8 := {
 }
 
 /-- [pqsigner_domain::slot_master_entropy_from_bip39]:
-    Source: 'domain/src/lib.rs', lines 465:0-490:1
+    Source: 'domain/src/lib.rs', lines 482:0-507:1
     Visibility: public -/
 def slot_master_entropy_from_bip39
   (bip39_seed : Array Std.U8 64#usize) (account_index : Std.U32) :
@@ -112,7 +112,7 @@ def slot_master_entropy_from_bip39
     ok out
 
 /-- [pqsigner_domain::derive_c10_master_from_bip39_seed]:
-    Source: 'domain/src/lib.rs', lines 546:0-603:1
+    Source: 'domain/src/lib.rs', lines 563:0-620:1
     Visibility: public -/
 def derive_c10_master_from_bip39_seed
   (bip39_seed : Array Std.U8 64#usize) (account_index : Std.U32) :
@@ -229,7 +229,7 @@ def derive_c10_master_from_bip39_seed
   ok (pk_seed1, sk_seed)
 
 /-- [pqsigner_domain::slot_entropy]:
-    Source: 'domain/src/lib.rs', lines 705:0-715:1
+    Source: 'domain/src/lib.rs', lines 727:0-737:1
     Visibility: public -/
 def slot_entropy
   (master_entropy : Array Std.U8 32#usize) (chain_id : Std.U64)
@@ -280,7 +280,7 @@ def slot_entropy
   ok out
 
 /-- [pqsigner_domain::derive_c10_slot_seeds]:
-    Source: 'domain/src/lib.rs', lines 720:0-740:1 -/
+    Source: 'domain/src/lib.rs', lines 742:0-762:1 -/
 def derive_c10_slot_seeds
   (slot_entropy1 : Array Std.U8 32#usize) :
   Result ((Array Std.U8 32#usize) × (Array Std.U8 32#usize))

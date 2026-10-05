@@ -39,7 +39,7 @@ namespace sphincs_c10
 def params.SUBTREE_H : Result Std.Usize := params.H / params.D
 
 /-- [sphincs_c10::merkle::verify_auth_path]: loop body 0:
-    Source: 'sphincs-c10/src/merkle.rs', lines 167:4-177:5
+    Source: 'sphincs-c10/src/merkle.rs', lines 179:4-189:5
     Visibility: public -/
 @[rust_loop_body]
 def merkle.verify_auth_path_loop.body
@@ -77,7 +77,7 @@ def merkle.verify_auth_path_loop.body
     ok (cont (iter1, node1, parent_idx))
 
 /-- [sphincs_c10::merkle::verify_auth_path]: loop 0:
-    Source: 'sphincs-c10/src/merkle.rs', lines 167:4-177:5
+    Source: 'sphincs-c10/src/merkle.rs', lines 179:4-189:5
     Visibility: public -/
 @[rust_loop]
 def merkle.verify_auth_path_loop
@@ -93,7 +93,7 @@ def merkle.verify_auth_path_loop
     (iter, node, idx)
 
 /-- [sphincs_c10::merkle::verify_auth_path]:
-    Source: 'sphincs-c10/src/merkle.rs', lines 157:0-179:1
+    Source: 'sphincs-c10/src/merkle.rs', lines 169:0-191:1
     Visibility: public -/
 def merkle.verify_auth_path
   (seed : Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)
