@@ -40,9 +40,21 @@ NONSECURE_ELF=target/nonsecure/$TARGET/release/sphincs-tz-nonsecure
 
 # Base feature set for the sealed EVT screen unit: interactive (no e2e-test),
 # dev-testkey for stable bench credentials, real dual-SE, USB, LCD.
-SEC_FEATURES=dual-se,dev-testkey,ui-lcd,stm32u585,usb,board-pq1
+#
+# SEC_BACKEND / NS_FEATURES are overridable because the default `dual-se` image
+# TALKS TO THE REAL SECURE ELEMENTS and will try to pair/provision them on first
+# boot. For a measurement-only flash of a never-provisioned unit that is an
+# unwanted permanent side effect, so such runs set SEC_BACKEND=mock-se. Keep the
+# default as dual-se: that is the ship-shaped image this script exists for.
+#   SEC_BACKEND=mock-se NS_FEATURES=stm32u585,ui-px-atlas,board-pq1 \
+#     tools/build-evt-image.sh evt-images/ft debug-log,ui-px,ui-px-frametime
+# Note ui-px needs `ui-px-atlas` in the NS world — the secure side re-hashes the
+# atlas window around every dialog, and a missing atlas is a refusal.
+SEC_BACKEND=${SEC_BACKEND:-dual-se}
+SEC_FEATURES=$SEC_BACKEND,dev-testkey,ui-lcd,stm32u585,board-pq1
+case ",$SEC_FEATURES," in *,mock-se,*) ;; *) SEC_FEATURES="$SEC_FEATURES,usb";; esac
 [ -n "$EXTRA" ] && SEC_FEATURES="$SEC_FEATURES,$EXTRA"
-NS_FEATURES=stm32u585,usb,board-pq1
+NS_FEATURES=${NS_FEATURES:-stm32u585,usb,board-pq1}
 
 REPRO="--remap-path-prefix=$HOME/.cargo=/cargo --remap-path-prefix=$HOME/.rustup=/rustup --remap-path-prefix=/nix/store=/nix-store --remap-path-prefix=$PWD=/pqsigner -C link-arg=--build-id=none"
 R=CARGO_TARGET_THUMBV8M_MAIN_NONE_EABI_RUSTFLAGS
