@@ -2862,6 +2862,28 @@ size-report: ## Report secure/NS/FSBL image sizes against their flash/SRAM budge
 # would have overrun the journal when flashed; only `size-report-px` checked
 # the real cap, and no ordinary hardware build runs it. These are two settings
 # for one property, written on different dates, so bind them.
+# The constant-time proof must run at the profile the device SHIPS. The checkct
+# workspace (tools/sca/checkct) is separate — its own Cargo.toml, Cargo.lock and
+# toolchain — so it does NOT inherit the root profile, and its `opt-level` is a
+# hand-written mirror of the root's. Its own comment says why: "so the CT proof
+# exercises the codegen the device actually ships". That makes these two settings
+# ONE property in two files, and on 2026-10-05 the root moved `s` -> `z` while
+# the harness stayed at `s`, which would have certified constant-time for
+# codegen the device does not ship. `z` matters here specifically because it
+# enables LLVM's MachineOutliner.
+.PHONY: check-checkct-profile
+check-checkct-profile: ## tools/sca/checkct opt-level == root opt-level (CT proof covers the shipped codegen)
+	@root=$$(sed -n '/^\[profile\.release\]/,/^\[/p' Cargo.toml | sed -n 's/^opt-level = "\(.*\)"$$/\1/p' | head -1); \
+	ct=$$(sed -n '/^\[profile\.release\]/,/^\[/p' tools/sca/checkct/Cargo.toml | sed -n 's/^opt-level = "\(.*\)"$$/\1/p' | head -1); \
+	case "$$root" in '') echo "check-checkct-profile: FAIL — could not read root [profile.release] opt-level"; exit 1 ;; esac; \
+	case "$$ct" in '') echo "check-checkct-profile: FAIL — could not read checkct [profile.release] opt-level"; exit 1 ;; esac; \
+	if [ "$$root" != "$$ct" ]; then \
+	  echo "    FAIL — root opt-level=\"$$root\" but tools/sca/checkct opt-level=\"$$ct\""; \
+	  echo "    The CT proof would certify codegen the device does not ship. Mirror them and re-run 'make checkct'."; \
+	  exit 1; \
+	fi; \
+	echo "    OK — root and checkct both at opt-level \"$$root\"; the CT proof covers the shipped codegen"
+
 .PHONY: check-slot-linker-span
 check-slot-linker-span: ## Slot linker FLASH region == geometry::SECURE_SLOT_SPAN
 	@span=$$(sed -n 's/^pub const SECURE_SLOT_SPAN: u32 = 0x\([0-9A-Fa-f]*\);$$/\1/p' geometry/src/lib.rs); \
@@ -4469,8 +4491,9 @@ invisible-unicode: ## Refuse zero-width / bidi-override codepoints in tracked te
 	python3 scripts/check_invisible_unicode.py
 
 invariant-gates: ## Local invariant gates (cargo-deny + semgrep + transcription)
-	@echo "==> [0/5] slot linker region == frozen geometry slot span:"
+	@echo "==> [0/5] paired-constant gates (one property, two files):"
 	$(MAKE) check-slot-linker-span
+	$(MAKE) check-checkct-profile
 	@echo "==> [1/5] supply-chain (deps): cargo deny check advisories bans sources"
 	@echo "    bans=invariant #5 (no classical signer); advisories=real CVEs"
 	@echo "    (unmaintained is workspace-scoped); sources=registry/remote guard."

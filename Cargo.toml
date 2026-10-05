@@ -202,26 +202,65 @@ opt-level = 3
 # against a 24 ms frame period, so `s` (~2× slower) still fits the budget.
 # Re-measure with `make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime`.
 #
-# This override is now LOOSER than the parent profile, which moved to `z` on
-# 2026-10-05. `z` here was measured at 475,648 B against `s`'s 481,376 B — a
-# further 5,728 B — but it slows the rasteriser on top of the 2x already
-# accepted above, so do not take those bytes without an on-panel
-# `ui-px-frametime` run.
+# UPDATE 2026-10-05: moved from `s` to `z` (owner request). This is now the
+# same level as the parent profile, so the override is kept only as the place
+# this reasoning lives — deleting it would inherit `z` silently.
 #
-# IMPORTANT — this override does NOT fence off the frame budget. The per-frame
-# work is SPLIT across two crates, and the slower half is not this one:
-#   - here, at `s`: raster + `font::blit_run`/`blit_glyph` (glyph compositing).
-#     Measured render 8-11 ms.
-#   - in `sphincs-tz-secure`, now at `z`: `ui::px::lcd::present_frame_ex` and
-#     `blit_strip`, the presenter and the SPI push. Measured blit 24 ms for
-#     nine strips, ~13 ms with unchanged strips skipped — i.e. the BOTTLENECK,
-#     against a 24 ms frame period.
-# So the parent profile's move to `z` put the dominant frame cost at `z`. That
-# is unmeasured on the panel. If the hero sweep regresses, the fix is to give
-# the presenter its own override (or move it into a crate that has one), not to
-# revert the parent profile — the 64 KB it recovers is what makes the image
-# linkable at all.
+# ⚠ FRAME TIME IS UNMEASURED AT `z` AND THE RUN IS OUTSTANDING. `ui-px-frametime`
+# requires `ui-lcd` (secure/Cargo.toml:203) — it is DWT instrumentation on a
+# real panel, with no host or QEMU path. At the time of this change no device
+# was attached by any channel (no probe-rs probe, no DFU device, `dfu-util` not
+# installed), and the only panel-bearing unit is the enclosed EVT screen unit,
+# which is flash-restricted. So this was taken on SIZE EVIDENCE ONLY.
+#
+# Before shipping `z` here, run on the EVT unit and compare THREE builds on the
+# same hero sweep — s/s, z/s and z/z — because comparing a lone z/z number
+# against the 2026-09-22 baseline is confounded by two weeks of code changes:
+#   make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime
+# Budget: 24 ms frame period. If the hero sweep regresses, revert THIS override
+# to `s` (worth 5,728 B) before touching the parent profile — the parent's 64 KB
+# is what makes the image linkable at all.
+#
+# The per-frame work is SPLIT across two crates, so neither override alone
+# fences off the budget:
+#   - here: raster + `font::blit_run`/`blit_glyph` (glyph compositing).
+#     Measured render 8-11 ms at `3`, ~2x that at `s`.
+#   - in `sphincs-tz-secure`: `ui::px::lcd::present_frame_ex` and `blit_strip`,
+#     the presenter and the SPI push. Measured blit 24 ms for nine strips,
+#     ~13 ms with unchanged strips skipped — i.e. the BOTTLENECK.
+# Both crates are now at `z`, so the whole frame path is at `z`.
 [profile.release.package.pqsigner-ui-px]
+opt-level = "z"
+
+# The FSBL is the WRP-frozen measuring root of invariant #10: once a die
+# self-locks to RDP-2 its pages are frozen forever and no update can change
+# them. Its 18/18 on-silicon boot proof (2026-09-18, pq1) was taken at `s`,
+# and at `s` it already fits its 38,912-B cap with ~10 KB spare — it does not
+# need the bytes `z` would save. When the parent profile moved to `z` on
+# 2026-10-05 this crate silently followed, re-generating the trust root's code
+# for no benefit; `z`'s MachineOutliner in particular rewrites the FSBL's
+# instruction stream. Pin it back: the trust root changes only when someone
+# chooses to change it.
+#
+# MEASURED EFFECT, stated honestly — this pin is PARTIAL. A per-package
+# override does not reach dependencies, and the FSBL links sphincs-tz-bip39,
+# fw-manifest, pqsigner-geometry and cortex-m*, which still ride the parent
+# profile. `make fsbl` physical span:
+#     all `s`  (pre-2026-10-05)        28,704 B
+#     all `z`                          19,708 B
+#     `z` + this pin                   20,464 B   <- only 756 B recovered
+# So ~92% of the trust root's codegen change comes from its dependencies, not
+# from this crate. What this pin DOES hold at `s` is the FSBL's own code: the
+# image verify, the NV3007 render of the 8-word fingerprint, and the tz-1
+# option-byte read-back tripwire. The measurement crypto was never affected —
+# sha2 and sphincs-c10 are pinned at opt-level 3 above and are byte-identical
+# across s/z (verified by symbol-size diff).
+#
+# OPEN for the owner: the 18/18 on-silicon FSBL boot proof (2026-09-18) and the
+# 10,372-B stack bound in invariant #10 were both taken at all-`s`. Neither has
+# been re-taken. Fully restoring the trust root's codegen means reverting the
+# parent profile, which costs the 64 KB that makes the secure image linkable.
+[profile.release.package.pqsigner-fsbl]
 opt-level = "s"
 
 # `micromath` provides the f32 sin/cos/sqrt/powf for the `splash-test` animated

@@ -6,12 +6,21 @@ resolver = "2"
 debug = true
 panic = "abort"
 # Match the SHIPPED firmware profile's optimisation axes that can reintroduce a
-# secret-dependent branch (root Cargo.toml: opt-level="s", overflow-checks=true) so
+# secret-dependent branch (root Cargo.toml: opt-level="z", overflow-checks=true) so
 # the CT proof exercises the codegen the device actually ships — NOT the cargo
-# template default opt-level=3/overflow-checks=false (CT-1, 2026-07-02). LTO +
+# template default opt-level=3/overflow-checks=false (CT-1, 2026-07-02).
+#
+# UPDATED 2026-10-05 "s" -> "z", tracking the root profile's move to `z`. These
+# two settings are ONE property written in two files: if they drift, this proof
+# certifies constant-time for codegen the device does not ship — which is the
+# exact failure this comment was written to prevent. `z` is not a cosmetic step
+# down from `s`: it enables LLVM's MachineOutliner, which rewrites instruction
+# streams and factors shared sequences into OUTLINED_FUNCTION_* helpers, so it
+# is precisely the kind of axis that can reintroduce a secret-dependent branch.
+# `make check-checkct-profile` now binds the two. LTO +
 # codegen-units=1 are cross-crate/link-time; the checkct driver is a single crate
 # (`#[path]`-including secure/src/cmac.rs), so cross-crate LTO does not apply here and
 # binsec's relational analysis runs on the pre-link object — the residual LTO axis is
 # documented in tools/sca/DONJON-RUST-TOOLING.md, not claimed closed.
-opt-level = "s"
+opt-level = "z"
 overflow-checks = true
