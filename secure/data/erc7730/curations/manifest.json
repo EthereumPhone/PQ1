@@ -410,7 +410,7 @@
     },
     {
       "path": "Cargo.toml",
-      "sha256": "feb819b838f23788da79c3db7253c7de14b6e7d7946f7402d8f1860f1ee9424c"
+      "sha256": "749aff424d2eea2c527293e79155f58be8505bee6f1b2f90c72f3ce74ef31414"
     },
     {
       "path": "dbgen/Cargo.toml",
