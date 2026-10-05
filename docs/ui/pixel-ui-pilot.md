@@ -124,6 +124,52 @@ the bottleneck. The raster and glyph compositing left at `"s"` are only
 presenter its own profile override rather than reverting the parent profile,
 which is what makes the image linkable at all.
 
+**UPDATE 2026-10-05c — FRAME TIME MEASURED ON THE PANEL. `pqsigner-ui-px` is
+back at `"s"`; the parent profile stays at `"z"`.**
+
+Measured on the EVT screen unit with the new `ui-px-bench` harness plus
+`ui-px-frametime`, at 40 MHz SPI (`ui-px-spi40`). Identical builds except the
+one override. Worst-case per second, render / blit / period in ms:
+
+| `pqsigner-ui-px` | render | blit | period | secure.bin |
+|---|---:|---:|---:|---:|
+| `z` | 15 | 20 | **36** | 495,296 B |
+| `s` | **11** | 19 | **31** | 501,280 B |
+
+The entire difference is in **render** (−4 ms, −27%) — that crate is the
+rasteriser. The blit is the SPI stream and does not move with opt-level, which
+is what makes this a real effect rather than drift. `z` there costs ~17% of the
+24 ms frame budget to buy 5,984 B, with the frame already over budget. Reverted
+to `"s"`; the image is 481,376 B, **14,432 B over** the slot.
+
+Do not re-take those bytes without re-running the comparison. It is cheap now:
+build with `ui-px-bench,ui-px-frametime,ui-px-spi40`, flash, read the top-left
+digits. No PIN, no wallet, no keygen.
+
+**NEITHER setting meets the 24 ms budget, and that is not an opt-level
+problem.** 31 ms is ~32 fps. Three things found while measuring, none of them
+caused by the profile work and all reproduced across `s`/`z` and 20/40 MHz:
+
+- **The shipping config has never been frame-time measured.** Every number here
+  is at 40 MHz, but `PX_SHIP_FEATURES` has no `ui-px-spi40`, so the ship image
+  runs the panel at 20 MHz where `hw/spi_hw.rs:221` records a **~48 ms full
+  repaint** — twice the whole budget before any render cost. The "≈ 40 fps on
+  the sweep" figure in this document describes a configuration we do not ship.
+- **Tearing** on every build tested. `LCD_TE` is mapped (`board/pq1.rs:116`)
+  and the panel is told to emit it (`lcd_nv3007.rs:612`), but nothing waits on
+  it; `spi_hw.rs:190` records that the mitigation chosen was faster SPI to
+  shrink the race window, not to close it.
+- **Ambient screens freeze** after `PLAY_CAP_MS` (3 s). `play_screen` is
+  documented as playing "until it rests", but a record whose layout sets an
+  ambient cycle never rests, so the cap is its normal exit and it abandons the
+  animation mid-motion. Proven in isolation by the bench: the *same* screen
+  freezes under `play_screen` and runs indefinitely under `run_flow`.
+
+Also note for anyone comparing with the 2026-09-22 row below: those were
+*typical* values at opt-level 3 with strip-skipping (~13 ms blit). The table
+above is worst-case-per-second. Compare only readings taken with the same
+overlay.
+
 **UPDATE 2026-10-05b — `pqsigner-ui-px` also moved to `z` (owner request), and
 the security properties were re-verified at that profile.**
 
