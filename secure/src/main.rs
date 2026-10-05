@@ -1744,6 +1744,14 @@ fn main() -> ! {
         }
     }
 
+    // Isolated interactive pixel-UI bench (`ui-px-bench`, PROD_FORBIDDEN).
+    // Hooked HERE: the display stack is up, but measured boot, PIN entry, the
+    // seed wizard and the idle timer are all still ahead — so the bench reaches
+    // the real presenter with no operator ceremony and no wallet. Diverges
+    // permanently; a bench image boots to the bench and nothing else.
+    #[cfg(feature = "ui-px-bench")]
+    ui::px::bench::run();
+
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.
     // Skipped in automated e2e tests which need non-interactive boot.

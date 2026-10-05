@@ -201,6 +201,13 @@ ui-px-spi40 = ["ui-px", "ui-lcd"]
 # Bench-only: overlay the previous frame's render / blit / period (ms) in the
 # top-left of every pixel-UI frame (DWT cycle counter). NEVER ship.
 ui-px-frametime = ["ui-px", "ui-lcd"]
+
+# Isolated interactive pixel-UI bench (secure/src/ui/px/bench.rs). Runs BEFORE
+# measured boot, so no wallet / PIN / keygen / idle timer — the only way to see
+# or measure the real presenter without the sign-dialog route, which #778/#779
+# document as blocked. Pair with `ui-px-frametime` to read the numbers.
+# PROD_FORBIDDEN: it replaces the boot flow outright.
+ui-px-bench = ["ui-px", "ui-lcd"]
 # Real STM32U585 hardware target (vs QEMU mps2-an505). Pulls in `hw-sha256`
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.
