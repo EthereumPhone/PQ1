@@ -202,11 +202,28 @@ opt-level = 3
 # against a 24 ms frame period, so `s` (~2× slower) still fits the budget.
 # Re-measure with `make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime`.
 #
-# UPDATE 2026-10-05: moved from `s` to `z` (owner request). This is now the
-# same level as the parent profile, so the override is kept only as the place
-# this reasoning lives — deleting it would inherit `z` silently.
+# UPDATE 2026-10-05b: MEASURED ON THE PANEL, and `z` here is NOT worth it —
+# reverted to `s`. EVT screen unit, `ui-px-bench` + `ui-px-frametime` at 40 MHz
+# SPI (`ui-px-spi40`), identical builds except THIS setting, worst-case per
+# second, render/blit/period in ms:
 #
-# ⚠ FRAME TIME IS UNMEASURED AT `z` AND THE RUN IS OUTSTANDING. `ui-px-frametime`
+#     this crate at `z`   15 / 20 / 36      (secure.bin 495,296 B)
+#     this crate at `s`   11 / 19 / 31      (secure.bin 501,280 B)
+#
+# The entire difference lands in RENDER (-4 ms, -27%), which is where this
+# crate's rasteriser runs; the blit is the SPI stream and does not move. So `z`
+# costs ~4 ms of a 24 ms frame budget — ~17% — to buy 5,984 B, with the frame
+# already over budget at 31 ms. Bad trade; keep `s`.
+#
+# Do NOT "save" those bytes again without re-running that comparison. The
+# harness makes it cheap: build with `ui-px-bench,ui-px-frametime,ui-px-spi40`,
+# flash, read the top-left digits. No PIN, no wallet.
+#
+# HISTORICAL — the note below is why this override existed before the
+# measurement; kept because its reasoning about the split frame path is still
+# correct and still load-bearing.
+#
+# ⚠ FRAME TIME WAS UNMEASURED AT `z` WHEN THAT MOVE WAS MADE. `ui-px-frametime`
 # requires `ui-lcd` (secure/Cargo.toml:203) — it is DWT instrumentation on a
 # real panel, with no host or QEMU path. At the time of this change no device
 # was attached by any channel (no probe-rs probe, no DFU device, `dfu-util` not
@@ -230,7 +247,7 @@ opt-level = 3
 #     ~13 ms with unchanged strips skipped — i.e. the BOTTLENECK.
 # Both crates are now at `z`, so the whole frame path is at `z`.
 [profile.release.package.pqsigner-ui-px]
-opt-level = "z"
+opt-level = "s"
 
 # The FSBL is the WRP-frozen measuring root of invariant #10: once a die
 # self-locks to RDP-2 its pages are frozen forever and no update can change
