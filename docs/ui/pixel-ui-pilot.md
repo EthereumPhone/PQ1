@@ -103,8 +103,8 @@ open owner decision.
 |---|---:|---:|
 | no `ui-px` | 431,680 B | fits, 35,264 B spare |
 | + `ui-px`, `opt-level = "s"` | 545,504 B | **78,560 B OVER** |
-| + `ui-px`, secure `opt-level = "z"` | 481,376 B | **14,432 B over** |
-| + `ui-px`, everything `"z"` | 475,648 B | 8,704 B over |
+| + `ui-px`, secure `opt-level = "z"` | 481,376 B | 14,432 B over |
+| + `ui-px`, everything `"z"` | 475,648 B | **8,704 B over** (current) |
 
 At `"s"` the image did not merely exceed the gate, it would not LINK:
 `region FLASH overflowed by 70368 bytes`. Moving `[profile.release]` to `z`
@@ -123,6 +123,59 @@ the bottleneck. The raster and glyph compositing left at `"s"` are only
 `ui-px-frametime` run gates shipping it; if the hero sweep regresses, give the
 presenter its own profile override rather than reverting the parent profile,
 which is what makes the image linkable at all.
+
+**UPDATE 2026-10-05b — `pqsigner-ui-px` also moved to `z` (owner request), and
+the security properties were re-verified at that profile.**
+
+Image: **475,648 B**, 8,704 B over the slot. Frame time is UNMEASURED: both
+halves of the per-frame path are now at `z`, `ui-px-frametime` requires
+`ui-lcd` and a real panel (no host or QEMU path), and no device was attached by
+any channel when this landed — not probe-rs, not DFU. Run it on the EVT unit
+comparing s/s, z/s and z/z on the same hero sweep; a lone z/z number against
+the 2026-09-22 baseline is confounded by two weeks of code change. If the hero
+sweep regresses, revert the `pqsigner-ui-px` override to `"s"` (5,728 B) before
+touching the parent profile.
+
+What WAS verified at `z`:
+
+- **Constant time.** `make checkct` (binsec relational proof, thumbv8m):
+  `driver_kdf`, `driver_fors`, `driver_th`, `driver_saes`, `driver_ct_eq` all
+  report `secure`, 2,326 control-flow and 11,132 memory-access checks passing.
+  The by-design-insecure `fisher_yates` control still reports `insecure`, so
+  the proof is not vacuous. NOTE: `make checkct` therefore always exits
+  non-zero — read the per-driver verdicts, not the exit code.
+- **The CT harness had to move with the root.** `tools/sca/checkct/Cargo.toml`
+  is a separate workspace whose `opt-level` is a hand-written MIRROR of the
+  root's, precisely "so the CT proof exercises the codegen the device actually
+  ships". The root's move to `z` left it at `s`, which would have certified
+  codegen the device does not ship. Both are now `z`, and
+  `make check-checkct-profile` binds them (negative control: it fails when
+  they differ).
+- **FI double-compute intact.** `c10_sign_verified_with_progress_inner` still
+  contains 2 `sign_with_shuffle` calls and 2 FI verified-checks, identical to
+  `s`. `ct_eq` and `CfiCounter` symbol counts unchanged.
+- **Pinned crypto byte-identical.** `sphincs_c10::{verify, sign_with_shuffle,
+  wots::keygen_pk, merkle::verify_auth_path}` and `sha2::{compress256,
+  compress512}` are the same size at s and z, so per-package `opt-level = 3`
+  survives fat LTO and signing throughput is unaffected.
+- **A metric that does NOT work at `z`.** Static FI call-site counts fall
+  247 -> 203, which looks like 44 lost FI checks. It is not: `z` enables LLVM's
+  MachineOutliner, which factors identical FI call sequences into
+  `OUTLINED_FUNCTION_*` helpers — 5 helpers hold 1 FI call each and are invoked
+  39 times. Per-function FI attribution is likewise invalid (it reported
+  `multisend_sign_gate` 4 -> 0 while the calls had moved into outlined
+  helpers). Do not use static counts to argue FI health at `z`.
+
+Still OPEN: the repo's own gate for this question, `make check-fi-ir` ("the FI
+recompute guard must survive -O"), is DEAD — `scripts/check_fi_ir.sh` is not
+tracked in git, the target fails with Error 127, and it runs in no CI job.
+
+The FSBL is pinned back to `"s"`, but the pin is PARTIAL: span went 28,704 B
+(all-s) -> 19,708 B (all-z) -> 20,464 B (z + pin), so only ~756 B of 8,996 B
+reverted, because a per-package override does not reach dependencies
+(sphincs-tz-bip39, fw-manifest, pqsigner-geometry, cortex-m*). The trust root's
+18/18 on-silicon boot proof and the 10,372-B stack bound of invariant #10 were
+both taken at all-`s` and have NOT been re-taken.
 
 Where the 113,824 B went, at `"s"`: **.text +103,584 / .rodata +9,472 /
 .data +776 — 91% is code.** Pre-existing functions grew only 8,742 B, and the
