@@ -164,8 +164,21 @@ opt-level = 3
 [profile.dev.package.hmac]
 opt-level = 3
 
+# `z` rather than `s` (2026-10-05, measured): the pixel trusted UI does not
+# fit the frozen 466,944-B v6 secure slot at `s`. Ship-shaped dual-SE + `ui-px`
+# at slot A, measured with `make size-report-px BOARD=pq1` (physical span,
+# cross-checked against `readelf -l` LOAD):
+#
+#   opt-level = "s"  545,504 B  — 78,560 B OVER the slot
+#   opt-level = "z"  481,376 B  — 14,432 B over (this setting)
+#
+# i.e. `z` on the non-UI firmware alone recovers 64,128 B, 82% of the gap, with
+# no code deleted and no sign family dropped. The three crypto packages below
+# stay at opt-level 3, so signing throughput is unchanged (that cost lives in
+# sphincs-c10 / sha2 / hmac, not here) — do not fold them into this setting.
+# `overflow-checks` stays on: the size came from `z`, not from dropping checks.
 [profile.release]
-opt-level = "s"
+opt-level = "z"
 lto = true
 codegen-units = 1
 strip = "debuginfo"
@@ -188,6 +201,26 @@ opt-level = 3
 # ~8 KB of the A/B slot; the EVT #1 hero sweep measured 8–11 ms render at `3`
 # against a 24 ms frame period, so `s` (~2× slower) still fits the budget.
 # Re-measure with `make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime`.
+#
+# This override is now LOOSER than the parent profile, which moved to `z` on
+# 2026-10-05. `z` here was measured at 475,648 B against `s`'s 481,376 B — a
+# further 5,728 B — but it slows the rasteriser on top of the 2x already
+# accepted above, so do not take those bytes without an on-panel
+# `ui-px-frametime` run.
+#
+# IMPORTANT — this override does NOT fence off the frame budget. The per-frame
+# work is SPLIT across two crates, and the slower half is not this one:
+#   - here, at `s`: raster + `font::blit_run`/`blit_glyph` (glyph compositing).
+#     Measured render 8-11 ms.
+#   - in `sphincs-tz-secure`, now at `z`: `ui::px::lcd::present_frame_ex` and
+#     `blit_strip`, the presenter and the SPI push. Measured blit 24 ms for
+#     nine strips, ~13 ms with unchanged strips skipped — i.e. the BOTTLENECK,
+#     against a 24 ms frame period.
+# So the parent profile's move to `z` put the dominant frame cost at `z`. That
+# is unmeasured on the panel. If the hero sweep regresses, the fix is to give
+# the presenter its own override (or move it into a crate that has one), not to
+# revert the parent profile — the 64 KB it recovers is what makes the image
+# linkable at all.
 [profile.release.package.pqsigner-ui-px]
 opt-level = "s"
 
