@@ -808,6 +808,9 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     frametime::enable();
     #[allow(unused_mut)]
     let mut overlay_buf = [0u8; 24];
+    // Worst-case accumulators for the bench overlay (republished once a second).
+    #[cfg(feature = "ui-px-frametime")]
+    let (mut ft_max_render, mut ft_max_blit, mut ft_max_period, mut ft_window_at) = (0u32, 0u32, 0u32, 0u32);
     #[allow(unused_mut)]
     let mut overlay_len = 0usize;
     #[allow(unused_mut, unused_variables)]
@@ -919,9 +922,29 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         presented_at = Some((driver.index(), driver.page()));
         #[cfg(feature = "ui-px-frametime")]
         {
+            // WORST-CASE HOLD. A per-frame instantaneous readout is unreadable
+            // on the glass — the owner reported the digits "move a lot and I
+            // can't read quick enough". A frame BUDGET is about the worst case
+            // anyway, not the latest sample, so accumulate the max of each
+            // field and republish once a second.
             let t = timeout::now();
-            overlay_len = frametime::format(&mut overlay_buf, cost.render, cost.blit, t.wrapping_sub(last_frame_at));
+            let period = t.wrapping_sub(last_frame_at);
             last_frame_at = t;
+            ft_max_render = ft_max_render.max(cost.render);
+            ft_max_blit = ft_max_blit.max(cost.blit);
+            // Skip the first frame's period: `last_frame_at` starts at 0, so
+            // its "period" is the whole boot time, not a frame.
+            if overlay_len > 0 {
+                ft_max_period = ft_max_period.max(period);
+            }
+            if t.wrapping_sub(ft_window_at) >= 1_000 || overlay_len == 0 {
+                overlay_len =
+                    frametime::format(&mut overlay_buf, ft_max_render, ft_max_blit, ft_max_period);
+                ft_window_at = t;
+                ft_max_render = 0;
+                ft_max_blit = 0;
+                ft_max_period = 0;
+            }
         }
         #[cfg(not(feature = "ui-px-frametime"))]
         let _ = cost;
