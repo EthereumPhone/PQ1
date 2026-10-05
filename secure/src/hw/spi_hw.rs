@@ -209,16 +209,32 @@ pub fn init() {
     // (the edge-rounding concern that capped the *trusted UI* at 20 MHz did not
     // materialise for this preview). The trusted-UI `ui-lcd` default stays at the
     // clean 20 MHz below (this faster clock is splash-preview-only).
+    //
+    // ⚠ DO NOT PROMOTE ÷2 TO THE TRUSTED UI ON THAT EVIDENCE. The 13.2 ms above
+    // is the splash PREVIEW on the DEV board, not this panel and not the
+    // trusted-UI path. The NV3007 data setup/hold is 10 ns (Table 8-3-2, cited
+    // above); ÷4 leaves a 12.5 ns half-period, ÷2 leaves 6.25 ns — OUT OF SPEC
+    // on paper. "No flicker in a preview" does not show a trusted display
+    // clocks every bit correctly: flicker is visible, one wrong pixel in an
+    // address or an amount is not. Promoting ÷2 needs the panel datasheet in
+    // hand (it is not in this repo), not this measurement.
     #[cfg(feature = "splash-test")]
-    const MBR: u32 = 0b000; // ÷2  → 80 MHz (splash preview, ~13 ms full repaint; HW-validated)
-    // The pixel trusted UI on a production board (no LED load on SCK): ÷4 →
-    // 40 MHz halves the ~48 ms full-frame blit. Opt-in until measured on the EVT.
+    const MBR: u32 = 0b000; // ÷2  → 80 MHz — SPLASH PREVIEW ONLY
+    // `ui-px-spi40` forces ÷4 on any board. Retained for bench A/B runs on
+    // iota2; redundant on pq1, whose board map now selects ÷4 by default.
     #[cfg(all(feature = "ui-px-spi40", not(feature = "splash-test")))]
-    const MBR: u32 = 0b001; // ÷4  → 40 MHz
-    // The `not(ui-lcd)` ÷32 arm that used to sit here was unreachable: this
-    // module only compiles under `ui-lcd`.
+    const MBR: u32 = 0b001; // ÷4  → 40 MHz (forced)
+    // DEFAULT: THE BOARD DECIDES (2026-10-05). The clock that is safe here is a
+    // property of the physical board — what else loads SCK — not of a feature
+    // flag, and a flag that must be remembered gets forgotten: PX_SHIP_FEATURES
+    // never carried `ui-px-spi40`, so every frame-time figure the project
+    // quoted was measured at 40 MHz while the shipping image ran at 20 (#781).
+    // Deriving it from `board::` closes that structurally — `BOARD=pq1` ships
+    // 40 MHz with no flag to forget.
+    //   pq1   ÷4 = 40 MHz  (SCK = PA5, a plain PCB trace, no LED load)
+    //   iota2 ÷8 = 20 MHz  (SCK = PE13 = the blue LD2 Arduino LED)
     #[cfg(not(any(feature = "splash-test", feature = "ui-px-spi40")))]
-    const MBR: u32 = 0b010; // ÷8  → 20 MHz (NV3007 trusted UI, ~48 ms full repaint)
+    const MBR: u32 = board::LCD_SPI_MBR;
     REG.spi_cfg1.write((MBR << 28) | 7);
     // ÷8 = 20 MHz (SCK half-period 25 ns = 2.5× the NV3007 10 ns setup/hold).
     // The raw fill demo ran fine at ÷4 (40 MHz), but the *UI* showed intermittent

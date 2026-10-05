@@ -58,6 +58,15 @@ pub const CONSOLE_BRR: u32 = 1389;
 // ---------------------------------------------------------------------------
 
 pub const LCD_SPI_BASE: u32 = SPI1_S;
+
+/// SPI1 baud-rate prescaler (`SPI_CFG1.MBR`) for the NV3007 on THIS board.
+///
+/// `0b010` = ÷8 = 20 MHz. Deliberately slower than pq1: this board hardwires
+/// its blue Arduino LED (LD2) to PE13 = SPI1_SCK, and that LED + series
+/// resistor is an extra capacitive load that rounds off the 40 MHz SCK edges
+/// (12.5 ns half-period, ~2.5 ns margin) -> occasional misread bits = flicker.
+/// ÷8 restores the margin. See `hw/spi_hw.rs` for the full history.
+pub const LCD_SPI_MBR: u32 = 0b010;
 pub const LCD_SPI_PORT: u32 = GPIOE_S;
 pub const LCD_SPI_AF: u32 = 5;
 pub const LCD_CS_PIN: u32 = 12;

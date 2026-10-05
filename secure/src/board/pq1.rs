@@ -94,6 +94,24 @@ pub const CONSOLE_RX: Option<(u32, u32)> = Some((GPIOA_S, 3));
 // ---------------------------------------------------------------------------
 
 pub const LCD_SPI_BASE: u32 = SPI1_S;
+
+/// SPI1 baud-rate prescaler (`SPI_CFG1.MBR`) for the NV3007 on THIS board.
+///
+/// `0b001` = ÷4 = 40 MHz. The ÷8 (20 MHz) default that iota2 keeps exists only
+/// because the B-U585I dev board hardwires its blue LD2 LED to PE13 = SPI1_SCK;
+/// that extra capacitive load rounds the 40 MHz edges and caused intermittent
+/// flicker. **pq1 has no such load**: SCK is PA5, a plain signal on a PCB
+/// trace. Measured on the EVT screen unit 2026-10-05 — worst-case blit 19-20 ms
+/// against ~40 ms at 20 MHz, with no pixel artefacts (the tearing seen is the
+/// scan-out race of #780, identical at both clocks).
+///
+/// Do NOT raise this to ÷2 (80 MHz) without the panel datasheet. The NV3007
+/// data setup/hold is 10 ns; ÷4 leaves a 12.5 ns half-period (~2.5 ns margin),
+/// ÷2 leaves 6.25 ns — out of spec on paper. The 13.2 ms figure recorded for
+/// ÷2 in `hw/spi_hw.rs` is the splash PREVIEW on the dev board, not this panel
+/// and not the trusted UI. A misclocked bit here is a wrong pixel on the
+/// trusted display.
+pub const LCD_SPI_MBR: u32 = 0b001;
 pub const LCD_SPI_PORT: u32 = GPIOA_S;
 pub const LCD_SPI_AF: u32 = 5;
 pub const LCD_CS_PIN: u32 = 4;
