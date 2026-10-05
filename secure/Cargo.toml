@@ -200,7 +200,7 @@ ui-px = []
 ui-px-spi40 = ["ui-px", "ui-lcd"]
 # Bench-only: overlay the previous frame's render / blit / period (ms) in the
 # top-left of every pixel-UI frame (DWT cycle counter). NEVER ship.
-ui-px-frametime = ["ui-px", "ui-lcd"]
+ui-px-frametime = ["ui-px", "ui-lcd", "pqsigner-ui-px/render-split"]
 
 # Isolated interactive pixel-UI bench (secure/src/ui/px/bench.rs). Runs BEFORE
 # measured boot, so no wallet / PIN / keygen / idle timer — the only way to see

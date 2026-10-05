@@ -251,6 +251,18 @@ mod frametime {
         DWT_CYCCNT.read()
     }
 
+    /// Format three cycle counts as TENTHS of a millisecond into `out`
+    /// (`<a>/<b>/<c>`), returning the used length.
+    ///
+    /// The render split needs finer resolution than whole milliseconds: the
+    /// whole render is ~11 ms, so a glyph share of 2 ms would print as "2" and
+    /// a share of 0.4 ms as "0" — neither distinguishable enough to decide
+    /// whether a DMA2D driver is worth building. Tenths give 0.1 ms steps and
+    /// still fit the 3-digit cap up to 99.9 ms.
+    pub fn format_tenths(out: &mut [u8; 24], a: u32, b: u32, c: u32) -> usize {
+        format(out, a * 10, b * 10, c / (CPU_HZ_PER_MS / 10))
+    }
+
     /// Format `<render>/<blit>/<period>` (ms, ≤ 3 digits each) into `out`;
     /// returns the used length.
     pub fn format(out: &mut [u8; 24], render_cyc: u32, blit_cyc: u32, period_ms: u32) -> usize {
@@ -288,6 +300,9 @@ mod frametime {
 struct FrameCost {
     render: u32,
     blit: u32,
+    /// Per-class render breakdown (bench only) — see `RenderSplit`.
+    #[cfg(feature = "ui-px-frametime")]
+    split: pqsigner_ui_px::raster::RenderSplit,
 }
 
 // ---- rendering ---------------------------------------------------------------
@@ -315,7 +330,16 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
         let Some(mut strip) = Strip::new(y0, h, &mut buf[..]) else { return cost };
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
+        #[cfg(not(feature = "ui-px-frametime"))]
         render_strip(frame, font, &mut strip);
+        #[cfg(feature = "ui-px-frametime")]
+        pqsigner_ui_px::raster::render_strip_split(
+            frame,
+            font,
+            &mut strip,
+            frametime::cycles,
+            &mut cost.split,
+        );
         let d = if force { 0 } else { strip_digest(&buf[..(W * h) as usize]) };
         #[cfg(feature = "ui-px-frametime")]
         let t1 = frametime::cycles();
@@ -366,12 +390,42 @@ fn blit_strip(y0: i32, h: i32, buf: &[u16]) {
 }
 
 /// Build the display list for `anim` and present it. `overlay` is the bench
-/// frame-time text (top-left, 16 px), `None` in every non-bench build.
-fn build_and_present(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, overlay: Option<&[u8]>) -> FrameCost {
+/// frame-time text (top-left, 16 px), `None` in every non-bench build; `split`
+/// is the optional second line beneath it (per-class render breakdown).
+fn build_and_present(
+    anim: &Anim,
+    marks: &Marks<'_>,
+    font: &Font<'_>,
+    overlay: Option<&[u8]>,
+    split: Option<&[u8]>,
+) -> FrameCost {
     let mut frame = Frame::new();
     #[cfg(feature = "ui-px-frametime")]
     let t0 = frametime::cycles();
     anim.build(marks, font, &mut frame);
+    // NOTE for the render split: these overlay runs are themselves `Item::Text`
+    // and so land in the `glyphs` bucket. They are ~8-12 glyphs per line against
+    // a caption of ~20, so they inflate `glyphs` somewhat. Stated rather than
+    // corrected: the decision this measurement feeds (is glyph work a big
+    // enough share to be worth a DMA2D driver?) tolerates that, and a marker
+    // field on `Item` to exclude them would cost more than it buys.
+    if let Some(text) = split {
+        use pqsigner_ui_px::font::{Align, TextRun, TierId};
+        use pqsigner_ui_px::raster::{Item, Rgb};
+        frame.push(Item::Text {
+            run: TextRun {
+                text,
+                tier: TierId::regular(16),
+                x: 40,
+                y: 34,
+                align: Align::Left,
+                baseline: true,
+                ls_q6: 0,
+                alpha: 255,
+            },
+            color: Rgb::WHITE,
+        });
+    }
     if let Some(text) = overlay {
         use pqsigner_ui_px::font::{Align, TextRun, TierId};
         use pqsigner_ui_px::raster::{Item, Rgb};
@@ -426,7 +480,7 @@ pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_RO
     invalidate_shown();
     let s = Screen::legacy(rows);
     let anim = Anim::new(&s, 0, timeout::now());
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
     true
 }
 
@@ -539,7 +593,7 @@ pub fn film_start_with(s: &Screen) {
     let mut anim = Anim::new(s, 0, now);
     anim.film_start(now);
     invalidate_shown();
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
     // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
     // this is the only writer while `FILM_LIVE` is false.
     unsafe {
@@ -570,7 +624,7 @@ pub fn film_tick(_percent: u8) {
         return;
     };
     anim.step(now);
-    let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None);
+    let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None);
     let after = timeout::now();
     *last = if after.wrapping_sub(now) > 50 { after.wrapping_add(FRAME_PERIOD_MS) } else { after };
 }
@@ -604,7 +658,7 @@ pub fn film_resolve(e: Ending) {
     loop {
         let t = timeout::now();
         anim.step(t);
-        let _ = build_and_present(&anim, &marks, &font, None);
+        let _ = build_and_present(&anim, &marks, &font, None, None);
         if anim.film_done(t) {
             break;
         }
@@ -684,7 +738,7 @@ pub fn show_busy(caption: &[u8]) {
     };
     invalidate_shown();
     let anim = Anim::new(&s, 0, timeout::now());
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
 }
 
 // ---- port step 4: screens outside the dialog -------------------------------------
@@ -761,7 +815,7 @@ pub fn paint_rest(s: &Screen, atlas: &assets::AtlasRef) {
     while anim.step(t) && t < PLAY_CAP_MS {
         t += 16;
     }
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
 }
 
 // ---- the flow ------------------------------------------------------------------
@@ -811,6 +865,10 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     // Worst-case accumulators for the bench overlay (republished once a second).
     #[cfg(feature = "ui-px-frametime")]
     let (mut ft_max_render, mut ft_max_blit, mut ft_max_period, mut ft_window_at) = (0u32, 0u32, 0u32, 0u32);
+    #[cfg(feature = "ui-px-frametime")]
+    let (mut ft_max_shapes, mut ft_max_glyphs, mut ft_max_secret) = (0u32, 0u32, 0u32);
+    #[cfg(feature = "ui-px-frametime")]
+    let (mut split_buf, mut split_len) = ([0u8; 24], 0usize);
     #[allow(unused_mut)]
     let mut overlay_len = 0usize;
     #[allow(unused_mut, unused_variables)]
@@ -918,7 +976,11 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         // ---- frame ----
         let animating = anim.step(now);
         let overlay = if overlay_len > 0 { Some(&overlay_buf[..overlay_len]) } else { None };
-        let cost = build_and_present(&anim, &marks, &font, overlay);
+        #[cfg(feature = "ui-px-frametime")]
+        let split_line = if split_len > 0 { Some(&split_buf[..split_len]) } else { None };
+        #[cfg(not(feature = "ui-px-frametime"))]
+        let split_line = None;
+        let cost = build_and_present(&anim, &marks, &font, overlay, split_line);
         presented_at = Some((driver.index(), driver.page()));
         #[cfg(feature = "ui-px-frametime")]
         {
@@ -932,6 +994,9 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
             last_frame_at = t;
             ft_max_render = ft_max_render.max(cost.render);
             ft_max_blit = ft_max_blit.max(cost.blit);
+            ft_max_shapes = ft_max_shapes.max(cost.split.shapes);
+            ft_max_glyphs = ft_max_glyphs.max(cost.split.glyphs.wrapping_add(cost.split.fills));
+            ft_max_secret = ft_max_secret.max(cost.split.secret);
             // Skip the first frame's period: `last_frame_at` starts at 0, so
             // its "period" is the whole boot time, not a frame.
             if overlay_len > 0 {
@@ -940,10 +1005,23 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
             if t.wrapping_sub(ft_window_at) >= 1_000 || overlay_len == 0 {
                 overlay_len =
                     frametime::format(&mut overlay_buf, ft_max_render, ft_max_blit, ft_max_period);
+                // Second line: where the render time actually goes.
+                // shapes = CPU-forever (no DMA2D geometry engine)
+                // glyphs = text + masks + fills, the DMA2D-offloadable part
+                // secret = the constant-time seed path, NEVER offloadable
+                split_len = frametime::format_tenths(
+                    &mut split_buf,
+                    ft_max_shapes,
+                    ft_max_glyphs,
+                    ft_max_secret,
+                );
                 ft_window_at = t;
                 ft_max_render = 0;
                 ft_max_blit = 0;
                 ft_max_period = 0;
+                ft_max_shapes = 0;
+                ft_max_glyphs = 0;
+                ft_max_secret = 0;
             }
         }
         #[cfg(not(feature = "ui-px-frametime"))]

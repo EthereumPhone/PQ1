@@ -389,6 +389,58 @@ pub fn render_strip(frame: &Frame<'_>, font: &Font<'_>, strip: &mut Strip<'_>) {
     }
 }
 
+/// Where a display-list item's rasterisation time goes, in raw cycles.
+///
+/// The classes are chosen to answer ONE question: how much of the render could
+/// Chrom-ART (DMA2D) actually take? It can fill rectangles and blend 4-bit
+/// alpha sources (our glyph atlas is 4-bit), and it has NO geometry engine.
+///
+/// * `shapes` — discs, rings, chords, chevrons, checks, crosses, procedural
+///   outlines. CPU forever; DMA2D cannot draw these.
+/// * `glyphs` — text runs and mask blits. The offloadable part.
+/// * `secret` — [`Item::Secret`], the constant-time seed-word path. Counted
+///   APART from `glyphs` because it must never be offloaded whatever its size:
+///   a DMA2D source address would be the glyph of a secret letter, i.e. a
+///   secret-dependent access by a bus master, which is exactly what the
+///   constant-time cell path exists to prevent.
+/// * `fills` — axis-aligned rectangles. Trivially offloadable.
+#[cfg(feature = "render-split")]
+#[derive(Default, Clone, Copy)]
+pub struct RenderSplit {
+    pub shapes: u32,
+    pub glyphs: u32,
+    pub secret: u32,
+    pub fills: u32,
+}
+
+/// [`render_strip`], accumulating per-class cycle counts into `acc`.
+///
+/// `now` is the caller's cycle source (the secure world passes its DWT reader);
+/// this crate stays free of any debug-block knowledge. Bench only.
+#[cfg(feature = "render-split")]
+pub fn render_strip_split(
+    frame: &Frame<'_>,
+    font: &Font<'_>,
+    strip: &mut Strip<'_>,
+    now: fn() -> u32,
+    acc: &mut RenderSplit,
+) {
+    strip.clear();
+    for item in frame.items() {
+        let t0 = now();
+        draw_item(item, font, strip);
+        let dt = now().wrapping_sub(t0);
+        let slot = match *item {
+            Item::Text { .. } | Item::Mask { .. } => &mut acc.glyphs,
+            Item::Secret { .. } => &mut acc.secret,
+            Item::Rect { .. } => &mut acc.fills,
+            Item::None => continue,
+            _ => &mut acc.shapes,
+        };
+        *slot = slot.wrapping_add(dt);
+    }
+}
+
 fn draw_item(item: &Item<'_>, font: &Font<'_>, s: &mut Strip<'_>) {
     match *item {
         Item::None => {}

@@ -29,6 +29,16 @@ edition.workspace = true
 
 [features]
 default = []
+# Bench instrumentation: `render_strip_split` times each display-list item by
+# CLASS (shapes / glyphs / secret / fills) so the DMA2D question — "is it worth
+# offloading glyph compositing to Chrom-ART?" — can be answered with a
+# measurement instead of a guess. Chrom-ART can do fills and 4-bit alpha glyph
+# blends but has NO geometry engine, so discs/rings/chevrons stay on the CPU;
+# the split says how much of the render is actually offloadable. `secret` is
+# counted apart because `Item::Secret` must NEVER be offloaded (its source
+# address is the glyph of a secret seed letter), so it is not offloadable work
+# however large it is. Enabled by the secure crate's `ui-px-frametime`.
+render-split = []
 # Host-side rendering helpers (`png` module): full-frame render + PNG writer
 # for the frame goldens and the `render_record` example. Never in firmware.
 std = []
