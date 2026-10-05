@@ -32,6 +32,17 @@ default = []
 # Host-side rendering helpers (`png` module): full-frame render + PNG writer
 # for the frame goldens and the `render_record` example. Never in firmware.
 std = []
+# Opt-in for Kani harnesses that do NOT TERMINATE today (#776): they are
+# compiled out of `make kani` and every other make target, and stay in the
+# source census (`scripts/kani_census.lock.json`) so their absence from the
+# runs is visible rather than silent. NOT `kani-heavy`: that target promises
+# its harnesses verify; these never reached the solver (51 min / 14.6 GB
+# locally) and each nightly that reached one was cancelled inside it, which
+# also suppressed every later crate in the job.
+#
+# A CARGO FEATURE rather than a bare `--cfg`, for the reason given at
+# `kani-heavy` in tx/Cargo.toml.
+kani-nonterminating = []
 
 [dependencies]
 pqsigner-erc7730 = { workspace = true }

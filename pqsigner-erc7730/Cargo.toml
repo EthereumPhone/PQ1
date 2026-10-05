@@ -38,6 +38,12 @@ erc7730-dev-unattested = []
 # admission table; this is compile-time policy, never a host-supplied runtime
 # switch.
 nested-calldata-test-fixture = []
+# Opt-in for Kani harnesses that do NOT TERMINATE today (#776): compiled out
+# of `make kani` and every other make target, still counted by the source
+# census. Same contract as `kani-nonterminating` in pqsigner-ui-px/Cargo.toml.
+# A CARGO FEATURE rather than a bare `--cfg`, for the reason given at
+# `kani-heavy` in tx/Cargo.toml.
+kani-nonterminating = []
 
 [dev-dependencies]
 hex = { workspace = true }

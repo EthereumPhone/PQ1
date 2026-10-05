@@ -467,6 +467,11 @@ mod kani_harnesses {
     //! truncate, for any input up to the bound. `cargo kani -p pqsigner-ui-px`.
     use super::*;
 
+    /// NON-TERMINATING today (#776), gated like the two amount-layout
+    /// harnesses below: run alone with default features it went ~58 min
+    /// without a verdict (2026-10-05, 60-min cap). It never ran in CI — every
+    /// nightly that reached the `fit` harnesses was cancelled first.
+    #[cfg(feature = "kani-nonterminating")]
     #[kani::proof]
     #[kani::unwind(70)]
     fn fit_tier_total() {
@@ -481,6 +486,13 @@ mod kani_harnesses {
         }
     }
 
+    /// NON-TERMINATING today (#776), so compiled out of `make kani` behind
+    /// `kani-nonterminating`. The 2026-10-02 nightly was cancelled 2h20m into
+    /// it, and it still hits a 30-min cap at `unwind(32)` (the loop bound for
+    /// these inputs), so the bound is not the cost: the per-byte `metrics()`
+    /// tier lookup inside `measure_q6` is. Do not shrink `n`/`u` to make it
+    /// pass — that trades coverage for a green check.
+    #[cfg(feature = "kani-nonterminating")]
     #[kani::proof]
     #[kani::unwind(70)]
     fn layout_amount_never_breaks_number() {
@@ -499,6 +511,11 @@ mod kani_harnesses {
 
     /// The wrapped layout is lossless: line 1 minus its mark ++ line 2 minus
     /// its mark and unit is the number, and line 1 holds the decimal point.
+    ///
+    /// NON-TERMINATING today (#776), gated like the harness above: 51 min /
+    /// 14.6 GB RSS locally without reaching the solver, a 30-min cap at
+    /// `unwind(32)`, and the 2026-10-03/04 nightlies were cancelled inside it.
+    #[cfg(feature = "kani-nonterminating")]
     #[kani::proof]
     #[kani::unwind(70)]
     fn layout_amount_wrapped_is_lossless() {

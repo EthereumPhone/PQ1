@@ -5204,6 +5204,11 @@ mod kani_harness {
     /// display index then proves all 48 positions without a second symbolic
     /// 48-iteration assertion loop. The bounded campaign remains an explicit
     /// no-verdict timeout until it converges.
+    ///
+    /// Compiled out of `make kani` behind `kani-nonterminating` (#776): every
+    /// nightly that reached it (2026-09-06, -16, -29 checked) was cancelled
+    /// hours inside it, which also suppressed every later crate in the job.
+    #[cfg(feature = "kani-nonterminating")]
     #[kani::proof]
     #[kani::unwind(52)]
     fn fmt_p0_const_value_chunks_bind_rows() {

@@ -4569,8 +4569,37 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
 	@echo "         + Safe management-op decoder (classify_safe_mgmt: accept => length-exact + selector-match + canonical address words + faithful threshold, reconstructed from original bytes; selector-gating reject + accept/reject controls)"
 	cargo kani -p pqsigner-tx
+	@echo "==> Kani: ERC-7730 IR header parser (offset-bounds safety)"
+	@echo "         + TLV param parser (panic/OOB-free over symbolic pool+offset; per-tag width/value soundness: enum_ref/decimals/token/visibility; reject unknown-tag + out-of-range visibility byte)"
+	@echo "         + visibility evaluator (should_render_with_mode total + spec-exact over all (visibility,compact))"
+	@# `fmt_p0_const_value_chunks_bind_rows` is compiled OUT behind
+	@# `kani-nonterminating` (#776). Its own doc calls it a no-verdict timeout,
+	@# and the 2026-09-06/-16/-29 nightlies were each cancelled hours inside it
+	@# — the job had not completed for that reason before ui-px existed.
+	cargo kani -p pqsigner-erc7730
+	@echo "==> Kani: NS-pointer validation (window soundness: accept => in-NS, no-wrap, mailbox-disjoint, no usize->u32 trunc; unbounded/loop-free + accept/reject controls)"
+	cargo kani -p sphincs-tz-shared
+	@echo "==> Kani: unified sign-input header kernels (decode_flags total+bitfield-bounded; validate_data_len keeps the inner-tx slice in-bounds — used in place by nsc::cmd_sign_userop) + reconstruct_execute_calldata (panic/OOB-freedom + byte-exact execute(...) ABI-layout soundness — the calldata the on-chain wallet executes)"
+	@echo "         + off-chain counter policy (offchain_gate): single-gate soundness (accept => new_count=max(off,last)+1, gap<=100, combined-cap respected) + verdict-exact accept/reject control + sequence/interleave (2-step gap+cap limit-slicing, single-op monotonicity, slot isolation) + both bricks unreachable (value-inflation sync-no-brick + distinct-slot graceful cap) — the extracted `check_offchain_gate` used in place by nsc::cmd_sign_offchain (work-todo §12e)"
+	cargo kani -p pqsigner-aa
+	@echo "==> Kani: FW-update manifest AUTHORITY gates (rollback-boundary biconditional [pins > not >=]; signed-preimage layout exhaustive) — gate DECISIONS, complementing the proptest/libfuzzer panic-freedom + fuzz coverage of the structural/CRC/crypto gates"
+	cargo kani -p fw-manifest
 	@echo "==> Kani: pixel trusted-UI tier fitter / splitters (total, lossless) + FlowDriver arming"
 	@echo "         + is_printable_ascii vs its spec on a FULLY SYMBOLIC record (both directions)"
+	@# LAST, deliberately (#776). A red step aborts this recipe, and the ui-px
+	@# step is red (#771, below). While it sat before erc7730 the four crates
+	@# after it ran in none of the 2026-10-02..04 nightlies. Every other crate
+	@# now runs first; `make kani` still exits non-zero until #771 is fixed.
+	@#
+	@# Three `fit` harnesses are compiled OUT here behind the
+	@# `kani-nonterminating` feature (#776): `layout_amount_never_breaks_number`
+	@# and `layout_amount_wrapped_is_lossless` never reached the solver
+	@# (51 min / 14.6 GB locally; still a 30-min cap at unwind(32)) and each
+	@# nightly that reached one was cancelled inside it; `fit_tier_total` went
+	@# ~58 min without a verdict locally and never ran in CI. They stay in the
+	@# census. Not in `make kani-heavy` either: that target promises its
+	@# harnesses verify.
+	@#
 	@# -Z stubbing (#771): `sign_only_from_armed_screens` stubs
 	@# `Screen::is_printable_ascii`. That function scans the record's FIXED
 	@# 256 bytes, so the bound that unrolls it is 257 — measured at 257 the
@@ -4590,17 +4619,6 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@# CONFIRM_MIN_DETAILS is 7 and details <= n - 2, so below n = 9 the
 	@# Confirm branch is unreachable and the harness passes vacuously.
 	cargo kani -Z stubbing -p pqsigner-ui-px
-	@echo "==> Kani: ERC-7730 IR header parser (offset-bounds safety)"
-	@echo "         + TLV param parser (panic/OOB-free over symbolic pool+offset; per-tag width/value soundness: enum_ref/decimals/token/visibility; reject unknown-tag + out-of-range visibility byte)"
-	@echo "         + visibility evaluator (should_render_with_mode total + spec-exact over all (visibility,compact))"
-	cargo kani -p pqsigner-erc7730
-	@echo "==> Kani: NS-pointer validation (window soundness: accept => in-NS, no-wrap, mailbox-disjoint, no usize->u32 trunc; unbounded/loop-free + accept/reject controls)"
-	cargo kani -p sphincs-tz-shared
-	@echo "==> Kani: unified sign-input header kernels (decode_flags total+bitfield-bounded; validate_data_len keeps the inner-tx slice in-bounds — used in place by nsc::cmd_sign_userop) + reconstruct_execute_calldata (panic/OOB-freedom + byte-exact execute(...) ABI-layout soundness — the calldata the on-chain wallet executes)"
-	@echo "         + off-chain counter policy (offchain_gate): single-gate soundness (accept => new_count=max(off,last)+1, gap<=100, combined-cap respected) + verdict-exact accept/reject control + sequence/interleave (2-step gap+cap limit-slicing, single-op monotonicity, slot isolation) + both bricks unreachable (value-inflation sync-no-brick + distinct-slot graceful cap) — the extracted `check_offchain_gate` used in place by nsc::cmd_sign_offchain (work-todo §12e)"
-	cargo kani -p pqsigner-aa
-	@echo "==> Kani: FW-update manifest AUTHORITY gates (rollback-boundary biconditional [pins > not >=]; signed-preimage layout exhaustive) — gate DECISIONS, complementing the proptest/libfuzzer panic-freedom + fuzz coverage of the structural/CRC/crypto gates"
-	cargo kani -p fw-manifest
 	@echo "==> kani: PASS"
 
 # Kani-side anti-vacuity gate — the mirror of the Lean `verify-proof-mutation`
