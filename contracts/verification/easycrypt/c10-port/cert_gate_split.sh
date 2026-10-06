@@ -294,7 +294,9 @@ add_job() { # $1 key  $2 stdin file or '-'  $3.. the exact argv
   printf '%s\t%s\t%s\n' "$key" "$in" "$*" >> "$MANIFEST"
 }
 while read -r f; do add_job "compile:$f" - easycrypt compile $ECFLAGS $INC "$f"; done < "$TMPD/targets"
-while read -r f; do add_job "cli:$f" "$f" easycrypt cli -iterate $INC; done < "$TMPD/targets"
+# `silent` suppresses goal rendering only; prompts and proof diagnostics remain.
+# Iteration and solver budgets stay identical to the default-display CLI leg.
+while read -r f; do add_job "cli:$f" "$f" easycrypt cli -iterate -pragmas silent $INC; done < "$TMPD/targets"
 while IFS=$'\t' read -r path kind reason; do
   case "$path" in ''|\#*) continue;; esac
   if [ -f "$path" ]; then add_job "control:$path" - easycrypt compile $INC "$path"; fi
@@ -421,7 +423,7 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
   # GprocT1Opre OTHER than the one just made deterministic are still budget-
   # sensitive under the cli driver.  Not chased here; not load-bearing, since the
   # leg passes at either budget.
-  if easycrypt cli -iterate "$@" >"$raw" 2>&1; then cli_rc=0; else cli_rc=$?; fi
+  if easycrypt cli -iterate -pragmas silent "$@" >"$raw" 2>&1; then cli_rc=0; else cli_rc=$?; fi
   cli_judge "$lbl" "$cli_rc" "$raw"
 }
 cli_judge() { # $1 = label, $2 = exit status of `easycrypt cli -iterate`, $3 = its raw output

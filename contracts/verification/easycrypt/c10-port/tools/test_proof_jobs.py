@@ -103,7 +103,7 @@ class RunnerTests(unittest.TestCase):
         with Fixture() as fx:
             fx.file('d/A.ec', 'EXIT 0\n'); fx.file('d/B.ec', 'EXIT 1\n'); fx.file('d/C.ec', 'ECHO_STDIN\n')
             r = fx.run([compile_row('compile:d/A.ec', 'd/A.ec'), compile_row('control:d/B.ec', 'd/B.ec'),
-                        ('cli:d/C.ec', 'd/C.ec', 'easycrypt cli -iterate -I base -I drafts')])
+                        ('cli:d/C.ec', 'd/C.ec', 'easycrypt cli -iterate -pragmas silent -I base -I drafts')])
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertEqual(fx.res(0)[:2], ['done', '0'])
             self.assertEqual(fx.res(1)[:2], ['done', '1'])    # a job's own failure is data
@@ -111,6 +111,7 @@ class RunnerTests(unittest.TestCase):
             self.assertIn('argv=compile -timeout 60 -I base -I drafts d/A.ec', fx.out_text(0))
             self.assertIn('to-stderr', fx.out_text(0))        # stderr merged, like 2>&1
             self.assertIn('stdin=ECHO_STDIN', fx.out_text(2))  # cli reads its file on stdin
+            self.assertIn('argv=cli -iterate -pragmas silent -I base -I drafts', fx.out_text(2))
             self.assertFalse((fx.tree / 'ran-here.marker').exists(), 'a job ran in the source tree')
             self.assertIn('byte-identical to the source tree', r.stdout)
             self.assertIn('### PROOF_JOBS completed=3/3 done=3', r.stdout)
@@ -389,7 +390,9 @@ class GateJudgeTests(unittest.TestCase):
 
     def test_cli_one_still_executes_and_judges_for_watched_files(self):
         with tempfile.TemporaryDirectory() as d:
-            (Path(d) / 'easycrypt').write_text('#!/bin/sh\nprintf "[1|check]>\\n"\nexit 0\n')
+            (Path(d) / 'easycrypt').write_text(
+                '#!/bin/sh\n[ "$*" = "cli -iterate -pragmas silent -I a" ] || exit 2\n'
+                'printf "[1|check]>\\n"\nexit 0\n')
             (Path(d) / 'easycrypt').chmod(0o755)
             r = self.bash(f'PATH={d}:$PATH; fail=0; cli_bad=0; cli_run=0; TMPD={d}\n' + block('cli-judge') +
                           'cli_one "watched X" -I a < /dev/null; echo "fail=$fail run=$cli_run"\n')
@@ -437,6 +440,9 @@ me = os.path.join(running, str(os.getpid()))
 open(me, 'w').close()
 atexit.register(lambda: os.path.exists(me) and os.remove(me))
 mode = sys.argv[1]
+if mode == 'cli' and sys.argv[1:] != ['cli', '-iterate', '-pragmas', 'silent', '-I', 'base', '-I', 'drafts']:
+    print('<tty>: unexpected CLI flags')
+    sys.exit(2)
 target = sys.argv[-1] if mode == 'compile' else None
 text = open(target).read() if mode == 'compile' else sys.stdin.read()
 name = (target or 'stdin-' + text.split('\n')[0]).replace('/', '_').replace(' ', '_')

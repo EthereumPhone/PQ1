@@ -65,9 +65,7 @@ use super::state::CachedSlot;
 use super::GatewayArgs;
 use crate::aa::userop::{
     batch_member_commitment, batch_tuple_commitment_from_members, compute_sphincs_digest_v06,
-    execute_batch_tuple_commitment_from_calldata, reconstruct_execute_batch_calldata_into,
-    sha256_bytes, AaUserOpParamsV06Sha256, BatchInnerTx, ExecuteBatchCallData, ENTRY_POINT_V06,
-    MAX_EXECUTE_BATCH_CALLDATA_LEN, SHA256_EMPTY,
+    sha256_bytes, AaUserOpParamsV06Sha256, BatchInnerTx, ENTRY_POINT_V06, SHA256_EMPTY,
 };
 use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata};
 use crate::names::{verify_name_bundle, NameResolver};
@@ -2265,33 +2263,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             data: &snap[p.data_off..p.data_off + p.data_len],
         };
     }
-    // In-place fill of a single caller-owned buffer. Building the 18 KB
-    // `ExecuteBatchCallData` here and passing `&mut` to the reconstructor
-    // (rather than letting it return one by value) keeps exactly one such
-    // buffer on this already-deep sign stack — the return-by-value form
-    // left a second transient copy live that overflowed into BSS.
-    let mut t2_exec = ExecuteBatchCallData {
-        buf: [0u8; MAX_EXECUTE_BATCH_CALLDATA_LEN],
-        len: 0,
-    };
-    if reconstruct_execute_batch_calldata_into(
-        &mut t2_exec,
-        t2_owner_index,
-        new_offchain_count,
-        &batch_view[..batch_count],
-    )
-    .is_err()
-    {
-        entropy.zeroize();
-        crate::fi::zeroize_barrier();
-        ui::show_status("Batch sign", "calldata too long");
-        return NscStatus::CryptoError as u32;
-    }
-
-    // Independently parse the exact live bytes that will feed the Type-2 call
-    // digest. This closes the post-confirmation construction seam: a fault in
-    // the tuple copy or ABI encoder cannot change target/value/data/count/order
-    // while preserving the final fingerprint the user confirmed.
+    // Build, independently check and hash the calldata in a separate frame.
+    // Its 18 KiB buffer must be gone before the nested C10 signing calls.
+    // The caller-owned, fail-initialized receipt also rejects a skipped helper.
     let mut encoded_tuple_verdict = crate::fi::FAIL_SENTINEL;
     // SAFETY: unique live local; volatile fail-initialization makes a skipped
     // parser/comparison call non-authoritative.
@@ -2299,18 +2273,21 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         core::ptr::write_volatile(&mut encoded_tuple_verdict, crate::fi::FAIL_SENTINEL);
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-    if let Some(encoded_tuple_commitment) = execute_batch_tuple_commitment_from_calldata(
-        t2_exec.as_slice(),
+    let t2_call_digest = match super::batch_call_digest::checked_digest(
         t2_owner_index,
         new_offchain_count,
-        batch_count,
+        &batch_view[..batch_count],
+        &batch_final,
+        &mut encoded_tuple_verdict,
     ) {
-        let exact = encoded_tuple_commitment.ct_eq(&batch_final).unwrap_u8() == 1;
-        crate::fi::scrub_sentinel_register();
-        let verdict = crate::fi::check_true_into_sentinel(|| core::hint::black_box(exact));
-        // SAFETY: unique live local and no concurrent access.
-        unsafe { core::ptr::write_volatile(&mut encoded_tuple_verdict, verdict) };
-    }
+        Ok(digest) => digest,
+        Err(()) => {
+            entropy.zeroize();
+            crate::fi::zeroize_barrier();
+            ui::show_status("Batch sign", "calldata too long");
+            return NscStatus::CryptoError as u32;
+        }
+    };
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     // SAFETY: live local, sampled independently around a randomized gap.
     let encoded_tuple_verdict_a = unsafe { core::ptr::read_volatile(&encoded_tuple_verdict) };
@@ -2589,7 +2566,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 12. Type 2: slot C10 signs the batch UserOp sphincs digest ──
-    let t2_call_digest = sha256_bytes(t2_exec.as_slice());
     let t2_init_code_digest = if include_init_code {
         t1_init_code_digest
     } else {
