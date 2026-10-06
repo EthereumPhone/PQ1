@@ -18,7 +18,14 @@ repaint below that however well it overlaps. Only the render half can hide.
 | fact | source |
 |---|---|
 | GPDMA1, 16 channels; LPDMA1, 4 | DS13086 §3 |
-| `spi1_tx_dma` = **request 8** (`spi1_rx_dma` = 7) | RM0456 GPDMA request table, p687 |
+| `spi1_tx_dma` = **request 7** (`spi1_rx_dma` = 6) | RM0456 Table 137, p687 |
+
+> **CORRECTED 2026-10-06.** This table said request **8**, which is
+> `spi2_rx_dma`. Table 137 reads `6 spi1_rx_dma / 7 spi1_tx_dma / 8 spi2_rx_dma`.
+> Two independent extractions caught it before any register was written; a
+> `REQSEL` of 8 would have armed a channel that never fired, with no compile
+> error and nothing on the glass. This is why the bit fields were extracted
+> from the manual rather than recalled.
 | GPDMA is TrustZone-aware: secure/non-secure **per channel**, plus a TrustZone-aware slave port protecting secure channels from NS access | RM0456 GPDMA §, "TrustZone support" |
 | GPDMA is **not** TZSC-attributable — it is "self-governed" via its own per-channel `SECCFGR` | already documented in `secure/src/sau.rs:615-619` |
 | DMA2D also exists on this part (AHB2 @160 MHz) — separate question, see below | DS13086 "Graphic features" |

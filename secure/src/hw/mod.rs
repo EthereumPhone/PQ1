@@ -142,6 +142,12 @@ pub mod dev_dfu;
 #[cfg(feature = "ui-lcd")]
 pub mod lcd_nv3007;
 
+/// GPDMA1 channel 0 for the pixel-UI strip blit (secure SRAM -> SPI1_TXDR), so
+/// strip k streams while strip k+1 renders. Gated on `ui-px-dma` because it is
+/// the tree's first DMA master and the serial path stays the fallback.
+#[cfg(all(feature = "ui-lcd", feature = "ui-px-dma"))]
+pub mod gpdma;
+
 /// AW99703 backlight boost driver on pq1 (I2C2 @0x36, bit-banged PB13/PB14).
 /// `LCM_EN` alone leaves the chip in Standby; this writes the mode register.
 #[cfg(all(feature = "stm32u585", feature = "ui-lcd", feature = "board-pq1"))]

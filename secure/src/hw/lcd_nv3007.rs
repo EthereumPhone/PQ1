@@ -384,6 +384,29 @@ fn spi_send_byte(b: u8) {
 /// can produce an asymmetric last SCK pulse and corrupt the final bit. Since
 /// every command is now its own TSIZE=1 transfer, that would silently corrupt
 /// the LSB of every command byte — so insert the delay.
+/// Tear the SPI down WITHOUT waiting for EOT, for a transfer that died
+/// part-way.
+///
+/// WHY THIS EXISTS. `spi_end` opens with an unbounded `while EOT == 0` spin.
+/// EOT only sets once all `TSIZE` frames have been transmitted (RM0456
+/// SPI_SR bit 3), so after a failed DMA — where the channel stopped with
+/// `BNDT > 0` and fewer than TSIZE bytes ever reached TXDR — **EOT can never
+/// set**. Calling `spi_end` there turns `gpdma::wait`'s deliberately bounded
+/// poll into an unbounded one, and the secure world spins forever with CS low
+/// and a half-painted sign dialog on the glass. Three independent review
+/// lenses found that path; this is the escape.
+///
+/// Clearing SPE resets the SPI state machine and flushes both FIFOs
+/// (RM0456 §68.8.1), which is exactly what a partial transfer needs before the
+/// next one is armed.
+#[cfg(feature = "ui-px-dma")]
+fn spi_force_down() {
+    // ES0499: let the last SCK pulse finish symmetrically before SPE drops.
+    cortex_m::asm::delay(16);
+    REG.spi_cr1.modify(|v| v & !CR1_SPE);
+    REG.spi_ifcr.write(IFCR_EOTC | IFCR_TXTFC | IFCR_OVRC);
+}
+
 fn spi_end() {
     while (REG.spi_sr.read() & SR_EOT) == 0 {}
     // ES0499 mitigation: let the last SCK pulse complete symmetrically before
@@ -733,6 +756,60 @@ pub fn write_pixels_with(n: u32, mut next: impl FnMut() -> u16) {
     cs_deassert();
 }
 
+/// Begin a DMA-fed pixel stream of `bytes` into the current window.
+///
+/// Same framing as [`write_pixels_with`] — CS low, DC high, one `spi_begin`
+/// sized to the whole run — but the FIFO is fed by GPDMA instead of the CPU,
+/// so this RETURNS IMMEDIATELY with the transfer in flight. `bytes` must stay
+/// alive and unmodified until [`write_pixels_dma_finish`] returns.
+///
+/// `bytes` is already in the panel's native scan order AND already big-endian
+/// per pixel: GPDMA copies bytes verbatim, so the hi-then-lo order that
+/// [`write_pixels_with`] produces with two `spi_send_byte` calls has to be
+/// baked into the buffer by the caller's transpose instead.
+#[cfg(feature = "ui-px-dma")]
+#[must_use]
+pub fn write_pixels_dma_start(bytes: &[u8]) -> bool {
+    if bytes.is_empty() {
+        // Nothing armed. Reported rather than silently assumed, so the caller
+        // cannot set a "pending" flag for a transfer that never started and
+        // then wait on it.
+        return false;
+    }
+    cs_assert();
+    dc_high();
+    // TSIZE must equal the DMA block size, or the SPI stops mid-stream with
+    // the channel still armed.
+    spi_begin(bytes.len() as u16);
+    crate::hw::gpdma::start(bytes);
+    true
+}
+
+/// Wait for the in-flight DMA stream, then close the SPI transaction.
+///
+/// `spi_end` is reused verbatim so the EOT wait and the ES0499 settle delay
+/// before dropping SPE are preserved — that delay exists because of a real
+/// erratum this driver already hit once.
+#[cfg(feature = "ui-px-dma")]
+pub fn write_pixels_dma_finish() -> Result<(), crate::hw::gpdma::DmaErr> {
+    // Bound: a 13,696-byte strip at 40 MHz takes ~2.7 ms. `spin_cap` counts
+    // POLL ITERATIONS, not cycles — at roughly 5 cycles each, 4,000,000 is
+    // ~125 ms, two orders of magnitude of headroom and still far below any
+    // interval a human would read as a hang.
+    let r = crate::hw::gpdma::wait(4_000_000);
+    match r {
+        Ok(()) => spi_end(),
+        // The transfer died part-way, so EOT will never set: do NOT wait for
+        // it. Force the peripheral down instead. The SPI must be disabled and
+        // re-enabled before the next transfer for its state machine to restart
+        // cleanly (RM0456 §68.4.12) — `spi_begin` already does SPE=0 -> TSIZE
+        // -> SPE=1 on every call, so the next strip recovers on its own.
+        Err(_) => spi_force_down(),
+    }
+    cs_deassert();
+    r
+}
+
 /// Fill the entire visible area with `color`. Convenience wrapper.
 pub fn fill_screen(color: u16) {
     set_window(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1);
@@ -770,6 +847,12 @@ pub fn fill_rect(x0: u16, y0: u16, w: u16, h: u16, color: u16) {
 pub fn init() {
     // main.rs does not init SPI for ui-lcd, so do it here.
     crate::hw::spi_hw::init();
+    // AFTER spi_hw::init: `gpdma::init` sets `SPI_CFG1.TXDMAEN` with a
+    // read-modify-write, and CFG1 is written wholesale by spi_hw::init (it
+    // carries MBR, the board's panel clock, and DSIZE). Running this first
+    // would have that whole-register write erase TXDMAEN again.
+    #[cfg(feature = "ui-px-dma")]
+    crate::hw::gpdma::init();
     init_dc_res_gpios();
     // pq1: LCM_EN (asserted just above) is only the AW99703's HWEN. Program
     // the backlight over I2C2 or the panel stays dark whatever SPI does.

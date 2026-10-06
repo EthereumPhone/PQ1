@@ -57,6 +57,48 @@ static mut STRIP: [u16; STRIP_PX] = [0; STRIP_PX];
 /// Number of strips per frame.
 const N_STRIPS: usize = ((H + STRIP_H - 1) / STRIP_H) as usize;
 
+/// One strip in the panel's NATIVE scan order, big-endian per pixel, ready to
+/// hand to GPDMA verbatim (13,696 B).
+///
+/// Only ONE buffer is needed, not two: the transpose that fills it runs only
+/// after the previous transfer has been waited on, so the buffer is never
+/// read by the DMA and written by the CPU at the same time. The overlap we
+/// want is DMA-of-strip-k against RENDER-of-strip-k+1, which this preserves.
+#[cfg(feature = "ui-px-dma")]
+static mut TXBUF: [u8; STRIP_PX * 2] = [0; STRIP_PX * 2];
+
+/// Transpose a landscape strip into `TXBUF` in native order.
+///
+/// Byte-for-byte the same stream `blit_strip`'s closure produces: native rows
+/// (landscape x) outer, native columns inner with landscape y descending, and
+/// each RGB565 pixel emitted high byte first. Returns the byte count.
+#[cfg(feature = "ui-px-dma")]
+fn transpose_into_txbuf(h: i32, buf: &[u16]) -> usize {
+    // SAFETY: single-threaded frame loop; the previous DMA was waited on
+    // before this call, so no other agent is reading TXBUF.
+    let tx = unsafe { &mut *core::ptr::addr_of_mut!(TXBUF) };
+    let mut o = 0usize;
+    for ny in 0..W {
+        for k in 0..h {
+            let ly = h - 1 - k;
+            let px = buf[(ly * W + ny) as usize];
+            tx[o] = (px >> 8) as u8;
+            tx[o + 1] = px as u8;
+            o += 2;
+        }
+    }
+    o
+}
+
+/// Open the panel window for the landscape band `[y0, y0 + h)`, exactly as
+/// `blit_strip` does, without streaming anything.
+#[cfg(feature = "ui-px-dma")]
+fn set_window_for(y0: i32, h: i32) {
+    let nx0 = (H - 1) - (y0 + h - 1);
+    let nx1 = (H - 1) - y0;
+    lcd::set_window(nx0 as u16, 0, nx1 as u16, (W - 1) as u16);
+}
+
 /// Per-strip 64-bit digest of what the panel currently shows, so a strip
 /// whose pixels did not change is not streamed again (the blit dominates
 /// the frame: ~24 ms at 40 MHz for all nine strips). `None` = unknown —
@@ -325,9 +367,20 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
     let shown = unsafe { &mut *core::ptr::addr_of_mut!(SHOWN) };
     let mut y0 = 0;
     let mut i = 0usize;
+    // Is a strip still on the wire? Drained before the SPI is touched again
+    // and once more after the loop, so no frame returns with the panel
+    // mid-stream. Set from what `write_pixels_dma_start` reports it armed,
+    // never assumed.
+    #[cfg(feature = "ui-px-dma")]
+    let mut dma_pending = false;
     while y0 < H {
         let h = STRIP_H.min(H - y0);
-        let Some(mut strip) = Strip::new(y0, h, &mut buf[..]) else { return cost };
+        let Some(mut strip) = Strip::new(y0, h, &mut buf[..]) else {
+            // MUST NOT `return` here: that would leave the last strip still
+            // streaming, and the drain below is the only thing that waits for
+            // it. Break so the single post-loop drain is the one exit.
+            break;
+        };
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
         #[cfg(not(feature = "ui-px-frametime"))]
@@ -343,15 +396,37 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
         let d = if force { 0 } else { strip_digest(&buf[..(W * h) as usize]) };
         #[cfg(feature = "ui-px-frametime")]
         let t1 = frametime::cycles();
-        if force {
+        // `force` streams every strip regardless of the digest — that is the
+        // F-24 stage-E property: on a secret frame the SPI timing must not
+        // reveal WHICH strips changed. The DMA path below preserves it,
+        // because it branches on exactly the same `want_blit`.
+        let want_blit = force || shown.get(i).copied().flatten() != Some(d);
+        if want_blit {
+            #[cfg(not(feature = "ui-px-dma"))]
             blit_strip(y0, h, &buf[..(W * h) as usize]);
-            if let Some(slot) = shown.get_mut(i) {
-                *slot = None;
+            #[cfg(feature = "ui-px-dma")]
+            {
+                // Close the PREVIOUS transfer first: `set_window` writes
+                // commands with DC low on the same bus, so it cannot overlap
+                // another strip's data. The overlap we get is this strip's
+                // DMA against the NEXT strip's render, which is the whole
+                // point — the render happens at the top of the next pass
+                // while the wire is still busy.
+                if dma_pending {
+                    let _ = lcd::write_pixels_dma_finish();
+                    dma_pending = false;
+                }
+                let n = transpose_into_txbuf(h, &buf[..(W * h) as usize]);
+                set_window_for(y0, h);
+                // SAFETY: single-threaded frame loop. The only other agent
+                // that reads TXBUF is the GPDMA channel, and the `finish`
+                // above guarantees the previous transfer has completed before
+                // the transpose rewrote it.
+                let tx = unsafe { &*core::ptr::addr_of!(TXBUF) };
+                dma_pending = lcd::write_pixels_dma_start(&tx[..n]);
             }
-        } else if shown.get(i).copied().flatten() != Some(d) {
-            blit_strip(y0, h, &buf[..(W * h) as usize]);
             if let Some(slot) = shown.get_mut(i) {
-                *slot = Some(d);
+                *slot = if force { None } else { Some(d) };
             }
         }
         #[cfg(feature = "ui-px-frametime")]
@@ -362,6 +437,12 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
         }
         y0 += h;
         i += 1;
+    }
+    // The last strip of the frame is still streaming; a frame must not be
+    // reported complete with the panel mid-write.
+    #[cfg(feature = "ui-px-dma")]
+    if dma_pending {
+        let _ = lcd::write_pixels_dma_finish();
     }
     cost
 }
