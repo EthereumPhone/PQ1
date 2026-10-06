@@ -4341,6 +4341,7 @@ impl DualSecureElement {
 //!     closure accessors. The one and only place `static mut` lives.
 //!   * [`ptr_validate`]  — NS SRAM/flash pointer + length validators.
 
+mod batch_call_digest;
 mod cmd_get_init_code;
 mod cmd_get_remaining;
 mod cmd_get_wallet_address;
