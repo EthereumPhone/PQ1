@@ -65,6 +65,9 @@ macro_rules! secure_log {
 
 // Pure-logic modules: no hardware dependencies, testable on the host.
 mod aa;
+#[cfg(test)]
+#[path = "nsc/batch_call_digest.rs"]
+mod batch_call_digest_under_test;
 mod tx;
 // Generic CMAC-AES core (RFC 4493). Always compiled — the firmware
 // pulls it in via the SAES-DHUK backend in `hw::saes_cmac`, and host

@@ -387,13 +387,14 @@ fn positive_spi_hw_ssi_high_before_master_mode() {
 }
 
 #[test]
-fn positive_spi_hw_cfg1_baud_gated_dsize_8bit() {
-    // SPI1 baud is gated on `ui-lcd` (2026-06-09): ÷8 (20 MHz) for the NV3007
-    // LCD (dropped from ÷4/40 MHz — the dev board's blue LED on PE13=SCK loads
-    // the line and corrupts 40 MHz edges), ÷32 (5 MHz) conservative for non-LCD
-    // builds. DSIZE = 7 (8-bit); only MBR nibble [30:28] moves.
-    assert!(SPI_HW_SRC.contains("const MBR: u32 = 0b010;")); // ÷8 → 20 MHz (ui-lcd)
-    assert!(SPI_HW_SRC.contains("REG.spi_cfg1.write((MBR << 28) | 7);"));
+fn positive_spi_hw_cfg1_board_baud_dsize_8bit() {
+    // The default prescaler follows the board: pq1 uses ÷4 (40 MHz),
+    // while iota2 keeps ÷8 (20 MHz) because its LED loads the SCK line.
+    // DSIZE stays 7 (8-bit); only MBR bits [30:28] select the clock.
+    assert!(contains_in_code(SPI_HW_SRC, "const MBR: u32 = board::LCD_SPI_MBR;"));
+    assert!(contains_in_code(BOARD_PQ1_SRC, "pub const LCD_SPI_MBR: u32 = 0b001;"));
+    assert!(contains_in_code(BOARD_IOTA2_SRC, "pub const LCD_SPI_MBR: u32 = 0b010;"));
+    assert!(contains_in_code(SPI_HW_SRC, "REG.spi_cfg1.write((MBR << 28) | 7);"));
 }
 
 #[test]
