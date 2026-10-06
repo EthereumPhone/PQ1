@@ -199,7 +199,10 @@ opt-level = 3
 # The pixel trusted-UI rasteriser runs per frame on the NV3007. Owner decision
 # 2026-09-23 (port plan § Flash): size over speed for this crate — `s` buys
 # ~8 KB of the A/B slot; the EVT #1 hero sweep measured 8–11 ms render at `3`
-# against a 24 ms frame period, so `s` (~2× slower) still fits the budget.
+# against a MEASURED 24 ms frame period, so `s` (~2x slower) still fit. NOTE:
+# 24 ms is what that frame COST, not a target — `FRAME_PERIOD_MS` (lcd.rs:47)
+# is 16 ms, and the pilot doc records that the 16 ms cap "never binds" because
+# the work already exceeds it.
 # Re-measure with `make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime`.
 #
 # UPDATE 2026-10-05b: MEASURED ON THE PANEL, and `z` here is NOT worth it —
@@ -212,8 +215,11 @@ opt-level = 3
 #
 # The entire difference lands in RENDER (-4 ms, -27%), which is where this
 # crate's rasteriser runs; the blit is the SPI stream and does not move. So `z`
-# costs ~4 ms of a 24 ms frame budget — ~17% — to buy 5,984 B, with the frame
-# already over budget at 31 ms. Bad trade; keep `s`.
+# costs ~4 ms against a 16 ms pacing target (`FRAME_PERIOD_MS`, lcd.rs:47) to
+# buy 5,984 B, on a frame already at 31 ms — roughly 2x the target. Bad trade;
+# keep `s`. (An earlier version of this comment called 24 ms the budget. That
+# was a measured COST mislabelled as a target; the real target is 16 ms, so the
+# overshoot is worse than it read.)
 #
 # Do NOT "save" those bytes again without re-running that comparison. The
 # harness makes it cheap: build with `ui-px-bench,ui-px-frametime,ui-px-spi40`,
@@ -234,7 +240,9 @@ opt-level = 3
 # same hero sweep — s/s, z/s and z/z — because comparing a lone z/z number
 # against the 2026-09-22 baseline is confounded by two weeks of code changes:
 #   make play-hw-px ... PX_EXTRA_FEATURES=,ui-px-frametime
-# Budget: 24 ms frame period. If the hero sweep regresses, revert THIS override
+# Target: `FRAME_PERIOD_MS` = 16 ms (lcd.rs:47), NOT the 24 ms often quoted —
+# that 24 is the measured nine-strip blit cost. If the hero sweep regresses,
+# revert THIS override
 # to `s` (worth 5,728 B) before touching the parent profile — the parent's 64 KB
 # is what makes the image linkable at all.
 #
@@ -244,7 +252,9 @@ opt-level = 3
 #     Measured render 8-11 ms at `3`, ~2x that at `s`.
 #   - in `sphincs-tz-secure`: `ui::px::lcd::present_frame_ex` and `blit_strip`,
 #     the presenter and the SPI push. Measured blit 24 ms for nine strips,
-#     ~13 ms with unchanged strips skipped — i.e. the BOTTLENECK.
+#     ~13 ms with unchanged strips skipped — i.e. the BOTTLENECK. Any blit
+#     reading BELOW ~24.3 ms (the 60,776 px x 16 b / 40 MHz wire floor) is a
+#     PARTIAL repaint, not a full one.
 # Both crates are now at `z`, so the whole frame path is at `z`.
 [profile.release.package.pqsigner-ui-px]
 opt-level = "s"

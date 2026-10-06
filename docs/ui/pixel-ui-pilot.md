@@ -117,8 +117,9 @@ an on-panel `ui-px-frametime` run first.
 The per-frame work is split across two crates and the slower half is in
 `sphincs-tz-secure`, which moved to `z`: `ui::px::lcd::present_frame_ex` and
 `blit_strip` are the presenter and the SPI push, measured at 24 ms for nine
-strips (~13 ms with unchanged strips skipped) against a 24 ms frame period —
-the bottleneck. The raster and glyph compositing left at `"s"` are only
+strips (~13 ms with unchanged strips skipped) — the bottleneck. That 24 ms is a
+COST, not a target: `FRAME_PERIOD_MS` is 16 ms, and the 2026-09-22 row below
+says so explicitly ("the 16 ms cap never binds"). The raster and glyph compositing left at `"s"` are only
 8-11 ms. So `z` put the dominant frame cost at `z`. An on-panel
 `ui-px-frametime` run gates shipping it; if the hero sweep regresses, give the
 presenter its own profile override rather than reverting the parent profile,
@@ -139,15 +140,24 @@ one override. Worst-case per second, render / blit / period in ms:
 The entire difference is in **render** (−4 ms, −27%) — that crate is the
 rasteriser. The blit is the SPI stream and does not move with opt-level, which
 is what makes this a real effect rather than drift. `z` there costs ~17% of the
-24 ms frame budget to buy 5,984 B, with the frame already over budget. Reverted
+16 ms pacing target to buy 5,984 B, on a frame already ~2x over it. Reverted
 to `"s"`; the image is 481,376 B, **14,432 B over** the slot.
 
 Do not re-take those bytes without re-running the comparison. It is cheap now:
 build with `ui-px-bench,ui-px-frametime,ui-px-spi40`, flash, read the top-left
 digits. No PIN, no wallet, no keygen.
 
-**NEITHER setting meets the 24 ms budget, and that is not an opt-level
-problem.** 31 ms is ~32 fps. Three things found while measuring, none of them
+**NEITHER setting meets the frame target, and that is not an opt-level
+problem.** 31 ms is ~32 fps against `FRAME_PERIOD_MS` = 16 ms — roughly 2x over.
+
+**CORRECTION 2026-10-06.** Earlier revisions of this UPDATE called 24 ms "the
+budget". It is not: it is the measured nine-strip blit cost (`ui/px/lcd.rs:62`).
+The 2026-09-22 row below had it right all along — "frame period ≈ 24 ms (≈ 40
+fps; the 16 ms cap never binds)" — i.e. 24 ms was what a frame HAPPENED to cost
+when the 16 ms cap could not bind. Two consequences: the overshoot is ~2x rather
+than ~29%, and the 19-20 ms blit readings above are PARTIAL repaints, because a
+full 428x142 frame at 40 MHz has a 24.31 ms wire floor (60,776 px x 16 b) that
+no full repaint can beat. The full-panel blit has never been measured. Three things found while measuring, none of them
 caused by the profile work and all reproduced across `s`/`z` and 20/40 MHz:
 
 - **The shipping config has never been frame-time measured.** Every number here

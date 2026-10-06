@@ -6,9 +6,12 @@ down so the next attempt starts from facts rather than repeating the search.
 
 Goal: overlap render and blit. Today a frame is serial — render then blit,
 nine strips. Measured on the EVT panel 2026-10-05 at 40 MHz: render 11 ms,
-blit 19 ms, period 31 ms against a 24 ms budget. With the SPI stream on DMA the
-frame becomes `max(render, blit)` instead of `render + blit`, i.e. ~20 ms, which
-would put it under budget.
+blit 19 ms, period 31 ms against a 16 ms pacing target (`FRAME_PERIOD_MS`,
+`ui/px/lcd.rs:47`). With the SPI stream on DMA the frame becomes
+`max(render, blit)` instead of `render + blit`, i.e. ~20 ms — better, but NOT
+under target. Note also that the 19 ms blit is a PARTIAL repaint: a full
+428x142 frame at 40 MHz has a 24.31 ms wire floor, so DMA cannot take a full
+repaint below that however well it overlaps. Only the render half can hide.
 
 ## What the hardware gives us
 
