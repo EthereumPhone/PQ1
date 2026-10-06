@@ -22,13 +22,15 @@ fn render_full(anim: &Anim, font: &Font<'_>, strip_buf: &mut [u16]) -> u64 {
     let mut frame = Frame::new();
     anim.build(&marks(), font, &mut frame);
     let mut acc = 0u64;
-    let mut y0 = 0;
-    while y0 < H {
-        let h = 16.min(H - y0);
-        let mut s = Strip::new(y0, h, strip_buf).unwrap();
+    // Vertical bands of 48 landscape columns since #780.
+    const BW: i32 = 48;
+    let mut x0 = 0;
+    while x0 < W {
+        let w = BW.min(W - x0);
+        let mut s = Strip::new(x0, w, strip_buf).unwrap();
         render_strip(&frame, font, &mut s);
-        acc = acc.wrapping_add(u64::from(s.buf[0])).wrapping_add(u64::from(s.buf[(W * h - 1) as usize]));
-        y0 += h;
+        acc = acc.wrapping_add(u64::from(s.buf[0])).wrapping_add(u64::from(s.buf[(w * H - 1) as usize]));
+        x0 += w;
     }
     acc
 }

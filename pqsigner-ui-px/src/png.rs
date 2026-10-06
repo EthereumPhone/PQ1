@@ -25,14 +25,26 @@ pub fn render_full(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>) -> Vec<u16> 
     let mut frame = Frame::new();
     anim.build(marks, font, &mut frame);
     let mut out = vec![0u16; (W * H) as usize];
-    let mut strip_buf = vec![0u16; (W * 16) as usize];
-    let mut y0 = 0;
-    while y0 < H {
-        let h = 16.min(H - y0);
-        let mut s = Strip::new(y0, h, &mut strip_buf).expect("strip");
+    // Bands are VERTICAL since #780 (see `raster::Strip`): 48 landscape
+    // columns each, which is 48 x 142 x 2 B = 13,632 B, inside the device's
+    // existing 13,696 B strip buffer.
+    const BW: i32 = 48;
+    let mut band_buf = vec![0u16; (BW * H) as usize];
+    let mut x0 = 0;
+    while x0 < W {
+        let w = BW.min(W - x0);
+        let mut s = Strip::new(x0, w, &mut band_buf).expect("strip");
         render_strip(&frame, font, &mut s);
-        out[(y0 * W) as usize..((y0 + h) * W) as usize].copy_from_slice(&s.buf[..(W * h) as usize]);
-        y0 += h;
+        // De-rotate the band's wire order back into landscape row-major, so
+        // this function's output -- and therefore every golden SHA -- is
+        // byte-identical to the pre-#780 horizontal-band composition.
+        for x in 0..w {
+            let col = &s.buf[(x * H) as usize..((x + 1) * H) as usize];
+            for y in 0..H {
+                out[(y * W + x0 + x) as usize] = col[(H - 1 - y) as usize];
+            }
+        }
+        x0 += w;
     }
     out
 }

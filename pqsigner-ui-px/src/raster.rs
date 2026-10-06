@@ -123,35 +123,58 @@ pub fn blend_over(dst: u16, src: Rgb, a: u8) -> u16 {
     Rgb::new(ch(d.r, src.r), ch(d.g, src.g), ch(d.b, src.b)).to565()
 }
 
-/// A horizontal band of the frame: rows `y0 .. y0 + h`, row-major landscape.
+/// A VERTICAL band of the frame: landscape columns `x0 .. x0 + w`, every row.
+///
+/// **The band axis is x, and the storage is the panel's wire order.** Both
+/// follow from the 90-degree rotation (`nx = 141 - y`, `ny = x`): the panel
+/// scans native rows `ny`, i.e. landscape *columns*, so a band of landscape x
+/// is a contiguous run of scan rows, and laying it out as
+/// `(x - x0) * H + (H - 1 - y)` is exactly the byte order a
+/// `set_window(0, x0, H-1, x0+w-1)` stream wants. No transpose.
+///
+/// It was a horizontal `y0 .. y0 + h` band until #780. That made every band a
+/// native COLUMN band spanning all 428 scan rows, so each one re-crossed the
+/// beam independently and the blit could never be synchronised to the panel —
+/// a TE wait bolted onto it cleans up at most the first band.
 pub struct Strip<'a> {
-    pub y0: i32,
-    pub h: i32,
+    pub x0: i32,
+    pub w: i32,
     pub buf: &'a mut [u16],
 }
 
 impl<'a> Strip<'a> {
-    /// `buf` must hold `W * h` pixels.
+    /// `buf` must hold `w * H` pixels.
     #[must_use]
-    pub fn new(y0: i32, h: i32, buf: &'a mut [u16]) -> Option<Self> {
-        if h <= 0 || y0 < 0 || y0 + h > H || buf.len() < (W * h) as usize {
+    pub fn new(x0: i32, w: i32, buf: &'a mut [u16]) -> Option<Self> {
+        if w <= 0 || x0 < 0 || x0 + w > W || buf.len() < (w * H) as usize {
             return None;
         }
-        Some(Self { y0, h, buf })
+        Some(Self { x0, w, buf })
     }
 
     pub fn clear(&mut self) {
-        for p in self.buf[..(W * self.h) as usize].iter_mut() {
+        for p in self.buf[..(self.w * H) as usize].iter_mut() {
             *p = 0;
         }
     }
 
+    /// Does the inclusive landscape-x range `xa ..= xb` touch this band?
+    ///
+    /// Every rasteriser calls this first. Without it an item outside the band
+    /// still walks its whole bounding box computing coverage that `idx` then
+    /// discards — nine times per frame, once per band.
+    #[inline]
+    #[must_use]
+    pub fn x_hits(&self, xa: i32, xb: i32) -> bool {
+        xb >= self.x0 && xa < self.x0 + self.w
+    }
+
     #[inline]
     fn idx(&self, x: i32, y: i32) -> Option<usize> {
-        if x < 0 || x >= W || y < self.y0 || y >= self.y0 + self.h {
+        if x < self.x0 || x >= self.x0 + self.w || y < 0 || y >= H {
             return None;
         }
-        Some(((y - self.y0) * W + x) as usize)
+        Some(((x - self.x0) * H + (H - 1 - y)) as usize)
     }
 
     /// Composite `color` at coverage `a` over pixel `(x, y)` (clipped).
@@ -178,26 +201,35 @@ impl<'a> Strip<'a> {
 
     /// Composite `color` at coverage `a` over the run `x0 ..= x1` of row `y`
     /// (clipped). Same per-pixel result as [`Strip::blend`]; the bounds are
-    /// checked once and an opaque run is a plain store.
+    /// checked once.
+    ///
+    /// Under the x-band layout a horizontal run STRIDES by `H`, so this is a
+    /// per-pixel store rather than the contiguous run it was before #780.
+    /// On this part that costs little — the Cortex-M33 has no data cache and
+    /// SRAM1 is zero-wait — the only loss is 32-bit store merging. Render
+    /// hides under the 24.31 ms wire either way.
     pub fn fill_span(&mut self, x0: i32, x1: i32, y: i32, color: Rgb, a: u8) {
-        if y < self.y0 || y >= self.y0 + self.h || a == 0 {
+        if y < 0 || y >= H || a == 0 {
             return;
         }
-        let x0 = x0.max(0);
-        let x1 = x1.min(W - 1);
-        if x1 < x0 {
+        let xa = x0.max(self.x0);
+        let xb = x1.min(self.x0 + self.w - 1);
+        if xb < xa {
             return;
         }
-        let row = ((y - self.y0) * W) as usize;
-        let run = &mut self.buf[row + x0 as usize..=row + x1 as usize];
+        let row = (H - 1 - y) as usize;
+        let stride = H as usize;
+        let mut i = (xa - self.x0) as usize * stride + row;
         if a == 255 {
             let p = color.to565();
-            for d in run.iter_mut() {
-                *d = p;
+            for _ in xa..=xb {
+                self.buf[i] = p;
+                i += stride;
             }
         } else {
-            for d in run.iter_mut() {
-                *d = blend_over(*d, color, a);
+            for _ in xa..=xb {
+                self.buf[i] = blend_over(self.buf[i], color, a);
+                i += stride;
             }
         }
     }
@@ -455,7 +487,7 @@ fn draw_item(item: &Item<'_>, font: &Font<'_>, s: &mut Strip<'_>) {
         Item::Shape { pts, xf, mode, color, a } => shape(s, pts, xf, mode, color, a),
         Item::Secret { text, tier, x, y, color } => font.blit_secret_run(tier, text, x, y, color, s),
         Item::Rect { x, y, w, h, color, a } => {
-            for yy in y.max(s.y0)..(y + h).min(s.y0 + s.h) {
+            for yy in y.max(0)..(y + h).min(H) {
                 for xx in x.max(0)..(x + w).min(W) {
                     s.blend(xx, yy, color, a);
                 }
@@ -510,7 +542,7 @@ fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8,
     let c = ONE_Q8 / 2 - cx; // offset of pixel centre x = 0
     let r_zero = i64::from(r + ZERO_D); // dist ≥ r + ZERO_D ⇒ cov 0
     let r_full = i64::from(r - FULL_D + 1); // dist ≤ r − FULL_D ⇔ dist² < r_full²
-    for y in y_lo.max(s.y0)..=y_hi.min(s.y0 + s.h - 1) {
+    for y in y_lo.max(0)..=y_hi.min(H - 1) {
         let py = (y << 8) + ONE_Q8 / 2; // pixel centre
         if py < level {
             continue;
@@ -570,7 +602,7 @@ fn ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
     let c = ONE_Q8 / 2 - cx;
     let r_zero = i64::from(r + ZERO_D); // dist ≥ r + ZERO_D ⇒ 0 (outside)
     let r_hole = i64::from(r_in - ZERO_D + 1); // dist ≤ r_in − ZERO_D ⇔ dist² < r_hole² ⇒ 0 (hole)
-    for y in y_lo.max(s.y0)..=y_hi.min(s.y0 + s.h - 1) {
+    for y in y_lo.max(0)..=y_hi.min(H - 1) {
         let dy = (y << 8) + ONE_Q8 / 2 - cy;
         if dy.abs() > r + ONE_Q8 {
             continue;
@@ -640,7 +672,7 @@ fn capsules(s: &mut Strip<'_>, pts: &[(Q8, Q8)], hw: Q8, color: Rgb) {
         y_hi = y_hi.max(y);
     }
     let pad = hw + ONE_Q8;
-    for y in ((y_lo - pad) >> 8).max(s.y0)..=((y_hi + pad) >> 8).min(s.y0 + s.h - 1) {
+    for y in ((y_lo - pad) >> 8).max(0)..=((y_hi + pad) >> 8).min(H - 1) {
         let py = (y << 8) + ONE_Q8 / 2;
         for x in ((x_lo - pad) >> 8).max(0)..=((x_hi + pad) >> 8).min(W - 1) {
             let px = (x << 8) + ONE_Q8 / 2;
@@ -817,8 +849,8 @@ fn shape(s: &mut Strip<'_>, pts: &[(i16, i16)], xf: Xform, mode: ShapeMode, colo
         ShapeMode::Stroke { hw } | ShapeMode::Loop { hw } => hw,
         ShapeMode::Rim { r, hw } => r.saturating_add(hw),
     }) + ONE_Q8;
-    let ya = ((y_lo - reach) >> 8).max(s.y0);
-    let yb = ((y_hi + reach) >> 8).min(s.y0 + s.h - 1);
+    let ya = ((y_lo - reach) >> 8).max(0);
+    let yb = ((y_hi + reach) >> 8).min(H - 1);
     let xa = ((x_lo - reach) >> 8).max(0);
     let xb = ((x_hi + reach) >> 8).min(W - 1);
     for y in ya..=yb {
@@ -857,7 +889,7 @@ fn mask_blit(s: &mut Strip<'_>, cx: Q8, cy: Q8, m: &Mask<'_>, scale: Q8, color: 
     let dh = (i64::from(m.h) * i64::from(scale) >> 8) as i32;
     let x0 = (cx >> 8) - dw / 2;
     let y0 = (cy >> 8) - dh / 2;
-    for y in y0.max(s.y0)..(y0 + dh).min(s.y0 + s.h) {
+    for y in y0.max(0)..(y0 + dh).min(H) {
         let sy = (((y - y0) << 8) / scale.max(1)) as u16;
         for x in x0.max(0)..(x0 + dw).min(W) {
             let sx = (((x - x0) << 8) / scale.max(1)) as u16;
@@ -898,8 +930,8 @@ mod tests {
 
     #[test]
     fn disc_covers_interior_and_edge_is_soft() {
-        let mut buf = [0u16; (W * 16) as usize];
-        let mut s = Strip::new(64, 16, &mut buf).unwrap();
+        let mut buf = [0u16; (W * H) as usize];
+        let mut s = Strip::new(0, W, &mut buf).unwrap();
         let mut f = Frame::new();
         // r = 30.5 px puts the edge through the centre of column 244.
         f.push(Item::Disc { cx: 214 << 8, cy: 72 << 8, r: (30 << 8) + 128, color: Rgb::WHITE });
@@ -916,8 +948,8 @@ mod tests {
 
     #[test]
     fn ring_leaves_the_centre_black() {
-        let mut buf = [0u16; (W * 16) as usize];
-        let mut s = Strip::new(64, 16, &mut buf).unwrap();
+        let mut buf = [0u16; (W * H) as usize];
+        let mut s = Strip::new(0, W, &mut buf).unwrap();
         let mut f = Frame::new();
         f.push(Item::Ring { cx: 214 << 8, cy: 72 << 8, r: 30 << 8, w: (24 * 256) / 10, color: Rgb::WHITE });
         render_strip(&f, &Font::empty(), &mut s);
@@ -927,8 +959,8 @@ mod tests {
 
     #[test]
     fn chord_fills_only_below_the_level() {
-        let mut buf = [0u16; (W * 16) as usize];
-        let mut s = Strip::new(64, 16, &mut buf).unwrap();
+        let mut buf = [0u16; (W * H) as usize];
+        let mut s = Strip::new(0, W, &mut buf).unwrap();
         let mut f = Frame::new();
         f.push(Item::Chord { cx: 214 << 8, cy: 72 << 8, r: 30 << 8, level_y: 72 << 8, color: Rgb::WHITE, a: 255 });
         render_strip(&f, &Font::empty(), &mut s);
@@ -938,8 +970,8 @@ mod tests {
 
     #[test]
     fn marks_and_chevron_draw_something_inside_their_bounds() {
-        let mut buf = [0u16; (W * 142) as usize];
-        let mut s = Strip::new(0, 142, &mut buf).unwrap();
+        let mut buf = [0u16; (W * H) as usize];
+        let mut s = Strip::new(0, W, &mut buf).unwrap();
         let mut f = Frame::new();
         f.push(Item::Check { cx: 214 << 8, cy: 72 << 8, r: 29 << 8, color: Rgb::WHITE, k: 1 << 16 });
         f.push(Item::Cross { cx: 100 << 8, cy: 72 << 8, r: 29 << 8, color: Rgb::WHITE, k: 1 << 16 });
@@ -974,7 +1006,7 @@ mod span_equivalence {
         let y_hi = ((cy + r) >> 8) + 1;
         let x_lo = ((cx - r) >> 8) - 1;
         let x_hi = ((cx + r) >> 8) + 1;
-        for y in y_lo.max(s.y0)..=y_hi.min(s.y0 + s.h - 1) {
+        for y in y_lo.max(0)..=y_hi.min(H - 1) {
             let py = (y << 8) + ONE_Q8 / 2;
             if py < level {
                 continue;
@@ -998,7 +1030,7 @@ mod span_equivalence {
         let y_hi = ((cy + r) >> 8) + 1;
         let x_lo = ((cx - r) >> 8) - 1;
         let x_hi = ((cx + r) >> 8) + 1;
-        for y in y_lo.max(s.y0)..=y_hi.min(s.y0 + s.h - 1) {
+        for y in y_lo.max(0)..=y_hi.min(H - 1) {
             let dy = (y << 8) + ONE_Q8 / 2 - cy;
             if dy.abs() > r + ONE_Q8 {
                 continue;
@@ -1033,7 +1065,8 @@ mod span_equivalence {
             let w = (lcg(&mut seed) % (6 << 8)) as i32 + 1;
             let a = (lcg(&mut seed) % 256) as u8;
             let level = cy + (lcg(&mut seed) % (80 << 8)) as i32 - (40 << 8);
-            let y0 = (lcg(&mut seed) % (H as u32 - 16)) as i32;
+            // Band ORIGIN in landscape x since #780, not a row.
+            let x0 = (lcg(&mut seed) % (W as u32 - 16)) as i32;
             let mut b1 = [0u16; (W * 16) as usize];
             let mut b2 = [0u16; (W * 16) as usize];
             // A non-black background so partial coverage is exercised.
@@ -1041,8 +1074,8 @@ mod span_equivalence {
                 *p = if i % 3 == 0 { under.to565() } else { 0 };
             }
             b2.copy_from_slice(&b1);
-            let mut s1 = Strip::new(y0, 16, &mut b1).unwrap();
-            let mut s2 = Strip::new(y0, 16, &mut b2).unwrap();
+            let mut s1 = Strip::new(x0, 16, &mut b1).unwrap();
+            let mut s2 = Strip::new(x0, 16, &mut b2).unwrap();
             match case % 3 {
                 0 => {
                     disc(&mut s1, cx, cy, r, color, None);
@@ -1057,8 +1090,61 @@ mod span_equivalence {
                     brute_disc(&mut s2, cx, cy, r, color, Some((level, a)));
                 }
             }
-            assert!(b1 == b2, "case {case}: cx={cx} cy={cy} r={r} w={w} a={a} level={level} y0={y0}");
+            assert!(b1 == b2, "case {case}: cx={cx} cy={cy} r={r} w={w} a={a} level={level} x0={x0}");
         }
+    }
+
+    /// Nine vertical bands must compose to exactly the same frame as one
+    /// full-width render.
+    ///
+    /// This is the property the device depends on and that nothing asserted
+    /// before #780: `present_frame_ex` renders the frame in bands, so a
+    /// rasteriser whose x-cull is off by a pixel, or that reads state it
+    /// should not across a band edge, would paint a seam that only appears on
+    /// glass. The goldens cannot catch it -- `png::render_full` composes bands
+    /// too, so a cull bug would corrupt the golden and the comparison equally.
+    #[test]
+    fn bands_compose_to_the_same_frame_as_one_full_render() {
+        let mut f = Frame::new();
+        // Items chosen to STRADDLE band edges at x = 48, 96, 144, ... : a disc
+        // and ring on a boundary, a chord, a chevron near x = 0, and marks far
+        // right, so every rasteriser is exercised across a cut.
+        f.push(Item::Disc { cx: 96 << 8, cy: 72 << 8, r: (30 << 8) + 128, color: Rgb::WHITE });
+        f.push(Item::Ring { cx: 144 << 8, cy: 60 << 8, r: 28 << 8, w: (24 * 256) / 10, color: Rgb::new(0x20, 0xFF, 0x7F) });
+        f.push(Item::Chord { cx: 192 << 8, cy: 80 << 8, r: 26 << 8, level_y: 80 << 8, color: Rgb::new(0x40, 0x80, 0xC0), a: 200 });
+        f.push(Item::Chevron { cx: (235 << 8) / 10, cy: 19 << 8, angle: 1 << 14, color: Rgb::WHITE });
+        f.push(Item::Check { cx: 384 << 8, cy: 72 << 8, r: 29 << 8, color: Rgb::WHITE, k: 1 << 16 });
+        f.push(Item::Cross { cx: 336 << 8, cy: 100 << 8, r: 20 << 8, color: Rgb::new(0xFF, 0x40, 0x40), k: 1 << 16 });
+        f.push(Item::Rect { x: 40, y: 4, w: 120, h: 9, color: Rgb::new(0x10, 0x30, 0x50), a: 180 });
+        let font = Font::empty();
+
+        let mut full = [0u16; (W * H) as usize];
+        {
+            let mut s = Strip::new(0, W, &mut full).unwrap();
+            render_strip(&f, &font, &mut s);
+        }
+
+        const BW: i32 = 48;
+        let mut band = [0u16; (BW * H) as usize];
+        let mut x0 = 0;
+        let mut bands = 0;
+        while x0 < W {
+            let w = BW.min(W - x0);
+            {
+                let mut s = Strip::new(x0, w, &mut band).unwrap();
+                render_strip(&f, &font, &mut s);
+            }
+            for x in 0..w {
+                for y in 0..H {
+                    let got = band[(x * H + (H - 1 - y)) as usize];
+                    let want = full[((x0 + x) * H + (H - 1 - y)) as usize];
+                    assert_eq!(got, want, "band at x0={x0} differs at ({}, {y})", x0 + x);
+                }
+            }
+            x0 += w;
+            bands += 1;
+        }
+        assert_eq!(bands, 9, "428 landscape columns in 48-wide bands");
     }
 
     #[test]
@@ -1069,15 +1155,21 @@ mod span_equivalence {
             let mut b2 = [0x1234u16; (W * 16) as usize];
             let mut s1 = Strip::new(32, 16, &mut b1).unwrap();
             let mut s2 = Strip::new(32, 16, &mut b2).unwrap();
+            // Spans that straddle the band's left edge, its right edge, and
+            // one that misses it entirely in x -- the clip that replaced the
+            // old off-row case when bands became vertical (#780).
             s1.fill_span(-5, 100, 40, color, a);
-            s1.fill_span(300, W + 10, 47, color, a);
+            s1.fill_span(30, W + 10, 47, color, a);
             s1.fill_span(10, 5, 41, color, a); // empty
-            s1.fill_span(0, W, 10, color, a); // off-strip row
+            s1.fill_span(200, 300, 10, color, a); // wholly outside the band
             for x in -5..=100 {
                 s2.blend(x, 40, color, a);
             }
-            for x in 300..=W + 10 {
+            for x in 30..=W + 10 {
                 s2.blend(x, 47, color, a);
+            }
+            for x in 200..=300 {
+                s2.blend(x, 10, color, a);
             }
             assert!(b1 == b2, "a={a}");
         }

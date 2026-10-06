@@ -17,7 +17,7 @@
 //! panic on the device).
 
 use crate::fixed::Q8;
-use crate::raster::{blend_over, Rgb, Strip, W};
+use crate::raster::{blend_over, Rgb, Strip, H};
 
 const FILE_HDR: usize = 12;
 const TIER_HDR: usize = 16;
@@ -202,10 +202,13 @@ impl<'a> Font<'a> {
             // Vertical centre: Pillow's "mm" anchor centres the ascender box.
             run.y + ((i32::from(t.ascent_q6) - i32::from(t.descent_q6)) / 2 + 32) / 64
         };
-        // Cheap reject: the tier's vertical extent misses the strip.
+        // Cheap reject: the tier's vertical extent misses the FRAME. Since
+        // #780 a band spans every row (it is a column band, not a row band),
+        // so this no longer rejects per-band — `blit_glyph` does that on x,
+        // per glyph, which is the tighter cull anyway.
         let top = baseline - (i32::from(t.ascent_q6) + 63) / 64 - 1;
         let bottom = baseline + (i32::from(t.descent_q6) + 63) / 64 + 1;
-        if bottom < s.y0 || top >= s.y0 + s.h {
+        if bottom < 0 || top >= H {
             return;
         }
         // Per-run LUTs over the 16 atlas alpha levels × the run alpha: the
@@ -289,8 +292,12 @@ impl Font<'_> {
             }
         }
         let baseline = y + ((i32::from(t.ascent_q6) - i32::from(t.descent_q6)) / 2 + 32) / 64;
-        let y_lo = (baseline - top).max(s.y0);
-        let y_hi = (baseline + bottom).min(s.y0 + s.h);
+        // Clip to the FRAME, not the band: a band spans every row since #780.
+        // That also makes the swept y range identical in every band, so the
+        // constant-time run's loop trip count no longer varies with which
+        // band is being rendered.
+        let y_lo = (baseline - top).max(0);
+        let y_hi = (baseline + bottom).min(H);
         if y_hi <= y_lo {
             return;
         }
@@ -327,22 +334,29 @@ fn blit_glyph(s: &mut Strip<'_>, g: &Glyph<'_>, x0: i32, y0: i32, color: Rgb, lu
         return;
     }
     let stride = (usize::from(g.w) + 1) / 2;
-    let y_lo = y0.max(s.y0);
-    let y_hi = (y0 + i32::from(g.h)).min(s.y0 + s.h);
-    // Horizontal clip once per glyph, not per pixel.
-    let x_lo = (-x0).max(0);
-    let x_hi = i32::from(g.w).min(W - x0);
-    if x_hi <= x_lo {
+    let y_lo = y0.max(0);
+    let y_hi = (y0 + i32::from(g.h)).min(H);
+    // Horizontal clip once per glyph, not per pixel — and since #780 that
+    // clip is to THIS BAND, which is the per-glyph cull that keeps a nine-band
+    // frame from rasterising every glyph nine times. `s.x0 >= 0`, so clamping
+    // to `s.x0 - x0` subsumes the old frame-left clamp `-x0`, and clamping to
+    // `s.x0 + s.w - x0` subsumes the old frame-right clamp `W - x0`.
+    let x_lo = (s.x0 - x0).max(0);
+    let x_hi = i32::from(g.w).min(s.x0 + s.w - x0);
+    if x_hi <= x_lo || y_hi <= y_lo {
         return;
     }
+    let stride_px = H as usize;
     for y in y_lo..y_hi {
         let row = &g.rows[(y - y0) as usize * stride..];
-        let base = ((y - s.y0) * W + x0) as usize;
+        // Wire-order layout: x is the outer axis, and y runs DOWN the column
+        // as native nx = H - 1 - y.
+        let col = (H - 1 - y) as usize;
         for x in x_lo..x_hi {
             let b = row[(x / 2) as usize];
             let n = usize::from(if x % 2 == 0 { b >> 4 } else { b & 0x0F });
             if n != 0 {
-                let i = base + x as usize;
+                let i = (x0 + x - s.x0) as usize * stride_px + col;
                 let dst = s.buf[i];
                 s.buf[i] = if dst == 0 { over_black[n] } else { blend_over(dst, color, lut[n]) };
             }

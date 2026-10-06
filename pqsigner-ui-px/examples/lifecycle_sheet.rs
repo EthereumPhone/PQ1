@@ -60,14 +60,20 @@ fn main() {
             pqsigner_ui_px::rows::push_secret_word(&mut frame, k, &w[..], 255);
         }
         let mut px = vec![0u16; (428 * 142) as usize];
-        let mut sbuf = vec![0u16; 428 * 16];
-        let mut y0 = 0;
-        while y0 < 142 {
-            let h = 16.min(142 - y0);
-            let mut st = pqsigner_ui_px::raster::Strip::new(y0, h, &mut sbuf).unwrap();
+        // Vertical bands of 48 landscape columns since #780; de-rotate each
+        // band's wire order back into landscape row-major for the PNG.
+        let mut sbuf = vec![0u16; 48 * 142];
+        let mut x0 = 0i32;
+        while x0 < 428 {
+            let w = 48.min(428 - x0);
+            let mut st = pqsigner_ui_px::raster::Strip::new(x0, w, &mut sbuf).unwrap();
             pqsigner_ui_px::raster::render_strip(&frame, &font, &mut st);
-            px[(y0 * 428) as usize..((y0 + h) * 428) as usize].copy_from_slice(&st.buf[..(428 * h) as usize]);
-            y0 += h;
+            for x in 0..w {
+                for y in 0..142i32 {
+                    px[(y * 428 + x0 + x) as usize] = st.buf[(x * 142 + (141 - y)) as usize];
+                }
+            }
+            x0 += w;
         }
         write_png(Path::new(&format!("{out}/{name}.png")), &px).unwrap();
     }

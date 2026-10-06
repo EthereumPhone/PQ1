@@ -46,19 +46,25 @@ use pqsigner_ui_px::{Screen, Screens};
 /// took longer starts the next one immediately.
 const FRAME_PERIOD_MS: u32 = 16;
 
-/// Rows per strip: 9 strips per frame, 13,696 B of BSS.
-const STRIP_H: i32 = 16;
-const STRIP_PX: usize = (W * STRIP_H) as usize;
+/// Landscape COLUMNS per band: 9 bands per frame, 13,632 B of BSS.
+///
+/// Bands are vertical since #780. The panel scans native rows `ny`, and
+/// `ny = x`, so a band of landscape x is a contiguous run of scan rows that
+/// can be streamed in the beam's own order; the old horizontal bands were
+/// native COLUMN bands spanning all 428 scan rows, so each one re-crossed the
+/// beam and no amount of TE synchronisation could help. See `raster::Strip`.
+const BAND_W: i32 = 48;
+const STRIP_PX: usize = (BAND_W * H) as usize;
 
 /// The one strip buffer. Single-threaded secure world; only the frame loop
 /// touches it (the SysTick sampler never renders).
 static mut STRIP: [u16; STRIP_PX] = [0; STRIP_PX];
 
-/// Number of strips per frame.
-const N_STRIPS: usize = ((H + STRIP_H - 1) / STRIP_H) as usize;
+/// Number of bands per frame.
+const N_STRIPS: usize = ((W + BAND_W - 1) / BAND_W) as usize;
 
 /// One strip in the panel's NATIVE scan order, big-endian per pixel, ready to
-/// hand to GPDMA verbatim (13,696 B).
+/// hand to GPDMA verbatim (13,632 B).
 ///
 /// Only ONE buffer is needed, not two: the transpose that fills it runs only
 /// after the previous transfer has been waited on, so the buffer is never
@@ -67,36 +73,36 @@ const N_STRIPS: usize = ((H + STRIP_H - 1) / STRIP_H) as usize;
 #[cfg(feature = "ui-px-dma")]
 static mut TXBUF: [u8; STRIP_PX * 2] = [0; STRIP_PX * 2];
 
-/// Transpose a landscape strip into `TXBUF` in native order.
+/// Widen a band into `TXBUF` as big-endian bytes. Returns the byte count.
 ///
-/// Byte-for-byte the same stream `blit_strip`'s closure produces: native rows
-/// (landscape x) outer, native columns inner with landscape y descending, and
-/// each RGB565 pixel emitted high byte first. Returns the byte count.
+/// This was a TRANSPOSE until #780, walking the landscape buffer with a
+/// stride to produce native order — and that transpose is what ate most of
+/// the GPDMA win (it replaced a transpose that had been free, hidden in the
+/// polled SPI wait, with an explicit serial pass). Now `Strip` already stores
+/// the band in wire order, so all that remains is the endian widen: a linear
+/// read, a linear write, no addressing arithmetic.
 #[cfg(feature = "ui-px-dma")]
-fn transpose_into_txbuf(h: i32, buf: &[u16]) -> usize {
+fn widen_into_txbuf(buf: &[u16]) -> usize {
     // SAFETY: single-threaded frame loop; the previous DMA was waited on
     // before this call, so no other agent is reading TXBUF.
     let tx = unsafe { &mut *core::ptr::addr_of_mut!(TXBUF) };
     let mut o = 0usize;
-    for ny in 0..W {
-        for k in 0..h {
-            let ly = h - 1 - k;
-            let px = buf[(ly * W + ny) as usize];
-            tx[o] = (px >> 8) as u8;
-            tx[o + 1] = px as u8;
-            o += 2;
-        }
+    for &px in buf {
+        tx[o] = (px >> 8) as u8;
+        tx[o + 1] = px as u8;
+        o += 2;
     }
     o
 }
 
-/// Open the panel window for the landscape band `[y0, y0 + h)`, exactly as
-/// `blit_strip` does, without streaming anything.
+/// Open the panel window for the landscape column band `[x0, x0 + w)`,
+/// exactly as `blit_strip` does, without streaming anything.
+///
+/// `ny = x`, so the band is native ROWS `x0 ..= x0 + w - 1` across every
+/// native column — one contiguous run of scan lines.
 #[cfg(feature = "ui-px-dma")]
-fn set_window_for(y0: i32, h: i32) {
-    let nx0 = (H - 1) - (y0 + h - 1);
-    let nx1 = (H - 1) - y0;
-    lcd::set_window(nx0 as u16, 0, nx1 as u16, (W - 1) as u16);
+fn set_window_for(x0: i32, w: i32) {
+    lcd::set_window(0, x0 as u16, (H - 1) as u16, (x0 + w - 1) as u16);
 }
 
 /// Per-strip 64-bit digest of what the panel currently shows, so a strip
@@ -365,7 +371,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
     // `splash_test::FB`).
     let buf = unsafe { &mut *core::ptr::addr_of_mut!(STRIP) };
     let shown = unsafe { &mut *core::ptr::addr_of_mut!(SHOWN) };
-    let mut y0 = 0;
+    let mut x0 = 0;
     let mut i = 0usize;
     // Is a strip still on the wire? Drained before the SPI is touched again
     // and once more after the loop, so no frame returns with the panel
@@ -373,9 +379,9 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
     // never assumed.
     #[cfg(feature = "ui-px-dma")]
     let mut dma_pending = false;
-    while y0 < H {
-        let h = STRIP_H.min(H - y0);
-        let Some(mut strip) = Strip::new(y0, h, &mut buf[..]) else {
+    while x0 < W {
+        let w = BAND_W.min(W - x0);
+        let Some(mut strip) = Strip::new(x0, w, &mut buf[..]) else {
             // MUST NOT `return` here: that would leave the last strip still
             // streaming, and the drain below is the only thing that waits for
             // it. Break so the single post-loop drain is the one exit.
@@ -393,7 +399,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
             frametime::cycles,
             &mut cost.split,
         );
-        let d = if force { 0 } else { strip_digest(&buf[..(W * h) as usize]) };
+        let d = if force { 0 } else { strip_digest(&buf[..(w * H) as usize]) };
         #[cfg(feature = "ui-px-frametime")]
         let t1 = frametime::cycles();
         // `force` streams every strip regardless of the digest — that is the
@@ -403,7 +409,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
         let want_blit = force || shown.get(i).copied().flatten() != Some(d);
         if want_blit {
             #[cfg(not(feature = "ui-px-dma"))]
-            blit_strip(y0, h, &buf[..(W * h) as usize]);
+            blit_strip(x0, w, &buf[..(w * H) as usize]);
             #[cfg(feature = "ui-px-dma")]
             {
                 // Close the PREVIOUS transfer first: `set_window` writes
@@ -416,8 +422,8 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
                     let _ = lcd::write_pixels_dma_finish();
                     dma_pending = false;
                 }
-                let n = transpose_into_txbuf(h, &buf[..(W * h) as usize]);
-                set_window_for(y0, h);
+                let n = widen_into_txbuf(&buf[..(w * H) as usize]);
+                set_window_for(x0, w);
                 // SAFETY: single-threaded frame loop. The only other agent
                 // that reads TXBUF is the GPDMA channel, and the `finish`
                 // above guarantees the previous transfer has completed before
@@ -435,7 +441,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
             cost.render = cost.render.wrapping_add(t1.wrapping_sub(t0));
             cost.blit = cost.blit.wrapping_add(t2.wrapping_sub(t1));
         }
-        y0 += h;
+        x0 += w;
         i += 1;
     }
     // The last strip of the frame is still streaming; a frame must not be
@@ -449,23 +455,17 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
 
 /// Stream a landscape row band `[y0, y0 + h)` as the native column band
 /// `nx ∈ [141 − (y0 + h − 1), 141 − y0]` over all 428 native rows.
-fn blit_strip(y0: i32, h: i32, buf: &[u16]) {
-    let nx0 = (H - 1) - (y0 + h - 1);
-    let nx1 = (H - 1) - y0;
-    lcd::set_window(nx0 as u16, 0, nx1 as u16, (W - 1) as u16);
-    // Native rows (ny = landscape x) outer, native columns (nx) inner: nx
-    // ascending means landscape y descending within the band.
-    let mut ny = 0i32; // landscape x
-    let mut k = 0i32; // 0..h, landscape y = y0 + (h − 1 − k)
-    let n = (W * h) as u32;
+fn blit_strip(x0: i32, w: i32, buf: &[u16]) {
+    lcd::set_window(0, x0 as u16, (H - 1) as u16, (x0 + w - 1) as u16);
+    // `Strip` already stores the band in the panel's own order — native row
+    // (landscape x) outer, native column (nx = H-1-y) inner — so this is a
+    // straight sequential read with no addressing arithmetic at all. Before
+    // #780 this closure carried the rotation.
+    let mut k = 0usize;
+    let n = (w * H) as u32;
     lcd::write_pixels_with(n, || {
-        let ly = h - 1 - k;
-        let px = buf[(ly * W + ny) as usize];
+        let px = buf[k];
         k += 1;
-        if k == h {
-            k = 0;
-            ny += 1;
-        }
         px
     });
 }
