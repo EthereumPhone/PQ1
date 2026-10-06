@@ -219,6 +219,10 @@ ui-px-dma = ["ui-px", "ui-lcd"]
 # document as blocked. Pair with `ui-px-frametime` to read the numbers.
 # PROD_FORBIDDEN: it replaces the boot flow outright.
 ui-px-bench = ["ui-px", "ui-lcd"]
+# One-shot NV3007 tearing-effect measurement (#780): reads the panel's
+# scan-out pulse, paints the refresh rate and its jitter, and parks. Decides
+# whether a TE-synced blit can be tear-free -- see hw/lcd_te.rs::te_probe.
+ui-px-te-probe = ["ui-px-bench"]
 # Real STM32U585 hardware target (vs QEMU mps2-an505). Pulls in `hw-sha256`
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.

@@ -31,6 +31,112 @@
 
 use pqsigner_ui_px::{Icon, ScreenBuilder, Screens, Side};
 
+/// Core clock, for turning DWT cycles into microseconds.
+const CPU_HZ_PER_US: u32 = 160;
+
+/// Right-align `v` into `dst`, blank-padded. Returns nothing; `dst` is wholly
+/// overwritten, so a shorter number never leaves a previous run's digits.
+fn num_right(dst: &mut [u8], mut v: u32) {
+    for b in dst.iter_mut() {
+        *b = b' ';
+    }
+    let mut i = dst.len();
+    loop {
+        i -= 1;
+        dst[i] = b'0' + (v % 10) as u8;
+        v /= 10;
+        if v == 0 || i == 0 {
+            break;
+        }
+    }
+}
+
+/// Copy `src` into `dst` from column 0, leaving the rest untouched.
+fn put(dst: &mut [u8], src: &[u8]) {
+    for (d, s) in dst.iter_mut().zip(src) {
+        *d = *s;
+    }
+}
+
+/// Measure the panel's tearing-effect line and hold the result on the glass.
+///
+/// This is the measurement that decides the shape of the #780 fix. A blit is
+/// tear-free when it either stays ahead of the scan-out for a whole refresh,
+/// or is slow enough to land entirely between two passes of every row — the
+/// condition for the latter being `write_time < 2 x refresh_period`. A full
+/// repaint is 24.3 ms on the wire, so the answer depends on a number nobody
+/// has ever read off this panel: its refresh rate. Near 41 Hz the write and
+/// the beam run at the same speed and interleave, which is the one case that
+/// tears no matter what we do.
+///
+/// Output is deliberately STATIC and then parks. The owner reported that the
+/// moving frame-time digits were unreadable; a held frame is readable, and a
+/// still screen also cannot itself tear.
+pub fn te_probe() -> ! {
+    crate::hw::lcd_te::cyccnt_enable();
+    crate::hw::lcd_te::init();
+
+    // Up to 64 edges or 1 s, whichever comes first. At any plausible refresh
+    // 64 edges is well under a second, so the budget only binds when TE is
+    // dead — and then it bounds the whole probe rather than hanging it.
+    let m = crate::hw::lcd_te::measure(64, 160_000_000);
+
+    let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
+
+    if !crate::hw::lcd_te::present() {
+        put(&mut rows[0], b"TE: NO PIN");
+    } else if m.edges == 0 {
+        put(&mut rows[0], b"TE DEAD");
+        put(&mut rows[1], b"0 EDGES SEEN");
+        put(&mut rows[2], b"PIN READS LOW");
+    } else {
+        // Row 0: edge count. Proves the pin moves at all, which no one has
+        // ever observed on this hardware.
+        put(&mut rows[0], b"TE  EDGES");
+        num_right(&mut rows[0][11..16], m.edges);
+
+        if m.period_cyc > 0 {
+            // Row 1: refresh in tenths of a hertz. This is the number the
+            // whole #780 design hangs on: a full repaint is 24.3 ms on the
+            // wire, so it is tear-free either well below ~41 Hz (outrunning
+            // the scan) or between ~41 and ~81 Hz (trailing it and never
+            // being lapped) -- and it tears at the ~41 Hz crossover and above
+            // ~81 Hz. The datasheet states 60 Hz exactly once, as the test
+            // CONDITION of a TE timing table, and our init shortens the
+            // porches (inter_vbp 12->4, inter_vfp 8->4) which pushes the real
+            // rate up from whatever the default is.
+            let period_us = m.period_cyc / CPU_HZ_PER_US;
+            let hz_tenths = if period_us > 0 { 10_000_000 / period_us } else { 0 };
+            put(&mut rows[1], b"HZ");
+            num_right(&mut rows[1][7..13], hz_tenths / 10);
+            rows[1][13] = b'.';
+            rows[1][14] = b'0' + (hz_tenths % 10) as u8;
+
+            // Row 2: TE high time. Datasheet Table 5-4-2 guarantees
+            // Tvdh >= 1000 us, but our shortened porches imply only ~0.35 ms
+            // of blanking at 60 Hz. Both cannot be true. This reading says
+            // which, and it sizes the window a "start inside the blank"
+            // design would have to fit into.
+            put(&mut rows[2], b"HIGH");
+            num_right(&mut rows[2][5..12], m.high_cyc / CPU_HZ_PER_US);
+            put(&mut rows[2][13..], b"us");
+
+            // Row 3: period spread. Near zero means a stable panel clock we
+            // can phase-lock to; wide means TE is not a usable reference and
+            // every design above is off the table.
+            let spread_us = (m.period_max_cyc.saturating_sub(m.period_min_cyc)) / CPU_HZ_PER_US;
+            put(&mut rows[3], b"JIT");
+            num_right(&mut rows[3][5..12], spread_us);
+            put(&mut rows[3][13..], b"us");
+        } else {
+            put(&mut rows[1], b"ONE EDGE ONLY");
+        }
+    }
+
+    let _ = super::lcd::paint_legacy(&rows);
+    park();
+}
+
 /// Park the CPU. A bench image has nothing to fall back to.
 fn park() -> ! {
     loop {
@@ -45,6 +151,9 @@ fn hero() -> pqsigner_ui_px::Screen {
 
 /// Run the bench forever. Never returns.
 pub fn run() -> ! {
+    #[cfg(feature = "ui-px-te-probe")]
+    te_probe();
+
     // The atlas is a WYSIWYS input: without a verified one the pixel path
     // refuses rather than painting with an unknown font, and so does this.
     let Ok(atlas) = super::assets::verify_atlas() else {

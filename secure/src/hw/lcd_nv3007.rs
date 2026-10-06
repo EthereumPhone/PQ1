@@ -563,8 +563,22 @@ pub fn run_init_sequence() {
     write_cmd_data(0x7F, &[0x00]);
 
     // ---- GOA (Gate-On Array) timing ----
+    // 50h / 52h are UNDOCUMENTED: the datasheet's private-register list
+    // (p.68) jumps USRMAD 4Fh -> ITCTRL1 53h. They could plausibly carry
+    // line-count or clock-divider state, which is why the frame rate cannot
+    // be derived from this sequence even in principle.
     write_cmd_data(0x50, &[0x00]);
     write_cmd_data(0x52, &[0xD6]);
+    // 53h-56h = ITCTRL1-4, the VERTICAL/HORIZONTAL PORCHES (§6.3.16-6.3.19,
+    // p.112) -- the only registers here that move the frame rate. We shorten
+    // every one of them below its default, which pushes the refresh UP:
+    //   inter_vbp 0x0C (12) -> 4 ; inter_vfp 0x08 (8) -> 4
+    //   inter_hbp 0x25 (37) -> 27 ; inter_hfp 0x25 (37) -> 27
+    // Consequence worth knowing (#780): with ~9-10 blank lines of 437 the
+    // V-blank is ~2% of a frame, i.e. ~0.35 ms at 60 Hz -- yet Table 5-4-2
+    // guarantees Tvdh >= 1000 us. Both cannot hold, so either the real rate
+    // is well below 60 Hz or 50h/52h add blanking we cannot see. Measured by
+    // `ui-px-te-probe`.
     write_cmd_data(0x53, &[0x04]);
     write_cmd_data(0x54, &[0x04]);
     write_cmd_data(0x55, &[0x1B]);
@@ -603,7 +617,16 @@ pub fn run_init_sequence() {
     write_cmd_data(0xD0, &[0x61]);
     write_cmd_data(0xD1, &[0x60]);
 
-    // ---- Frame timing / inversion control ----
+    // ---- GOAVEND control + inversion (NOT frame timing) ----
+    //
+    // Corrected 2026-10-06 against the NV3007 datasheet §6.5.3 "GOAVEND
+    // control (ABh-B8h)", pp.138-139. These shape the gate-driver waveform;
+    // none of them sets a frame rate, and the panel exposes no frame-rate
+    // divider or oscillator register at all. B0h = eclk_gnd1/gnd2/vci period
+    // + eclk_noverlap; B6h = tchop[8]/tglue[8]/vend_noverlap/glass_sel/
+    // rst_shift2_en/bw_fw_sel; B7h = goa_vend_tchop[7:0] (default 44h);
+    // B8h = goa_vend_tglue[7:0] (default 44h). The vertical timing that DOES
+    // affect the frame rate is 53h-56h above.
     write_cmd_data(0xB0, &[0x3A, 0x3A, 0x00, 0x00]);
     write_cmd_data(0xB6, &[0x32]);
     write_cmd_data(0xB7, &[0x80]);
@@ -636,7 +659,11 @@ pub fn run_init_sequence() {
     write_cmd_data(0x35, &[0x00]);
     // 0x44: tear scanline.
     write_cmd_data(0x44, &[0x00, 0x10]);
-    // 0x46: brightness/related.
+    // 0x46 = TECTRL3 (datasheet §6.3.7, p.107), and this is the write that
+    // actually ENABLES the TE pin: te_oe is D4, and the register's default is
+    // 0x00 = output disabled. te_pol (D1) and te_extend (D0) stay 0, so TE is
+    // idle-low / active-high. Mislabelled "brightness/related" until
+    // 2026-10-06; 0x35 above only selects WHICH event drives the line.
     write_cmd_data(0x46, &[0x10]);
 
     // Lock vendor command-mode (mirror of the 0xFF/0xA5 unlock at the top).

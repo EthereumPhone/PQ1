@@ -142,6 +142,18 @@ pub mod dev_dfu;
 #[cfg(feature = "ui-lcd")]
 pub mod lcd_nv3007;
 
+/// NV3007 tearing-effect input (#780): the panel's once-per-frame scan-out
+/// pulse, the only timing source we have (the panel has no MISO, so `0x45`
+/// Get_Scanline cannot be read back).
+///
+/// Gated on BOTH features. `ui-lcd` alone is not enough — it does not imply
+/// `stm32u585` (secure/Cargo.toml: it pulls `spi1-arduino`, `gpio-buttons`,
+/// `embedded-graphics`), while `crate::board` only exists under `stm32u585`.
+/// An ungated `pub mod` here broke `make run` / `make e2e` / `make play` with
+/// `E0432: no 'board' in the root`.
+#[cfg(all(feature = "stm32u585", feature = "ui-lcd"))]
+pub mod lcd_te;
+
 /// GPDMA1 channel 0 for the pixel-UI strip blit (secure SRAM -> SPI1_TXDR), so
 /// strip k streams while strip k+1 renders. Gated on `ui-px-dma` because it is
 /// the tree's first DMA master and the serial path stays the fallback.
