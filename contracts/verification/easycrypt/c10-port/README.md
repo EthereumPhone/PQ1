@@ -614,6 +614,11 @@ sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C;
 > Toolchain-free regression controls:
 > `tools/test_proof_jobs.py` (run by `make verify-easycrypt-split-pins`).
 
+> **UPDATE 2026-10-06 — quiet CLI rendering.** Queued and watched CLI jobs use
+> `-iterate -pragmas silent`. The pinned toolchain suppresses goal-state display;
+> command prompts and proof diagnostics remain visible to the unchanged verdict
+> checks. Solver budgets, iteration, compile jobs and controls are unchanged.
+
 
 `LC_ALL=C` is REQUIRED: identity hashing is collation-sensitive.
 
