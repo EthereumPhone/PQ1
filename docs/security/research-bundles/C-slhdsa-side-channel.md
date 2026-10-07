@@ -3921,12 +3921,27 @@ ui-px-spi40 = ["ui-px", "ui-lcd"]
 # top-left of every pixel-UI frame (DWT cycle counter). NEVER ship.
 ui-px-frametime = ["ui-px", "ui-lcd", "pqsigner-ui-px/render-split"]
 
+# Stream the pixel-UI strip blit over GPDMA1 instead of the polled per-byte
+# loop, so strip k goes out on the wire while strip k+1 renders. Opt-in: this
+# is the tree's FIRST DMA master, it adds a second bus master touching the
+# trusted display's framebuffer, and the serial path remains the fallback until
+# it is proven on a panel. Costs 13,696 B of BSS — ONE native-order TX buffer
+# (`STRIP_PX * 2`), not two: the transpose that fills it runs only after the
+# previous transfer has been waited on, so the buffer is never read by the DMA
+# and written by the CPU at once. The overlap is DMA-of-strip-k against
+# RENDER-of-strip-k+1.
+ui-px-dma = ["ui-px", "ui-lcd"]
+
 # Isolated interactive pixel-UI bench (secure/src/ui/px/bench.rs). Runs BEFORE
 # measured boot, so no wallet / PIN / keygen / idle timer — the only way to see
 # or measure the real presenter without the sign-dialog route, which #778/#779
 # document as blocked. Pair with `ui-px-frametime` to read the numbers.
 # PROD_FORBIDDEN: it replaces the boot flow outright.
 ui-px-bench = ["ui-px", "ui-lcd"]
+# One-shot NV3007 tearing-effect measurement (#780): reads the panel's
+# scan-out pulse, paints the refresh rate and its jitter, and parks. Decides
+# whether a TE-synced blit can be tear-free -- see hw/lcd_te.rs::te_probe.
+ui-px-te-probe = ["ui-px-bench"]
 # Real STM32U585 hardware target (vs QEMU mps2-an505). Pulls in `hw-sha256`
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.
