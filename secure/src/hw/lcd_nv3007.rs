@@ -783,27 +783,58 @@ pub fn write_pixels_with(n: u32, mut next: impl FnMut() -> u16) {
     cs_deassert();
 }
 
-/// Begin a DMA-fed pixel stream of `bytes` into the current window.
-///
-/// Same framing as [`write_pixels_with`] — CS low, DC high, one `spi_begin`
-/// sized to the whole run — but the FIFO is fed by GPDMA instead of the CPU,
-/// so this RETURNS IMMEDIATELY with the transfer in flight. `bytes` must stay
-/// alive and unmodified until [`write_pixels_dma_finish`] returns.
-///
-/// `bytes` is already in the panel's native scan order AND already big-endian
-/// per pixel: GPDMA copies bytes verbatim, so the hi-then-lo order that
-/// [`write_pixels_with`] produces with two `spi_send_byte` calls has to be
-/// baked into the buffer by the caller's transpose instead.
+// ---------------------------------------------------------------------------
+// Multi-chunk streams into ONE window (#780)
+// ---------------------------------------------------------------------------
+//
+// The panel auto-increments through the active window across chunks, so a
+// whole frame can be delivered by several transfers under a SINGLE
+// `set_window`. That is what makes a tear-free blit possible: one monotone
+// sweep in the beam's own direction, started on the TE edge, instead of nine
+// independent window writes that each re-cross the scan.
+//
+// CS MUST STAY LOW for every chunk of such a stream. `write_pixels_solid`
+// states the same rule ("CS stays low across all chunks; only SPE toggles per
+// chunk"), and a CS deassert part-way through a RAMWR is the class of defect
+// the original CS-framing fix closed. The per-chunk entry points below
+// therefore do NOT touch CS; the caller brackets the whole frame with
+// `stream_open` / `stream_close`.
+
+/// Open a multi-chunk pixel stream into the current window: CS low, DC high.
+pub fn stream_open() {
+    cs_assert();
+    dc_high();
+}
+
+/// Close a stream opened by [`stream_open`].
+pub fn stream_close() {
+    cs_deassert();
+}
+
+/// One polled chunk of an open stream. RGB565, high byte first.
+pub fn stream_chunk(buf: &[u16]) {
+    let pixels_per_chunk = usize::from(MAX_CHUNK / 2);
+    let mut off = 0usize;
+    while off < buf.len() {
+        let n = core::cmp::min(buf.len() - off, pixels_per_chunk);
+        spi_begin((n * 2) as u16);
+        for &px in &buf[off..off + n] {
+            spi_send_byte((px >> 8) as u8);
+            spi_send_byte(px as u8);
+        }
+        spi_end();
+        off += n;
+    }
+}
+
+/// Arm one DMA chunk of an open stream. Returns immediately with the transfer
+/// in flight; `bytes` must stay alive and unmodified until
+/// [`stream_dma_finish`] returns. No CS framing — see the note above.
 #[cfg(feature = "ui-px-dma")]
-#[must_use]
-pub fn write_pixels_dma_start(bytes: &[u8]) -> bool {
+pub fn stream_dma_start(bytes: &[u8]) -> bool {
     if bytes.is_empty() {
-        // Nothing armed. Reported rather than silently assumed, so the caller
-        // cannot set a "pending" flag for a transfer that never started and
-        // then wait on it.
         return false;
     }
-    cs_assert();
     dc_high();
     // TSIZE must equal the DMA block size, or the SPI stops mid-stream with
     // the channel still armed.
@@ -812,30 +843,26 @@ pub fn write_pixels_dma_start(bytes: &[u8]) -> bool {
     true
 }
 
-/// Wait for the in-flight DMA stream, then close the SPI transaction.
-///
-/// `spi_end` is reused verbatim so the EOT wait and the ES0499 settle delay
-/// before dropping SPE are preserved — that delay exists because of a real
-/// erratum this driver already hit once.
+/// Wait for the in-flight chunk and close its SPI transaction, leaving CS
+/// asserted so the next chunk continues the same window.
 #[cfg(feature = "ui-px-dma")]
-pub fn write_pixels_dma_finish() -> Result<(), crate::hw::gpdma::DmaErr> {
-    // Bound: a 13,696-byte strip at 40 MHz takes ~2.7 ms. `spin_cap` counts
-    // POLL ITERATIONS, not cycles — at roughly 5 cycles each, 4,000,000 is
-    // ~125 ms, two orders of magnitude of headroom and still far below any
-    // interval a human would read as a hang.
+pub fn stream_dma_finish() -> Result<(), crate::hw::gpdma::DmaErr> {
     let r = crate::hw::gpdma::wait(4_000_000);
     match r {
         Ok(()) => spi_end(),
         // The transfer died part-way, so EOT will never set: do NOT wait for
-        // it. Force the peripheral down instead. The SPI must be disabled and
-        // re-enabled before the next transfer for its state machine to restart
-        // cleanly (RM0456 §68.4.12) — `spi_begin` already does SPE=0 -> TSIZE
-        // -> SPE=1 on every call, so the next strip recovers on its own.
+        // it. Same reasoning as `write_pixels_dma_finish`.
         Err(_) => spi_force_down(),
     }
-    cs_deassert();
     r
 }
+
+// `write_pixels_dma_start` / `write_pixels_dma_finish` were deleted here by
+// #780. They framed each transfer with its own CS assert/deassert, which is
+// correct for one window per band and WRONG for a frame streamed under a
+// single window — a CS deassert part-way through a RAMWR is exactly the
+// framing defect the original CS fix closed. `stream_dma_start` /
+// `stream_dma_finish` above replace them and leave CS to the caller.
 
 /// Fill the entire visible area with `color`. Convenience wrapper.
 pub fn fill_screen(color: u16) {

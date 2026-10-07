@@ -39,6 +39,7 @@ use pqsigner_ui_px::driver::{Btn, FlowDriver, Gesture as NavGesture, NavResult};
 use pqsigner_ui_px::font::Font;
 use pqsigner_ui_px::input::{Gesture, InputCtx, InputFsm, DEBOUNCE_MS};
 use pqsigner_ui_px::raster::{render_strip, Frame, Strip, H, W};
+use zeroize::Zeroize;
 use pqsigner_ui_px::scene::{Anim, Ending, Marks};
 use pqsigner_ui_px::{Screen, Screens};
 
@@ -95,53 +96,24 @@ fn widen_into_txbuf(buf: &[u16]) -> usize {
     o
 }
 
-/// Open the panel window for the landscape column band `[x0, x0 + w)`,
-/// exactly as `blit_strip` does, without streaming anything.
-///
-/// `ny = x`, so the band is native ROWS `x0 ..= x0 + w - 1` across every
-/// native column — one contiguous run of scan lines.
-#[cfg(feature = "ui-px-dma")]
-fn set_window_for(x0: i32, w: i32) {
-    lcd::set_window(0, x0 as u16, (H - 1) as u16, (x0 + w - 1) as u16);
-}
-
-/// Per-strip 64-bit digest of what the panel currently shows, so a strip
-/// whose pixels did not change is not streamed again (the blit dominates
-/// the frame: ~24 ms at 40 MHz for all nine strips). `None` = unknown —
-/// every other painter (legacy glyph blitter, `fill_screen`, the ending /
-/// busy / legacy paints) invalidates it, and a flow starts invalidated, so
-/// the first frame of a flow always writes the whole panel.
-static mut SHOWN: [Option<u64>; N_STRIPS] = [None; N_STRIPS];
-
-/// Forget what the panel shows: the next frame streams every strip.
-fn invalidate_shown() {
-    // SAFETY: single-threaded frame loop bookkeeping (never touched by the
-    // SysTick sampler).
-    let shown = unsafe { &mut *core::ptr::addr_of_mut!(SHOWN) };
-    for s in shown.iter_mut() {
-        *s = None;
-    }
-}
-
-/// Two independent 32-bit FNV-1a lanes over the strip's pixels (a 64-bit
-/// digest; a collision would leave one stale strip on the glass, so the
-/// width is chosen to make that ≈ 2⁻⁶⁴ per changed strip).
-fn strip_digest(buf: &[u16]) -> u64 {
-    let mut a: u32 = 0x811C_9DC5;
-    let mut b: u32 = 0x2545_F491;
-    // Two pixels per step; an odd trailing pixel is folded in on its own.
-    let mut pairs = buf.chunks_exact(2);
-    for pr in &mut pairs {
-        let w = u32::from(pr[0]) | (u32::from(pr[1]) << 16);
-        a = (a ^ w).wrapping_mul(0x0100_0193);
-        b = (b ^ w.rotate_left(13)).wrapping_mul(0x01B8_73E9);
-    }
-    for &p in pairs.remainder() {
-        a = (a ^ u32::from(p)).wrapping_mul(0x0100_0193);
-        b = (b ^ u32::from(p).rotate_left(13)).wrapping_mul(0x01B8_73E9);
-    }
-    (u64::from(a) << 32) | u64::from(b)
-}
+// The per-band content DIGEST and its `SHOWN` table were deleted here by
+// #780. They existed so an unchanged band was not streamed again, which was
+// worth ~10 ms of a ~24 ms blit. A TE-synchronised frame cannot use them:
+// the whole frame goes out under ONE `set_window` and the panel
+// auto-increments, so skipping a band would place every later band at the
+// wrong offset. Three things follow, and two are improvements:
+//
+//   * blit duration is now CONSTANT. That is the F-24 stage-E property --
+//     "on a secret frame the SPI timing must not reveal which bands
+//     changed" -- satisfied by construction rather than by remembering to
+//     pass `force`, which is why `present_frame_ex` now ignores it. It also
+//     removes the 64-bit digest of secret pixels that used to outlive the
+//     frame in a `static`.
+//   * `strip_digest` hashed all 60,776 pixels of every frame. Not computing
+//     it is a render saving, not just a deletion.
+//   * every frame now streams 121,552 B (24.31 ms) where a partial repaint
+//     was ~13.7 ms. Invisible here: the frame is paced to two refresh
+//     periods (32.0 ms) either way.
 
 // ---- SysTick edge ring ------------------------------------------------------
 
@@ -364,77 +336,89 @@ fn present_frame(frame: &Frame<'_>, font: &Font<'_>) -> FrameCost {
 /// [`present_frame`]; `force` streams every strip and records none (a frame
 /// carrying secret cells: no strip is skipped on a digest of secret pixels,
 /// and no such digest outlives the frame).
-fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCost {
+fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCost {
     let mut cost = FrameCost::default();
     // SAFETY: single-threaded frame loop; the SysTick sampler never touches
-    // the strip buffer or the digest table (same discipline as
-    // `splash_test::FB`).
+    // the band buffer (same discipline as `splash_test::FB`).
     let buf = unsafe { &mut *core::ptr::addr_of_mut!(STRIP) };
-    let shown = unsafe { &mut *core::ptr::addr_of_mut!(SHOWN) };
-    let mut x0 = 0;
-    let mut i = 0usize;
-    // Is a strip still on the wire? Drained before the SPI is touched again
-    // and once more after the loop, so no frame returns with the panel
-    // mid-stream. Set from what `write_pixels_dma_start` reports it armed,
-    // never assumed.
+
+    // ---- band 0 BEFORE the TE wait -------------------------------------
+    // So the stream starts on the edge rather than one render after it: the
+    // whole point of the wait is the phase it buys.
+    let Some(mut strip) = Strip::new(0, BAND_W.min(W), &mut buf[..]) else {
+        return cost;
+    };
+    #[cfg(feature = "ui-px-frametime")]
+    let t0 = frametime::cycles();
+    render_band(frame, font, &mut strip, &mut cost);
     #[cfg(feature = "ui-px-dma")]
-    let mut dma_pending = false;
+    let mut n = widen_into_txbuf(&buf[..(BAND_W.min(W) * H) as usize]);
+    #[cfg(feature = "ui-px-frametime")]
+    {
+        cost.render = cost.render.wrapping_add(frametime::cycles().wrapping_sub(t0));
+    }
+
+    // ---- phase-lock, then one monotone sweep ---------------------------
+    // 62.5 Hz measured => T = 16.0 ms; a full 121,552 B frame is 24.31 ms at
+    // 40 MHz. The sweep is therefore SLOWER than the beam, and that is fine:
+    // it trails through refresh N (which shows all-old, no composite) and the
+    // beam wraps while the write pointer is at row 271, so refresh N+1 shows
+    // all-new. The condition is `write < 2 x refresh` (24.31 < 32.0), and the
+    // beam would not catch the write until t = 45 ms. The failure modes are
+    // NEAR-EQUAL speed (a full frame matches the beam at ~41 Hz) and refresh
+    // above ~81 Hz; 62.5 Hz is clear of both.
+    //
+    // Bound: ~5 cycles per poll, so 2,000,000 is ~62 ms at 160 MHz — four TE
+    // periods, and it latches dead on the first miss so a panel-less board
+    // pays it once. A frozen counter cannot stall this: it counts ITERATIONS.
+    let synced = crate::hw::lcd_te::sync_to_scanout(2_000_000);
+    let _ = synced;
+
+    // ONE window for the whole frame. The panel auto-increments across all
+    // 428 native rows, so the nine band transfers below are a single
+    // continuous stream and nothing may send a command (DC low) between them.
+    lcd::set_window(0, 0, (H - 1) as u16, (W - 1) as u16);
+    lcd::stream_open();
+
+    #[cfg(feature = "ui-px-dma")]
+    let mut dma_pending = {
+        // SAFETY: single-threaded frame loop; the only other reader of TXBUF
+        // is the GPDMA channel, and nothing has armed it yet this frame.
+        let tx = unsafe { &*core::ptr::addr_of!(TXBUF) };
+        lcd::stream_dma_start(&tx[..n])
+    };
+    #[cfg(not(feature = "ui-px-dma"))]
+    lcd::stream_chunk(&buf[..(BAND_W.min(W) * H) as usize]);
+
+    let mut x0 = BAND_W.min(W);
     while x0 < W {
         let w = BAND_W.min(W - x0);
         let Some(mut strip) = Strip::new(x0, w, &mut buf[..]) else {
-            // MUST NOT `return` here: that would leave the last strip still
-            // streaming, and the drain below is the only thing that waits for
-            // it. Break so the single post-loop drain is the one exit.
+            // MUST NOT `return`: the drain and `stream_close` below are the
+            // only exit that leaves the panel out of mid-stream.
             break;
         };
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
-        #[cfg(not(feature = "ui-px-frametime"))]
-        render_strip(frame, font, &mut strip);
-        #[cfg(feature = "ui-px-frametime")]
-        pqsigner_ui_px::raster::render_strip_split(
-            frame,
-            font,
-            &mut strip,
-            frametime::cycles,
-            &mut cost.split,
-        );
-        let d = if force { 0 } else { strip_digest(&buf[..(w * H) as usize]) };
+        // Renders UNDER the previous band's DMA — that overlap is what keeps
+        // the sweep continuous. Band render is ~1.9 ms against ~2.7 ms of
+        // wire, so the wire never starves.
+        render_band(frame, font, &mut strip, &mut cost);
         #[cfg(feature = "ui-px-frametime")]
         let t1 = frametime::cycles();
-        // `force` streams every strip regardless of the digest — that is the
-        // F-24 stage-E property: on a secret frame the SPI timing must not
-        // reveal WHICH strips changed. The DMA path below preserves it,
-        // because it branches on exactly the same `want_blit`.
-        let want_blit = force || shown.get(i).copied().flatten() != Some(d);
-        if want_blit {
-            #[cfg(not(feature = "ui-px-dma"))]
-            blit_strip(x0, w, &buf[..(w * H) as usize]);
-            #[cfg(feature = "ui-px-dma")]
-            {
-                // Close the PREVIOUS transfer first: `set_window` writes
-                // commands with DC low on the same bus, so it cannot overlap
-                // another strip's data. The overlap we get is this strip's
-                // DMA against the NEXT strip's render, which is the whole
-                // point — the render happens at the top of the next pass
-                // while the wire is still busy.
-                if dma_pending {
-                    let _ = lcd::write_pixels_dma_finish();
-                    dma_pending = false;
-                }
-                let n = widen_into_txbuf(&buf[..(w * H) as usize]);
-                set_window_for(x0, w);
-                // SAFETY: single-threaded frame loop. The only other agent
-                // that reads TXBUF is the GPDMA channel, and the `finish`
-                // above guarantees the previous transfer has completed before
-                // the transpose rewrote it.
-                let tx = unsafe { &*core::ptr::addr_of!(TXBUF) };
-                dma_pending = lcd::write_pixels_dma_start(&tx[..n]);
+        #[cfg(feature = "ui-px-dma")]
+        {
+            if dma_pending {
+                let _ = lcd::stream_dma_finish();
             }
-            if let Some(slot) = shown.get_mut(i) {
-                *slot = if force { None } else { Some(d) };
-            }
+            n = widen_into_txbuf(&buf[..(w * H) as usize]);
+            // SAFETY: as above; the `finish` guarantees the previous transfer
+            // completed before the widen rewrote the buffer.
+            let tx = unsafe { &*core::ptr::addr_of!(TXBUF) };
+            dma_pending = lcd::stream_dma_start(&tx[..n]);
         }
+        #[cfg(not(feature = "ui-px-dma"))]
+        lcd::stream_chunk(&buf[..(w * H) as usize]);
         #[cfg(feature = "ui-px-frametime")]
         {
             let t2 = frametime::cycles();
@@ -442,32 +426,57 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
             cost.blit = cost.blit.wrapping_add(t2.wrapping_sub(t1));
         }
         x0 += w;
-        i += 1;
     }
-    // The last strip of the frame is still streaming; a frame must not be
-    // reported complete with the panel mid-write.
+
     #[cfg(feature = "ui-px-dma")]
     if dma_pending {
-        let _ = lcd::write_pixels_dma_finish();
+        let _ = lcd::stream_dma_finish();
     }
+    lcd::stream_close();
+    wipe_scratch();
     cost
 }
 
-/// Stream a landscape row band `[y0, y0 + h)` as the native column band
-/// `nx ∈ [141 − (y0 + h − 1), 141 − y0]` over all 428 native rows.
-fn blit_strip(x0: i32, w: i32, buf: &[u16]) {
-    lcd::set_window(0, x0 as u16, (H - 1) as u16, (x0 + w - 1) as u16);
-    // `Strip` already stores the band in the panel's own order — native row
-    // (landscape x) outer, native column (nx = H-1-y) inner — so this is a
-    // straight sequential read with no addressing arithmetic at all. Before
-    // #780 this closure carried the rotation.
-    let mut k = 0usize;
-    let n = (w * H) as u32;
-    lcd::write_pixels_with(n, || {
-        let px = buf[k];
-        k += 1;
-        px
-    });
+/// Zeroize the band scratch (and the DMA staging buffer) once the frame is on
+/// the glass.
+///
+/// REQUIRED, not hygiene. Seed-word pixels from `Font::blit_secret_run`
+/// transit `STRIP`, and the 2026-09-24 adversarial review flagged that it is
+/// never cleared — judging it unexploitable only "by layout accident: the loop
+/// renders bands in ascending y, so STRIP is left holding the y=128..142 band,
+/// while the words grid's lowest row is WORDS_ROWS[3]=110 ... Nothing enforces
+/// that relationship", and predicting it "becomes a real secret-retention bug
+/// the moment the words-grid layout changes".
+///
+/// Vertical bands broke that accident. The last band is now x in [384, 428)
+/// spanning EVERY row, and the seed grid's second word column starts at
+/// `WORDS_COLS[1].1 = 282` (`rows.rs:120`), so a long word at the 22 px tier
+/// reaches well past 384. The residue the review called latent became live, so
+/// the wipe it prescribed is now load-bearing.
+///
+/// Unconditional rather than gated on a "this frame was secret" flag: that is
+/// the same kind of remembered relationship the review objected to. The cost
+/// is one clear of a buffer `render_strip` already clears nine times a frame
+/// (~0.085 ms against a 24.31 ms wire), so there is nothing to buy by being
+/// clever.
+fn wipe_scratch() {
+    // SAFETY: single-threaded frame loop, and every transfer that could read
+    // these buffers has been drained above (`stream_dma_finish`) before the
+    // stream was closed.
+    unsafe {
+        (*core::ptr::addr_of_mut!(STRIP)).zeroize();
+        #[cfg(feature = "ui-px-dma")]
+        (*core::ptr::addr_of_mut!(TXBUF)).zeroize();
+    }
+}
+
+/// Rasterise one band, with or without the per-class cost split.
+fn render_band(frame: &Frame<'_>, font: &Font<'_>, strip: &mut Strip<'_>, cost: &mut FrameCost) {
+    let _ = cost;
+    #[cfg(not(feature = "ui-px-frametime"))]
+    render_strip(frame, font, strip);
+    #[cfg(feature = "ui-px-frametime")]
+    pqsigner_ui_px::raster::render_strip_split(frame, font, strip, frametime::cycles, &mut cost.split);
 }
 
 /// Build the display list for `anim` and present it. `overlay` is the bench
@@ -558,7 +567,6 @@ pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_RO
         return false;
     };
     // The legacy glyph blitter may have painted between calls.
-    invalidate_shown();
     let s = Screen::legacy(rows);
     let anim = Anim::new(&s, 0, timeout::now());
     let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
@@ -567,7 +575,6 @@ pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_RO
 
 /// Clear the panel (before the legacy glyph blitter paints again).
 pub fn clear() {
-    invalidate_shown();
     lcd::fill_screen(0);
 }
 
@@ -673,7 +680,6 @@ pub fn film_start_with(s: &Screen) {
     let now = timeout::now();
     let mut anim = Anim::new(s, 0, now);
     anim.film_start(now);
-    invalidate_shown();
     let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
     // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
     // this is the only writer while `FILM_LIVE` is false.
@@ -735,7 +741,6 @@ pub fn film_resolve(e: Ending) {
     anim.film_resolve(e, now);
     let marks = atlas.marks();
     let font = atlas.font();
-    invalidate_shown();
     loop {
         let t = timeout::now();
         anim.step(t);
@@ -817,7 +822,6 @@ pub fn show_busy(caption: &[u8]) {
     let Some(atlas) = assets::atlas_verified() else {
         return;
     };
-    invalidate_shown();
     let anim = Anim::new(&s, 0, timeout::now());
     let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
 }
@@ -847,7 +851,6 @@ fn clock_running() -> bool {
 /// With a stopped clock only the resting frame is shown.
 pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8])]) {
     film_abort();
-    invalidate_shown();
     let marks = atlas.marks();
     let font = atlas.font();
     let force = !secret.is_empty();
@@ -883,14 +886,12 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
         }
     }
     if force {
-        invalidate_shown();
     }
 }
 
 /// Paint a non-dialog record's resting frame at once (work in progress).
 pub fn paint_rest(s: &Screen, atlas: &assets::AtlasRef) {
     film_abort();
-    invalidate_shown();
     let mut anim = Anim::new(s, 0, 0);
     let mut t = 16;
     while anim.step(t) && t < PLAY_CAP_MS {
@@ -924,7 +925,6 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     // F14/SCAFI-2: FI-hardened arming flag (complement pair + double read).
     let mut commit_armed = crate::fih::FihBool::new_false();
     // Whatever the panel shows now, the flow's first frame repaints it all.
-    invalidate_shown();
     sampling_enable();
     // Seed the gesture FSM with the buttons' CURRENT level, which
     // `sampling_enable` just latched into `STABLE_BITS`. A plain

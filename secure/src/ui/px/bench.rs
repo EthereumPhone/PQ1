@@ -32,10 +32,12 @@
 use pqsigner_ui_px::{Icon, ScreenBuilder, Screens, Side};
 
 /// Core clock, for turning DWT cycles into microseconds.
+#[cfg(feature = "ui-px-te-probe")]
 const CPU_HZ_PER_US: u32 = 160;
 
 /// Right-align `v` into `dst`, blank-padded. Returns nothing; `dst` is wholly
 /// overwritten, so a shorter number never leaves a previous run's digits.
+#[cfg(feature = "ui-px-te-probe")]
 fn num_right(dst: &mut [u8], mut v: u32) {
     for b in dst.iter_mut() {
         *b = b' ';
@@ -52,6 +54,7 @@ fn num_right(dst: &mut [u8], mut v: u32) {
 }
 
 /// Copy `src` into `dst` from column 0, leaving the rest untouched.
+#[cfg(feature = "ui-px-te-probe")]
 fn put(dst: &mut [u8], src: &[u8]) {
     for (d, s) in dst.iter_mut().zip(src) {
         *d = *s;
@@ -72,6 +75,7 @@ fn put(dst: &mut [u8], src: &[u8]) {
 /// Output is deliberately STATIC and then parks. The owner reported that the
 /// moving frame-time digits were unreadable; a held frame is readable, and a
 /// still screen also cannot itself tear.
+#[cfg(feature = "ui-px-te-probe")]
 pub fn te_probe() -> ! {
     crate::hw::lcd_te::cyccnt_enable();
     crate::hw::lcd_te::init();

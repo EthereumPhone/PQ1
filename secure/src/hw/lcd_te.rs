@@ -200,6 +200,48 @@ pub fn measure(want_edges: u32, budget_cyc: u32) -> TeMeasure {
 #[cfg(feature = "ui-px-te-probe")]
 pub use probe_clock::{cycles, cyccnt_enable, measure, TeMeasure};
 
+/// Sticky "this board's TE never pulses" latch.
+///
+/// Without it a dead pin costs the full poll cap on EVERY frame, halving the
+/// frame rate of a board that is otherwise fine. One failed wait is enough
+/// evidence: TE either pulses once per refresh or not at all.
+static mut TE_DEAD: bool = false;
+
+/// Has the TE line been observed dead? (Latched by [`sync_to_scanout`].)
+#[must_use]
+pub fn dead() -> bool {
+    // SAFETY: single-threaded frame loop; a plain bool written only here and
+    // in `sync_to_scanout`, never from an ISR.
+    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(TE_DEAD)) }
+}
+
+/// Phase-lock the caller to the panel's scan-out: block until the next TE
+/// rising edge. Returns `true` if an edge was seen.
+///
+/// Measured on the EVT unit 2026-10-06: the panel runs at **62.5 Hz** (16.0 ms)
+/// and the TE pulse is **18 us** wide — a half-line strobe at the `0x44` tear
+/// scanline, NOT the V-blank level the datasheet's `Tvdh >= 1000 us` describes.
+/// Two things follow. A tight poll catches an 18 us pulse easily (it is
+/// 150-300 iterations wide), but a single opportunistic read would see it only
+/// 0.11% of the time — so there is no cheap non-blocking variant of this, and
+/// anything that cannot spin needs a latched EXTI edge instead. And there is no
+/// wide blanking window to start inside, which is why the blit TRAILS the beam
+/// rather than trying to outrun it.
+///
+/// Once latched dead this returns immediately, so a panel-less board pays the
+/// cap once rather than every frame.
+pub fn sync_to_scanout(spin_cap: u32) -> bool {
+    if dead() {
+        return false;
+    }
+    if wait_rising(spin_cap) {
+        return true;
+    }
+    // SAFETY: as `dead()`.
+    unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(TE_DEAD), true) };
+    false
+}
+
 /// Block until the next TE rising edge, or until `spin_cap` poll iterations
 /// have been spent. Returns `true` only if an edge was actually seen.
 ///
