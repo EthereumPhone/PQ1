@@ -3942,6 +3942,11 @@ ui-px-bench = ["ui-px", "ui-lcd"]
 # scan-out pulse, paints the refresh rate and its jitter, and parks. Decides
 # whether a TE-synced blit can be tear-free -- see hw/lcd_te.rs::te_probe.
 ui-px-te-probe = ["ui-px-bench"]
+# Re-test the EXTI edge latch for the TE line (#783 follow-up). OFF by
+# default: the configuration reads back correctly on the EVT unit and still
+# latches no edge, so the level poll is the shipping path until a logic
+# analyser says why. Keeps the code reachable in one flash instead of a revert.
+ui-px-te-exti = ["ui-lcd"]
 # Real STM32U585 hardware target (vs QEMU mps2-an505). Pulls in `hw-sha256`
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.
