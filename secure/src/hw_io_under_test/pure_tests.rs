@@ -53,6 +53,8 @@ const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
 const BOARD_MOD_SRC: &str = include_str!("../board/mod.rs");
 const LCD_NV3007_SRC: &str = include_str!("../hw/lcd_nv3007.rs");
 const UI_PX_LCD_SRC: &str = include_str!("../ui/px/lcd.rs");
+const GPDMA_SRC: &str = include_str!("../hw/gpdma.rs");
+const MAIN_SRC: &str = include_str!("../main.rs");
 const AW99703_SRC: &str = include_str!("../hw/aw99703.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
@@ -1979,5 +1981,330 @@ fn positive_te_input_is_configured_by_the_panel_init() {
     assert!(
         UI_PX_LCD_SRC.contains("lcd_te::sync_to_scanout("),
         "the presenter must phase-lock to the scan-out (#780)"
+    );
+}
+
+#[test]
+fn positive_pixel_stream_frame_size_and_dma_beat_width_agree() {
+    // #790. THREE register settings in TWO files encode ONE property: the
+    // width of a datum crossing SPI1 for the pixel stream. They are legal
+    // only together, and every wrong pairing is silent on the host:
+    //
+    //   DSIZE=16 + BYTE beats  -- FORBIDDEN hardware config. RM0456 §68.4.14:
+    //      "Configuring any DMA data access to less than the configured data
+    //      size is forbidden", and §68.8.13 for TXDR itself. No defined
+    //      behaviour, no error flag.
+    //   DSIZE=8  + WORD beats  -- legal but WRONG ORDER. A 32-bit access at
+    //      an 8-bit frame packs FOUR frames and sends "the lowest significant
+    //      byte first" (§68.4.11), i.e. little-endian, so every pixel's bytes
+    //      arrive swapped. Garbled colour, no fault.
+    //   DSIZE=16 + WORD beats  -- what we ship: two frames per access, low
+    //      half-word first (ascending memory order), each frame shifted MSB
+    //      first, so a native `u16` RGB565 pixel leads with its high byte.
+    //
+    // Pin all three so a future "simplification" of either file cannot
+    // silently pick one of the broken pairings.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "const DSIZE_16: u32 = 15;"),
+        "the pixel stream runs 16-bit frames so no byte swap is needed"
+    );
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "spi_begin_framed(DSIZE_16, FTHLV_2, n_px)"),
+        "spi_begin_px must declare the 16-bit frame geometry explicitly"
+    );
+    // SDW_LOG2 = DDW_LOG2 = 0b10 (word): bits [1:0] = 2 and [17:16] = 2.
+    assert!(
+        contains_in_code(GPDMA_SRC, "const TR1_VAL: u32 = 0x8002_800A;"),
+        "GPDMA must use WORD beats, which is legal only at DSIZE=16"
+    );
+    // And the 2-data FIFO threshold that a 32-bit access requires: §68.8.8
+    // recommends FTHLV in {2,4,6} for a 32-bit register access with
+    // DSIZE > 8, and §68.4.11 caps the packet at half the 16-byte FIFO,
+    // which is 4 half-word frames.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "const FTHLV_2: u32 = 1;"),
+        "a 32-bit TXDR access needs a 2-data threshold, not the 1-data default"
+    );
+}
+
+#[test]
+fn positive_pixel_stream_derives_tsize_and_bndt_from_one_count() {
+    // #790. `CR2.TSIZE` counts data FRAMES (§68.8.2) and `GPDMA_CxBR1.BNDT`
+    // counts BYTES (§17.8.14). At 8-bit frames those were the same number,
+    // which is why the old code could pass `bytes.len()` to both. At 16-bit
+    // frames they differ by 2x, and the UNDER-supply direction is the one
+    // mistake hardware does not catch: the DMA raises TCF and returns Ok, the
+    // SPI has sent only half its TSIZE frames so EOT never sets, and
+    // `spi_end`'s unbounded `while EOT == 0` wedges the display with CS still
+    // asserted. The watchdog does not rescue it (IWDG is kicked from
+    // SysTick), and this path paints the measured-boot fingerprint.
+    //
+    // So require that ONE pixel slice feeds both counters at the single call
+    // site, rather than two numbers agreeing by review.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "pub fn stream_dma_start(px: &[u16]) -> bool"),
+        "the DMA stream entry point must take PIXELS, so both counters derive from one length"
+    );
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "spi_begin_px(px.len() as u16);"),
+        "TSIZE must be the frame count of the slice actually handed to GPDMA"
+    );
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "crate::hw::gpdma::start_px(px);"),
+        "GPDMA must be armed from the same slice that set TSIZE"
+    );
+    assert!(
+        contains_in_code(GPDMA_SRC, "let bytes = px.len() * 2;")
+            && contains_in_code(GPDMA_SRC, "REG.cbr1.write(bytes as u32);"),
+        "BNDT must be the BYTE count derived from that same pixel slice"
+    );
+}
+
+#[test]
+fn positive_polled_pixel_stream_never_writes_a_sub_frame_byte() {
+    // #790. `stream_chunk` is the `ui-px-dma`-OFF fallback and lives inside
+    // the same `stream_open`/`stream_close` bracket, so it runs at
+    // `DSIZE_16` too. A BYTE write to TXDR is then an access smaller than one
+    // data, which RM0456 §68.8.13 forbids outright -- it specifies no
+    // truncation, no partial-frame accumulation and no error flag, so it is
+    // undefined, not "writes the low byte". It must push half-word data.
+    //
+    // It pushes PAIRS as one 32-bit access rather than single half-words:
+    // that matches the 2-data threshold above, and `H` = 142 is even so a
+    // band is always an even number of pixels and `chunks_exact(2)` can never
+    // drop a trailing pixel.
+    let chunk = UI_PX_LCD_SRC; // keep the band-geometry fact visible to the reader
+    let _ = chunk;
+    let body = LCD_NV3007_SRC
+        .split("pub fn stream_chunk(buf: &[u16])")
+        .nth(1)
+        .expect("stream_chunk must exist — it is the non-DMA pixel path");
+    let body = &body[..body.find("\n}\n").expect("stream_chunk must be a complete fn")];
+    assert!(
+        body.contains("spi_send_px_pair("),
+        "the polled pixel path must write half-word data, not bytes, at DSIZE=16"
+    );
+    assert!(
+        !body.contains("spi_send_byte("),
+        "a byte write inside a 16-bit frame stream is a forbidden sub-frame access (§68.8.13)"
+    );
+    assert!(
+        body.contains("spi_begin_px("),
+        "the polled pixel path must open its transfer with the 16-bit frame geometry"
+    );
+}
+
+#[test]
+fn positive_band_buffers_are_word_aligned_and_all_wiped() {
+    // #790, two properties of the band buffers that hardware and the
+    // 2026-09-24 secret-retention review respectively require.
+    //
+    // ALIGNMENT: GPDMA streams a band with WORD beats, and "a source address
+    // must be aligned with the programmed data width of a source burst ...
+    // Else, a user setting error is reported and no transfer is issued"
+    // (RM0456 §17.8.14). A bare `[u16; N]` is only 2-byte aligned, so without
+    // the `repr` the channel raises USEF and paints nothing -- loud, but only
+    // on hardware, and only on a panel nobody has on the bench board.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "#[repr(align(4))]")
+            && contains_in_code(UI_PX_LCD_SRC, "struct Band([u16; STRIP_PX]);"),
+        "the band buffer must be 4-byte aligned for word-width GPDMA beats"
+    );
+    // WIPE: seed-word pixels transit these buffers. The review flagged the
+    // old single buffer as safe only "by layout accident ... Nothing enforces
+    // that relationship". Wipe by ITERATING the array, so adding a third
+    // buffer cannot leave one holding secret pixels.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "for b in (*core::ptr::addr_of_mut!(BANDS)).iter_mut()"),
+        "every band buffer must be zeroized by iteration, not by being named one at a time"
+    );
+}
+
+#[test]
+fn positive_no_unbounded_wait_survives_on_the_panel_path() {
+    // #790. Every other wait in this driver is capped -- `gpdma::wait`,
+    // `gpdma::abort`'s suspend loop, `lcd_te::sync_to_scanout` -- and
+    // `spi_force_down` exists precisely because "EOT can never set" is a
+    // reachable state after a failed DMA. The hole was that it is reachable on
+    // the DMA SUCCESS arm too: `CR2.TSIZE` counts frames, `BNDT` counts bytes,
+    // hardware cross-checks neither, so any accounting error between them
+    // leaves GPDMA raising TCF while the SPI still waits for frames that never
+    // arrive. Unbounded there is a DEAD DEVICE, not a dropped frame: IWDG is
+    // kicked from SysTick so the watchdog does not rescue it, and this path
+    // paints the measured-boot fingerprint and the PIN entry screen.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "const EOT_SPIN_CAP: u32 = 4_000_000;"),
+        "the EOT wait must be bounded"
+    );
+    assert!(
+        !LCD_NV3007_SRC.contains("while (REG.spi_sr.read() & SR_EOT) == 0 {}"),
+        "the unbounded EOT spin must not come back"
+    );
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "if spins >= EOT_SPIN_CAP {"),
+        "the EOT wait must give up at its cap rather than spin forever"
+    );
+}
+
+#[test]
+fn positive_dma_pixel_chunk_is_capped_by_bndt_at_runtime() {
+    // #790. `TSIZE` is NOT the binding counter once GPDMA is involved.
+    // `GPDMA_CxBR1.BNDT` is also 16 bits but counts BYTES, and bits 31:16 of
+    // that register are reserved -- so a 40,000-pixel chunk is a legal TSIZE
+    // and an 80,000-byte BNDT that TRUNCATES to 14,464. The channel then
+    // delivers 7,232 of 40,000 frames, raises TCF, `wait` returns Ok, and the
+    // SPI waits forever for the rest. Reaching that needs no mis-typed unit,
+    // just a chunk over 32,767 px.
+    //
+    // So the DMA path needs its OWN cap, at half the polled one, and it must
+    // be a RUNTIME refusal: `[profile.release]` sets no `debug-assertions`, so
+    // an assert is absent from exactly the images that ship.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "const MAX_DMA_PX_CHUNK: usize = 32_766;"),
+        "the DMA chunk cap must come from BNDT (bytes), not from TSIZE (frames)"
+    );
+    assert!(
+        contains_in_code(
+            LCD_NV3007_SRC,
+            "if px.len() > MAX_DMA_PX_CHUNK || px.len() % 2 != 0 {"
+        ),
+        "the cap must be enforced at runtime -- release builds carry no debug assertions"
+    );
+    // And the polled path must keep TSIZE in step with the pairs it actually
+    // sends, for ANY length, rather than asserting evenness in a profile that
+    // strips asserts.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "MAX_PX_CHUNK) & !1;"),
+        "the polled chunk must round down to an even frame count"
+    );
+}
+
+#[test]
+fn positive_panic_tears_down_the_blit_before_the_fatal_screen() {
+    // #790. `present_frame_ex` holds `&mut BANDS` across a render that runs
+    // while GPDMA channel 0 is EN=1, and `[profile.release]` keeps
+    // `overflow-checks = true`, so a panic in that window is live in SHIPPING
+    // images. The #484 fatal screen then paints, which under `ui-px` reaches
+    // `paint_legacy` and back into `present_frame_ex` -- a second `&mut` to
+    // the same static while a DMA channel is reading it, and a second stream
+    // into the same auto-incrementing RAMWR.
+    //
+    // Two halves, in two files, of one property: the channel is torn down and
+    // the presenter refuses re-entry.
+    assert!(
+        MAIN_SRC.contains("crate::hw::gpdma::abort();"),
+        "the panic handler must abort the blit channel before the fatal screen paints"
+    );
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "if FRAME_IN_FLIGHT.swap(true, Ordering::Acquire) {"),
+        "the presenter must refuse re-entry rather than alias the band buffers"
+    );
+    // The latch and the secret wipe both release through `Drop`, so a `return`
+    // added later cannot skip either. The band-0 branch already was such a
+    // return.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "impl Drop for FrameGuard {")
+            && contains_in_code(UI_PX_LCD_SRC, "FRAME_IN_FLIGHT.store(false, Ordering::Release);"),
+        "the latch and the wipe must be released structurally, not positionally"
+    );
+}
+
+#[test]
+fn positive_an_incomplete_frame_cannot_arm_the_sign_gesture() {
+    // #790. Since #780 the whole frame streams under ONE `set_window` and the
+    // panel auto-increments through it, so a band that stops short does not
+    // cost one band -- every LATER band lands at the wrong offset and the
+    // glass shows a shifted, garbled frame.
+    //
+    // Before #790 bounded the waits, those paths HUNG, and a hang is
+    // fail-safe: nothing is signed off a frame nobody saw. Bounding them
+    // turned a hang into "one dropped frame", which is only safe if the
+    // presenter knows the frame dropped. Otherwise `mark_rendered` runs,
+    // `seen_last` sets, and `PX_COMMIT_REQUIRES_SEEN_LAST` (owner decision
+    // 2026-09-24, HARDENING.md 2.4) counts a garbled amount or recipient page
+    // as SEEN -- arming the chord on something never legibly displayed.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "if cost.complete && driver.index() != painted_idx {"),
+        "the sign-gesture arming must require a frame that fully reached the glass"
+    );
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "cost.complete = ok && x0 >= W;"),
+        "completeness must account for BOTH a failed transfer and a short sweep"
+    );
+    // THE LOAD-BEARING HALF, and the one a must-fail control caught this gate
+    // not testing: every `stream_dma_finish` result must feed `ok`. Swapping
+    // either call site back to `let _ = ...` left the whole suite green, which
+    // means the gate above was asserting the plumbing without the input.
+    // Count the sites rather than spot-check one: there are two (the in-loop
+    // drain and the final band), and the final one is the easier to forget
+    // because nothing renders behind it.
+    let consumed = UI_PX_LCD_SRC
+        .matches("ok &= lcd::stream_dma_finish().is_ok();")
+        .count();
+    let discarded = UI_PX_LCD_SRC.matches("= lcd::stream_dma_finish();").count();
+    assert!(
+        consumed == 2 && discarded == 0,
+        "every stream_dma_finish result must clear `complete` on error \
+         (found {consumed} consuming, {discarded} discarding)"
+    );
+    // Same for the polled fallback and for a refused arm — BY COUNT, not by
+    // presence. Each of these forms appears exactly twice (band 0 before the
+    // TE wait, then once per loop iteration), so a `contains` check stays
+    // green when one of the two is swapped back to `let _ = ...`. Two
+    // must-fail controls proved that: both "refused arm ignored" and "polled
+    // failure ignored" left the whole suite green against the presence check.
+    //
+    // Every site that can tell us the frame did not land must feed `ok`, so
+    // the invariant is "no discarding site exists", which only a count can
+    // express.
+    let arms = UI_PX_LCD_SRC.matches("ok &= dma_pending;").count();
+    let polled = UI_PX_LCD_SRC.matches("ok &= lcd::stream_chunk(").count();
+    let loose_arm = UI_PX_LCD_SRC.matches("= dma_pending;").count() - arms;
+    let loose_polled = UI_PX_LCD_SRC.matches("= lcd::stream_chunk(").count() - polled;
+    assert!(
+        arms == 2 && loose_arm == 0,
+        "both arm sites must clear `complete` on a refusal (consuming {arms}, other {loose_arm})"
+    );
+    assert!(
+        polled == 2 && loose_polled == 0,
+        "both polled sites must clear `complete` on failure (consuming {polled}, other {loose_polled})"
+    );
+    // And the sweep must STOP at the first failure. Continuing streams the
+    // rest of the frame into a window whose offset is already wrong, which
+    // is more garbage on the glass and more wire for nothing.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "if !ok {")
+            && UI_PX_LCD_SRC.contains("// STOP THE SWEEP."),
+        "the band loop must break at the first failed band, not paint the rest shifted"
+    );
+    // And the legacy bridge must tell `flush()` the truth, or the #484 fatal
+    // screen silently vanishes in the one situation it exists for.
+    assert!(
+        contains_in_code(
+            UI_PX_LCD_SRC,
+            "build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None).complete"
+        ),
+        "paint_legacy must report whether the page actually landed"
+    );
+    // The verdict must survive the no-instrumentation path. A blanket
+    // `FrameCost::default()` there makes `complete` false in every build
+    // WITHOUT `ui-px-frametime` -- the shipping-shaped one -- so the chord
+    // would never arm while the bench config looked perfect.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "complete: cost.complete,"),
+        "zeroing the instrumentation must not zero the completeness verdict"
+    );
+    // Exact-line, because the loose substring also matches the legitimate
+    // `let mut cost = FrameCost::default();` initialiser. What must not come
+    // back is the bare RE-ASSIGNMENT.
+    assert!(
+        !UI_PX_LCD_SRC
+            .lines()
+            .map(|l| match l.find("//") {
+                Some(i) => &l[..i],
+                None => l,
+            })
+            .any(|c| c.trim() == "cost = FrameCost::default();"),
+        "a blanket FrameCost::default() re-assignment would clobber `complete` outside the bench config"
     );
 }

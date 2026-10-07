@@ -57,64 +57,62 @@ const FRAME_PERIOD_MS: u32 = 16;
 const BAND_W: i32 = 48;
 const STRIP_PX: usize = (BAND_W * H) as usize;
 
-/// The one strip buffer. Single-threaded secure world; only the frame loop
-/// touches it (the SysTick sampler never renders).
-static mut STRIP: [u16; STRIP_PX] = [0; STRIP_PX];
-
 /// Number of bands per frame.
 const N_STRIPS: usize = ((W + BAND_W - 1) / BAND_W) as usize;
 
-/// One strip in the panel's NATIVE scan order, big-endian per pixel, ready to
-/// hand to GPDMA verbatim (13,632 B).
+/// One band of the frame, in the panel's wire order, NATIVE pixel endianness.
 ///
-/// Only ONE buffer is needed, not two: the transpose that fills it runs only
-/// after the previous transfer has been waited on, so the buffer is never
-/// read by the DMA and written by the CPU at the same time. The overlap we
-/// want is DMA-of-strip-k against RENDER-of-strip-k+1, which this preserves.
-#[cfg(feature = "ui-px-dma")]
-static mut TXBUF: [u16; STRIP_PX] = [0; STRIP_PX];
+/// `#[repr(align(4))]` is load-bearing, not hygiene: GPDMA streams this with
+/// WORD beats (`gpdma::TR1_VAL`), and "a source address must be aligned with
+/// the programmed data width of a source burst … Else, a user setting error is
+/// reported and no transfer is issued" (RM0456 §17.8.14). A bare
+/// `[u16; STRIP_PX]` is only guaranteed 2-byte aligned, so without this the
+/// channel would raise `USEF` and paint nothing — loudly, but only on
+/// hardware. `STRIP_PX * 2` = 13,632 is a multiple of 4, so every element of
+/// the array below stays aligned too.
+#[repr(align(4))]
+struct Band([u16; STRIP_PX]);
 
-/// Widen a band into `TXBUF` as big-endian bytes. Returns the byte count.
-///
-/// This was a TRANSPOSE until #780, walking the landscape buffer with a
-/// stride to produce native order — and that transpose is what ate most of
-/// the GPDMA win (it replaced a transpose that had been free, hidden in the
-/// polled SPI wait, with an explicit serial pass). Now `Strip` already stores
-/// the band in wire order, so all that remains is the endian widen: a linear
-/// read, a linear write, no addressing arithmetic.
-#[cfg(feature = "ui-px-dma")]
-fn widen_into_txbuf(buf: &[u16]) -> usize {
-    // SAFETY: single-threaded frame loop; the previous DMA was waited on
-    // before this call, so no other agent is reading TXBUF.
-    let tx = unsafe { &mut *core::ptr::addr_of_mut!(TXBUF) };
-    // One 16-bit store per pixel via `to_be`, zipped so the bounds checks fall
-    // away. It was two bounds-checked BYTE stores at `tx[o]` / `tx[o + 1]`,
-    // which measured 4.0 ms for 60,776 px on glass — 10.5 cycles a pixel, and
-    // the single largest removable cost in the frame. `to_be` puts the high
-    // byte at the lower address on this little-endian core, which is the order
-    // the panel wants, so the DMA still streams the buffer verbatim as bytes.
-    for (d, &px) in tx.iter_mut().zip(buf) {
-        *d = px.to_be();
-    }
-    buf.len() * 2
-}
+// The OTHER half of the word-beat precondition, and the one that is a property
+// of the panel rather than of a type: `GPDMA_CxBR1.BNDT` must be a multiple of
+// the 4-byte source data width (RM0456 §17.8.14), and `BNDT` for a band is
+// `w * H * 2`. That is a multiple of 4 for every `w` exactly when `H` is even.
+// H = 142 today; a panel with an odd pixel height would make every band
+// transfer raise `USEF` and paint nothing, so fail the BUILD instead.
+const _: () = assert!(
+    H % 2 == 0,
+    "word-width GPDMA beats need an even pixel count per band; see gpdma::start_px"
+);
+// And `Band` must itself be a whole number of words, or `BANDS[1]` would start
+// at a 2-byte-aligned address however the type is aligned.
+const _: () = assert!(
+    (STRIP_PX * 2) % 4 == 0,
+    "every band buffer must be word-sized so the second one stays word-aligned"
+);
 
-/// `TXBUF`'s first `n` bytes, for GPDMA.
+/// How many band buffers the frame loop ping-pongs between.
 ///
-/// The buffer is `[u16]` so the endian swap above is one store per pixel, but
-/// the transfer is a byte stream: GPDMA reads bytes in ascending address order,
-/// which over `to_be`-stored half-words is high-byte-first per pixel.
+/// TWO when the blit is DMA'd, because the whole point is to render band k+1
+/// while band k is still on the wire — the DMA must own a buffer the
+/// rasteriser is not writing. ONE otherwise: the polled `stream_chunk`
+/// returns only when the band is fully clocked out, so there is nothing to
+/// overlap and nothing to protect.
+///
+/// This REPLACES the old `STRIP` + `TXBUF` pair, at identical BSS (2 ×
+/// 13,632 B). `TXBUF` existed to do two jobs — byte-swap each pixel for the
+/// wire, and give the DMA a buffer stable across the next render. 16-bit SPI
+/// frames (`lcd::spi_begin_px`) do the byte ordering in the shift register for
+/// free, so only the second job was left, and a second buffer does that
+/// without a copy. The 2.7 ms endian pass measured on glass is not optimised
+/// here, it is deleted (#790).
 #[cfg(feature = "ui-px-dma")]
-fn txbuf_bytes(n: usize) -> &'static [u8] {
-    // SAFETY: `TXBUF` is `[u16; STRIP_PX]`, so it is 2-byte aligned and
-    // `STRIP_PX * 2` bytes long; `n` is always `w * H * 2 <= STRIP_PX * 2`.
-    // Reading a `[u16]` as `[u8]` is sound for any initialised contents, and
-    // the frame loop is single-threaded with the previous DMA already drained.
-    unsafe {
-        let p = core::ptr::addr_of!(TXBUF).cast::<u8>();
-        core::slice::from_raw_parts(p, n.min(STRIP_PX * 2))
-    }
-}
+const N_BANDBUF: usize = 2;
+#[cfg(not(feature = "ui-px-dma"))]
+const N_BANDBUF: usize = 1;
+
+/// The band buffers. Single-threaded secure world; only the frame loop
+/// touches them (the SysTick sampler never renders).
+static mut BANDS: [Band; N_BANDBUF] = [const { Band([0; STRIP_PX]) }; N_BANDBUF];
 
 // The per-band content DIGEST and its `SHOWN` table were deleted here by
 // #780. They existed so an unchanged band was not streamed again, which was
@@ -136,6 +134,9 @@ fn txbuf_bytes(n: usize) -> &'static [u8] {
 //     periods (32.0 ms) either way.
 
 // ---- SysTick edge ring ------------------------------------------------------
+
+/// Set for the duration of `present_frame_ex`. See the latch there.
+static FRAME_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 /// Sampling is enabled only inside a live flow.
 static PX_SAMPLING: AtomicBool = AtomicBool::new(false);
@@ -338,6 +339,20 @@ mod frametime {
 #[derive(Clone, Copy, Default)]
 #[allow(dead_code)]
 struct FrameCost {
+    /// The frame reached the glass IN FULL. **Not instrumentation** — this is
+    /// ungated and load-bearing, because #780 streams the whole frame under
+    /// ONE `set_window` and the panel auto-increments through it. A band that
+    /// stops short therefore does not lose one band: every LATER band lands
+    /// at the wrong offset, so the glass shows a shifted, garbled frame.
+    ///
+    /// Before #790's bounded waits, those paths HUNG, and a hang is fail-safe
+    /// — nothing gets signed off a frame nobody saw. Bounding them turned a
+    /// hang into "one dropped frame", which is only safe if the caller
+    /// actually knows the frame was dropped: otherwise `mark_rendered` runs
+    /// and `PX_COMMIT_REQUIRES_SEEN_LAST` (owner decision 2026-09-24,
+    /// `HARDENING.md` §2.4) counts a garbled amount or recipient page as
+    /// SEEN, arming the sign chord on something never legibly displayed.
+    complete: bool,
     render: u32,
     blit: u32,
     /// Per-class render breakdown (bench only) — see `RenderSplit`.
@@ -346,15 +361,38 @@ struct FrameCost {
     /// Cycles spent in `stream_dma_finish` INSIDE the band loop, i.e. the wire
     /// time the CPU could not hide behind a render. If the DMA ran at the full
     /// 40 MHz this should be 9 x (2.73 - 1.84) = ~8 ms; materially more means
-    /// the transfer is not achieving line rate, and the suspects are SRAM1
-    /// contention (TXBUF and STRIP share the block the CPU renders into) and
-    /// the single-beat config forced by `SPI_CFG1.FTHLV = 0`.
+    /// the transfer is not achieving line rate. Compare against `wire_last`,
+    /// which isolates one band's wire with nothing overlapping it.
     #[cfg(feature = "ui-px-frametime")]
     dma_wait: u32,
-    /// Cycles in `widen_into_txbuf`. Expected ~1.5 ms for 60,776 px; this is
-    /// the pass that would vanish if the band buffer held wire-order bytes.
+    /// Cycles from the TE edge to the last pixel of the frame reaching TXDR —
+    /// `T_write`, the quantity #780's tear-free bound is stated over
+    /// (`< 31.40 ms`). Nothing else in this struct is that number: `blit` is
+    /// CPU time in the blit section, `dma_wait` is only the part the CPU
+    /// could not hide, and `period` includes the TE slack.
     #[cfg(feature = "ui-px-frametime")]
-    widen: u32,
+    stream: u32,
+    /// Cycles of the LAST band's DMA alone. Nothing renders behind it, so this
+    /// is one band's wire time uncontaminated by overlap.
+    ///
+    /// Its floor is **2.50 ms**, not 2.73: the last band is 44 columns wide,
+    /// not `BAND_W` — `W` = 428 and 8 x 48 = 384 — so it is 12,496 B at
+    /// 40 MHz. Reading it against the full-band figure would score a 2.73 ms
+    /// result as "at line rate" when the wire is in fact 8% slow.
+    ///
+    /// Wire efficiency is therefore `2.50 / wire_last`, and the frame it
+    /// predicts is `stream ~= 24.31 / efficiency` (24.31 ms being the whole
+    /// 121,552 B frame at 40 MHz). So: 30 tenths = 83% = `stream` ~29.2;
+    /// 35 = 71% = ~34.0, which is over #780's 31.40 ms tear bound.
+    ///
+    /// AND THE FLOOR PRINTS AS **24**, NOT 25. `frametime::format_tenths`
+    /// TRUNCATES — `(cycles * 10) / 160_000` — and 2.4992 ms is 399,872
+    /// cycles, which comes out 24.99 and prints 24. So a reading of 24 means
+    /// `wire_last` is somewhere in [2.40, 2.50) ms, i.e. at line rate within
+    /// the overlay's own 0.1 ms resolution; it is NOT below the floor.
+    /// MEASURED on the EVT unit 2026-10-07: 24, with `stream` = 27.9 ms.
+    #[cfg(feature = "ui-px-frametime")]
+    wire_last: u32,
     /// Cycles blocked on the TE rising edge. This is the SLACK: large means
     /// the frame finished early and is waiting for the panel (good, and the
     /// period is refresh-bound), ~0 means we are right at the edge of the
@@ -375,36 +413,83 @@ fn present_frame(frame: &Frame<'_>, font: &Font<'_>) -> FrameCost {
 /// carrying secret cells: no strip is skipped on a digest of secret pixels,
 /// and no such digest outlives the frame).
 fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCost {
+    // `complete` stays false through every early exit below: the latch, the
+    // band-0 `Strip::new` failure, and the mid-loop `break`.
     let mut cost = FrameCost::default();
+
+    // RE-ENTRANCY LATCH. The band loop below holds `&mut BANDS` across a
+    // render that runs while GPDMA is streaming, and `[profile.release]`
+    // keeps `overflow-checks = true`, so a panic inside that window is live in
+    // shipping images. The #484 panic handler paints a fatal screen, which
+    // under `ui-px` reaches `paint_legacy` and back into here — taking a
+    // SECOND `&mut` to the same static while a DMA channel reads it. The
+    // latch turns that into an early return; the panic handler's own
+    // `paint_legacy` then falls through to the glyph blitter, which touches
+    // neither this static nor the DMA.
+    if FRAME_IN_FLIGHT.swap(true, Ordering::Acquire) {
+        return cost;
+    }
+    // Clears the latch AND zeroizes the band buffers on EVERY exit, including
+    // the `return` in the band-0 branch below and any future one. The wipe
+    // used to be a statement at the end of the function, which the band-0
+    // `Strip::new` failure skipped — unreachable, but positional rather than
+    // structural, and the sibling branch inside the loop needs a comment
+    // saying "MUST NOT return" precisely because of that asymmetry.
+    struct FrameGuard;
+    impl Drop for FrameGuard {
+        fn drop(&mut self) {
+            wipe_scratch();
+            FRAME_IN_FLIGHT.store(false, Ordering::Release);
+        }
+    }
+    let _guard = FrameGuard;
+
     // SAFETY: single-threaded frame loop; the SysTick sampler never touches
-    // the band buffer (same discipline as `splash_test::FB`).
-    let buf = unsafe { &mut *core::ptr::addr_of_mut!(STRIP) };
+    // the band buffers (same discipline as `splash_test::FB`), and the latch
+    // above excludes the one re-entrant caller (the panic handler).
+    let bands = unsafe { &mut *core::ptr::addr_of_mut!(BANDS) };
 
     // ---- band 0 BEFORE the TE wait -------------------------------------
     // So the stream starts on the edge rather than one render after it: the
     // whole point of the wait is the phase it buys.
-    let Some(mut strip) = Strip::new(0, BAND_W.min(W), &mut buf[..]) else {
-        return cost;
-    };
+    let w0 = BAND_W.min(W);
     #[cfg(feature = "ui-px-frametime")]
     let t0 = frametime::cycles();
-    render_band(frame, font, &mut strip, &mut cost);
-    #[cfg(feature = "ui-px-dma")]
-    let mut n = widen_into_txbuf(&buf[..(BAND_W.min(W) * H) as usize]);
+    {
+        let Some(mut strip) = Strip::new(0, w0, &mut bands[0].0[..]) else {
+            return cost;
+        };
+        render_band(frame, font, &mut strip, &mut cost);
+    }
     #[cfg(feature = "ui-px-frametime")]
     {
         cost.render = cost.render.wrapping_add(frametime::cycles().wrapping_sub(t0));
     }
 
     // ---- phase-lock, then one monotone sweep ---------------------------
-    // 62.5 Hz measured => T = 16.0 ms; a full 121,552 B frame is 24.31 ms at
-    // 40 MHz. The sweep is therefore SLOWER than the beam, and that is fine:
+    // 62.5 Hz measured => T = 16.0 ms. The sweep is SLOWER than the beam, and
+    // that is fine as long as it finishes before the beam's next pass laps it:
     // it trails through refresh N (which shows all-old, no composite) and the
-    // beam wraps while the write pointer is at row 271, so refresh N+1 shows
-    // all-new. The condition is `write < 2 x refresh` (24.31 < 32.0), and the
-    // beam would not catch the write until t = 45 ms. The failure modes are
-    // NEAR-EQUAL speed (a full frame matches the beam at ~41 Hz) and refresh
-    // above ~81 Hz; 62.5 Hz is clear of both.
+    // beam wraps while the write pointer is mid-frame, so refresh N+1 shows
+    // all-new.
+    //
+    // The bound is NOT `2 x T_refresh`. The panel's tear scanline is
+    // programmed to 16 (`lcd_nv3007.rs`, DCS 0x44 = `[0x00, 0x10]`), so at the
+    // TE edge the beam is already 16 of 428 rows in and those rows come off
+    // the allowance: solving `16 + R*t - 428 = (428/Tw)*t` for a root below
+    // `Tw` gives TEAR-FREE IFF `Tw < 31.40 ms` (conservative — no V-blank
+    // credit, since the panel datasheet is not in this repo). The other
+    // failure modes are NEAR-EQUAL speed (a full frame matches the beam at
+    // ~41 Hz) and refresh above ~81 Hz; 62.5 Hz is clear of both.
+    //
+    // `cost.stream` measures exactly `Tw`, because that bound is the thing
+    // this frame has to satisfy and nothing else in `FrameCost` is it (#790).
+    // MEASURED on the EVT screen unit 2026-10-07: Tw = 27.9 ms against the
+    // 31.40 ms bound, so the sweep is inside its own precondition by 3.5 ms.
+    // Before #790 it was ~31.8 ms by arithmetic -- possibly OVER, with the
+    // composite at x ~ 417, the 11 rightmost of 428 columns, where the hero
+    // animation's +-95 px swing never reaches. Do not let Tw grow without
+    // re-reading this number.
     //
     // Bound: ~5 cycles per poll, so 2,000,000 is ~62 ms at 160 MHz — four TE
     // periods, and it latches dead on the first miss so a panel-less board
@@ -414,8 +499,10 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     let synced = crate::hw::lcd_te::sync_to_scanout(2_000_000);
     let _ = synced;
     #[cfg(feature = "ui-px-frametime")]
+    let t_edge = frametime::cycles();
+    #[cfg(feature = "ui-px-frametime")]
     {
-        cost.te_wait = frametime::cycles().wrapping_sub(t_te);
+        cost.te_wait = t_edge.wrapping_sub(t_te);
     }
 
     // ONE window for the whole frame. The panel auto-increments across all
@@ -424,29 +511,43 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     lcd::set_window(0, 0, (H - 1) as u16, (W - 1) as u16);
     lcd::stream_open();
 
+    // The buffer the wire is currently reading. Bands alternate, so the
+    // rasteriser always writes the OTHER one (`N_BANDBUF` = 1 collapses this
+    // to a single buffer, which is correct because the polled blit is
+    // synchronous).
+    let mut cur = 0usize;
+    let mut ok = true;
     #[cfg(feature = "ui-px-dma")]
-    let mut dma_pending = {
-        // SAFETY: single-threaded frame loop; the only other reader of TXBUF
-        // is the GPDMA channel, and nothing has armed it yet this frame.
-        lcd::stream_dma_start(txbuf_bytes(n))
-    };
+    let mut dma_pending = lcd::stream_dma_start(&bands[0].0[..(w0 * H) as usize]);
+    #[cfg(feature = "ui-px-dma")]
+    {
+        // `false` for a non-empty band is a REFUSAL (over the BNDT cap, or an
+        // odd pixel count), not "nothing to send".
+        ok &= dma_pending;
+    }
     #[cfg(not(feature = "ui-px-dma"))]
-    lcd::stream_chunk(&buf[..(BAND_W.min(W) * H) as usize]);
+    {
+        ok &= lcd::stream_chunk(&bands[0].0[..(w0 * H) as usize]);
+    }
 
-    let mut x0 = BAND_W.min(W);
+    let mut x0 = w0;
     while x0 < W {
         let w = BAND_W.min(W - x0);
-        let Some(mut strip) = Strip::new(x0, w, &mut buf[..]) else {
-            // MUST NOT `return`: the drain and `stream_close` below are the
-            // only exit that leaves the panel out of mid-stream.
-            break;
-        };
+        let nxt = (cur + 1) % N_BANDBUF;
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
-        // Renders UNDER the previous band's DMA — that overlap is what keeps
-        // the sweep continuous. Band render is ~1.9 ms against ~2.7 ms of
-        // wire, so the wire never starves.
-        render_band(frame, font, &mut strip, &mut cost);
+        {
+            // Renders UNDER the previous band's DMA — that overlap is what
+            // keeps the sweep continuous. Band render is ~1.9 ms against
+            // ~2.7 ms of wire, so the wire never starves.
+            let Some(mut strip) = Strip::new(x0, w, &mut bands[nxt].0[..]) else {
+                // MUST NOT `return`: the drain and `stream_close` below are
+                // the only exit that leaves the panel out of mid-stream.
+                ok = false;
+                break;
+            };
+            render_band(frame, font, &mut strip, &mut cost);
+        }
         #[cfg(feature = "ui-px-frametime")]
         let t1 = frametime::cycles();
         #[cfg(feature = "ui-px-dma")]
@@ -454,57 +555,74 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
             if dma_pending {
                 #[cfg(feature = "ui-px-frametime")]
                 let t_w = frametime::cycles();
-                let _ = lcd::stream_dma_finish();
+                ok &= lcd::stream_dma_finish().is_ok();
                 #[cfg(feature = "ui-px-frametime")]
                 {
                     cost.dma_wait = cost.dma_wait.wrapping_add(frametime::cycles().wrapping_sub(t_w));
                 }
             }
-            #[cfg(feature = "ui-px-frametime")]
-            let t_x = frametime::cycles();
-            n = widen_into_txbuf(&buf[..(w * H) as usize]);
-            #[cfg(feature = "ui-px-frametime")]
-            {
-                cost.widen = cost.widen.wrapping_add(frametime::cycles().wrapping_sub(t_x));
+            if !ok {
+                // STOP THE SWEEP. The panel auto-increments through one
+                // frame-wide window, so once a band has stopped short every
+                // later band lands at the wrong offset — continuing just
+                // paints more garbage and spends more wire. `x0 < W` on this
+                // path, so `complete` is false either way; breaking only
+                // makes the glass less wrong and the recovery quicker.
+                break;
             }
-            dma_pending = lcd::stream_dma_start(txbuf_bytes(n));
+            dma_pending = lcd::stream_dma_start(&bands[nxt].0[..(w * H) as usize]);
+            ok &= dma_pending;
         }
         #[cfg(not(feature = "ui-px-dma"))]
-        lcd::stream_chunk(&buf[..(w * H) as usize]);
+        {
+            ok &= lcd::stream_chunk(&bands[nxt].0[..(w * H) as usize]);
+        }
         #[cfg(feature = "ui-px-frametime")]
         {
             let t2 = frametime::cycles();
             cost.render = cost.render.wrapping_add(t1.wrapping_sub(t0));
             cost.blit = cost.blit.wrapping_add(t2.wrapping_sub(t1));
         }
+        cur = nxt;
         x0 += w;
     }
 
     #[cfg(feature = "ui-px-dma")]
     if dma_pending {
-        // Counted: this last band's whole DMA is exposed (nothing left to
-        // render behind it) and was NOT in any earlier figure, which is part
-        // of why render + blit under-reported the real frame cost.
+        // Counted twice, on purpose. Into `dma_wait` because it is wire the
+        // CPU blocked on, and into `wire_last` ALONE because this band has
+        // nothing rendering behind it: it is the one uncontaminated
+        // single-band wire measurement in the frame, self-checking against
+        // its 2.73 ms theoretical floor (13,632 B at 40 MHz). `stream` close
+        // to `9 * wire_last` means the sweep is continuous and wire-bound;
+        // materially more means it is stalling between bands (#790).
         #[cfg(feature = "ui-px-frametime")]
         let t_w = frametime::cycles();
-        let _ = lcd::stream_dma_finish();
+        ok &= lcd::stream_dma_finish().is_ok();
         #[cfg(feature = "ui-px-frametime")]
         {
-            cost.dma_wait = cost.dma_wait.wrapping_add(frametime::cycles().wrapping_sub(t_w));
+            let d = frametime::cycles().wrapping_sub(t_w);
+            cost.dma_wait = cost.dma_wait.wrapping_add(d);
+            cost.wire_last = d;
         }
     }
     lcd::stream_close();
-    wipe_scratch();
+    cost.complete = ok && x0 >= W;
+    #[cfg(feature = "ui-px-frametime")]
+    {
+        cost.stream = frametime::cycles().wrapping_sub(t_edge);
+    }
+    // `_guard` wipes the band buffers and clears the latch here.
     cost
 }
 
-/// Zeroize the band scratch (and the DMA staging buffer) once the frame is on
-/// the glass.
+/// Zeroize EVERY band buffer once the frame is on the glass.
 ///
 /// REQUIRED, not hygiene. Seed-word pixels from `Font::blit_secret_run`
-/// transit `STRIP`, and the 2026-09-24 adversarial review flagged that it is
-/// never cleared — judging it unexploitable only "by layout accident: the loop
-/// renders bands in ascending y, so STRIP is left holding the y=128..142 band,
+/// transit the band buffers, and the 2026-09-24 adversarial review flagged
+/// that they are never cleared — judging it unexploitable only "by layout
+/// accident: the loop renders bands in ascending y, so STRIP is left holding
+/// the y=128..142 band,
 /// while the words grid's lowest row is WORDS_ROWS[3]=110 ... Nothing enforces
 /// that relationship", and predicting it "becomes a real secret-retention bug
 /// the moment the words-grid layout changes".
@@ -515,19 +633,29 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
 /// reaches well past 384. The residue the review called latent became live, so
 /// the wipe it prescribed is now load-bearing.
 ///
+/// The WHOLE buffer, not the `w * H` the band used. `render_strip` clears only
+/// `w * H` pixels, and the last band is 44 columns wide (W = 428, 8 x 48 =
+/// 384) against a 48-column buffer — so 568 pixels of the tail are never
+/// touched by that clear and still hold an EARLIER band's ink. Under the
+/// two-buffer ping-pong the parity is fixed (bands 0,2,4,6,8 all land in
+/// `BANDS[0]`), so that residue is band SIX's, not band seven's as a reader
+/// of the alternation would assume. Zeroizing the array rather than the used
+/// prefix is what makes that irrelevant.
+///
 /// Unconditional rather than gated on a "this frame was secret" flag: that is
 /// the same kind of remembered relationship the review objected to. The cost
 /// is one clear of a buffer `render_strip` already clears nine times a frame
 /// (~0.085 ms against a 24.31 ms wire), so there is nothing to buy by being
-/// clever.
+/// clever. Iterating `BANDS` rather than naming each buffer is deliberate:
+/// adding a third would otherwise leave one un-wiped, silently.
 fn wipe_scratch() {
     // SAFETY: single-threaded frame loop, and every transfer that could read
     // these buffers has been drained above (`stream_dma_finish`) before the
     // stream was closed.
     unsafe {
-        (*core::ptr::addr_of_mut!(STRIP)).zeroize();
-        #[cfg(feature = "ui-px-dma")]
-        (*core::ptr::addr_of_mut!(TXBUF)).zeroize();
+        for b in (*core::ptr::addr_of_mut!(BANDS)).iter_mut() {
+            b.0.zeroize();
+        }
     }
 }
 
@@ -578,9 +706,17 @@ fn build_and_present(
             color: Rgb::WHITE,
         });
     }
-    // Third line (green): where the WIRE time goes --- dma_wait / widen /
-    // te_wait, in tenths. The first two say whether the transfer is making
-    // line rate; the third is the slack before a whole refresh period is lost.
+    // Third line (green): the WIRE, in tenths --- stream / wire_last /
+    // te_wait.
+    //   stream    = TE edge -> last pixel at TXDR. MUST read < 314 (31.40 ms)
+    //               or the frame is outside #780's tear-free bound.
+    //   wire_last = one band's wire with nothing overlapping it. The LAST
+    //               band is 44 cols, not 48, so its floor is 2.4992 ms --
+    //               and the formatter TRUNCATES, so the floor PRINTS AS 24.
+    //               24 therefore means line rate, not "below the floor".
+    //               Reading it against the 48-col 2.73 ms figure would score
+    //               an 8%-slow wire as perfect.
+    //   te_wait   = the slack before a whole refresh period is lost.
     if let Some(text) = wire {
         use pqsigner_ui_px::font::{Align, TextRun, TierId};
         use pqsigner_ui_px::raster::{Item, Rgb};
@@ -624,7 +760,17 @@ fn build_and_present(
     }
     #[cfg(not(feature = "ui-px-frametime"))]
     {
-        cost = FrameCost::default();
+        // Zero the INSTRUMENTATION, keep the VERDICT. `complete` is not a
+        // counter — `paint_legacy` and the sign-gesture arming both read it —
+        // so a blanket `FrameCost::default()` here would make it false in
+        // every build WITHOUT `ui-px-frametime`, i.e. in the shipping-shaped
+        // one: `mark_rendered` would never run, `seen_last` would never set,
+        // and the chord would never arm. The bench config would have looked
+        // perfect throughout.
+        cost = FrameCost {
+            complete: cost.complete,
+            ..FrameCost::default()
+        };
     }
     cost
 }
@@ -651,8 +797,14 @@ pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_RO
     // The legacy glyph blitter may have painted between calls.
     let s = Screen::legacy(rows);
     let anim = Anim::new(&s, 0, timeout::now());
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
-    true
+    // RETURNS THE TRUTH. `flush()` skips the glyph blitter only when this
+    // says the page is on the glass. Two ways it is not, and both reach here
+    // from the #484 panic handler: the re-entrancy latch (a panic landed
+    // INSIDE `present_frame_ex`, so this call paints nothing at all), and a
+    // band that stopped short. Returning `true` regardless would make the
+    // fatal "Secrets wiped / Power-cycle" screen silently disappear in
+    // exactly the situation it exists for.
+    build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None).complete
 }
 
 /// Clear the panel (before the legacy glyph blitter paints again).
@@ -1030,7 +1182,7 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     let (mut ft_max_render, mut ft_max_blit, mut ft_max_period, mut ft_window_at) = (0u32, 0u32, 0u32, 0u32);
     #[cfg(feature = "ui-px-frametime")]
     let (mut ft_max_shapes, mut ft_max_glyphs, mut ft_max_secret) = (0u32, 0u32, 0u32);
-    let (mut ft_max_dma, mut ft_max_widen, mut ft_max_te) = (0u32, 0u32, 0u32);
+    let (mut ft_max_stream, mut ft_max_wire_last, mut ft_max_te) = (0u32, 0u32, 0u32);
     let mut wire_buf = [0u8; 24];
     let mut wire_len = 0usize;
     #[cfg(feature = "ui-px-frametime")]
@@ -1167,8 +1319,8 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
             ft_max_shapes = ft_max_shapes.max(cost.split.shapes);
             ft_max_glyphs = ft_max_glyphs.max(cost.split.glyphs.wrapping_add(cost.split.fills));
             ft_max_secret = ft_max_secret.max(cost.split.secret);
-            ft_max_dma = ft_max_dma.max(cost.dma_wait);
-            ft_max_widen = ft_max_widen.max(cost.widen);
+            ft_max_stream = ft_max_stream.max(cost.stream);
+            ft_max_wire_last = ft_max_wire_last.max(cost.wire_last);
             ft_max_te = ft_max_te.max(cost.te_wait);
             // Skip the first frame's period: `last_frame_at` starts at 0, so
             // its "period" is the whole boot time, not a frame.
@@ -1190,13 +1342,13 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
                 );
                 wire_len = frametime::format_tenths(
                     &mut wire_buf,
-                    ft_max_dma,
-                    ft_max_widen,
+                    ft_max_stream,
+                    ft_max_wire_last,
                     ft_max_te,
                 );
                 ft_window_at = t;
-                ft_max_dma = 0;
-                ft_max_widen = 0;
+                ft_max_stream = 0;
+                ft_max_wire_last = 0;
                 ft_max_te = 0;
                 ft_max_render = 0;
                 ft_max_blit = 0;
@@ -1208,7 +1360,12 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         }
         #[cfg(not(feature = "ui-px-frametime"))]
         let _ = cost;
-        if driver.index() != painted_idx {
+        // `cost.complete` FIRST. `mark_rendered` is what sets `seen_last`,
+        // which is the whole of `PX_COMMIT_REQUIRES_SEEN_LAST`: arming the
+        // sign chord off a frame that did not fully reach the glass would
+        // approve a recipient or amount the user never legibly saw. Leaving
+        // `painted_idx` unadvanced means the next good frame does the mark.
+        if cost.complete && driver.index() != painted_idx {
             painted_idx = driver.index();
             driver.mark_rendered();
             super::text::present(&visible[painted_idx], driver.page(), painted_idx, visible.len());

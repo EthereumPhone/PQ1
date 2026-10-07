@@ -10,8 +10,13 @@
 //!
 //! WHAT THIS CANNOT DO. A FULL 428x142 repaint has a hard wire floor of
 //! 24.31 ms (60,776 px x 16 b / 40 MHz). DMA hides the render half; it cannot
-//! make the panel accept bits faster. Only partial repaints (the per-strip
-//! digest skip) come in under that.
+//! make the panel accept bits faster. Since #780 every frame IS a full
+//! repaint — the per-band digest skip is gone, because a TE-synchronised
+//! frame goes out under one `set_window` and skipping a band would misplace
+//! every band after it — so 24.31 ms is the floor for all of them, and the
+//! panel's own 62.5 Hz refresh quantises the period to a multiple of 16.0 ms.
+//! The job of this driver is therefore to get the WIRE to that floor, which
+//! is what the word-beat width below is for (#790).
 //!
 //! EVERY REGISTER VALUE HERE WAS EXTRACTED FROM RM0456 Rev 7 AND INDEPENDENTLY
 //! RE-VERIFIED against the manual, because a wrong bit is a silent fault on the
@@ -31,15 +36,34 @@ const GPDMA1_S: u32 = 0x5002_0000;
 const CH: u32 = 0;
 const CH_OFF: u32 = 0x80 * CH;
 
-/// `GPDMA_CxTR1` = DSEC | SSEC | SINC.
+/// `GPDMA_CxTR1` = DSEC | DDW_LOG2(word) | SSEC | SINC | SDW_LOG2(word).
 ///
-/// byte source width (SDW_LOG2 = 00) and byte destination width
-/// (DDW_LOG2 = 00), source incrementing (SINC = 1), destination FIXED
-/// (DINC = 0, TXDR does not move), single beats (SBL_1 = DBL_1 = 0 — required
-/// while `SPI_CFG1.FTHLV` = 0b0000, i.e. a 1-data threshold), and both the
-/// source and destination accesses marked SECURE. `PAM` is ignored because the
-/// widths are equal; `DBX`/`DHX`/`SBX` are ignored at byte width.
-const TR1_VAL: u32 = 0x8000_8008;
+/// WORD source and destination width (SDW_LOG2 = DDW_LOG2 = 0b10) since #790,
+/// source incrementing (SINC = 1), destination FIXED (DINC = 0, TXDR does not
+/// move), single beats (SBL_1 = DBL_1 = 0), and both the source and
+/// destination accesses marked SECURE.
+///
+/// WHY WORD AND NOT BYTE. At byte width the SPI raised one DMA request per
+/// byte and the controller answered each with one AHB read plus one AHB write,
+/// against the 200 ns a byte of 40 MHz wire affords — the measured wire ran at
+/// ~77% of line rate (#790). A word beat carries FOUR bytes, so the same AHB
+/// round trip has 800 ns to hide in, and the beat count per band drops
+/// 13,632 → 3,408.
+///
+/// This is only legal because `SPI_CFG1.DSIZE` is 16 for the pixel stream: a
+/// 32-bit access is a MULTIPLE of the 16-bit frame, so the SPI packs it into
+/// two frames automatically (RM0456 §68.4.14 "The packing mode is enabled if
+/// the DMA channel PSIZE value is a multiple of the data size"), lowest
+/// half-word first. An access SMALLER than the frame is forbidden
+/// (§68.4.14 "Configuring any DMA data access to less than the configured
+/// data size is forbidden"), which is why `TR1_VAL` and `DSIZE` must move
+/// together and why `start_px` is the only entry point.
+///
+/// `PAM` is ignored because the widths are equal (§17.8.14). `DBX`/`DHX` are
+/// LIVE at word width and both 0 — no byte exchange within a half-word, no
+/// half-word exchange within a word — so the word reaches TXDR verbatim and
+/// the wire order is the buffer's own. `SBX` is ignored at word source width.
+const TR1_VAL: u32 = 0x8002_800A;
 
 /// `GPDMA_CxTR2` = DREQ | REQSEL(7).
 ///
@@ -107,12 +131,16 @@ const REG: GpdmaRegs = unsafe {
     }
 };
 
-/// The destination: SPI1's transmit data register, byte-addressed.
+/// The destination: SPI1's transmit data register.
 ///
-/// `DDW_LOG2 = 00` makes each GPDMA beat an 8-bit write here, which is exactly
-/// one SPI frame because `spi_hw::init` programs `CFG1.DSIZE = 7`. RM0456's
-/// SPI_TXDR note permits a byte access when it EQUALS the configured frame
-/// size; only an access SMALLER than the frame size is forbidden.
+/// `DDW_LOG2 = 10` makes each GPDMA beat a 32-bit write here, which is TWO
+/// SPI frames because `lcd_nv3007::spi_begin_px` programs `CFG1.DSIZE = 15`
+/// for the pixel stream. RM0456's SPI_TXDR note forbids an access SMALLER
+/// than the configured frame size (§68.8.13) and defines an access that is a
+/// multiple of it as packed, lowest half-word first (§68.4.11) — so word
+/// beats are legal here and byte beats would NOT be. The register is at a
+/// 4-byte-aligned address, which word beats also require (§17.8.14: "A
+/// destination address must be aligned with the programmed data width").
 const TXDR: u32 = board::SPI1_S + 0x20;
 
 /// Why a blit gave up.
@@ -158,27 +186,46 @@ pub fn init() {
     REG.spi_cfg1.set_bits(CFG1_TXDMAEN);
 }
 
-/// Arm the channel for `src`, which must already be in the panel's native byte
-/// order. Returns immediately — the transfer runs in the background.
+/// Arm the channel for `px`, a run of RGB565 pixels in the panel's native
+/// scan order. Returns immediately — the transfer runs in the background.
 ///
 /// The caller owns the SPI framing: `CS` asserted, the window command sent,
-/// and `spi_begin(src.len())` done so `CR2.TSIZE` equals `src.len()`. TSIZE and
-/// `BNDT` must agree, or the SPI stops mid-stream with the channel still armed.
+/// and `spi_begin_px(px.len())` done so `CR2.TSIZE` is the FRAME count while
+/// `BNDT` below is the BYTE count. Those are different numbers at 16-bit
+/// frames; see `lcd_nv3007::spi_begin_px` for what an under-supply does.
+/// `lcd_nv3007::stream_dma_start` is the one call site and derives both from
+/// the same slice.
 ///
-/// `src` must stay alive and unmodified until [`wait`] returns.
-pub fn start(src: &[u8]) {
-    debug_assert!(!src.is_empty(), "a null block raises USEF, not a no-op");
-    debug_assert!(src.len() <= 0xFFFF, "BNDT is 16 bits");
+/// `px` must stay alive and unmodified until [`wait`] returns.
+///
+/// Takes `&[u16]` rather than `&[u8]` so the two USEF preconditions of word
+/// beats are checkable at the type and the assert rather than trusted: the
+/// source address must be 4-byte aligned and `BNDT` must be a multiple of the
+/// 4-byte source width (RM0456 §17.8.14 — "Else, a user setting error is
+/// reported and no transfer is issued"). An even pixel count gives the second;
+/// the band buffers are `#[repr(align(4))]` for the first.
+pub fn start_px(px: &[u16]) {
+    debug_assert!(!px.is_empty(), "a null block raises USEF, not a no-op");
+    let bytes = px.len() * 2;
+    debug_assert!(bytes <= 0xFFFF, "BNDT is 16 bits");
+    debug_assert!(
+        px.as_ptr() as usize % 4 == 0,
+        "word beats need a 4-byte-aligned source or the channel raises USEF"
+    );
+    debug_assert!(
+        px.len() % 2 == 0,
+        "BNDT must be a multiple of the 4-byte source data width"
+    );
 
     REG.cfcr.write(FCR_ALL);
 
     // SAR/DAR/BR1 are modified by hardware as the block progresses, so all
     // three are rewritten for every transfer rather than set once in `init`.
-    REG.csar.write(src.as_ptr() as u32);
+    REG.csar.write(px.as_ptr() as u32);
     REG.cdar.write(TXDR);
-    REG.cbr1.write(src.len() as u32);
+    REG.cbr1.write(bytes as u32); // BNDT is BYTES, whatever the beat width
 
-    // BARRIER. `transpose_into_txbuf` fills TXBUF with ORDINARY stores, and
+    // BARRIER. The rasteriser fills the band buffer with ORDINARY stores, and
     // volatile MMIO writes are ordered only against other volatile accesses —
     // nothing stops LLVM sinking those plain stores past this arming write,
     // and this tree builds with fat LTO and codegen-units=1, which is exactly
@@ -222,9 +269,9 @@ pub fn wait(spin_cap: u32) -> Result<(), DmaErr> {
         if sr & SR_TCF != 0 {
             REG.cfcr.write(FCR_ALL);
             // BARRIER before the caller may reuse the buffer the channel was
-            // reading: without it the NEXT strip's transpose stores can be
+            // reading: without it the next band's rasteriser stores can be
             // hoisted above this poll, since the loop is provably bounded and
-            // nothing creates a data dependency on TXBUF.
+            // nothing creates a data dependency on the band buffer.
             cortex_m::asm::dsb();
             return Ok(());
         }

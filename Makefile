@@ -4837,11 +4837,51 @@ ui-px-goldens-bless: ## Re-export every family's scenario transcripts and re-ble
 	@UI_PX_BLESS=1 UI_PX_PNG=1 cargo test --locked -p pqsigner-ui-px --test golden >/dev/null
 	@ls pqsigner-ui-px/tests/fixtures/*/*.sha | wc -l | xargs -I{} echo "blessed {} transcript goldens (frames under target/ui-px-golden/<family>/)"
 
-.PHONY: pq-ui-port-diff ui-px-check
+.PHONY: pq-ui-port-diff ui-px-check ui-px-configs
 pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails on an unrecorded MISMATCH
 	@python3 tools/pq_ui_port_diff.py
 
-ui-px-check: pq-ui-check ui-px-assets-check pq-ui-port-diff ## All pixel-UI design-rule gates (vendored tree, bake, port_diff, checker tests)
+# WHY THIS EXISTS (#790, 2026-10-07). A repo-wide grep for `ui-px-dma` found
+# exactly ONE hit: the feature definition in secure/Cargo.toml. No make
+# target, no CI job and no size report built it — the EVT images that every
+# frame-time measurement came from were produced by a hand-typed feature list
+# in a shell. So the configuration we actually flash to the screen unit was
+# the one configuration nothing compiled, which is how `ui-px-bench` once
+# broke on a DWT helper that five other configs did not reach.
+#
+# These are the feature sets that are really built and flashed. They are
+# target-triple `cargo check`s, so they catch a cfg-gated path that only
+# exists on thumbv8m — which a host `cargo test` cannot.
+# BOTH BOARDS, explicitly, NOT $(BOARD_FEATURE). Deriving the board from
+# $(BOARD) would mean a plain `make ui-px-check` only ever compiles the
+# default (iota2) — and pq1 is the board these images are flashed to, so the
+# one that matters would be covered only when someone remembered
+# `BOARD=pq1`. `board/mod.rs` hard-errors on neither-or-both, so each set
+# must name exactly one.
+UI_PX_SUFFIXES := \
+	debug-log,ui-px \
+	debug-log,ui-px,ui-px-dma \
+	debug-log,ui-px,ui-px-frametime \
+	debug-log,ui-px,ui-px-dma,ui-px-frametime \
+	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench \
+	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench,ui-px-te-probe \
+	debug-log,ui-px,ui-px-spi40 \
+	ui-px,ui-px-dma
+UI_PX_CONFIGS := $(foreach b,board-pq1 board-iota2,\
+	$(foreach s,$(UI_PX_SUFFIXES),mock-se,dev-testkey,ui-lcd,stm32u585,$(b),$(s)))
+
+ui-px-configs: ## Target-triple compile of every ui-px feature set actually flashed, on BOTH boards (incl. ui-px-dma)
+	@fail=0; \
+	for c in $(UI_PX_CONFIGS); do \
+	  printf '==> %s\n' "$$c"; \
+	  env -u RUSTFLAGS cargo check --locked -q --target thumbv8m.main-none-eabi \
+	      -p sphincs-tz-secure --no-default-features --features "$$c" \
+	    || { echo "!! FAILED: $$c"; fail=1; }; \
+	done; \
+	[ $$fail -eq 0 ] || { echo "ui-px-configs: at least one feature set does not compile"; exit 1; }
+	@echo "ui-px-configs: all $(words $(UI_PX_CONFIGS)) feature sets compile"
+
+ui-px-check: pq-ui-check ui-px-assets-check pq-ui-port-diff ui-px-configs ## All pixel-UI design-rule gates (vendored tree, bake, port_diff, feature sets, checker tests)
 	@cargo test --locked -p pqsigner-ui-px
 	@# FEATURE SET MATTERS. This ran with DEFAULT features while the same
 	@# tests' golden constants are authored under CI's set, so three of them
