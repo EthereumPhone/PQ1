@@ -233,7 +233,7 @@ jobs:
       # (fonts + marks + the NS atlas container + its pinned root) is
       # reproducible, and the firmware's motion / input / film constants match
       # the design spec except for the recorded device deviations.
-      - name: Pixel-UI design gates (pq-ui-check, ui-px-assets-check, pq-ui-port-diff)
+      - name: Pixel-UI design gates (pq-ui-check, ui-px-assets-check, pq-ui-port-diff, ui-px-configs)
         run: |
           python3 -m pip install --quiet -r tools/pq-ui/requirements.txt
           # The vendored requirements say `Pillow>=10.0`, and that file is
@@ -248,6 +248,23 @@ jobs:
           make pq-ui-check
           make ui-px-assets-check
           make pq-ui-port-diff
+          # #790: every ui-px feature set that is actually built and flashed,
+          # on BOTH boards. Added because a repo-wide grep for `ui-px-dma`
+          # found exactly ONE hit — the feature definition in
+          # secure/Cargo.toml. No make target, no CI job, no size report. So
+          # the configuration every EVT frame-time measurement came from was
+          # the one configuration nothing compiled, and it was produced by a
+          # hand-typed feature list in a shell.
+          #
+          # Note this job runs the three gates DIRECTLY rather than via
+          # `make ui-px-check`, which is how a red once sat unnoticed inside
+          # that target (see its own comment). Keep this list and that
+          # target's prerequisites in step.
+          #
+          # Cost: 16 target-triple `cargo check`s. If that becomes the long
+          # pole, trim the matrix in `UI_PX_SUFFIXES` — do not drop
+          # `ui-px-dma`, which is the whole reason this exists.
+          make ui-px-configs
       # Keep the host-only fsbl-tests suites enrolled explicitly.
       # The whole fsbl-tests crate stays out of this job because its footprint
       # suite cross-compiles the real FSBL; these named suites have no Thumb or

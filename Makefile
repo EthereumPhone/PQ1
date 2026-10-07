@@ -4852,18 +4852,25 @@ pq-ui-port-diff: ## Firmware timing constants vs handoff/spec/motion.json; fails
 # These are the feature sets that are really built and flashed. They are
 # target-triple `cargo check`s, so they catch a cfg-gated path that only
 # exists on thumbv8m — which a host `cargo test` cannot.
-UI_PX_CONFIG_BASE := mock-se,dev-testkey,ui-lcd,stm32u585,$(BOARD_FEATURE)
-UI_PX_CONFIGS := \
-	$(UI_PX_CONFIG_BASE),debug-log,ui-px \
-	$(UI_PX_CONFIG_BASE),debug-log,ui-px,ui-px-dma \
-	$(UI_PX_CONFIG_BASE),debug-log,ui-px,ui-px-frametime \
-	$(UI_PX_CONFIG_BASE),debug-log,ui-px,ui-px-dma,ui-px-frametime \
-	$(UI_PX_CONFIG_BASE),debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench \
-	$(UI_PX_CONFIG_BASE),debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench,ui-px-te-probe \
-	$(UI_PX_CONFIG_BASE),debug-log,ui-px,ui-px-spi40 \
-	$(UI_PX_CONFIG_BASE),ui-px,ui-px-dma
+# BOTH BOARDS, explicitly, NOT $(BOARD_FEATURE). Deriving the board from
+# $(BOARD) would mean a plain `make ui-px-check` only ever compiles the
+# default (iota2) — and pq1 is the board these images are flashed to, so the
+# one that matters would be covered only when someone remembered
+# `BOARD=pq1`. `board/mod.rs` hard-errors on neither-or-both, so each set
+# must name exactly one.
+UI_PX_SUFFIXES := \
+	debug-log,ui-px \
+	debug-log,ui-px,ui-px-dma \
+	debug-log,ui-px,ui-px-frametime \
+	debug-log,ui-px,ui-px-dma,ui-px-frametime \
+	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench \
+	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench,ui-px-te-probe \
+	debug-log,ui-px,ui-px-spi40 \
+	ui-px,ui-px-dma
+UI_PX_CONFIGS := $(foreach b,board-pq1 board-iota2,\
+	$(foreach s,$(UI_PX_SUFFIXES),mock-se,dev-testkey,ui-lcd,stm32u585,$(b),$(s)))
 
-ui-px-configs: ## Target-triple compile of every ui-px feature set that is actually flashed (incl. ui-px-dma)
+ui-px-configs: ## Target-triple compile of every ui-px feature set actually flashed, on BOTH boards (incl. ui-px-dma)
 	@fail=0; \
 	for c in $(UI_PX_CONFIGS); do \
 	  printf '==> %s\n' "$$c"; \

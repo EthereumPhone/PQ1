@@ -2208,3 +2208,103 @@ fn positive_panic_tears_down_the_blit_before_the_fatal_screen() {
         "the latch and the wipe must be released structurally, not positionally"
     );
 }
+
+#[test]
+fn positive_an_incomplete_frame_cannot_arm_the_sign_gesture() {
+    // #790. Since #780 the whole frame streams under ONE `set_window` and the
+    // panel auto-increments through it, so a band that stops short does not
+    // cost one band -- every LATER band lands at the wrong offset and the
+    // glass shows a shifted, garbled frame.
+    //
+    // Before #790 bounded the waits, those paths HUNG, and a hang is
+    // fail-safe: nothing is signed off a frame nobody saw. Bounding them
+    // turned a hang into "one dropped frame", which is only safe if the
+    // presenter knows the frame dropped. Otherwise `mark_rendered` runs,
+    // `seen_last` sets, and `PX_COMMIT_REQUIRES_SEEN_LAST` (owner decision
+    // 2026-09-24, HARDENING.md 2.4) counts a garbled amount or recipient page
+    // as SEEN -- arming the chord on something never legibly displayed.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "if cost.complete && driver.index() != painted_idx {"),
+        "the sign-gesture arming must require a frame that fully reached the glass"
+    );
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "cost.complete = ok && x0 >= W;"),
+        "completeness must account for BOTH a failed transfer and a short sweep"
+    );
+    // THE LOAD-BEARING HALF, and the one a must-fail control caught this gate
+    // not testing: every `stream_dma_finish` result must feed `ok`. Swapping
+    // either call site back to `let _ = ...` left the whole suite green, which
+    // means the gate above was asserting the plumbing without the input.
+    // Count the sites rather than spot-check one: there are two (the in-loop
+    // drain and the final band), and the final one is the easier to forget
+    // because nothing renders behind it.
+    let consumed = UI_PX_LCD_SRC
+        .matches("ok &= lcd::stream_dma_finish().is_ok();")
+        .count();
+    let discarded = UI_PX_LCD_SRC.matches("= lcd::stream_dma_finish();").count();
+    assert!(
+        consumed == 2 && discarded == 0,
+        "every stream_dma_finish result must clear `complete` on error \
+         (found {consumed} consuming, {discarded} discarding)"
+    );
+    // Same for the polled fallback and for a refused arm — BY COUNT, not by
+    // presence. Each of these forms appears exactly twice (band 0 before the
+    // TE wait, then once per loop iteration), so a `contains` check stays
+    // green when one of the two is swapped back to `let _ = ...`. Two
+    // must-fail controls proved that: both "refused arm ignored" and "polled
+    // failure ignored" left the whole suite green against the presence check.
+    //
+    // Every site that can tell us the frame did not land must feed `ok`, so
+    // the invariant is "no discarding site exists", which only a count can
+    // express.
+    let arms = UI_PX_LCD_SRC.matches("ok &= dma_pending;").count();
+    let polled = UI_PX_LCD_SRC.matches("ok &= lcd::stream_chunk(").count();
+    let loose_arm = UI_PX_LCD_SRC.matches("= dma_pending;").count() - arms;
+    let loose_polled = UI_PX_LCD_SRC.matches("= lcd::stream_chunk(").count() - polled;
+    assert!(
+        arms == 2 && loose_arm == 0,
+        "both arm sites must clear `complete` on a refusal (consuming {arms}, other {loose_arm})"
+    );
+    assert!(
+        polled == 2 && loose_polled == 0,
+        "both polled sites must clear `complete` on failure (consuming {polled}, other {loose_polled})"
+    );
+    // And the sweep must STOP at the first failure. Continuing streams the
+    // rest of the frame into a window whose offset is already wrong, which
+    // is more garbage on the glass and more wire for nothing.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "if !ok {")
+            && UI_PX_LCD_SRC.contains("// STOP THE SWEEP."),
+        "the band loop must break at the first failed band, not paint the rest shifted"
+    );
+    // And the legacy bridge must tell `flush()` the truth, or the #484 fatal
+    // screen silently vanishes in the one situation it exists for.
+    assert!(
+        contains_in_code(
+            UI_PX_LCD_SRC,
+            "build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None).complete"
+        ),
+        "paint_legacy must report whether the page actually landed"
+    );
+    // The verdict must survive the no-instrumentation path. A blanket
+    // `FrameCost::default()` there makes `complete` false in every build
+    // WITHOUT `ui-px-frametime` -- the shipping-shaped one -- so the chord
+    // would never arm while the bench config looked perfect.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "complete: cost.complete,"),
+        "zeroing the instrumentation must not zero the completeness verdict"
+    );
+    // Exact-line, because the loose substring also matches the legitimate
+    // `let mut cost = FrameCost::default();` initialiser. What must not come
+    // back is the bare RE-ASSIGNMENT.
+    assert!(
+        !UI_PX_LCD_SRC
+            .lines()
+            .map(|l| match l.find("//") {
+                Some(i) => &l[..i],
+                None => l,
+            })
+            .any(|c| c.trim() == "cost = FrameCost::default();"),
+        "a blanket FrameCost::default() re-assignment would clobber `complete` outside the bench config"
+    );
+}

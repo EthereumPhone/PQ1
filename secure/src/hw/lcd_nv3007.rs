@@ -534,7 +534,7 @@ fn spi_force_down() {
 /// and same reasoning as `gpdma::wait`'s cap.
 const EOT_SPIN_CAP: u32 = 4_000_000;
 
-fn spi_end() {
+fn spi_end() -> bool {
     // BOUNDED. This was `while (SR & EOT) == 0 {}`, and it is the last
     // unbounded wait in the driver — `gpdma::wait`, `gpdma::abort` and
     // `lcd_te::sync_to_scanout` are all capped, and `spi_force_down` exists
@@ -555,7 +555,12 @@ fn spi_end() {
             cortex_m::asm::delay(16);
             REG.spi_cr1.modify(|v| v & !CR1_SPE);
             REG.spi_ifcr.write(IFCR_EOTC | IFCR_TXTFC | IFCR_OVRC);
-            return;
+            // REPORTED, not just survived. Giving up means some of this
+            // chunk's frames never reached the panel, and under #780's single
+            // frame-wide window every LATER band then lands at the wrong
+            // offset — so the caller must be able to refuse the frame rather
+            // than present a shifted one. See `present_frame_ex`'s `complete`.
+            return false;
         }
     }
     // ES0499 mitigation: let the last SCK pulse complete symmetrically before
@@ -566,6 +571,7 @@ fn spi_end() {
     // next chunk; OVRC clears the harmless OVR latched from the undrained
     // RxFIFO on this write-only panel.
     REG.spi_ifcr.write(IFCR_EOTC | IFCR_TXTFC | IFCR_OVRC);
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +588,7 @@ fn spi_transfer(bytes: &[u8]) {
         for &b in &bytes[off..off + n] {
             spi_send_byte(b);
         }
-        spi_end();
+        let _ = spi_end();
         off += n;
     }
 }
@@ -598,7 +604,7 @@ pub fn write_cmd_data(cmd: u8, params: &[u8]) {
     dc_low();
     spi_begin(1);
     spi_send_byte(cmd);
-    spi_end();
+    let _ = spi_end();
     if !params.is_empty() {
         dc_high();
         spi_transfer(params); // CS still low; chunks ≤ TSIZE max
@@ -619,7 +625,7 @@ pub fn write_data(data: u8) {
     dc_high();
     spi_begin(1);
     spi_send_byte(data);
-    spi_end();
+    let _ = spi_end();
     cs_deassert();
 }
 
@@ -872,7 +878,7 @@ pub fn write_pixels_solid(color: u16, n: u32) {
             spi_send_byte(hi);
             spi_send_byte(lo);
         }
-        spi_end();
+        let _ = spi_end();
         remaining -= chunk_px;
     }
     cs_deassert();
@@ -894,7 +900,7 @@ pub fn write_pixels(buf: &[u16]) {
             spi_send_byte((px >> 8) as u8);
             spi_send_byte(px as u8);
         }
-        spi_end();
+        let _ = spi_end();
     }
     cs_deassert();
 }
@@ -926,7 +932,7 @@ pub fn write_pixels_with(n: u32, mut next: impl FnMut() -> u16) {
             spi_send_byte((px >> 8) as u8);
             spi_send_byte(px as u8);
         }
-        spi_end();
+        let _ = spi_end();
         remaining -= chunk_px;
     }
     cs_deassert();
@@ -967,7 +973,7 @@ pub fn stream_close() {
 /// byte-denominated bound. Pixels go out in pairs as single 32-bit accesses;
 /// `H` is even so every band has an even pixel count and no pair is ever
 /// split, which `chunks_exact(2)` would otherwise silently drop.
-pub fn stream_chunk(buf: &[u16]) {
+pub fn stream_chunk(buf: &[u16]) -> bool {
     // `& !1` rather than a `debug_assert` on evenness. `chunks_exact(2)` drops
     // a trailing odd pixel SILENTLY, but `spi_begin_px` would already have
     // programmed TSIZE including it — so EOT would never set and `spi_end`
@@ -980,15 +986,20 @@ pub fn stream_chunk(buf: &[u16]) {
     while off < buf.len() {
         let n = core::cmp::min(buf.len() - off, MAX_PX_CHUNK) & !1;
         if n == 0 {
-            break;
+            // An odd tail: not sent, and reported, because TSIZE would have
+            // counted it.
+            return false;
         }
         spi_begin_px(n as u16);
         for pair in buf[off..off + n].chunks_exact(2) {
             spi_send_px_pair(pair[0], pair[1]);
         }
-        spi_end();
+        if !spi_end() {
+            return false;
+        }
         off += n;
     }
+    true
 }
 
 /// Arm one DMA chunk of an open stream. Returns immediately with the transfer
@@ -1028,12 +1039,23 @@ pub fn stream_dma_start(px: &[u16]) -> bool {
 pub fn stream_dma_finish() -> Result<(), crate::hw::gpdma::DmaErr> {
     let r = crate::hw::gpdma::wait(4_000_000);
     match r {
-        Ok(()) => spi_end(),
+        // The DMA delivered every byte; the SPI may still not have clocked
+        // out every FRAME, and `spi_end` now says which. A cap expiry there
+        // is reported as a timeout so the caller refuses the frame.
+        Ok(()) => {
+            if spi_end() {
+                Ok(())
+            } else {
+                Err(crate::hw::gpdma::DmaErr::Timeout)
+            }
+        }
         // The transfer died part-way, so EOT will never set: do NOT wait for
         // it. Same reasoning as `write_pixels_dma_finish`.
-        Err(_) => spi_force_down(),
+        Err(_) => {
+            spi_force_down();
+            r
+        }
     }
-    r
 }
 
 // `write_pixels_dma_start` / `write_pixels_dma_finish` were deleted here by

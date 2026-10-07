@@ -339,6 +339,20 @@ mod frametime {
 #[derive(Clone, Copy, Default)]
 #[allow(dead_code)]
 struct FrameCost {
+    /// The frame reached the glass IN FULL. **Not instrumentation** — this is
+    /// ungated and load-bearing, because #780 streams the whole frame under
+    /// ONE `set_window` and the panel auto-increments through it. A band that
+    /// stops short therefore does not lose one band: every LATER band lands
+    /// at the wrong offset, so the glass shows a shifted, garbled frame.
+    ///
+    /// Before #790's bounded waits, those paths HUNG, and a hang is fail-safe
+    /// — nothing gets signed off a frame nobody saw. Bounding them turned a
+    /// hang into "one dropped frame", which is only safe if the caller
+    /// actually knows the frame was dropped: otherwise `mark_rendered` runs
+    /// and `PX_COMMIT_REQUIRES_SEEN_LAST` (owner decision 2026-09-24,
+    /// `HARDENING.md` §2.4) counts a garbled amount or recipient page as
+    /// SEEN, arming the sign chord on something never legibly displayed.
+    complete: bool,
     render: u32,
     blit: u32,
     /// Per-class render breakdown (bench only) — see `RenderSplit`.
@@ -359,9 +373,18 @@ struct FrameCost {
     #[cfg(feature = "ui-px-frametime")]
     stream: u32,
     /// Cycles of the LAST band's DMA alone. Nothing renders behind it, so this
-    /// is one band's wire time uncontaminated by overlap — 13,632 B at 40 MHz
-    /// is 2.73 ms, so the number says directly whether the wire is at line
-    /// rate.
+    /// is one band's wire time uncontaminated by overlap.
+    ///
+    /// Its floor is **2.50 ms**, not 2.73: the last band is 44 columns wide,
+    /// not `BAND_W` — `W` = 428 and 8 x 48 = 384 — so it is 12,496 B at
+    /// 40 MHz. Reading it against the full-band figure would score a 2.73 ms
+    /// result as "at line rate" when the wire is in fact 8% slow.
+    ///
+    /// Wire efficiency is therefore `2.50 / wire_last`, and the frame it
+    /// predicts is `stream ~= 24.31 / efficiency` (24.31 ms being the whole
+    /// 121,552 B frame at 40 MHz). So: 25 tenths = line rate = `stream` ~24.3;
+    /// 30 = 83% = ~29.2; 35 = 71% = ~34.0, which is over #780's 31.40 ms
+    /// tear bound.
     #[cfg(feature = "ui-px-frametime")]
     wire_last: u32,
     /// Cycles blocked on the TE rising edge. This is the SLACK: large means
@@ -384,6 +407,8 @@ fn present_frame(frame: &Frame<'_>, font: &Font<'_>) -> FrameCost {
 /// carrying secret cells: no strip is skipped on a digest of secret pixels,
 /// and no such digest outlives the frame).
 fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCost {
+    // `complete` stays false through every early exit below: the latch, the
+    // band-0 `Strip::new` failure, and the mid-loop `break`.
     let mut cost = FrameCost::default();
 
     // RE-ENTRANCY LATCH. The band loop below holds `&mut BANDS` across a
@@ -479,10 +504,19 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     // to a single buffer, which is correct because the polled blit is
     // synchronous).
     let mut cur = 0usize;
+    let mut ok = true;
     #[cfg(feature = "ui-px-dma")]
     let mut dma_pending = lcd::stream_dma_start(&bands[0].0[..(w0 * H) as usize]);
+    #[cfg(feature = "ui-px-dma")]
+    {
+        // `false` for a non-empty band is a REFUSAL (over the BNDT cap, or an
+        // odd pixel count), not "nothing to send".
+        ok &= dma_pending;
+    }
     #[cfg(not(feature = "ui-px-dma"))]
-    lcd::stream_chunk(&bands[0].0[..(w0 * H) as usize]);
+    {
+        ok &= lcd::stream_chunk(&bands[0].0[..(w0 * H) as usize]);
+    }
 
     let mut x0 = w0;
     while x0 < W {
@@ -497,6 +531,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
             let Some(mut strip) = Strip::new(x0, w, &mut bands[nxt].0[..]) else {
                 // MUST NOT `return`: the drain and `stream_close` below are
                 // the only exit that leaves the panel out of mid-stream.
+                ok = false;
                 break;
             };
             render_band(frame, font, &mut strip, &mut cost);
@@ -508,16 +543,28 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
             if dma_pending {
                 #[cfg(feature = "ui-px-frametime")]
                 let t_w = frametime::cycles();
-                let _ = lcd::stream_dma_finish();
+                ok &= lcd::stream_dma_finish().is_ok();
                 #[cfg(feature = "ui-px-frametime")]
                 {
                     cost.dma_wait = cost.dma_wait.wrapping_add(frametime::cycles().wrapping_sub(t_w));
                 }
             }
+            if !ok {
+                // STOP THE SWEEP. The panel auto-increments through one
+                // frame-wide window, so once a band has stopped short every
+                // later band lands at the wrong offset — continuing just
+                // paints more garbage and spends more wire. `x0 < W` on this
+                // path, so `complete` is false either way; breaking only
+                // makes the glass less wrong and the recovery quicker.
+                break;
+            }
             dma_pending = lcd::stream_dma_start(&bands[nxt].0[..(w * H) as usize]);
+            ok &= dma_pending;
         }
         #[cfg(not(feature = "ui-px-dma"))]
-        lcd::stream_chunk(&bands[nxt].0[..(w * H) as usize]);
+        {
+            ok &= lcd::stream_chunk(&bands[nxt].0[..(w * H) as usize]);
+        }
         #[cfg(feature = "ui-px-frametime")]
         {
             let t2 = frametime::cycles();
@@ -539,7 +586,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
         // materially more means it is stalling between bands (#790).
         #[cfg(feature = "ui-px-frametime")]
         let t_w = frametime::cycles();
-        let _ = lcd::stream_dma_finish();
+        ok &= lcd::stream_dma_finish().is_ok();
         #[cfg(feature = "ui-px-frametime")]
         {
             let d = frametime::cycles().wrapping_sub(t_w);
@@ -548,6 +595,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
         }
     }
     lcd::stream_close();
+    cost.complete = ok && x0 >= W;
     #[cfg(feature = "ui-px-frametime")]
     {
         cost.stream = frametime::cycles().wrapping_sub(t_edge);
@@ -650,9 +698,11 @@ fn build_and_present(
     // te_wait.
     //   stream    = TE edge -> last pixel at TXDR. MUST read < 314 (31.40 ms)
     //               or the frame is outside #780's tear-free bound.
-    //   wire_last = one band's wire with nothing overlapping it. Floor is 27
-    //               (2.73 ms). `stream` ~= 9 x wire_last means the sweep is
-    //               continuous; much more means it stalls between bands.
+    //   wire_last = one band's wire with nothing overlapping it. Floor is 25
+    //               (2.50 ms -- the LAST band is 44 cols, not 48). Wire
+    //               efficiency = 25 / wire_last, and that predicts
+    //               `stream` ~= 243 / efficiency. Reading it against the
+    //               48-col 2.73 ms figure scores an 8%-slow wire as perfect.
     //   te_wait   = the slack before a whole refresh period is lost.
     if let Some(text) = wire {
         use pqsigner_ui_px::font::{Align, TextRun, TierId};
@@ -697,7 +747,17 @@ fn build_and_present(
     }
     #[cfg(not(feature = "ui-px-frametime"))]
     {
-        cost = FrameCost::default();
+        // Zero the INSTRUMENTATION, keep the VERDICT. `complete` is not a
+        // counter — `paint_legacy` and the sign-gesture arming both read it —
+        // so a blanket `FrameCost::default()` here would make it false in
+        // every build WITHOUT `ui-px-frametime`, i.e. in the shipping-shaped
+        // one: `mark_rendered` would never run, `seen_last` would never set,
+        // and the chord would never arm. The bench config would have looked
+        // perfect throughout.
+        cost = FrameCost {
+            complete: cost.complete,
+            ..FrameCost::default()
+        };
     }
     cost
 }
@@ -724,8 +784,14 @@ pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_RO
     // The legacy glyph blitter may have painted between calls.
     let s = Screen::legacy(rows);
     let anim = Anim::new(&s, 0, timeout::now());
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
-    true
+    // RETURNS THE TRUTH. `flush()` skips the glyph blitter only when this
+    // says the page is on the glass. Two ways it is not, and both reach here
+    // from the #484 panic handler: the re-entrancy latch (a panic landed
+    // INSIDE `present_frame_ex`, so this call paints nothing at all), and a
+    // band that stopped short. Returning `true` regardless would make the
+    // fatal "Secrets wiped / Power-cycle" screen silently disappear in
+    // exactly the situation it exists for.
+    build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None).complete
 }
 
 /// Clear the panel (before the legacy glyph blitter paints again).
@@ -1281,7 +1347,12 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         }
         #[cfg(not(feature = "ui-px-frametime"))]
         let _ = cost;
-        if driver.index() != painted_idx {
+        // `cost.complete` FIRST. `mark_rendered` is what sets `seen_last`,
+        // which is the whole of `PX_COMMIT_REQUIRES_SEEN_LAST`: arming the
+        // sign chord off a frame that did not fully reach the glass would
+        // approve a recipient or amount the user never legibly saw. Leaving
+        // `painted_idx` unadvanced means the next good frame does the mark.
+        if cost.complete && driver.index() != painted_idx {
             painted_idx = driver.index();
             driver.mark_rendered();
             super::text::present(&visible[painted_idx], driver.page(), painted_idx, visible.len());
