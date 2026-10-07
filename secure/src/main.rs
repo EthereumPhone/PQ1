@@ -4723,6 +4723,18 @@ unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     nsc::zeroize_sensitive_state();
 
+    // Tear down the pixel blit's DMA channel BEFORE the fatal screen paints.
+    // A panic can land inside `ui::px::lcd::present_frame_ex`'s band loop,
+    // where GPDMA channel 0 is `EN = 1` and streaming a band buffer that the
+    // rasteriser is about to be re-entered on. Nothing on the fault path tore
+    // that channel down, so the fatal screen below would paint into the same
+    // auto-incrementing RAMWR as a live transfer. `abort()` is bounded spins
+    // plus MMIO writes and is panic-free, so it is safe to call from here.
+    // `[profile.release]` keeps `overflow-checks = true`, so this window is
+    // live in shipping images and not just in debug ones.
+    #[cfg(all(feature = "stm32u585", feature = "ui-px-dma"))]
+    crate::hw::gpdma::abort();
+
     // Issue #484 fatal screen. Secrets are already wiped, so row 1 is
     // truthful. Every call on this path is panic-free by construction
     // (see the handler doc + `ui::display_if_ready`).

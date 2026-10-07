@@ -225,12 +225,28 @@ const IFCR_OVRC: u32 = 1 << 6;
 /// SPE-toggle gap.
 const MAX_CHUNK: u16 = 65_534;
 
-/// The same 16-bit `TSIZE` ceiling expressed in 16-bit FRAMES, for the pixel
-/// stream. `TSIZE` counts frames, so at `DSIZE_16` a chunk may carry 65,534
-/// PIXELS (131,068 B) rather than 65,534 bytes — the whole 60,776-pixel frame
-/// would fit in one, and a band (6,816 px) is far inside it. Even, so the
-/// paired 32-bit accesses never straddle a chunk boundary.
+/// The 16-bit `TSIZE` ceiling expressed in 16-bit FRAMES, for the POLLED pixel
+/// stream. `TSIZE` counts frames, so at `DSIZE_16` a polled chunk may carry
+/// 65,534 PIXELS rather than 65,534 bytes. Even, so the paired 32-bit accesses
+/// never straddle a chunk boundary.
 const MAX_PX_CHUNK: usize = 65_534;
+
+/// The DMA pixel ceiling, which is HALF the polled one and derived from a
+/// DIFFERENT register.
+///
+/// `TSIZE` is not the binding counter once GPDMA is involved:
+/// `GPDMA_CxBR1.BNDT` is also 16 bits but counts BYTES, and bits 31:16 of
+/// that register are "Reserved, must be kept at reset value" (RM0456
+/// §17.8.14). So a 40,000-pixel chunk is a legal TSIZE and an 80,000-byte
+/// BNDT, which truncates to 14,464 — the channel then delivers 7,232 of the
+/// 40,000 frames, raises TCF, `wait` returns `Ok`, and `spi_end` spins on an
+/// EOT that can never set. That is the exact under-supply wedge
+/// [`spi_begin_px`] warns about, reached without anyone mis-typing a unit.
+///
+/// 65,532 B is the largest BNDT that is also a multiple of the 4-byte source
+/// width word beats require, so 32,766 pixels. Even, so `px.len() % 2 == 0`
+/// still holds at the cap.
+const MAX_DMA_PX_CHUNK: usize = 32_766;
 
 // ---------------------------------------------------------------------------
 // GPIO helpers — DC / RES atomic set/clear via BSRR
@@ -426,9 +442,21 @@ fn spi_send_byte(b: u8) {
     while (REG.spi_sr.read() & SR_TXP) == 0 {}
     // 8-bit write to TXDR. Reg32 only supports u32 access; use raw
     // write_volatile here for the byte-wide store the SPI peripheral
-    // expects when DSIZE=7.
-    // SAFETY: TXDR is a real MMIO register, `cfg1` was set with
-    // DSIZE = 7 (8-bit) by spi_hw::init(); byte writes are valid.
+    // expects at DSIZE_8.
+    //
+    // SAFETY: TXDR is a real MMIO register. The precondition is the BRACKET,
+    // not the boot-time init: `spi_hw::init`'s `DSIZE = 7` governs nothing any
+    // more, because `spi_begin_framed` rewrites the frame geometry on every
+    // transfer. What makes this byte store exactly one frame is that every
+    // caller runs inside a `spi_begin()` — never a `spi_begin_px()` — and that
+    // call programmed `DSIZE_8` in its own SPE = 0 window. A byte store at
+    // `DSIZE_16` would be an access smaller than one data, which §68.8.13
+    // forbids with no defined behaviour at all.
+    debug_assert_eq!(
+        REG.spi_cfg1.read() & 0x1F,
+        DSIZE_8,
+        "spi_send_byte outside a spi_begin() bracket: a sub-frame TXDR write"
+    );
     unsafe {
         core::ptr::write_volatile(REG.spi_txdr_addr as *mut u8, b);
     }
@@ -497,8 +525,39 @@ fn spi_force_down() {
     REG.spi_ifcr.write(IFCR_EOTC | IFCR_TXTFC | IFCR_OVRC);
 }
 
+/// Poll iterations `spi_end` will wait for EOT before giving up.
+///
+/// The worst legitimate wait is one whole frame's chunk: 60,776 pixels at
+/// 40 MHz is 24.3 ms, and a poll iteration is a handful of cycles at 160 MHz,
+/// so 4,000,000 iterations is well over an order of magnitude of headroom
+/// while still bounding the wait at roughly a tenth of a second. Same shape
+/// and same reasoning as `gpdma::wait`'s cap.
+const EOT_SPIN_CAP: u32 = 4_000_000;
+
 fn spi_end() {
-    while (REG.spi_sr.read() & SR_EOT) == 0 {}
+    // BOUNDED. This was `while (SR & EOT) == 0 {}`, and it is the last
+    // unbounded wait in the driver — `gpdma::wait`, `gpdma::abort` and
+    // `lcd_te::sync_to_scanout` are all capped, and `spi_force_down` exists
+    // precisely because "EOT can never set" is a reachable state. The hole was
+    // that it is reachable on the DMA *success* arm too: TSIZE counts frames
+    // and BNDT counts bytes, hardware cross-checks neither, so any accounting
+    // error between them leaves the DMA reporting TCF while the SPI still
+    // waits for frames that will never arrive. Unbounded there means a dead
+    // device — IWDG is kicked from SysTick, so the watchdog does not rescue it
+    // — and this path paints the measured-boot fingerprint and the PIN entry
+    // screen. Bounded, the same mistake costs one dropped frame.
+    let mut spins = 0u32;
+    while (REG.spi_sr.read() & SR_EOT) == 0 {
+        spins += 1;
+        if spins >= EOT_SPIN_CAP {
+            // Tear it down the way a known-dead transfer is torn down, rather
+            // than dropping SPE on a transfer that might still be shifting.
+            cortex_m::asm::delay(16);
+            REG.spi_cr1.modify(|v| v & !CR1_SPE);
+            REG.spi_ifcr.write(IFCR_EOTC | IFCR_TXTFC | IFCR_OVRC);
+            return;
+        }
+    }
     // ES0499 mitigation: let the last SCK pulse complete symmetrically before
     // dropping SPE. ~16 cycles @160 MHz ≈ 100 ns > one 5 MHz SCK half-period.
     cortex_m::asm::delay(16);
@@ -909,13 +968,20 @@ pub fn stream_close() {
 /// `H` is even so every band has an even pixel count and no pair is ever
 /// split, which `chunks_exact(2)` would otherwise silently drop.
 pub fn stream_chunk(buf: &[u16]) {
-    debug_assert!(
-        buf.len() % 2 == 0,
-        "bands are w*H pixels and H is even, so the pair loop is exact"
-    );
+    // `& !1` rather than a `debug_assert` on evenness. `chunks_exact(2)` drops
+    // a trailing odd pixel SILENTLY, but `spi_begin_px` would already have
+    // programmed TSIZE including it — so EOT would never set and `spi_end`
+    // would spin with CS asserted. Release builds carry no debug assertions,
+    // so the assert that named this hazard was absent exactly where it
+    // mattered. Rounding the chunk down keeps TSIZE and the pairs in step for
+    // ANY buffer length; an odd tail is then simply not sent, which is a
+    // missing pixel rather than a dead device.
     let mut off = 0usize;
     while off < buf.len() {
-        let n = core::cmp::min(buf.len() - off, MAX_PX_CHUNK);
+        let n = core::cmp::min(buf.len() - off, MAX_PX_CHUNK) & !1;
+        if n == 0 {
+            break;
+        }
         spi_begin_px(n as u16);
         for pair in buf[off..off + n].chunks_exact(2) {
             spi_send_px_pair(pair[0], pair[1]);
@@ -941,7 +1007,15 @@ pub fn stream_dma_start(px: &[u16]) -> bool {
     if px.is_empty() {
         return false;
     }
-    debug_assert!(px.len() <= MAX_PX_CHUNK, "TSIZE is 16 bits, in frames");
+    // A RUNTIME refusal, not a `debug_assert`: `[profile.release]` sets no
+    // `debug-assertions`, so an assert here is absent from every image that
+    // ships, and the failure it would have caught is a permanent hang rather
+    // than a wrong pixel. Refusing returns `false`, which the caller reads as
+    // "nothing in flight" — one dropped band, and the stream is closed
+    // normally.
+    if px.len() > MAX_DMA_PX_CHUNK || px.len() % 2 != 0 {
+        return false;
+    }
     dc_high();
     spi_begin_px(px.len() as u16); // TSIZE = frames
     crate::hw::gpdma::start_px(px); // BNDT = 2 * frames, in bytes

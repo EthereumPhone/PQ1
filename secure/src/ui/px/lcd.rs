@@ -135,6 +135,9 @@ static mut BANDS: [Band; N_BANDBUF] = [const { Band([0; STRIP_PX]) }; N_BANDBUF]
 
 // ---- SysTick edge ring ------------------------------------------------------
 
+/// Set for the duration of `present_frame_ex`. See the latch there.
+static FRAME_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
 /// Sampling is enabled only inside a live flow.
 static PX_SAMPLING: AtomicBool = AtomicBool::new(false);
 /// Accepted (debounced) edges only: ≤ 40 per second per side, so 16 entries
@@ -382,8 +385,37 @@ fn present_frame(frame: &Frame<'_>, font: &Font<'_>) -> FrameCost {
 /// and no such digest outlives the frame).
 fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCost {
     let mut cost = FrameCost::default();
+
+    // RE-ENTRANCY LATCH. The band loop below holds `&mut BANDS` across a
+    // render that runs while GPDMA is streaming, and `[profile.release]`
+    // keeps `overflow-checks = true`, so a panic inside that window is live in
+    // shipping images. The #484 panic handler paints a fatal screen, which
+    // under `ui-px` reaches `paint_legacy` and back into here — taking a
+    // SECOND `&mut` to the same static while a DMA channel reads it. The
+    // latch turns that into an early return; the panic handler's own
+    // `paint_legacy` then falls through to the glyph blitter, which touches
+    // neither this static nor the DMA.
+    if FRAME_IN_FLIGHT.swap(true, Ordering::Acquire) {
+        return cost;
+    }
+    // Clears the latch AND zeroizes the band buffers on EVERY exit, including
+    // the `return` in the band-0 branch below and any future one. The wipe
+    // used to be a statement at the end of the function, which the band-0
+    // `Strip::new` failure skipped — unreachable, but positional rather than
+    // structural, and the sibling branch inside the loop needs a comment
+    // saying "MUST NOT return" precisely because of that asymmetry.
+    struct FrameGuard;
+    impl Drop for FrameGuard {
+        fn drop(&mut self) {
+            wipe_scratch();
+            FRAME_IN_FLIGHT.store(false, Ordering::Release);
+        }
+    }
+    let _guard = FrameGuard;
+
     // SAFETY: single-threaded frame loop; the SysTick sampler never touches
-    // the band buffers (same discipline as `splash_test::FB`).
+    // the band buffers (same discipline as `splash_test::FB`), and the latch
+    // above excludes the one re-entrant caller (the panic handler).
     let bands = unsafe { &mut *core::ptr::addr_of_mut!(BANDS) };
 
     // ---- band 0 BEFORE the TE wait -------------------------------------
@@ -520,7 +552,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     {
         cost.stream = frametime::cycles().wrapping_sub(t_edge);
     }
-    wipe_scratch();
+    // `_guard` wipes the band buffers and clears the latch here.
     cost
 }
 
@@ -540,6 +572,15 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
 /// `WORDS_COLS[1].1 = 282` (`rows.rs:120`), so a long word at the 22 px tier
 /// reaches well past 384. The residue the review called latent became live, so
 /// the wipe it prescribed is now load-bearing.
+///
+/// The WHOLE buffer, not the `w * H` the band used. `render_strip` clears only
+/// `w * H` pixels, and the last band is 44 columns wide (W = 428, 8 x 48 =
+/// 384) against a 48-column buffer — so 568 pixels of the tail are never
+/// touched by that clear and still hold an EARLIER band's ink. Under the
+/// two-buffer ping-pong the parity is fixed (bands 0,2,4,6,8 all land in
+/// `BANDS[0]`), so that residue is band SIX's, not band seven's as a reader
+/// of the alternation would assume. Zeroizing the array rather than the used
+/// prefix is what makes that irrelevant.
 ///
 /// Unconditional rather than gated on a "this frame was secret" flag: that is
 /// the same kind of remembered relationship the review objected to. The cost

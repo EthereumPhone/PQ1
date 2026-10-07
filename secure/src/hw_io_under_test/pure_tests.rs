@@ -54,6 +54,7 @@ const BOARD_MOD_SRC: &str = include_str!("../board/mod.rs");
 const LCD_NV3007_SRC: &str = include_str!("../hw/lcd_nv3007.rs");
 const UI_PX_LCD_SRC: &str = include_str!("../ui/px/lcd.rs");
 const GPDMA_SRC: &str = include_str!("../hw/gpdma.rs");
+const MAIN_SRC: &str = include_str!("../main.rs");
 const AW99703_SRC: &str = include_str!("../hw/aw99703.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
@@ -2116,5 +2117,94 @@ fn positive_band_buffers_are_word_aligned_and_all_wiped() {
     assert!(
         contains_in_code(UI_PX_LCD_SRC, "for b in (*core::ptr::addr_of_mut!(BANDS)).iter_mut()"),
         "every band buffer must be zeroized by iteration, not by being named one at a time"
+    );
+}
+
+#[test]
+fn positive_no_unbounded_wait_survives_on_the_panel_path() {
+    // #790. Every other wait in this driver is capped -- `gpdma::wait`,
+    // `gpdma::abort`'s suspend loop, `lcd_te::sync_to_scanout` -- and
+    // `spi_force_down` exists precisely because "EOT can never set" is a
+    // reachable state after a failed DMA. The hole was that it is reachable on
+    // the DMA SUCCESS arm too: `CR2.TSIZE` counts frames, `BNDT` counts bytes,
+    // hardware cross-checks neither, so any accounting error between them
+    // leaves GPDMA raising TCF while the SPI still waits for frames that never
+    // arrive. Unbounded there is a DEAD DEVICE, not a dropped frame: IWDG is
+    // kicked from SysTick so the watchdog does not rescue it, and this path
+    // paints the measured-boot fingerprint and the PIN entry screen.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "const EOT_SPIN_CAP: u32 = 4_000_000;"),
+        "the EOT wait must be bounded"
+    );
+    assert!(
+        !LCD_NV3007_SRC.contains("while (REG.spi_sr.read() & SR_EOT) == 0 {}"),
+        "the unbounded EOT spin must not come back"
+    );
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "if spins >= EOT_SPIN_CAP {"),
+        "the EOT wait must give up at its cap rather than spin forever"
+    );
+}
+
+#[test]
+fn positive_dma_pixel_chunk_is_capped_by_bndt_at_runtime() {
+    // #790. `TSIZE` is NOT the binding counter once GPDMA is involved.
+    // `GPDMA_CxBR1.BNDT` is also 16 bits but counts BYTES, and bits 31:16 of
+    // that register are reserved -- so a 40,000-pixel chunk is a legal TSIZE
+    // and an 80,000-byte BNDT that TRUNCATES to 14,464. The channel then
+    // delivers 7,232 of 40,000 frames, raises TCF, `wait` returns Ok, and the
+    // SPI waits forever for the rest. Reaching that needs no mis-typed unit,
+    // just a chunk over 32,767 px.
+    //
+    // So the DMA path needs its OWN cap, at half the polled one, and it must
+    // be a RUNTIME refusal: `[profile.release]` sets no `debug-assertions`, so
+    // an assert is absent from exactly the images that ship.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "const MAX_DMA_PX_CHUNK: usize = 32_766;"),
+        "the DMA chunk cap must come from BNDT (bytes), not from TSIZE (frames)"
+    );
+    assert!(
+        contains_in_code(
+            LCD_NV3007_SRC,
+            "if px.len() > MAX_DMA_PX_CHUNK || px.len() % 2 != 0 {"
+        ),
+        "the cap must be enforced at runtime -- release builds carry no debug assertions"
+    );
+    // And the polled path must keep TSIZE in step with the pairs it actually
+    // sends, for ANY length, rather than asserting evenness in a profile that
+    // strips asserts.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "MAX_PX_CHUNK) & !1;"),
+        "the polled chunk must round down to an even frame count"
+    );
+}
+
+#[test]
+fn positive_panic_tears_down_the_blit_before_the_fatal_screen() {
+    // #790. `present_frame_ex` holds `&mut BANDS` across a render that runs
+    // while GPDMA channel 0 is EN=1, and `[profile.release]` keeps
+    // `overflow-checks = true`, so a panic in that window is live in SHIPPING
+    // images. The #484 fatal screen then paints, which under `ui-px` reaches
+    // `paint_legacy` and back into `present_frame_ex` -- a second `&mut` to
+    // the same static while a DMA channel is reading it, and a second stream
+    // into the same auto-incrementing RAMWR.
+    //
+    // Two halves, in two files, of one property: the channel is torn down and
+    // the presenter refuses re-entry.
+    assert!(
+        MAIN_SRC.contains("crate::hw::gpdma::abort();"),
+        "the panic handler must abort the blit channel before the fatal screen paints"
+    );
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "if FRAME_IN_FLIGHT.swap(true, Ordering::Acquire) {"),
+        "the presenter must refuse re-entry rather than alias the band buffers"
+    );
+    // The latch and the secret wipe both release through `Drop`, so a `return`
+    // added later cannot skip either. The band-0 branch already was such a
+    // return.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "impl Drop for FrameGuard {")
+            && contains_in_code(UI_PX_LCD_SRC, "FRAME_IN_FLIGHT.store(false, Ordering::Release);"),
+        "the latch and the wipe must be released structurally, not positionally"
     );
 }

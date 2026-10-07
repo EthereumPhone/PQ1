@@ -182,7 +182,15 @@ pub fn init() {
     // CFG1: 8-bit data size (DSIZE[4:0] = 7), baud rate prescaler.
     // PCLK = 160 MHz.  SCK = 160 / 2^(MBR+1), MBR[2:0] in bits [30:28].
     // DSIZE[4:0] in bits [4:0] = 0b00111 (8-bit)
-    // FTHLV[1:0] in bits [6:5] = 00 (1-data threshold for TXP/RXP)
+    // FTHLV[3:0] in bits [8:5] = 0000 (1-data threshold for TXP/RXP) -- FOUR
+    // bits wide, not two; the old "[1:0] in bits [6:5]" here was wrong (SVD +
+    // RM0456 §68.8.8, which enumerates 0000..1111 = 1..16 data). Harmless
+    // while the value is 0, which is why it survived.
+    //
+    // NOTE: since #790 neither of these frame-geometry fields is observable.
+    // `lcd_nv3007::spi_begin_framed` rewrites CFG1[8:0] on every transfer, so
+    // what is written here is a reset-state courtesy; only MBR[30:28] below
+    // outlives this function.
     //
     // The NV3007 LCD (`ui-lcd`) needs throughput — at ÷32 (5 MHz) a full
     // 121,552-byte RGB565 repaint takes ~200 ms, and while that slowly streams
