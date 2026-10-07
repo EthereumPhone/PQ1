@@ -487,14 +487,37 @@ fn draw_item(item: &Item<'_>, font: &Font<'_>, s: &mut Strip<'_>) {
         Item::Shape { pts, xf, mode, color, a } => shape(s, pts, xf, mode, color, a),
         Item::Secret { text, tier, x, y, color } => font.blit_secret_run(tier, text, x, y, color, s),
         Item::Rect { x, y, w, h, color, a } => {
+            if !s.x_hits(x, x + w - 1) {
+                return;
+            }
+            note_work();
             for yy in y.max(0)..(y + h).min(H) {
-                for xx in x.max(0)..(x + w).min(W) {
+                for xx in x.max(s.x0)..(x + w).min(s.x0 + s.w) {
                     s.blend(xx, yy, color, a);
                 }
             }
         }
     }
 }
+
+/// Counts rasteriser invocations that got PAST their band cull.
+///
+/// A missing x cull is invisible to the goldens — output is identical either
+/// way, it is only 9x slower — and that is exactly how `x_hits` came to be
+/// defined, documented as "every rasteriser calls this first", and called by
+/// nothing. `cull_rejects_items_outside_the_band` reads this.
+#[cfg(test)]
+pub(crate) static WORK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+#[inline]
+fn note_work() {
+    WORK.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+fn note_work() {}
 
 /// Coverage of a pixel at signed distance `d` (Q8) from an edge, where the
 /// inside is `d ≤ 0`: 1 − clamp(d + ½).
@@ -536,6 +559,13 @@ fn half_width(limit: i64) -> Option<Q8> {
 /// ≈ 1 px anti-aliased rim evaluates the exact distance. Pixel-for-pixel the
 /// same output as evaluating [`edge_cov`] everywhere, ~15× fewer square roots.
 fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8, u8)>) {
+    // Band cull FIRST: the row loop below runs an isqrt (`half_width`) per
+    // row, and a band spans every row, so a disc outside this band would cost
+    // 142 isqrts for nothing -- nine times per frame.
+    if !s.x_hits(((cx - r) >> 8) - 1, ((cx + r) >> 8) + 1) {
+        return;
+    }
+    note_work();
     let (level, a) = min_y.unwrap_or((i32::MIN / 2, 255));
     let y_lo = ((cy - r) >> 8) - 1;
     let y_hi = ((cy + r) >> 8) + 1;
@@ -596,6 +626,10 @@ fn chord(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, level_y: Q8, color: Rgb, a: u
 /// and the outside are skipped by row span. Output identical to evaluating
 /// every pixel of the bounding box.
 fn ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
+    if !s.x_hits(((cx - r) >> 8) - 1, ((cx + r) >> 8) + 1) {
+        return;
+    }
+    note_work();
     let r_in = r - w;
     let y_lo = ((cy - r) >> 8) - 1;
     let y_hi = ((cy + r) >> 8) + 1;
@@ -672,9 +706,18 @@ fn capsules(s: &mut Strip<'_>, pts: &[(Q8, Q8)], hw: Q8, color: Rgb) {
         y_hi = y_hi.max(y);
     }
     let pad = hw + ONE_Q8;
+    if !s.x_hits((x_lo - pad) >> 8, ((x_hi + pad) >> 8) + 1) {
+        return;
+    }
+    note_work();
+    // Clip x to the BAND, not the frame: this inner loop pays a 64-bit
+    // division per pixel per segment in `seg_dist`, so iterating columns the
+    // band cannot hold is the most expensive possible way to do nothing.
+    let xa = ((x_lo - pad) >> 8).max(s.x0);
+    let xb = ((x_hi + pad) >> 8).min(s.x0 + s.w - 1);
     for y in ((y_lo - pad) >> 8).max(0)..=((y_hi + pad) >> 8).min(H - 1) {
         let py = (y << 8) + ONE_Q8 / 2;
-        for x in ((x_lo - pad) >> 8).max(0)..=((x_hi + pad) >> 8).min(W - 1) {
+        for x in xa..=xb {
             let px = (x << 8) + ONE_Q8 / 2;
             let mut d = i32::MAX;
             for w in pts.windows(2) {
@@ -851,8 +894,12 @@ fn shape(s: &mut Strip<'_>, pts: &[(i16, i16)], xf: Xform, mode: ShapeMode, colo
     }) + ONE_Q8;
     let ya = ((y_lo - reach) >> 8).max(0);
     let yb = ((y_hi + reach) >> 8).min(H - 1);
-    let xa = ((x_lo - reach) >> 8).max(0);
-    let xb = ((x_hi + reach) >> 8).min(W - 1);
+    let xa = ((x_lo - reach) >> 8).max(s.x0);
+    let xb = ((x_hi + reach) >> 8).min(s.x0 + s.w - 1);
+    if xb < xa {
+        return;
+    }
+    note_work();
     for y in ya..=yb {
         let py = (y << 8) + ONE_Q8 / 2;
         for x in xa..=xb {
@@ -889,9 +936,15 @@ fn mask_blit(s: &mut Strip<'_>, cx: Q8, cy: Q8, m: &Mask<'_>, scale: Q8, color: 
     let dh = (i64::from(m.h) * i64::from(scale) >> 8) as i32;
     let x0 = (cx >> 8) - dw / 2;
     let y0 = (cy >> 8) - dh / 2;
+    if !s.x_hits(x0, x0 + dw - 1) {
+        return;
+    }
+    note_work();
+    let xa = x0.max(s.x0);
+    let xb = (x0 + dw).min(s.x0 + s.w);
     for y in y0.max(0)..(y0 + dh).min(H) {
         let sy = (((y - y0) << 8) / scale.max(1)) as u16;
-        for x in x0.max(0)..(x0 + dw).min(W) {
+        for x in xa..xb {
             let sx = (((x - x0) << 8) / scale.max(1)) as u16;
             let a4 = m.alpha4(sx, sy);
             if a4 != 0 {
@@ -1092,6 +1145,59 @@ mod span_equivalence {
             }
             assert!(b1 == b2, "case {case}: cx={cx} cy={cy} r={r} w={w} a={a} level={level} x0={x0}");
         }
+    }
+
+    /// Every rasteriser must reject an item its band cannot hold, BEFORE doing
+    /// per-row work.
+    ///
+    /// This is the test that was missing. `x_hits` was defined, documented as
+    /// "every rasteriser calls this first", asserted in a commit message to be
+    /// wired in -- and called by nothing. The goldens could not catch it
+    /// because the OUTPUT is identical either way: a band spans every row, so
+    /// an unculled disc still clips correctly in `idx`, it just walks 142 rows
+    /// running an isqrt each, nine times per frame instead of once. On glass
+    /// that was render 7.8 ms -> 51.6 ms of shapes, which overran the frame and
+    /// brought the tearing back as stationary seams.
+    ///
+    /// Both directions are asserted: an out-of-band frame must do NO work, and
+    /// the same frame must do work when the band contains it. Without the
+    /// positive leg a cull that rejects everything would pass.
+    #[test]
+    fn cull_rejects_items_outside_the_band() {
+        use core::sync::atomic::Ordering;
+
+        // Every item kind that has a cull, all parked in x = [0, 60).
+        let mut f = Frame::new();
+        f.push(Item::Disc { cx: 30 << 8, cy: 72 << 8, r: 20 << 8, color: Rgb::WHITE });
+        f.push(Item::Ring { cx: 30 << 8, cy: 72 << 8, r: 18 << 8, w: 2 << 8, color: Rgb::WHITE });
+        f.push(Item::Chord { cx: 30 << 8, cy: 72 << 8, r: 16 << 8, level_y: 72 << 8, color: Rgb::WHITE, a: 200 });
+        f.push(Item::Chevron { cx: 20 << 8, cy: 19 << 8, angle: 1 << 14, color: Rgb::WHITE });
+        f.push(Item::Check { cx: 30 << 8, cy: 100 << 8, r: 15 << 8, color: Rgb::WHITE, k: 1 << 16 });
+        f.push(Item::Cross { cx: 45 << 8, cy: 40 << 8, r: 12 << 8, color: Rgb::WHITE, k: 1 << 16 });
+        f.push(Item::Rect { x: 10, y: 4, w: 40, h: 9, color: Rgb::WHITE, a: 180 });
+        let font = Font::empty();
+
+        // NEGATIVE: a band far to the right holds none of them.
+        let mut buf = [0u16; (48 * H) as usize];
+        WORK.store(0, Ordering::Relaxed);
+        {
+            let mut st = Strip::new(336, 48, &mut buf).unwrap();
+            render_strip(&f, &font, &mut st);
+        }
+        let rejected = WORK.load(Ordering::Relaxed);
+        assert_eq!(rejected, 0, "every item should have been culled by the x = [336, 384) band");
+        assert!(buf.iter().all(|&p| p == 0), "a culled band must also be blank");
+
+        // POSITIVE control: the band that DOES hold them must do work, or the
+        // assertion above would pass for a cull that rejects everything.
+        WORK.store(0, Ordering::Relaxed);
+        {
+            let mut st = Strip::new(0, 48, &mut buf).unwrap();
+            render_strip(&f, &font, &mut st);
+        }
+        let accepted = WORK.load(Ordering::Relaxed);
+        assert!(accepted >= 7, "the x = [0, 48) band holds all 7 items, got {accepted}");
+        assert!(buf.iter().any(|&p| p != 0), "the holding band must have drawn something");
     }
 
     /// Nine vertical bands must compose to exactly the same frame as one
