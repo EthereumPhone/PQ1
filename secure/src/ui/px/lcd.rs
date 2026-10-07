@@ -72,7 +72,7 @@ const N_STRIPS: usize = ((W + BAND_W - 1) / BAND_W) as usize;
 /// read by the DMA and written by the CPU at the same time. The overlap we
 /// want is DMA-of-strip-k against RENDER-of-strip-k+1, which this preserves.
 #[cfg(feature = "ui-px-dma")]
-static mut TXBUF: [u8; STRIP_PX * 2] = [0; STRIP_PX * 2];
+static mut TXBUF: [u16; STRIP_PX] = [0; STRIP_PX];
 
 /// Widen a band into `TXBUF` as big-endian bytes. Returns the byte count.
 ///
@@ -87,13 +87,33 @@ fn widen_into_txbuf(buf: &[u16]) -> usize {
     // SAFETY: single-threaded frame loop; the previous DMA was waited on
     // before this call, so no other agent is reading TXBUF.
     let tx = unsafe { &mut *core::ptr::addr_of_mut!(TXBUF) };
-    let mut o = 0usize;
-    for &px in buf {
-        tx[o] = (px >> 8) as u8;
-        tx[o + 1] = px as u8;
-        o += 2;
+    // One 16-bit store per pixel via `to_be`, zipped so the bounds checks fall
+    // away. It was two bounds-checked BYTE stores at `tx[o]` / `tx[o + 1]`,
+    // which measured 4.0 ms for 60,776 px on glass — 10.5 cycles a pixel, and
+    // the single largest removable cost in the frame. `to_be` puts the high
+    // byte at the lower address on this little-endian core, which is the order
+    // the panel wants, so the DMA still streams the buffer verbatim as bytes.
+    for (d, &px) in tx.iter_mut().zip(buf) {
+        *d = px.to_be();
     }
-    o
+    buf.len() * 2
+}
+
+/// `TXBUF`'s first `n` bytes, for GPDMA.
+///
+/// The buffer is `[u16]` so the endian swap above is one store per pixel, but
+/// the transfer is a byte stream: GPDMA reads bytes in ascending address order,
+/// which over `to_be`-stored half-words is high-byte-first per pixel.
+#[cfg(feature = "ui-px-dma")]
+fn txbuf_bytes(n: usize) -> &'static [u8] {
+    // SAFETY: `TXBUF` is `[u16; STRIP_PX]`, so it is 2-byte aligned and
+    // `STRIP_PX * 2` bytes long; `n` is always `w * H * 2 <= STRIP_PX * 2`.
+    // Reading a `[u16]` as `[u8]` is sound for any initialised contents, and
+    // the frame loop is single-threaded with the previous DMA already drained.
+    unsafe {
+        let p = core::ptr::addr_of!(TXBUF).cast::<u8>();
+        core::slice::from_raw_parts(p, n.min(STRIP_PX * 2))
+    }
 }
 
 // The per-band content DIGEST and its `SHOWN` table were deleted here by
@@ -323,6 +343,24 @@ struct FrameCost {
     /// Per-class render breakdown (bench only) — see `RenderSplit`.
     #[cfg(feature = "ui-px-frametime")]
     split: pqsigner_ui_px::raster::RenderSplit,
+    /// Cycles spent in `stream_dma_finish` INSIDE the band loop, i.e. the wire
+    /// time the CPU could not hide behind a render. If the DMA ran at the full
+    /// 40 MHz this should be 9 x (2.73 - 1.84) = ~8 ms; materially more means
+    /// the transfer is not achieving line rate, and the suspects are SRAM1
+    /// contention (TXBUF and STRIP share the block the CPU renders into) and
+    /// the single-beat config forced by `SPI_CFG1.FTHLV = 0`.
+    #[cfg(feature = "ui-px-frametime")]
+    dma_wait: u32,
+    /// Cycles in `widen_into_txbuf`. Expected ~1.5 ms for 60,776 px; this is
+    /// the pass that would vanish if the band buffer held wire-order bytes.
+    #[cfg(feature = "ui-px-frametime")]
+    widen: u32,
+    /// Cycles blocked on the TE rising edge. This is the SLACK: large means
+    /// the frame finished early and is waiting for the panel (good, and the
+    /// period is refresh-bound), ~0 means we are right at the edge of the
+    /// window and any extra work costs a whole refresh period.
+    #[cfg(feature = "ui-px-frametime")]
+    te_wait: u32,
 }
 
 // ---- rendering ---------------------------------------------------------------
@@ -371,8 +409,14 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     // Bound: ~5 cycles per poll, so 2,000,000 is ~62 ms at 160 MHz — four TE
     // periods, and it latches dead on the first miss so a panel-less board
     // pays it once. A frozen counter cannot stall this: it counts ITERATIONS.
+    #[cfg(feature = "ui-px-frametime")]
+    let t_te = frametime::cycles();
     let synced = crate::hw::lcd_te::sync_to_scanout(2_000_000);
     let _ = synced;
+    #[cfg(feature = "ui-px-frametime")]
+    {
+        cost.te_wait = frametime::cycles().wrapping_sub(t_te);
+    }
 
     // ONE window for the whole frame. The panel auto-increments across all
     // 428 native rows, so the nine band transfers below are a single
@@ -384,8 +428,7 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     let mut dma_pending = {
         // SAFETY: single-threaded frame loop; the only other reader of TXBUF
         // is the GPDMA channel, and nothing has armed it yet this frame.
-        let tx = unsafe { &*core::ptr::addr_of!(TXBUF) };
-        lcd::stream_dma_start(&tx[..n])
+        lcd::stream_dma_start(txbuf_bytes(n))
     };
     #[cfg(not(feature = "ui-px-dma"))]
     lcd::stream_chunk(&buf[..(BAND_W.min(W) * H) as usize]);
@@ -409,13 +452,22 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
         #[cfg(feature = "ui-px-dma")]
         {
             if dma_pending {
+                #[cfg(feature = "ui-px-frametime")]
+                let t_w = frametime::cycles();
                 let _ = lcd::stream_dma_finish();
+                #[cfg(feature = "ui-px-frametime")]
+                {
+                    cost.dma_wait = cost.dma_wait.wrapping_add(frametime::cycles().wrapping_sub(t_w));
+                }
             }
+            #[cfg(feature = "ui-px-frametime")]
+            let t_x = frametime::cycles();
             n = widen_into_txbuf(&buf[..(w * H) as usize]);
-            // SAFETY: as above; the `finish` guarantees the previous transfer
-            // completed before the widen rewrote the buffer.
-            let tx = unsafe { &*core::ptr::addr_of!(TXBUF) };
-            dma_pending = lcd::stream_dma_start(&tx[..n]);
+            #[cfg(feature = "ui-px-frametime")]
+            {
+                cost.widen = cost.widen.wrapping_add(frametime::cycles().wrapping_sub(t_x));
+            }
+            dma_pending = lcd::stream_dma_start(txbuf_bytes(n));
         }
         #[cfg(not(feature = "ui-px-dma"))]
         lcd::stream_chunk(&buf[..(w * H) as usize]);
@@ -430,7 +482,16 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
 
     #[cfg(feature = "ui-px-dma")]
     if dma_pending {
+        // Counted: this last band's whole DMA is exposed (nothing left to
+        // render behind it) and was NOT in any earlier figure, which is part
+        // of why render + blit under-reported the real frame cost.
+        #[cfg(feature = "ui-px-frametime")]
+        let t_w = frametime::cycles();
         let _ = lcd::stream_dma_finish();
+        #[cfg(feature = "ui-px-frametime")]
+        {
+            cost.dma_wait = cost.dma_wait.wrapping_add(frametime::cycles().wrapping_sub(t_w));
+        }
     }
     lcd::stream_close();
     wipe_scratch();
@@ -488,6 +549,7 @@ fn build_and_present(
     font: &Font<'_>,
     overlay: Option<&[u8]>,
     split: Option<&[u8]>,
+    wire: Option<&[u8]>,
 ) -> FrameCost {
     let mut frame = Frame::new();
     #[cfg(feature = "ui-px-frametime")]
@@ -514,6 +576,26 @@ fn build_and_present(
                 alpha: 255,
             },
             color: Rgb::WHITE,
+        });
+    }
+    // Third line (green): where the WIRE time goes --- dma_wait / widen /
+    // te_wait, in tenths. The first two say whether the transfer is making
+    // line rate; the third is the slack before a whole refresh period is lost.
+    if let Some(text) = wire {
+        use pqsigner_ui_px::font::{Align, TextRun, TierId};
+        use pqsigner_ui_px::raster::{Item, Rgb};
+        frame.push(Item::Text {
+            run: TextRun {
+                text,
+                tier: TierId::regular(16),
+                x: 40,
+                y: 52,
+                align: Align::Left,
+                baseline: true,
+                ls_q6: 0,
+                alpha: 255,
+            },
+            color: Rgb::GREEN,
         });
     }
     if let Some(text) = overlay {
@@ -569,7 +651,7 @@ pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_RO
     // The legacy glyph blitter may have painted between calls.
     let s = Screen::legacy(rows);
     let anim = Anim::new(&s, 0, timeout::now());
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
     true
 }
 
@@ -680,7 +762,7 @@ pub fn film_start_with(s: &Screen) {
     let now = timeout::now();
     let mut anim = Anim::new(s, 0, now);
     anim.film_start(now);
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
     // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
     // this is the only writer while `FILM_LIVE` is false.
     unsafe {
@@ -711,7 +793,7 @@ pub fn film_tick(_percent: u8) {
         return;
     };
     anim.step(now);
-    let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None);
+    let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None, None);
     let after = timeout::now();
     *last = if after.wrapping_sub(now) > 50 { after.wrapping_add(FRAME_PERIOD_MS) } else { after };
 }
@@ -744,7 +826,7 @@ pub fn film_resolve(e: Ending) {
     loop {
         let t = timeout::now();
         anim.step(t);
-        let _ = build_and_present(&anim, &marks, &font, None, None);
+        let _ = build_and_present(&anim, &marks, &font, None, None, None);
         if anim.film_done(t) {
             break;
         }
@@ -823,7 +905,7 @@ pub fn show_busy(caption: &[u8]) {
         return;
     };
     let anim = Anim::new(&s, 0, timeout::now());
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
 }
 
 // ---- port step 4: screens outside the dialog -------------------------------------
@@ -897,7 +979,7 @@ pub fn paint_rest(s: &Screen, atlas: &assets::AtlasRef) {
     while anim.step(t) && t < PLAY_CAP_MS {
         t += 16;
     }
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None);
+    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
 }
 
 // ---- the flow ------------------------------------------------------------------
@@ -948,6 +1030,9 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     let (mut ft_max_render, mut ft_max_blit, mut ft_max_period, mut ft_window_at) = (0u32, 0u32, 0u32, 0u32);
     #[cfg(feature = "ui-px-frametime")]
     let (mut ft_max_shapes, mut ft_max_glyphs, mut ft_max_secret) = (0u32, 0u32, 0u32);
+    let (mut ft_max_dma, mut ft_max_widen, mut ft_max_te) = (0u32, 0u32, 0u32);
+    let mut wire_buf = [0u8; 24];
+    let mut wire_len = 0usize;
     #[cfg(feature = "ui-px-frametime")]
     let (mut split_buf, mut split_len) = ([0u8; 24], 0usize);
     #[allow(unused_mut)]
@@ -1059,9 +1144,13 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         let overlay = if overlay_len > 0 { Some(&overlay_buf[..overlay_len]) } else { None };
         #[cfg(feature = "ui-px-frametime")]
         let split_line = if split_len > 0 { Some(&split_buf[..split_len]) } else { None };
+        #[cfg(feature = "ui-px-frametime")]
+        let wire_line = if wire_len > 0 { Some(&wire_buf[..wire_len]) } else { None };
         #[cfg(not(feature = "ui-px-frametime"))]
         let split_line = None;
-        let cost = build_and_present(&anim, &marks, &font, overlay, split_line);
+        #[cfg(not(feature = "ui-px-frametime"))]
+        let wire_line = None;
+        let cost = build_and_present(&anim, &marks, &font, overlay, split_line, wire_line);
         presented_at = Some((driver.index(), driver.page()));
         #[cfg(feature = "ui-px-frametime")]
         {
@@ -1078,6 +1167,9 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
             ft_max_shapes = ft_max_shapes.max(cost.split.shapes);
             ft_max_glyphs = ft_max_glyphs.max(cost.split.glyphs.wrapping_add(cost.split.fills));
             ft_max_secret = ft_max_secret.max(cost.split.secret);
+            ft_max_dma = ft_max_dma.max(cost.dma_wait);
+            ft_max_widen = ft_max_widen.max(cost.widen);
+            ft_max_te = ft_max_te.max(cost.te_wait);
             // Skip the first frame's period: `last_frame_at` starts at 0, so
             // its "period" is the whole boot time, not a frame.
             if overlay_len > 0 {
@@ -1096,7 +1188,16 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
                     ft_max_glyphs,
                     ft_max_secret,
                 );
+                wire_len = frametime::format_tenths(
+                    &mut wire_buf,
+                    ft_max_dma,
+                    ft_max_widen,
+                    ft_max_te,
+                );
                 ft_window_at = t;
+                ft_max_dma = 0;
+                ft_max_widen = 0;
+                ft_max_te = 0;
                 ft_max_render = 0;
                 ft_max_blit = 0;
                 ft_max_period = 0;
