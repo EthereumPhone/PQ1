@@ -925,6 +925,21 @@ pub fn init() {
     }
     delay_ms(150);
     run_init_sequence();
+
+    // Configure the tearing-effect INPUT here, inside the panel bring-up.
+    //
+    // It belongs here and nowhere else. `run_init_sequence` has just enabled
+    // the TE output (`0x46` bit D4 = te_oe) and issued DISPON, so the line is
+    // pulsing from this point; and putting it in the panel's own init makes it
+    // impossible to have a panel without its TE input configured. It was
+    // initially called only from the bench probe, which meant the shipping
+    // render path called `sync_to_scanout` on a PB2 still in its reset mode —
+    // the wait never saw an edge, latched dead on the first frame and silently
+    // skipped forever after. The frame period gave it away: 36 ms, not a
+    // multiple of the 16.0 ms refresh, where a working phase lock quantises.
+    #[cfg(feature = "stm32u585")]
+    crate::hw::lcd_te::init();
+
     fill_screen(0x0000);
 
     // #730: light the panel only NOW, once its content is defined. DISPON is

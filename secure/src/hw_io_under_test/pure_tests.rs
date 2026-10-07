@@ -52,6 +52,7 @@ const BOARD_IOTA2_SRC: &str = include_str!("../board/iota2.rs");
 const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
 const BOARD_MOD_SRC: &str = include_str!("../board/mod.rs");
 const LCD_NV3007_SRC: &str = include_str!("../hw/lcd_nv3007.rs");
+const UI_PX_LCD_SRC: &str = include_str!("../ui/px/lcd.rs");
 const AW99703_SRC: &str = include_str!("../hw/aw99703.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
@@ -1953,4 +1954,30 @@ fn negative_backlight_enables_only_after_the_panel_is_painted() {
     );
     // The private field is what makes the token unforgeable outside the module.
     assert!(drv.contains("pub struct Configured(());"));
+}
+
+#[test]
+fn positive_te_input_is_configured_by_the_panel_init() {
+    // #780. `lcd_te::init()` configures PB2 as the tearing-effect input, and
+    // the pixel presenter's `sync_to_scanout` is useless without it: an
+    // unconfigured pin never shows a rising edge, so the wait burns its poll
+    // cap, latches the line dead and silently skips forever after. That is
+    // exactly what shipped once -- `init()` was called only from the bench
+    // probe, which is gated on `ui-px-te-probe` and diverges, so no ordinary
+    // image ever ran it. It was invisible in every test and every build: the
+    // only symptom was a frame period of 36 ms where a working phase lock
+    // quantises to a multiple of the 16.0 ms refresh.
+    //
+    // These are two halves of ONE property written in two files, so bind
+    // them. The init must live in the PANEL bring-up specifically: that is
+    // what makes "a panel exists" and "its TE input is configured" the same
+    // event, rather than a relationship someone has to remember.
+    assert!(
+        LCD_NV3007_SRC.contains("crate::hw::lcd_te::init();"),
+        "the panel init must configure the TE input, or sync_to_scanout can never see an edge"
+    );
+    assert!(
+        UI_PX_LCD_SRC.contains("lcd_te::sync_to_scanout("),
+        "the presenter must phase-lock to the scan-out (#780)"
+    );
 }

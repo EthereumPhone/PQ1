@@ -200,19 +200,29 @@ pub fn measure(want_edges: u32, budget_cyc: u32) -> TeMeasure {
 #[cfg(feature = "ui-px-te-probe")]
 pub use probe_clock::{cycles, cyccnt_enable, measure, TeMeasure};
 
-/// Sticky "this board's TE never pulses" latch.
+/// Consecutive missed edges. At `DEAD_AFTER` the line is declared dead.
 ///
-/// Without it a dead pin costs the full poll cap on EVERY frame, halving the
-/// frame rate of a board that is otherwise fine. One failed wait is enough
-/// evidence: TE either pulses once per refresh or not at all.
-static mut TE_DEAD: bool = false;
+/// Without a latch a dead pin costs the full poll cap on EVERY frame, which
+/// halves the frame rate of a board that is otherwise fine. But latching on a
+/// SINGLE miss is too eager: one spurious miss would disable synchronisation
+/// for the rest of the boot with no way back, and that is exactly the failure
+/// that hid `lcd_te::init()` not being called — the first frame missed, the
+/// latch stuck, and every later frame skipped the wait silently. Three
+/// consecutive misses is still ~190 ms of evidence at worst and cannot be a
+/// glitch.
+static mut TE_MISSES: u32 = 0;
 
-/// Has the TE line been observed dead? (Latched by [`sync_to_scanout`].)
+/// Consecutive misses before the line is declared dead.
+const DEAD_AFTER: u32 = 3;
+
+/// Has the TE line been observed dead? (Latched by [`sync_to_scanout`] after
+/// [`DEAD_AFTER`] consecutive misses.)
 #[must_use]
 pub fn dead() -> bool {
-    // SAFETY: single-threaded frame loop; a plain bool written only here and
-    // in `sync_to_scanout`, never from an ISR.
-    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(TE_DEAD)) }
+    // SAFETY: single-threaded frame loop; a plain u32 written only here and in
+    // `sync_to_scanout`, never from an ISR.
+    let n = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(TE_MISSES)) };
+    n >= DEAD_AFTER
 }
 
 /// Phase-lock the caller to the panel's scan-out: block until the next TE
@@ -235,10 +245,17 @@ pub fn sync_to_scanout(spin_cap: u32) -> bool {
         return false;
     }
     if wait_rising(spin_cap) {
+        // A good edge clears the run: a transient miss must not accumulate
+        // across an otherwise healthy boot.
+        // SAFETY: as `dead()`.
+        unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(TE_MISSES), 0) };
         return true;
     }
     // SAFETY: as `dead()`.
-    unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(TE_DEAD), true) };
+    unsafe {
+        let n = core::ptr::read_volatile(core::ptr::addr_of!(TE_MISSES));
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(TE_MISSES), n.saturating_add(1));
+    }
     false
 }
 
