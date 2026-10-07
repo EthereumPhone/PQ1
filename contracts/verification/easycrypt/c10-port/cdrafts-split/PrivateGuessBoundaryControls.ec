@@ -2,16 +2,23 @@
 require import AllCore List.
 require import C10RawOracle RawKeygen RawFors ForsPrivateLeaves ForsInputSeparation.
 require import RawSigner PrefixGuess PrefixHybrid FullSession ExposureLog ClientQueryLog.
-require import ClientGuessCandidates.
+require import ClientGuessCandidates ClientQueryReplay.
 
 lemma ordinary_and_special_inputs_differ ht i j :
   0<=ht<262144 => 0<=i<2048 => 0<=j<2048 =>
   fors_private_key ht 11 i <> fors_private_key ht 12 j.
 proof. smt(fors_private_key_injective). qed.
 
-lemma repeated_coordinate_same_input ht tree index :
-  fors_private_key ht tree index=fors_private_key ht tree index.
-proof. trivial. qed.
+lemma repeated_coordinate_queries_recorded_twice
+  (O <: PrefixOracle {-FullSession,-ExposureLog,-ClientQueryLog}) inputs0 ht tree index :
+  hoare [ClientQueryReplay(O).run :
+    ClientQueryLog.inputs=inputs0 /\ x=fors_private_key ht tree index /\
+    FullSession.raw_calls=0 /\ FullSession.raw_limit=2 ==>
+    ClientQueryLog.inputs=rcons (rcons inputs0 (fors_private_key ht tree index))
+      (fors_private_key ht tree index) /\ FullSession.raw_calls=2].
+proof.
+  conseq (repeated_query_recorded_twice O inputs0 (fors_private_key ht tree index) 0 2); smt().
+qed.
 
 lemma no_queries_still_has_twelve_candidates signature :
   size (client_guess_candidates [] signature)=12.

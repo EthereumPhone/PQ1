@@ -104,8 +104,10 @@ cdrafts-split/ClassifiedHistory.ec
 cdrafts-split/ClassifiedSession.ec
 cdrafts-split/ClassifiedSigner.ec
 cdrafts-split/ClientGuessCandidates.ec
+cdrafts-split/ClientOutputBinding.ec
 cdrafts-split/ClientQueryDriver.ec
 cdrafts-split/ClientQueryLog.ec
+cdrafts-split/ClientQueryReplay.ec
 cdrafts-split/ContextExhaustion.ec
 cdrafts-split/CountDS.ec
 cdrafts-split/DarkSide.ec
@@ -246,8 +248,16 @@ cdrafts-split/LayerSignWitness.ec
 cdrafts-split/LayerWitness.ec
 cdrafts-split/LayerWotsExtraction.ec
 cdrafts-split/LayerWotsSign.ec
+cdrafts-split/LeafBoundState.ec
+cdrafts-split/LeafCommitmentBound.ec
+cdrafts-split/LeafCommitmentHybrid.ec
+cdrafts-split/LeafForestView.ec
+cdrafts-split/LeafOpeningBound.ec
 cdrafts-split/LeafOriginOracle.ec
 cdrafts-split/LeafOrigins.ec
+cdrafts-split/LeafSessionView.ec
+cdrafts-split/LeafSignerView.ec
+cdrafts-split/LeafViewLossless.ec
 cdrafts-split/LinearChain.ec
 cdrafts-split/LinearCollision.ec
 cdrafts-split/LinearOracle.ec
@@ -294,6 +304,7 @@ cdrafts-split/PrivateAliasBound.ec
 cdrafts-split/PrivateAliasControls.ec
 cdrafts-split/PrivateGuessBoundaryConsumer.ec
 cdrafts-split/PrivateGuessBoundaryControls.ec
+cdrafts-split/PrivateTargetSampling.ec
 cdrafts-split/ProjectedBirthday.ec
 cdrafts-split/ProjectedMemoOracle.ec
 cdrafts-split/PublicCollisionBound.ec
@@ -373,6 +384,8 @@ cdrafts-split/STCR_C.ec
 cdrafts-split/SecretLeafOracle.ec
 cdrafts-split/SecretLeafOrigins.ec
 cdrafts-split/SecretPrefix.ec
+cdrafts-split/SelectiveHidingConsumer.ec
+cdrafts-split/SelectiveHidingControls.ec
 cdrafts-split/SessionClosedForm.ec
 cdrafts-split/SessionDigest.ec
 cdrafts-split/SessionForestExtraction.ec
@@ -414,6 +427,11 @@ cdrafts-split/StreamBound.ec
 cdrafts-split/StreamExpectation.ec
 cdrafts-split/SubtreeOpeningCases.ec
 cdrafts-split/TCollResEnum.ec
+cdrafts-split/TargetByteBound.ec
+cdrafts-split/TargetByteLossless.ec
+cdrafts-split/TargetByteView.ec
+cdrafts-split/TargetOracleSplit.ec
+cdrafts-split/TargetPrivateBound.ec
 cdrafts-split/TopVerifierOpening.ec
 cdrafts-split/TotalBuilderReference.ec
 cdrafts-split/TrialAccepted.ec

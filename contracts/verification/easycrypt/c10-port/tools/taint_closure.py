@@ -74,6 +74,25 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'client_query_output_binding',
+    'repeated_query_recorded_twice',
+    'leaf_forest_sign_projection',
+    'leaf_signer_sign_projection',
+    'byte_leaf_query_game_projection',
+    'leaf_signer_sign_lossless',
+    'adaptive_leaf_commitment',
+    'adaptive_hidden_leaf_guess_bound',
+    'adaptive_unopened_leaf_guess_bound',
+    'initialized_private_target_sampling',
+    'target_oracle_opening_coupling',
+    'adaptive_selective_private_guess_bound',
+    'target_byte_candidates_projection',
+    'target_byte_candidates_lossless',
+    'byte_selective_private_guess_bound',
+    'adaptive_selective_private_guess_at_state',
+    'opened_candidate_is_rejected',
+    'consume_byte_selective_private_bound',
+
     'fors_digest_coordinate_injective',
     'unreturned_value_not_logged',
     'client_query_client_accounting',

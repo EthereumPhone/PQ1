@@ -107,6 +107,10 @@ unreturned and unaliased values are not assumed hidden.
 The [private-guess boundary](RAW-PRIVATE-GUESS-BOUNDARY.md) adds exact
 coordinate/input separation and a bounded client-only candidate list; its
 hiding-game probability transfer remains open.
+The [selective-hiding result](RAW-SELECTIVE-HIDING.md) proves a conditional
+`(q+12)/2^128` bound for the selected-input byte-client experiment. Its original
+initialized-game event connection, transformed query budget, and coordinate
+selection charge remain open; it is not yet an added EUF probability charge.
 
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement

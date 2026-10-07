@@ -68,6 +68,10 @@ See the
 and [research obligations](verification/easycrypt-euf-cma-port-feasibility-2026-07.md#2026-09-23-accepted-history-composition-and-persistent-raw-oracle).
 The [merge receipt](security/adversarial-review/findings/easycrypt-accepted-history-2026-09-23/README.md)
 binds the corrected cold replay and bounded Astra/Opus review to the source.
+The [selective-hiding continuation](../contracts/verification/easycrypt/c10-port/RAW-SELECTIVE-HIDING.md)
+now proves the selected-input byte-client bound conditional on its transformed
+query budget. The original-game event connection and coordinate selection
+charge remain open; no original-game EUF charge is claimed.
 
 > **The front door.** Read this first. It's a **router, not an encyclopedia**: §0 maps *where the truth
 > lives* (one owner per concern — everyone else links); §A–§D are the **security/verification frontier**,

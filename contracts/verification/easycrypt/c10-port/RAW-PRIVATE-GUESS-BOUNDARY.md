@@ -69,7 +69,7 @@ Eight modules add 45 statements and three operator pins. Their definitions,
 module bodies and interface signature enter the census. Existing statements
 and project assumptions remain unchanged; there is no new axiom, admit or
 clone assumption. Exact consumers check byte-game projection and the candidate
-budget. Positive controls cover coordinate replay, the ordinary/special tree
+budget. Positive controls cover two forwarded queries at the same coordinate, the ordinary/special tree
 boundary, candidate counts, and forwarded versus blocked queries.
 
 Eight scope probes and three rejected attempts cover forbidden-theory scope,
@@ -84,3 +84,8 @@ the remaining adaptive private-value event. WOTS reverse-chain/new-message
 bounds, encoding/ITSR and the composed numerical EUF bound follow under
 #100/#295. Concrete SHA-256, QROM and Rust extraction remain separate; #789 and
 #509 remain deferred.
+
+The [selective-hiding continuation](RAW-SELECTIVE-HIDING.md) now supplies the
+output/verified-pair relation, an operational repeated-query witness, full
+interface lifting, and a numerical selective experiment. Its original-game
+event connection and transformed resource premise remain explicit.

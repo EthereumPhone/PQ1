@@ -238,3 +238,23 @@ ForsLeafView
 PrivateGuessBoundaryConsumer
 PrivateGuessBoundaryControls
 ReturnedPrivateInputs
+
+# Selective private FORS hiding, 2026-10-07.
+ClientOutputBinding
+ClientQueryReplay
+LeafBoundState
+LeafCommitmentBound
+LeafCommitmentHybrid
+LeafForestView
+LeafOpeningBound
+LeafSessionView
+LeafSignerView
+LeafViewLossless
+PrivateTargetSampling
+SelectiveHidingConsumer
+SelectiveHidingControls
+TargetByteBound
+TargetByteLossless
+TargetByteView
+TargetOracleSplit
+TargetPrivateBound
