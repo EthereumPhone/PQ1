@@ -97,5 +97,6 @@ proof.
       (selected_candidates_unopened A target_ht target_tree target_index); 1,2:smt().
     proc; call (_ : ={glob A,glob FullLimits,glob KeygenInputs,glob FullSession,glob ExposureLog,glob ClientQueryLog,glob Independent,glob OriginalTargetState,glob TargetConfig}); first by sim.
     inline Independent.init; auto; smt().
-  auto; rewrite /unreturned_candidate_guess /observed_private_guess; smt(size_eq0).
+  auto=> />; rewrite /unreturned_candidate_guess /observed_private_guess;
+    smt(size_eq0 size_ge0).
 qed.

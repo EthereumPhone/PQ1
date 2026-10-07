@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	379ad2f911356d63c69f851d1b955560
+split	27c9c4d5d9f170a3a3b38f77f6983798
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1540,4 +1540,4 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 2026-10-08: ordinary FORS opening charge in the actual accepted byte output.
 # 23 modules / 102 lemmas / 8 ops; old statements and assumptions preserved.
 # 496 targets / 485 controls, including semantic replay twins.
-# Split identity df854093d37c5ff9cb410b108aaee5da -> 379ad2f911356d63c69f851d1b955560.
+# Split identity df854093d37c5ff9cb410b108aaee5da -> 27c9c4d5d9f170a3a3b38f77f6983798.
