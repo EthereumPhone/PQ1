@@ -1323,19 +1323,33 @@ impl Ambient {
                 //
                 // If misses stay 0 and the lag still arrives, the TE poll was
                 // never the cause and the idle counter is back in the frame.
-                let misses = crate::hw::lcd_te::miss_total().min(999);
                 let idle_s = (timeout::idle_for() / 1_000).min(999);
-                // A BITFIELD: +1 EXTI latch in use, +2 currently dead,
-                // +4 the latch answered a SOFTWARE trigger at init.
+                // Line 3 (green) — the #794 DISCRIMINATOR: `items / drawn /
+                // idle_seconds`, plain counts.
                 //
-                // That third bit is the diagnostic. 4 means the EXTI block,
-                // register map and security config are all correct and the
-                // fault is the PIN -> edge-detector path; 0 means the block
-                // is not behaving as configured at all. One flash, no probe.
-                let dead = u32::from(crate::hw::lcd_te::exti_in_use())
-                    + 2 * u32::from(crate::hw::lcd_te::dead())
-                    + 4 * u32::from(crate::hw::lcd_te::exti_swier_ok());
-                self.ft.len3 = frametime::format_raw(&mut self.ft.buf3, misses, idle_s, dead);
+                // The render grew ~50-70% across every class over two minutes
+                // on the EVT unit. Cycle counts cannot distinguish "more work"
+                // from "the same work, slower", and every class growing by a
+                // similar factor points at the latter — but points is not
+                // measures. So count what is actually submitted and what
+                // survives the band cull:
+                //
+                //   counts FLAT, cycles grow -> the same work taking longer:
+                //       GPDMA/SRAM1 contention or fetch cost. The animation is
+                //       out of scope and so is every motion constant.
+                //   counts GROW              -> work is being submitted that
+                //       inspection of the motion code did not find.
+                //
+                // `idle_seconds` stays because the owner's hypothesis for the
+                // ONSET is the 120 s inactivity boundary, and it is still the
+                // only one with the right timescale.
+                //
+                // The TE fields this replaces have served their purpose: the
+                // latch is live and self-proving, `te_misses` reads 0, and
+                // `te_wait` is back inside one refresh period.
+                let items = cost.split.items.min(999);
+                let drawn = cost.split.drawn.min(999);
+                self.ft.len3 = frametime::format_raw(&mut self.ft.buf3, items, drawn, idle_s);
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;
                 self.ft.max_te = 0;

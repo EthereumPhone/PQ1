@@ -443,6 +443,16 @@ pub struct RenderSplit {
     pub glyphs: u32,
     pub secret: u32,
     pub fills: u32,
+    /// Items DISPATCHED to the rasteriser this frame.
+    pub items: u32,
+    /// Of those, how many survived their band cull and actually drew (#794).
+    ///
+    /// This is the discriminator the cycle counts cannot provide: if `items`
+    /// and `drawn` are FLAT while `shapes`/`glyphs` grow, the same work is
+    /// taking longer — bus contention or fetch cost — and the animation is
+    /// out of scope. If they grow, there is work being submitted that
+    /// inspection of the motion code did not find.
+    pub drawn: u32,
 }
 
 /// [`render_strip`], accumulating per-class cycle counts into `acc`.
@@ -458,7 +468,11 @@ pub fn render_strip_split(
     acc: &mut RenderSplit,
 ) {
     strip.clear();
+    let drawn_before = work_count();
     for item in frame.items() {
+        if !matches!(*item, Item::None) {
+            acc.items = acc.items.wrapping_add(1);
+        }
         let t0 = now();
         draw_item(item, font, strip);
         let dt = now().wrapping_sub(t0);
@@ -471,6 +485,7 @@ pub fn render_strip_split(
         };
         *slot = slot.wrapping_add(dt);
     }
+    acc.drawn = acc.drawn.wrapping_add(work_count().wrapping_sub(drawn_before));
 }
 
 fn draw_item(item: &Item<'_>, font: &Font<'_>, s: &mut Strip<'_>) {
@@ -506,18 +521,29 @@ fn draw_item(item: &Item<'_>, font: &Font<'_>, s: &mut Strip<'_>) {
 /// way, it is only 9x slower — and that is exactly how `x_hits` came to be
 /// defined, documented as "every rasteriser calls this first", and called by
 /// nothing. `cull_rejects_items_outside_the_band` reads this.
-#[cfg(test)]
+/// Also compiled under `render-split` (#794), where the question is whether a
+/// render that got 50% slower over two minutes is doing MORE work or the SAME
+/// work more slowly. Cycle counts alone cannot tell those apart; a count of
+/// the items that survived the band cull can.
+#[cfg(any(test, feature = "render-split"))]
 pub(crate) static WORK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
-#[cfg(test)]
+#[cfg(any(test, feature = "render-split"))]
 #[inline]
 fn note_work() {
     WORK.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 }
 
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "render-split")))]
 #[inline(always)]
 fn note_work() {}
+
+/// Items that have survived a band cull since boot (saturating view).
+#[cfg(feature = "render-split")]
+#[must_use]
+pub fn work_count() -> u32 {
+    WORK.load(core::sync::atomic::Ordering::Relaxed) as u32
+}
 
 /// Coverage of a pixel at signed distance `d` (Q8) from an edge, where the
 /// inside is `d ≤ 0`: 1 − clamp(d + ½).
