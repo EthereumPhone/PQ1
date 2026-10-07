@@ -57,7 +57,10 @@ byte-game probability hop preserves its success residual and existing charges;
 the new cases still lack numerical bounds.
 The [private-value alias charge](../contracts/verification/easycrypt/c10-port/RAW-PRIVATE-VALUE-ALIASES.md)
 now bounds generated public/private node aliases in the same initialized game.
-Direct adaptive private-value guesses remain explicit and unbounded.
+Direct adaptive private-value guesses remain explicit and unbounded. The
+[private-guess boundary](../contracts/verification/easycrypt/c10-port/RAW-PRIVATE-GUESS-BOUNDARY.md)
+now proves coordinate/input separation, client-only candidate accounting and
+an exact commitment/opening interface; the hiding hop is still open.
 Adaptive accumulated opening coverage, the complete byte-game component
 reduction and numerical end-to-end forgery bounds remain open.
 See the

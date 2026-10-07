@@ -103,6 +103,9 @@ cdrafts-split/ClassifiedGrind.ec
 cdrafts-split/ClassifiedHistory.ec
 cdrafts-split/ClassifiedSession.ec
 cdrafts-split/ClassifiedSigner.ec
+cdrafts-split/ClientGuessCandidates.ec
+cdrafts-split/ClientQueryDriver.ec
+cdrafts-split/ClientQueryLog.ec
 cdrafts-split/ContextExhaustion.ec
 cdrafts-split/CountDS.ec
 cdrafts-split/DarkSide.ec
@@ -165,9 +168,11 @@ cdrafts-split/ForsCatalogAuth.ec
 cdrafts-split/ForsCatalogObserver.ec
 cdrafts-split/ForsCatalogSound.ec
 cdrafts-split/ForsComponentHistory.ec
+cdrafts-split/ForsInputSeparation.ec
 cdrafts-split/ForsKnownSecret.ec
 cdrafts-split/ForsLeafInputs.ec
 cdrafts-split/ForsLeafOrigins.ec
+cdrafts-split/ForsLeafView.ec
 cdrafts-split/ForsOneRecorded.ec
 cdrafts-split/ForsOpening.ec
 cdrafts-split/ForsOpeningReplay.ec
@@ -287,6 +292,8 @@ cdrafts-split/PreparedHistory.ec
 cdrafts-split/PreparedRaw.ec
 cdrafts-split/PrivateAliasBound.ec
 cdrafts-split/PrivateAliasControls.ec
+cdrafts-split/PrivateGuessBoundaryConsumer.ec
+cdrafts-split/PrivateGuessBoundaryControls.ec
 cdrafts-split/ProjectedBirthday.ec
 cdrafts-split/ProjectedMemoOracle.ec
 cdrafts-split/PublicCollisionBound.ec
@@ -354,6 +361,7 @@ cdrafts-split/RawWotsReference.ec
 cdrafts-split/RecoveryCompression.ec
 cdrafts-split/RecoveryHistory.ec
 cdrafts-split/RecoveryTraceOracle.ec
+cdrafts-split/ReturnedPrivateInputs.ec
 cdrafts-split/RoleGrind.ec
 cdrafts-split/RoleGrindCost.ec
 cdrafts-split/RootCoverage.ec

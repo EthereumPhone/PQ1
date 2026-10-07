@@ -2193,3 +2193,15 @@ cdrafts-split/JointNodeCollision.ec	defined-op:a67abad0c687	joint_node_collision
 cdrafts-split/JointNodeCollision.ec	defined-op:c7e4c1c48e4e	joint_draws
 cdrafts-split/JointNodeCollision.ec	defined-op:e8c4a53989a4	joint_nodes_valid
 cdrafts-split/PrivateAliasBound.ec	module:6626c89fbddd	JointDraws
+
+# Private-guess interface definitions; no new project assumptions.
+cdrafts-split/ClientGuessCandidates.ec	defined-op:229d3f22864e	client_guess_candidates
+cdrafts-split/ClientQueryDriver.ec	module:ca91072596a8	ClientQueryContext
+cdrafts-split/ClientQueryDriver.ec	module:d3fd3f8ea858	ClientQueryDriver
+cdrafts-split/ClientQueryLog.ec	defined-op:bd310db4f149	client_query_accounting
+cdrafts-split/ClientQueryLog.ec	module:34e1447a7087	QueryExposureSession
+cdrafts-split/ClientQueryLog.ec	module:a85774f26f6d	ClientQueryLog
+cdrafts-split/ForsLeafView.ec	module-type:9ad3c3ffcf3f	ForsLeafOracle
+cdrafts-split/ForsLeafView.ec	module:11bec16b4c8d	ConcreteForsLeaf
+cdrafts-split/ForsLeafView.ec	module:516f9ebdeb1c	LeafFors
+cdrafts-split/ReturnedPrivateInputs.ec	defined-op:efbf37b7b851	returned_private_input

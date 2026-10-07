@@ -228,3 +228,13 @@ JointMemoOracle
 JointNodeCollision
 PrivateAliasBound
 PrivateAliasControls
+
+# Private FORS guess boundary, 2026-10-07.
+ClientGuessCandidates
+ClientQueryDriver
+ClientQueryLog
+ForsInputSeparation
+ForsLeafView
+PrivateGuessBoundaryConsumer
+PrivateGuessBoundaryControls
+ReturnedPrivateInputs

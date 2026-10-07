@@ -162,6 +162,16 @@ SOURCES = (
         'PrivateAliasBound',
         'PrivateAliasControls',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'ClientGuessCandidates',
+        'ClientQueryDriver',
+        'ClientQueryLog',
+        'ForsInputSeparation',
+        'ForsLeafView',
+        'PrivateGuessBoundaryConsumer',
+        'PrivateGuessBoundaryControls',
+        'ReturnedPrivateInputs',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

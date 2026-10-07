@@ -87,7 +87,10 @@ copies the defining module, drops its cross-table event, and checks rejection
 of the existing proof. Neither rejection is a general soundness proof. See
 [control evidence](CONTROL-EVIDENCE.md).
 
-The next mathematical obligation is a hiding/lazy-sampling argument for direct
+The [private-guess boundary](RAW-PRIVATE-GUESS-BOUNDARY.md) now proves bounded
+coordinate input separation, records client-only queries and final-output
+candidates in an exact game observer, and separates leaf commitments from
+explicit openings. The next mathematical obligation is a hiding/lazy-sampling argument for direct
 adaptive private-value guesses through the actual public hash/sign interface.
 Uniform fresh draws alone do not justify that bound after observations. General
 exposure accounting, WOTS reverse-chain bounds, encoding/ITSR, and the final

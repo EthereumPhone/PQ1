@@ -104,6 +104,9 @@ The [private-value alias charge](RAW-PRIVATE-VALUE-ALIASES.md) now bounds equali
 between private values and other generated public/private nodes in the actual
 byte game. The refined residual keeps direct adaptive guesses explicit;
 unreturned and unaliased values are not assumed hidden.
+The [private-guess boundary](RAW-PRIVATE-GUESS-BOUNDARY.md) adds exact
+coordinate/input separation and a bounded client-only candidate list; its
+hiding-game probability transfer remains open.
 
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
