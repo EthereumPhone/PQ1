@@ -217,3 +217,14 @@ ExposureComponents
 ExposurePartition
 ExposurePartitionGame
 ExposurePartitionHop
+
+# Generated-node alias charge, 2026-10-07.
+BytePrivateAlias
+BytePrivateAliasConsumer
+BytePrivateAliasHop
+ForsValueExposure
+JointCallCost
+JointMemoOracle
+JointNodeCollision
+PrivateAliasBound
+PrivateAliasControls

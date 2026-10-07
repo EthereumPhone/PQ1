@@ -74,6 +74,16 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'private_value_known_elsewhere',
+    'joint_memo_context_records',
+    'private_alias_at_state',
+    'full_context_joint_cost',
+    'byte_private_node_alias',
+    'message_partition_without_alias',
+    'byte_private_alias_hop',
+    'unaliased_opening_is_possible',
+    'consume_byte_private_alias_hop',
+
     'byte_exposure_width',
     'fors_root_witness_unique',
     'logged_fors_private_value',

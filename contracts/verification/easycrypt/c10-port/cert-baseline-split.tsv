@@ -2178,3 +2178,18 @@ cdrafts-split/ExposureCoverage.ec	defined-op:36a5047825b4	returned_private_value
 cdrafts-split/ExposurePartition.ec	defined-op:bd79fbbbd477	exposure_forgery_cases	# line 8
 cdrafts-split/ExposurePartition.ec	defined-op:991055d128b6	new_message_exposure_partition	# line 29
 cdrafts-split/ExposureWidths.ec	defined-op:bc4d45bf5244	exposures_width	# line 7
+
+# Generated-node alias predicates; no new assumptions.
+cdrafts-split/ForsValueExposure.ec	defined-op:0db8977e7e1c	unaliased_private_opening
+cdrafts-split/ForsValueExposure.ec	defined-op:2809956057a5	unaliased_forgery_cases
+cdrafts-split/ForsValueExposure.ec	defined-op:2993407490a5	aliased_private_opening
+cdrafts-split/ForsValueExposure.ec	defined-op:a777c0e1bc83	new_message_unaliased_partition
+cdrafts-split/JointMemoOracle.ec	defined-op:182242dc4c91	joint_memo_valid
+cdrafts-split/JointMemoOracle.ec	module:05979ccdec71	JointMemo
+cdrafts-split/JointNodeCollision.ec	defined-op:1c1b867b7868	private_node_alias
+cdrafts-split/JointNodeCollision.ec	defined-op:4718d97e13fb	node_known_elsewhere
+cdrafts-split/JointNodeCollision.ec	defined-op:97d7d5746327	cross_node_alias
+cdrafts-split/JointNodeCollision.ec	defined-op:a67abad0c687	joint_node_collision
+cdrafts-split/JointNodeCollision.ec	defined-op:c7e4c1c48e4e	joint_draws
+cdrafts-split/JointNodeCollision.ec	defined-op:e8c4a53989a4	joint_nodes_valid
+cdrafts-split/PrivateAliasBound.ec	module:6626c89fbddd	JointDraws

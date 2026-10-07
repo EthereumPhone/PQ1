@@ -55,6 +55,9 @@ coordinate and coverage assembled across prior responses. It proves exact
 returned-value agreement and retains the special root-as-secret. The same
 byte-game probability hop preserves its success residual and existing charges;
 the new cases still lack numerical bounds.
+The [private-value alias charge](../contracts/verification/easycrypt/c10-port/RAW-PRIVATE-VALUE-ALIASES.md)
+now bounds generated public/private node aliases in the same initialized game.
+Direct adaptive private-value guesses remain explicit and unbounded.
 Adaptive accumulated opening coverage, the complete byte-game component
 reduction and numerical end-to-end forgery bounds remain open.
 See the

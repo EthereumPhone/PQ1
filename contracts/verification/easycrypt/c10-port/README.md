@@ -100,6 +100,11 @@ FORS coordinate, or coverage assembled from earlier responses. Covered values
 agree with actual logged outputs; the special root remains separate. These
 cases still need probability charges.
 
+The [private-value alias charge](RAW-PRIVATE-VALUE-ALIASES.md) now bounds equality
+between private values and other generated public/private nodes in the actual
+byte game. The refined residual keeps direct adaptive guesses explicit;
+unreturned and unaliased values are not assumed hidden.
+
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every

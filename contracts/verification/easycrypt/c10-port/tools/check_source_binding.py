@@ -151,6 +151,17 @@ SOURCES = (
         'ExposureComponents', 'ExposureCoverage', 'ExposurePartition', 'ExposurePartitionGame',
         'ExposurePartitionHop', 'ExposurePrivate', 'ExposureWidths', 'ForsRootDeterminism',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'BytePrivateAlias',
+        'BytePrivateAliasConsumer',
+        'BytePrivateAliasHop',
+        'ForsValueExposure',
+        'JointCallCost',
+        'JointMemoOracle',
+        'JointNodeCollision',
+        'PrivateAliasBound',
+        'PrivateAliasControls',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

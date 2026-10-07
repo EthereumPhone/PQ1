@@ -1,3 +1,4 @@
+# Complete pinned require cone.
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -43,6 +44,9 @@ cdrafts-split/ByteGameForestExtraction.ec
 cdrafts-split/ByteGameSubtreeExtraction.ec
 cdrafts-split/ByteGameTopExtraction.ec
 cdrafts-split/ByteHistory.ec
+cdrafts-split/BytePrivateAlias.ec
+cdrafts-split/BytePrivateAliasConsumer.ec
+cdrafts-split/BytePrivateAliasHop.ec
 cdrafts-split/BytePublicCollision.ec
 cdrafts-split/BytePublicNodeBad.ec
 cdrafts-split/ByteReplay.ec
@@ -177,6 +181,7 @@ cdrafts-split/ForsRootWitness.ec
 cdrafts-split/ForsSignCorrect.ec
 cdrafts-split/ForsSignRecord.ec
 cdrafts-split/ForsSignWitness.ec
+cdrafts-split/ForsValueExposure.ec
 cdrafts-split/FreshCoverage.ec
 cdrafts-split/FullFailure.ec
 cdrafts-split/FullHistory.ec
@@ -215,6 +220,9 @@ cdrafts-split/HonestSubtreeMessages.ec
 cdrafts-split/IdealWitness.ec
 cdrafts-split/IndependentSignerWidth.ec
 cdrafts-split/IndependentWidths.ec
+cdrafts-split/JointCallCost.ec
+cdrafts-split/JointMemoOracle.ec
+cdrafts-split/JointNodeCollision.ec
 cdrafts-split/KeygenExhaustion.ec
 cdrafts-split/KeygenPrefixes.ec
 cdrafts-split/LayerBuildExtraction.ec
@@ -277,6 +285,8 @@ cdrafts-split/PreparedFinish.ec
 cdrafts-split/PreparedGrind.ec
 cdrafts-split/PreparedHistory.ec
 cdrafts-split/PreparedRaw.ec
+cdrafts-split/PrivateAliasBound.ec
+cdrafts-split/PrivateAliasControls.ec
 cdrafts-split/ProjectedBirthday.ec
 cdrafts-split/ProjectedMemoOracle.ec
 cdrafts-split/PublicCollisionBound.ec
