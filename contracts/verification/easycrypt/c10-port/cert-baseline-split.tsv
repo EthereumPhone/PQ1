@@ -2256,3 +2256,34 @@ cdrafts-split/TargetOracleSplit.ec	module:b3184411b185	TargetKernelAdapter
 cdrafts-split/TargetOracleSplit.ec	module:cc426ec032a5	RealTargetPrivate
 cdrafts-split/TargetPrivateBound.ec	module:01a66d451a26	SelectivePrivateGuess
 cdrafts-split/TargetPrivateBound.ec	module:453c980bfd3c	TargetKernelContext
+
+# Original-game opening definitions; no new project assumptions.
+cdrafts-split/ActualForsOpening.ec	defined-op:b4e9fb1ea278	actual_output_unreturned
+cdrafts-split/ForsCoordinateUniverse.ec	defined-op:10c30b711bee	ordinary_fors_coordinates
+cdrafts-split/OriginalByteTargetBound.ec	module:ee8174714d9a	SelectedByteTargetGuess
+cdrafts-split/OriginalTargetEvent.ec	defined-op:e854d4fd4c81	unreturned_candidate_guess
+cdrafts-split/OriginalTargetEvent.ec	module:0d779e0b147e	ObservedSelectedCandidates
+cdrafts-split/OriginalTargetEvent.ec	module:1fe61b3828a6	SelectedUnreturnedCandidate
+cdrafts-split/OriginalTargetEvent.ec	module:dfabd4536a81	ByteCandidateGame
+cdrafts-split/TargetAdapterCost.ec	module:4c3356ba3c16	IdealLeaf
+cdrafts-split/TargetAdapterCost.ec	module:60bdd723655c	IdealPrefix
+cdrafts-split/TargetAdapterCost.ec	module:cb5f1a69febd	IdealTarget
+cdrafts-split/TargetAdapterCost.ec	module:fb568b872acf	IdealPreparation
+cdrafts-split/TargetExposureOpenings.ec	defined-op:ba38206a3924	opening_accounted
+cdrafts-split/TargetForestOpenings.ec	defined-op:724186c9adf0	forest_opens_input
+cdrafts-split/TargetOpeningFrames.ec	module-type:765ab3c4daa4	WotsRoot
+cdrafts-split/TargetSessionOpenings.ec	module:67def4f5f14e	TargetExposureSession
+cdrafts-split/TargetSessionOpenings.ec	module:f178e5856599	TargetSession
+cdrafts-split/TargetSignerOpenings.ec	defined-op:039538368501	signature_opens_input
+cdrafts-split/TargetSignerProjection.ec	module-type:8d5861de56bd	TargetFinisher
+cdrafts-split/TargetSignerProjection.ec	module:b7afd6b3e976	TargetSigning
+cdrafts-split/TargetTableGames.ec	defined-op:39f0196e83b4	observed_private_guess
+cdrafts-split/TargetTableGames.ec	module:281cd2199b33	LateTargetCandidates
+cdrafts-split/TargetTableGames.ec	module:737c960a0ab2	EarlyTargetCandidates
+cdrafts-split/TargetTableGames.ec	module:769753ff770e	ObservedCandidates
+cdrafts-split/TargetTableGames.ec	module:9f2771dbd2ea	EarlyObservedPrivateGuess
+cdrafts-split/TargetTableGames.ec	module:ba3f1e6f1a17	LateObservedPrivateGuess
+cdrafts-split/TargetTableGames.ec	module:fa4afc537ef3	OriginalObservedPrivateGuess
+cdrafts-split/TargetTableProjection.ec	defined-op:178ca7e7c2f1	selected_table
+cdrafts-split/TargetTableProjection.ec	module:7130efa00034	OriginalTargetState
+cdrafts-split/TargetTableProjection.ec	module:97c70155dd72	ObservedTarget

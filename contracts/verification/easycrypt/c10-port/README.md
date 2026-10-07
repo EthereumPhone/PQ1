@@ -105,12 +105,12 @@ between private values and other generated public/private nodes in the actual
 byte game. The refined residual keeps direct adaptive guesses explicit;
 unreturned and unaliased values are not assumed hidden.
 The [private-guess boundary](RAW-PRIVATE-GUESS-BOUNDARY.md) adds exact
-coordinate/input separation and a bounded client-only candidate list; its
-hiding-game probability transfer remains open.
-The [selective-hiding result](RAW-SELECTIVE-HIDING.md) proves a conditional
-`(q+12)/2^128` bound for the selected-input byte-client experiment. Its original
-initialized-game event connection, transformed query budget, and coordinate
-selection charge remain open; it is not yet an added EUF probability charge.
+coordinate/input separation and a bounded client-only candidate list.
+The [ordinary FORS opening charge](RAW-SELECTIVE-HIDING.md) now connects
+selective hiding to the actual accepted byte output, discharges all transformed
+public-query costs, and applies a finite-coordinate union. This is one event
+charge; WOTS/encoding charges and the actual-output partition connection for
+numerical EUF composition remain open.
 
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement

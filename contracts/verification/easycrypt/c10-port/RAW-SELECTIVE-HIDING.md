@@ -1,10 +1,27 @@
-# Selective hiding of an ordinary FORS private value
+# Ordinary FORS private-opening charge
 
 This extends the [private-guess boundary](RAW-PRIVATE-GUESS-BOUNDARY.md)
-in the manual classical ideal-oracle model. It proves a numerical bound for a
-selected private-input experiment, including an actual byte-client consumer.
-It does **not yet charge the unreturned-private-opening event in the original
-initialized byte game**. The connecting obligations are listed below.
+in the manual classical ideal-oracle model. The selective hiding experiment
+is now connected to an unreturned ordinary private opening in the **actual
+accepted output** of the original initialized byte game.
+
+`OriginalForsOpeningBound.original_byte_fors_opening_bound` proves
+
+```
+Pr[IndependentGame(ClientQueryContext(ByteLift(A))).run :
+   res /\ actual_output_unreturned(..., ClientQueryLog.output)]
+  <= 6442450944 * (full_public_budget(qr, qs) + 12) / 2^128
+
+full_public_budget(qr, qs)
+  = 155135 + qr + qs * (3 * signing_budget + 364892) + 771
+```
+
+Premises are nonnegative configured query/signing caps and client termination
+for lossless byte hash/sign oracles. The theorem exposes no unproved query
+budget or private-independence premise. Its finite-universe factor is
+`2^18 * 12 * 2^11 = 6442450944`; this is a conservative union bound, not a tight
+128-bit security claim. It charges this event only, not complete EUF success.
+The special thirteenth tree is not an ordinary private-value candidate.
 
 ## Quantitative result and its premises
 
@@ -25,12 +42,13 @@ explicitly opened. The twelve slots include duplicates and arbitrary values.
 
 The client must terminate for lossless byte hash/sign oracles. Termination of
 the factored signer, verifier, key generation, and adapters is proved from that
-client premise. The remaining resource premise bounds **all public hash calls
+client premise. The selective theorem's resource premise bounds **all public hash calls
 in the transformed ideal game** by `q`, including non-encapsulated internal
 hashes. It is not merely the byte client's raw-query cap. Initial-state versions
 freeze the context's starting globals, so runtime caps need not be uniform over
-unrelated configurations. This resource premise has not yet been discharged for
-the complete byte consumer.
+unrelated configurations. `TargetAdapterCost.ec`, `TargetForsCost.ec`,
+`TargetSignerCost.ec` and `TargetSessionCost.ec` discharge it for the transformed
+byte consumer, including repeated calls, initialization and final verification.
 
 ## Why commitments do not reveal the node for free
 
@@ -60,8 +78,8 @@ input. Internal leaf commitments use the selected value without marking it
 opened. Explicit secret requests and direct private derivation of that input
 mark it opened. Other private inputs remain memoized. Equality of encoded
 inputs selects the target, avoiding an unproved coordinate-injectivity premise
-inside the adapter. The target's ordinary-tree bounds will be needed when the
-final existential event is charged.
+inside the adapter. `ForsCoordinateUniverse.ec` proves coverage and the exact
+size of the finite ordinary-coordinate universe used by the union bound.
 
 ## Connection already proved to the original program
 
@@ -80,29 +98,42 @@ and proves at most twelve final candidates. The original signer is unchanged.
 
 `PrivateTargetSampling.ec` proves that memoizing one private entry before an
 adaptive context is equivalent to memoizing it afterwards, including complete
-final table equality. This is a separate sampling lemma, not yet the complete
-original-game/selective-game event hop. The context explicitly excludes both
+final table equality. `TargetTableProjection.ec` and `TargetTableGames.ec`
+complete the event hop. An absent selected entry cannot satisfy the original
+event; sampling it afterwards may add success, so this step is an inequality.
+The context explicitly excludes both
 the sampled table and target-sampling globals; the eager swap writes only the
 excluded private table. This satisfies the disjointness condition missing from
 older EasyCrypt eager automation (upstream #1097). The pinned checker and SMT
 solvers remain trusted components; the scoped checker update/audit is tracked
 in #100. No new project axiom, admit, or unresolved clone assumption is added.
 
-## Remaining connection to the original forgery event
+## Original-game connection and remaining composition
 
-1. Complete the original initialized private-table to selective-table projection
-   using the sampling lemma, with the exact observed output and event preserved.
-2. Prove that a selected unreturned ordinary coordinate was not internally
-   opened on a successful run, accounting for repeated responses and signing
-   failures. Non-aliasing or an absent response alone is not this proof.
-3. Discharge the transformed game's public-query budget. Internal selected leaf
-   commitments are encapsulated; other honest hashes must remain accounted for.
-4. Charge the final existential coordinate using a proved finite-coordinate
-   union bound or adaptive selection reduction.
+`TargetSignerOpenings.ec` binds a newly observed opening to the successful
+signature's actual H_msg digest. The session/exposure/client/context lemmas
+prove that any such opening on a nonfailed accepted run is represented in the
+persistent returned-response ledger. Failed signing is absorbing, and later
+public hashes and successful requests preserve prior exposure entries.
+Thus an unreturned ordinary encoded input is unopened on the winning event.
+Non-aliasing or an absent response alone is never used as a hiding argument.
 
-The WOTS reverse-chain/new-message charges, encoding/ITSR charges, and numerical
-same-game EUF composition follow under #100/#295. Concrete SHA-256, QROM,
-extraction, #789 optimization and #509 combined assurance remain separate.
+`OriginalCandidateBound.ec` supplies a pointwise charge in the unchanged
+initialized byte candidate game. `OriginalCandidateUnion.ec` combines those
+charges in that same game. `ActualForsOpening.ec` attaches the event to the
+exact client output and its H_msg table entry; `OriginalForsOpeningBound.ec`
+consumes the union for that accepted output.
+
+The older `new_message_exposure_partition` and
+`new_message_unaliased_partition` predicates contain existential signature
+witnesses. Their whole existential events are **not** silently identified with
+this actual-output event. The final common-game composition must carry the
+actual-output witness through its extraction and partition steps.
+
+WOTS reverse-chain/new-message charges, encoding/ITSR charges, that explicit
+partition connection, and numerical same-game EUF composition remain under
+#100/#295. Concrete SHA-256, QROM, extraction, #789 optimization and #509 combined
+assurance remain separate.
 
 ## Controls and evidence scope
 
@@ -113,6 +144,10 @@ Registered rejected attempts remove the twelve final candidates, substitute
 256-bit for 128-bit node guessing, accept an opened candidate, substitute the
 output log, or drop the second query. Each rejection concerns that concrete
 proof attempt; it is not a general claim that every premise is necessary.
+The dropped-query control now uses a valid one-call proof script, with an
+otherwise identical passing one-call witness. New controls also reject losing
+a public adapter call, treating tree 12 as ordinary, treating an absent private
+entry as selected, and clearing an already failed session.
 Every new target is enrolled in both proof drivers, statement/definition pins,
 source bindings and forbidden-theory scope probes. See
 [control evidence](CONTROL-EVIDENCE.md) for the gate's evidence ceiling.

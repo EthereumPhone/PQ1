@@ -37,7 +37,7 @@ trap 'rm -rf "$TMPD"' EXIT
 # cone files (1016).  Bumping only one turns the gate RED at PHASE 1c with
 # "statement pin file truncated" -- which is exactly what it did on the first
 # run of this promotion.
-EXPECT_PINS=3217
+EXPECT_PINS=3327
 # 1167 -> 1166 on 2026-09-15: a DUPLICATE row removed.  op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f
 # sat on two identical rows from 92ecb63 (2026-08-20), so this count was one pin HIGH for 26 days.
 # PHASE 1c now also requires the UNIQUE key count to equal it.
@@ -48,7 +48,7 @@ EXPECT_PINS=3217
 # somebody must say why.  896 measured 2026-08-20; 993 after the 2026-08-25 pins;
 # 1016 on 2026-08-31 when cdrafts-split/BadEncCountermodel.ec was promoted into the
 # closure (+23 statements, all pinned in the same commit).
-EXPECT_STMTS=2797
+EXPECT_STMTS=2899
 # 1081 -> 1082 on 2026-09-14: GprocTCollNamed.ec (one lemma, pinned in the same commit).
 # 1024 -> 1081 on 2026-09-14 (+57, the T_COLL_RES_ENUM chain; all pinned in the same commit).
 # COMMITTED CONTROL COUNT (added 2026-09-14).  The PHASE 3 guard used to be
@@ -57,7 +57,7 @@ EXPECT_STMTS=2797
 # nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
 # itself, authored in this tree.  Now an equality against a committed constant, the
 # same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
-EXPECT_CTLS=456
+EXPECT_CTLS=485
 # 44 -> 49 on 2026-09-15 (later): a per-file scope negative for each of the other five headline
 # files.  Kimi K3 review: they had inherited isolation through GprocTCollNamed's require chain,
 # which nothing gated (all six are closure roots).
@@ -250,7 +250,7 @@ echo "### ECO_REMAINING=$left"
 # BEGIN proof-jobs  (executed verbatim, end to end, by tools/test_proof_jobs.py)
 echo "### PROOF JOBS — every PHASE 1 / 1e / 3 EasyCrypt run, executed here, judged below"
 # Added 2026-10-01 (PQ1 #768).  PHASES 1, 1e and 3 used to RUN their EasyCrypt commands
-# inside their own loops, one at a time: 473 compiles + 473 cli runs + 456 controls,
+# inside their own loops, one at a time: 496 compiles + 496 cli runs + 485 controls,
 # 3 h 20 min on the reference host.  Those runs now happen HERE, in parallel, and the
 # three loops below READ the results and judge them with their unchanged verdict code.
 # What did NOT change, and why each still holds:

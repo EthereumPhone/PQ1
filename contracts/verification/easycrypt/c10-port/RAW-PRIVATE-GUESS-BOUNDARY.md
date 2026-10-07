@@ -77,15 +77,10 @@ dropping final-output candidates, logging blocked calls, and removing bounded
 encoding premises. Rejection means the particular proof attempt fails, not
 that every hypothesis is necessary; see [control evidence](CONTROL-EVIDENCE.md).
 
-Next: prove a selective private-leaf hiding/lazy-sampling game hop, preserve
-the actual public hash/sign view up to a recorded input hit, and discharge its
-reveal and resource conditions. Only then can a fresh-node mass bound charge
-the remaining adaptive private-value event. WOTS reverse-chain/new-message
-bounds, encoding/ITSR and the composed numerical EUF bound follow under
-#100/#295. Concrete SHA-256, QROM and Rust extraction remain separate; #789 and
-#509 remain deferred.
-
-The [selective-hiding continuation](RAW-SELECTIVE-HIDING.md) now supplies the
-output/verified-pair relation, an operational repeated-query witness, full
-interface lifting, and a numerical selective experiment. Its original-game
-event connection and transformed resource premise remain explicit.
+The [ordinary FORS opening continuation](RAW-SELECTIVE-HIDING.md) now proves
+the hiding hop, opening/response relation, transformed resource bound and
+finite-coordinate union for the actual accepted byte output. This document
+records its prerequisites; it does not independently claim secrecy from
+candidate-list size. WOTS reverse-chain/new-message charges, encoding/ITSR,
+and the numerical common-game composition remain under #100/#295. Concrete
+SHA-256, QROM and Rust extraction remain separate; #789 and #509 stay deferred.

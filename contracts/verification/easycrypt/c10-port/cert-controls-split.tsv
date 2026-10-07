@@ -607,4 +607,35 @@ scratch/selective_no_final_candidates.ec	MUST-FAIL	the given proof-term proves:
 scratch/selective_wrong_node_width.ec	MUST-FAIL	the given proof-term proves:
 scratch/selective_accepts_opened.ec	MUST-FAIL	[by]: cannot close goals
 scratch/selective_output_substituted.ec	MUST-FAIL	[by]: cannot close goals
-scratch/selective_repeat_call_dropped.ec	MUST-FAIL	invalid last instruction
+scratch/selective_repeat_call_dropped.ec	MUST-FAIL	[by]: cannot close goals
+
+# Original-game opening and semantic replay controls.
+scratch/_scope_neg_op_ActualForsOpening.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_ForsCoordinateUniverse.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_OriginalByteTargetBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_OriginalCandidateBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_OriginalCandidateUnion.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_OriginalForsOpeningBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_OriginalTargetBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_OriginalTargetEvent.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetAdapterCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetClientOpenings.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetContextOpenings.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetExposureOpenings.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetForestOpenings.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetForsCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetOpeningFrames.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetReturnedOpenings.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetSessionCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetSessionOpenings.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetSignerCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetSignerOpenings.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetSignerProjection.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetTableGames.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_TargetTableProjection.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/original_adapter_dropped_hash.ec	MUST-FAIL	[by]: cannot close goals
+scratch/original_special_tree_ordinary.ec	MUST-FAIL	[by]: cannot close goals
+scratch/original_empty_target_entry.ec	MUST-FAIL	[by]: cannot close goals
+scratch/original_failure_recovery.ec	MUST-FAIL	[by]: cannot close goals
+scratch/selective_one_call_witness.ec	MUST-PASS	-
+scratch/original_adapter_two_hashes.ec	MUST-PASS	-

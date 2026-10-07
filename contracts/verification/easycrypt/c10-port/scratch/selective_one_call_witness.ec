@@ -28,7 +28,7 @@ lemma repeated_query_recorded_twice
   hoare [ClientQueryReplay(O).run :
     ClientQueryLog.inputs=[] /\ x=x0 /\ FullSession.raw_calls=0 /\
     FullSession.raw_limit=2 ==>
-    ClientQueryLog.inputs=[x0;x0] /\ FullSession.raw_calls=2].
+    ClientQueryLog.inputs=[x0] /\ FullSession.raw_calls=1].
 proof.
   proc; call (forwarded_query_exact_count O [] x0 0 2); by auto.
 qed.
