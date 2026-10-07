@@ -382,9 +382,15 @@ struct FrameCost {
     ///
     /// Wire efficiency is therefore `2.50 / wire_last`, and the frame it
     /// predicts is `stream ~= 24.31 / efficiency` (24.31 ms being the whole
-    /// 121,552 B frame at 40 MHz). So: 25 tenths = line rate = `stream` ~24.3;
-    /// 30 = 83% = ~29.2; 35 = 71% = ~34.0, which is over #780's 31.40 ms
-    /// tear bound.
+    /// 121,552 B frame at 40 MHz). So: 30 tenths = 83% = `stream` ~29.2;
+    /// 35 = 71% = ~34.0, which is over #780's 31.40 ms tear bound.
+    ///
+    /// AND THE FLOOR PRINTS AS **24**, NOT 25. `frametime::format_tenths`
+    /// TRUNCATES — `(cycles * 10) / 160_000` — and 2.4992 ms is 399,872
+    /// cycles, which comes out 24.99 and prints 24. So a reading of 24 means
+    /// `wire_last` is somewhere in [2.40, 2.50) ms, i.e. at line rate within
+    /// the overlay's own 0.1 ms resolution; it is NOT below the floor.
+    /// MEASURED on the EVT unit 2026-10-07: 24, with `stream` = 27.9 ms.
     #[cfg(feature = "ui-px-frametime")]
     wire_last: u32,
     /// Cycles blocked on the TE rising edge. This is the SLACK: large means
@@ -478,6 +484,12 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     //
     // `cost.stream` measures exactly `Tw`, because that bound is the thing
     // this frame has to satisfy and nothing else in `FrameCost` is it (#790).
+    // MEASURED on the EVT screen unit 2026-10-07: Tw = 27.9 ms against the
+    // 31.40 ms bound, so the sweep is inside its own precondition by 3.5 ms.
+    // Before #790 it was ~31.8 ms by arithmetic -- possibly OVER, with the
+    // composite at x ~ 417, the 11 rightmost of 428 columns, where the hero
+    // animation's +-95 px swing never reaches. Do not let Tw grow without
+    // re-reading this number.
     //
     // Bound: ~5 cycles per poll, so 2,000,000 is ~62 ms at 160 MHz — four TE
     // periods, and it latches dead on the first miss so a panel-less board
@@ -698,11 +710,12 @@ fn build_and_present(
     // te_wait.
     //   stream    = TE edge -> last pixel at TXDR. MUST read < 314 (31.40 ms)
     //               or the frame is outside #780's tear-free bound.
-    //   wire_last = one band's wire with nothing overlapping it. Floor is 25
-    //               (2.50 ms -- the LAST band is 44 cols, not 48). Wire
-    //               efficiency = 25 / wire_last, and that predicts
-    //               `stream` ~= 243 / efficiency. Reading it against the
-    //               48-col 2.73 ms figure scores an 8%-slow wire as perfect.
+    //   wire_last = one band's wire with nothing overlapping it. The LAST
+    //               band is 44 cols, not 48, so its floor is 2.4992 ms --
+    //               and the formatter TRUNCATES, so the floor PRINTS AS 24.
+    //               24 therefore means line rate, not "below the floor".
+    //               Reading it against the 48-col 2.73 ms figure would score
+    //               an 8%-slow wire as perfect.
     //   te_wait   = the slack before a whole refresh period is lost.
     if let Some(text) = wire {
         use pqsigner_ui_px::font::{Align, TextRun, TierId};
