@@ -53,6 +53,7 @@ const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
 const BOARD_MOD_SRC: &str = include_str!("../board/mod.rs");
 const LCD_NV3007_SRC: &str = include_str!("../hw/lcd_nv3007.rs");
 const UI_PX_LCD_SRC: &str = include_str!("../ui/px/lcd.rs");
+const GPDMA_SRC: &str = include_str!("../hw/gpdma.rs");
 const AW99703_SRC: &str = include_str!("../hw/aw99703.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
@@ -1979,5 +1980,141 @@ fn positive_te_input_is_configured_by_the_panel_init() {
     assert!(
         UI_PX_LCD_SRC.contains("lcd_te::sync_to_scanout("),
         "the presenter must phase-lock to the scan-out (#780)"
+    );
+}
+
+#[test]
+fn positive_pixel_stream_frame_size_and_dma_beat_width_agree() {
+    // #790. THREE register settings in TWO files encode ONE property: the
+    // width of a datum crossing SPI1 for the pixel stream. They are legal
+    // only together, and every wrong pairing is silent on the host:
+    //
+    //   DSIZE=16 + BYTE beats  -- FORBIDDEN hardware config. RM0456 §68.4.14:
+    //      "Configuring any DMA data access to less than the configured data
+    //      size is forbidden", and §68.8.13 for TXDR itself. No defined
+    //      behaviour, no error flag.
+    //   DSIZE=8  + WORD beats  -- legal but WRONG ORDER. A 32-bit access at
+    //      an 8-bit frame packs FOUR frames and sends "the lowest significant
+    //      byte first" (§68.4.11), i.e. little-endian, so every pixel's bytes
+    //      arrive swapped. Garbled colour, no fault.
+    //   DSIZE=16 + WORD beats  -- what we ship: two frames per access, low
+    //      half-word first (ascending memory order), each frame shifted MSB
+    //      first, so a native `u16` RGB565 pixel leads with its high byte.
+    //
+    // Pin all three so a future "simplification" of either file cannot
+    // silently pick one of the broken pairings.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "const DSIZE_16: u32 = 15;"),
+        "the pixel stream runs 16-bit frames so no byte swap is needed"
+    );
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "spi_begin_framed(DSIZE_16, FTHLV_2, n_px)"),
+        "spi_begin_px must declare the 16-bit frame geometry explicitly"
+    );
+    // SDW_LOG2 = DDW_LOG2 = 0b10 (word): bits [1:0] = 2 and [17:16] = 2.
+    assert!(
+        contains_in_code(GPDMA_SRC, "const TR1_VAL: u32 = 0x8002_800A;"),
+        "GPDMA must use WORD beats, which is legal only at DSIZE=16"
+    );
+    // And the 2-data FIFO threshold that a 32-bit access requires: §68.8.8
+    // recommends FTHLV in {2,4,6} for a 32-bit register access with
+    // DSIZE > 8, and §68.4.11 caps the packet at half the 16-byte FIFO,
+    // which is 4 half-word frames.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "const FTHLV_2: u32 = 1;"),
+        "a 32-bit TXDR access needs a 2-data threshold, not the 1-data default"
+    );
+}
+
+#[test]
+fn positive_pixel_stream_derives_tsize_and_bndt_from_one_count() {
+    // #790. `CR2.TSIZE` counts data FRAMES (§68.8.2) and `GPDMA_CxBR1.BNDT`
+    // counts BYTES (§17.8.14). At 8-bit frames those were the same number,
+    // which is why the old code could pass `bytes.len()` to both. At 16-bit
+    // frames they differ by 2x, and the UNDER-supply direction is the one
+    // mistake hardware does not catch: the DMA raises TCF and returns Ok, the
+    // SPI has sent only half its TSIZE frames so EOT never sets, and
+    // `spi_end`'s unbounded `while EOT == 0` wedges the display with CS still
+    // asserted. The watchdog does not rescue it (IWDG is kicked from
+    // SysTick), and this path paints the measured-boot fingerprint.
+    //
+    // So require that ONE pixel slice feeds both counters at the single call
+    // site, rather than two numbers agreeing by review.
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "pub fn stream_dma_start(px: &[u16]) -> bool"),
+        "the DMA stream entry point must take PIXELS, so both counters derive from one length"
+    );
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "spi_begin_px(px.len() as u16);"),
+        "TSIZE must be the frame count of the slice actually handed to GPDMA"
+    );
+    assert!(
+        contains_in_code(LCD_NV3007_SRC, "crate::hw::gpdma::start_px(px);"),
+        "GPDMA must be armed from the same slice that set TSIZE"
+    );
+    assert!(
+        contains_in_code(GPDMA_SRC, "let bytes = px.len() * 2;")
+            && contains_in_code(GPDMA_SRC, "REG.cbr1.write(bytes as u32);"),
+        "BNDT must be the BYTE count derived from that same pixel slice"
+    );
+}
+
+#[test]
+fn positive_polled_pixel_stream_never_writes_a_sub_frame_byte() {
+    // #790. `stream_chunk` is the `ui-px-dma`-OFF fallback and lives inside
+    // the same `stream_open`/`stream_close` bracket, so it runs at
+    // `DSIZE_16` too. A BYTE write to TXDR is then an access smaller than one
+    // data, which RM0456 §68.8.13 forbids outright -- it specifies no
+    // truncation, no partial-frame accumulation and no error flag, so it is
+    // undefined, not "writes the low byte". It must push half-word data.
+    //
+    // It pushes PAIRS as one 32-bit access rather than single half-words:
+    // that matches the 2-data threshold above, and `H` = 142 is even so a
+    // band is always an even number of pixels and `chunks_exact(2)` can never
+    // drop a trailing pixel.
+    let chunk = UI_PX_LCD_SRC; // keep the band-geometry fact visible to the reader
+    let _ = chunk;
+    let body = LCD_NV3007_SRC
+        .split("pub fn stream_chunk(buf: &[u16])")
+        .nth(1)
+        .expect("stream_chunk must exist — it is the non-DMA pixel path");
+    let body = &body[..body.find("\n}\n").expect("stream_chunk must be a complete fn")];
+    assert!(
+        body.contains("spi_send_px_pair("),
+        "the polled pixel path must write half-word data, not bytes, at DSIZE=16"
+    );
+    assert!(
+        !body.contains("spi_send_byte("),
+        "a byte write inside a 16-bit frame stream is a forbidden sub-frame access (§68.8.13)"
+    );
+    assert!(
+        body.contains("spi_begin_px("),
+        "the polled pixel path must open its transfer with the 16-bit frame geometry"
+    );
+}
+
+#[test]
+fn positive_band_buffers_are_word_aligned_and_all_wiped() {
+    // #790, two properties of the band buffers that hardware and the
+    // 2026-09-24 secret-retention review respectively require.
+    //
+    // ALIGNMENT: GPDMA streams a band with WORD beats, and "a source address
+    // must be aligned with the programmed data width of a source burst ...
+    // Else, a user setting error is reported and no transfer is issued"
+    // (RM0456 §17.8.14). A bare `[u16; N]` is only 2-byte aligned, so without
+    // the `repr` the channel raises USEF and paints nothing -- loud, but only
+    // on hardware, and only on a panel nobody has on the bench board.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "#[repr(align(4))]")
+            && contains_in_code(UI_PX_LCD_SRC, "struct Band([u16; STRIP_PX]);"),
+        "the band buffer must be 4-byte aligned for word-width GPDMA beats"
+    );
+    // WIPE: seed-word pixels transit these buffers. The review flagged the
+    // old single buffer as safe only "by layout accident ... Nothing enforces
+    // that relationship". Wipe by ITERATING the array, so adding a third
+    // buffer cannot leave one holding secret pixels.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "for b in (*core::ptr::addr_of_mut!(BANDS)).iter_mut()"),
+        "every band buffer must be zeroized by iteration, not by being named one at a time"
     );
 }

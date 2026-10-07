@@ -225,6 +225,13 @@ const IFCR_OVRC: u32 = 1 << 6;
 /// SPE-toggle gap.
 const MAX_CHUNK: u16 = 65_534;
 
+/// The same 16-bit `TSIZE` ceiling expressed in 16-bit FRAMES, for the pixel
+/// stream. `TSIZE` counts frames, so at `DSIZE_16` a chunk may carry 65,534
+/// PIXELS (131,068 B) rather than 65,534 bytes — the whole 60,776-pixel frame
+/// would fit in one, and a band (6,816 px) is far inside it. Even, so the
+/// paired 32-bit accesses never straddle a chunk boundary.
+const MAX_PX_CHUNK: usize = 65_534;
+
 // ---------------------------------------------------------------------------
 // GPIO helpers — DC / RES atomic set/clear via BSRR
 // ---------------------------------------------------------------------------
@@ -339,19 +346,77 @@ fn init_dc_res_gpios() {
 // SPI byte send — direct TXDR write
 // ---------------------------------------------------------------------------
 
-/// Begin one bounded SPI transfer of exactly `tsize` bytes. TSIZE is loaded
-/// into CR2 while SPE = 0 (RM0456 §68.8.2: TSIZE must be changed with the SPI
-/// disabled), then SPE + CSTART start the transfer. With TSIZE > 0, EOT fires
-/// deterministically when the last byte has shifted out — which is what
-/// [`spi_end`] waits on. Caller pushes exactly `tsize` bytes via
-/// [`spi_send_byte`], then calls [`spi_end`].
-fn spi_begin(tsize: u16) {
-    // SPE = 0 so TSIZE is writable (robust even if a prior chunk left it set
-    // on an error path).
+// ---- frame geometry, declared per transfer ---------------------------------
+//
+// `CFG1.DSIZE` is NOT a once-at-init setting any more: commands and the
+// legacy dialogs run 8-bit frames, the pixel stream runs 16-bit frames
+// (#790). Every `spi_begin*` writes it explicitly rather than inheriting
+// whatever the last transfer left, because an implicit frame size is exactly
+// the kind of remembered relationship that produces a silent wrong pixel —
+// a byte write at DSIZE=16 is *forbidden* with no defined behaviour
+// (RM0456 §68.8.13: "Write access of this register less than the configured
+// data size is forbidden"), not a truncating store.
+
+/// `CFG1.DSIZE` for 8-bit frames (the field holds bits − 1).
+const DSIZE_8: u32 = 7;
+/// `CFG1.DSIZE` for 16-bit frames — one RGB565 pixel per frame.
+const DSIZE_16: u32 = 15;
+/// `CFG1.FTHLV` = 1 data.
+const FTHLV_1: u32 = 0;
+/// `CFG1.FTHLV` = 2 data. Paired with the 32-bit TXDR accesses the pixel
+/// stream performs: RM0456 §68.8.8 recommends FTHLV ∈ {2,4,6} when "the SPI
+/// data register is accessed as a 32-bit register and DSIZE > 8 bits", and a
+/// 2-data packet is 4 B against the 8 B ceiling (§68.4.11: "The data packet
+/// occupancy must not exceed half of the FIFO size"; SPI1's FIFO is 16 × 8 b
+/// and a 9-to-16-bit frame occupies two bytes, so half is 4 frames).
+const FTHLV_2: u32 = 1;
+/// `CFG1` bits owned by the frame geometry: `DSIZE[4:0]` and `FTHLV[8:5]`.
+/// Everything else in that register — `MBR` (the board's panel clock) and
+/// `TXDMAEN` (set once by `gpdma::init`) — must survive, hence read-modify-write.
+const CFG1_FRAME_MASK: u32 = 0x1FF;
+
+/// Begin one bounded SPI transfer of exactly `tsize` FRAMES at the given
+/// frame geometry.
+///
+/// `CR2.TSIZE` counts DATA FRAMES, not bytes (§68.8.2 "number of data at
+/// current transfer"), and `CFG1` is write-protected while SPE = 1 (§68.8.8:
+/// "The content of this register is write protected when SPI is enabled,
+/// except TXDMAEN and RXDMAEN bits") — so both writes live inside the one
+/// SPE = 0 window this function opens. With TSIZE > 0, EOT fires
+/// deterministically when the last frame has shifted out, which is what
+/// [`spi_end`] waits on.
+fn spi_begin_framed(dsize: u32, fthlv: u32, tsize: u16) {
+    // SPE = 0 so TSIZE and CFG1 are writable (robust even if a prior chunk
+    // left SPE set on an error path).
     REG.spi_cr1.modify(|v| v & !CR1_SPE);
+    REG.spi_cfg1.modify(|v| (v & !CFG1_FRAME_MASK) | (fthlv << 5) | dsize);
     REG.spi_cr2.write(u32::from(tsize)); // CR2[15:0] = TSIZE; upper bits 0 (no CRC)
     REG.spi_cr1.modify(|v| v | CR1_SPE);
     REG.spi_cr1.modify(|v| v | CR1_CSTART);
+}
+
+/// Begin one bounded transfer of `tsize` BYTES — 8-bit frames, 1-data
+/// threshold. Caller pushes exactly `tsize` bytes via [`spi_send_byte`],
+/// then calls [`spi_end`]. This is every command and every legacy dialog.
+fn spi_begin(tsize: u16) {
+    spi_begin_framed(DSIZE_8, FTHLV_1, tsize);
+}
+
+/// Begin one bounded transfer of `n_px` RGB565 PIXELS — 16-bit frames, so one
+/// frame is one pixel and no byte swap is needed anywhere: `LSBFRST = 0`
+/// shifts each frame out MSB first (§68.8.9), the frame is `TXDR[15:0]`
+/// right-aligned (§68.4.6), so a native little-endian `u16` puts its high
+/// byte on MOSI first — which is the order the NV3007 wants.
+///
+/// Caller pushes exactly `n_px` pixels, either via [`spi_send_px_pair`] or by
+/// handing GPDMA `2 * n_px` bytes. **TSIZE is frames and `BNDT` is bytes**
+/// (§17.8.14 "programmed in number of bytes"), so they are NOT the same
+/// number here; under-supplying bytes relative to TSIZE is the one mismatch
+/// hardware does not catch — the DMA completes, EOT never sets, and
+/// [`spi_end`]'s unbounded wait wedges the display. Both therefore derive
+/// from the SAME pixel count at the single call site below.
+fn spi_begin_px(n_px: u16) {
+    spi_begin_framed(DSIZE_16, FTHLV_2, n_px);
 }
 
 /// Push one byte through TXDR. Blocks until TXP is set (Tx FIFO has space).
@@ -366,6 +431,31 @@ fn spi_send_byte(b: u8) {
     // DSIZE = 7 (8-bit) by spi_hw::init(); byte writes are valid.
     unsafe {
         core::ptr::write_volatile(REG.spi_txdr_addr as *mut u8, b);
+    }
+}
+
+/// Push TWO RGB565 pixels as one 32-bit TXDR access, at `DSIZE_16`.
+///
+/// A 32-bit access is a multiple of the 16-bit frame size, so the SPI packs it
+/// automatically and sends "the lowest significant half-word first"
+/// (§68.4.11) — i.e. `lo` then `hi`, ascending memory order for a
+/// little-endian `[u16]`. Each frame is then shifted MSB first, so the pixel's
+/// high byte leads. Pairs rather than single half-words because `Reg32` is a
+/// 32-bit handle and every band is an even number of pixels (`H` = 142), and
+/// because the access then exactly matches the 2-data FIFO threshold
+/// (§68.8.8: "SPI interface is more efficient if configured packet sizes are
+/// aligned with data register access parallelism").
+fn spi_send_px_pair(lo: u16, hi: u16) {
+    while (REG.spi_sr.read() & SR_TXP) == 0 {}
+    // SAFETY: TXDR is a real, 4-byte-aligned MMIO register and the caller is
+    // inside a `spi_begin_px` transfer, so DSIZE = 15 and a 32-bit access is
+    // a legal 2-frame packed write (§68.4.11). TXP is set, and with
+    // FTHLV = 2-data that guarantees room for both frames.
+    unsafe {
+        core::ptr::write_volatile(
+            REG.spi_txdr_addr as *mut u32,
+            u32::from(lo) | (u32::from(hi) << 16),
+        );
     }
 }
 
@@ -812,15 +902,23 @@ pub fn stream_close() {
 }
 
 /// One polled chunk of an open stream. RGB565, high byte first.
+///
+/// 16-bit frames (`spi_begin_px`), so `TSIZE` is the PIXEL count and the
+/// chunk cap is `MAX_PX_CHUNK` pixels — not `MAX_CHUNK / 2`, which was a
+/// byte-denominated bound. Pixels go out in pairs as single 32-bit accesses;
+/// `H` is even so every band has an even pixel count and no pair is ever
+/// split, which `chunks_exact(2)` would otherwise silently drop.
 pub fn stream_chunk(buf: &[u16]) {
-    let pixels_per_chunk = usize::from(MAX_CHUNK / 2);
+    debug_assert!(
+        buf.len() % 2 == 0,
+        "bands are w*H pixels and H is even, so the pair loop is exact"
+    );
     let mut off = 0usize;
     while off < buf.len() {
-        let n = core::cmp::min(buf.len() - off, pixels_per_chunk);
-        spi_begin((n * 2) as u16);
-        for &px in &buf[off..off + n] {
-            spi_send_byte((px >> 8) as u8);
-            spi_send_byte(px as u8);
+        let n = core::cmp::min(buf.len() - off, MAX_PX_CHUNK);
+        spi_begin_px(n as u16);
+        for pair in buf[off..off + n].chunks_exact(2) {
+            spi_send_px_pair(pair[0], pair[1]);
         }
         spi_end();
         off += n;
@@ -828,18 +926,25 @@ pub fn stream_chunk(buf: &[u16]) {
 }
 
 /// Arm one DMA chunk of an open stream. Returns immediately with the transfer
-/// in flight; `bytes` must stay alive and unmodified until
-/// [`stream_dma_finish`] returns. No CS framing — see the note above.
+/// in flight; `px` must stay alive and unmodified until [`stream_dma_finish`]
+/// returns. No CS framing — see the note above.
+///
+/// Takes PIXELS, not bytes, and that is the whole point: `CR2.TSIZE` is a
+/// frame count and `GPDMA_CxBR1.BNDT` is a byte count, and at 16-bit frames
+/// those differ by 2×. Supplying fewer bytes than TSIZE frames is the one
+/// mismatch the hardware does not report — the DMA raises TCF, EOT never
+/// sets, and [`spi_end`] spins forever with CS asserted. Deriving both from
+/// one `px.len()` here makes the relation hold by construction instead of by
+/// two call sites agreeing.
 #[cfg(feature = "ui-px-dma")]
-pub fn stream_dma_start(bytes: &[u8]) -> bool {
-    if bytes.is_empty() {
+pub fn stream_dma_start(px: &[u16]) -> bool {
+    if px.is_empty() {
         return false;
     }
+    debug_assert!(px.len() <= MAX_PX_CHUNK, "TSIZE is 16 bits, in frames");
     dc_high();
-    // TSIZE must equal the DMA block size, or the SPI stops mid-stream with
-    // the channel still armed.
-    spi_begin(bytes.len() as u16);
-    crate::hw::gpdma::start(bytes);
+    spi_begin_px(px.len() as u16); // TSIZE = frames
+    crate::hw::gpdma::start_px(px); // BNDT = 2 * frames, in bytes
     true
 }
 
