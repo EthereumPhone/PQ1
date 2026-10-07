@@ -151,6 +151,31 @@ fn stacked_y_q8(tier: Tier, n: u8, i: u8) -> Q8 {
 
 /// The design's layout of a screen at `page`.
 #[must_use]
+impl Layout {
+    /// Whether this layout drives an animation with **no rest pose** — the
+    /// disc sweeps, the hint pulses or the band scrolls, forever.
+    ///
+    /// This is the predicate `Anim::step` reads to decide `ambient`, exposed
+    /// so a caller can ask the question BEFORE it starts playing a screen it
+    /// can never finish. #783 was exactly that: `play_screen` has one exit
+    /// for such a screen — a 3 s cap — so it abandoned the motion 40% into a
+    /// 5 s sine and left the disc stranded off-centre. A caller that knows a
+    /// screen plays forever can animate it against real input instead.
+    ///
+    /// `step` reads this same method on purpose: two copies of "which flags
+    /// mean endless" would drift the first time a fourth ambient flag lands.
+    #[must_use]
+    pub fn plays_forever(&self) -> bool {
+        self.sweep || self.hint || self.band
+    }
+}
+
+/// Whether `screen`/`page` plays forever — see [`Layout::plays_forever`].
+#[must_use]
+pub fn plays_forever(screen: &Screen, page: u8) -> bool {
+    layout_of(screen, page).plays_forever()
+}
+
 pub fn layout_of(s: &Screen, page: u8) -> Layout {
     let mut l = Layout {
         circle: None,
@@ -906,7 +931,7 @@ impl Anim {
         if !flip_live {
             self.flip_at = None;
         }
-        let ambient = (l.sweep || l.hint || l.band || crate::verdict::live(&self.cur, now.wrapping_sub(self.arrived_at)))
+        let ambient = (l.plays_forever() || crate::verdict::live(&self.cur, now.wrapping_sub(self.arrived_at)))
             && self.film.is_none();
         let ending_live = self.film.is_some() && !self.film_done(now);
         // The trail is still catching up with the head.
@@ -1759,5 +1784,56 @@ mod tests {
         assert_eq!(Anim::resting(Ending::Declined, &cow), (Rgb::RED, Rgb::BLACK, Rgb::BLACK));
         assert_eq!(Anim::resting(Ending::Signed, &eth), (Rgb::BLACK, Rgb::GREEN, Rgb::GREEN));
         assert_eq!(Anim::resting(Ending::Declined, &eth), (Rgb::BLACK, Rgb::RED, Rgb::RED));
+    }
+
+    #[test]
+    fn plays_forever_agrees_with_step_never_settling() {
+        // #783. The predicate must mean what it says, and be measured against
+        // `step` itself rather than against a second reading of the Kind
+        // table: for every screen shape, `plays_forever` has to coincide with
+        // "step is STILL true long after any finite timeline could have
+        // resolved". The longest finite one is a verdict (Icon::Lock,
+        // 1,870 ms), so 60 s is far past every rest pose.
+        let status = ScreenBuilder::status(b"S", Icon::Eth, b"T", State::None, ResultMark::None)
+            .finish()
+            .unwrap();
+        let words = ScreenBuilder::words(b"W", b"", &[&b"alpha"[..]]).finish().unwrap();
+        let cases: [(&str, Screen); 4] =
+            [("hero", hero()), ("detail", detail()), ("status", status), ("words", words)];
+        for (name, sc) in &cases {
+            let forever = plays_forever(sc, 0);
+            let mut a = Anim::new(sc, 0, 0);
+            let mut moving = true;
+            let mut t = 0u32;
+            while t < 60_000 {
+                t += 16;
+                moving = a.step(t);
+            }
+            assert_eq!(
+                forever, moving,
+                "{name}: plays_forever() = {forever} but step() after 60 s = {moving} — the \
+                 predicate and the loop it guards disagree"
+            );
+        }
+    }
+
+    #[test]
+    fn the_wizard_chooser_is_an_endless_screen() {
+        // #783's instance, pinned. `status_map::choice` builds a hero, and
+        // that is the one NON-DIALOG screen that plays forever — so the one
+        // `play_screen` could never finish. If a future layout change makes
+        // it settle, this says so, rather than leaving the chooser on the
+        // animate-against-input path for a reason that stopped being true.
+        let chooser = ScreenBuilder::hero(b"CHOICE", Icon::Eth, b"Create new wallet")
+            .finish()
+            .unwrap();
+        assert!(plays_forever(&chooser, 0), "the chooser ask must still be endless");
+
+        // And the contrast #783 rests on: a verdict FINISHES, which is why
+        // the red lock looks smooth on the very same driver and pacing.
+        let verdict = ScreenBuilder::status(b"V", Icon::Lock, b"LOCKED", State::None, ResultMark::None)
+            .finish()
+            .unwrap();
+        assert!(!plays_forever(&verdict, 0), "a verdict must still reach a rest pose");
     }
 }

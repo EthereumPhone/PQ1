@@ -128,6 +128,47 @@ pub fn show(s: &Screen) -> bool {
     show_with(s, &[])
 }
 
+/// What [`show_waiting`] did.
+pub enum Waited {
+    /// No verified atlas — the caller must paint its own 16x4 page and run
+    /// its own `wait_button`. Same contract as `show_with` returning `false`.
+    NoAtlas,
+    /// The screen was shown and kept animating for the whole wait. Carries
+    /// the input event, or `None` if the idle timer fired.
+    Event(Option<(crate::ui::Button, crate::ui::Press)>),
+}
+
+/// Show an ENDLESS ambient record and wait for a button, animating it
+/// throughout (#783).
+///
+/// This is the fix for the wizard chooser. `show`/`play_screen` play a record
+/// "until it rests", which for a screen that never rests means a 3 s cap
+/// firing mid-swing, followed by a blocking input wait during which nothing
+/// moves at all — and because that wait samples no input, a tap that starts
+/// and ends inside the 3 s window was invisible. Driving the animation FROM
+/// the input wait fixes both halves with one loop.
+///
+/// Goes through the same `record(s)` as every other presenter, exactly once,
+/// so the `[UI-PXSR]` log line and the `ui-capture` frame hash are unchanged
+/// and the transcript count does not move.
+pub fn show_waiting(s: &Screen, idle: &mut dyn FnMut() -> bool) -> Waited {
+    #[cfg(feature = "ui-lcd")]
+    {
+        let Ok(atlas) = super::assets::verify_atlas() else {
+            return Waited::NoAtlas;
+        };
+        record(s);
+        let mut amb = super::lcd::Ambient::new(s, &atlas);
+        let ev = crate::ui::input().wait_button_ticking(idle, &mut || amb.tick(&atlas));
+        Waited::Event(ev)
+    }
+    #[cfg(not(feature = "ui-lcd"))]
+    {
+        record(s);
+        Waited::Event(crate::ui::input().wait_button(idle))
+    }
+}
+
 /// Work in progress (a one-off status before the work runs): the record
 /// painted at rest at once — an entrance would only delay the work. With a
 /// film already running (the signing film) the film keeps the glass and is

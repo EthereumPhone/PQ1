@@ -55,6 +55,10 @@ const LCD_NV3007_SRC: &str = include_str!("../hw/lcd_nv3007.rs");
 const UI_PX_LCD_SRC: &str = include_str!("../ui/px/lcd.rs");
 const GPDMA_SRC: &str = include_str!("../hw/gpdma.rs");
 const MAIN_SRC: &str = include_str!("../main.rs");
+const SEED_WIZARD_SRC: &str = include_str!("../ui/seed_wizard.rs");
+const LCD_TE_SRC: &str = include_str!("../hw/lcd_te.rs");
+const PX_SCREENS_SRC: &str = include_str!("../ui/px/screens.rs");
+const SECURE_CARGO_TOML_SRC: &str = include_str!("../../Cargo.toml");
 const AW99703_SRC: &str = include_str!("../hw/aw99703.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
@@ -2306,5 +2310,275 @@ fn positive_an_incomplete_frame_cannot_arm_the_sign_gesture() {
             })
             .any(|c| c.trim() == "cost = FrameCost::default();"),
         "a blanket FrameCost::default() re-assignment would clobber `complete` outside the bench config"
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// #783 — the endless chooser: animate against input, never play to rest
+// ═════════════════════════════════════════════════════════════════════
+
+#[test]
+fn positive_the_animation_tick_never_runs_while_a_button_is_down() {
+    // `wait_event_ticking` exists so the endless chooser can animate during
+    // the input wait. The tempting place to hang that is `idle_check`, which
+    // is already called at every poll point -- and it would be WRONG,
+    // silently.
+    //
+    // `track_hold` measures a hold on a SYNTHETIC clock (`held_ms +=
+    // POLL_MS` after each `delay_ms(POLL_MS)`), not on `timeout::now()`. A
+    // frame paint is ~34 ms against POLL_MS = 5, so a tick inside the press
+    // path makes `held_ms` undercount ~7x: a real 500 ms hold would need
+    // about 3 s of wall time to register as `Press::Long`. The chooser's
+    // long-Right is what CONFIRMS wallet creation, so that is a trusted-path
+    // input defect, not a cosmetic one -- and nothing reports it.
+    //
+    // So: exactly ONE `tick()` call, in the branch where neither button is
+    // pressed.
+    // Count in CODE only — the contract above says "tick" a dozen times, and
+    // the invocation form has already changed once (`tick();` became
+    // `if !tick() {` when the hook started reporting whether it painted), so
+    // match the CALL, not one spelling of a statement. Allocation-free: this
+    // crate is `no_std`, so walk the lines and keep byte offsets.
+    //
+    // `find_in_code` returns the byte offset of `needle` in the comment-
+    // stripped view, and `count_in_code` counts it, so positions from the two
+    // are comparable.
+    fn each_code_line(src: &str, mut f: impl FnMut(usize, &str)) {
+        let mut off = 0usize;
+        for line in src.split('\n') {
+            let code = match line.find("//") {
+                Some(i) => &line[..i],
+                None => line,
+            };
+            f(off, code);
+            off += line.len() + 1;
+        }
+    }
+    fn count_in_code(src: &str, needle: &str) -> usize {
+        let mut n = 0;
+        each_code_line(src, |_, c| n += c.matches(needle).count());
+        n
+    }
+    fn find_in_code(src: &str, needle: &str) -> Option<usize> {
+        let mut hit = None;
+        each_code_line(src, |off, c| {
+            if hit.is_none() {
+                if let Some(i) = c.find(needle) {
+                    hit = Some(off + i);
+                }
+            }
+        });
+        hit
+    }
+
+    let calls = count_in_code(BUTTONS_SRC, "tick()");
+    assert_eq!(
+        calls, 1,
+        "exactly one tick site is allowed in the button state machine, found {calls}"
+    );
+    // Compare POSITIONS, not comments.
+    let guard = find_in_code(BUTTONS_SRC, "if !(left_pressed() || right_pressed()) {")
+        .expect("the nothing-pressed branch must still exist");
+    let tick = find_in_code(BUTTONS_SRC, "tick()").expect("the tick site must exist");
+    let delay = find_in_code(&BUTTONS_SRC[guard..], "delay_ms(POLL_MS);")
+        .map(|i| i + guard)
+        .expect("that branch must still idle with delay_ms");
+    assert!(
+        guard < tick && tick < delay,
+        "the tick must sit between the nothing-pressed guard and its delay \
+         (guard {guard}, tick {tick}, delay {delay}) — anywhere in the press path \
+         corrupts track_hold's synthetic hold clock"
+    );
+    let th = find_in_code(BUTTONS_SRC, "fn track_hold").expect("track_hold must exist");
+    assert!(
+        find_in_code(&BUTTONS_SRC[th..], "tick()").is_none(),
+        "track_hold must never tick"
+    );
+}
+
+#[test]
+fn positive_an_endless_screen_is_never_played_to_rest() {
+    // The CLASS, not just the instance. `play_screen` means "play until it
+    // rests"; a `plays_forever` screen has no rest, so its only exit was a
+    // 3 s cap that fired mid-motion. Keep the cap for the finite callers and
+    // make the endless case structurally impossible to re-enter, so the next
+    // hero someone shows does not reintroduce the freeze.
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "if pqsigner_ui_px::scene::plays_forever(s, 0) {"),
+        "play_screen must branch on whether the screen can ever rest"
+    );
+    assert!(
+        contains_in_code(UI_PX_LCD_SRC, "const PLAY_CAP_MS: u32 = 3_000;"),
+        "the cap stays as the backstop for screens that DO rest"
+    );
+    // Endlessness must be asked of the LAYOUT that sets the flags, not
+    // re-derived from a second copy of the Kind table in the firmware.
+    assert!(
+        !contains_in_code(UI_PX_LCD_SRC, "Kind::Hero") && !contains_in_code(PX_SCREENS_SRC, "Kind::Hero"),
+        "endlessness must come from scene::plays_forever, not a local Kind match"
+    );
+}
+
+#[test]
+fn positive_the_chooser_animates_from_inside_its_input_wait() {
+    // The two defects were one structure: a paint loop that sampled no
+    // input, followed by an input wait that painted nothing. Neither half is
+    // fixable alone, so the chooser paints AND waits in one call.
+    assert!(
+        contains_in_code(PX_SCREENS_SRC, "pub fn show_waiting(")
+            && contains_in_code(
+                PX_SCREENS_SRC,
+                "wait_button_ticking(idle, &mut || amb.tick(&atlas))"
+            ),
+        "the ambient presenter must drive its animation from the input wait"
+    );
+    // Through `record` on every arm, like every other presenter, or the
+    // [UI-PXSR] line and the ui-capture frame hash change and the transcript
+    // count moves.
+    let body = PX_SCREENS_SRC
+        .split("pub fn show_waiting(")
+        .nth(1)
+        .expect("show_waiting must exist");
+    let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
+    assert_eq!(
+        body.matches("record(s);").count(),
+        2,
+        "show_waiting must record the screen on each cfg arm, exactly once"
+    );
+    // Both wizard choosers must use it (the fn itself plus two call sites),
+    // and the paint-then-block helper must not come back.
+    assert_eq!(
+        SEED_WIZARD_SRC.matches("px_choice_wait(").count(),
+        3,
+        "both chooser loops must animate while waiting"
+    );
+    assert!(
+        !contains_in_code(SEED_WIZARD_SRC, "fn px_choice("),
+        "the paint-then-block helper must not come back"
+    );
+}
+
+#[test]
+fn positive_the_te_edge_is_latched_in_hardware_not_polled_as_a_level() {
+    // #783 follow-up. The TE pulse is 18 us and repeats every 16.0 ms, which
+    // is an EXACT multiple of the 1 kHz SysTick — so a strobe that lands
+    // inside the tick ISR is invisible to a level poll, and once one
+    // coincides, every following one coincides too. The poll then burns its
+    // whole cap: measured `te_wait` >= 99.9 ms where a wait for an edge can
+    // never exceed 16.0 ms.
+    //
+    // EXTI's edge detector sets the pending flag whether or not the CPU is
+    // executing anything (RM0456 23.6.4), so the strobe becomes impossible
+    // to miss. Pin the latch, and pin the ABSENCE of the level loop that
+    // replaced it — a future "simplification" back to `while !level()`
+    // reintroduces a ~100 ms stall per frame with no compile error.
+    assert!(
+        contains_in_code(LCD_TE_SRC, "const EXTI_RPR1: u32 = 0x00C;")
+            && contains_in_code(LCD_TE_SRC, "rpr.read() & line == 0"),
+        "wait_rising must poll the EXTI rising-edge latch"
+    );
+    // The level poll is KEPT, as a verified fallback — see below. What must
+    // not happen is `wait_rising` using it unconditionally.
+    assert!(
+        contains_in_code(LCD_TE_SRC, "if !exti_in_use() {")
+            && contains_in_code(LCD_TE_SRC, "return wait_rising_by_level(spin_cap);"),
+        "the level poll must be reachable ONLY as the fallback"
+    );
+    // FAIL-SAFE, because the first cut of this shipped broken: the EXTI path
+    // detected nothing, the line latched dead inside 15 s, and the trusted
+    // display ran with NO scan-out sync for the whole session — trading
+    // #783's stall for #780's tearing without anyone choosing that. The
+    // driver must prove its own configuration took effect.
+    assert!(
+        contains_in_code(LCD_TE_SRC, "core::ptr::addr_of_mut!(EXTI_USABLE)")
+            && contains_in_code(LCD_TE_SRC, "== port_index && rtsr.read() & exti_line(pin) != 0"),
+        "exti_init must read its configuration back and fall back if it did not stick"
+    );
+    // AND THE EXTI PATH IS OFF BY DEFAULT. It reads back correctly on the EVT
+    // unit and still latches no edge (measured 37 misses in 28 s with
+    // `exti_in_use` true), while the level poll on the same pin sees the
+    // strobe. Shipping the unproven path cost a session-long loss of scan-out
+    // sync once already.
+    // SELF-PROVING: the latch is used only when it demonstrated, this boot,
+    // that it answers a software trigger. A build-time flag records what
+    // someone believed; the self-test records what the silicon just did.
+    assert!(
+        contains_in_code(LCD_TE_SRC, "let ok = config_ok && swier_ok;"),
+        "EXTI must be used only when BOTH its configuration read back and its \
+         latch answered a software trigger"
+    );
+    // And the line must be UNMASKED, which is what the pending flag needs.
+    // Its absence is why the first attempt latched nothing.
+    assert!(
+        contains_in_code(LCD_TE_SRC, "Reg32::new(EXTI_S + EXTI_IMR1).set_bits(exti_line(pin));"),
+        "IMR1 must unmask the line or RPR1 never latches (RM0456 23.6.10)"
+    );
+    // And a dead line must be RE-TESTED, not written off for the session.
+    assert!(
+        contains_in_code(LCD_TE_SRC, "const RETRY_EVERY: u32 = 64;")
+            && contains_in_code(LCD_TE_SRC, "core::ptr::addr_of_mut!(TE_RETRY)"),
+        "a line declared dead must be retried — losing sync permanently is tearing by default"
+    );
+    // Rising edge armed, and the line claimed SECURE so NS cannot clear the
+    // flag and silently drop the trusted display back to an unsynchronised
+    // blit (i.e. #780's tearing) on demand.
+    assert!(
+        contains_in_code(LCD_TE_SRC, "Reg32::new(EXTI_S + EXTI_RTSR1).set_bits(exti_line(pin));")
+            && contains_in_code(
+                LCD_TE_SRC,
+                "Reg32::new(EXTI_S + EXTI_SECCFGR1).set_bits(exti_line(pin));"
+            ),
+        "the TE line must be armed for rising edges and owned by the secure world"
+    );
+    // And it must be configured by the panel init, like the pin itself —
+    // the same binding that `positive_te_input_is_configured_by_the_panel_init`
+    // enforces, because an unconfigured EXTI line never sets its flag and the
+    // wait would fail CLOSED into the spin cap forever.
+    assert!(
+        contains_in_code(LCD_TE_SRC, "exti_init(port, pin);"),
+        "init() must arm the EXTI line, or every wait burns its cap"
+    );
+}
+
+#[test]
+fn positive_a_cycle_count_cannot_come_from_a_stopped_counter() {
+    // The ambient chooser's first instrumented flash read `0/0/0` with the
+    // animation running fine: `frametime::enable()` was called from exactly
+    // one function (`run_flow`), so every other path measured a dead
+    // `DWT_CYCCNT`. Third instance in one day of "a helper that must be
+    // called, defined and not called on the new path" — after
+    // `Strip::x_hits` and `lcd_te::init()`, both of which were SUBTLY wrong
+    // and cost a flash each.
+    //
+    // So `cycles()` arms the counter itself. Adding another call site would
+    // have fixed the instance; this fixes the class, and the gate pins the
+    // structure rather than the call.
+    let i = UI_PX_LCD_SRC
+        .find("pub fn cycles() -> u32 {")
+        .expect("the frametime reader must exist");
+    let body = &UI_PX_LCD_SRC[i..];
+    let body = &body[..body.find("\n    }\n").unwrap_or(body.len())];
+    assert!(
+        body.contains("CTRL_CYCCNTENA == 0") && body.contains("enable();"),
+        "cycles() must arm the counter when it is not running, or a new \
+         measurement path silently reports 0"
+    );
+}
+
+#[test]
+fn positive_ui_lcd_implies_gpio_buttons() {
+    // The fix rests on this: only the GPIO path can honour a tick, and that
+    // is sufficient ONLY because every build with a panel has it. With
+    // `ui-lcd` off, `px::screens::show_with` records and returns without
+    // painting, so there is nothing to animate. If the implication breaks,
+    // a panel build would show the chooser as a still frame forever — worse
+    // than the 3 s of motion #783 complained about.
+    let line = SECURE_CARGO_TOML_SRC
+        .lines()
+        .find(|l| l.trim_start().starts_with("ui-lcd ="))
+        .expect("ui-lcd must still be a feature");
+    assert!(
+        line.contains("gpio-buttons"),
+        "ui-lcd must imply gpio-buttons, or the animated chooser has no tick: {line}"
     );
 }

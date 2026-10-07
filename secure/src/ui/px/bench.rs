@@ -15,12 +15,13 @@
 //!
 //! It deliberately shows the two things under investigation:
 //!
-//!   A. `status_map::choice` through `lcd::play_screen` — the #778 repro. A
-//!      record whose layout sets an ambient cycle never returns `!moving` from
-//!      `Anim::step`, so `play_screen`'s only exit is its 3 s `PLAY_CAP_MS` cap:
-//!      it abandons the animation mid-cycle and leaves the frame on the glass.
-//!      Every input is time-based, so the stop PHASE is identical at any frame
-//!      rate — confirmed on silicon at both 20 MHz and 40 MHz SPI.
+//!   A. the endless ambient record (`Kind::Hero`), animated against the real
+//!      buttons via `Ambient` + `wait_button_ticking`. This was the #783
+//!      REPRO — it called `play_screen`, whose only exit for a screen that
+//!      never rests is the 3 s `PLAY_CAP_MS`, so it stopped 40% into a 5 s
+//!      sweep with the disc stranded. Since the fix it is the
+//!      DEMONSTRATION: the motion should continue for as long as you watch
+//!      it, and a tap should be picked up promptly. Press either button for B.
 //!
 //!   B. the same record as the hero of a short transcript through
 //!      `lcd::run_flow` — the real interactive dialog, which is where the
@@ -165,8 +166,24 @@ pub fn run() -> ! {
     };
 
     loop {
-        // ---- A. ambient record via play_screen: freezes after PLAY_CAP_MS.
-        super::lcd::play_screen(&hero(), &atlas, &[]);
+        // ---- A. the endless ambient record, animated against real input.
+        //
+        // This CALLED `play_screen` until #783 was fixed, and froze after
+        // PLAY_CAP_MS — 1 s of still image, 2 s of a 5 s sweep, then a hard
+        // stop mid-swing. That was the repro. It is now the demonstration:
+        // the same screen on the same driver, animated for as long as the
+        // wait lasts, so a human watching this image sees whether the fix
+        // holds. Press either button to move on to B.
+        //
+        // Deliberately NOT `play_screen` any more: that function now refuses
+        // to play a `plays_forever` screen at all (it paints the opening
+        // frame and returns), so calling it here would show a still and look
+        // like a regression.
+        {
+            let mut idle = || false; // watched by a human; no idle wipe here
+            let mut amb = super::lcd::Ambient::new(&hero(), &atlas);
+            let _ = crate::ui::input().wait_button_ticking(&mut idle, &mut || amb.tick(&atlas));
+        }
 
         // ---- B. the same record as hero of a transcript, through the real
         // interactive dialog. `FlowDriver::new` only requires screen 0 to be

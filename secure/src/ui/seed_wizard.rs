@@ -48,16 +48,29 @@ use zeroize::Zeroize;
 // Each painter returns `true` when the pixel UI showed the screen; `false`
 // (no `ui-px`, or no verified atlas) means the caller paints its 16×4 page.
 
-/// The chooser ask (`status_map::choice`).
-fn px_choice(title: &[u8], option: &[u8]) -> bool {
-    #[cfg(feature = "ui-px")]
-    {
-        super::px::screens::show(&super::px::status_map::choice(title, option))
-    }
-    #[cfg(not(feature = "ui-px"))]
-    {
-        let _ = (title, option);
-        false
+/// The chooser ask (`status_map::choice`), shown and ANIMATED for the whole
+/// input wait (#783).
+///
+/// Returns `None` when the pixel UI could not paint it, and the caller falls
+/// back to its 16x4 page plus an ordinary `wait_button` — the same contract
+/// the old `px_choice` had, except the wait now belongs to the painter.
+///
+/// It has to be one call, not paint-then-wait. The chooser ask is a
+/// `Kind::Hero`, the one non-dialog screen whose `Anim::step` never returns
+/// false (`scene::plays_forever`), so "play it until it rests" cannot
+/// terminate: `play_screen`'s 3 s cap was its NORMAL exit and it fired 40%
+/// into a 5 s sweep, stranding the disc off-centre. And because the old
+/// paint loop sampled no input at all, a tap inside those 3 s was dropped.
+/// Animating from inside the input wait removes both.
+#[cfg(feature = "ui-px")]
+fn px_choice_wait(
+    title: &[u8],
+    option: &[u8],
+    idle: &mut dyn FnMut() -> bool,
+) -> Option<Option<(Button, Press)>> {
+    match super::px::screens::show_waiting(&super::px::status_map::choice(title, option), idle) {
+        super::px::screens::Waited::NoAtlas => None,
+        super::px::screens::Waited::Event(ev) => Some(ev),
     }
 }
 
@@ -133,26 +146,38 @@ pub fn choose_setup_mode() -> WizardChoice {
     loop {
         // Port step 4: the chooser is the design's ask, the highlighted
         // option as its caption (taps switch it, the chord selects).
-        if !px_choice(b"", [&b"Create new wallet"[..], b"Restore wallet"][idx]) {
-            let d = display();
-            d.clear();
-            d.draw_line(0, "  Wallet Setup");
-            for (i, label) in options.iter().enumerate() {
-                let mut row = [b' '; DISPLAY_COLS];
-                row[0] = if i == idx { b'>' } else { b' ' };
-                let lb = label.as_bytes();
-                let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
-                row[2..2 + max].copy_from_slice(&lb[..max]);
-                d.draw_line(i + 1, super::ascii_str(&row));
-            }
-            d.draw_line(3, "L=- R=+ LR=ok");
-            d.flush();
-        }
-
         let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
-            Some(ev) => ev,
-            None => return WizardChoice::IdleWipe,
+
+        // The pixel chooser paints AND waits, so it can keep animating for
+        // the whole wait (#783). `None` = it could not paint; fall through to
+        // the 16x4 page and the plain wait.
+        #[cfg(feature = "ui-px")]
+        let waited = px_choice_wait(b"", [&b"Create new wallet"[..], b"Restore wallet"][idx], &mut idle);
+        #[cfg(not(feature = "ui-px"))]
+        let waited: Option<Option<(Button, Press)>> = None;
+
+        let event = match waited {
+            Some(Some(ev)) => ev,
+            Some(None) => return WizardChoice::IdleWipe,
+            None => {
+                let d = display();
+                d.clear();
+                d.draw_line(0, "  Wallet Setup");
+                for (i, label) in options.iter().enumerate() {
+                    let mut row = [b' '; DISPLAY_COLS];
+                    row[0] = if i == idx { b'>' } else { b' ' };
+                    let lb = label.as_bytes();
+                    let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
+                    row[2..2 + max].copy_from_slice(&lb[..max]);
+                    d.draw_line(i + 1, super::ascii_str(&row));
+                }
+                d.draw_line(3, "L=- R=+ LR=ok");
+                d.flush();
+                match input().wait_button(&mut idle) {
+                    Some(ev) => ev,
+                    None => return WizardChoice::IdleWipe,
+                }
+            }
         };
         timeout::reset_activity();
 
@@ -198,26 +223,35 @@ fn yes_no(title: &str) -> Option<bool> {
     let options = ["No", "Yes"];
     let mut idx: usize = 0;
     loop {
-        if !px_choice(title.as_bytes(), options[idx].as_bytes()) {
-            let d = display();
-            d.clear();
-            d.draw_line(0, title);
-            for (i, label) in options.iter().enumerate() {
-                let mut row = [b' '; DISPLAY_COLS];
-                row[0] = if i == idx { b'>' } else { b' ' };
-                let lb = label.as_bytes();
-                let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
-                row[2..2 + max].copy_from_slice(&lb[..max]);
-                d.draw_line(i + 1, super::ascii_str(&row));
-            }
-            d.draw_line(3, "L=- R=+ LR=ok");
-            d.flush();
-        }
-
         let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
-            Some(ev) => ev,
-            None => return None,
+
+        #[cfg(feature = "ui-px")]
+        let waited = px_choice_wait(title.as_bytes(), options[idx].as_bytes(), &mut idle);
+        #[cfg(not(feature = "ui-px"))]
+        let waited: Option<Option<(Button, Press)>> = None;
+
+        let event = match waited {
+            Some(Some(ev)) => ev,
+            Some(None) => return None,
+            None => {
+                let d = display();
+                d.clear();
+                d.draw_line(0, title);
+                for (i, label) in options.iter().enumerate() {
+                    let mut row = [b' '; DISPLAY_COLS];
+                    row[0] = if i == idx { b'>' } else { b' ' };
+                    let lb = label.as_bytes();
+                    let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
+                    row[2..2 + max].copy_from_slice(&lb[..max]);
+                    d.draw_line(i + 1, super::ascii_str(&row));
+                }
+                d.draw_line(3, "L=- R=+ LR=ok");
+                d.flush();
+                match input().wait_button(&mut idle) {
+                    Some(ev) => ev,
+                    None => return None,
+                }
+            }
         };
         timeout::reset_activity();
         match event {

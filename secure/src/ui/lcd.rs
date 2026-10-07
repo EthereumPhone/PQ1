@@ -379,10 +379,32 @@ impl Input {
     }
 
     pub fn wait_button(&mut self, idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
+        self.wait_button_ticking(idle_check, &mut || false)
+    }
+
+    /// [`Self::wait_button`], calling `tick` while no button is down, so an
+    /// endless ambient screen can keep animating during the wait (#783).
+    ///
+    /// Only the GPIO path can honour it, and that is sufficient: `ui-lcd`
+    /// IMPLIES `gpio-buttons` (`secure/Cargo.toml`), so every build that has
+    /// a panel to animate takes the branch below, and a build without
+    /// `ui-lcd` never calls `play_screen` at all — `px::screens::show_with`
+    /// records the screen and returns without painting. The semihosting
+    /// branch blocks inside a `READ` syscall with nowhere safe to tick, so it
+    /// gets one tick up front and then the normal wait; `pure_tests` pins the
+    /// feature implication this rests on.
+    pub fn wait_button_ticking(
+        &mut self,
+        idle_check: &mut dyn FnMut() -> bool,
+        tick: &mut dyn FnMut() -> bool,
+    ) -> Option<(Button, Press)> {
         #[cfg(feature = "gpio-buttons")]
         {
-            return crate::hw::buttons::wait_event(idle_check);
+            return crate::hw::buttons::wait_event_ticking(idle_check, tick);
         }
+
+        #[cfg(not(feature = "gpio-buttons"))]
+        let _ = tick();
 
         #[cfg(all(not(feature = "gpio-buttons"), feature = "debug-log"))]
         if self.fd != usize::MAX {

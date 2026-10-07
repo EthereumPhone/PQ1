@@ -280,15 +280,41 @@ mod frametime {
     const DWT_LAR: Reg32 = unsafe { Reg32::new(0xE000_1FB0) };
     const CPU_HZ_PER_MS: u32 = 160_000;
 
+    /// `DWT_CTRL.CYCCNTENA`.
+    const CTRL_CYCCNTENA: u32 = 1;
+
+    /// Arm the cycle counter. Idempotent apart from zeroing `CYCCNT`, which
+    /// only costs one bad delta.
     pub fn enable() {
         DEMCR.modify(|v| v | (1 << 24)); // TRCENA
         DWT_LAR.write(0xC5AC_CE55);
         DWT_CYCCNT.write(0);
-        DWT_CTRL.modify(|v| v | 1); // CYCCNTENA
+        DWT_CTRL.modify(|v| v | CTRL_CYCCNTENA);
     }
 
+    /// The cycle counter, ARMING IT IF IT IS NOT RUNNING.
+    ///
+    /// SELF-ARMING ON PURPOSE. `enable()` used to be called from exactly one
+    /// place — `run_flow` — so every other path that measured anything read a
+    /// dead `CYCCNT` and reported **0**. That is what the ambient chooser's
+    /// new overlay did on its first flash: `0/0/0`, with the frame times
+    /// perfectly fine and simply unmeasured.
+    ///
+    /// This is the third time in one day that a helper which MUST be called
+    /// was defined and then not called on a new path — after `Strip::x_hits`
+    /// (defined, never called, 9x the raster work) and `lcd_te::init()`
+    /// (called only from the bench probe, so every ordinary image skipped the
+    /// TE wait forever). The first two were SUBTLY wrong and cost a flash
+    /// each to find. So the fix here is structural rather than one more call
+    /// site: a reader cannot obtain a cycle count from a stopped counter,
+    /// because asking for one starts it.
+    ///
+    /// Costs one extra MMIO read per call, in `PROD_FORBIDDEN` bench code.
     #[inline]
     pub fn cycles() -> u32 {
+        if DWT_CTRL.read() & CTRL_CYCCNTENA == 0 {
+            enable();
+        }
         DWT_CYCCNT.read()
     }
 
@@ -302,6 +328,13 @@ mod frametime {
     /// still fit the 3-digit cap up to 99.9 ms.
     pub fn format_tenths(out: &mut [u8; 24], a: u32, b: u32, c: u32) -> usize {
         format(out, a * 10, b * 10, c / (CPU_HZ_PER_MS / 10))
+    }
+
+    /// Format three PLAIN integers as `<a>/<b>/<c>` (≤ 3 digits each, clamped
+    /// at 999). For counts and seconds, which are not cycle measurements and
+    /// must not be divided by anything.
+    pub fn format_raw(out: &mut [u8; 24], a: u32, b: u32, c: u32) -> usize {
+        format(out, a.saturating_mul(CPU_HZ_PER_MS), b.saturating_mul(CPU_HZ_PER_MS), c)
     }
 
     /// Format `<render>/<blit>/<period>` (ms, ≤ 3 digits each) into `out`;
@@ -1096,7 +1129,17 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
         }
         let _ = present_frame_ex(&frame, &font, force);
     };
-    if !clock_running() {
+    if pqsigner_ui_px::scene::plays_forever(s, 0) {
+        // #783. This screen has NO rest pose, so "play it until it rests"
+        // cannot terminate and `PLAY_CAP_MS` is not a safety net — it is the
+        // normal exit, and it fires mid-motion. Painting the opening frame
+        // and returning is the honest thing: the caller gets a clean,
+        // deliberate still rather than a swing abandoned 40% through. A
+        // caller that wants the motion animates it against its own input
+        // wait with `Ambient` + `wait_button_ticking`.
+        let anim = Anim::new(s, 0, timeout::now());
+        paint(&anim);
+    } else if !clock_running() {
         // Settle on synthetic time, show the rest.
         let mut anim = Anim::new(s, 0, 0);
         let mut t = 16;
@@ -1120,6 +1163,188 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
         }
     }
     if force {
+    }
+}
+
+/// An endless ambient screen, animated against real input (#783).
+///
+/// WHY THIS EXISTS. `play_screen` plays a record "until it rests", and for a
+/// screen that NEVER rests its only exit is `PLAY_CAP_MS`. For the wizard
+/// chooser that means: 1 s of still image (`sweep_offset` returns 0 until
+/// `SWEEP_HOLD_MS`), then 2 s of a 5 s sine, then a hard stop 40% through the
+/// swing with the disc stranded off-centre — and then a blocking input wait
+/// during which nothing moves. That is the freeze, exactly as reported.
+///
+/// The fix is not a longer cap. A cap on an animation with no end is always
+/// an arbitrary truncation; the screen has to be animated for as long as the
+/// user is looking at it, which means for as long as the input wait lasts.
+/// So this holds the animation state and paints ONE frame per call, and the
+/// caller hands `tick` to `wait_button_ticking`.
+///
+/// Takes no `secret` cells, deliberately: nothing endless carries seed words
+/// (the words grid is `Kind::Words`, which settles), so the constant-time
+/// secret run has no business on this path and cannot be asked for.
+pub struct Ambient {
+    anim: Anim,
+    /// Clock time the next frame is due.
+    due_at: u32,
+    /// Per-second worst case of `stream` / `te_wait` / frame period, in DWT
+    /// cycles, plus the formatted line. Bench only.
+    ///
+    /// WHY THIS IS HERE AT ALL. The first cut of this struct painted through
+    /// `present_frame_ex` with no overlay, so the only interactive screen that
+    /// is NOT a sign dialog had no numbers — and when the owner reported it
+    /// "feels laggier", there was nothing to read but adjectives. `run_flow`
+    /// had three lines; this had none. The gap was mine, and it is the reason
+    /// the first diagnosis of that report was guesswork.
+    ///
+    /// `period` is what settles it: phase-locked to a 16.0 ms refresh, a frame
+    /// can only land on a multiple, so 320 vs 480 tenths is the difference
+    /// between "inside the window" and "lost a whole refresh period".
+    #[cfg(feature = "ui-px-frametime")]
+    ft: AmbientFt,
+}
+
+/// The ambient overlay's accumulators (bench only).
+#[cfg(feature = "ui-px-frametime")]
+#[derive(Default)]
+struct AmbientFt {
+    max_stream: u32,
+    max_te: u32,
+    max_period: u32,
+    max_render: u32,
+    max_shapes: u32,
+    max_glyphs: u32,
+    window_at: u32,
+    last_paint: u32,
+    buf: [u8; 24],
+    len: usize,
+    buf2: [u8; 24],
+    len2: usize,
+    buf3: [u8; 24],
+    len3: usize,
+}
+
+impl Ambient {
+    /// Start animating `s` and paint its first frame NOW.
+    ///
+    /// Eagerly, not on the first `tick`: a wait that returns immediately
+    /// (a button already down, or an idle timeout) must still leave THIS
+    /// screen on the glass rather than whatever the previous one left.
+    pub fn new(s: &Screen, atlas: &assets::AtlasRef) -> Self {
+        film_abort();
+        let now = timeout::now();
+        let mut a = Self {
+            anim: Anim::new(s, 0, now),
+            due_at: now,
+            #[cfg(feature = "ui-px-frametime")]
+            ft: AmbientFt::default(),
+        };
+        a.paint(atlas);
+        a
+    }
+
+    /// Paint one frame if one is due. Cheap and bounded when it is not.
+    ///
+    /// MUST NOT be called while a button is down — see
+    /// `hw::buttons::wait_event_ticking`, whose hold timing is synthetic.
+    /// Returns whether it painted, so the caller can skip its poll delay —
+    /// a painted frame has already spent ~34 ms.
+    pub fn tick(&mut self, atlas: &assets::AtlasRef) -> bool {
+        let now = timeout::now();
+        if now.wrapping_sub(self.due_at) >= (1 << 31) {
+            return false; // not due yet
+        }
+        self.due_at = now.wrapping_add(FRAME_PERIOD_MS);
+        let _ = self.anim.step(now);
+        self.paint(atlas);
+        true
+    }
+
+    fn paint(&mut self, atlas: &assets::AtlasRef) {
+        let marks = atlas.marks();
+        let font = atlas.font();
+        // Through `build_and_present`, not a hand-rolled frame build, so the
+        // overlay text is drawn by exactly the same code as the dialog's.
+        #[cfg(feature = "ui-px-frametime")]
+        let overlay = (self.ft.len > 0).then(|| &self.ft.buf[..self.ft.len]);
+        #[cfg(feature = "ui-px-frametime")]
+        let split = (self.ft.len2 > 0).then(|| &self.ft.buf2[..self.ft.len2]);
+        #[cfg(feature = "ui-px-frametime")]
+        let wire = (self.ft.len3 > 0).then(|| &self.ft.buf3[..self.ft.len3]);
+        #[cfg(not(feature = "ui-px-frametime"))]
+        let wire = None;
+        #[cfg(not(feature = "ui-px-frametime"))]
+        let overlay = None;
+        #[cfg(not(feature = "ui-px-frametime"))]
+        let split = None;
+        // Both of those borrow `self` IMMUTABLY, as does `&self.anim`, so no
+        // dance is needed; they all end when `cost` comes back owned.
+        let cost = build_and_present(&self.anim, &marks, &font, overlay, split, wire);
+        let _ = cost;
+
+        #[cfg(feature = "ui-px-frametime")]
+        {
+            let end = frametime::cycles();
+            if self.ft.last_paint != 0 {
+                self.ft.max_period = self.ft.max_period.max(end.wrapping_sub(self.ft.last_paint));
+            }
+            self.ft.last_paint = end;
+            self.ft.max_stream = self.ft.max_stream.max(cost.stream);
+            self.ft.max_te = self.ft.max_te.max(cost.te_wait);
+            self.ft.max_render = self.ft.max_render.max(cost.render);
+            self.ft.max_shapes = self.ft.max_shapes.max(cost.split.shapes);
+            self.ft.max_glyphs = self.ft
+                .max_glyphs
+                .max(cost.split.glyphs.wrapping_add(cost.split.fills));
+            let t = timeout::now();
+            if t.wrapping_sub(self.ft.window_at) >= 1_000 || self.ft.len == 0 {
+                // Line 1 (yellow) — the CADENCE: where the frame period goes.
+                let (a, b, c) = (self.ft.max_stream, self.ft.max_te, self.ft.max_period);
+                self.ft.len = frametime::format_tenths(&mut self.ft.buf, a, b, c);
+                // Line 2 (white) — the CPU: where the render time goes.
+                //
+                // Six numbers, so one flash LOCALISES a drift instead of only
+                // confirming it:
+                //   period climbs + render climbs  -> the rasteriser
+                //   period climbs + stream climbs  -> the wire
+                //   period climbs, both flat       -> the tail / poll loop,
+                //                                     i.e. my own code
+                let (d, e, f) = (self.ft.max_render, self.ft.max_shapes, self.ft.max_glyphs);
+                self.ft.len2 = frametime::format_tenths(&mut self.ft.buf2, d, e, f);
+                // Line 3 (green) — the DISCRIMINATOR for "why after 1-2 min?".
+                //   te_misses    = TE waits that found no edge (each costs the
+                //                  whole ~100 ms spin cap)
+                //   idle_seconds = seconds since the last activity reset; the
+                //                  120 s timeout is the owner's hypothesis for
+                //                  the onset, so show the boundary directly
+                //                  instead of reasoning about it
+                //   te_dead      = 1 once the line has latched dead
+                //
+                // If misses stay 0 and the lag still arrives, the TE poll was
+                // never the cause and the idle counter is back in the frame.
+                let misses = crate::hw::lcd_te::miss_total().min(999);
+                let idle_s = (timeout::idle_for() / 1_000).min(999);
+                // A BITFIELD: +1 EXTI latch in use, +2 currently dead,
+                // +4 the latch answered a SOFTWARE trigger at init.
+                //
+                // That third bit is the diagnostic. 4 means the EXTI block,
+                // register map and security config are all correct and the
+                // fault is the PIN -> edge-detector path; 0 means the block
+                // is not behaving as configured at all. One flash, no probe.
+                let dead = u32::from(crate::hw::lcd_te::exti_in_use())
+                    + 2 * u32::from(crate::hw::lcd_te::dead())
+                    + 4 * u32::from(crate::hw::lcd_te::exti_swier_ok());
+                self.ft.len3 = frametime::format_raw(&mut self.ft.buf3, misses, idle_s, dead);
+                self.ft.window_at = t;
+                self.ft.max_stream = 0;
+                self.ft.max_te = 0;
+                self.ft.max_period = 0;
+                self.ft.max_render = 0;
+                self.ft.max_shapes = 0;
+                self.ft.max_glyphs = 0;
+            }
+        }
     }
 }
 

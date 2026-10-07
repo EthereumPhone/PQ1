@@ -143,6 +143,18 @@ impl Input {
     /// `board::BTN_LEFT_*` / `board::BTN_RIGHT_*` (iota2: PC1/PA8;
     /// pq1: PA0/PA1).
     /// Without: blocks on semihosting READC for keyboard input from host.
+    /// [`Self::wait_button`] with a `tick` hook (#783). This backend drives
+    /// no panel, so there is nothing to animate: tick once for symmetry with
+    /// the LCD backend and then wait normally.
+    pub fn wait_button_ticking(
+        &mut self,
+        idle_check: &mut dyn FnMut() -> bool,
+        tick: &mut dyn FnMut() -> bool,
+    ) -> Option<(Button, Press)> {
+        let _ = tick();
+        self.wait_button(idle_check)
+    }
+
     pub fn wait_button(&mut self, idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
         #[cfg(feature = "gpio-buttons")]
         {

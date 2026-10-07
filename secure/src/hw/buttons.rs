@@ -298,13 +298,58 @@ use crate::ui::{Button, Press};
 /// `(Button::Right, Press::Long)` event so every existing UI path treats it
 /// as a confirm.
 pub fn wait_event(idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
+    wait_event_ticking(idle_check, &mut || false)
+}
+
+/// [`wait_event`], calling `tick` while **no button is down**.
+///
+/// WHY THE RESTRICTION IS THE WHOLE POINT (#783). `tick` exists so an endless
+/// ambient screen — the wizard chooser — can keep animating while this
+/// function waits, instead of being played for 3 s by `play_screen` and
+/// abandoned mid-sweep. The obvious place to hang it is `idle_check`, which
+/// is already called at every poll point. That would be WRONG, silently:
+///
+///   `track_hold` measures the hold with a SYNTHETIC clock — `held_ms +=
+///   POLL_MS` after each `delay_ms(POLL_MS)` — not with `timeout::now()`. A
+///   frame paint is ~34 ms against `POLL_MS` = 5, so a `tick` anywhere inside
+///   the press path would make `held_ms` undercount by ~7x: a real 500 ms
+///   hold would need about 3 s of wall time to register as `Press::Long`,
+///   and nothing would report it. The chooser's long-Right CONFIRMS wallet
+///   creation, so that is a trusted-path input defect, not a cosmetic one.
+///
+/// So `tick` is called in exactly one place: the branch below where neither
+/// button is pressed, replacing dead `delay_ms` time the function was
+/// spending anyway. Once a button is down, the state machine runs untouched
+/// and its timing is unchanged. `pure_tests` pins that placement.
+///
+/// `tick` must itself be bounded and must not block, for the same reason, and
+/// returns `true` when it did real work so the caller's poll delay can be
+/// skipped — a painted frame has already spaced the next GPIO read by far
+/// more than `POLL_MS`.
+pub fn wait_event_ticking(
+    idle_check: &mut dyn FnMut() -> bool,
+    tick: &mut dyn FnMut() -> bool,
+) -> Option<(Button, Press)> {
     loop {
         if idle_check() {
             return None;
         }
 
         if !(left_pressed() || right_pressed()) {
-            delay_ms(POLL_MS);
+            // The ONE tick site. See the contract above before moving it.
+            //
+            // `tick` reports whether it actually did work. If it painted a
+            // frame it already spent ~34 ms — far more spacing than the 5 ms
+            // this poll wants — so adding `delay_ms(POLL_MS)` on top is pure
+            // waste, and NOT harmless: the frame is phase-locked to a 16.0 ms
+            // refresh and the whole sweep has to finish inside two periods
+            // (#780). Five extra milliseconds is enough to push a ~30 ms frame
+            // past the 32 ms window, which costs a WHOLE refresh period —
+            // 32 ms becomes 48, i.e. 31 fps becomes 21. That is the kind of
+            // "it feels laggier" that has a precise cause.
+            if !tick() {
+                delay_ms(POLL_MS);
+            }
             continue;
         }
 

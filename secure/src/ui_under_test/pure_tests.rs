@@ -590,9 +590,48 @@ fn positive_semihosting_keymap_matches_documented_table() {
 
 #[test]
 fn positive_all_input_backends_sample_the_supplied_wait_predicate() {
+    // ASSERT THE PROPERTY, NOT THE CALLEE'S NAME. This pinned the literal
+    // `return crate::hw::buttons::wait_event(idle_check);` and went red at
+    // #783, which added a `tick`-taking variant and made `wait_event` a thin
+    // delegate to it. The predicate was still sampled — only the function
+    // being called had a different name — so the gate was reporting a
+    // rename, not a regression. What must hold is that every backend
+    // FORWARDS the caller's idle predicate rather than substituting its own
+    // notion of idleness, because that predicate is the 120 s inactivity
+    // timeout and NS must not be able to extend it.
     assert!(SEMI_SRC.contains("if idle_check() {\n                    return None;\n                }"));
     assert!(NOOP_SRC.contains("if idle_check() {"));
-    assert!(LCD_SRC.contains("return crate::hw::buttons::wait_event(idle_check);"));
+    assert!(
+        LCD_SRC
+            .lines()
+            .any(|l| l.contains("crate::hw::buttons::wait_event") && l.contains("idle_check")),
+        "the LCD backend must forward the caller's idle predicate into the GPIO driver"
+    );
+    // #783 added a second entry point on every backend. It must forward the
+    // predicate too, or the animated chooser would wait forever with the
+    // idle wipe disarmed.
+    for (name, src) in [("lcd", LCD_SRC), ("semihosting", SEMI_SRC), ("noop", NOOP_SRC)] {
+        let i = src
+            .find("pub fn wait_button_ticking(")
+            .unwrap_or_else(|| panic!("{name} backend must offer wait_button_ticking (#783)"));
+        // SKIP THE SIGNATURE. Slicing from the fn name made this vacuous: the
+        // parameter declaration `idle_check: &mut dyn FnMut() -> bool` is
+        // itself an occurrence of the name, so the check passed even when the
+        // body forwarded `&mut || false` instead — a backend that animates
+        // forever with the idle wipe disarmed. A must-fail control caught it;
+        // the `contains` was reading the signature, not the behaviour.
+        let after_sig = src[i..]
+            .find("-> Option<(Button, Press)> {")
+            .map(|j| i + j + "-> Option<(Button, Press)> {".len())
+            .unwrap_or_else(|| panic!("{name}: wait_button_ticking must return an event"));
+        let body = &src[after_sig..];
+        let body = &body[..body.find("\n    }\n").unwrap_or(body.len())];
+        assert!(
+            body.contains("idle_check"),
+            "{name}: wait_button_ticking's BODY must forward the caller's idle predicate, \
+             or the animated chooser waits forever with the idle wipe disarmed"
+        );
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────

@@ -38,6 +38,18 @@ impl Input {
 
     /// Returns `None` when the caller's abort predicate fires; otherwise
     /// returns Right+Short immediately (auto-confirm).
+    /// [`Self::wait_button`] with a `tick` hook (#783). This backend drives
+    /// no panel, so there is nothing to animate: tick once for symmetry with
+    /// the LCD backend and then wait normally.
+    pub fn wait_button_ticking(
+        &mut self,
+        idle_check: &mut dyn FnMut() -> bool,
+        tick: &mut dyn FnMut() -> bool,
+    ) -> Option<(Button, Press)> {
+        let _ = tick();
+        self.wait_button(idle_check)
+    }
+
     pub fn wait_button(&mut self, idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
         if idle_check() {
             None
