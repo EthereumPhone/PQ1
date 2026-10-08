@@ -78,6 +78,19 @@ pub use hash::counters;
 #[cfg(feature = "sim-internals")]
 #[doc(hidden)]
 pub mod sim_internals {
+    /// Exercise the actual bounded search with no UI callback in host tests.
+    pub fn find_count(
+        seed: &[u8; 32],
+        layer: u32,
+        tree: u64,
+        kp: u32,
+        message: &[u8; 32],
+    ) -> (u32, [u8; 32], [u8; 43]) {
+        crate::wots::find_count(
+            seed, layer, tree, kp, message, &crate::hypertree::progress_none(), 0,
+        )
+    }
+
     pub use crate::address::make_adrs;
     pub use crate::wots::extract_digits;
     pub use crate::fors::{
