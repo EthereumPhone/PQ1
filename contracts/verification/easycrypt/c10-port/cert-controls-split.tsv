@@ -780,3 +780,41 @@ scratch/wots_top_bottom_coordinates.ec	MUST-PASS	-
 scratch/wots_omitted_top_coordinates.ec	MUST-FAIL	[by]: cannot close goals
 scratch/wots_encoding_width_129.ec	MUST-PASS	-
 scratch/wots_encoding_claimed_128.ec	MUST-FAIL	[by]: cannot close goals
+
+# Accepted-pool scope and paired control checks.
+scratch/_scope_neg_op_AcceptedCoordinateLaw.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_AcceptedDigestDistribution.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_AcceptedPrefixSampling.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_CoverageAssignment.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_CoverageWitnessCompression.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_CoveredOutputPool.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgByteEvidence.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgForestCount.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgKeygenCount.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgLayerCount.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgMemoFacts.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgMemoOracle.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgPoolGame.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgPoolRecords.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgSessionCount.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgSessionMetadata.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgShapes.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgSignerCount.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgTreeCount.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_HmsgWotsCount.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_IidSelection.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_NumericalByteBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_NumericalByteCases.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_OriginalCoverageBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_PoolCoverageBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_PoolCoverageEvent.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_QueryPublicCharges.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SelectedCoverageMass.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/coverage_cached_call_counted.ec	MUST-PASS	-
+scratch/coverage_cached_call_omitted.ec	MUST-FAIL	[by]: cannot close goals
+scratch/coverage_distinct_indices.ec	MUST-PASS	-
+scratch/coverage_repeated_index.ec	MUST-FAIL	[by]: cannot close goals
+scratch/coverage_assignment_150_bits.ec	MUST-PASS	-
+scratch/coverage_assignment_151_bits.ec	MUST-FAIL	[by]: cannot close goals
+scratch/coverage_physical_transfer_charge.ec	MUST-PASS	-
+scratch/coverage_physical_transfer_omitted.ec	MUST-FAIL	[by]: cannot close goals

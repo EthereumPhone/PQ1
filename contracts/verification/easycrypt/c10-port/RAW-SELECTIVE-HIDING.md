@@ -153,5 +153,5 @@ source bindings and forbidden-theory scope probes. See
 [control evidence](CONTROL-EVIDENCE.md) for the gate's evidence ceiling.
 
 The [WOTS continuation](RAW-WOTS-CHARGE.md) supplies the exact-output partition,
-reverse-chain and encoding charges. Accumulated returned FORS coverage/ITSR and
-the final common-game numerical composition remain open.
+reverse-chain and encoding charges. The [numerical continuation](RAW-NUMERICAL-EUF.md)
+adds accumulated adaptive FORS coverage and the final common-game composition.

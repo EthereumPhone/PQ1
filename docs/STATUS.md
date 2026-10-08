@@ -73,8 +73,14 @@ now charges an unreturned ordinary FORS private opening in the actual accepted
 byte output, including transformed query costs and a finite-coordinate union.
 The [actual-output WOTS charge](../contracts/verification/easycrypt/c10-port/RAW-WOTS-CHARGE.md)
 now supplies reverse-chain and low-129-bit encoding bounds with exact-output
-and adaptive disclosure accounting. Accumulated FORS coverage/ITSR and final
-numerical common-game EUF composition remain open.
+and adaptive disclosure accounting. The
+[numerical byte-game continuation](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)
+now bounds accumulated adaptive FORS coverage and composes all six charged cases
+in the common initialized byte game, then transfers to the physical ideal-oracle
+game. This closes those manual classical-model proof gaps; tight security-level
+claims, concrete SHA-256, QROM and Rust extraction remain outside the result.
+Earlier open-boundary statements in this dated progression describe their
+individual milestones and are superseded by that owner for the combined claim.
 
 > **The front door.** Read this first. It's a **router, not an encyclopedia**: §0 maps *where the truth
 > lives* (one owner per concern — everyone else links); §A–§D are the **security/verification frontier**,

@@ -49,3 +49,13 @@ bottom-only coordinate count, and 129 versus 128 encoding bits. The negative
 attempts are graded on `[by]: cannot close goals`, with positive twins checked
 separately. They do not establish that the factor eight or any union-bound
 summand is tight. The complete two-driver proof replay is separate evidence.
+
+## Accepted-pool and numerical composition controls
+
+Four paired checks compare counting an accepted cached call with omitting it,
+distinct iid sample indices with a repeated index, the exact single-witness
+150-bit assignment mass with a claimed 151-bit mass, and the physical-transfer
+expression with its prefix term omitted. Positive twins must compile; negative
+attempts must produce their enrolled unfinished-obligation diagnostic. There is
+also one unavailable-symbol scope probe per new module. These checks do not
+prove the final upper bound tight or each summand necessary.

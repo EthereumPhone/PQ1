@@ -107,6 +107,7 @@ of the probability bound. See [control evidence](CONTROL-EVIDENCE.md).
 
 No production signer or wire behavior changes. The model is manually
 transcribed and classical, with a trusted pinned EasyCrypt/SMT toolchain.
-Concrete SHA-256, QROM and Rust extraction are outside this result. Accumulated
-returned FORS coverage/ITSR and the final numerical common-game EUF composition
-remain open. The older conditional MM45 capstone remains a separate theorem family.
+Concrete SHA-256, QROM and Rust extraction are outside this result. The
+[numerical continuation](RAW-NUMERICAL-EUF.md) supplies accumulated adaptive FORS
+coverage and the final common-game composition. The older conditional MM45
+capstone remains a separate theorem family.

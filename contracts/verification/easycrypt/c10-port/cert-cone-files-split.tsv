@@ -11,8 +11,11 @@ base-c10-split/SPHINCS_PLUS.ec
 base-c10-split/TweakableHashFunctions.eca
 base-c10-split/WOTS_TW_ES.ec
 cdrafts-split/AcceptedContexts.ec
+cdrafts-split/AcceptedCoordinateLaw.ec
 cdrafts-split/AcceptedCoverage.ec
+cdrafts-split/AcceptedDigestDistribution.ec
 cdrafts-split/AcceptedHypertree.ec
+cdrafts-split/AcceptedPrefixSampling.ec
 cdrafts-split/AcceptedSampling.ec
 cdrafts-split/ActualByteSignerCorrect.ec
 cdrafts-split/ActualExposurePartition.ec
@@ -156,6 +159,9 @@ cdrafts-split/ClientQueryReplay.ec
 cdrafts-split/CompleteChainProgramming.ec
 cdrafts-split/ContextExhaustion.ec
 cdrafts-split/CountDS.ec
+cdrafts-split/CoverageAssignment.ec
+cdrafts-split/CoverageWitnessCompression.ec
+cdrafts-split/CoveredOutputPool.ec
 cdrafts-split/DarkSide.ec
 cdrafts-split/DarkSideC10.ec
 cdrafts-split/DigestCoordinates.ec
@@ -280,6 +286,20 @@ cdrafts-split/GrindTrace.ec
 cdrafts-split/GrindTraceRecorded.ec
 cdrafts-split/GrindTraceReplay.ec
 cdrafts-split/GrindWitness.ec
+cdrafts-split/HmsgByteEvidence.ec
+cdrafts-split/HmsgForestCount.ec
+cdrafts-split/HmsgKeygenCount.ec
+cdrafts-split/HmsgLayerCount.ec
+cdrafts-split/HmsgMemoFacts.ec
+cdrafts-split/HmsgMemoOracle.ec
+cdrafts-split/HmsgPoolGame.ec
+cdrafts-split/HmsgPoolRecords.ec
+cdrafts-split/HmsgSessionCount.ec
+cdrafts-split/HmsgSessionMetadata.ec
+cdrafts-split/HmsgShapes.ec
+cdrafts-split/HmsgSignerCount.ec
+cdrafts-split/HmsgTreeCount.ec
+cdrafts-split/HmsgWotsCount.ec
 cdrafts-split/HonestByteContext.ec
 cdrafts-split/HonestByteCost.ec
 cdrafts-split/HonestBytePhysical.ec
@@ -287,6 +307,7 @@ cdrafts-split/HonestForestMessages.ec
 cdrafts-split/HonestMinimumCounts.ec
 cdrafts-split/HonestSubtreeMessages.ec
 cdrafts-split/IdealWitness.ec
+cdrafts-split/IidSelection.ec
 cdrafts-split/IndependentSignerWidth.ec
 cdrafts-split/IndependentWidths.ec
 cdrafts-split/InitializedChainSampling.ec
@@ -353,6 +374,8 @@ cdrafts-split/NodeDistribution.ec
 cdrafts-split/NodeGridIndex.ec
 cdrafts-split/NodeGridPath.ec
 cdrafts-split/NodeVectorMass.ec
+cdrafts-split/NumericalByteBound.ec
+cdrafts-split/NumericalByteCases.ec
 cdrafts-split/ObservedCandidateHistory.ec
 cdrafts-split/ObservedChainCache.ec
 cdrafts-split/ObservedComponentProjection.ec
@@ -372,6 +395,7 @@ cdrafts-split/ObservedWotsOpening.ec
 cdrafts-split/OriginalByteTargetBound.ec
 cdrafts-split/OriginalCandidateBound.ec
 cdrafts-split/OriginalCandidateUnion.ec
+cdrafts-split/OriginalCoverageBound.ec
 cdrafts-split/OriginalForsOpeningBound.ec
 cdrafts-split/OriginalTargetBound.ec
 cdrafts-split/OriginalTargetEvent.ec
@@ -385,6 +409,8 @@ cdrafts-split/PathOracle.ec
 cdrafts-split/PathReplay.ec
 cdrafts-split/PersistentGrind.ec
 cdrafts-split/PhysicalKeygenCost.ec
+cdrafts-split/PoolCoverageBound.ec
+cdrafts-split/PoolCoverageEvent.ec
 cdrafts-split/PrefixAudit.ec
 cdrafts-split/PrefixBound.ec
 cdrafts-split/PrefixGames.ec
@@ -418,6 +444,7 @@ cdrafts-split/PublicNodeZero.ec
 cdrafts-split/PublicSamplingContext.ec
 cdrafts-split/PublicTargetSampling.ec
 cdrafts-split/QueryMinimumHistory.ec
+cdrafts-split/QueryPublicCharges.ec
 cdrafts-split/RHistoryOps.ec
 cdrafts-split/RSession.ec
 cdrafts-split/RSessionBound.ec
@@ -506,6 +533,7 @@ cdrafts-split/SecretLeafOracle.ec
 cdrafts-split/SecretLeafOrigins.ec
 cdrafts-split/SecretPrefix.ec
 cdrafts-split/SelectedChainSampling.ec
+cdrafts-split/SelectedCoverageMass.ec
 cdrafts-split/SelectedWotsBound.ec
 cdrafts-split/SelectiveHidingConsumer.ec
 cdrafts-split/SelectiveHidingControls.ec

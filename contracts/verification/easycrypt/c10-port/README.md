@@ -111,20 +111,25 @@ selective hiding to the actual accepted byte output, discharges all transformed
 public-query costs, and applies a finite-coordinate union. This is one event
 charge. The [actual-output WOTS charge](RAW-WOTS-CHARGE.md) now adds the
 reverse-chain and low-129-bit encoding bounds, with an exact-output partition
-and adaptive disclosure accounting. Accumulated FORS coverage/ITSR and final
-numerical common-game EUF composition remain open.
+and adaptive disclosure accounting. The
+[numerical byte-game continuation](RAW-NUMERICAL-EUF.md) now supplies accumulated
+adaptive FORS coverage and a complete numerical composition in the initialized
+classical ideal-oracle byte game, including the physical game transfer. Earlier
+open-boundary statements above describe the individual milestones; this owner
+supersedes them for the combined manual-model claim. It does not prove concrete
+SHA-256, QROM security, Rust extraction or a deployed 96-bit security level.
 
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every
 term in a bound is necessary.
 
-The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
+The older conditional-family headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a
 numerically meaningful bound**.
 
-### CURRENT STATE — read this, then the history below if you want to know how it got here
+### Current state of the older conditional theorem family
 
 Four members of the headline family live in `cdrafts-split/GprocChargedQWired.ec`. All are
 gated closure members, statement-pinned by digest. Premise counts are read off the **proof
