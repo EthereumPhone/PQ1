@@ -57,7 +57,7 @@ EXPECT_STMTS=3545
 # nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
 # itself, authored in this tree.  Now an equality against a committed constant, the
 # same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
-EXPECT_CTLS=673
+EXPECT_CTLS=674
 # 44 -> 49 on 2026-09-15 (later): a per-file scope negative for each of the other five headline
 # files.  Kimi K3 review: they had inherited isolation through GprocTCollNamed's require chain,
 # which nothing gated (all six are closure roots).
@@ -250,7 +250,7 @@ echo "### ECO_REMAINING=$left"
 # BEGIN proof-jobs  (executed verbatim, end to end, by tools/test_proof_jobs.py)
 echo "### PROOF JOBS — every PHASE 1 / 1e / 3 EasyCrypt run, executed here, judged below"
 # Added 2026-10-01 (PQ1 #768).  PHASES 1, 1e and 3 used to RUN their EasyCrypt commands
-# inside their own loops, one at a time: 662 compiles + 662 cli runs + 673 controls,
+# inside their own loops, one at a time: 662 compiles + 662 cli runs + 674 controls,
 # 3 h 20 min on the reference host.  Those runs now happen HERE, in parallel, and the
 # three loops below READ the results and judge them with their unchanged verdict code.
 # What did NOT change, and why each still holds:

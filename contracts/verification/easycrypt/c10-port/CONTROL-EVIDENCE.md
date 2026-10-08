@@ -62,10 +62,14 @@ prove the final upper bound tight or each summand necessary.
 
 ## Canonical witness counting controls
 
-Three paired checks cover the reverse last-occurrence witness index, the exact
-2-witness assignment count (2048 versus 1024), and the forced zero final
-assignment index. Positive twins compile; negative twins reach their enrolled
-unfinished-obligation diagnostic without relying on a failed SMT search. Each
-new module also has an unavailable-symbol scope probe. These checks exercise
-the canonical counting machinery; they do not establish optimality, remove
-the remaining birthday charges, or certify any concrete hash backend.
+Three paired checks cover a reverse last-occurrence index bound (using
+`[7;3;7]` and applying `reverse_undup_index`), the exact 2-witness assignment
+count (2048 versus 1024), and the forced zero final assignment index. The last
+pair changes only the final digit of `rcons (nseq 11 1) digit`; a separate
+positive witness proves that the zero-final-digit word is canonical. Thus the
+negative claim has a checked counterexample. Positive twins compile; negative
+twins reach their enrolled proof-application or unfinished-obligation diagnostic
+without relying on a failed SMT search. Each new module also has an unavailable-
+symbol scope probe. These checks exercise the canonical counting machinery;
+they do not establish optimality, remove the birthday charges, or certify a
+concrete hash backend.

@@ -831,5 +831,6 @@ scratch/CanonicalAssignmentNeg.ec	MUST-FAIL	[by]: cannot close goals
 scratch/CanonicalAssignmentPos.ec	MUST-PASS	-
 scratch/CanonicalCountNeg.ec	MUST-FAIL	[by]: cannot close goals
 scratch/CanonicalCountPos.ec	MUST-PASS	-
-scratch/CanonicalIndexNeg.ec	MUST-FAIL	[by]: cannot close goals
+scratch/CanonicalIndexNeg.ec	MUST-FAIL	the given proof-term proves:
 scratch/CanonicalIndexPos.ec	MUST-PASS	-
+scratch/CanonicalAssignmentWitness.ec	MUST-PASS	-
