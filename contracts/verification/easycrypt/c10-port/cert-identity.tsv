@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	27c9c4d5d9f170a3a3b38f77f6983798
+split	8ef0af723c5b5302c0c5512dc8eedc40
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1541,3 +1541,8 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 23 modules / 102 lemmas / 8 ops; old statements and assumptions preserved.
 # 496 targets / 485 controls, including semantic replay twins.
 # Split identity df854093d37c5ff9cb410b108aaee5da -> 27c9c4d5d9f170a3a3b38f77f6983798.
+
+# 2026-10-08: original initialized byte-game WOTS reverse-chain and encoding charges.
+# 131 modules / 473 lemmas / 52 ops; old statements and assumptions preserved.
+# Includes resolved DList.Program clone, 627 targets / 624 controls.
+# Split identity 27c9c4d5d9f170a3a3b38f77f6983798 -> 8ef0af723c5b5302c0c5512dc8eedc40.

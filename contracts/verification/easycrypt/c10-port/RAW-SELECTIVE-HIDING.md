@@ -151,3 +151,7 @@ entry as selected, and clearing an already failed session.
 Every new target is enrolled in both proof drivers, statement/definition pins,
 source bindings and forbidden-theory scope probes. See
 [control evidence](CONTROL-EVIDENCE.md) for the gate's evidence ceiling.
+
+The [WOTS continuation](RAW-WOTS-CHARGE.md) supplies the exact-output partition,
+reverse-chain and encoding charges. Accumulated returned FORS coverage/ITSR and
+the final common-game numerical composition remain open.

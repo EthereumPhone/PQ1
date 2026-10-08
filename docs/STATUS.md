@@ -71,8 +71,10 @@ binds the corrected cold replay and bounded Astra/Opus review to the source.
 The [selective-hiding continuation](../contracts/verification/easycrypt/c10-port/RAW-SELECTIVE-HIDING.md)
 now charges an unreturned ordinary FORS private opening in the actual accepted
 byte output, including transformed query costs and a finite-coordinate union.
-This is one event charge. WOTS/encoding charges, the explicit actual-output
-partition connection and complete numerical EUF composition remain open.
+The [actual-output WOTS charge](../contracts/verification/easycrypt/c10-port/RAW-WOTS-CHARGE.md)
+now supplies reverse-chain and low-129-bit encoding bounds with exact-output
+and adaptive disclosure accounting. Accumulated FORS coverage/ITSR and final
+numerical common-game EUF composition remain open.
 
 > **The front door.** Read this first. It's a **router, not an encyclopedia**: §0 maps *where the truth
 > lives* (one owner per concern — everyone else links); §A–§D are the **security/verification frontier**,

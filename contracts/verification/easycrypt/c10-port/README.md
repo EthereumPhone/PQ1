@@ -109,8 +109,10 @@ coordinate/input separation and a bounded client-only candidate list.
 The [ordinary FORS opening charge](RAW-SELECTIVE-HIDING.md) now connects
 selective hiding to the actual accepted byte output, discharges all transformed
 public-query costs, and applies a finite-coordinate union. This is one event
-charge; WOTS/encoding charges and the actual-output partition connection for
-numerical EUF composition remain open.
+charge. The [actual-output WOTS charge](RAW-WOTS-CHARGE.md) now adds the
+reverse-chain and low-129-bit encoding bounds, with an exact-output partition
+and adaptive disclosure accounting. Accumulated FORS coverage/ITSR and final
+numerical common-game EUF composition remain open.
 
 The [control evidence](CONTROL-EVIDENCE.md) distinguishes successful proofs,
 scope checks and expected proof-driver rejections. An exact theorem-statement

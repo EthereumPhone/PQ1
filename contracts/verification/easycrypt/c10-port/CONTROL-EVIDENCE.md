@@ -39,3 +39,13 @@ do not establish that their terms are necessary. The proved upper bounds and
 their explicit residual events remain the claims. No lower bound or optimality
 claim follows from these rejection controls. Earlier shorthand calling the
 whole collection "semantic controls" must be read with this distinction.
+
+## WOTS continuation controls
+
+The WOTS batch adds four paired positive/negative checks and one unavailable-
+symbol scope probe per new module. The pairs check an internal request above
+versus at the selected cut, 86 versus 12 output positions, the complete versus
+bottom-only coordinate count, and 129 versus 128 encoding bits. The negative
+attempts are graded on `[by]: cannot close goals`, with positive twins checked
+separately. They do not establish that the factor eight or any union-bound
+summand is tight. The complete two-driver proof replay is separate evidence.
