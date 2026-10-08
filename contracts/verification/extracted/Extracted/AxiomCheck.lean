@@ -5,6 +5,7 @@
    [propext, Classical.choice, Quot.sound] — verified 2026-06-10.
    In particular NO `sorryAx`: the sorries inside the Aeneas support
    library (Aeneas/Std/Slice.lean etc.) are not on our proof paths. -/
+import Extracted.HMsgSpecBridge
 import Extracted.AdrsEquiv
 import Extracted.Bits
 import Extracted.ForsExtract
@@ -144,3 +145,6 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.vendored_readBitsLe_eq_digestWord
 #print axioms Extracted.Equiv.firmware_extract_ht_index_matches_vendored
 #print axioms Extracted.Equiv.firmware_extract_fors_indices_matches_vendored
+
+#print axioms sphincs_c10.hash.h_msg_spec
+#print axioms Extracted.Equiv.firmware_h_msg_matches_vendored

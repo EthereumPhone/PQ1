@@ -57,3 +57,11 @@ def hash.sha256_bytes (data : Slice Std.U8) :
 @[step] theorem hash.sha256_bytes_spec (data : Slice Std.U8) :
     hash.sha256_bytes data ⦃ r => r = sha256_pure data.val ⦄ := by
   simp [hash.sha256_bytes, WP.spec_ok]
+
+/-- Explicit streaming backend model: ordered slices denote their concatenation.
+    This supplied definition does not extract or verify RustCrypto or the
+    hardware stream implementation. The caller's five arguments are extracted. -/
+@[rust_fun "sphincs_c10::hash::sha256_parts"]
+def hash.sha256_parts (parts : Slice (Slice Std.U8)) :
+    Result (Array Std.U8 32#usize) :=
+  ok (sha256_pure ((parts.val.map (fun part => part.val)).flatten))

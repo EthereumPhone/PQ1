@@ -9,3 +9,4 @@ import Extracted.HashSpecs.ThPair
 import Extracted.HashSpecs.WotsDigest
 import Extracted.HashSpecs.ThMulti
 import Extracted.HashSpecs.ChainHash
+import Extracted.HashSpecs.HMsg

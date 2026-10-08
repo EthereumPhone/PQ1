@@ -98,3 +98,7 @@ Extracted.Equiv.toSpecDigest_get
 Extracted.Equiv.vendored_readBitsLe_eq_digestWord
 Extracted.Equiv.firmware_extract_ht_index_matches_vendored
 Extracted.Equiv.firmware_extract_fors_indices_matches_vendored
+
+# H_msg input layout and verifier-spec bridge, explicit supplied backend.
+sphincs_c10.hash.h_msg_spec
+Extracted.Equiv.firmware_h_msg_matches_vendored

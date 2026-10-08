@@ -183,23 +183,31 @@ fn u64_to_b32(v: u64) -> [u8; 32] {
 
 
 // ---------------------------------------------------------------------------
-// One-shot SHA-256 boundary
+// SHA-256 backend boundaries
 // ---------------------------------------------------------------------------
 
 /// One-shot SHA-256 over a single contiguous buffer.
 ///
-/// This is the SINGLE opaque hash boundary for the Lean extraction
-/// (`--opaque sphincs_c10::hash::sha256_bytes` in the §33 verification
-/// Makefile targets): every tweakable-hash primitive below assembles its
-/// exact preimage in a stack buffer and makes one call here, so the
-/// extracted code exposes the full preimage layout to the prover and the
-/// only unverified step is SHA-256 itself (pinned to the FIPS 180-4
-/// transcription spec + CAVP vectors on the Lean side). Behaviour is
-/// identical to the previous incremental `update()` chains — SHA-256 is
-/// streaming, so hashing the concatenation equals the incremental digest.
+/// Opaque backend boundary for the buffer-based Lean hash extractions.
+/// The extracted callers expose their preimage layout; the supplied Lean
+/// backend uses the FIPS 180-4 transcription plus CAVP tests. Equivalence
+/// of the software/hardware backend to that specification remains open.
+/// Streaming callers can use `sha256_parts` without a concatenation buffer.
 pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(data);
+    h.finalize().into()
+}
+
+/// Streaming SHA-256 over ordered byte slices, without a concatenation buffer.
+/// Like `sha256_bytes`, this is an explicit backend boundary in the Lean
+/// extraction; the callers' input construction remains visible to the prover.
+#[inline(always)]
+pub fn sha256_parts(parts: &[&[u8]]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    for part in parts {
+        h.update(part);
+    }
     h.finalize().into()
 }
 
@@ -295,13 +303,7 @@ pub fn h_msg(
     message: &[u8; 32],
 ) -> [u8; 32] {
     bump!(OTHER);
-    let mut h = Sha256::new();
-    h.update(seed);
-    h.update(root);
-    h.update(r);
-    h.update(message);
-    h.update([0xFFu8; 32]);
-    h.finalize().into()
+    sha256_parts(&[seed, root, r, message, &[0xFFu8; 32]])
 }
 
 // ---------------------------------------------------------------------------

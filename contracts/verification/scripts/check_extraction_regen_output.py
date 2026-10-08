@@ -66,7 +66,12 @@ ALLOWED_EXTRA_LOCAL_BINDINGS = {
                 "rust_fun",
                 "sphincs_c10::hash::sha256_bytes",
                 "hash.sha256_bytes",
-            ): 1
+            ): 1,
+            (
+                "rust_fun",
+                "sphincs_c10::hash::sha256_parts",
+                "hash.sha256_parts",
+            ): 1,
         }
     ),
     ("extract-tx-merkle", "FunsExternal.lean"): collections.Counter(

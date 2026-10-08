@@ -65,7 +65,7 @@ def hash.truncate
   ok (to_slice_mut_back s2)
 
 /-- [sphincs_c10::hash::th]:
-    Source: 'sphincs-c10/src/hash.rs', lines 216:0-223:1
+    Source: 'sphincs-c10/src/hash.rs', lines 224:0-231:1
     Visibility: public -/
 def hash.th
   (seed : Array Std.U8 32#usize) (adrs : Array Std.U8 32#usize)
@@ -99,7 +99,7 @@ def hash.th
   hash.truncate a
 
 /-- [sphincs_c10::hash::th_pair]:
-    Source: 'sphincs-c10/src/hash.rs', lines 230:0-243:1
+    Source: 'sphincs-c10/src/hash.rs', lines 238:0-251:1
     Visibility: public -/
 def hash.th_pair
   (seed : Array Std.U8 32#usize) (adrs : Array Std.U8 32#usize)
@@ -140,12 +140,12 @@ def hash.th_pair
   hash.truncate a
 
 /-- [sphincs_c10::hash::TH_MULTI_MAX]
-    Source: 'sphincs-c10/src/hash.rs', lines 247:0-247:35
+    Source: 'sphincs-c10/src/hash.rs', lines 255:0-255:35
     Visibility: public -/
 @[global_simps, irreducible] def hash.TH_MULTI_MAX : Std.Usize := 43#usize
 
 /-- [sphincs_c10::hash::th_multi]: loop body 0:
-    Source: 'sphincs-c10/src/hash.rs', lines 268:4-271:5
+    Source: 'sphincs-c10/src/hash.rs', lines 276:4-279:5
     Visibility: public -/
 @[rust_loop_body]
 def hash.th_multi_loop.body
@@ -173,7 +173,7 @@ def hash.th_multi_loop.body
     ok (cont (iter1, buf1))
 
 /-- [sphincs_c10::hash::th_multi]: loop 0:
-    Source: 'sphincs-c10/src/hash.rs', lines 268:4-271:5
+    Source: 'sphincs-c10/src/hash.rs', lines 276:4-279:5
     Visibility: public -/
 @[rust_loop]
 def hash.th_multi_loop
@@ -186,7 +186,7 @@ def hash.th_multi_loop
     (iter, buf)
 
 /-- [sphincs_c10::hash::th_multi]:
-    Source: 'sphincs-c10/src/hash.rs', lines 260:0-273:1
+    Source: 'sphincs-c10/src/hash.rs', lines 268:0-281:1
     Visibility: public -/
 def hash.th_multi
   (seed : Array Std.U8 32#usize) (adrs : Array Std.U8 32#usize)
@@ -222,8 +222,25 @@ def hash.th_multi
   let a ← hash.sha256_bytes s6
   hash.truncate a
 
+/-- [sphincs_c10::hash::h_msg]:
+    Source: 'sphincs-c10/src/hash.rs', lines 299:0-307:1
+    Visibility: public -/
+def hash.h_msg
+  (seed : Array Std.U8 32#usize) (root : Array Std.U8 32#usize)
+  (r : Array Std.U8 32#usize) (message : Array Std.U8 32#usize) :
+  Result (Array Std.U8 32#usize)
+  := do
+  let a := Array.repeat 32#usize 255#u8
+  let s ← lift (Array.to_slice seed)
+  let s1 ← lift (Array.to_slice root)
+  let s2 ← lift (Array.to_slice r)
+  let s3 ← lift (Array.to_slice message)
+  let s4 ← lift (Array.to_slice a)
+  let s5 ← lift (Array.to_slice (Array.make 5#usize [ s, s1, s2, s3, s4 ]))
+  hash.sha256_parts s5
+
 /-- [sphincs_c10::hash::chain_hash]: loop body 0:
-    Source: 'sphincs-c10/src/hash.rs', lines 332:4-337:5
+    Source: 'sphincs-c10/src/hash.rs', lines 334:4-339:5
     Visibility: public -/
 @[rust_loop_body]
 def hash.chain_hash_loop.body
@@ -252,7 +269,7 @@ def hash.chain_hash_loop.body
     ok (cont (iter1, current1, a2))
 
 /-- [sphincs_c10::hash::chain_hash]: loop 0:
-    Source: 'sphincs-c10/src/hash.rs', lines 332:4-337:5
+    Source: 'sphincs-c10/src/hash.rs', lines 334:4-339:5
     Visibility: public -/
 @[rust_loop]
 def hash.chain_hash_loop
@@ -267,7 +284,7 @@ def hash.chain_hash_loop
     (iter, current, a)
 
 /-- [sphincs_c10::hash::chain_hash]:
-    Source: 'sphincs-c10/src/hash.rs', lines 322:0-339:1
+    Source: 'sphincs-c10/src/hash.rs', lines 324:0-341:1
     Visibility: public -/
 def hash.chain_hash
   (seed : Array Std.U8 32#usize) (adrs : Array Std.U8 32#usize)
@@ -281,7 +298,7 @@ def hash.chain_hash
   hash.truncate current1
 
 /-- [sphincs_c10::hash::wots_digest]:
-    Source: 'sphincs-c10/src/hash.rs', lines 350:0-365:1
+    Source: 'sphincs-c10/src/hash.rs', lines 352:0-367:1
     Visibility: public -/
 def hash.wots_digest
   (seed : Array Std.U8 32#usize) (wots_adrs : Array Std.U8 32#usize)

@@ -53,9 +53,9 @@ an ideal-oracle proof alone is not a generic security guarantee for concrete
 hash instantiations. This does not show C10 insecure; it explains why the
 instantiation step remains an obligation.
 
-The repository's extracted hash wrappers call a manually supplied
-`hash.sha256_bytes` definition in `Extracted/Hash/FunsExternal.lean`. That wrapper
-uses executable `sha256_pure`; it does not mechanically extract RustCrypto's
+The repository's extracted hash wrappers call manually supplied
+`hash.sha256_bytes` and streaming `hash.sha256_parts` definitions in `Extracted/Hash/FunsExternal.lean`. These wrappers
+use executable `sha256_pure`; it does not mechanically extract RustCrypto's
 SHA-256 implementation or the STM32 hardware driver. CAVP/test-vector agreement
 and absence of project axioms do not close either backend correspondence.
 
@@ -103,6 +103,22 @@ that theorem but do not prove the Aeneas translation sound. This is a bridge
 to the verifier's Lean specification, not yet to the EasyCrypt game and not
 a proof that every signer/recovery call uses the decoded position correctly.
 
+The H_msg input-construction component is now proved in
+[`HMsgSpecBridge.lean`](../../extracted/Extracted/HMsgSpecBridge.lean): for every
+four 32-byte inputs, the extracted Rust caller returns the full digest of
+`seed || root || R || message || FF[32]`, equal to the fidelity-checked
+verifier H_msg definition after the byte conversion. The implementation streams
+five slices through `sha256_parts`, avoiding a 160-byte concatenation buffer.
+The supplied Lean backend hashes the concatenation; equivalence of that backend
+to RustCrypto or STM32 remains open. The two new results have kernel-only
+closures and join the default extracted gate. Seven copied declarations have
+semantic drift and deletion controls, and six input-construction mutations
+must fail the universal proof. A 132-case Rust/extracted/verifier corpus checks
+every input-byte position; changes in either half of the output are rejected.
+Host tests of the hardware adapter also check all five update calls and their
+bytes. Those hooks do not exercise the peripheral. The ordinary CI differential
+replays the committed corpus; regenerating it runs the Rust generator locally.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,
@@ -114,9 +130,8 @@ part of the current certificate.
 The [Aeneas cryptographic verification guide](https://github.com/AeneasVerif/aeneas/blob/main/documentation/crypto-verification.md)
 and [SymCrypt technical report](https://arxiv.org/abs/2609.15648) support a
 staged approach: extracted code, mathematical specifications and proved
-refinements between them. H_msg input construction remains open after the
-digest-field bridge, followed by the bounded
-signer/session relation. An opaque hash definition remains an explicit
+refinements between them. The digest-field and H_msg input-construction components are now bridged to
+the verifier specification. The bounded signer/session relation remains open. An opaque hash definition remains an explicit
 backend boundary even when the surrounding refinement is axiom-free.
 
 Replay optimization #789 and the combined owner-triggered assurance pass #509

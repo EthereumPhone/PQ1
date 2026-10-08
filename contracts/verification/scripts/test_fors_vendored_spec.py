@@ -11,12 +11,14 @@ COPY = [
     "scripts/check_vendored_spec.py",
     "lean/SphincsCVerify/Spec/Bytes.lean",
     "lean/SphincsCVerify/Spec/Adrs.lean",
+    "lean/SphincsCVerify/Spec/Hash.lean",
     "lean/SphincsCVerify/Spec/Params.lean",
     "lean/SphincsCVerify/Spec/Sha256Impl.lean",
     "lean/SphincsCVerify/Util/Bits.lean",
     "extracted/Extracted/SpecVendored.lean",
     "extracted/Extracted/Sha256Vendored.lean",
     "extracted/Extracted/ForsSpecVendored.lean",
+    "extracted/Extracted/HMsgSpecVendored.lean",
 ]
 MUTATIONS = [
     ("def get ", "v.data[i']", "0"),

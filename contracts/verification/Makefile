@@ -1733,12 +1733,18 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --features sim-internals \
 	  --test gen_fors_extract_vectors --release -- --nocapture 2>&1 \
 	  | grep -E 'gen_fors_extract_vectors:|test result'
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --features sim-internals \
+	  --test gen_hmsg_vectors --release -- --nocapture 2>&1 \
+	  | grep -E 'gen_hmsg_vectors:|test result'
 endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ExtractDiffVectors Extracted.FormatDecimalDiffVectors \
 	  Extracted.FwManifest.Funs Extracted.FormatDecimal.Funs \
-	  Extracted.ForsSpecBridge Extracted.ForsExtractDiffVectors 2>&1 | tail -1
+	  Extracted.ForsSpecBridge Extracted.ForsExtractDiffVectors \
+	  Extracted.HMsgSpecBridge Extracted.HMsgDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_hmsg_proof_controls.py
 
 verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@cd $(EXTRACTED_DIR) && $(LAKE) build 2>&1 | tee /tmp/pq_extracted_build.out
@@ -1872,6 +1878,7 @@ _extract-fors-index-impl:
 verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/check_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_hmsg_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See
@@ -2130,6 +2137,7 @@ _extract-decode-item-impl:
 # sha256_bytes as the SINGLE opaque boundary (FunsExternal wires it to the
 # vendored FIPS 180-4 sha256_pure). chain_hash extracts its real loop (calls
 # th); th/th_pair/th_multi/wots_digest expose their exact preimage assembly.
+# H_msg keeps streaming through the separate sha256_parts backend boundary.
 .PHONY: extract-hash-fns
 _extract-hash-fns-impl:
 	@$(_begin_private_extraction)
@@ -2137,11 +2145,13 @@ _extract-hash-fns-impl:
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
 	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::sha256_bytes' \
+	  --opaque 'sphincs_c10::hash::sha256_parts' \
 	  --start-from 'sphincs_c10::hash::th' \
 	  --start-from 'sphincs_c10::hash::th_pair' \
 	  --start-from 'sphincs_c10::hash::th_multi' \
 	  --start-from 'sphincs_c10::hash::chain_hash' \
 	  --start-from 'sphincs_c10::hash::wots_digest' \
+	  --start-from 'sphincs_c10::hash::h_msg' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/hashfns.llbc 2>&1 | tail -1 )
 	@rm -rf $${EXTRACTION_TMP_ROOT}/hout && mkdir -p $${EXTRACTION_TMP_ROOT}/hout
 	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/hout -split-files $${EXTRACTION_TMP_ROOT}/hashfns.llbc

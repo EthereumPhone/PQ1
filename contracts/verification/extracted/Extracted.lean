@@ -41,3 +41,5 @@ import Extracted.FormatDecimal.EmitSpec
 -- Rust-generated differential vectors (consumed by Extracted/ExtractDiffCheck.lean)
 import Extracted.ExtractDiffVectors
 import Extracted.FormatDecimalDiffVectors
+
+import Extracted.HMsgSpecBridge
