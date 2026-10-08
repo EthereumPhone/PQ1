@@ -33,7 +33,7 @@ MANIFEST = 'cert-statements-split.tsv'
 # digested only the token.  Appending a conjunct to a pred body silently installed
 # that hypothesis in every statement using it, with zero pin/coverage/census delta.
 # Found by adversarial review 2026-08-20; FORS_C_TreePort.ec alone declares 9.
-KINDS = r"(?:local\s+)?(?:lemma|theorem|equiv|hoare|phoare|declare\s+axiom|axiom|pred)"
+KINDS = r"(?:local\s+)?(?:lemma|theorem|equiv|hoare|ehoare|phoare|declare\s+axiom|axiom|pred)"
 # `(?:^|\.)` not `^`: EasyCrypt is whitespace-insensitive, so
 # `qed. lemma hidden : 1 = 1. proof. trivial. qed.` on ONE line is a legal, saved,
 # requirable result.  A line-anchored scan does not see it -- it is not counted, not
@@ -119,7 +119,7 @@ def main():
         for kind, name in statements(r):
             total += 1
             # axioms AND preds pin through the op: path (digest() matches only
-            # lemma/theorem/equiv/hoare/phoare), so accept either spelling
+            # lemma/theorem/equiv/hoare/ehoare/phoare), so accept either spelling
             if f'{r}::{name}' not in keys and f'op:{r}::{name}' not in keys:
                 unpinned.append(f'{r}::{name}  ({kind})')
 

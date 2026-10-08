@@ -26,6 +26,45 @@ def fixture():
 
 
 class ContractTests(unittest.TestCase):
+    def test_expectation_statement_mutations_are_pinned_and_censused(self):
+        source = ('ehoare bound : M.run : (1%r)%xr ==> (1%r)%xr.\n'
+                  'proof. admit. qed.\n')
+        with fixture() as p:
+            path = p / 'Expectation.ec'
+            path.write_text(source)
+            self.assertEqual(gate.stmt_coverage.statements(path), [('ehoare', 'bound')])
+            digest = gate.stmt_digest.digest(path, 'bound')
+            self.assertRegex(digest, r'^[0-9a-f]{32}$')
+            census = gate.cert_cone.census({'Expectation.ec': source})
+            self.assertEqual(len(census), 1)
+            self.assertEqual(census[0][2], 'bound')
+            self.assertRegex(census[0][1], r'^admit:[0-9a-f]{12}$')
+            (p / 'cert_gate_split.sh').write_text('EXPECT_PINS=1\n')
+            (p / 'cert-cone-files-split.tsv').write_text('Expectation.ec\n')
+            (p / 'cert-statements-split.tsv').write_text(f'Expectation.ec::bound\t{digest}\n')
+            gate.check_pins()
+            changed = source.replace('==> (1%r)%xr', '==> (2%r)%xr')
+            path.write_text(changed)
+            with self.assertRaisesRegex(ValueError, 'statement pin changed'):
+                gate.check_pins()
+            self.assertNotEqual(census[0][1], gate.cert_cone.census({'Expectation.ec': changed})[0][1])
+            path.write_text(source + '\n' + source)
+            self.assertEqual(gate.stmt_digest.digest(path, 'bound'), 'AMBIGUOUS-2-STATEMENTS')
+
+    def test_expectation_proof_is_visible_to_taint_parser(self):
+        import taint_closure
+        with fixture() as p:
+            (p / 'Expectation.ec').write_text(
+                'local ehoare bound : M.run : (1%r)%xr ==> (1%r)%xr.\n'
+                'proof. admit. qed.\n'
+                'lemma consumer : true.\nproof. exact bound. qed.\n')
+            with patch.object(taint_closure, 'cone_files', return_value=['Expectation.ec']), \
+                 patch.object(taint_closure, 'MIN_CLONE_STMTS', 0):
+                lemmas, admitted, _ = taint_closure.parse()
+            self.assertEqual(set(lemmas), {('Expectation.ec', 'bound'), ('Expectation.ec', 'consumer')})
+            self.assertEqual(admitted, {('Expectation.ec', 'bound')})
+            self.assertTrue(taint_closure.mentions(lemmas[('Expectation.ec', 'consumer')][2], 'bound'))
+
     def test_manual_source_binding_rejects_drift_and_missing_inputs(self):
         import hashlib
         with tempfile.TemporaryDirectory() as temp:

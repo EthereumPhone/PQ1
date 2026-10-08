@@ -448,7 +448,7 @@ def strip_comments(s):
         i+=1
     return ''.join(out)
 
-DECL = re.compile(r'^\s*(?:local\s+)?(?:lemma|theorem|equiv|hoare|phoare)\s+([A-Za-z0-9_\']+)', re.M)
+DECL = re.compile(r'^\s*(?:local\s+)?(?:lemma|theorem|equiv|hoare|ehoare|phoare)\s+([A-Za-z0-9_\']+)', re.M)
 OPDECL = re.compile(r'^\s*(?:local\s+)?(?:op|abbrev|pred)\s+([A-Za-z0-9_\']+)', re.M)
 
 def cone_files():
@@ -694,4 +694,5 @@ def main():
           f'(exact bijection)')
     return 0
 
-sys.exit(main())
+if __name__ == '__main__':
+    sys.exit(main())

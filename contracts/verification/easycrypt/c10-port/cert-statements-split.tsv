@@ -4154,3 +4154,12 @@ cdrafts-split/SelectedCoverageMass.ec::ordered_assignment_mass	e5806ecfb52503f80
 cdrafts-split/SelectedCoverageMass.ec::selected_assignment_mass	4a191de5b10795b7ed9e90b36e29b1ab
 op:cdrafts-split/SelectedCoverageMass.ec::assignment_pool_event	a5d5b8452a1c34d0996f3ab736571838
 op:cdrafts-split/SelectedCoverageMass.ec::ordered_assignment_event	4164ee775c6ed9708c778b5b0c21ebb7
+
+# Expectation-Hoare declarations: new adaptive-prefix step and six existing expectation results.
+cdrafts-split/AcceptedPrefixSampling.ec::accepted_client_completion	7285e633f1da5914e50509064d36505a
+cdrafts-split/AcceptedSampling.ec::accepted_sampling	f37a9b933a7be0db68e3cd271fb955d5
+cdrafts-split/GrindTail.ec::fresh_loop_tail	5233cfa76223d331edece580db022770
+cdrafts-split/StreamAccepted.ec::stream_acceptance	252bbc31f409083438d7a0915e8daaa4
+cdrafts-split/StreamExpectation.ec::stream_rejection_potential	0b7799537e6548cc48d31e40d00b09fb
+cdrafts-split/TrialAccepted.ec::trial_acceptance_potential	94cdf90084071c84f6897e3e948d888d
+cdrafts-split/TrialExpectation.ec::trial_rejection_potential	03d1b4d2c020e6f25c42d218408e424c

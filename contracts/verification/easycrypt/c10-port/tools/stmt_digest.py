@@ -101,11 +101,11 @@ def digest(path, name):
     # literal string NOT-FOUND then COMPARED EQUAL.  A pin that cannot resolve
     # its target must fail, not agree with itself.  Found while pinning
     # GprocKg_sk_eq (Tier 1 brick 2).
-    _c = re.findall(r'(?:^|\.)\s*(?:local\s+)?(?:lemma|theorem|equiv|hoare|phoare)\s+' + re.escape(name) + r'(?![A-Za-z0-9_\'])',
+    _c = re.findall(r'(?:^|\.)\s*(?:local\s+)?(?:lemma|theorem|equiv|hoare|ehoare|phoare)\s+' + re.escape(name) + r'(?![A-Za-z0-9_\'])',
                     body, re.M)
     if len(_c) > 1:
         return 'AMBIGUOUS-%d-STATEMENTS' % len(_c)
-    m = re.search(r'(?:^|\.)\s*((?:local\s+)?(?:lemma|theorem|equiv|hoare|phoare)\s+' + re.escape(name) + r'(?![A-Za-z0-9_\']))',
+    m = re.search(r'(?:^|\.)\s*((?:local\s+)?(?:lemma|theorem|equiv|hoare|ehoare|phoare)\s+' + re.escape(name) + r'(?![A-Za-z0-9_\']))',
                   body, re.M | re.S)
     if not m:
         return None

@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	df670cd34584c260568448c6e00e9b83
+split	6dc1d872107b5b684b48f22b062b5789
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1551,3 +1551,8 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 28 modules / 139 lemmas / 26 ops; old statements and assumptions preserved.
 # 655 targets / 660 controls; exact manual classical ideal-oracle boundary documented.
 # Split identity 8ef0af723c5b5302c0c5512dc8eedc40 -> df670cd34584c260568448c6e00e9b83.
+
+# 2026-10-08: include ehoare statements in all declaration scanners, pin seven
+# expectation results (one new, six existing), add two scanner regressions.
+# Proof sources and assumption census unchanged; 4024 pins / 3518 statements.
+# Split identity df670cd34584c260568448c6e00e9b83 -> 6dc1d872107b5b684b48f22b062b5789.

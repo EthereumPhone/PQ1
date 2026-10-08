@@ -91,7 +91,7 @@ REQ = re.compile(r"(?<![A-Za-z0-9_'])require\s+([^.]*)\.", re.M | re.S)
 # unpinned assumption wearing a digest.  Found 2026-08-02 by testing the new
 # code against a synthetic file instead of re-reading it.  No live instance in
 # either cone today (0 `theorem`s), which is why nothing surfaced it.
-DECL = re.compile(r"^\s*(?:local\s+)?(lemma|theorem|equiv|hoare|phoare|axiom|declare\s+axiom|module|op|pred|const|abbrev|type|realize)\s+"
+DECL = re.compile(r"^\s*(?:local\s+)?(lemma|theorem|equiv|hoare|ehoare|phoare|axiom|declare\s+axiom|module|op|pred|const|abbrev|type|realize)\s+"
                   r"([A-Za-z0-9_']+)")
 
 
@@ -214,7 +214,7 @@ def census(files):
                 # very hole run 12's commit message claimed to close.  Dormant only because
                 # all three live sites happen to follow a non-clone declaration.
                 r"(?=^[ \t]*(?:local\s+)?clone\b|"
-                r"^(?:local\s+)?(?:lemma|theorem|module|type|op|const|abbrev|pred|axiom|section|end|require|import|export|equiv|hoare|phoare)\b|\Z)",
+                r"^(?:local\s+)?(?:lemma|theorem|module|type|op|const|abbrev|pred|axiom|section|end|require|import|export|equiv|hoare|ehoare|phoare)\b|\Z)",
                 body, re.M | re.S):
             src, alias, tail = m.group(1), m.group(2) or m.group(1), m.group(3) or ''
             alias = alias.rstrip('.')          # `clone include X.` captured the terminator
@@ -433,7 +433,7 @@ def _stmt_digest(body, name):
     # leave this digest byte-identical -- the same defect run 11 fixed in
     # tools/stmt_digest.py, still live here.  Latent today (zero duplicate names
     # in either cone, scanned) and fatal the moment that stops being true.
-    _all = re.findall(r"(?:^|\.)\s*(?:local\s+)?(?:lemma|theorem|equiv|hoare|phoare)\s+"
+    _all = re.findall(r"(?:^|\.)\s*(?:local\s+)?(?:lemma|theorem|equiv|hoare|ehoare|phoare)\s+"
                       + re.escape(name) + r"(?![A-Za-z0-9_'])", body, re.M | re.S)
     if len(_all) > 1:
         return 'ambig%d' % len(_all)
@@ -446,7 +446,7 @@ def _stmt_digest(body, name):
     # the gate's only degraded-digest check (a grep for `nostmt`) sails past.
     # The main path escaped it only because `cut` is normally found; a lemma
     # closed by `by smt()` with no `proof` keyword hits the same constant.
-    m = re.search(r"(?:^|\.)\s*((?:local\s+)?(?:lemma|theorem|equiv|hoare|phoare)\s+"
+    m = re.search(r"(?:^|\.)\s*((?:local\s+)?(?:lemma|theorem|equiv|hoare|ehoare|phoare)\s+"
                   + re.escape(name) + r"(?![A-Za-z0-9_']))", body, re.M | re.S)
     if not m:
         # FALL BACK TO THE ENCLOSING DECLARATION rather than returning a constant.
