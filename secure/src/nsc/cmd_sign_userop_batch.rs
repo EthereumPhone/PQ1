@@ -2311,6 +2311,24 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // `type2_nonce` was derived before trusted-display rendering so every
     // member/final confirmation is bound to this exact signed batch nonce.
 
+    // The pixel route's signing film starts HERE, before the slot keygen,
+    // not at the sign: on a SLOT_CACHE miss the keygen's progress hook
+    // otherwise started an undressed GENERATING KEYS busy film that
+    // `film_start` then restarted in the family's look (white dots, a cut,
+    // then the dressed film). With the family film live, every progress
+    // hook below (slot / master keygen, the factory sign) advances this one film. Same fix as
+    // `cmd_sign_userop`.
+    // #773: arm the landing guard with the film. Every way out of this
+    // scope but the success landing below lands the film on the X instead
+    // of freezing the orbit.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    let mut film_landing: Option<crate::ui::px::lcd::FilmLanding> = None;
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_owns_ending {
+        crate::ui::px::lcd::film_start();
+        film_landing = Some(crate::ui::px::lcd::FilmLanding::armed());
+    }
+
     // ── 10. Slot C10 keygen (cached) ────────────────────────────────
     let need_keygen = super::state::peek_state(|_| {
         // SAFETY: category 5 — read-only borrow of `static mut
@@ -2609,16 +2627,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     let t2_digest = compute_sphincs_digest_v06(&t2_params, &t2_call_digest);
 
-    // #773: arm the landing guard with the film. Every way out of this
-    // scope but the success landing below — 25 error returns today, and any
-    // added later — lands the film on the X instead of freezing the orbit.
+    // The pixel route's film is already running (started before the slot
+    // keygen, above); every other route shows the progress text.
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
-    let mut film_landing: Option<crate::ui::px::lcd::FilmLanding> = None;
-    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
-    if px_owns_ending {
-        crate::ui::px::lcd::film_start();
-        film_landing = Some(crate::ui::px::lcd::FilmLanding::armed());
-    } else {
+    if !px_owns_ending {
         ui::show_progress("Slot C10 sign", 0);
     }
     #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]
