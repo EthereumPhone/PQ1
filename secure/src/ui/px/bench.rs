@@ -165,6 +165,38 @@ pub fn run() -> ! {
         park();
     };
 
+    // ---- #805 condition (d): MEASURE the fallback rate, once, at boot ----
+    //
+    // The claim under test is structural and precise: ONE top-level
+    // `fi::wait_random()` triggers N requests to `rng::byte_nonsecret`, of
+    // which F lose the non-blocking `DriverGuard` race and replay
+    // `FI_DELAY_LAST_GOOD` instead of drawing a fresh TRNG byte. Two
+    // independent reviews read the structure as N ~ 28, F ~ 27 — i.e. the
+    // delay is one fresh length plus 27 identical replays, which is a far
+    // weaker jitter than a "fresh TRNG byte per delay" design implies, and a
+    // pattern an attacker can trigger on.
+    //
+    // That was INFERRED, never measured, and `CLAUDE.md`'s countermeasure
+    // carve-out requires a measured rate before anything is built on it. The
+    // #802 fix also removed the 1 kHz SysTick caller, which changed the
+    // contention pattern, so any earlier figure would be stale anyway.
+    //
+    // Self-contained: thread mode, nothing else running, no wallet needed.
+    // One call in, two counters out.
+    #[cfg(feature = "ui-px-frametime")]
+    let (one_shot_calls, one_shot_fallbacks) = {
+        use core::sync::atomic::Ordering::Relaxed;
+        crate::rng::NONSECRET_CALLS.store(0, Relaxed);
+        crate::rng::NONSECRET_FALLBACKS.store(0, Relaxed);
+        crate::fi::wait_random();
+        (
+            crate::rng::NONSECRET_CALLS.load(Relaxed),
+            crate::rng::NONSECRET_FALLBACKS.load(Relaxed),
+        )
+    };
+    #[cfg(feature = "ui-px-frametime")]
+    super::lcd::set_fallback_probe(one_shot_calls, one_shot_fallbacks);
+
     loop {
         // ---- A. the endless ambient record, animated against real input.
         //

@@ -115,7 +115,59 @@ pub fn byte() -> u8 {
 pub fn byte_nonsecret(fallback: u8) -> u8 {
     let mut b = [0u8; 1];
     match fill(&mut b) {
-        Ok(()) => b[0],
-        Err(()) => fallback,
+        Ok(()) => {
+            #[cfg(feature = "ui-px-frametime")]
+            nonsecret_tally(false);
+            b[0]
+        }
+        Err(()) => {
+            #[cfg(feature = "ui-px-frametime")]
+            nonsecret_tally(true);
+            fallback
+        }
+    }
+}
+
+/// How often `byte_nonsecret` returned the FALLBACK instead of a fresh TRNG
+/// byte. Bench instrumentation only (`ui-px-frametime`, in `PROD_FORBIDDEN`).
+///
+/// WHY THIS IS COUNTED (#805 condition (d)). `fi::wait_random` draws its delay
+/// length here, and the fill that serves it *itself* contains 17
+/// `fi::wait_random()` call sites (`hw/rng.rs`, several inside loops). Because
+/// `DriverGuard::try_acquire()?` is the FIRST statement of `fill_bound`, every
+/// one of those inner calls loses the non-blocking race and returns `Err`
+/// before reaching a `wait_random` of its own. The recursion is therefore
+/// bounded at depth 2 — a one-level fan-out, not a 28-deep nest as #802 and an
+/// earlier version of this comment both said — and one top-level delay costs
+/// `1 + K` calls with `K` fallbacks, where `K` is the number of inner sites
+/// actually reached.
+///
+/// So the shape of the claim is right (one fresh length, many replays of
+/// `FI_DELAY_LAST_GOOD`) but the arithmetic was INFERRED, never measured, and
+/// the #802 fix changed the contention pattern by removing the 1 kHz SysTick
+/// caller. `CLAUDE.md`'s carve-out for countermeasure timing requires the
+/// degraded path to be "bounded, loud, documented, and NOT the dominant path,
+/// with a MEASURED fallback rate" — so it has to be measured, not asserted,
+/// before any DRBG is built on the argument.
+///
+/// Two numbers, and they cross-check each other. The bench's boot-time
+/// one-shot gives `K` structurally, with a clean guard and nothing else
+/// running. The running rate averages steady state, and must converge to
+/// `K / (K + 1)`; anything ABOVE that is a genuine TRNG seed/clock error
+/// (`SECS`/`CECS`) rather than guard contention, which is the one failure the
+/// structural read cannot predict.
+#[cfg(feature = "ui-px-frametime")]
+pub static NONSECRET_CALLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(feature = "ui-px-frametime")]
+pub static NONSECRET_FALLBACKS: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+
+#[cfg(feature = "ui-px-frametime")]
+#[inline]
+fn nonsecret_tally(fell_back: bool) {
+    use core::sync::atomic::Ordering::Relaxed;
+    NONSECRET_CALLS.fetch_add(1, Relaxed);
+    if fell_back {
+        NONSECRET_FALLBACKS.fetch_add(1, Relaxed);
     }
 }

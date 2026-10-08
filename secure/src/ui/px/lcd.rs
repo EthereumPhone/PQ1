@@ -1193,6 +1193,25 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
 #[cfg(feature = "ui-px-frametime")]
 const ONE_SHOT_RESET_MS: u32 = 180_000;
 
+/// #805 condition (d): the boot-time one-shot `fi::wait_random()` fallback
+/// measurement — `(calls, fallbacks)` for a SINGLE top-level delay, taken by
+/// the bench in thread mode before anything else runs.
+///
+/// Measured rather than inferred because the carve-out requires it; see the
+/// rationale on `crate::rng::NONSECRET_CALLS`.
+#[cfg(feature = "ui-px-frametime")]
+static FALLBACK_SHOT_CALLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(feature = "ui-px-frametime")]
+static FALLBACK_SHOT_FB: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Publish the one-shot probe for the overlay.
+#[cfg(feature = "ui-px-frametime")]
+pub fn set_fallback_probe(calls: u32, fallbacks: u32) {
+    use core::sync::atomic::Ordering::Relaxed;
+    FALLBACK_SHOT_CALLS.store(calls, Relaxed);
+    FALLBACK_SHOT_FB.store(fallbacks, Relaxed);
+}
+
 /// An endless ambient screen, animated against real input (#783).
 ///
 /// WHY THIS EXISTS. `play_screen` plays a record "until it rests", and for a
@@ -1415,8 +1434,50 @@ impl Ambient {
                 #[cfg(not(feature = "stm32u585"))]
                 let (isr_ms, gate_per_s) = (0u32, 0u32);
                 let _ = (cost.split.items, cost.split.drawn);
-                self.ft.len3 =
-                    frametime::format_raw(&mut self.ft.buf3, isr_ms.min(999), gate_per_s.min(999), idle_s);
+                // Line 3 (green) — REPURPOSED for #805 condition (d), now
+                // that #802's `isr_ms -> 0` / `gate_calls` reading has been
+                // taken on glass and the issue is closed:
+                //
+                //   shot_calls / shot_fallbacks / running_pct
+                //
+                //   shot_*      ONE top-level `fi::wait_random()`, measured
+                //               at boot in thread mode with a clean guard.
+                //               `shot_calls = 1 + K`, `shot_fallbacks = K`.
+                //               The reviewed reading of the source was 28/27.
+                //   running_pct fallback percentage over EVERY
+                //               `byte_nonsecret` since boot. It must land on
+                //               `100*K/(K+1)`; anything higher is a real TRNG
+                //               seed/clock error on top of guard contention.
+                //
+                // Self-diagnosing: `shot_calls = 0` means the probe never
+                // ran, and `shot_calls = 1` with `shot_fallbacks = 1` means
+                // the OUTER draw failed too (RNG not yet initialised), so a
+                // misleading reading cannot pass as a real one.
+                let (shot_calls, shot_fb, running_pct) = {
+                    #[cfg(feature = "ui-px-frametime")]
+                    {
+                        use core::sync::atomic::Ordering::Relaxed;
+                        let tot = crate::rng::NONSECRET_CALLS.load(Relaxed);
+                        let fb = crate::rng::NONSECRET_FALLBACKS.load(Relaxed);
+                        let pct = if tot == 0 { 0 } else { fb.saturating_mul(100) / tot };
+                        (
+                            FALLBACK_SHOT_CALLS.load(Relaxed),
+                            FALLBACK_SHOT_FB.load(Relaxed),
+                            pct,
+                        )
+                    }
+                    #[cfg(not(feature = "ui-px-frametime"))]
+                    {
+                        (0u32, 0u32, 0u32)
+                    }
+                };
+                let _ = (isr_ms, gate_per_s, idle_s);
+                self.ft.len3 = frametime::format_raw(
+                    &mut self.ft.buf3,
+                    shot_calls.min(999),
+                    shot_fb.min(999),
+                    running_pct.min(999),
+                );
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;
                 self.ft.max_te = 0;
