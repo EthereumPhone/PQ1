@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	88f7513fc775f338200a45ef5c38e086
+split	eeccd2afca8898b60616feb1b501b927
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1556,3 +1556,7 @@ fork	9c2d21280c84d52c30b22111151f1135
 # expectation results (one new, six existing), add two scanner regressions.
 # Proof sources and assumption census unchanged; 4024 pins / 3518 statements.
 # Split identity df670cd34584c260568448c6e00e9b83 -> 6dc1d872107b5b684b48f22b062b5789.
+
+# 2026-10-08: extractable bounded Rust WOTS search and test-only entry point.
+# Source binding changed; EasyCrypt proof sources and assumptions unchanged.
+# Split identity 88f7513fc775f338200a45ef5c38e086 -> eeccd2afca8898b60616feb1b501b927. Full replay required.
