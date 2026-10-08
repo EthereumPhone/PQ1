@@ -1,5 +1,11 @@
 # PQSigner — STATUS (start here)
 
+**Rust digest-field bridge (2026-10-08):** the extracted HT and all thirteen
+FORS decoders now agree with the fidelity-checked verifier specification for
+every digest. [Proof and remaining correspondence boundary](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
+This closes the decoder component of #288; H_msg construction, the hash
+backend and the complete Rust/EasyCrypt relation remain open.
+
 **EasyCrypt coverage tightening (2026-10-08):** canonical witness counting
 reduces the adaptive FORS coverage term while retaining the initialized byte
 game. The [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)

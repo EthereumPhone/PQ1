@@ -3,6 +3,7 @@
 transcribe their SphincsCVerify v4.22 sources:
 
   * SpecVendored.lean    — ByteVec/Adrs definitions from Spec/{Bytes,Adrs}.lean
+  * ForsSpecVendored.lean — digest-field decoders from Spec/{Bytes,Params} + Util/Bits
   * Sha256Vendored.lean  — FIPS 180-4 SHA-256 from Spec/Sha256Impl.lean
 
 The version bridge's trust rests on the vendored copies being verbatim; this
@@ -15,6 +16,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 #  byte-for-byte — semantic content; markers are matched against the start
 #  of a stripped line, so include any attribute prefix like `@[inline] `)
 CHECKS = [
+    ([ROOT/"lean/SphincsCVerify/Spec/Bytes.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Params.lean",
+      ROOT/"lean/SphincsCVerify/Util/Bits.lean"],
+     ROOT/"extracted/Extracted/ForsSpecVendored.lean",
+     ["def get ", "def H :", "def K :", "def A :",
+      "@[inline] def readBitsLe.stepValue", "def readBitsLe ",
+      "def extractForsIndices ", "def extractHtIndex "]),
     ([ROOT/"lean/SphincsCVerify/Spec/Bytes.lean",
       ROOT/"lean/SphincsCVerify/Spec/Adrs.lean"],
      ROOT/"extracted/Extracted/SpecVendored.lean",
@@ -66,5 +74,5 @@ for srcs, ven, defs in CHECKS:
         if s != v:
             print(f"[{ven.name}] DRIFT in {d!r}:\n  src: {s}\n  ven: {v}")
             ok=False
-if ok: print("OK: vendored spec + SHA-256 are faithful copies of the SphincsCVerify source")
+if ok: print("OK: vendored spec + digest decoders + SHA-256 are faithful copies of the SphincsCVerify source")
 sys.exit(0 if ok else 1)

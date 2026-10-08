@@ -89,6 +89,20 @@ registry binds selected source and generated files, with separate generator
 replay. These results should be reused, not described as if no extraction
 existed.
 
+The digest-field version bridge now closes the HT/FORS decoder portion of
+[#288](https://github.com/EthereumPhone/PQ1/issues/288):
+[`ForsSpecBridge.lean`](../../extracted/Extracted/ForsSpecBridge.lean) proves
+the extracted Rust decoder results equal the verifier's vendored
+`Util/Bits.lean` definitions for every 32-byte digest. It covers the 18-bit
+HT field and all thirteen 11-bit FORS fields, including the last field,
+without assuming that its forced-zero test succeeds. The byte conversion
+preserves order and values; the four audited bridge results use only Lean's
+kernel axioms. The exact copied definitions and their parameters are checked
+by the vendored-fidelity gate. Rust-executed differential vectors complement
+that theorem but do not prove the Aeneas translation sound. This is a bridge
+to the verifier's Lean specification, not yet to the EasyCrypt game and not
+a proof that every signer/recovery call uses the decoded position correctly.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,
@@ -100,8 +114,8 @@ part of the current certificate.
 The [Aeneas cryptographic verification guide](https://github.com/AeneasVerif/aeneas/blob/main/documentation/crypto-verification.md)
 and [SymCrypt technical report](https://arxiv.org/abs/2609.15648) support a
 staged approach: extracted code, mathematical specifications and proved
-refinements between them. For this repository, the next bounded component is
-H_msg input construction and digest-field decoding, followed by the bounded
+refinements between them. H_msg input construction remains open after the
+digest-field bridge, followed by the bounded
 signer/session relation. An opaque hash definition remains an explicit
 backend boundary even when the surrounding refinement is axiom-free.
 

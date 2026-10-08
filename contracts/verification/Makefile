@@ -1730,10 +1730,15 @@ ifeq ($(GEN),1)
 	@echo "=== regenerating EXPECTED outputs from the SHIPPED Rust (ground truth) ==="
 	@cd $(REPO_ROOT) && cargo test -p fw-manifest --test gen_extract_vectors --release -- --nocapture 2>&1 \
 	  | grep -E 'gen_extract_vectors:|test result'
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --features sim-internals \
+	  --test gen_fors_extract_vectors --release -- --nocapture 2>&1 \
+	  | grep -E 'gen_fors_extract_vectors:|test result'
 endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ExtractDiffVectors Extracted.FormatDecimalDiffVectors \
-	  Extracted.FwManifest.Funs Extracted.FormatDecimal.Funs 2>&1 | tail -1
+	  Extracted.FwManifest.Funs Extracted.FormatDecimal.Funs \
+	  Extracted.ForsSpecBridge Extracted.ForsExtractDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 
 verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@cd $(EXTRACTED_DIR) && $(LAKE) build 2>&1 | tee /tmp/pq_extracted_build.out
@@ -1756,8 +1761,8 @@ verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@# bidirectional and fails closed: an UNLISTED headline (rogue/undisclosed
 	@# theorem), a MISSING headline (silently dropped / dump truncated), or a
 	@# closure carrying an undisclosed axiom all fail. Manifest =
-	@# extracted/axiom_closure_manifest.txt (57 kernel-only + 4 sha256_pure_bytes
-	@# + 1 sha256+hmac + 4 keccak256_pure = 66 headlines).
+	@# extracted/axiom_closure_manifest.txt (61 kernel-only + 4 sha256_pure_bytes
+	@# + 1 sha256+hmac + 4 keccak256_pure = 70 headlines).
 	@$(_FV_PYTHON3) scripts/check_axiom_closure.py --manifest $(EXTRACTED_DIR)/axiom_closure_manifest.txt /tmp/pq_axiomcheck.out
 	@# WIRED-IN NEGATIVE CONTROL: the Evil:False canary MUST be rejected. A *pass*
 	@# of the checker here is a *failure* of the meta-gate (the gate is toothless).
@@ -1866,6 +1871,7 @@ _extract-fors-index-impl:
 .PHONY: verify-spec-vendored-fidelity
 verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/check_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See

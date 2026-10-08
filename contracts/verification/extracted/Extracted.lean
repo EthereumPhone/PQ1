@@ -8,6 +8,7 @@ import Extracted.SpecBridge
 import Extracted.ForsLoop
 import Extracted.Bits
 import Extracted.ForsExtract
+import Extracted.ForsSpecBridge
 import Extracted.Eip1271Equiv
 import Extracted.WotsDigits
 import Extracted.FwManifestSpec

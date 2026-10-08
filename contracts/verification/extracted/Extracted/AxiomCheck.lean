@@ -8,6 +8,7 @@
 import Extracted.AdrsEquiv
 import Extracted.Bits
 import Extracted.ForsExtract
+import Extracted.ForsSpecBridge
 import Extracted.Eip1271Equiv
 import Extracted.WotsDigits
 import Extracted.FwManifestSpec
@@ -137,3 +138,9 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms sphincs_c10.hash.wots_digest_spec
 #print axioms sphincs_c10.hash.th_multi_spec
 #print axioms sphincs_c10.hash.chain_hash_spec
+
+-- Digest-field version bridge: kernel-only, no hash or translation axioms.
+#print axioms Extracted.Equiv.toSpecDigest_get
+#print axioms Extracted.Equiv.vendored_readBitsLe_eq_digestWord
+#print axioms Extracted.Equiv.firmware_extract_ht_index_matches_vendored
+#print axioms Extracted.Equiv.firmware_extract_fors_indices_matches_vendored
