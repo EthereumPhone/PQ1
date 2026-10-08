@@ -4291,9 +4291,29 @@ fn main() -> ! {
     unsafe { boot_ns::boot(NS_FLASH_BASE) }
 }
 
+/// #802 bench accounting: cumulative SysTick cycles, and how many times the
+/// idle gate actually evaluated `nsc::is_unlocked()`.
+///
+/// WHY. `main.rs`'s idle gate short-circuits, so before `TIMEOUT_TICKS` the
+/// predicate is never called from the ISR and afterwards it is called every
+/// millisecond — and evaluating it performs a full FI-hardened TRNG draw
+/// (`fih::is_true_fi` -> `fi::wait_random` -> `rng::byte_nonsecret`). DWT
+/// CYCCNT counts those cycles as part of whatever the ISR interrupted, which
+/// is why the rasteriser appeared to get 55% slower doing identical work.
+///
+/// Accounting them separately turns a correlation into a measurement: the
+/// overlay can then show elapsed-MINUS-ISR cycles, and any residual is the
+/// ICACHE amplifier rather than the ISR itself.
+#[cfg(all(feature = "ui-px-frametime", feature = "stm32u585"))]
+pub static ISR_CYCLES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(all(feature = "ui-px-frametime", feature = "stm32u585"))]
+pub static IDLE_GATE_CALLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
 #[cfg(not(test))]
 #[cortex_m_rt::exception]
 fn SysTick() {
+    #[cfg(all(feature = "ui-px-frametime", feature = "stm32u585"))]
+    let isr_t0 = crate::ui::px::lcd::isr_cycles_now();
     // Advance the secure millisecond pair before any other ISR work. Both
     // caller-owned slots start fail-closed: skipping the non-inlined helper,
     // rejecting an invalid old pair, or skipping either completion publish
@@ -4358,7 +4378,39 @@ fn SysTick() {
     // Let the handler observe `timeout::is_idle()` at its own
     // blocking-dialog check points (which `confirm` and `enter_pin`
     // already do via the idle callback to `wait_button`).
-    if timeout::is_idle() && nsc::is_unlocked() && !nsc::handler_is_busy() {
+    // #802: count how often the SHORT-CIRCUITED right-hand side actually
+    // runs. This is the whole mechanism in one counter: 0/s before the idle
+    // boundary, ~1000/s after.
+    #[cfg(all(feature = "ui-px-frametime", feature = "stm32u585"))]
+    if timeout::is_idle() {
+        IDLE_GATE_CALLS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    }
+    // #802. `is_unlocked()` here cost 25.7% of the CPU on every idle device:
+    // `&&` short-circuits, so before the timeout it was never evaluated and
+    // afterwards it ran every millisecond — and it routes through
+    // `FihBool::is_true_fi`, whose unconditional `wait_random()` draws a
+    // TRNG byte through a fill containing ~28 more delay loops. Measured on
+    // the EVT unit: 257 ms of every second, which inflated the pixel UI's
+    // render by 55% and pushed the blit past #780's tear bound.
+    //
+    // Two changes, and the second is the security one:
+    //
+    //   `!is_definitely_locked()` instead of `is_unlocked()` — two volatile
+    //   loads, no TRNG. It asks the INVERSE question so the fail direction is
+    //   right: only the exact intact FALSE codeword means "nothing to wipe".
+    //   Corrupted or torn state now WIPES, where `is_unlocked()` fail-closed
+    //   to false and left secrets resident for the rest of the session.
+    //
+    //   `!handler_is_busy()` moved FIRST so the cheap, side-effect-free guard
+    //   runs before any state access, narrowing the window in which SysTick
+    //   reads state a handler holds mutably.
+    //
+    // Still evaluated EVERY tick, deliberately: a one-shot would miss the
+    // wipe whenever a handler is busy at the transition tick, which this
+    // level check retries. What stopped recurring is the jitter, not the
+    // decision. The repetition IS the defence — suppressing the wipe for a
+    // whole idle window now means glitching every tick of it.
+    if timeout::is_idle() && !nsc::handler_is_busy() && !nsc::is_definitely_locked() {
         nsc::zeroize_sensitive_state();
 
         // Trigger PendSV to run the re-unlock flow outside the ISR.
@@ -4377,6 +4429,12 @@ fn SysTick() {
     // services the timeout/idle-wipe bookkeeping above.
     #[cfg(not(feature = "stm32u585"))]
     nsc::poll_gateway();
+
+    #[cfg(all(feature = "ui-px-frametime", feature = "stm32u585"))]
+    {
+        let dt = crate::ui::px::lcd::isr_cycles_now().wrapping_sub(isr_t0);
+        ISR_CYCLES.fetch_add(dt, core::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// Catch-all device-IRQ handler.

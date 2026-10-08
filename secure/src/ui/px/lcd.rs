@@ -318,6 +318,14 @@ mod frametime {
         DWT_CYCCNT.read()
     }
 
+    /// The counter with NO arming check — for the ISR path only (#802), where
+    /// the extra read would distort the measurement and the frame loop has
+    /// already armed it.
+    #[inline]
+    pub fn cycles_raw() -> u32 {
+        DWT_CYCCNT.read()
+    }
+
     /// Format three cycle counts as TENTHS of a millisecond into `out`
     /// (`<a>/<b>/<c>`), returning the used length.
     ///
@@ -366,6 +374,18 @@ mod frametime {
         num(period_ms, &mut put);
         n
     }
+}
+
+/// The cycle counter, for the SysTick ISR's own accounting (#802).
+///
+/// Separate from `frametime::cycles()` because that one self-arms, and an
+/// `if` plus an extra debug-block read on every ISR entry and exit would
+/// itself distort the thing being measured. By the time SysTick is counting,
+/// the frame loop has already armed the counter.
+#[cfg(all(feature = "ui-px-frametime", feature = "stm32u585"))]
+#[inline]
+pub fn isr_cycles_now() -> u32 {
+    frametime::cycles_raw()
 }
 
 /// Cycle split of one presented frame (bench overlay); zeros otherwise.
@@ -1166,6 +1186,13 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
     }
 }
 
+/// Idle time after which the #802 probe calls `reset_activity()` ONCE.
+///
+/// 180 s: comfortably past the 120 s boundary, so the degraded state has been
+/// established and read off the glass before the gate is closed again.
+#[cfg(feature = "ui-px-frametime")]
+const ONE_SHOT_RESET_MS: u32 = 180_000;
+
 /// An endless ambient screen, animated against real input (#783).
 ///
 /// WHY THIS EXISTS. `play_screen` plays a record "until it rests", and for a
@@ -1223,6 +1250,11 @@ struct AmbientFt {
     len2: usize,
     buf3: [u8; 24],
     len3: usize,
+    /// #802: ISR cycles and gate calls at the last window boundary.
+    isr_at: u32,
+    gate_at: u32,
+    /// Did the one-shot `reset_activity()` probe already fire?
+    reset_fired: bool,
 }
 
 impl Ambient {
@@ -1256,6 +1288,15 @@ impl Ambient {
             return false; // not due yet
         }
         self.due_at = now.wrapping_add(FRAME_PERIOD_MS);
+        // #802's one-shot: close the idle gate again, once, well after the
+        // boundary. Nothing else changes — same `Ambient`, same screen, same
+        // binary, no reboot. The slowdown must vanish at this instant and
+        // come back ~120 s later.
+        #[cfg(feature = "ui-px-frametime")]
+        if !self.ft.reset_fired && timeout::idle_for() > ONE_SHOT_RESET_MS {
+            self.ft.reset_fired = true;
+            timeout::reset_activity();
+        }
         let _ = self.anim.step(now);
         self.paint(atlas);
         true
@@ -1347,9 +1388,35 @@ impl Ambient {
                 // The TE fields this replaces have served their purpose: the
                 // latch is live and self-proving, `te_misses` reads 0, and
                 // `te_wait` is back inside one refresh period.
-                let items = cost.split.items.min(999);
-                let drawn = cost.split.drawn.min(999);
-                self.ft.len3 = frametime::format_raw(&mut self.ft.buf3, items, drawn, idle_s);
+                // Line 3 (green) — #802's CAUSAL test: `isr_ms_per_s /
+                // gate_calls_per_s / idle_seconds`.
+                //
+                //   gate_calls jumps 0 -> ~1000 at the idle boundary: that IS
+                //     the short-circuit flipping, measured rather than argued.
+                //   isr_ms_per_s is how much of each second the ISR consumed.
+                //     Predicted < 1 before the boundary, 250-450 after.
+                //
+                // And `ONE_SHOT_RESET_MS` calls `timeout::reset_activity()`
+                // once, so the gate closes again WITHOUT a reboot, a cooling
+                // interval or any content change. If the slowdown vanishes at
+                // that instant and returns ~120 s later, the mechanism is
+                // proven, not correlated.
+                #[cfg(feature = "stm32u585")]
+                let (isr_ms, gate_per_s) = {
+                    use core::sync::atomic::Ordering::Relaxed;
+                    let isr = crate::ISR_CYCLES.load(Relaxed);
+                    let gate = crate::IDLE_GATE_CALLS.load(Relaxed);
+                    let d_isr = isr.wrapping_sub(self.ft.isr_at);
+                    let d_gate = gate.wrapping_sub(self.ft.gate_at);
+                    self.ft.isr_at = isr;
+                    self.ft.gate_at = gate;
+                    (d_isr / 160_000, d_gate)
+                };
+                #[cfg(not(feature = "stm32u585"))]
+                let (isr_ms, gate_per_s) = (0u32, 0u32);
+                let _ = (cost.split.items, cost.split.drawn);
+                self.ft.len3 =
+                    frametime::format_raw(&mut self.ft.buf3, isr_ms.min(999), gate_per_s.min(999), idle_s);
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;
                 self.ft.max_te = 0;

@@ -1404,9 +1404,41 @@ fn negative_systick_idle_wipe_skips_when_handler_is_busy() {
         .find("\n/// Catch-all device-IRQ handler.")
         .expect("SysTick must close before DefaultHandler doc");
     let body = &systick[..systick_end];
+    // The HIGH-7 guard must survive, but it is pinned as a PROPERTY now, not
+    // as the exact predicate text: #802 rewrote this condition (the old
+    // `nsc::is_unlocked()` cost 25.7% of the CPU on every idle device) and
+    // this assertion went red on the rewrite while HIGH-7 itself was intact.
+    // What must hold is that the busy guard is present and NEGATED.
     assert!(
-        body.contains("if timeout::is_idle() && nsc::is_unlocked() && !nsc::handler_is_busy()"),
+        body.contains("!nsc::handler_is_busy()"),
         "SysTick idle-wipe must keep the `!nsc::handler_is_busy()` guard (HIGH-7 fix)"
+    );
+    assert!(
+        body.contains("timeout::is_idle()"),
+        "SysTick idle-wipe must still be gated on the inactivity timeout"
+    );
+    // #802: the wipe side must ask the INVERSE question. `is_unlocked()`
+    // fail-closes to false, which for this consumer means "nothing to wipe"
+    // — so a single bit flip in `pin_verified` suppressed the idle wipe for
+    // the rest of the session. `is_definitely_locked()` is true only for the
+    // exact intact FALSE codeword, so corrupted state wipes instead.
+    assert!(
+        body.contains("!nsc::is_definitely_locked()"),
+        "the idle wipe must trigger on anything that is not EXACTLY the locked \
+         codeword — `is_unlocked()` here fails in the unsafe direction (#802)"
+    );
+    assert!(
+        !body.contains("nsc::is_unlocked()"),
+        "`is_unlocked()` must not come back into SysTick: it fails toward \
+         'no wipe', and its FI hardening costs 25.7% of the CPU at 1 kHz"
+    );
+    // The cheap, side-effect-free guard runs before any state access.
+    let busy_at = body.find("!nsc::handler_is_busy()").expect("busy guard");
+    let state_at = body.find("!nsc::is_definitely_locked()").expect("locked check");
+    assert!(
+        busy_at < state_at,
+        "the busy guard must precede the state read, to narrow the window in \
+         which SysTick reads state a handler holds mutably"
     );
 }
 

@@ -995,6 +995,21 @@ pub fn is_unlocked() -> bool {
     state::peek_state(|s| s.pin_verified.is_true_fi())
 }
 
+/// Is there definitely nothing to wipe? (#802)
+///
+/// The INVERSE of `is_unlocked`, and deliberately not its negation. This
+/// answers "is the device in the exact, intact, locked state?" — so a
+/// corrupted or torn `pin_verified` answers `false` and the caller wipes,
+/// where `!is_unlocked()` would answer `true` and let secrets sit.
+///
+/// Cheap by design: two volatile loads, no TRNG, no random delay. It is
+/// called from SysTick at 1 kHz; `is_true_fi` there cost 25.7% of the CPU
+/// and defended nothing the per-tick repetition did not already defend.
+#[must_use]
+pub fn is_definitely_locked() -> bool {
+    state::peek_state(|s| s.pin_verified.is_exactly_false())
+}
+
 /// Shared TOCTOU snapshot buffer for the three mutually-exclusive sign
 /// handlers (`cmd_sign_userop`, `cmd_sign_userop_batch`,
 /// `cmd_sign_offchain`). Each used to own a private `static mut SNAP_BUF`
