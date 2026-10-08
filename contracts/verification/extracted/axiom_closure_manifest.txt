@@ -21,8 +21,8 @@
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
 # Regenerate/verify against a fresh dump with the same 4-bucket structure:
-#   70 kernel-only + 4 sha256_pure_bytes + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes)
-#   + 4 keccak256_pure = 79 headlines.
+#   77 kernel-only + 4 sha256_pure_bytes + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes)
+#   + 4 keccak256_pure = 86 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
 #
@@ -116,3 +116,9 @@ Extracted.Equiv.find_count_total
 Extracted.Equiv.grind_r_first_success
 Extracted.Equiv.grind_r_exhausted
 Extracted.Equiv.grind_r_total
+
+# WOTS recovery, including the explicit none/zero distinction.
+Extracted.Equiv.firmware_chain_hash_matches_vendored
+Extracted.Equiv.firmware_th_multi_matches_vendored
+Extracted.Equiv.firmware_pk_from_sig_matches_vendored
+Extracted.Equiv.vendored_wots_recovery_outcome

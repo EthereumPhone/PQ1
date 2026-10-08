@@ -12,6 +12,7 @@ COPY = [
     "lean/SphincsCVerify/Spec/Bytes.lean",
     "lean/SphincsCVerify/Spec/Adrs.lean",
     "lean/SphincsCVerify/Spec/Hash.lean",
+    "lean/SphincsCVerify/Spec/Wots.lean",
     "lean/SphincsCVerify/Spec/Params.lean",
     "lean/SphincsCVerify/Spec/Sha256Impl.lean",
     "lean/SphincsCVerify/Util/Bits.lean",
@@ -20,6 +21,7 @@ COPY = [
     "extracted/Extracted/ForsSpecVendored.lean",
     "extracted/Extracted/HMsgSpecVendored.lean",
     "extracted/Extracted/WotsSpecVendored.lean",
+    "extracted/Extracted/WotsRecoveryVendored.lean",
 ]
 MUTATIONS = [
     ("def get ", "v.data[i']", "0"),

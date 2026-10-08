@@ -7,6 +7,7 @@
    library (Aeneas/Std/Slice.lean etc.) are not on our proof paths. -/
 import Extracted.HMsgSpecBridge
 import Extracted.WotsSpecBridge
+import Extracted.WotsRecoveryBridge
 import Extracted.FindCountSpec
 import Extracted.GrindRSpec
 import Extracted.AdrsEquiv
@@ -164,3 +165,9 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.grind_r_first_success
 #print axioms Extracted.Equiv.grind_r_exhausted
 #print axioms Extracted.Equiv.grind_r_total
+
+-- Complete WOTS recovery value and outcome bridge.
+#print axioms Extracted.Equiv.firmware_chain_hash_matches_vendored
+#print axioms Extracted.Equiv.firmware_th_multi_matches_vendored
+#print axioms Extracted.Equiv.firmware_pk_from_sig_matches_vendored
+#print axioms Extracted.Equiv.vendored_wots_recovery_outcome

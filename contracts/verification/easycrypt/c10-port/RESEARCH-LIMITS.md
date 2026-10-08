@@ -189,6 +189,33 @@ cryptographic hardness and caller-provided randomness freshness remain open;
 these functional results assume neither independent trials nor eventual
 success. They do not establish the EasyCrypt random-oracle game relation.
 
+The WOTS recovery caller is now connected to the verifier specification in
+[`WotsRecoveryBridge.lean`](../../extracted/Extracted/WotsRecoveryBridge.lean).
+The actual extracted chain walk agrees whenever `start + steps ≤ u32::MAX`,
+including zero steps. Endpoint compression preserves each padded node
+and its position for all lists of at most 43 nodes. For every seed, position,
+16-byte message, 43-node signature and full `u32` counter, the extracted
+`pk_from_sig` result equals the verifier's recovered node, with `none` mapped
+to Rust's zero sentinel. A separate audited equation preserves the exact
+sum-205 branch: an accepted zero-valued hash remains `some zero`, whereas a
+rejected sum produces `none`. No converse from a zero Rust result to rejection
+is assumed. This is a component value/outcome relation, not a proof that the
+full Rust verifier handles that sentinel identically to the on-chain verifier.
+
+Four added headline results are kernel-only, bringing the default extracted
+closure audit to 86 with the same 27 environment axioms. Fifteen additional
+copied verifier declarations are checked for semantic drift and deletion.
+The default differential gate executes the production Rust module files in a
+host test crate, under normal and extraction configurations, against an
+independent preimage/chain reference and committed Lean vectors. The 20
+recovery cases include accepted and rejected messages at counter boundaries
+through `u32::MAX`; 40 chain cases include carry and zero-step boundaries,
+and four compression cases include empty and full lists. Both extracted and
+verifier computations must agree, including the explicit rejection outcome.
+Fourteen well-typed changes to chain order, compression and recovery semantics
+must break the unchanged universal proofs. No production Rust, hash backend,
+cryptographic assumption or EasyCrypt game is changed by this bridge.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

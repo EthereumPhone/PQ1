@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Typed semantic changes must break the unchanged universal recovery proofs."""
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+import os
+import pwd
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1] / "extracted"
+LAKE = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".elan/bin/lake"
+
+FAMILIES = {
+    "chain": ("SphincsCVerify.Spec", "chainHash", [
+        ("reverse", "startPos + (steps - 1 - i)", "startPos + i"),
+        ("start", "startPos + (steps - 1 - i)", "startPos + 1 + (steps - 1 - i)"),
+        ("omit-last", "aux steps val", "aux (steps - 1) val"),
+    ]),
+    "compression": ("SphincsCVerify.Spec", "thMulti", [
+        ("reverse", "vals.map", "vals.reverse.map"),
+        ("seed", "ByteSeg.ofByteVec seed,", "ByteSeg.ofByteVec a,"),
+        ("omit-first", "vals.map", "(vals.drop 1).map"),
+    ]),
+    "recovery": ("SphincsCVerify.Spec.Wots", "pkFromSig", [
+        ("sum", "digitSum digits ≠ TargetSum", "digitSum digits ≠ TargetSum + 1"),
+        ("rejection", "    none", "    some (zero 16)"),
+        ("missing-chain", "List.range L", "List.range (L - 1)"),
+        ("chain-index", "setChainIndex wotsAdrs (UInt32.ofNat i)", "setChainIndex wotsAdrs (UInt32.ofNat (i + 1))"),
+        ("count", "padded sigma.count", "padded (sigma.count % 256)"),
+        ("remaining", "(W - 1) - digit", "W - digit"),
+        ("signature-order", "sigma.chains[i]", "sigma.chains.getD 0 (zero 16)"),
+        ("compress-address", "Adrs.wotsPk layer tree kp", "Adrs.wots layer tree kp"),
+    ]),
+}
+
+
+def main():
+    specification = (ROOT / "Extracted/WotsRecoveryVendored.lean").read_text()
+    proof = (ROOT / "Extracted/WotsRecoveryBridge.lean").read_text()
+    with tempfile.TemporaryDirectory(prefix="wots-recovery-controls-") as td:
+        def fixture(family, before=None, after=None):
+            namespace, name, _ = FAMILIES[family]
+            start = specification.index("def " + name)
+            declaration = specification[start:specification.index("\n\n", start)]
+            if before is not None:
+                assert declaration.count(before) == 1, (name, "ambiguous mutation")
+                declaration = declaration.replace(before, after)
+            declaration = (f"namespace {namespace}\n"
+                "open SphincsCVerify.Spec SphincsCVerify.Spec.ByteVec SphincsCVerify.Util\n"
+                + declaration + f"\nend {namespace}\n").replace(name, name + "_probe")
+            source = proof
+            if family != "recovery":
+                source = source[:source.index("private theorem recovery_adrs (")] + "\nend Extracted.Equiv\n"
+            source = source.replace(name, name + "_probe")
+            marker = "namespace Extracted.Equiv"
+            source = source.replace(marker, declaration + "\n" + marker, 1)
+            assert "sorry" not in source and "axiom " not in source
+            return source
+
+        def run(name, source):
+            p = Path(td) / (name + ".lean")
+            p.write_text(source)
+            return subprocess.run([str(LAKE), "env", "lean", str(p)], cwd=ROOT,
+                                  capture_output=True, text=True, timeout=90)
+
+        for family in FAMILIES:
+            result = run(family + "-positive", fixture(family))
+            assert result.returncode == 0, (family, result.stdout, result.stderr)
+
+        jobs = [(family, name, before, after) for family, (_, _, mutations) in FAMILIES.items()
+                for name, before, after in mutations]
+
+        def negative(job):
+            family, name, before, after = job
+            source = fixture(family, before, after)
+            typed = run(family + "-" + name + "-definition", source.split("namespace Extracted.Equiv", 1)[0])
+            assert typed.returncode == 0, (name, typed.stdout, typed.stderr)
+            result = run(family + "-" + name, source)
+            output = result.stdout + result.stderr
+            assert result.returncode != 0 and any(x in output for x in
+                ("unsolved goals", "Type mismatch", "Application type mismatch", "Tactic `rewrite` failed", "'show' tactic failed", "`simp` made no progress", "Tactic `rfl` failed", "Tactic `apply` failed")), (name, output)
+            assert not any(x in output for x in ("unknown module", "Unknown constant", "unexpected token",
+                "maximum recursion", "maximum number of heartbeats", "timeout", "declaration uses")), (name, output)
+
+        def checked(job):
+            try:
+                negative(job)
+                return None
+            except (AssertionError, subprocess.TimeoutExpired) as exc:
+                return f"{job[0]}/{job[1]}: {exc}"
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            failures = [result for result in pool.map(checked, jobs) if result is not None]
+        assert not failures, "\n".join(failures)
+    print("OK: WOTS recovery proof controls: 3 positive baselines; 14 typed semantic mutations rejected")
+
+
+if __name__ == "__main__":
+    main()

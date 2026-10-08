@@ -1739,7 +1739,13 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --features sim-internals \
 	  --test gen_wots_bridge_vectors --release -- --nocapture 2>&1 \
 	  | grep -E 'gen_wots_bridge_vectors:|test result'
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 \
+	  --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_WOTS_RECOVERY_CHECK=1 cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_RECOVERY_CHECK=1 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
 	@cd $(REPO_ROOT) && PQ_WOTS_BRIDGE_CHECK=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --features sim-internals \
 	  --test gen_wots_bridge_vectors --release -- --nocapture
@@ -1753,13 +1759,16 @@ endif
 	  Extracted.FwManifest.Funs Extracted.FormatDecimal.Funs \
 	  Extracted.ForsSpecBridge Extracted.ForsExtractDiffVectors \
 	  Extracted.HMsgSpecBridge Extracted.HMsgDiffVectors \
-	  Extracted.WotsSpecBridge Extracted.WotsBridgeDiffVectors 2>&1 | tail -1
+	  Extracted.WotsSpecBridge Extracted.WotsBridgeDiffVectors \
+	  Extracted.WotsRecoveryBridge Extracted.WotsRecoveryDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_hmsg_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsBridgeDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_wots_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsRecoveryDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_wots_recovery_proof_controls.py
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
 	  --target x86_64-unknown-linux-gnu --features sim-internals --test wots_grind
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
@@ -1911,6 +1920,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/test_fors_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_hmsg_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_wots_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_wots_recovery_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See
