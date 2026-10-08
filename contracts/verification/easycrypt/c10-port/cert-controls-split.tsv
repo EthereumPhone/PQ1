@@ -818,3 +818,18 @@ scratch/coverage_assignment_150_bits.ec	MUST-PASS	-
 scratch/coverage_assignment_151_bits.ec	MUST-FAIL	[by]: cannot close goals
 scratch/coverage_physical_transfer_charge.ec	MUST-PASS	-
 scratch/coverage_physical_transfer_omitted.ec	MUST-FAIL	[by]: cannot close goals
+
+# Canonical witness scope and paired control checks.
+scratch/_scope_neg_op_BoundedAssignmentWords.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_CanonicalCoverageBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_CanonicalNumericalBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_CanonicalPoolEvent.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_CanonicalPoolWitness.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_CanonicalWitnessIndices.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_OriginalCanonicalCoverage.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/CanonicalAssignmentNeg.ec	MUST-FAIL	[by]: cannot close goals
+scratch/CanonicalAssignmentPos.ec	MUST-PASS	-
+scratch/CanonicalCountNeg.ec	MUST-FAIL	[by]: cannot close goals
+scratch/CanonicalCountPos.ec	MUST-PASS	-
+scratch/CanonicalIndexNeg.ec	MUST-FAIL	[by]: cannot close goals
+scratch/CanonicalIndexPos.ec	MUST-PASS	-

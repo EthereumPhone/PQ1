@@ -1,5 +1,12 @@
 # PQSigner — STATUS (start here)
 
+**EasyCrypt coverage tightening (2026-10-08):** canonical witness counting
+reduces the adaptive FORS coverage term while retaining the initialized byte
+game. The [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)
+and [remaining research obligations](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md)
+distinguish that result from tighter collision charges, concrete SHA-256, QROM
+and full Rust correspondence.
+
 **Kani/EasyCrypt evidence correction (2026-09-16):** current gate scope and
 research limits are owned by the [FV surface map](../contracts/verification/docs/FV_SURFACE_MAP.md),
 rows 4 and 9. Historical draft receipts below do not certify the vendored split.

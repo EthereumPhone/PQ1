@@ -446,3 +446,12 @@ PoolCoverageBound
 PoolCoverageEvent
 QueryPublicCharges
 SelectedCoverageMass
+
+# Canonical witness counting and tighter byte-game EUF coverage, 2026-10-08.
+BoundedAssignmentWords
+CanonicalCoverageBound
+CanonicalNumericalBound
+CanonicalPoolEvent
+CanonicalPoolWitness
+CanonicalWitnessIndices
+OriginalCanonicalCoverage

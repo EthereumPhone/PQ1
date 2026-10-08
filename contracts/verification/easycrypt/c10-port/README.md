@@ -1,5 +1,7 @@
 # C10 (SPHINCS+C) EUF-CMA — certified EasyCrypt artifact
 
+Current numerical result and canonical-witness refinement: [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). Remaining obligations: [RESEARCH-LIMITS.md](RESEARCH-LIMITS.md).
+
 Snapshot of the `c10-eufcma-port` research workspace, **re-taken 2026-08-12 at
 its commit `0c825ed`**, at which the SPLIT gate is **GREEN — 208 OK, 0 FAIL**
 (`INPUTS_SHA256 eb589caf...`, toolchain r2026.02, 25 prover configurations,

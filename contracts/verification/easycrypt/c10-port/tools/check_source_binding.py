@@ -380,6 +380,15 @@ SOURCES = (
         'QueryPublicCharges',
         'SelectedCoverageMass',
     )),
+    *(PORT + 'cdrafts-split/' + f + '.ec' for f in (
+        'BoundedAssignmentWords',
+        'CanonicalCoverageBound',
+        'CanonicalNumericalBound',
+        'CanonicalPoolEvent',
+        'CanonicalPoolWitness',
+        'CanonicalWitnessIndices',
+        'OriginalCanonicalCoverage',
+    )),
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 

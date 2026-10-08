@@ -71,6 +71,32 @@ repeated contexts and adaptive stopping are included; no final adaptive set is
 substituted into a fixed-prior-set theorem. `OriginalCoverageBound` transfers
 this charge back to the actual output event in the original byte game.
 
+## Canonical-witness tightening
+
+`CanonicalNumericalBound.physical_byte_canonical_euf_bound` proves the same
+initialized byte-game bound with only the coverage term replaced by
+
+```
+A(j) = product(i = 0..11, min(j, 12-i)) = j! * j^(12-j), for 1 <= j <= 12
+Ccanonical(n) = sum(j = 1..12, n^(j+1) * A(j) / 2^(132+18*j))
+```
+
+`CanonicalWitnessIndices` bounds the index of each coordinate's witness after
+reversing last-occurrence deduplication. Its index is less than `12-i` and
+less than the number of witnesses. `CanonicalPoolWitness` constructs that
+representation; `CanonicalPoolEvent` proves it represents exactly the earlier
+coverage event. `BoundedAssignmentWords` enumerates the separate coordinate
+alphabets and proves their cardinality. The uniform assignment mass, adaptive
+prefix domination and original-game projection are retained.
+
+`canonical_physical_charge_tighter` proves that the resulting full bound is
+no larger than the earlier bound for every nonnegative pair of caps. At the
+example caps, coverage is approximately `8.2837816e-29` (`2^-93.29`), an
+improvement by about 1,644 times. The overall probability upper bound remains
+approximately `8.7695861e-15` (`2^-46.70`) because the other charges are unchanged.
+The assignment enumeration still overcounts; this is not the exact occupancy
+or Stirling-number formula.
+
 ## Composition, evidence and limits
 
 `NumericalByteCases` proves that every successful output belongs to one of the
@@ -100,5 +126,6 @@ classical model are closed by these theorems. Tightening the charges, proving
 concrete SHA-256 assumptions, QROM security, mechanically extracting the model
 from Rust, and making a deployment security-level claim remain outside this
 result. The earlier conditional MM45 capstone and its explicit residuals are
-unchanged. Replay optimization #789 and the owner-triggered assurance pass
-#509 remain deferred.
+unchanged. See [RESEARCH-LIMITS.md](RESEARCH-LIMITS.md) for the specific remaining
+quantitative, concrete-hash, quantum and Rust correspondence obligations.
+Replay optimization #789 and the owner-triggered assurance pass #509 remain deferred.

@@ -41,6 +41,7 @@ cdrafts-split/BadEncCountermodel.ec
 cdrafts-split/BadEncSplit.ec
 cdrafts-split/BadEncStep4.ec
 cdrafts-split/BadEncToTColl.ec
+cdrafts-split/BoundedAssignmentWords.ec
 cdrafts-split/BoundedIID.ec
 cdrafts-split/BuildRootProjection.ec
 cdrafts-split/BuilderPath.ec
@@ -102,7 +103,12 @@ cdrafts-split/CacheConcreteCoupling.ec
 cdrafts-split/CacheMemoCoupling.ec
 cdrafts-split/CacheValueCoupling.ec
 cdrafts-split/CachedChainOracle.ec
+cdrafts-split/CanonicalCoverageBound.ec
 cdrafts-split/CanonicalExposure.ec
+cdrafts-split/CanonicalNumericalBound.ec
+cdrafts-split/CanonicalPoolEvent.ec
+cdrafts-split/CanonicalPoolWitness.ec
+cdrafts-split/CanonicalWitnessIndices.ec
 cdrafts-split/CatalogDeterminism.ec
 cdrafts-split/CatalogForest.ec
 cdrafts-split/CatalogForestMerge.ec
@@ -395,6 +401,7 @@ cdrafts-split/ObservedWotsOpening.ec
 cdrafts-split/OriginalByteTargetBound.ec
 cdrafts-split/OriginalCandidateBound.ec
 cdrafts-split/OriginalCandidateUnion.ec
+cdrafts-split/OriginalCanonicalCoverage.ec
 cdrafts-split/OriginalCoverageBound.ec
 cdrafts-split/OriginalForsOpeningBound.ec
 cdrafts-split/OriginalTargetBound.ec

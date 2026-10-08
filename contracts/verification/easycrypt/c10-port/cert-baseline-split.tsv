@@ -2469,3 +2469,18 @@ cdrafts-split/PoolCoverageEvent.ec	defined-op:143fc7406d22	pool_coverage_j
 cdrafts-split/PoolCoverageEvent.ec	defined-op:bbc0f3827d2d	pool_coverage
 cdrafts-split/SelectedCoverageMass.ec	defined-op:7a9d4823e68a	ordered_assignment_event
 cdrafts-split/SelectedCoverageMass.ec	defined-op:91efdbe712ce	assignment_pool_event
+
+# Canonical witness definitions; no new project assumptions.
+cdrafts-split/BoundedAssignmentWords.ec	defined-op:19d3947d2973	canonical_assignment_count
+cdrafts-split/BoundedAssignmentWords.ec	defined-op:47d96f9227d9	canonical_bounds
+cdrafts-split/BoundedAssignmentWords.ec	defined-op:5073bb71ffbc	bounded_word
+cdrafts-split/BoundedAssignmentWords.ec	defined-op:540012551eca	bounded_word_count
+cdrafts-split/BoundedAssignmentWords.ec	defined-op:6d81c7e7bf8b	canonical_words
+cdrafts-split/BoundedAssignmentWords.ec	defined-op:9bdbb1a046aa	bounded_words
+cdrafts-split/BoundedAssignmentWords.ec	defined-op:c2daffeab465	canonical_assignment
+cdrafts-split/CanonicalCoverageBound.ec	defined-op:aa2813166ae0	canonical_coverage_charge
+cdrafts-split/CanonicalNumericalBound.ec	defined-op:0698e40b94a7	canonical_independent_euf_charge
+cdrafts-split/CanonicalNumericalBound.ec	defined-op:e84e6503db39	canonical_physical_euf_charge
+cdrafts-split/CanonicalPoolEvent.ec	defined-op:06c225a679d3	canonical_pool_enumerated
+cdrafts-split/CanonicalPoolEvent.ec	defined-op:b27fbfd11a1c	canonical_pool_j
+cdrafts-split/CanonicalPoolWitness.ec	defined-op:3eb2adb9ed46	canonical_pool_coverage

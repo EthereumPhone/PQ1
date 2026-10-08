@@ -59,3 +59,13 @@ expression with its prefix term omitted. Positive twins must compile; negative
 attempts must produce their enrolled unfinished-obligation diagnostic. There is
 also one unavailable-symbol scope probe per new module. These checks do not
 prove the final upper bound tight or each summand necessary.
+
+## Canonical witness counting controls
+
+Three paired checks cover the reverse last-occurrence witness index, the exact
+2-witness assignment count (2048 versus 1024), and the forced zero final
+assignment index. Positive twins compile; negative twins reach their enrolled
+unfinished-obligation diagnostic without relying on a failed SMT search. Each
+new module also has an unavailable-symbol scope probe. These checks exercise
+the canonical counting machinery; they do not establish optimality, remove
+the remaining birthday charges, or certify any concrete hash backend.
