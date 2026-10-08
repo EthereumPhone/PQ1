@@ -10,25 +10,35 @@
     "extract_command_pattern": "cd <crate> && RUSTFLAGS=--cfg lean_extract $PQLEAN/charon cargo --preset=aeneas --opaque <deps> --start-from <symbol> --dest-file <llbc>; $PQLEAN/aeneas -backend lean -dest <out> [-split-files] <llbc>; check_extraction_regen_output.py <target> <out> [normalized Funs]"
   },
   "shared_rust_files": {
-    "tx-core/src/rlp.rs": [
-      "extract-decode-item",
-      "extract-txcore-rlp"
-    ],
-    "tx-core/src/eip1559.rs": [
-      "extract-aa-userop",
-      "extract-u256-mul",
-      "extract-format-decimal"
+    "sphincs-c10/src/wots.rs": [
+      "extract-wots-find-count",
+      "extract-wots-pkfromsig",
+      "extract-wots-digits"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-wots-find-count",
       "extract-fors-index",
       "extract-merkle-verify",
       "extract-wots-pkfromsig",
       "extract-hash-fns",
       "extract-wots-digits"
     ],
-    "sphincs-c10/src/wots.rs": [
-      "extract-wots-pkfromsig",
-      "extract-wots-digits"
+    "sphincs-c10/src/address.rs": [
+      "extract-wots-find-count",
+      "extract-sphincs-adrs"
+    ],
+    "sphincs-c10/src/hash.rs": [
+      "extract-wots-find-count",
+      "extract-hash-fns"
+    ],
+    "tx-core/src/eip1559.rs": [
+      "extract-aa-userop",
+      "extract-u256-mul",
+      "extract-format-decimal"
+    ],
+    "tx-core/src/rlp.rs": [
+      "extract-decode-item",
+      "extract-txcore-rlp"
     ],
     "domain/src/lib.rs": [
       "extract-pinstate",
@@ -36,6 +46,7 @@
     ]
   },
   "required_targets": [
+    "extract-wots-find-count",
     "extract-sphincs-adrs",
     "extract-aa-userop",
     "extract-fors-index",
@@ -55,6 +66,43 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-wots-find-count",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/wots.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/hypertree.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/hash.rs"
+      ],
+      "rust_files_sha256": [
+        "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "f68e07c6eff2680c501857529e37d539bec5312ee6c76d72d1627f452313f0c2",
+        "Types.lean": "b915a476dc32b9513747ca9917f4e398b1a9e729b18ba04d69d3b09f5575b15e",
+        "FunsExternal_Template.lean": "87b3424848b17e6226d4248b9f12dfe6a3d7d504a0cbefdfb415b1d128f53cfc"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/FindCount/Funs.lean",
+        "contracts/verification/extracted/Extracted/FindCount/Types.lean",
+        "contracts/verification/extracted/Extracted/FindCount/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "a8b22c862bc22260b665b0ff6f008bf32869e8c3ab43e932380cd1c5aef2bbeb",
+        "b915a476dc32b9513747ca9917f4e398b1a9e729b18ba04d69d3b09f5575b15e",
+        "a35a493001a29d24dc0f102718d58cc2b9affa15005d32f96cea8f44e062dc8f"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/FindCountSpec.lean",
+      "headline_theorem": "find_count_total",
+      "fresh": true
+    },
     {
       "target": "extract-sphincs-adrs",
       "make_dir": "contracts/verification",
@@ -209,13 +257,13 @@
         "sphincs-c10/src/params.rs"
       ],
       "rust_files_sha256": [
-        "c4f756501733a54d30dc4ae1f193032d4f720a350d8c9f511b49b1aab272a019",
+        "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "09b19d511f03d229f5d2ae0e3e4e522298c50f2e4f1c9ccd51c8a300988584de",
+        "Funs.lean": "58cfbc8a7d630f2452b21e3753ea844caec2ce92d11d0adab31856bd8c8f3c5a",
         "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
-        "FunsExternal_Template.lean": "ad87eacdb10e13a27eae74b50ea2bdfbf54904ffeb6f49ded89de99fde4f45ca"
+        "FunsExternal_Template.lean": "6722c12866c55aed764013ee18825bd04ff72d0500dd7a2ed8cd5cd1201bb0b9"
       },
       "generated_lean": [
         "contracts/verification/extracted/Extracted/PkFromSig/Funs.lean",
@@ -223,7 +271,7 @@
         "contracts/verification/extracted/Extracted/PkFromSig/FunsExternal.lean"
       ],
       "generated_lean_sha256": [
-        "e57b5e9c6fb97361220a16463550db9a1ad2e6551ea4caf999b6440483439931",
+        "de2290828f7913a36286a529273c78d47b59b2847f4123d6316730d1e07ef40a",
         "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
         "60562c2c0eef84e5ea156cedf835de8e95230cb18bcc0364e90647a090b638d5"
       ],
@@ -404,7 +452,7 @@
         "sphincs-c10/src/params.rs"
       ],
       "rust_files_sha256": [
-        "c4f756501733a54d30dc4ae1f193032d4f720a350d8c9f511b49b1aab272a019",
+        "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
       "raw_generated_sha256": {

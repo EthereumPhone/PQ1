@@ -136,6 +136,33 @@ controls; ten semantic changes must break the universal bridge proofs.
 These results do not establish the Rust grinder's stopping/failure behavior
 or that every recovery/signing caller consumes these components correctly.
 
+The bounded WOTS search is now covered separately by
+[`FindCountSpec.lean`](../../extracted/Extracted/FindCountSpec.lean).
+The actual Rust `find_count` body is extracted with an explicit counter and
+indexed sum; its sum loop is definitionally the already-proved verifier loop.
+For every input, the unconditional theorem gives exactly two outcomes: the
+first count in `0..10_000_000` with digit sum 205, together with its complete
+digest and all 43 digits, or failure because every count in that interval is
+rejected. Charon reconstructs the terminal Rust panic as `assertionFailure`;
+the proof excludes a successful value and divergence on that path. Separate
+first-success and exhaustion results complete the three new kernel-only
+headlines. The default gate now checks 79 headline closures, with the same
+27 environment axioms. No success-probability or independent-trials premise
+is added.
+
+The default differential gate executes the actual Rust search against an
+independent real-SHA reference, plus hardware-adapter host hooks forcing first,
+progress-boundary, last-permitted and full-exhaustion cases. Controlled outputs
+with sums 204 and 206 must be rejected; a success must return all of the actual
+count, digest and digits. The controlled cases also run under `lean_extract`.
+Eight altered executable definitions must typecheck and then fail the unchanged
+proofs. Fresh generator replay checks the complete new extraction and the
+affected older modules. The release ARM crate has unchanged section sizes and
+all 26 frame annotations; this is not a final firmware or whole-program stack
+bound. The supplied SHA backend and erased progress callbacks remain explicit
+boundaries: arbitrary production callbacks are not proved to return or to
+preserve behavior, and the host hooks do not exercise STM32 silicon.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,
@@ -148,7 +175,9 @@ The [Aeneas cryptographic verification guide](https://github.com/AeneasVerif/aen
 and [SymCrypt technical report](https://arxiv.org/abs/2609.15648) support a
 staged approach: extracted code, mathematical specifications and proved
 refinements between them. The digest-field, H_msg input-construction and WOTS digest/digit components
-are now bridged to the verifier specification. The bounded signer/session relation remains open. An opaque hash definition remains an explicit
+are now bridged to the verifier specification. Bounded WOTS search has a
+functional success/failure proof; FORS grinding and the complete signer/session
+relation remain open. An opaque hash definition remains an explicit
 backend boundary even when the surrounding refinement is axiom-free.
 
 Replay optimization #789 and the combined owner-triggered assurance pass #509
