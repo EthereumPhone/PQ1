@@ -21,8 +21,8 @@
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
 # Regenerate/verify against a fresh dump with the same 4-bucket structure:
-#   79 kernel-only + 4 sha256_pure_bytes + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes)
-#   + 4 keccak256_pure = 88 headlines.
+#   81 kernel-only + 4 sha256_pure_bytes + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes)
+#   + 4 keccak256_pure = 90 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
 #
@@ -126,3 +126,7 @@ Extracted.Equiv.vendored_wots_recovery_outcome
 # XMSS authentication-path recovery.
 Extracted.Equiv.firmware_th_pair_matches_vendored
 Extracted.Equiv.firmware_verify_auth_path_matches_vendored
+
+# FORS single-tree recovery, including the initial secret hash.
+Extracted.Equiv.fors_recovery_spec
+Extracted.Equiv.firmware_fors_recovery_matches_vendored

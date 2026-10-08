@@ -18,6 +18,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 CHECKS = [
     ([ROOT/"lean/SphincsCVerify/Spec/Params.lean",
       ROOT/"lean/SphincsCVerify/Spec/Adrs.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Fors.lean"],
+     ROOT/"extracted/Extracted/ForsRecoveryVendored.lean",
+     ["def ADRS_FORS_TREE :", "def forsNode ", "def reconstructRoot\n"]),
+    ([ROOT/"lean/SphincsCVerify/Spec/Params.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Adrs.lean",
       ROOT/"lean/SphincsCVerify/Spec/Hash.lean",
       ROOT/"lean/SphincsCVerify/Spec/Hypertree.lean"],
      ROOT/"extracted/Extracted/MerkleRecoveryVendored.lean",

@@ -19,6 +19,7 @@
       "extract-wots-find-count",
       "extract-fors-index",
       "extract-merkle-verify",
+      "extract-fors-recovery",
       "extract-wots-pkfromsig",
       "extract-hash-fns",
       "extract-wots-digits"
@@ -26,6 +27,7 @@
     "sphincs-c10/src/hash.rs": [
       "extract-fors-grind-r",
       "extract-wots-find-count",
+      "extract-fors-recovery",
       "extract-hash-fns"
     ],
     "sphincs-c10/src/wots.rs": [
@@ -33,9 +35,14 @@
       "extract-wots-pkfromsig",
       "extract-wots-digits"
     ],
+    "sphincs-c10/src/hypertree.rs": [
+      "extract-wots-find-count",
+      "extract-fors-recovery"
+    ],
     "sphincs-c10/src/address.rs": [
       "extract-wots-find-count",
-      "extract-sphincs-adrs"
+      "extract-sphincs-adrs",
+      "extract-fors-recovery"
     ],
     "tx-core/src/eip1559.rs": [
       "extract-aa-userop",
@@ -59,6 +66,7 @@
     "extract-fors-index",
     "extract-tx-merkle",
     "extract-merkle-verify",
+    "extract-fors-recovery",
     "extract-wots-pkfromsig",
     "extract-hash-fns",
     "extract-bip39-roundtrip",
@@ -286,6 +294,41 @@
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/MerkleVerifySpec.lean",
       "headline_theorem": "verify_auth_path_loop_value",
+      "fresh": true
+    },
+    {
+      "target": "extract-fors-recovery",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/hypertree.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/hash.rs"
+      ],
+      "rust_files_sha256": [
+        "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "03fdaae78900f26b748b182ec39b7a876881f1217520abc4e13d0129c6a34be8",
+        "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "FunsExternal_Template.lean": "6d558024b2e6a3c130b53c8a7e3d1aad4bf51b98c36a31e91d8307485f969b70"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/ForsRecovery/Funs.lean",
+        "contracts/verification/extracted/Extracted/ForsRecovery/Types.lean",
+        "contracts/verification/extracted/Extracted/ForsRecovery/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "4fd16c2a2e6999ebf1422725bb2b1c935e3e7450652ba2f72c0c8ba09891e9fa",
+        "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "d6cea76d13aeecfa75655eeee2cef1bd74a4c6be0728fb6f6305335615326af8"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/ForsRecoverySpec.lean",
+      "headline_theorem": "fors_recovery_spec",
       "fresh": true
     },
     {

@@ -237,6 +237,29 @@ shift, with the declaration unchanged. This component retains the supplied
 SHA backend boundary and does not prove tree construction, membership
 soundness or the complete verifier/session relation.
 
+The FORS single-tree component is connected in
+[`ForsRecoveryBridge.lean`](../../extracted/Extracted/ForsRecoveryBridge.lean).
+The actual private `reconstruct_fors_root` helper is newly extracted without
+changing production Rust. It hashes the secret with the leaf address, then
+folds all eleven siblings. The functional result and verifier correspondence
+cover every represented seed, `u32` hypertree position, tree and leaf index,
+secret and eleven-node path. Position widening, the FORS address domain,
+initial leaf index, sibling order and parent/height fields are preserved.
+As with XMSS, out-of-range indices remain computation claims.
+
+Two more kernel-only headlines bring the default closure audit to 90, with
+unchanged environment assumptions. Three copied definitions have fidelity and
+deletion controls. A test-only crate embeds the complete production helper
+module unchanged and appends a child test, giving private-function access
+without a production API or source change. Both Rust configurations and both
+Lean computations agree on all 2,048 branch patterns and 16 full-width cases.
+The gate rejects 4,128 changed outputs and seven malformed inputs, plus 23
+well-typed semantic mutations: nine in the Rust-derived functions and fourteen
+in verifier recovery/address definitions. Fresh generation checks the complete
+new extraction interface. Full thirteen-root/forced-zero composition, tree
+construction, membership, backend correctness and signer/session refinement
+remain open.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

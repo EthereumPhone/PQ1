@@ -15,8 +15,10 @@ endpoint compression and full-counter recovery values. Its checked outcome
 relation preserves verifier rejection versus Rust's zero sentinel; zero alone
 is not claimed to prove rejection. The extracted XMSS pair hash and nine-level
 authentication-path recovery now also agree with the verifier computation,
-including sibling order and parent/address fields. The full verifier/session
-relation remains open.
+including sibling order and parent/address fields. The actual private FORS
+helper is also extracted and proved to agree with the verifier for its initial
+secret hash and all eleven siblings, including position/domain binding. Full
+FORS forest/forced-zero composition and the verifier/session relation remain open.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

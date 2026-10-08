@@ -121,6 +121,10 @@ REQUIRED_ENTRY_PATHS = {
          "contracts/verification/extracted/Extracted/Merkle/Types.lean",
          "contracts/verification/extracted/Extracted/Merkle/FunsExternal.lean"),
     ),
+    "extract-fors-recovery": (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/ForsRecovery/Funs.lean', 'contracts/verification/extracted/Extracted/ForsRecovery/Types.lean', 'contracts/verification/extracted/Extracted/ForsRecovery/FunsExternal.lean'),
+    ),
     "extract-wots-pkfromsig": (
         ("sphincs-c10/src/wots.rs", "sphincs-c10/src/params.rs"),
         ("contracts/verification/extracted/Extracted/PkFromSig/Funs.lean",
@@ -191,7 +195,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "daf65a89af99d90ff7ecfdb15c6b0352b24ab90542e0145e72aeb56daff8d6aa"
+REGISTRY_BINDING_SHA256 = "eb84252057eae16e731f4e2b19e5cef7ea1bbc47b68b72c6ac67f55d87d88298"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")

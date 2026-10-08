@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1741,9 +1741,18 @@ ifeq ($(GEN),1)
 	  | grep -E 'gen_wots_bridge_vectors:|test result'
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 \
 	  --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_RECOVERY_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_recovery_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_FORS_RECOVERY_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_recovery_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_RECOVERY_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_recovery_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=0 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 \
@@ -1767,7 +1776,8 @@ endif
 	  Extracted.HMsgSpecBridge Extracted.HMsgDiffVectors \
 	  Extracted.WotsSpecBridge Extracted.WotsBridgeDiffVectors \
 	  Extracted.WotsRecoveryBridge Extracted.WotsRecoveryDiffVectors \
-	  Extracted.MerkleRecoveryBridge Extracted.MerkleRecoveryDiffVectors 2>&1 | tail -1
+	  Extracted.MerkleRecoveryBridge Extracted.MerkleRecoveryDiffVectors \
+	  Extracted.ForsRecoveryBridge Extracted.ForsRecoveryDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
@@ -1778,6 +1788,8 @@ endif
 	@$(_FV_PYTHON3) scripts/test_wots_recovery_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/MerkleRecoveryDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_merkle_recovery_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsRecoveryDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_recovery_proof_controls.py
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
 	  --target x86_64-unknown-linux-gnu --features sim-internals --test wots_grind
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
@@ -1931,6 +1943,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/test_wots_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_wots_recovery_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_merkle_recovery_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_recovery_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See
@@ -2082,6 +2095,26 @@ _extract-merkle-verify-impl:
 	  && echo "OK: committed merkle extraction matches the current Rust" \
 	  || { echo "DRIFT: sphincs-c10/src/merkle.rs changed — re-extract, re-prove, re-commit"; exit 1; }
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-merkle-verify $${EXTRACTION_TMP_ROOT}/mkout $${EXTRACTION_TMP_ROOT}/mkout/Funs.fixed.lean
+
+# Actual private FORS recovery helper; dependencies reuse their extracted bodies.
+_extract-fors-recovery-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::th' --opaque 'sphincs_c10::hash::th_pair' \
+	  --start-from 'sphincs_c10::hypertree::reconstruct_fors_root' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/forsroot.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/frout
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/frout -split-files $${EXTRACTION_TMP_ROOT}/forsroot.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/frout/Funs.lean $${EXTRACTION_TMP_ROOT}/frout/Funs.fixed.lean \
+	  --sed-import 'Forsroot.=Extracted.ForsRecovery.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::params::A' \
+	  --kill 'sphincs_c10::hash::pad16' --kill 'sphincs_c10::params::N' \
+	  --add-import Extracted.Adrs --add-import Extracted.Fors.Funs --add-import Extracted.Hash.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/ForsRecovery/Funs.lean $${EXTRACTION_TMP_ROOT}/frout/Funs.fixed.lean \
+	  && echo "OK: committed FORS recovery extraction matches the current Rust" \
+	  || { echo "DRIFT: FORS recovery extraction changed — re-extract and re-prove"; exit 1; }
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-recovery $${EXTRACTION_TMP_ROOT}/frout $${EXTRACTION_TMP_ROOT}/frout/Funs.fixed.lean
 
 # §33 rank 5 — wots::pk_from_sig (verifier-side WOTS+C; wots_digest/chain_hash/
 # th_multi opaque → _pure axioms in PkFromSig/FunsExternal.lean; dedup drops

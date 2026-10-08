@@ -9,6 +9,7 @@ import Extracted.HMsgSpecBridge
 import Extracted.WotsSpecBridge
 import Extracted.WotsRecoveryBridge
 import Extracted.MerkleRecoveryBridge
+import Extracted.ForsRecoveryBridge
 import Extracted.FindCountSpec
 import Extracted.GrindRSpec
 import Extracted.AdrsEquiv
@@ -176,3 +177,7 @@ import Extracted.FormatDecimalDiffVectors
 -- XMSS pair hash and complete nine-level recovery.
 #print axioms Extracted.Equiv.firmware_th_pair_matches_vendored
 #print axioms Extracted.Equiv.firmware_verify_auth_path_matches_vendored
+
+-- FORS secret leaf and complete eleven-level recovery.
+#print axioms Extracted.Equiv.fors_recovery_spec
+#print axioms Extracted.Equiv.firmware_fors_recovery_matches_vendored

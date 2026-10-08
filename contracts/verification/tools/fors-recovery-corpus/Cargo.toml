@@ -1,0 +1,14 @@
+[package]
+name = "pq-fors-recovery-corpus"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+sha2 = { version = "0.10", default-features = false }
+sphincs-c10 = { path = "../../../../sphincs-c10" }
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(lean_extract)'] }
