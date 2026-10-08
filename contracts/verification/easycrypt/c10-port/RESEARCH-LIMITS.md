@@ -216,6 +216,27 @@ Fourteen well-typed changes to chain order, compression and recovery semantics
 must break the unchanged universal proofs. No production Rust, hash backend,
 cryptographic assumption or EasyCrypt game is changed by this bridge.
 
+The XMSS authentication-path component is connected in
+[`MerkleRecoveryBridge.lean`](../../extracted/Extracted/MerkleRecoveryBridge.lean).
+The actual extracted pair hash preserves all four 32-byte preimage segments.
+For every seed, layer, tree, leaf, full `u32` index and nine-node path, the
+extracted recovery agrees with the verifier's nine-level computation. This
+preserves sibling order, parity selection, successive parent indices, height
+fields and the tree address domain. Out-of-range leaf indices are included as
+computations; agreement does not assert membership in a 512-leaf subtree.
+
+The two additional kernel-only headlines bring the default closure audit to
+88 with the same 27 environment axioms. Five copied declarations have fidelity
+and deletion controls. The default execution corpus covers all 512 nine-bit
+branch patterns, 16 full-width boundary cases and six pair-hash cases, under
+both normal and extraction Rust configurations and both Lean computations.
+Fifteen well-typed semantic mutations must break the unchanged proofs.
+Fresh Merkle extraction also checks the complete generated interface; its old
+external-template pin was corrected only for an eight-line source-comment
+shift, with the declaration unchanged. This component retains the supplied
+SHA backend boundary and does not prove tree construction, membership
+soundness or the complete verifier/session relation.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

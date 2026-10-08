@@ -16,6 +16,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 #  byte-for-byte — semantic content; markers are matched against the start
 #  of a stripped line, so include any attribute prefix like `@[inline] `)
 CHECKS = [
+    ([ROOT/"lean/SphincsCVerify/Spec/Params.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Adrs.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Hash.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Hypertree.lean"],
+     ROOT/"extracted/Extracted/MerkleRecoveryVendored.lean",
+     ["def SubtreeH :", "def ADRS_TREE :", "def treeNode ", "def thPair ",
+      "def verifyAuthPath\n"]),
     ([ROOT/"lean/SphincsCVerify/Spec/Bytes.lean",
       ROOT/"lean/SphincsCVerify/Spec/Params.lean",
       ROOT/"lean/SphincsCVerify/Spec/Adrs.lean",

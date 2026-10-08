@@ -50,3 +50,4 @@ import Extracted.FindCountSpec
 import Extracted.GrindRSpec
 
 import Extracted.WotsRecoveryBridge
+import Extracted.MerkleRecoveryBridge

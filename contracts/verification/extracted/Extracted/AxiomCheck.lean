@@ -8,6 +8,7 @@
 import Extracted.HMsgSpecBridge
 import Extracted.WotsSpecBridge
 import Extracted.WotsRecoveryBridge
+import Extracted.MerkleRecoveryBridge
 import Extracted.FindCountSpec
 import Extracted.GrindRSpec
 import Extracted.AdrsEquiv
@@ -171,3 +172,7 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_th_multi_matches_vendored
 #print axioms Extracted.Equiv.firmware_pk_from_sig_matches_vendored
 #print axioms Extracted.Equiv.vendored_wots_recovery_outcome
+
+-- XMSS pair hash and complete nine-level recovery.
+#print axioms Extracted.Equiv.firmware_th_pair_matches_vendored
+#print axioms Extracted.Equiv.firmware_verify_auth_path_matches_vendored

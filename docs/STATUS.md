@@ -13,7 +13,10 @@ also covers the exact secret-keyed nonce preimage in both OptRand modes.
 The WOTS recovery caller now agrees with the verifier's chain walks,
 endpoint compression and full-counter recovery values. Its checked outcome
 relation preserves verifier rejection versus Rust's zero sentinel; zero alone
-is not claimed to prove rejection. The full verifier/session relation remains open.
+is not claimed to prove rejection. The extracted XMSS pair hash and nine-level
+authentication-path recovery now also agree with the verifier computation,
+including sibling order and parent/address fields. The full verifier/session
+relation remains open.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.
