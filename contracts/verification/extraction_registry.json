@@ -10,12 +10,12 @@
     "extract_command_pattern": "cd <crate> && RUSTFLAGS=--cfg lean_extract $PQLEAN/charon cargo --preset=aeneas --opaque <deps> --start-from <symbol> --dest-file <llbc>; $PQLEAN/aeneas -backend lean -dest <out> [-split-files] <llbc>; check_extraction_regen_output.py <target> <out> [normalized Funs]"
   },
   "shared_rust_files": {
-    "sphincs-c10/src/wots.rs": [
-      "extract-wots-find-count",
-      "extract-wots-pkfromsig",
-      "extract-wots-digits"
+    "sphincs-c10/src/fors.rs": [
+      "extract-fors-grind-r",
+      "extract-fors-index"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-fors-grind-r",
       "extract-wots-find-count",
       "extract-fors-index",
       "extract-merkle-verify",
@@ -23,13 +23,19 @@
       "extract-hash-fns",
       "extract-wots-digits"
     ],
+    "sphincs-c10/src/hash.rs": [
+      "extract-fors-grind-r",
+      "extract-wots-find-count",
+      "extract-hash-fns"
+    ],
+    "sphincs-c10/src/wots.rs": [
+      "extract-wots-find-count",
+      "extract-wots-pkfromsig",
+      "extract-wots-digits"
+    ],
     "sphincs-c10/src/address.rs": [
       "extract-wots-find-count",
       "extract-sphincs-adrs"
-    ],
-    "sphincs-c10/src/hash.rs": [
-      "extract-wots-find-count",
-      "extract-hash-fns"
     ],
     "tx-core/src/eip1559.rs": [
       "extract-aa-userop",
@@ -46,6 +52,7 @@
     ]
   },
   "required_targets": [
+    "extract-fors-grind-r",
     "extract-wots-find-count",
     "extract-sphincs-adrs",
     "extract-aa-userop",
@@ -66,6 +73,39 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-fors-grind-r",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/fors.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/hash.rs"
+      ],
+      "rust_files_sha256": [
+        "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "42c9aaed875972bb4a232c388ed3a6c88d5acb854fd23af70125615d3a70a1e3",
+        "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "FunsExternal_Template.lean": "c003b46dc9a65dfc216138d96be08a2d49eb38d86a17d5f2ce826a422c6a3b57"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/GrindR/Funs.lean",
+        "contracts/verification/extracted/Extracted/GrindR/Types.lean",
+        "contracts/verification/extracted/Extracted/GrindR/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "a8f3bc9e6d488096ba2207953db457625d9d79b1b2758aa7080e30a6997a4925",
+        "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "beedddfc25d67a2de9516e16f4d0b87f5c6dff0d49f0450e02c205d36e00672c"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/GrindRSpec.lean",
+      "headline_theorem": "grind_r_total",
+      "fresh": true
+    },
     {
       "target": "extract-wots-find-count",
       "make_dir": "contracts/verification",
@@ -168,7 +208,7 @@
         "sphincs-c10/src/params.rs"
       ],
       "rust_files_sha256": [
-        "3b64e07bc9c3a6c0e1db1d63da90c32ad34b26857dfe5767997df360b7713ed2",
+        "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
       "raw_generated_sha256": {

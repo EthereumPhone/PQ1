@@ -8,6 +8,7 @@
 import Extracted.HMsgSpecBridge
 import Extracted.WotsSpecBridge
 import Extracted.FindCountSpec
+import Extracted.GrindRSpec
 import Extracted.AdrsEquiv
 import Extracted.Bits
 import Extracted.ForsExtract
@@ -159,3 +160,7 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.find_count_first_success
 #print axioms Extracted.Equiv.find_count_exhausted
 #print axioms Extracted.Equiv.find_count_total
+
+#print axioms Extracted.Equiv.grind_r_first_success
+#print axioms Extracted.Equiv.grind_r_exhausted
+#print axioms Extracted.Equiv.grind_r_total

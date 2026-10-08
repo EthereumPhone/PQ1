@@ -146,9 +146,7 @@ digest and all 43 digits, or failure because every count in that interval is
 rejected. Charon reconstructs the terminal Rust panic as `assertionFailure`;
 the proof excludes a successful value and divergence on that path. Separate
 first-success and exhaustion results complete the three new kernel-only
-headlines. The default gate now checks 79 headline closures, with the same
-27 environment axioms. No success-probability or independent-trials premise
-is added.
+headlines. No success-probability or independent-trials premise is added.
 
 The default differential gate executes the actual Rust search against an
 independent real-SHA reference, plus hardware-adapter host hooks forcing first,
@@ -163,6 +161,34 @@ bound. The supplied SHA backend and erased progress callbacks remain explicit
 boundaries: arbitrary production callbacks are not proved to return or to
 preserve behavior, and the host hooks do not exercise STM32 silicon.
 
+The actual FORS `grind_r` search is now covered by
+[`GrindRSpec.lean`](../../extracted/Extracted/GrindRSpec.lean). For both `None`
+and `Some(opt_rand)`, its extracted body constructs exactly
+`sk_seed || "R_grind" || [opt_rand] || message || zero[28] || nonce_be32`,
+truncates SHA-256 to the first 16 bytes, and computes the full H_msg digest
+using the padded public seed, root and randomizer. The acceptance test is
+exactly digest bits 132 through 142 being zero. Three kernel-only headlines
+prove the first accepted nonce in `0..10_000_000`, failure after every nonce
+in that interval rejects, and an unconditional disjunction of those outcomes.
+The terminal Rust panic again maps to `assertionFailure` in the extraction.
+The default gate now checks 82 headline closures with the unchanged
+27 environment axioms.
+
+The source uses the existing streaming SHA boundary and an explicit counter;
+the deterministic path still omits the OptRand update entirely. Default
+controls execute independent real-SHA reference searches and controlled
+hardware-adapter hooks in normal and `lean_extract` configurations. They
+check every update's bytes and length, ascending nonces, first success,
+byte-carry boundaries, the last permitted nonce, exhaustion and complete
+returned values in both randomness modes. Twelve typed changes to executable
+definitions must break the unchanged proofs. Generator replay covers both
+the new search and the existing FORS decoder. ARM crate code is six bytes
+smaller with unchanged data sections and all 26 frame annotations; this is
+not final firmware or whole-program stack evidence. SHA backend correctness,
+cryptographic hardness and caller-provided randomness freshness remain open;
+these functional results assume neither independent trials nor eventual
+success. They do not establish the EasyCrypt random-oracle game relation.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,
@@ -175,9 +201,9 @@ The [Aeneas cryptographic verification guide](https://github.com/AeneasVerif/aen
 and [SymCrypt technical report](https://arxiv.org/abs/2609.15648) support a
 staged approach: extracted code, mathematical specifications and proved
 refinements between them. The digest-field, H_msg input-construction and WOTS digest/digit components
-are now bridged to the verifier specification. Bounded WOTS search has a
-functional success/failure proof; FORS grinding and the complete signer/session
-relation remain open. An opaque hash definition remains an explicit
+are now bridged to the verifier specification. Bounded WOTS and FORS searches
+have functional success/failure proofs; their connection to the EasyCrypt
+games and the complete signer/session relation remain open. An opaque hash definition remains an explicit
 backend boundary even when the surrounding refinement is axiom-free.
 
 Replay optimization #789 and the combined owner-triggered assurance pass #509

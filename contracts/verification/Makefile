@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1767,6 +1767,15 @@ endif
 	@cd $(REPO_ROOT) && RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
 	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test wots_grind
 	@$(_FV_PYTHON3) scripts/test_find_count_proof_controls.py
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test fors_grind
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test fors_grind
+	@cd $(REPO_ROOT) && RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test fors_grind
+	@cd $(REPO_ROOT) && RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test fors_grind
+	@$(_FV_PYTHON3) scripts/test_grind_r_proof_controls.py
 
 verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@cd $(EXTRACTED_DIR) && $(LAKE) build 2>&1 | tee /tmp/pq_extracted_build.out
@@ -2100,6 +2109,25 @@ _extract-wots-find-count-impl:
 	  --kill 'sphincs_c10::params::ADRS_WOTS' --add-import Extracted.PkFromSig.Funs
 	@diff -u $(EXTRACTED_DIR)/Extracted/FindCount/Funs.lean $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-find-count $${EXTRACTION_TMP_ROOT}/gout $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean
+
+# Actual FORS randomizer search; reuse the existing SHA backend and extracted helpers.
+_extract-fors-grind-r-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::sha256_parts' \
+	  --opaque 'sphincs_c10::hash::pad16' --opaque 'sphincs_c10::hash::truncate' \
+	  --opaque 'sphincs_c10::hash::h_msg' --opaque 'sphincs_c10::fors::read_bits_le' \
+	  --start-from 'sphincs_c10::fors::grind_r' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/grindr.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/gout
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/gout -split-files $${EXTRACTION_TMP_ROOT}/grindr.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/gout/Funs.lean $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean \
+	  --sed-import 'Grindr.=Extracted.GrindR.' \
+	  --kill 'sphincs_c10::params::A' --kill 'sphincs_c10::params::K' \
+	  --add-import Extracted.Fors.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/GrindR/Funs.lean $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-grind-r $${EXTRACTION_TMP_ROOT}/gout $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean
 
 # §33 rank 11 — tx::erc20::merkle::verify_proof (trust-bundle merkle walk;
 # leaf_hash/node_hash opaque → _pure axioms in TxMerkle/FunsExternal.lean).

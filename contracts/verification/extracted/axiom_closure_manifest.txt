@@ -112,3 +112,7 @@ Extracted.Equiv.firmware_wots_digit_sum_matches_vendored
 Extracted.Equiv.find_count_first_success
 Extracted.Equiv.find_count_exhausted
 Extracted.Equiv.find_count_total
+
+Extracted.Equiv.grind_r_first_success
+Extracted.Equiv.grind_r_exhausted
+Extracted.Equiv.grind_r_total

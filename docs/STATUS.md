@@ -7,10 +7,12 @@ This closes the decoder component of #288. The H_msg input-construction
 bridge is also proved against the verifier specification, with an explicit
 streaming backend model. The WOTS digest bridge covers every 32-bit count,
 and all 43 WOTS digits and their sum agree with the verifier specification.
-The extracted WOTS grinder now proves first success and bounded exhaustion,
-including an unconditional result for every input. Hash backend correctness,
-progress-callback correspondence, FORS grinding and the complete Rust/EasyCrypt
-signer/session relation remain open.
+The extracted WOTS and FORS grinders now prove first success and bounded
+exhaustion, including unconditional results for every input. The FORS proof
+also covers the exact secret-keyed nonce preimage in both OptRand modes.
+Hash backend correctness, randomness freshness, progress-callback
+correspondence and the complete Rust/EasyCrypt signer/session relation
+remain open.
 
 **EasyCrypt coverage tightening (2026-10-08):** canonical witness counting
 reduces the adaptive FORS coverage term while retaining the initialized byte
