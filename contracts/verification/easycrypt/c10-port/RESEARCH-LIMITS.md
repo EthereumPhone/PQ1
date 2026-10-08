@@ -260,6 +260,39 @@ new extraction interface. Full thirteen-root/forced-zero composition, tree
 construction, membership, backend correctness and signer/session refinement
 remain open.
 
+The FORS forest stage now adds
+[`ForsPkSpec.lean`](../../extracted/Extracted/ForsPkSpec.lean),
+[`ForsForestSpec.lean`](../../extracted/Extracted/ForsForestSpec.lean) and
+[`ForsRejectSpec.lean`](../../extracted/Extracted/ForsRejectSpec.lean).
+The actual `compute_fors_pk` and complete `hypertree::verify` bodies are
+freshly extracted, with existing proved dependency implementations and no
+new opaque assumptions. The compression theorem preserves all thirteen
+roots in order, their padding, domain 4 and the full `u32` position. The
+actual verifier's twelve-root loop agrees pointwise with the verifier's
+single-tree computation for every represented input and preserves slot 12.
+The whole Rust verifier is proved to return false whenever its actual
+H_msg digest's final FORS field is nonzero, including the signature's first
+sixteen bytes as the randomizer. This is a refusal theorem; it makes no
+claim about the accepting branch.
+
+Four additional kernel-only headlines bring the default closure audit to
+94; the environment inventory remains 27 axioms. Complete-output generation
+checks both new extraction interfaces. Three copied definitions have edit
+and deletion controls. Normal and `lean_extract` Rust, extracted execution
+and verifier computations agree on 32 forest/compression cases and 16 actual
+whole-verifier refusals. The cases include full-width positions/indices and
+distinct secrets/paths for each tree. The gate also rejects 480 changed
+outputs, 16 changed digest fields, ten malformed inputs and 18 well-typed
+semantic mutations (fourteen Rust-derived and four verifier/address), with
+five positive proof baselines. Production Rust is unchanged.
+
+This advances the components, not the complete forest/caller relation.
+Signature parsing, the special last leaf's assembly into slot 12, and the
+handoff to the WOTS/XMSS layers still need a composed proof. Tree
+construction/membership, the Rust zero-sentinel caller behavior, concrete
+hash backends, randomness and full signer/session refinement remain open.
+The new files do not change EasyCrypt proof inputs or its numerical bounds.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

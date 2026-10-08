@@ -1,3 +1,4 @@
+import Extracted.ForsRejectSpec
 /- Axiom-discipline check (extends the SphincsCVerify no-sorry/axiom-lint
    culture to the extracted-code project; CI wiring tracked in §33 P1).
 
@@ -181,3 +182,9 @@ import Extracted.FormatDecimalDiffVectors
 -- FORS secret leaf and complete eleven-level recovery.
 #print axioms Extracted.Equiv.fors_recovery_spec
 #print axioms Extracted.Equiv.firmware_fors_recovery_matches_vendored
+
+-- Forest-stage correspondences and whole-verifier forced-zero refusal.
+#print axioms Extracted.Equiv.fors_pk_spec
+#print axioms Extracted.Equiv.firmware_fors_pk_matches_vendored
+#print axioms Extracted.Equiv.firmware_fors_normal_roots
+#print axioms Extracted.Equiv.firmware_verify_rejects_nonzero_fors

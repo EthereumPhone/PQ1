@@ -17,8 +17,12 @@ is not claimed to prove rejection. The extracted XMSS pair hash and nine-level
 authentication-path recovery now also agree with the verifier computation,
 including sibling order and parent/address fields. The actual private FORS
 helper is also extracted and proved to agree with the verifier for its initial
-secret hash and all eleven siblings, including position/domain binding. Full
-FORS forest/forced-zero composition and the verifier/session relation remain open.
+secret hash and all eleven siblings, including position/domain binding.
+The thirteen-root compression and actual verifier's twelve-root loop now
+preserve every input position and the last slot. The complete Rust verifier
+also has a universal early-refusal theorem for a nonzero final FORS index.
+Parsing, special-last-leaf assembly and composition into the accepting
+verifier/session relation remain open.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

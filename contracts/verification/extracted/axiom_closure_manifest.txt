@@ -130,3 +130,9 @@ Extracted.Equiv.firmware_verify_auth_path_matches_vendored
 # FORS single-tree recovery, including the initial secret hash.
 Extracted.Equiv.fors_recovery_spec
 Extracted.Equiv.firmware_fors_recovery_matches_vendored
+
+# FORS forest stage: kernel-only, with full verifier/refinement still open.
+Extracted.Equiv.fors_pk_spec
+Extracted.Equiv.firmware_fors_pk_matches_vendored
+Extracted.Equiv.firmware_fors_normal_roots
+Extracted.Equiv.firmware_verify_rejects_nonzero_fors

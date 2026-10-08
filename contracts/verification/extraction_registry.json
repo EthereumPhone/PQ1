@@ -11,10 +11,14 @@
   },
   "shared_rust_files": {
     "sphincs-c10/src/fors.rs": [
+      "extract-fors-pk",
+      "extract-verifier",
       "extract-fors-grind-r",
       "extract-fors-index"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-fors-pk",
+      "extract-verifier",
       "extract-fors-grind-r",
       "extract-wots-find-count",
       "extract-fors-index",
@@ -24,25 +28,35 @@
       "extract-hash-fns",
       "extract-wots-digits"
     ],
+    "sphincs-c10/src/address.rs": [
+      "extract-fors-pk",
+      "extract-verifier",
+      "extract-wots-find-count",
+      "extract-sphincs-adrs",
+      "extract-fors-recovery"
+    ],
     "sphincs-c10/src/hash.rs": [
+      "extract-fors-pk",
+      "extract-verifier",
       "extract-fors-grind-r",
       "extract-wots-find-count",
       "extract-fors-recovery",
       "extract-hash-fns"
     ],
+    "sphincs-c10/src/hypertree.rs": [
+      "extract-verifier",
+      "extract-wots-find-count",
+      "extract-fors-recovery"
+    ],
     "sphincs-c10/src/wots.rs": [
+      "extract-verifier",
       "extract-wots-find-count",
       "extract-wots-pkfromsig",
       "extract-wots-digits"
     ],
-    "sphincs-c10/src/hypertree.rs": [
-      "extract-wots-find-count",
-      "extract-fors-recovery"
-    ],
-    "sphincs-c10/src/address.rs": [
-      "extract-wots-find-count",
-      "extract-sphincs-adrs",
-      "extract-fors-recovery"
+    "sphincs-c10/src/merkle.rs": [
+      "extract-verifier",
+      "extract-merkle-verify"
     ],
     "tx-core/src/eip1559.rs": [
       "extract-aa-userop",
@@ -59,6 +73,8 @@
     ]
   },
   "required_targets": [
+    "extract-fors-pk",
+    "extract-verifier",
     "extract-fors-grind-r",
     "extract-wots-find-count",
     "extract-sphincs-adrs",
@@ -81,6 +97,82 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-fors-pk",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/fors.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/hash.rs"
+      ],
+      "rust_files_sha256": [
+        "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "160318291e85c43e75cb80571f823806e0b083e353b366de7008b467e90a3b20",
+        "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "FunsExternal_Template.lean": "7321b8a6496d772781a039a01da43de5fff09af84e6629c6463cb58539f9a516"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/ForsPk/Funs.lean",
+        "contracts/verification/extracted/Extracted/ForsPk/Types.lean",
+        "contracts/verification/extracted/Extracted/ForsPk/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "d8fee0d9cdedf96c2cb27756fcdcc2f2948597bc508dde5e99db889f03cdd67f",
+        "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "fb587ad8c1c4e991c2d200f15ddfbab948ef905bed26f2484e7920eaaadafb51"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/ForsPkSpec.lean",
+      "headline_theorem": "fors_pk_spec",
+      "fresh": true
+    },
+    {
+      "target": "extract-verifier",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/hypertree.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/fors.rs",
+        "sphincs-c10/src/wots.rs",
+        "sphincs-c10/src/merkle.rs"
+      ],
+      "rust_files_sha256": [
+        "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb",
+        "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
+        "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
+        "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "977ec3cac638c70003648da8b0943eeef8452464cb61bec1d8c1a164b45fe3d1",
+        "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "FunsExternal_Template.lean": "040a4b4b056fd7ec158ac646d8acd6c496900870c12cd9e3e7091c1b385beb08"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/Verify/Funs.lean",
+        "contracts/verification/extracted/Extracted/Verify/Types.lean",
+        "contracts/verification/extracted/Extracted/Verify/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "491b0be3bfccec4f46473fd1165b6287b6968e3cfbce5a1330ac0da3fe0b4a28",
+        "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "b55d32e8f47d2263eb49d1194290d0702bb366547951eb3a3e7049b084362f8f"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/ForsForestSpec.lean",
+      "headline_theorem": "firmware_fors_normal_roots",
+      "fresh": true
+    },
     {
       "target": "extract-fors-grind-r",
       "make_dir": "contracts/verification",

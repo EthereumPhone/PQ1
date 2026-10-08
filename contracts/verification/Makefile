@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1741,12 +1741,21 @@ ifeq ($(GEN),1)
 	  | grep -E 'gen_wots_bridge_vectors:|test result'
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 \
 	  --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_FOREST_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_forest_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_FORS_RECOVERY_GENERATE=1 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release fors_recovery_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_FORS_FOREST_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_forest_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_FOREST_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_forest_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_FORS_RECOVERY_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release fors_recovery_corpus -- --nocapture
@@ -1777,7 +1786,8 @@ endif
 	  Extracted.WotsSpecBridge Extracted.WotsBridgeDiffVectors \
 	  Extracted.WotsRecoveryBridge Extracted.WotsRecoveryDiffVectors \
 	  Extracted.MerkleRecoveryBridge Extracted.MerkleRecoveryDiffVectors \
-	  Extracted.ForsRecoveryBridge Extracted.ForsRecoveryDiffVectors 2>&1 | tail -1
+	  Extracted.ForsRecoveryBridge Extracted.ForsRecoveryDiffVectors \
+	  Extracted.ForsRejectSpec Extracted.ForsForestDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
@@ -1790,6 +1800,8 @@ endif
 	@$(_FV_PYTHON3) scripts/test_merkle_recovery_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsRecoveryDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_fors_recovery_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsForestDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_forest_proof_controls.py
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
 	  --target x86_64-unknown-linux-gnu --features sim-internals --test wots_grind
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
@@ -1944,6 +1956,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/test_wots_recovery_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_merkle_recovery_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_recovery_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_forest_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See
@@ -2364,3 +2377,57 @@ verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/
 
 verify-easycrypt-split: ## Full current split proof replay in the pinned image (parallel; PQ_EASYCRYPT_JOBS=N, 1 = serial)
 	$(_FV_PYTHON3) -B scripts/run_easycrypt_split.py
+
+# Actual sphincs_c10::fors::compute_fors_pk; reused dependencies retain their proved bodies.
+_extract-fors-pk-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::th_multi' \
+	  --start-from 'sphincs_c10::fors::compute_fors_pk' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/forspk.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/forspk-out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/forspk-out -split-files $${EXTRACTION_TMP_ROOT}/forspk.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/forspk-out/Funs.lean $${EXTRACTION_TMP_ROOT}/forspk-out/Funs.fixed.lean \
+	  --sed-import 'Forspk.=Extracted.ForsPk.' \
+	  --kill 'sphincs_c10::address::make_adrs' \
+	  --add-import Extracted.Adrs
+	@diff -u $(EXTRACTED_DIR)/Extracted/ForsPk/Funs.lean $${EXTRACTION_TMP_ROOT}/forspk-out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-pk $${EXTRACTION_TMP_ROOT}/forspk-out $${EXTRACTION_TMP_ROOT}/forspk-out/Funs.fixed.lean
+
+# Actual sphincs_c10::hypertree::verify; reused dependencies retain their proved bodies.
+_extract-verifier-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::h_msg' \
+	  --opaque 'sphincs_c10::hash::th' \
+	  --opaque 'sphincs_c10::fors::extract_fors_indices' \
+	  --opaque 'sphincs_c10::fors::extract_ht_index' \
+	  --opaque 'sphincs_c10::hypertree::reconstruct_fors_root' \
+	  --opaque 'sphincs_c10::fors::compute_fors_pk' \
+	  --opaque 'sphincs_c10::wots::pk_from_sig' \
+	  --opaque 'sphincs_c10::merkle::verify_auth_path' \
+	  --start-from 'sphincs_c10::hypertree::verify' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/verifyfors.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/verifyfors-out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/verifyfors-out -split-files $${EXTRACTION_TMP_ROOT}/verifyfors.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.lean $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.dedup.lean \
+	  --sed-import 'Verifyfors.=Extracted.Verify.' \
+	  --kill 'sphincs_c10::address::make_adrs' \
+	  --kill 'sphincs_c10::params::N' \
+	  --kill 'sphincs_c10::hash::pad16' \
+	  --kill 'sphincs_c10::params::ADRS_FORS_TREE' \
+	  --kill 'sphincs_c10::params::L' \
+	  --kill 'sphincs_c10::params::H' \
+	  --kill 'sphincs_c10::params::A' \
+	  --kill 'sphincs_c10::params::K' \
+	  --kill 'sphincs_c10::params::D' \
+	  --kill 'sphincs_c10::params::SUBTREE_H' \
+	  --add-import Extracted.Adrs \
+	  --add-import Extracted.Fors.Funs \
+	  --add-import Extracted.Wots.Funs
+	@$(_FV_PYTHON3) scripts/normalize_verify_extraction.py $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.dedup.lean $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.fixed.lean
+	@rm $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.dedup.lean
+	@diff -u $(EXTRACTED_DIR)/Extracted/Verify/Funs.lean $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-verifier $${EXTRACTION_TMP_ROOT}/verifyfors-out $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.fixed.lean

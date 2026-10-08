@@ -81,6 +81,15 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-fors-pk': (
+        ('sphincs-c10/src/fors.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/ForsPk/Funs.lean', 'contracts/verification/extracted/Extracted/ForsPk/Types.lean', 'contracts/verification/extracted/Extracted/ForsPk/FunsExternal.lean'),
+    ),
+    'extract-verifier': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/fors.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/merkle.rs'),
+        ('contracts/verification/extracted/Extracted/Verify/Funs.lean', 'contracts/verification/extracted/Extracted/Verify/Types.lean', 'contracts/verification/extracted/Extracted/Verify/FunsExternal.lean'),
+    ),
+
     "extract-fors-grind-r": (
         ("sphincs-c10/src/fors.rs", "sphincs-c10/src/params.rs", "sphincs-c10/src/hash.rs"),
         ("contracts/verification/extracted/Extracted/GrindR/Funs.lean",
@@ -195,7 +204,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "eb84252057eae16e731f4e2b19e5cef7ea1bbc47b68b72c6ac67f55d87d88298"
+REGISTRY_BINDING_SHA256 = "956695a9fd66b96da5d6023d896c3697c4b8f1372c40b762b887ec4bc7b82452"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")
