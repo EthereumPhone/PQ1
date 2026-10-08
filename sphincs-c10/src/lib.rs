@@ -94,7 +94,8 @@ pub mod sim_internals {
     pub use crate::address::make_adrs;
     pub use crate::wots::extract_digits;
     pub use crate::fors::{
-        compute_fors_pk, compute_fors_root, extract_fors_indices, extract_ht_index, sign_fors_tree,
+        compute_fors_pk, compute_fors_root, extract_fors_indices, extract_ht_index, grind_r,
+        sign_fors_tree,
     };
     pub use crate::hash::{
         chain_hash, fors_secret, h_msg, pad16, th, th_multi, th_pair, wots_digest, wots_secret,

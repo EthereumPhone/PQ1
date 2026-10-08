@@ -4,8 +4,8 @@
   "sources": {
     "sphincs-c10/src/wots.rs": "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
     "sphincs-c10/src/hash.rs": "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb",
-    "sphincs-c10/src/lib.rs": "76020f97d7142924931d13702332dfbd557d9354ccaa16101f2370189160bcc8",
-    "sphincs-c10/src/fors.rs": "3b64e07bc9c3a6c0e1db1d63da90c32ad34b26857dfe5767997df360b7713ed2",
+    "sphincs-c10/src/lib.rs": "ff1a44a2fb74aac0c4afc91a3f76601c6a5af1e21e2b5439684e770b48f45a8f",
+    "sphincs-c10/src/fors.rs": "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",

@@ -7,7 +7,7 @@
 //! saving (A * N) = 176 bytes per signature.
 
 use crate::address::make_adrs;
-use crate::hash::{fors_secret, h_msg, pad16, th, th_multi, th_pair, truncate, Digest, Sha256};
+use crate::hash::{fors_secret, h_msg, pad16, sha256_parts, th, th_multi, th_pair, truncate};
 use crate::params::*;
 
 /// Read `num_bits` (≤ 57) starting at logical bit `bit_offset` from a
@@ -106,18 +106,17 @@ pub fn grind_r(
     let root_b32 = pad16(pk_root);
     let last_shift = (K - 1) * A; // bit offset of the last FORS index
 
-    for nonce in 0..10_000_000u32 {
-        let mut h = Sha256::new();
-        h.update(sk_seed);
-        h.update(b"R_grind");
-        if let Some(rand) = opt_rand {
-            h.update(rand);
-        }
-        h.update(message);
+    let mut nonce = 0u32;
+    while nonce < 10_000_000 {
         let mut nonce_b32 = [0u8; 32];
         nonce_b32[28..32].copy_from_slice(&nonce.to_be_bytes());
-        h.update(&nonce_b32);
-        let r_full: [u8; 32] = h.finalize().into();
+        // Preserve the streaming calls, including the absence of an OptRand
+        // update in deterministic mode. The shared backend makes the exact
+        // preimage visible to extraction without copying it into a buffer.
+        let r_full = match opt_rand {
+            Some(rand) => sha256_parts(&[sk_seed, b"R_grind", rand, message, &nonce_b32]),
+            None => sha256_parts(&[sk_seed, b"R_grind", message, &nonce_b32]),
+        };
         let r = truncate(&r_full);
 
         let r_b32 = pad16(&r);
@@ -126,6 +125,7 @@ pub fn grind_r(
         if read_bits_le(&digest, last_shift, A) == 0 {
             return (r, digest);
         }
+        nonce += 1;
     }
     panic!("R grinding failed after 10M iterations");
 }
