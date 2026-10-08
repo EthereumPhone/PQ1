@@ -136,3 +136,9 @@ Extracted.Equiv.fors_pk_spec
 Extracted.Equiv.firmware_fors_pk_matches_vendored
 Extracted.Equiv.firmware_fors_normal_roots
 Extracted.Equiv.firmware_verify_rejects_nonzero_fors
+
+# Exact FORS parsers and composed actual-verifier prefix.
+Extracted.Equiv.firmware_parse_fors_secrets_value
+Extracted.Equiv.firmware_parse_fors_auth_value
+Extracted.Equiv.forsForestPhase_matches_vendored
+Extracted.Equiv.firmware_verify_fors_prefix

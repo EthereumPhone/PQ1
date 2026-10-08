@@ -21,8 +21,11 @@ secret hash and all eleven siblings, including position/domain binding.
 The thirteen-root compression and actual verifier's twelve-root loop now
 preserve every input position and the last slot. The complete Rust verifier
 also has a universal early-refusal theorem for a nonzero final FORS index.
-Parsing, special-last-leaf assembly and composition into the accepting
-verifier/session relation remain open.
+The actual signature parsers and special last leaf now compose into a
+complete FORS prefix theorem (2026-10-09): on the forced-zero branch, the
+full verifier equals its unchanged WOTS/XMSS continuation supplied with the
+specified FORS public key and offset 2,336. Full WOTS/XMSS acceptance and
+the signer/session relation remain open.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

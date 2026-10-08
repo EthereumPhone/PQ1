@@ -1,3 +1,4 @@
+import Extracted.ForsVerifierPrefix
 import Extracted.ForsRejectSpec
 /- Axiom-discipline check (extends the SphincsCVerify no-sorry/axiom-lint
    culture to the extracted-code project; CI wiring tracked in §33 P1).
@@ -188,3 +189,9 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_fors_pk_matches_vendored
 #print axioms Extracted.Equiv.firmware_fors_normal_roots
 #print axioms Extracted.Equiv.firmware_verify_rejects_nonzero_fors
+
+-- Complete FORS prefix through the unchanged WOTS/XMSS continuation.
+#print axioms Extracted.Equiv.firmware_parse_fors_secrets_value
+#print axioms Extracted.Equiv.firmware_parse_fors_auth_value
+#print axioms Extracted.Equiv.forsForestPhase_matches_vendored
+#print axioms Extracted.Equiv.firmware_verify_fors_prefix

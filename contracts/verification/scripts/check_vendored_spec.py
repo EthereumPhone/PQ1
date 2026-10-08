@@ -16,6 +16,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 #  byte-for-byte — semantic content; markers are matched against the start
 #  of a stripped line, so include any attribute prefix like `@[inline] `)
 CHECKS = [
+    ([ROOT/"lean/SphincsCVerify/Spec/Fors.lean"],
+     ROOT/"extracted/Extracted/ForsPrefixVendored.lean",
+     ["structure ForsSig", "def reconstructForsPk\n"]),
     ([ROOT/"lean/SphincsCVerify/Spec/Params.lean",
       ROOT/"lean/SphincsCVerify/Spec/Adrs.lean",
       ROOT/"lean/SphincsCVerify/Spec/Fors.lean"],

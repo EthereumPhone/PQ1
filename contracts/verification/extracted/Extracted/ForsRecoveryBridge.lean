@@ -12,7 +12,7 @@ private theorem byteVec_ext {n : Nat} {a b : ByteVec n} (h : a.data = b.data) : 
   cases a; cases b; cases h; rfl
 
 attribute [local irreducible] Adrs.make
-private theorem fors_recovery_adrs (ht tree : Std.U32) (h idx : Nat)
+theorem fors_recovery_adrs (ht tree : Std.U32) (h idx : Nat)
     (hh : h < 2^32) (hi : idx < 2^32) :
     toSpecDigest (forsRecoveryAdrs ht tree h idx) =
       Adrs.forsNode (UInt64.ofNat ht.val) (UInt32.ofNat tree.val)

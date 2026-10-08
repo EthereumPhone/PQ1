@@ -1741,6 +1741,9 @@ ifeq ($(GEN),1)
 	  | grep -E 'gen_wots_bridge_vectors:|test result'
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 \
 	  --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_PREFIX_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_prefix_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_FORS_FOREST_GENERATE=1 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release fors_forest_corpus -- --nocapture
@@ -1750,6 +1753,12 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_FORS_PREFIX_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_prefix_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_PREFIX_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_prefix_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_FORS_FOREST_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release fors_forest_corpus -- --nocapture
@@ -1787,7 +1796,8 @@ endif
 	  Extracted.WotsRecoveryBridge Extracted.WotsRecoveryDiffVectors \
 	  Extracted.MerkleRecoveryBridge Extracted.MerkleRecoveryDiffVectors \
 	  Extracted.ForsRecoveryBridge Extracted.ForsRecoveryDiffVectors \
-	  Extracted.ForsRejectSpec Extracted.ForsForestDiffVectors 2>&1 | tail -1
+	  Extracted.ForsRejectSpec Extracted.ForsForestDiffVectors \
+	  Extracted.ForsVerifierPrefix Extracted.ForsPrefixDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
@@ -1802,6 +1812,8 @@ endif
 	@$(_FV_PYTHON3) scripts/test_fors_recovery_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsForestDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_fors_forest_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsPrefixDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_prefix_proof_controls.py
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
 	  --target x86_64-unknown-linux-gnu --features sim-internals --test wots_grind
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
@@ -1957,6 +1969,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/test_merkle_recovery_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_recovery_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_forest_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_prefix_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See

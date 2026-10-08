@@ -286,12 +286,39 @@ outputs, 16 changed digest fields, ten malformed inputs and 18 well-typed
 semantic mutations (fourteen Rust-derived and four verifier/address), with
 five positive proof baselines. Production Rust is unchanged.
 
-This advances the components, not the complete forest/caller relation.
-Signature parsing, the special last leaf's assembly into slot 12, and the
-handoff to the WOTS/XMSS layers still need a composed proof. Tree
-construction/membership, the Rust zero-sentinel caller behavior, concrete
-hash backends, randomness and full signer/session refinement remain open.
-The new files do not change EasyCrypt proof inputs or its numerical bounds.
+The FORS prefix continuation (2026-10-09) closes that forest/caller gap.
+[`ForsParseSpec.lean`](../../extracted/Extracted/ForsParseSpec.lean) proves the
+actual signature parsers read all thirteen secrets from bytes 16–223 and all
+12×11 authentication nodes from bytes 224–2335, retaining exact order and
+ending at offset 2,336. The special last leaf uses tree 12, height/index zero,
+the decoded HT position and secret 12. It fills root slot 12 before compression.
+[`ForsPrefixSpec.lean`](../../extracted/Extracted/ForsPrefixSpec.lean) composes
+those calls with the faithful complete `Fors.reconstructForsPk` definition.
+[`ForsVerifierPrefix.lean`](../../extracted/Extracted/ForsVerifierPrefix.lean)
+then proves the **actual full verifier** equals its unchanged WOTS/XMSS
+continuation with that public key on every signature whose final FORS digest
+field is zero. The theorem preserves the continuation's `Result`, including
+failure/divergence; it neither assumes totality nor proves acceptance of the
+remaining layers. The earlier nonzero-field refusal theorem covers the other
+branch. No production Rust behavior changes.
+
+Four new kernel-only headlines bring the default audit to 98; the environment
+inventory stays at 27 axioms. Both copied complete-FORS declarations have
+semantic-edit and deletion fidelity controls. The execution corpus runs the
+whole production verifier in normal and `lean_extract` configurations, its
+extracted counterpart, the exact prefix/continuation split and the faithful
+FORS computation on 22 cases: four accepting KAT signatures, two negative KATs,
+and sixteen synthetic signatures that pass the forced-zero check. It checks
+all parsed bytes and offsets and rejects 176 altered outputs and seven malformed
+inputs. Five positive proof baselines accompany 23 well-typed semantic controls
+for parser sources/destinations/offsets, the actual last-leaf/compression/handoff
+calls and verifier-side reconstruction. These controls supplement universal
+proofs; the corpus alone is not a full verifier refinement.
+
+The remaining composition starts at WOTS/XMSS, including the Rust zero-sentinel
+caller behavior. Tree construction/membership, concrete hash backends,
+randomness and full signer/session refinement remain open. EasyCrypt proof
+inputs and numerical bounds are unchanged.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
