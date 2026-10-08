@@ -5,7 +5,9 @@ FORS decoders now agree with the fidelity-checked verifier specification for
 every digest. [Proof and remaining correspondence boundary](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
 This closes the decoder component of #288. The H_msg input-construction
 bridge is also proved against the verifier specification, with an explicit
-streaming backend model. Hash backend correctness and the complete
+streaming backend model. The WOTS digest bridge covers every 32-bit count,
+and all 43 WOTS digits and their sum agree with the verifier specification.
+Hash backend correctness, bounded-grinder/session refinement and the complete
 Rust/EasyCrypt relation remain open.
 
 **EasyCrypt coverage tightening (2026-10-08):** canonical witness counting

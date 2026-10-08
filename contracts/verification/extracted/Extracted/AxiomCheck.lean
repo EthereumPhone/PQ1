@@ -6,6 +6,7 @@
    In particular NO `sorryAx`: the sorries inside the Aeneas support
    library (Aeneas/Std/Slice.lean etc.) are not on our proof paths. -/
 import Extracted.HMsgSpecBridge
+import Extracted.WotsSpecBridge
 import Extracted.AdrsEquiv
 import Extracted.Bits
 import Extracted.ForsExtract
@@ -148,3 +149,8 @@ import Extracted.FormatDecimalDiffVectors
 
 #print axioms sphincs_c10.hash.h_msg_spec
 #print axioms Extracted.Equiv.firmware_h_msg_matches_vendored
+
+#print axioms Extracted.Equiv.firmware_wots_digest_matches_vendored
+#print axioms Extracted.Equiv.firmware_extract_digits_matches_vendored
+#print axioms Extracted.Equiv.firmware_wots_digit_array_matches_vendored
+#print axioms Extracted.Equiv.firmware_wots_digit_sum_matches_vendored

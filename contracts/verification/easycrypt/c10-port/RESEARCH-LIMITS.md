@@ -121,6 +121,21 @@ match the committed corpus without rewriting it. The hooks also check all five
 update calls and their bytes; they do not exercise the peripheral. `GEN=1`
 regenerates the corpus before these checks.
 
+The WOTS digest/digit components are now joined in
+[`WotsSpecBridge.lean`](../../extracted/Extracted/WotsSpecBridge.lean).
+For every three input words and every `u32` count, the extracted hash caller
+agrees with the verifier's `wotsDigest`, including its 28 zero padding bytes,
+big-endian counter and full digest. This covers counts outside the signer's
+10-million-trial range too. For every digest, all 43 extracted digits, their
+complete array and their sum equal the verifier's bit-loop definitions; no
+accepted-sum premise is imposed. Four added results have kernel-only closures.
+The default gate executes 140 Rust hash cases and 262 Rust digit cases, checks
+both extracted and verifier outputs, and rejects altered expectations and
+malformed inputs. Seven copied definitions have fidelity drift/deletion
+controls; ten semantic changes must break the universal bridge proofs.
+These results do not establish the Rust grinder's stopping/failure behavior
+or that every recovery/signing caller consumes these components correctly.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,
@@ -132,8 +147,8 @@ part of the current certificate.
 The [Aeneas cryptographic verification guide](https://github.com/AeneasVerif/aeneas/blob/main/documentation/crypto-verification.md)
 and [SymCrypt technical report](https://arxiv.org/abs/2609.15648) support a
 staged approach: extracted code, mathematical specifications and proved
-refinements between them. The digest-field and H_msg input-construction components are now bridged to
-the verifier specification. The bounded signer/session relation remains open. An opaque hash definition remains an explicit
+refinements between them. The digest-field, H_msg input-construction and WOTS digest/digit components
+are now bridged to the verifier specification. The bounded signer/session relation remains open. An opaque hash definition remains an explicit
 backend boundary even when the surrounding refinement is axiom-free.
 
 Replay optimization #789 and the combined owner-triggered assurance pass #509

@@ -1736,7 +1736,13 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --features sim-internals \
 	  --test gen_hmsg_vectors --release -- --nocapture 2>&1 \
 	  | grep -E 'gen_hmsg_vectors:|test result'
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --features sim-internals \
+	  --test gen_wots_bridge_vectors --release -- --nocapture 2>&1 \
+	  | grep -E 'gen_wots_bridge_vectors:|test result'
 endif
+	@cd $(REPO_ROOT) && PQ_WOTS_BRIDGE_CHECK=1 cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --features sim-internals \
+	  --test gen_wots_bridge_vectors --release -- --nocapture
 	@cd $(REPO_ROOT) && PQ_HMSG_CHECK=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --features sim-internals \
 	  --test gen_hmsg_vectors --release -- --nocapture
@@ -1746,11 +1752,14 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ExtractDiffVectors Extracted.FormatDecimalDiffVectors \
 	  Extracted.FwManifest.Funs Extracted.FormatDecimal.Funs \
 	  Extracted.ForsSpecBridge Extracted.ForsExtractDiffVectors \
-	  Extracted.HMsgSpecBridge Extracted.HMsgDiffVectors 2>&1 | tail -1
+	  Extracted.HMsgSpecBridge Extracted.HMsgDiffVectors \
+	  Extracted.WotsSpecBridge Extracted.WotsBridgeDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_hmsg_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsBridgeDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_wots_proof_controls.py
 
 verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@cd $(EXTRACTED_DIR) && $(LAKE) build 2>&1 | tee /tmp/pq_extracted_build.out
@@ -1773,8 +1782,8 @@ verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@# bidirectional and fails closed: an UNLISTED headline (rogue/undisclosed
 	@# theorem), a MISSING headline (silently dropped / dump truncated), or a
 	@# closure carrying an undisclosed axiom all fail. Manifest =
-	@# extracted/axiom_closure_manifest.txt (61 kernel-only + 4 sha256_pure_bytes
-	@# + 1 sha256+hmac + 4 keccak256_pure = 70 headlines).
+	@# extracted/axiom_closure_manifest.txt (67 kernel-only + 4 sha256_pure_bytes
+	@# + 1 sha256+hmac + 4 keccak256_pure = 76 headlines).
 	@$(_FV_PYTHON3) scripts/check_axiom_closure.py --manifest $(EXTRACTED_DIR)/axiom_closure_manifest.txt /tmp/pq_axiomcheck.out
 	@# WIRED-IN NEGATIVE CONTROL: the Evil:False canary MUST be rejected. A *pass*
 	@# of the checker here is a *failure* of the meta-gate (the gate is toothless).
@@ -1885,6 +1894,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/check_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_hmsg_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_wots_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See

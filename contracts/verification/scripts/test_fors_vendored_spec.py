@@ -19,6 +19,7 @@ COPY = [
     "extracted/Extracted/Sha256Vendored.lean",
     "extracted/Extracted/ForsSpecVendored.lean",
     "extracted/Extracted/HMsgSpecVendored.lean",
+    "extracted/Extracted/WotsSpecVendored.lean",
 ]
 MUTATIONS = [
     ("def get ", "v.data[i']", "0"),
