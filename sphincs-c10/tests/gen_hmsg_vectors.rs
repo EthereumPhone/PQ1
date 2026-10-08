@@ -100,7 +100,15 @@ fn gen_hmsg_vectors() {
     ));
     let dest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../contracts/verification/extracted/Extracted/HMsgDiffVectors.lean");
-    std::fs::write(dest, out).unwrap();
+    if std::env::var_os("PQ_HMSG_CHECK").is_some() {
+        assert_eq!(
+            std::fs::read_to_string(dest).unwrap(),
+            out,
+            "executed H_msg output differs from the committed corpus"
+        );
+    } else {
+        std::fs::write(dest, out).unwrap();
+    }
     println!(
         "gen_hmsg_vectors: {} Rust-executed H_msg vectors",
         inputs.len()

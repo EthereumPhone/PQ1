@@ -1737,6 +1737,12 @@ ifeq ($(GEN),1)
 	  --test gen_hmsg_vectors --release -- --nocapture 2>&1 \
 	  | grep -E 'gen_hmsg_vectors:|test result'
 endif
+	@cd $(REPO_ROOT) && PQ_HMSG_CHECK=1 cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --features sim-internals \
+	  --test gen_hmsg_vectors --release -- --nocapture
+	@cd $(REPO_ROOT) && PQ_HMSG_CHECK=1 cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 \
+	  --test gen_hmsg_vectors --release -- --nocapture
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ExtractDiffVectors Extracted.FormatDecimalDiffVectors \
 	  Extracted.FwManifest.Funs Extracted.FormatDecimal.Funs \
 	  Extracted.ForsSpecBridge Extracted.ForsExtractDiffVectors \

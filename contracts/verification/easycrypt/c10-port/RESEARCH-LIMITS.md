@@ -115,9 +115,11 @@ closures and join the default extracted gate. Seven copied declarations have
 semantic drift and deletion controls, and six input-construction mutations
 must fail the universal proof. A 132-case Rust/extracted/verifier corpus checks
 every input-byte position; changes in either half of the output are rejected.
-Host tests of the hardware adapter also check all five update calls and their
-bytes. Those hooks do not exercise the peripheral. The ordinary CI differential
-replays the committed corpus; regenerating it runs the Rust generator locally.
+The default differential gate, including CI, executes both the software-backed
+Rust H_msg and the hardware adapter with host hooks, requiring their outputs to
+match the committed corpus without rewriting it. The hooks also check all five
+update calls and their bytes; they do not exercise the peripheral. `GEN=1`
+regenerates the corpus before these checks.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
