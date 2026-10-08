@@ -227,7 +227,7 @@ On every boot, before trusting the SE050:
 
 ### 4.4 Hardware Peripherals to Use
 
-- **TRNG**: for all nonces, challenges, and any randomness. Audit that `rand_core` is wired to this, not to a software PRNG.
+- **TRNG**: for all nonces, challenges, and every value that is secret or reaches a signature. Audit that `rand_core` is wired to this, not to a software PRNG. **This line used to read "any randomness", which contradicted its own sibling in §"RNG" below ("Never a software PRNG *for secrets*") and did not match the code** — `hw/consumption_mask.rs` has always seeded an xorshift32 from the platform TRNG for PWM duty. Both are now scoped the same way, and the one narrow exception for non-secret countermeasure parameters, with its six mandatory conditions, is stated once in `CLAUDE.md` § "What NOT to do" rather than restated here (see #805).
 - **HASH**: for SHA-256 acceleration inside SPHINCS+ (pick the SHA2 parameter set specifically to benefit from this).
 - **SAES**: for DHUK/BHK derivation and BHK wrap/unwrap operations; the hardware roots never become CPU-visible.
 - **TAMP**: wire any tamper inputs (case switch, mesh) into the wipe handler.
