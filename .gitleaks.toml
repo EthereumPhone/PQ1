@@ -27,6 +27,35 @@
 [extend]
 useDefault = true
 
+# Public proof-file SHA256s are not credentials. Restrict these exceptions to
+# the generic heuristic, the exact artifact paths, AND the full matched field
+# shape. Other credential assignments in the same files remain detectable.
+# Validated against gitleaks 8.24.0: 51 existing false positives, no new matches
+# in the digest-bridge change; ordinary keys and cross-path mutations stay red.
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "EasyCrypt source-file digest bindings"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
+regexTarget = "match"
+regexes = ['''^[A-Za-z][A-Za-z0-9_]*\.eca?": "[0-9a-f]{64}"$''']
+
+[[rules.allowlists]]
+description = "Historical EasyCrypt proof-file digest receipts"
+condition = "AND"
+paths = ['''^docs/security/adversarial-review/findings/easycrypt-[^/]+/([a-z0-9-]+\.log|evidence\.json|formal-source-mapping\.json)$''']
+regexTarget = "match"
+regexes = ['''^(RawKeygen\.ec|KeyedHashFunctions\.eca)": "[0-9a-f]{64}"$''']
+
+[[rules.allowlists]]
+description = "Public UI exception identifier, not a credential"
+condition = "AND"
+paths = ['''^tools/pq-ui/(handoff/spec/exceptions|tools/check/baseline)\.toml$''']
+regexTarget = "secret"
+regexes = ['''^DEFAULT_END=None$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
