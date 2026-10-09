@@ -1,3 +1,4 @@
+import Extracted.ForsRootBridge
 import Extracted.ForsSecretBridge
 import Extracted.WotsKeygenBridge
 import Extracted.WholeVerifierSpec
