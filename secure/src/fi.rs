@@ -78,12 +78,29 @@ fn rng_byte() -> u8 {
         //        device inside the very sequence meant to fix it, which is
         //        strictly worse than the fallback arm 4 removes.
         //
-        //    Residual, counted rather than hidden: the second case is
-        //    attacker-reachable by inducing `SECS`/`CECS` repeatedly. The
-        //    delays inside it protect conditioning-reset register writes, not
-        //    key material, and a failed recovery still makes `fill` refuse —
-        //    but a climbing `BOOTSTRAP_DELAYS` means something is forcing
-        //    resets, so it is observable.
+        //    MEASURED, enclosed EVT unit, 2026-10-09, `evt-images/px834demo`,
+        //    reading `windows / recovered / misses = 1 / 16 / 0`:
+        //
+        //      * exactly ONE conditioning window in a whole boot, and it is
+        //        `rng::init` itself — so there are ZERO recoveries in normal
+        //        operation. #698's "latched seed error after nearly every
+        //        idle gap" does not reproduce on this build, presumably
+        //        closed by #704's AN4230 `HTCR`/`NSCR` values. The recovery
+        //        window is therefore EXCEPTIONAL, not routine, and remains
+        //        reachable essentially only by inducing `SECS`/`CECS`.
+        //      * each window serves FOUR `wait_random` calls, not the one
+        //        this comment first claimed: `init_conditioning` holds one
+        //        directly and `read_healthy_word_into` contributes the rest
+        //        through its own `check_true_into_sentinel` and direct delay.
+        //        An attacker who forces a reset gets 4 fixed delays, and they
+        //        cover conditioning-reset register writes, not key material.
+        //      * the PRE-INIT half of this window is the large one: 91 calls
+        //        between reset and `rng::init`, covering SAU/RCC/SAES/flash
+        //        work before any RNG exists. Unavoidable and pre-secret, but
+        //        it is 91, not "a handful".
+        //
+        //    A failed recovery still makes `fill` refuse, and both halves are
+        //    counted, so a climbing count means something is forcing resets.
         if crate::rng::fixed_delay_permitted() {
             #[cfg(feature = "ui-px-frametime")]
             BOOTSTRAP_DELAYS.fetch_add(1, Ordering::Relaxed);
