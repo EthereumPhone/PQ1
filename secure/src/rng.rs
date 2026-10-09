@@ -201,6 +201,34 @@ pub fn byte_nonsecret(fallback: u8) -> u8 {
 /// is the real contention. The bench cannot produce a production-shaped number
 /// on its own because it never signs.
 ///
+/// SECOND MEASUREMENT, 2026-10-09, `evt-images/px805cm` — the same build plus
+/// the production-forced `consumption-mask`, so the guard's only other user is
+/// present. `shot_calls / shot_fb / isr_fb = 32 / 31 / 248` at ~10 s, with
+/// `isr_fb` climbing by exactly **31 per second**.
+///
+/// `+31` is one SUCCESSFUL SysTick reseed fill per second running its fan-out
+/// in exception context. A lost `try_acquire` would be `+1`, since
+/// `fill_bound` returns before reaching any `wait_random`. So no lost acquire
+/// was observed at all: every fallback on the device is either the thread-mode
+/// fan-out or the ISR fan-out, and the contention condition (d) is about did
+/// not occur. `32 / 31` is unchanged, so `K` is a property of the fill rather
+/// than of the feature set — and the earlier agreement with `100*31/32` was
+/// not a configuration artefact, for the stronger reason that there is nothing
+/// to contend with.
+///
+/// Consistency check, NOT a second derivation of `K`: #802 separately measured
+/// one `is_true_fi()` per 1 kHz tick at 257 ms/s, i.e. 41,120 cycles for one
+/// top-level delay, i.e. ~10.1 cycles per `wait_random_loop` iteration over
+/// `(K+1) * 127.5` iterations. Right for that loop body, and it confirms the
+/// loop dominates the cost — but `K = 27` would give 11.5 cycles/iteration,
+/// also plausible, so only the direct count is evidence for `K`.
+///
+/// The residual cost is the 31 equal-length delays the reseed now runs inside
+/// SysTick once per second: ~257 us of the 1 ms period on average, ~514 us
+/// worst case, 0.026 % CPU aggregate. No overrun risk, but a 1 Hz comb of 31
+/// delays at a length derivable from the preceding trace, wrapped around the
+/// one operation whose fault would freeze `PRNG_STATE`. See #831.
+///
 /// WHAT THE REPLAYS ACTUALLY LEAK. `fi::rng_byte` passes `FI_DELAY_LAST_GOOD`
 /// as the fallback and stores the result only AFTER `fill` returns, so all 31
 /// inner delays of fill `N` use `b_{N-1}` — the fresh length of the PREVIOUS
