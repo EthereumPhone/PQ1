@@ -184,22 +184,29 @@ pub fn run() -> ! {
     // Self-contained: thread mode, nothing else running, no wallet needed.
     // One call in, two counters out.
     //
+    // POST-#832 READING. The pre-drawn pool now serves the inner delays, so
+    // they never reach `byte_nonsecret` at all. Expected `hits = 31` and
+    // `fallbacks = 0` — the fallbacks going to zero IS the fix, and a nonzero
+    // `hits` is what proves the new path actually ran rather than being
+    // compiled out.
+    //
     // Inside `interrupt::free`: otherwise an ISR that drew from the RNG during
     // the window would add its own calls and the claim "all K fallbacks are
     // this fill's fan-out" would be an assumption rather than a measurement.
     #[cfg(feature = "ui-px-frametime")]
-    let (one_shot_calls, one_shot_fallbacks) = cortex_m::interrupt::free(|_| {
+    let (one_shot_hits, one_shot_fallbacks) = cortex_m::interrupt::free(|_| {
         use core::sync::atomic::Ordering::Relaxed;
         crate::rng::NONSECRET_CALLS.store(0, Relaxed);
         crate::rng::NONSECRET_FALLBACKS.store(0, Relaxed);
+        crate::fi_delay_pool::HITS.store(0, Relaxed);
         crate::fi::wait_random();
         (
-            crate::rng::NONSECRET_CALLS.load(Relaxed),
+            crate::fi_delay_pool::HITS.load(Relaxed),
             crate::rng::NONSECRET_FALLBACKS.load(Relaxed),
         )
     });
     #[cfg(feature = "ui-px-frametime")]
-    super::lcd::set_fallback_probe(one_shot_calls, one_shot_fallbacks);
+    super::lcd::set_fallback_probe(one_shot_hits, one_shot_fallbacks);
 
     loop {
         // ---- A. the endless ambient record, animated against real input.

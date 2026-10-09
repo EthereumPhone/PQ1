@@ -55,6 +55,18 @@ fn rng_byte() -> u8 {
         // last good TRNG byte instead — the value only sets a delay duration
         // and leaks no secret (see the rationale above). Still platform-only
         // TRNG, never `rng_strong` (the sign-latency cliff).
+        // #832: inside `rng::fill` the driver is reentrancy-locked, so this
+        // used to fall through to `byte_nonsecret` -> `Err` -> replay
+        // `FI_DELAY_LAST_GOOD` for all 31 inner delays. They were therefore
+        // all the SAME length, which made the separation between each receipt
+        // check and its recheck a known constant and the burst self-revealing
+        // (measure the first, know the other thirty). Take a pre-drawn FRESH
+        // TRNG byte instead. `None` means no pool is armed — the ordinary
+        // top-level case — and falls through to exactly the old path.
+        if let Some(b) = crate::fi_delay_pool::take() {
+            FI_DELAY_LAST_GOOD.store(b, Ordering::Relaxed);
+            return b;
+        }
         let b = crate::rng::byte_nonsecret(FI_DELAY_LAST_GOOD.load(Ordering::Relaxed));
         FI_DELAY_LAST_GOOD.store(b, Ordering::Relaxed);
         b

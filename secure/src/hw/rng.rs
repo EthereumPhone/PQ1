@@ -143,8 +143,51 @@ impl DriverGuard {
 
 impl Drop for DriverGuard {
     fn drop(&mut self) {
+        // #832: the delay pool is armed only for a guard's lifetime. Disarm
+        // BEFORE releasing the busy flag, so there is no window in which the
+        // pool is armed while no guard is held.
+        crate::fi_delay_pool::disarm();
         DRIVER_BUSY.store(false, Ordering::Release);
     }
+}
+
+/// One raw TRNG word for the FI delay pool (#832). Caller must hold
+/// `DriverGuard`.
+///
+/// Deliberately NOT `read_healthy_word_into`, on two counts that are the whole
+/// point of the fix:
+///
+///   * **No `wait_random()`.** This feeds the delay path; calling into it
+///     would re-enter the recursion the pool exists to break.
+///   * **No `PREVIOUS_WORD` update.** Pool words must not participate in the
+///     continuous-repetition test that guards real output, or a pool draw
+///     could trip CRNGT on a word no secret will ever see.
+///
+/// Delay lengths are non-secret (see `rng::byte_nonsecret`), so the full
+/// health ladder is not required here. A latched seed/clock error, a DRDY
+/// timeout or an all-zero word still refuse, which leaves the pool unarmed and
+/// the behaviour byte-identical to before this fix.
+fn delay_pool_word() -> Option<u32> {
+    let mut timeout = 0u32;
+    loop {
+        let sr = REG.sr.read();
+        if !status_is_clean(sr) {
+            return None;
+        }
+        if sr & DRDY != 0 {
+            break;
+        }
+        timeout = timeout.wrapping_add(1);
+        if timeout >= POLL_LIMIT {
+            return None;
+        }
+    }
+    let word = REG.dr.read();
+    // RM0456: a seed error can assert concurrently with the DR read.
+    if !status_is_clean(REG.sr.read()) || word == 0 {
+        return None;
+    }
+    Some(word)
 }
 
 #[inline]
@@ -619,6 +662,13 @@ unsafe fn fill_bound(
     // returns before any raw destination is constructed or touched.
     let _guard = DriverGuard::try_acquire()?;
 
+    // #832: draw the inner delays' lengths NOW, while the guard is held and
+    // the peripheral is live. Every `wait_random` below is the separation
+    // between a receipt check and its recheck; without this they all replayed
+    // one byte and that separation was a known constant. Unarmed on refusal,
+    // which is exactly the previous behaviour.
+    crate::fi_delay_pool::replenish(delay_pool_word);
+
     let mut fill_binding_receipt = crate::fi::FAIL_SENTINEL;
     unsafe {
         core::ptr::write_volatile(&mut fill_binding_receipt, crate::fi::FAIL_SENTINEL);
@@ -684,6 +734,10 @@ unsafe fn fill_bound(
             if i >= buf.len() {
                 break;
             }
+            // #832: ~28 of the fan-out's delays live in this iteration, and
+            // `rng_strong::fill` passes the caller's whole buffer through, so
+            // no fixed pool covers every length. Top up per output word.
+            crate::fi_delay_pool::replenish(delay_pool_word);
             // Draw two independently receipted words and XOR them. Besides
             // preserving the STM32 TRNG's entropy, this means one skipped DR
             // load still leaves a fresh hardware sample in every output word.

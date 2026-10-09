@@ -125,6 +125,8 @@ mod boot_ns;
 mod board;
 mod crypto;
 mod fi;
+/// Pre-drawn fresh-TRNG pool for FI delay lengths (#832).
+mod fi_delay_pool;
 mod fih;
 // Resilient semihosting host-stdout writer (QEMU/dev only). Replaces the
 // busy-spinning `cortex_m_semihosting` write path that hangs `make e2e`.

@@ -1440,32 +1440,37 @@ impl Ambient {
                 //
                 //   shot_calls / shot_fallbacks / running_pct
                 //
-                //   shot_*      ONE top-level `fi::wait_random()`, measured
-                //               at boot in thread mode with a clean guard.
-                //               `shot_calls = 1 + K`, `shot_fallbacks = K`.
-                //               The reviewed reading of the source was 28/27.
-                //   isr_fb      fallbacks taken with `IPSR != 0`. THE
-                //               discriminating number: a thread-mode fallback
-                //               is the known 31-per-fill fan-out, but an
-                //               exception-context one is a handler that
-                //               preempted a thread-mode fill and lost the
-                //               guard for its whole duration — the only way a
-                //               delay outside the RNG driver ever replays.
-                //               `consumption_mask::randomize()`'s fail-open
-                //               sca-1 reseed is the production case.
+                //   shot_hits   pool bytes served to ONE top-level
+                //               `fi::wait_random()`, measured at boot in
+                //               thread mode with a clean guard. Expect 31 —
+                //               the measured fan-out — and a 0 here means the
+                //               pool never armed, i.e. the #832 fix is inert.
+                //   shot_fb     fallbacks on that same call. Expect 0. This
+                //               going to zero IS the fix: before #832 it was
+                //               31, every one of them replaying a single byte
+                //               and making the receipt-recheck separation a
+                //               known constant.
+                //   misses      pool exhaustion since boot: a delay that
+                //               found the pool ARMED but empty and had to
+                //               replay after all. The one new degradation
+                //               #832 introduces, and the number that sizes
+                //               `POOL_LEN`/`REFILL_BELOW`. Expect 0; anything
+                //               else means a fill length drains the pool
+                //               faster than the per-output-word top-up fills
+                //               it.
                 //
                 // Self-diagnosing: `shot_calls = 0` means the probe never
                 // ran, and `shot_calls = 1` with `shot_fallbacks = 1` means
                 // the OUTER draw failed too (RNG not yet initialised), so a
                 // misleading reading cannot pass as a real one.
-                let (shot_calls, shot_fb, isr_fb) = {
+                let (shot_hits, shot_fb, misses) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
                         (
                             FALLBACK_SHOT_CALLS.load(Relaxed),
                             FALLBACK_SHOT_FB.load(Relaxed),
-                            crate::rng::NONSECRET_FALLBACKS_ISR.load(Relaxed),
+                            crate::fi_delay_pool::MISSES.load(Relaxed),
                         )
                     }
                     #[cfg(not(feature = "ui-px-frametime"))]
@@ -1476,9 +1481,9 @@ impl Ambient {
                 let _ = (isr_ms, gate_per_s, idle_s);
                 self.ft.len3 = frametime::format_raw(
                     &mut self.ft.buf3,
-                    shot_calls.min(999),
+                    shot_hits.min(999),
                     shot_fb.min(999),
-                    isr_fb.min(999),
+                    misses.min(999),
                 );
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;
