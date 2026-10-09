@@ -50,7 +50,7 @@ def main():
                 + declaration + f"\nend {namespace}\n").replace(name, name + "_probe")
             source = proof
             if family != "recovery":
-                source = source[:source.index("private theorem recovery_adrs (")] + "\nend Extracted.Equiv\n"
+                source = source[:source.index("theorem recovery_adrs (")] + "\nend Extracted.Equiv\n"
             source = source.replace(name, name + "_probe")
             marker = "namespace Extracted.Equiv"
             source = source.replace(marker, declaration + "\n" + marker, 1)
