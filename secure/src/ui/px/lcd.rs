@@ -1207,6 +1207,21 @@ static FALLBACK_SHOT_FB: core::sync::atomic::AtomicU32 = core::sync::atomic::Ato
 static FALLBACK_SHOT_MISSES: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 
+/// Baseline for the zero-skip ratio, so it measures ordinary running and not
+/// boot's unrepresentative burst.
+#[cfg(feature = "ui-px-frametime")]
+static SKIP_BASE_HITS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(feature = "ui-px-frametime")]
+static SKIP_BASE_ZEROS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Record where the skip ratio should start counting from.
+#[cfg(feature = "ui-px-frametime")]
+pub fn set_skip_baseline(hits: u32, skips: u32) {
+    use core::sync::atomic::Ordering::Relaxed;
+    SKIP_BASE_HITS.store(hits, Relaxed);
+    SKIP_BASE_ZEROS.store(skips, Relaxed);
+}
+
 /// Publish the boot probe for the overlay: worst-case pool draw of any single
 /// fill in the length sweep, total fallbacks, total pool misses.
 #[cfg(feature = "ui-px-frametime")]
@@ -1494,8 +1509,12 @@ impl Ambient {
                             FALLBACK_SHOT_CALLS.load(Relaxed),
                             now.saturating_sub(base),
                             {
-                                let skips = crate::fi_delay_pool::ZERO_SKIPS.load(Relaxed);
-                                let hits = crate::fi_delay_pool::HITS.load(Relaxed);
+                                let skips = crate::fi_delay_pool::ZERO_SKIPS
+                                    .load(Relaxed)
+                                    .saturating_sub(SKIP_BASE_ZEROS.load(Relaxed));
+                                let hits = crate::fi_delay_pool::HITS
+                                    .load(Relaxed)
+                                    .saturating_sub(SKIP_BASE_HITS.load(Relaxed));
                                 // Draws = successful takes plus the zeros
                                 // rejected along the way.
                                 let draws = hits.saturating_add(skips);

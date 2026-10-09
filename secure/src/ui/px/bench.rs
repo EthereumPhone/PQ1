@@ -198,10 +198,15 @@ pub fn run() -> ! {
         use core::sync::atomic::Ordering::Relaxed;
         crate::rng::NONSECRET_CALLS.store(0, Relaxed);
         crate::rng::NONSECRET_FALLBACKS.store(0, Relaxed);
-        crate::fi_delay_pool::HITS.store(0, Relaxed);
+        // By DELTA, not by reset. Resetting `HITS` here and in the sweep below
+        // dropped 780 draws from the ratio's denominator while `ZERO_SKIPS`
+        // kept their skips, which biased the zero-skip permille HIGH and made
+        // it decay as real draws accumulated — read on silicon as 11 falling
+        // to 5 against a true 3.9, and briefly looked like TRNG bias.
+        let before = crate::fi_delay_pool::HITS.load(Relaxed);
         crate::fi::wait_random();
         (
-            crate::fi_delay_pool::HITS.load(Relaxed),
+            crate::fi_delay_pool::HITS.load(Relaxed).saturating_sub(before),
             crate::rng::NONSECRET_FALLBACKS.load(Relaxed),
         )
     });
@@ -227,9 +232,9 @@ pub fn run() -> ! {
         crate::rng::NONSECRET_FALLBACKS.store(0, Relaxed);
         crate::fi_delay_pool::MISSES.store(0, Relaxed);
         for len in [1usize, 4, 16, 32, 64] {
-            crate::fi_delay_pool::HITS.store(0, Relaxed);
+            let before = crate::fi_delay_pool::HITS.load(Relaxed);
             let _ = crate::rng::fill(&mut buf[..len]);
-            let hits = crate::fi_delay_pool::HITS.load(Relaxed);
+            let hits = crate::fi_delay_pool::HITS.load(Relaxed).saturating_sub(before);
             if hits > max_hits {
                 max_hits = hits;
             }
@@ -298,6 +303,16 @@ pub fn run() -> ! {
     // doing nothing unusual should never fail to source a delay.
     #[cfg(feature = "ui-px-frametime")]
     let poison_baseline = crate::fi::DELAY_POISONINGS.load(core::sync::atomic::Ordering::Relaxed);
+
+    // Baseline the skip ratio too, so it reports ORDINARY RUNNING rather than
+    // boot. Boot's draws are real but unrepresentative — the length sweep
+    // alone is 780 of them in a burst — and mixing them in is what made the
+    // reading converge slowly from above instead of simply being right.
+    #[cfg(feature = "ui-px-frametime")]
+    super::lcd::set_skip_baseline(
+        crate::fi_delay_pool::HITS.load(core::sync::atomic::Ordering::Relaxed),
+        crate::fi_delay_pool::ZERO_SKIPS.load(core::sync::atomic::Ordering::Relaxed),
+    );
 
     #[cfg(feature = "ui-px-frametime")]
     super::lcd::set_fallback_probe(poison_selftest, poison_baseline, sweep_misses);
