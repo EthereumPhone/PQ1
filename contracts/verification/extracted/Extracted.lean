@@ -57,3 +57,5 @@ import Extracted.GrindRSpec
 import Extracted.WotsRecoveryBridge
 import Extracted.MerkleRecoveryBridge
 import Extracted.ForsRecoveryBridge
+
+import Extracted.ForsSecretBridge

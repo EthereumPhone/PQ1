@@ -37,8 +37,11 @@ refusal agrees in both. The converse acceptance implication remains open because
 strict rejection is distinct from Rust's zero-node continuation. These results
 do not close the signer/session relation. The actual WOTS secret derivation
 and complete 43-chain public-key generation now agree with the faithful
-reference for every seed and full-width address. Tree construction, FORS
-secret generation and shuffled signing remain separate correspondence work.
+reference for every seed and full-width address. FORS secret derivation now
+also agrees with the corrected reference, including all 48 preimage bytes and
+the full hypertree-position field (#820). The reference signer and round-trip
+callers carry that field consistently. Tree construction and shuffled signing
+remain separate correspondence work.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

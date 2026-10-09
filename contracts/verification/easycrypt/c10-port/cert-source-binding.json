@@ -3,7 +3,7 @@
   "scope": "Manually reviewed Rust/EasyCrypt model inputs; hashes and finite host tests are not extraction or full hash/predicate refinement.",
   "sources": {
     "sphincs-c10/src/wots.rs": "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
-    "sphincs-c10/src/hash.rs": "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45",
+    "sphincs-c10/src/hash.rs": "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
     "sphincs-c10/src/lib.rs": "ff1a44a2fb74aac0c4afc91a3f76601c6a5af1e21e2b5439684e770b48f45a8f",
     "sphincs-c10/src/fors.rs": "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",

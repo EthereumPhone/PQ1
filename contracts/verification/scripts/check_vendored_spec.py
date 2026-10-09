@@ -17,6 +17,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 #  of a stripped line, so include any attribute prefix like `@[inline] `)
 CHECKS = [
     ([ROOT/"lean/SphincsCVerify/Spec/Bytes.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Hash.lean"],
+     ROOT/"extracted/Extracted/ForsSecretVendored.lean",
+     ["def forsTag :", "def forsSecret\n"]),
+    ([ROOT/"lean/SphincsCVerify/Spec/Bytes.lean",
       ROOT/"lean/SphincsCVerify/Spec/Hash.lean",
       ROOT/"lean/SphincsCVerify/Spec/Wots.lean"],
      ROOT/"extracted/Extracted/WotsKeygenVendored.lean",

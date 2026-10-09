@@ -170,3 +170,7 @@ Extracted.Equiv.firmware_wots_secret_matches_vendored
 Extracted.Equiv.wots_keygen_loop_spec
 Extracted.Equiv.wots_keygen_pk_spec
 Extracted.Equiv.firmware_wots_keygen_matches_vendored
+
+Extracted.Equiv.forsSecretPreimage_length
+Extracted.Equiv.fors_secret_spec
+Extracted.Equiv.firmware_fors_secret_matches_vendored

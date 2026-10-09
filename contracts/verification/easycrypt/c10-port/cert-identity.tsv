@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	63463c2158987d54aacfa14a7707c673
+split	27015a144ca3e10d6a96b4375c3e29e8
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1565,3 +1565,5 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Rust source-binding changes; EasyCrypt proof sources/census unchanged.
 # Split identity aaf747777d1e559c722482ffa37f0152 -> 63463c2158987d54aacfa14a7707c673.
 # Full replay required; software/extraction/hardware-adapter preimage checks accompany the refactor.
+
+# 2026-10-09: preserve FORS-secret five-segment byte behavior through existing SHAparts helper; refresh manual Rust binding. No EasyCrypt proof/axiom/census change; fresh full replay required.

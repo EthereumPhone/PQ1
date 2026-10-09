@@ -427,8 +427,46 @@ in `wots::keygen_pk` and `hypertree::sign_inner`. This is a bounded crate/frame
 delta, not a whole-program worst-case-stack or silicon receipt. The manual
 Rust/EasyCrypt source binding and split identity are deliberately updated;
 the EasyCrypt proof sources, assumption census and numerical bounds are unchanged.
-Tree construction/membership, FORS secret generation (#820), shuffled signing,
-concrete hash backends, randomness and full signer/session refinement remain open.
+Tree construction/membership, shuffled signing, concrete hash backends,
+randomness and full signer/session refinement remain open. FORS secret generation
+is covered by the next result below.
+
+FORS secret generation (2026-10-09) closes the reference mismatch in #820.
+`Spec.forsSecret` and all reference signer/round-trip callers now include the
+hypertree position, matching the existing Rust preimage:
+`sk_seed[32] || "fors"[4] || BE32(ht_idx) || BE32(tree_idx) || BE32(leaf_idx)`.
+The reference signer and its honest round-trip theorem rebuild with this field.
+This correction does not establish refinement of the actual Rust signer.
+
+`ForsSecretSpec.fors_secret_spec` proves the actual extracted helper returns the
+first 16 bytes of the existing supplied SHA backend on exactly those 48 bytes;
+`ForsSecretBridge.firmware_fors_secret_matches_vendored` composes that result with
+the faithfully copied corrected helper for every seed and all three full-width
+32-bit fields. Rust uses the existing ordered SHA helper for the same five
+updates. Concrete software/peripheral hash correctness remains outside the proof.
+
+Three new kernel-only headlines bring the extracted closure audit to **123**,
+with the same exact **27** environment axioms. The new extraction and all eight
+existing targets pinning the changed Rust file regenerate completely. The
+registry contains 25 entries: 24 fresh and the unchanged tracked `tx-merkle`
+waiver. Both copied FORS declarations have mutation and deletion fidelity controls.
+
+An independent 48-byte oracle checks 131 Rust cases covering every seed byte,
+every bit of hypertree/tree/leaf indices, zero, maximum and mixed fields. The
+same corpus runs in normal/extraction software and host hardware-adapter builds;
+the latter checks all five update segments `[32,4,4,4,4]`, without exercising a
+peripheral. Extracted/pure/reference executions match it. Controls reject 262
+altered output values, 131 wrong widths and five malformed inputs. Two fresh
+positive proof baselines pass; 13 independently compiling semantic mutations of
+the actual and reference helper fail their unchanged consuming proofs.
+
+The release ARM crate comparison measured 120 additional code bytes, unchanged
+static data and an eight-byte smaller `sign_inner` compiler frame. These are
+crate/frame measurements, not a whole-program stack or silicon claim. The Rust
+source binding changes, so this batch requires a new complete EasyCrypt replay;
+its proof definitions, axioms, numerical bounds and cryptographic assumptions
+are unchanged. FORS tree construction/membership, shuffled signing, randomness,
+concrete hash backends and full signer/session refinement remain open.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

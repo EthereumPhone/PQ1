@@ -140,11 +140,11 @@ noncomputable def sign
     -- FORS+C: honest leaf secrets + honest Merkle auth paths (under sk_seed).
     let forsSecrets : Array (ByteVec 16) :=
       Array.ofFn (n := K) fun i =>
-        forsSecret sk.skSeed (UInt32.ofNat i.val) (UInt32.ofNat (forsIndices.getD i.val 0))
+        forsSecret sk.skSeed (UInt32.ofNat htIdxNat) (UInt32.ofNat i.val) (UInt32.ofNat (forsIndices.getD i.val 0))
     let forsAuthPaths : Array (Array (ByteVec 16)) :=
       Array.ofFn (n := K - 1) fun t =>
         forsMtAuthPath seed htIdx (UInt32.ofNat t.val)
-          (fun j => forsSecret sk.skSeed (UInt32.ofNat t.val) (UInt32.ofNat j))
+          (fun j => forsSecret sk.skSeed (UInt32.ofNat htIdxNat) (UInt32.ofNat t.val) (UInt32.ofNat j))
           (forsIndices.getD t.val 0)
     let fors : Fors.ForsSig :=
       { secrets := forsSecrets, secretsLen := Array.size_ofFn,
@@ -155,7 +155,7 @@ noncomputable def sign
       Fors.computeForsPk seed htIdx
         ((Array.ofFn (n := K - 1) fun t : Fin (K - 1) =>
             forsMtNode seed htIdx (UInt32.ofNat t.val)
-              (fun j => forsSecret sk.skSeed (UInt32.ofNat t.val) (UInt32.ofNat j)) A 0).push
+              (fun j => forsSecret sk.skSeed (UInt32.ofNat htIdxNat) (UInt32.ofNat t.val) (UInt32.ofNat j)) A 0).push
           (th seed (Adrs.forsNode htIdx (UInt32.ofNat (K - 1)) 0 0)
             (pad16 (forsSecrets.getD (K - 1) (zero 16)))))
     let mask : Nat := (1 <<< SubtreeH) - 1

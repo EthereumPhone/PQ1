@@ -1,3 +1,4 @@
+import Extracted.ForsSecretBridge
 import Extracted.WotsKeygenBridge
 import Extracted.WholeVerifierSpec
 import Extracted.HypertreeStrictSpec
@@ -226,3 +227,8 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.wots_keygen_loop_spec
 #print axioms Extracted.Equiv.wots_keygen_pk_spec
 #print axioms Extracted.Equiv.firmware_wots_keygen_matches_vendored
+
+-- FORS secret generation, including hypertree-position binding.
+#print axioms Extracted.Equiv.forsSecretPreimage_length
+#print axioms Extracted.Equiv.fors_secret_spec
+#print axioms Extracted.Equiv.firmware_fors_secret_matches_vendored

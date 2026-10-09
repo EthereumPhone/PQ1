@@ -105,24 +105,24 @@ theorem honest_fors_pk (skSeed seed digest : ByteVec 32)
     (hz : readBitsLe digest ((Spec.K - 1) * Spec.A) Spec.A = 0) :
     Spec.Fors.reconstructForsPk seed digest
         { secrets := Array.ofFn fun i =>
-            forsSecret skSeed (UInt32.ofNat i.val) (UInt32.ofNat ((extractForsIndices digest).getD i.val 0)),
+            forsSecret skSeed (UInt32.ofNat (extractHtIndex digest)) (UInt32.ofNat i.val) (UInt32.ofNat ((extractForsIndices digest).getD i.val 0)),
           secretsLen := Array.size_ofFn,
           authPaths := Array.ofFn fun t =>
             forsMtAuthPath seed (UInt64.ofNat (extractHtIndex digest)) (UInt32.ofNat t.val)
-              (fun j => forsSecret skSeed (UInt32.ofNat t.val) (UInt32.ofNat j))
+              (fun j => forsSecret skSeed (UInt32.ofNat (extractHtIndex digest)) (UInt32.ofNat t.val) (UInt32.ofNat j))
               ((extractForsIndices digest).getD t.val 0),
           authPathsLen := Array.size_ofFn }
       = some (Spec.Fors.computeForsPk seed (UInt64.ofNat (extractHtIndex digest))
           ((Array.ofFn (fun t : Fin (Spec.K - 1) =>
               forsMtNode seed (UInt64.ofNat (extractHtIndex digest)) (UInt32.ofNat t.val)
-                (fun j => forsSecret skSeed (UInt32.ofNat t.val) (UInt32.ofNat j)) Spec.A 0)).push
+                (fun j => forsSecret skSeed (UInt32.ofNat (extractHtIndex digest)) (UInt32.ofNat t.val) (UInt32.ofNat j)) Spec.A 0)).push
             (Spec.th seed
               (Spec.Adrs.forsNode (UInt64.ofNat (extractHtIndex digest)) (UInt32.ofNat (Spec.K - 1)) 0 0)
               (((Array.ofFn (n := Spec.K) (fun i =>
-                  forsSecret skSeed (UInt32.ofNat i.val)
+                  forsSecret skSeed (UInt32.ofNat (extractHtIndex digest)) (UInt32.ofNat i.val)
                     (UInt32.ofNat ((extractForsIndices digest).getD i.val 0)))).getD (Spec.K - 1)
                 (ByteVec.zero 16)).pad16)))) := by
-  apply fors_pk_roundtrip seed digest _ (fun t j => forsSecret skSeed (UInt32.ofNat t) (UInt32.ofNat j))
+  apply fors_pk_roundtrip seed digest _ (fun t j => forsSecret skSeed (UInt32.ofNat (extractHtIndex digest)) (UInt32.ofNat t) (UInt32.ofNat j))
   · rw [extractForsIndices_getD digest (Spec.K - 1) (by decide)]; exact hz
   · intro t ht
     rw [extractForsIndices_getD digest t (by omega)]; exact readBitsLe_lt digest (t * Spec.A) Spec.A

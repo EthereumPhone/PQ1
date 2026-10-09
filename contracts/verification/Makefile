@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1764,6 +1764,14 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_FORS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_fors_secret_vectors gen_fors_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test gen_fors_secret_vectors gen_fors_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_SECRET_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_fors_secret_vectors gen_fors_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_SECRET_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test gen_fors_secret_vectors gen_fors_secret_vectors -- --nocapture
 	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
 	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
 	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
@@ -1855,6 +1863,9 @@ endif
 	@$(_FV_PYTHON3) scripts/test_fors_prefix_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HypertreeDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_hypertree_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ForsSecretBridge Extracted.ForsSecretDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsSecretDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_secret_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsKeygenBridge Extracted.WotsSecretDiffVectors Extracted.WotsKeygenDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSecretDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsKeygenDiffCheck.lean
@@ -2019,6 +2030,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/test_fors_prefix_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_hypertree_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_signature_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_secret_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_wots_keygen_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
@@ -2526,3 +2538,19 @@ _extract-wots-keygen-impl:
 	  --add-import Extracted.PkFromSig.Funs
 	@diff -u $(EXTRACTED_DIR)/Extracted/WotsKeygen/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-keygen $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual FORS secret derivation through the existing SHAparts boundary.
+_extract-fors-secret-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::sha256_parts' \
+	  --start-from 'sphincs_c10::hash::fors_secret' --dest-file $${EXTRACTION_TMP_ROOT}/forssecret.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/forssecret.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Forssecret.=Extracted.ForsSecret.' \
+	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::truncate' \
+	  --add-import Extracted.Hash.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/ForsSecret/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-secret $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean

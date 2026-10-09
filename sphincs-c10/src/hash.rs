@@ -409,11 +409,11 @@ pub fn wots_secret(
 /// reassemble the shared forest and forge (CWE-347 / few-time-key reuse).
 pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32) -> [u8; N] {
     bump!(FORS_SECRET);
-    let mut h = Sha256::new();
-    h.update(sk_seed);
-    h.update(b"fors");
-    h.update(ht_idx.to_be_bytes()); // to_b4 — hypertree-position binding
-    h.update(tree_idx.to_be_bytes()); // to_b4
-    h.update(leaf_idx.to_be_bytes()); // to_b4
-    truncate(&h.finalize().into())
+    truncate(&sha256_parts(&[
+        sk_seed,
+        b"fors",
+        &ht_idx.to_be_bytes(), // to_b4 — hypertree-position binding
+        &tree_idx.to_be_bytes(), // to_b4
+        &leaf_idx.to_be_bytes(), // to_b4
+    ]))
 }
