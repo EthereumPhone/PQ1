@@ -57,15 +57,21 @@ actual public-key-root wrapper pads the public seed and selects layer one,
 tree zero. The actual XMSS authentication-path builder now returns that same
 root and all nine reference siblings for every valid leaf below 512. Its capture
 flags and final copy loop are proved total; the actual WOTS public-key leaf and
-recovery helper recover the independently constructed root. Complete WOTS
-signature generation is outside this component result.
+recovery helper recover the independently constructed root. The actual shuffled
+WOTS signer now also has total first-success/bounded-exhaustion semantics,
+43 positional reference chains, shuffle-seed independence, and recovery to
+its actual generated public key. The extracted shuffle itself terminates with
+a permutation of every prefix of length at most 64; no desired-permutation
+premise is imposed. Its private SHA-block helper has an explicit computable
+backend model. The unchanged RustCrypto byte computation is factored into that
+helper for extraction; this does not verify RustCrypto or physical shuffling.
 Four builder-consuming headlines explicitly retain Aeneas's existing opaque
 `Formatter` type dependency from the unreachable debug-panic branch; the
 environment axiom inventory remains unchanged.
 These totality results concern the existing callback-free extraction;
 normal and extraction Rust corpora agree, with progress transcripts checked in
-the normal configuration. The complete signer loop and shuffled signing remain
-separate correspondence work.
+the normal configuration. The shuffled FORS forest, complete signer loop and signature serialization
+remain separate correspondence work.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

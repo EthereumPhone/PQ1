@@ -679,8 +679,59 @@ its unchanged consuming proof fails. Resource, malformed-definition and
 abnormal exits do not count. The copied path declaration has semantic-drift
 and deletion controls; the default gate and blocking push/PR paths run all
 new checks. The callback-free extraction boundary remains explicit. This does
-not yet prove complete WOTS signing, the shuffled forest/signer loop, serialized
-signature production or the full Rust/EasyCrypt signer/session relation.
+not itself prove WOTS signature construction (now covered below), the shuffled
+forest/signer loop, serialized signature production or the full Rust/EasyCrypt
+signer/session relation.
+
+Shuffled WOTS signature construction (2026-10-09) is now connected in
+`ShuffleSpec`, `WotsSignSpec`, `WotsSignRecovery` and `WotsSignBridge`.
+For every seed and prefix length at most 64, the actual Fisher–Yates function
+terminates, preserves exactly the prefix permutation and leaves its tail zero.
+The signer theorem consumes that result directly. For every input, the actual
+`sign_with_shuffle` either returns the first accepted count below its ten-million
+bound with all 43 chains in their specified positions, or fails with every
+candidate rejected. Successful signatures recover the public key computed by
+actual `keygen_pk` and agree position by position with the faithful reference
+secret, digest, address and chain definitions. Any two shuffle seeds give the
+same result, including bounded failure. Neither a desired permutation nor a
+desired signature is a premise of these headlines.
+
+Seven added kernel-only headlines bring the default audit to **156**:
+143 kernel-only, four retaining the existing opaque `Formatter` type, four
+SHA-256, one SHA-256/HMAC and four Keccak closures. The environment still has
+**27** axioms. The registry now contains **31** entries: 30 fresh and the existing
+tx-merkle waiver. Exact generation covers both new modules, normalized Types
+and imported external interfaces. No axiom or native proof tactic was added.
+
+The private Rust shuffle SHA-block computation was factored without changing
+its RustCrypto backend, domain prefix, seed/counter encoding or caller
+zeroization. Its extraction boundary uses the existing executable SHA-256
+model; zeroization follows the existing total/discarded-result model. These
+are explicit backend and physical-erasure limits. Before/after Rust outputs
+agree on 2,535 seed/length cases in each normal/extraction mode. A separate
+72-case Rust/Lean corpus checks exact SHA-derived order and zero tails; the
+permutation theorem alone deliberately makes no exact-order or randomness
+claim. The signer corpus checks 24 signatures across six full-width address
+and first-count cases, both zero and seven digits, and 258 altered-chain
+recoveries. Three cases run the actual extracted signer, recovery and keygen
+in Lean, including alternative shuffle seeds and malformed inputs.
+Two positive proof baselines and 20 typed semantic changes exercise shuffle
+initialization, reduction, swaps, signer addressing, count, chain, iteration
+and positional output. Each changed definition must compile before its
+unchanged consuming proof fails; resource or abnormal failures do not count.
+All new checks are part of the ordinary extraction/differential gates.
+
+A required host-emulator tail check also has explicit evidence limits: it uses
+a gate mirror, fixed keys/randomness and one message, not a production image
+or silicon. Every changed literal-success output must now undergo actual
+unfaulted verification; baseline failure, verifier errors and ambiguous key
+artifacts cannot become successful rejection evidence. Crashes, hangs and
+noncanonical returns remain separately reported. This is sampled integration
+evidence, not full-body fault resistance, DPA resistance or shipment authority.
+
+The callback-free extraction boundary remains. This closes the WOTS signing
+component, not the shuffled FORS forest, whole hypertree signer, serialization,
+session relation, backend correctness, entropy freshness or physical leakage.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

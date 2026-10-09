@@ -10,20 +10,12 @@
     "extract_command_pattern": "cd <crate> && RUSTFLAGS=--cfg lean_extract $PQLEAN/charon cargo --preset=aeneas --opaque <deps> --start-from <symbol> --dest-file <llbc>; $PQLEAN/aeneas -backend lean -dest <out> [-split-files] <llbc>; check_extraction_regen_output.py <target> <out> [normalized Funs]"
   },
   "shared_rust_files": {
-    "sphincs-c10/src/hypertree.rs": [
-      "extract-xmss-auth",
-      "extract-xmss-root",
-      "extract-verifier",
-      "extract-wots-find-count",
-      "extract-fors-recovery"
-    ],
-    "sphincs-c10/src/merkle.rs": [
-      "extract-xmss-auth",
-      "extract-xmss-root",
-      "extract-verifier",
-      "extract-merkle-verify"
+    "sphincs-c10/src/shuffle.rs": [
+      "extract-shuffle",
+      "extract-wots-sign"
     ],
     "sphincs-c10/src/wots.rs": [
+      "extract-wots-sign",
       "extract-xmss-auth",
       "extract-xmss-root",
       "extract-wots-keygen",
@@ -32,7 +24,21 @@
       "extract-wots-pkfromsig",
       "extract-wots-digits"
     ],
+    "sphincs-c10/src/address.rs": [
+      "extract-wots-sign",
+      "extract-xmss-auth",
+      "extract-xmss-root",
+      "extract-fors-auth",
+      "extract-fors-root",
+      "extract-wots-keygen",
+      "extract-fors-pk",
+      "extract-verifier",
+      "extract-wots-find-count",
+      "extract-sphincs-adrs",
+      "extract-fors-recovery"
+    ],
     "sphincs-c10/src/params.rs": [
+      "extract-wots-sign",
       "extract-xmss-auth",
       "extract-xmss-root",
       "extract-fors-auth",
@@ -51,19 +57,8 @@
       "extract-hash-fns",
       "extract-wots-digits"
     ],
-    "sphincs-c10/src/address.rs": [
-      "extract-xmss-auth",
-      "extract-xmss-root",
-      "extract-fors-auth",
-      "extract-fors-root",
-      "extract-wots-keygen",
-      "extract-fors-pk",
-      "extract-verifier",
-      "extract-wots-find-count",
-      "extract-sphincs-adrs",
-      "extract-fors-recovery"
-    ],
     "sphincs-c10/src/hash.rs": [
+      "extract-wots-sign",
       "extract-xmss-auth",
       "extract-xmss-root",
       "extract-fors-auth",
@@ -77,6 +72,20 @@
       "extract-wots-find-count",
       "extract-fors-recovery",
       "extract-hash-fns"
+    ],
+    "sphincs-c10/src/hypertree.rs": [
+      "extract-wots-sign",
+      "extract-xmss-auth",
+      "extract-xmss-root",
+      "extract-verifier",
+      "extract-wots-find-count",
+      "extract-fors-recovery"
+    ],
+    "sphincs-c10/src/merkle.rs": [
+      "extract-xmss-auth",
+      "extract-xmss-root",
+      "extract-verifier",
+      "extract-merkle-verify"
     ],
     "sphincs-c10/src/fors.rs": [
       "extract-fors-auth",
@@ -101,6 +110,8 @@
     ]
   },
   "required_targets": [
+    "extract-shuffle",
+    "extract-wots-sign",
     "extract-xmss-auth",
     "extract-xmss-root",
     "extract-fors-auth",
@@ -132,6 +143,74 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-shuffle",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/shuffle.rs"
+      ],
+      "rust_files_sha256": [
+        "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "d57fe87f51f5262b9769f46e777b4b615a8850050a756681ff92ebf2527f6dc4",
+        "Types.lean": "f76039f8a48fb9021879686236722086b4ab85aa49aa9ca60518b9ceeb4f4cf4",
+        "FunsExternal_Template.lean": "13c7d24bd20a930751d5d7f3446f177fa5fbd0fd9649956b7b5233e32f9a1c3e"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/Shuffle/Funs.lean",
+        "contracts/verification/extracted/Extracted/Shuffle/Types.lean",
+        "contracts/verification/extracted/Extracted/Shuffle/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "ae4784f7df5ff79e516de19f0be4dcc560fa42cc30e0ddecd541ac97a0652474",
+        "f76039f8a48fb9021879686236722086b4ab85aa49aa9ca60518b9ceeb4f4cf4",
+        "8c79d778f8c7588078a112d081ff763cd9907a178c6662357029e3015dadea83"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/ShuffleSpec.lean",
+      "headline_theorem": "shuffle_permutation_spec",
+      "fresh": true
+    },
+    {
+      "target": "extract-wots-sign",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/wots.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/shuffle.rs",
+        "sphincs-c10/src/hypertree.rs"
+      ],
+      "rust_files_sha256": [
+        "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023",
+        "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "e9edb20b18879750aab8af5a6e0d26e2ea1414929dfa79935c7615461f41ccc7",
+        "Types.lean": "b915a476dc32b9513747ca9917f4e398b1a9e729b18ba04d69d3b09f5575b15e",
+        "FunsExternal_Template.lean": "c6553a83326e66fb79acdd65c570b3d0d0efc94761e04be1cfc60df2f28ead0d"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/WotsSign/Funs.lean",
+        "contracts/verification/extracted/Extracted/WotsSign/Types.lean",
+        "contracts/verification/extracted/Extracted/WotsSign/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "d14efdfdff267b14767d725de64e3707c4ec713cbf0122bc137d225e6359c9a3",
+        "04b7fe2cdf43e0087d770a67ad33dc27fac4de89757e1ecaac00326696a38b16",
+        "1c495d6988caba18e1918c921e741442dc5c16f89089d2e70a25b47db6fa7ee2"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/WotsSignSpec.lean",
+      "headline_theorem": "wots_sign_total",
+      "fresh": true
+    },
     {
       "target": "extract-xmss-auth",
       "make_dir": "contracts/verification",

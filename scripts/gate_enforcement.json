@@ -447,6 +447,7 @@
         "contracts/verification/scripts/test_xmss_root_proof_controls.py",
         "contracts/verification/scripts/test_xmss_root_vendored_spec.py",
         "contracts/verification/scripts/test_xmss_auth_proof_controls.py",
+        "contracts/verification/scripts/test_wots_sign_proof_controls.py",
         "contracts/verification/scripts/test_xmss_auth_vendored_spec.py"
       ],
       "runs_in": "lean-extracted.yml",

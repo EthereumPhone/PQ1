@@ -49,7 +49,7 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec": "bf87e10779968fb910aa907188a7814a406def59d89e77534c12c3a13d8be7a2",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawGrind.ec": "5679f591d11a4f43e27529b3e57bae2f200b1c0ff49c85ed3469f48482b7fbd3",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/FORSC10Digest.ec": "3f659f40957b9b58fd92f9dc740458c3f6fb8c2df02f66d2850a2e06586d5c02",
-    "sphincs-c10/src/shuffle.rs": "2f3e0b12351084599294c9ccdfa01d18d7e2130a2fa84bae177ef26cfdb470ad",
+    "sphincs-c10/src/shuffle.rs": "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023",
     "sphincs-c10/src/hypertree.rs": "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
     "sphincs-c10/src/merkle.rs": "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/AcceptedContexts.ec": "3a3cba55b26455b51f8515dcdd6a10189b7aad373a4f54ef436a481a627cf9ee",

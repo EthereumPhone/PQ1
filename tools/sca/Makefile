@@ -84,7 +84,10 @@ $(NSP_ELF): $(NSP_DIR)/src/main.rs $(NSP_DIR)/memory.x $(NSP_DIR)/build.rs $(NSP
 
 build-c10-sign: $(C10S_ELF)
 
-$(C10S_ELF): $(C10S_DIR)/src/main.rs $(C10S_DIR)/memory.x $(C10S_DIR)/build.rs $(C10S_DIR)/Cargo.toml ../../sphincs-c10/src/lib.rs ../../secure/src/fi.rs
+.PHONY: c10-sign-cargo-check
+c10-sign-cargo-check:
+
+$(C10S_ELF): c10-sign-cargo-check
 	cargo build --release --target $(TARGET) --manifest-path $(C10S_DIR)/Cargo.toml
 
 build-cap: $(CAP_ELF)
@@ -150,6 +153,7 @@ ns-ptr: build-ns-ptr
 	$(DONJON) run fault_sweep_ns_ptr.py
 
 c10-sign: build-c10-sign
+	python3 test_c10_sign_sweep.py
 	$(DONJON) run fault_sweep_c10_sign.py
 
 cap: build-cap

@@ -1,3 +1,4 @@
+import Extracted.WotsSignBridge
 import Extracted.WotsKeygenBridge
 import Extracted.WholeVerifierSpec
 import Extracted.HypertreeStrictSpec

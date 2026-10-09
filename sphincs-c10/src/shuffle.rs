@@ -72,6 +72,20 @@ impl ShuffleSeed {
     }
 }
 
+/// One block of the existing RustCrypto shuffle stream. Keeping the hash
+/// operation separate gives the functional extraction an explicit backend
+/// boundary; the caller still copies and scrubs each returned block.
+#[inline]
+fn shuffle_hash_block(seed: &[u8; 32], counter: u32) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(b"sphincs-c10-fisher-yates-v1");
+    h.update(*seed);
+    h.update(counter.to_be_bytes());
+    let mut d = [0u8; 32];
+    d.copy_from_slice(&h.finalize());
+    d
+}
+
 /// Fisher-Yates shuffle of `[0, 1, …, n-1]`, returned in the first
 /// `n` entries of an owned 64-byte buffer (tail entries are 0).
 ///
@@ -134,12 +148,7 @@ pub fn fisher_yates(seed: &[u8; 32], n: usize) -> [u8; 64] {
     let mut stream = [0u8; 128];
     let mut blk: u32 = 0;
     while blk < 4 {
-        let mut h = Sha256::new();
-        h.update(b"sphincs-c10-fisher-yates-v1");
-        h.update(*seed);
-        h.update(blk.to_be_bytes());
-        let mut d = [0u8; 32];
-        d.copy_from_slice(&h.finalize());
+        let mut d = shuffle_hash_block(seed, blk);
         // Single-variable index `w` (not `blk * 32 + b`): compound
         // index expressions inside loops are a shape the Aeneas Lean
         // extraction rejects (work-todo §33 P0).

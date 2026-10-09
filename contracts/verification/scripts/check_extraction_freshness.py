@@ -81,6 +81,14 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-shuffle': (
+        ('sphincs-c10/src/shuffle.rs',),
+        ('contracts/verification/extracted/Extracted/Shuffle/Funs.lean', 'contracts/verification/extracted/Extracted/Shuffle/Types.lean', 'contracts/verification/extracted/Extracted/Shuffle/FunsExternal.lean'),
+    ),
+    'extract-wots-sign': (
+        ('sphincs-c10/src/wots.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/shuffle.rs', 'sphincs-c10/src/hypertree.rs'),
+        ('contracts/verification/extracted/Extracted/WotsSign/Funs.lean', 'contracts/verification/extracted/Extracted/WotsSign/Types.lean', 'contracts/verification/extracted/Extracted/WotsSign/FunsExternal.lean'),
+    ),
     'extract-xmss-auth': (
         ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
         ('contracts/verification/extracted/Extracted/XmssAuth/Funs.lean', 'contracts/verification/extracted/Extracted/XmssAuth/Types.lean', 'contracts/verification/extracted/Extracted/XmssAuth/FunsExternal.lean'),
@@ -232,7 +240,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "9d876f0d73ac2bd4c9bc7a4f5cce5016111287def7ca47fb83962f5a4c06b33b"
+REGISTRY_BINDING_SHA256 = "00f2775fc1a7dd4f15fb2c08105c3008c32e16c6360752fcfc0896a76c969835"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")

@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1727,6 +1727,12 @@ _verify-lake-path-self-test:
 #   make verify-extract-differential GEN=1    re-execute the Rust to regenerate them
 verify-extract-differential: ## Extracted-Lean vs shipped-Rust differential
 ifeq ($(GEN),1)
+	@cd $(REPO_ROOT) && PQ_SHUFFLE_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release shuffle_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SIGN_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_sign_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_XMSS_ROOT_GENERATE=1 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release xmss_root_corpus -- --nocapture
@@ -1770,6 +1776,18 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_SHUFFLE_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release shuffle_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SIGN_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_sign_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_SHUFFLE_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release shuffle_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SIGN_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_sign_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_XMSS_ROOT_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release xmss_root_corpus -- --nocapture
@@ -1898,6 +1916,10 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.XmssRootBridge Extracted.XmssRootDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/XmssRootDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_xmss_root_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsSignBridge Extracted.ShuffleDiffVectors Extracted.WotsSignDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ShuffleDiffCheck.lean
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSignDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_wots_sign_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.XmssAuthRecovery Extracted.XmssAuthDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/XmssAuthDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_xmss_auth_proof_controls.py
@@ -2678,3 +2700,38 @@ _extract-xmss-root-impl:
 	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
 	@diff -u $(EXTRACTED_DIR)/Extracted/XmssRoot/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-xmss-root $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual initialization, seed fold, stream assembly and Fisher-Yates swaps.
+_extract-shuffle-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::shuffle::shuffle_hash_block' \
+	  --start-from 'sphincs_c10::shuffle::fisher_yates' --dest-file $${EXTRACTION_TMP_ROOT}/shuffle.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/shuffle.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Shuffle.=Extracted.Shuffle.'
+	@diff -u $(EXTRACTED_DIR)/Extracted/Shuffle/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-shuffle $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual signing loop and caller; every opaque callee reuses a proved extraction.
+_extract-wots-sign-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::wots::find_count' --opaque 'sphincs_c10::hash::wots_secret' \
+	  --opaque 'sphincs_c10::hash::chain_hash' --opaque 'sphincs_c10::shuffle::fisher_yates' \
+	  --start-from 'sphincs_c10::wots::sign_with_shuffle' --dest-file $${EXTRACTION_TMP_ROOT}/wotssign.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/wotssign.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Wotssign.=Extracted.WotsSign.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::address::set_chain_index' \
+	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::pad16' \
+	  --kill 'sphincs_c10::params::L' --kill 'sphincs_c10::params::ADRS_WOTS' \
+	  --add-import Extracted.PkFromSig.Funs
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
+	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
+	@diff -u $(EXTRACTED_DIR)/Extracted/WotsSign/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-sign $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean

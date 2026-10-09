@@ -1,3 +1,4 @@
+import Extracted.WotsSignBridge
 import Extracted.XmssRootBridge
 import Extracted.XmssAuthRecovery
 import Extracted.ForsRoundtripSpec
@@ -272,3 +273,12 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.xmss_root_node_matches_vendored
 #print axioms Extracted.Equiv.firmware_xmss_root_matches_vendored
 #print axioms Extracted.Equiv.firmware_pk_root_matches_vendored
+
+-- Actual shuffled WOTS construction and recovery: kernel-only, no backend/freshness claim.
+#print axioms Extracted.Equiv.shuffle_permutation_spec
+#print axioms Extracted.Equiv.wots_sign_first_success
+#print axioms Extracted.Equiv.wots_sign_exhausted
+#print axioms Extracted.Equiv.wots_sign_total
+#print axioms Extracted.Equiv.wots_sign_shuffle_independent
+#print axioms Extracted.Equiv.firmware_wots_sign_recovers_keygen
+#print axioms Extracted.Equiv.firmware_wots_sign_matches_vendored
