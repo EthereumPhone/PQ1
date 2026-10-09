@@ -552,10 +552,21 @@ struct ConditioningWindow;
 
 impl ConditioningWindow {
     fn enter() -> Self {
+        #[cfg(feature = "ui-px-frametime")]
+        CONDITIONING_WINDOWS.fetch_add(1, Ordering::Relaxed);
         CONDITIONING.store(true, Ordering::Release);
         Self
     }
 }
+
+/// How many conditioning windows have opened. Bench instrumentation.
+///
+/// Separates "many windows" from "few windows with interrupt-context delays
+/// landing inside them" — a distinction the fixed-delay count alone cannot
+/// make, and which decides whether the #834 residual is routine or
+/// exceptional.
+#[cfg(feature = "ui-px-frametime")]
+pub static CONDITIONING_WINDOWS: AtomicU32 = AtomicU32::new(0);
 
 impl Drop for ConditioningWindow {
     fn drop(&mut self) {

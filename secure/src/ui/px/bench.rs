@@ -259,14 +259,48 @@ pub fn run() -> ! {
     // second field proves nothing at all, rather than proving the window is
     // bounded.
     #[cfg(feature = "ui-px-frametime")]
-    let boot_fixed_delays = {
+    let (boot_windows, recovery_delta) = {
         use core::sync::atomic::Ordering::Relaxed;
-        crate::fi::BOOTSTRAP_DELAYS.load(Relaxed) + crate::fi::DELAY_RETRIES.load(Relaxed)
+        let windows_at_boot = crate::hw::rng::CONDITIONING_WINDOWS.load(Relaxed);
+        let before = crate::fi::BOOTSTRAP_DELAYS.load(Relaxed)
+            + crate::fi::DELAY_RETRIES.load(Relaxed);
+
+        // ---- #834: DEMONSTRATE the halt that was fixed, don't infer it ----
+        //
+        // `fill_bound` recovers from a latched `SECS`/`CECS` by calling
+        // `init_locked`, which calls `wait_random` while holding the driver
+        // lock. Before 0a02fe54 that reached the refusal and HALTED the
+        // device inside the sequence meant to fix the error. The fix is the
+        // conditioning window — and `since_boot` reading 0 means no recovery
+        // happened on its own, so the fix was never exercised.
+        //
+        // So open one deliberately. `init()` runs exactly the conditioning
+        // sequence recovery runs. Inside `interrupt::free` so SysTick cannot
+        // hold the driver lock and turn a real result into an ambiguous
+        // `Err`. If this image boots and shows a NONZERO delta, the device
+        // survived the path that used to kill it; pre-fix, it would be dead
+        // here and the screen would never paint.
+        let recovered = cortex_m::interrupt::free(|_| {
+            let ok = crate::hw::rng::init().is_ok();
+            let after = crate::fi::BOOTSTRAP_DELAYS.load(Relaxed)
+                + crate::fi::DELAY_RETRIES.load(Relaxed);
+            if ok {
+                after.saturating_sub(before)
+            } else {
+                0
+            }
+        });
+        (windows_at_boot, recovered)
     };
     #[cfg(feature = "ui-px-frametime")]
-    super::lcd::set_fallback_probe(boot_fixed_delays, 0, sweep_misses);
+    super::lcd::set_fallback_probe(boot_windows, recovery_delta, sweep_misses);
     #[cfg(feature = "ui-px-frametime")]
-    let _ = (max_hits, one_shot_fallbacks, sweep_fallbacks);
+    let _ = (
+        max_hits,
+        one_shot_fallbacks,
+        sweep_fallbacks,
+        boot_fixed_unused(),
+    );
 
     loop {
         // ---- A. the endless ambient record, animated against real input.
@@ -307,4 +341,14 @@ pub fn run() -> ! {
         let mut never_expires = || false;
         let _ = super::lcd::run_flow(&screens, &atlas, &mut never_expires);
     }
+}
+
+/// Keeps the boot fixed-delay total reachable for the log without widening the
+/// three-slot overlay. The overlay now carries window COUNT instead, because
+/// the total alone cannot separate many windows from few windows with
+/// interrupt-context delays landing inside them.
+#[cfg(feature = "ui-px-frametime")]
+fn boot_fixed_unused() -> u32 {
+    use core::sync::atomic::Ordering::Relaxed;
+    crate::fi::BOOTSTRAP_DELAYS.load(Relaxed) + crate::fi::DELAY_RETRIES.load(Relaxed)
 }

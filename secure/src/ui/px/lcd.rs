@@ -1445,32 +1445,26 @@ impl Ambient {
                 //
                 //   shot_calls / shot_fallbacks / running_pct
                 //
-                //   boot_fixed  arm-3 fixed delays + arm-2 retries taken
-                //               during boot. A LIVENESS WITNESS, not a
-                //               verdict: every `wait_random` inside
-                //               `init_conditioning` takes arm 2 three times
-                //               and arm 3 once, so a working build cannot
-                //               read 0. If it does, the counters are dead and
-                //               the next field proves nothing.
-                //   since_boot  the same two counters, accrued AFTER boot.
-                //               MUST BE 0 and stay 0. Anything else means the
-                //               fixed-delay window is not bounded — i.e. the
-                //               fallback #833 removed is back under another
-                //               name, or something is forcing RNG
-                //               conditioning resets.
-                //   misses      pool shortfall over the boot length sweep:
-                //               the per-output-word top-up not keeping up.
-                //               Expect 0; recovered in place either way.
-                let (boot_fixed, since_boot, misses) = {
+                //   windows     conditioning windows opened during boot.
+                //               Separates "many windows" from "few windows
+                //               with ISR delays landing inside them" — the
+                //               380 total of the previous image could have
+                //               been either, and it decides whether the #834
+                //               residual is routine or exceptional.
+                //   recovered   fixed delays served by a DELIBERATE post-boot
+                //               conditioning window. Nonzero means the device
+                //               SURVIVED the path that halted it before
+                //               0a02fe54 — pre-fix this screen would never
+                //               paint. Expect 4: one `wait_random` in
+                //               `init_conditioning`, 3 retries plus 1 fixed.
+                //   misses      pool shortfall over the boot length sweep.
+                let (windows, recovered, misses) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
-                        let boot = FALLBACK_SHOT_CALLS.load(Relaxed);
-                        let now = crate::fi::BOOTSTRAP_DELAYS.load(Relaxed)
-                            + crate::fi::DELAY_RETRIES.load(Relaxed);
                         (
-                            boot,
-                            now.saturating_sub(boot),
+                            FALLBACK_SHOT_CALLS.load(Relaxed),
+                            FALLBACK_SHOT_FB.load(Relaxed),
                             FALLBACK_SHOT_MISSES
                                 .load(Relaxed)
                                 .max(crate::fi_delay_pool::MISSES.load(Relaxed)),
@@ -1484,8 +1478,8 @@ impl Ambient {
                 let _ = (isr_ms, gate_per_s, idle_s);
                 self.ft.len3 = frametime::format_raw(
                     &mut self.ft.buf3,
-                    boot_fixed.min(999),
-                    since_boot.min(999),
+                    windows.min(999),
+                    recovered.min(999),
                     misses.min(999),
                 );
                 self.ft.window_at = t;
