@@ -1460,15 +1460,31 @@ impl Ambient {
                 //   poisonings  poisonings in ordinary running since that
                 //               self-test. MUST be 0 — a device doing nothing
                 //               unusual should never fail to source a delay.
-                //   zeroskips   zero TRNG bytes rejection-sampled out of the
-                //               pool. A WITNESS, not a verdict: it must grow
-                //               slowly and forever (1/256 of draws), and a 0
-                //               here would mean the skip path never ran — in
-                //               which case the 0 in the middle field proves
-                //               nothing. This is the exact bug the device
-                //               found: treating these as failures poisoned
-                //               two operations per zero byte.
-                let (selftest, poisonings_now, zeroskips) = {
+                //   permille    zero-skips per 1000 pool draws. Expect 4
+                //               (1/256 = 3.9) and expect it to STAY there.
+                //
+                //               The raw skip count was ambiguous: it tracks
+                //               how many delay bytes are being drawn, not
+                //               anything about correctness, so the observed
+                //               burst to ~1/s could equally be 5x the work
+                //               for a few seconds (benign) or the TRNG
+                //               briefly emitting more zeros than it should
+                //               (bias). The ratio separates them.
+                //
+                //               Bias matters here specifically because
+                //               `delay_pool_word` checks only SR-clean and
+                //               nonzero — it deliberately skips the
+                //               continuous-repetition test, which both
+                //               #835 reviewers flagged: a transient stuck-at
+                //               during a pool burst could fill the pool with
+                //               a repeating pattern undetected. Excess zeros
+                //               are the mild version of that hole, and this
+                //               is the only instrument pointed at it.
+                //
+                //               999 is a sentinel for "no draws yet", so a
+                //               low reading cannot be confused with an
+                //               unexercised path.
+                let (selftest, poisonings_now, permille) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
@@ -1477,7 +1493,18 @@ impl Ambient {
                         (
                             FALLBACK_SHOT_CALLS.load(Relaxed),
                             now.saturating_sub(base),
-                            crate::fi_delay_pool::ZERO_SKIPS.load(Relaxed),
+                            {
+                                let skips = crate::fi_delay_pool::ZERO_SKIPS.load(Relaxed);
+                                let hits = crate::fi_delay_pool::HITS.load(Relaxed);
+                                // Draws = successful takes plus the zeros
+                                // rejected along the way.
+                                let draws = hits.saturating_add(skips);
+                                if draws == 0 {
+                                    999
+                                } else {
+                                    skips.saturating_mul(1000) / draws
+                                }
+                            },
                         )
                     }
                     #[cfg(not(feature = "ui-px-frametime"))]
@@ -1490,7 +1517,7 @@ impl Ambient {
                     &mut self.ft.buf3,
                     selftest.min(999),
                     poisonings_now.min(999),
-                    zeroskips.min(999),
+                    permille.min(999),
                 );
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;
