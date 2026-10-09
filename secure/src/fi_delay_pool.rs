@@ -155,6 +155,26 @@ pub static HITS: AtomicU32 = AtomicU32::new(0);
 /// built on it; both halves now measure by delta.
 pub static ZERO_SKIPS: AtomicU32 = AtomicU32::new(0);
 
+/// Bytes WRITTEN into the pool, and how many of them were zero.
+///
+/// Measured at the source, independent of consumption (#835, 2026-10-09).
+/// `ZERO_SKIPS / (HITS + ZERO_SKIPS)` is a consumption-side proxy for the
+/// TRNG's byte distribution and it is confounded: consumption is LIFO, bytes
+/// below `AVAIL` can be wiped at `disarm` without ever being drawn, and the
+/// counters are baselined by two separate non-atomic loads. One boot of the
+/// EVT unit read a PERSISTENT 0-1 permille against an expected 3.9 — a
+/// sustained 4x deficit of zero bytes, which Poisson noise does not explain
+/// and which is as much a non-uniform distribution as an excess would be.
+///
+/// These two count every byte at the moment it is stored, so
+/// `ZERO_BYTES_WRITTEN / BYTES_WRITTEN` is the distribution itself with no
+/// consumption path in between. If that reads 3.9 while the consumed ratio
+/// reads 0-1, the bug is in the accounting. If it reads low too, the TRNG's
+/// byte distribution is skewed and the missing continuous-repetition test in
+/// `delay_pool_word` stops being a theoretical gap.
+pub static BYTES_WRITTEN: AtomicU32 = AtomicU32::new(0);
+pub static ZERO_BYTES_WRITTEN: AtomicU32 = AtomicU32::new(0);
+
 /// Inner delays that found the pool armed but empty, i.e. the per-output-word
 /// top-up schedule did not keep up. Counted whether or not the in-place
 /// top-up then recovered, so this stays a true sizing signal. Expected 0.
@@ -262,6 +282,12 @@ pub fn replenish(mut word: impl FnMut() -> Option<u32>) {
             for b in w.to_le_bytes() {
                 POOL[n].store(b, Relaxed);
                 n += 1;
+                // Tally at the SOURCE, so the distribution can be read
+                // without the consumption path in between.
+                BYTES_WRITTEN.fetch_add(1, Relaxed);
+                if b == 0 {
+                    ZERO_BYTES_WRITTEN.fetch_add(1, Relaxed);
+                }
             }
         }
         AVAIL.store(n, Relaxed);

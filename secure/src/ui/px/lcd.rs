@@ -1475,34 +1475,29 @@ impl Ambient {
                 //   poisonings  poisonings in ordinary running since that
                 //               self-test. MUST be 0 — a device doing nothing
                 //               unusual should never fail to source a delay.
-                //   permille    zero-skips per 1000 pool draws. Expect 4
-                //               (1/256 = 3.9) and expect it to STAY there.
+                //   zperm       zero bytes per 1000 bytes WRITTEN into the
+                //               pool — the TRNG byte distribution measured at
+                //               the source, with no consumption path in
+                //               between. Expect 4 (1/256 = 3.9).
                 //
-                //               The raw skip count was ambiguous: it tracks
-                //               how many delay bytes are being drawn, not
-                //               anything about correctness, so the observed
-                //               burst to ~1/s could equally be 5x the work
-                //               for a few seconds (benign) or the TRNG
-                //               briefly emitting more zeros than it should
-                //               (bias). The ratio separates them.
+                //               Replaces the consumption-side ratio, which
+                //               was confounded: consumption is LIFO, bytes
+                //               below AVAIL can be wiped at disarm without
+                //               ever being drawn, and its two baselines are
+                //               separate non-atomic loads. One boot read a
+                //               PERSISTENT 0-1 against 3.9 — a sustained 4x
+                //               deficit of zeros, which noise does not
+                //               explain. This field says whether that is the
+                //               accounting or the hardware.
                 //
-                //               Bias matters here specifically because
-                //               `delay_pool_word` checks only SR-clean and
-                //               nonzero — it deliberately skips the
-                //               continuous-repetition test, which both
-                //               #835 reviewers flagged: a transient stuck-at
-                //               during a pool burst could fill the pool with
-                //               a repeating pattern undetected. Excess zeros
-                //               are the mild version of that hole, and this
-                //               is the only instrument pointed at it.
+                //               A DEFICIT is bias just as much as an excess
+                //               is. If this reads low too, the missing
+                //               continuous-repetition test in
+                //               `delay_pool_word` stops being theoretical.
                 //
-                //               999 means "not enough draws yet to carry a
-                //               ratio" (< 1024). It is both the
-                //               unexercised-path sentinel and the
-                //               small-sample guard, so any number that DOES
-                //               appear is already stable — no spike, no
-                //               convergence to watch.
-                let (selftest, poisonings_now, permille) = {
+                //               999 until 1024 bytes have been written, so
+                //               the first number shown is already stable.
+                let (selftest, poisonings_now, zperm) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
@@ -1512,38 +1507,16 @@ impl Ambient {
                             FALLBACK_SHOT_CALLS.load(Relaxed),
                             now.saturating_sub(base),
                             {
-                                let skips = crate::fi_delay_pool::ZERO_SKIPS
-                                    .load(Relaxed)
-                                    .saturating_sub(SKIP_BASE_ZEROS.load(Relaxed));
-                                let hits = crate::fi_delay_pool::HITS
-                                    .load(Relaxed)
-                                    .saturating_sub(SKIP_BASE_HITS.load(Relaxed));
-                                // Draws = successful takes plus the zeros
-                                // rejected along the way.
-                                let draws = hits.saturating_add(skips);
-                                // Hold the sentinel until the denominator can
-                                // carry a ratio. Below this, ONE skip reads
-                                // 21.7 permille after a second and 4.3 after
-                                // five, so the field spikes and converges and
-                                // only means something to a reader who knows
-                                // to expect Poisson noise. Observed across
-                                // three boots as 999 -> 33 -> 3, and as
-                                // 8,6,4 -> 3,4,3,2,3: all correct, all
-                                // misleading at a glance.
-                                //
-                                // At 1024 draws (~22 s here) a single skip
-                                // reads 1.0 permille and the sd is 2.0, so
-                                // the reading is stable the moment it
-                                // appears. An instrument that needs a
-                                // statistics caveat to read correctly is the
-                                // same defect as one that is biased.
-                                const MIN_DRAWS_FOR_RATIO: u32 = 1024;
-                                if draws < MIN_DRAWS_FOR_RATIO {
+                                let z = crate::fi_delay_pool::ZERO_BYTES_WRITTEN
+                                    .load(Relaxed);
+                                let n = crate::fi_delay_pool::BYTES_WRITTEN.load(Relaxed);
+                                const MIN_BYTES_FOR_RATIO: u32 = 1024;
+                                if n < MIN_BYTES_FOR_RATIO {
                                     999
                                 } else {
-                                    skips.saturating_mul(1000) / draws
+                                    z.saturating_mul(1000) / n
                                 }
-                            },
+                                                        },
                         )
                     }
                     #[cfg(not(feature = "ui-px-frametime"))]
@@ -1556,7 +1529,7 @@ impl Ambient {
                     &mut self.ft.buf3,
                     selftest.min(999),
                     poisonings_now.min(999),
-                    permille.min(999),
+                    zperm.min(999),
                 );
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;
