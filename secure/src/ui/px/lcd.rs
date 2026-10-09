@@ -1207,21 +1207,6 @@ static FALLBACK_SHOT_FB: core::sync::atomic::AtomicU32 = core::sync::atomic::Ato
 static FALLBACK_SHOT_MISSES: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 
-/// Baseline for the zero-skip ratio, so it measures ordinary running and not
-/// boot's unrepresentative burst.
-#[cfg(feature = "ui-px-frametime")]
-static SKIP_BASE_HITS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-#[cfg(feature = "ui-px-frametime")]
-static SKIP_BASE_ZEROS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-
-/// Record where the skip ratio should start counting from.
-#[cfg(feature = "ui-px-frametime")]
-pub fn set_skip_baseline(hits: u32, skips: u32) {
-    use core::sync::atomic::Ordering::Relaxed;
-    SKIP_BASE_HITS.store(hits, Relaxed);
-    SKIP_BASE_ZEROS.store(skips, Relaxed);
-}
-
 /// Publish the boot probe for the overlay: worst-case pool draw of any single
 /// fill in the length sweep, total fallbacks, total pool misses.
 #[cfg(feature = "ui-px-frametime")]

@@ -168,10 +168,28 @@ pub static ZERO_SKIPS: AtomicU32 = AtomicU32::new(0);
 ///
 /// These two count every byte at the moment it is stored, so
 /// `ZERO_BYTES_WRITTEN / BYTES_WRITTEN` is the distribution itself with no
-/// consumption path in between. If that reads 3.9 while the consumed ratio
-/// reads 0-1, the bug is in the accounting. If it reads low too, the TRNG's
-/// byte distribution is skewed and the missing continuous-repetition test in
-/// `delay_pool_word` stops being a theoretical gap.
+/// consumption path in between.
+///
+/// MEASURED, enclosed EVT unit, 2026-10-09, `evt-images/px835dist`, three
+/// boots: **3, 5 and 3 permille** against 3.9 expected — cold boot, fast
+/// replug, and a second fast replug. **The byte distribution is uniform.**
+/// So the TRNG is sound, the "excess zeros" hypothesis is refuted, and so is
+/// the follow-up guess that a fast replug might bring the RNG up on
+/// reset-value `NSCR` with fewer noise oscillators.
+///
+/// The consumption-side ratio that produced the anomalous reading has been
+/// WITHDRAWN rather than diagnosed, and that distinction is deliberate: I do
+/// not know what the persistent 0-1 was. What is known is that the metric is
+/// confounded three ways (LIFO consumption, so only the top ~28 of 128 slots
+/// are ever drawn and the rest are wiped at `disarm`; two non-atomic
+/// baseline loads), that it gates nothing in firmware, and that the direct
+/// measurement which replaces it agrees with theory. Keeping a derived number
+/// on screen that I cannot explain is worse than removing it — it would be
+/// the next thing to mislead a reading.
+///
+/// [`ZERO_SKIPS`] itself stays: the rejection it counts is load-bearing (a
+/// zero must never become a zero-length gap) and a sustained climb would
+/// still be worth seeing. It is only the RATIO built on it that is gone.
 pub static BYTES_WRITTEN: AtomicU32 = AtomicU32::new(0);
 pub static ZERO_BYTES_WRITTEN: AtomicU32 = AtomicU32::new(0);
 

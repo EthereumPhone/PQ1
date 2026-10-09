@@ -304,16 +304,6 @@ pub fn run() -> ! {
     #[cfg(feature = "ui-px-frametime")]
     let poison_baseline = crate::fi::DELAY_POISONINGS.load(core::sync::atomic::Ordering::Relaxed);
 
-    // Baseline the skip ratio too, so it reports ORDINARY RUNNING rather than
-    // boot. Boot's draws are real but unrepresentative — the length sweep
-    // alone is 780 of them in a burst — and mixing them in is what made the
-    // reading converge slowly from above instead of simply being right.
-    #[cfg(feature = "ui-px-frametime")]
-    super::lcd::set_skip_baseline(
-        crate::fi_delay_pool::HITS.load(core::sync::atomic::Ordering::Relaxed),
-        crate::fi_delay_pool::ZERO_SKIPS.load(core::sync::atomic::Ordering::Relaxed),
-    );
-
     #[cfg(feature = "ui-px-frametime")]
     super::lcd::set_fallback_probe(poison_selftest, poison_baseline, sweep_misses);
     #[cfg(feature = "ui-px-frametime")]
