@@ -73,7 +73,57 @@ def fixture(family, before=None, after=None):
     return source
 
 
+def require_semantic_rejection(result, name):
+    """Only a normal Lean proof error is evidence of semantic rejection."""
+    output = result.stdout + result.stderr
+    assert result.returncode == 1, (name, "abnormal or successful exit", result.returncode, output)
+    assert any(x in output for x in
+        ("unsolved goals", "Type mismatch", "Application type mismatch", "Tactic `rewrite` failed",
+         "'show' tactic failed", "`simp` made no progress", "Tactic `rfl` failed",
+         "Tactic `apply` failed", "Could not unify", "Tactic `assumption` failed",
+         "omega could not prove", "scalar_tac failed")), (name, output)
+    lowered = output.lower()
+    assert not any(x in lowered for x in
+        ("unknown module", "unknown constant", "unexpected token", "unknown identifier",
+         "maximum recursion", "maximum number of heartbeats", "timeout", "declaration uses",
+         "memory", "out-of-memory", "excessive memory consumption", "memory allocation",
+         "cannot allocate memory", "bad_alloc", "interrupted", "interrupt", "killed",
+         "segmentation fault", "stack overflow", "fatal error", "internal exception",
+         "assertion failed", "core dumped")), (name, "incomplete or invalid proof run", output)
+
+
+def test_result_classifier():
+    """Mixed proof/resource output and abnormal exits must fail closed."""
+    semantic = "error: unsolved goals"
+    require_semantic_rejection(subprocess.CompletedProcess([], 1, semantic, ""), "positive proof error")
+    rejected = [
+        subprocess.CompletedProcess([], code, semantic, "")
+        for code in [0, -9, -15, 2, 124, 130, 134, 137, 139]
+    ]
+    rejected += [subprocess.CompletedProcess([], 1, semantic + "\n" + diagnostic, "")
+        for diagnostic in [
+            "(kernel) excessive memory consumption detected", "out of memory", "out-of-memory",
+            "memory allocation failed", "cannot allocate memory", "std::bad_alloc",
+            "Interrupted", "interrupt requested", "Killed", "segmentation fault", "stack overflow",
+            "fatal error", "internal exception", "assertion failed", "core dumped",
+            "maximum recursion depth", "maximum number of heartbeats", "timeout",
+            "Unknown identifier", "unknown module", "Unknown constant", "unexpected token",
+            "declaration uses sorry",
+        ]]
+    # Resource diagnostics on stderr are equally disqualifying.
+    rejected.append(subprocess.CompletedProcess([], 1, semantic, "(kernel) excessive memory consumption detected"))
+    rejected.append(subprocess.CompletedProcess([], 1, "", ""))
+    for index, result in enumerate(rejected):
+        try:
+            require_semantic_rejection(result, f"classifier-control-{index}")
+        except AssertionError:
+            continue
+        raise AssertionError(("invalid proof result accepted", result))
+    print(f"OK: proof-result classifier: one normal proof error accepted; {len(rejected)} invalid outcomes rejected")
+
+
 def main():
+    test_result_classifier()
     with tempfile.TemporaryDirectory(prefix="fors-auth-controls-") as td:
         def run(name, source):
             path = Path(td) / (name + ".lean")
@@ -93,14 +143,7 @@ def main():
             typed = run(family + "-" + name + "-definition", source.rsplit("namespace Extracted.Equiv", 1)[0])
             assert typed.returncode == 0, (name, typed.stdout, typed.stderr)
             result = run(family + "-" + name, source)
-            output = result.stdout + result.stderr
-            assert result.returncode != 0 and any(x in output for x in
-                ("unsolved goals", "Type mismatch", "Application type mismatch", "Tactic `rewrite` failed",
-                 "'show' tactic failed", "`simp` made no progress", "Tactic `rfl` failed",
-                 "Tactic `apply` failed", "Could not unify", "Tactic `assumption` failed",
-                 "omega could not prove", "scalar_tac failed")), (name, output)
-            assert not any(x in output for x in ("unknown module", "Unknown constant", "unexpected token",
-                "Unknown identifier", "maximum recursion", "maximum number of heartbeats", "timeout", "declaration uses")), (name, output)
+            require_semantic_rejection(result, name)
         def checked(job):
             try:
                 negative(job)
