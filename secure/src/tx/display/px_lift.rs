@@ -341,7 +341,14 @@ fn structure_ok(
     let confirms = visible.iter().filter(|s| s.kind() == Some(Kind::Confirm)).count();
     match confirm_at {
         Some(c) => {
-            if confirms != 1 || c >= visible.len() || visible[c].kind() != Some(Kind::Confirm) || !visible[c].commit() {
+            // At the design's index for THIS transcript (5, or past a
+            // CoW order's buy leg, direct or Safe-wrapped — `screen::confirm_index`).
+            if confirms != 1
+                || c >= visible.len()
+                || c != pqsigner_ui_px::screen::confirm_index(visible)
+                || visible[c].kind() != Some(Kind::Confirm)
+                || !visible[c].commit()
+            {
                 return false;
             }
         }
