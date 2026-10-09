@@ -228,7 +228,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "311519035edf9ae798f91d2269d575111f9de5b54c893891e4eebefd6f7c6e98"
+REGISTRY_BINDING_SHA256 = "58cfdd4701b3505d1dd724c3b69e3f064842ea021d193064ab54f9afad3e0b7e"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")
