@@ -1496,9 +1496,12 @@ impl Ambient {
                 //               are the mild version of that hole, and this
                 //               is the only instrument pointed at it.
                 //
-                //               999 is a sentinel for "no draws yet", so a
-                //               low reading cannot be confused with an
-                //               unexercised path.
+                //               999 means "not enough draws yet to carry a
+                //               ratio" (< 1024). It is both the
+                //               unexercised-path sentinel and the
+                //               small-sample guard, so any number that DOES
+                //               appear is already stable — no spike, no
+                //               convergence to watch.
                 let (selftest, poisonings_now, permille) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
@@ -1518,7 +1521,24 @@ impl Ambient {
                                 // Draws = successful takes plus the zeros
                                 // rejected along the way.
                                 let draws = hits.saturating_add(skips);
-                                if draws == 0 {
+                                // Hold the sentinel until the denominator can
+                                // carry a ratio. Below this, ONE skip reads
+                                // 21.7 permille after a second and 4.3 after
+                                // five, so the field spikes and converges and
+                                // only means something to a reader who knows
+                                // to expect Poisson noise. Observed across
+                                // three boots as 999 -> 33 -> 3, and as
+                                // 8,6,4 -> 3,4,3,2,3: all correct, all
+                                // misleading at a glance.
+                                //
+                                // At 1024 draws (~22 s here) a single skip
+                                // reads 1.0 permille and the sd is 2.0, so
+                                // the reading is stable the moment it
+                                // appears. An instrument that needs a
+                                // statistics caveat to read correctly is the
+                                // same defect as one that is biased.
+                                const MIN_DRAWS_FOR_RATIO: u32 = 1024;
+                                if draws < MIN_DRAWS_FOR_RATIO {
                                     999
                                 } else {
                                     skips.saturating_mul(1000) / draws
