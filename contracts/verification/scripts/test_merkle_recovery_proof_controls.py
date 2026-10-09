@@ -7,6 +7,8 @@ import pwd
 import subprocess
 import tempfile
 
+from test_fors_auth_proof_controls import require_semantic_rejection
+
 ROOT = Path(__file__).resolve().parents[1] / "extracted"
 LAKE = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".elan/bin/lake"
 
@@ -51,7 +53,7 @@ def main():
                 + declaration + f"\nend {namespace}\n").replace(name, name + "_probe")
             source = proof
             if family == "pair":
-                source = source[:source.index("private theorem merkle_tree_adrs (")] + "\nend Extracted.Equiv\n"
+                source = source[:source.index("theorem merkle_tree_adrs (")] + "\nend Extracted.Equiv\n"
             elif family == "address":
                 source = source[:source.index("attribute [local irreducible] thPair Adrs.treeNode")] + "\nend Extracted.Equiv\n"
             source = source.replace(name, name + "_probe")
@@ -79,11 +81,7 @@ def main():
             typed = run(family + "-" + name + "-definition", source.split("namespace Extracted.Equiv", 1)[0])
             assert typed.returncode == 0, (name, typed.stdout, typed.stderr)
             result = run(family + "-" + name, source)
-            output = result.stdout + result.stderr
-            assert result.returncode != 0 and any(x in output for x in
-                ("unsolved goals", "Type mismatch", "Application type mismatch", "Tactic `rewrite` failed", "'show' tactic failed", "`simp` made no progress", "Tactic `rfl` failed", "Tactic `apply` failed")), (name, output)
-            assert not any(x in output for x in ("unknown module", "Unknown constant", "unexpected token",
-                "maximum recursion", "maximum number of heartbeats", "timeout", "declaration uses")), (name, output)
+            require_semantic_rejection(result, name)
 
         def checked(job):
             try:

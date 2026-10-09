@@ -10,15 +10,27 @@
     "extract_command_pattern": "cd <crate> && RUSTFLAGS=--cfg lean_extract $PQLEAN/charon cargo --preset=aeneas --opaque <deps> --start-from <symbol> --dest-file <llbc>; $PQLEAN/aeneas -backend lean -dest <out> [-split-files] <llbc>; check_extraction_regen_output.py <target> <out> [normalized Funs]"
   },
   "shared_rust_files": {
-    "sphincs-c10/src/fors.rs": [
-      "extract-fors-auth",
-      "extract-fors-root",
-      "extract-fors-pk",
+    "sphincs-c10/src/hypertree.rs": [
+      "extract-xmss-root",
       "extract-verifier",
-      "extract-fors-grind-r",
-      "extract-fors-index"
+      "extract-wots-find-count",
+      "extract-fors-recovery"
+    ],
+    "sphincs-c10/src/merkle.rs": [
+      "extract-xmss-root",
+      "extract-verifier",
+      "extract-merkle-verify"
+    ],
+    "sphincs-c10/src/wots.rs": [
+      "extract-xmss-root",
+      "extract-wots-keygen",
+      "extract-verifier",
+      "extract-wots-find-count",
+      "extract-wots-pkfromsig",
+      "extract-wots-digits"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-xmss-root",
       "extract-fors-auth",
       "extract-fors-root",
       "extract-fors-secret",
@@ -36,6 +48,7 @@
       "extract-wots-digits"
     ],
     "sphincs-c10/src/address.rs": [
+      "extract-xmss-root",
       "extract-fors-auth",
       "extract-fors-root",
       "extract-wots-keygen",
@@ -46,6 +59,7 @@
       "extract-fors-recovery"
     ],
     "sphincs-c10/src/hash.rs": [
+      "extract-xmss-root",
       "extract-fors-auth",
       "extract-fors-root",
       "extract-fors-secret",
@@ -58,21 +72,13 @@
       "extract-fors-recovery",
       "extract-hash-fns"
     ],
-    "sphincs-c10/src/wots.rs": [
-      "extract-wots-keygen",
+    "sphincs-c10/src/fors.rs": [
+      "extract-fors-auth",
+      "extract-fors-root",
+      "extract-fors-pk",
       "extract-verifier",
-      "extract-wots-find-count",
-      "extract-wots-pkfromsig",
-      "extract-wots-digits"
-    ],
-    "sphincs-c10/src/hypertree.rs": [
-      "extract-verifier",
-      "extract-wots-find-count",
-      "extract-fors-recovery"
-    ],
-    "sphincs-c10/src/merkle.rs": [
-      "extract-verifier",
-      "extract-merkle-verify"
+      "extract-fors-grind-r",
+      "extract-fors-index"
     ],
     "tx-core/src/eip1559.rs": [
       "extract-aa-userop",
