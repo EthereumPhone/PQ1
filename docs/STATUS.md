@@ -43,9 +43,11 @@ the full hypertree-position field (#820). The reference signer and round-trip
 callers carry that field consistently. The actual FORS stack algorithm now
 provably constructs the recursive height-11 root over all 2,048 leaves, for every
 seed and full-width index. The reference signer's final FORS slot carries that
-full root (#823), and its honest round-trip proof still holds. Authentication-path
-generation, hypertree key-generation trees and shuffled signing remain separate
-correspondence work.
+full root (#823), and its honest round-trip proof still holds. The actual FORS
+authentication-path generator now also terminates and returns the reference
+secret and all eleven recursive-tree siblings for every valid 11-bit leaf,
+every seed and full-width hypertree/tree index. Hypertree key-generation trees
+and shuffled signing remain separate correspondence work.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

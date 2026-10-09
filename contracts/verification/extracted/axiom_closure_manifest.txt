@@ -181,3 +181,10 @@ Extracted.Equiv.fors_compute_root_spec
 Extracted.Equiv.fors_root_node_matches_vendored
 Extracted.Equiv.firmware_fors_root_matches_vendored
 Extracted.Equiv.firmware_fors_final_slot_matches_vendored
+
+# FORS authentication-path generation (2026-10-09)
+Extracted.Equiv.fors_auth_leaf_schedule
+Extracted.Equiv.fors_auth_carry_schedule
+Extracted.Equiv.fors_sign_tree_spec
+Extracted.Equiv.fors_auth_path_matches_vendored
+Extracted.Equiv.firmware_fors_auth_matches_vendored

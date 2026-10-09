@@ -11,6 +11,7 @@
   },
   "shared_rust_files": {
     "sphincs-c10/src/fors.rs": [
+      "extract-fors-auth",
       "extract-fors-root",
       "extract-fors-pk",
       "extract-verifier",
@@ -18,6 +19,7 @@
       "extract-fors-index"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-fors-auth",
       "extract-fors-root",
       "extract-fors-secret",
       "extract-wots-keygen",
@@ -34,6 +36,7 @@
       "extract-wots-digits"
     ],
     "sphincs-c10/src/address.rs": [
+      "extract-fors-auth",
       "extract-fors-root",
       "extract-wots-keygen",
       "extract-fors-pk",
@@ -43,6 +46,7 @@
       "extract-fors-recovery"
     ],
     "sphincs-c10/src/hash.rs": [
+      "extract-fors-auth",
       "extract-fors-root",
       "extract-fors-secret",
       "extract-wots-keygen",
@@ -85,6 +89,7 @@
     ]
   },
   "required_targets": [
+    "extract-fors-auth",
     "extract-fors-root",
     "extract-fors-secret",
     "extract-wots-keygen",
@@ -113,6 +118,41 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-fors-auth",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/fors.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/hash.rs"
+      ],
+      "rust_files_sha256": [
+        "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "f0a3b8977eca85195418b31e9c0d96e8628559afe80e9b355cd0b0caddac985b",
+        "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "FunsExternal_Template.lean": "015aee1250a04606a3e6925f449e0b4bec42a8ecab218835f0320d2bdbcdb654"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/ForsAuth/Funs.lean",
+        "contracts/verification/extracted/Extracted/ForsAuth/Types.lean",
+        "contracts/verification/extracted/Extracted/ForsAuth/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "04c0b95fd2390f7fac3e68f3375edea0d60ef0cb5baca4be8ad64264155429e5",
+        "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "52d4714794d0d7f6a9a346382515afd02253ad91c7bcc8d03a32b375afd6b577"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/ForsAuthSpec.lean",
+      "headline_theorem": "fors_sign_tree_spec",
+      "fresh": true
+    },
     {
       "target": "extract-fors-root",
       "make_dir": "contracts/verification",

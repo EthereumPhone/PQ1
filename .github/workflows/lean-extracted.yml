@@ -30,6 +30,9 @@ on:
   push:
     branches: [master]
     paths: &extracted_paths
+      - 'contracts/verification/scripts/test_fors_auth_proof_controls.py'
+      - 'contracts/verification/scripts/test_fors_auth_vendored_spec.py'
+      - 'sphincs-c10/tests/gen_fors_auth_vectors.rs'
       - 'contracts/verification/scripts/test_fors_root_proof_controls.py'
       - 'contracts/verification/scripts/test_fors_root_vendored_spec.py'
       - 'sphincs-c10/tests/gen_fors_root_vectors.rs'

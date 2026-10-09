@@ -1,3 +1,4 @@
+import Extracted.ForsAuthBridge
 import Extracted.ForsRootBridge
 import Extracted.ForsSecretBridge
 import Extracted.WotsKeygenBridge
@@ -240,3 +241,9 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.fors_root_node_matches_vendored
 #print axioms Extracted.Equiv.firmware_fors_root_matches_vendored
 #print axioms Extracted.Equiv.firmware_fors_final_slot_matches_vendored
+
+#print axioms Extracted.Equiv.fors_auth_leaf_schedule
+#print axioms Extracted.Equiv.fors_auth_carry_schedule
+#print axioms Extracted.Equiv.fors_sign_tree_spec
+#print axioms Extracted.Equiv.fors_auth_path_matches_vendored
+#print axioms Extracted.Equiv.firmware_fors_auth_matches_vendored

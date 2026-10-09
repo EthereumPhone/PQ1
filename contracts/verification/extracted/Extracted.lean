@@ -60,4 +60,5 @@ import Extracted.ForsRecoveryBridge
 
 import Extracted.ForsSecretBridge
 
+import Extracted.ForsAuthBridge
 import Extracted.ForsRootBridge

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 COPY = [
     "scripts/check_vendored_spec.py",
     "extracted/Extracted/ForsRootVendored.lean",
+    "extracted/Extracted/ForsAuthVendored.lean",
     "lean/SphincsCVerify/Spec/Treehash.lean",
     "lean/SphincsCVerify/Spec/Signer.lean",
     "extracted/Extracted/ForsSecretVendored.lean",

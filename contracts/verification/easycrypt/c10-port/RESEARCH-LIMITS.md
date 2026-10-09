@@ -514,6 +514,51 @@ cryptographic claim follows from reuse. FORS authentication-path generation,
 hypertree key-generation trees, shuffled signing, randomness, concrete hash
 backends and the complete Rust/EasyCrypt signer/session relation remain open.
 
+FORS authentication-path generation (2026-10-09) now closes the actual
+`sign_fors_tree` helper. `ForsAuthSpec.fors_sign_tree_spec` proves totality,
+the exact derived secret and each of the eleven canonical sibling nodes for
+all pairs of 32-byte seeds, all full-width hypertree/tree indices and every
+leaf below 2,048. The valid-leaf bound is explicit; this theorem does not
+advertise a membership claim for arbitrary 32-bit out-of-range leaves.
+
+The proof reuses the root frontier/value invariant and tracks every path slot
+whose parent merge has completed. The actual shifts, XOR sibling selection,
+left/right comparisons, array writes and ordered hashes preserve that
+invariant; completion establishes every slot. Two finite geometry certificates
+use `decide +kernel` over leaf/height and traversal/height indices only. They
+contain no hash values and add no native-code assumption.
+`ForsAuthBridge.firmware_fors_auth_matches_vendored` relates the actual helper
+to the faithfully copied `sibIdx`/`forsMtAuthPath` definitions consumed by the
+reference signer, plus the existing faithful secret derivation. This proves
+the generated subtree values directly; it does not assume the desired path.
+
+Five added headlines bring the closure audit to **133**, retaining the exact
+**27** environment axioms. Complete authentication-path extraction is registered
+and regenerates: 27 entries, 26 fresh and the unchanged `tx-merkle` waiver.
+The two copied definitions have semantic-edit and deletion fidelity controls.
+Two positive proof baselines and 24 typed semantic controls cover traversal,
+secret/address binding, merge geometry and ordering, sibling selection,
+capture/update/return behavior and the copied path rules. Each changed body
+must compile before its unchanged consuming proof is required to reject it;
+name/parse errors, timeouts and exhausted proof resources do not count.
+
+An independently assembled recursive Rust byte oracle checks 23 boundary cases
+and all 2,048 leaves of one additional tree, including all 22,528 siblings and
+secret values. Own-node substitutions discriminate from the expected siblings.
+Both normal and extraction builds select both Rust tests. The actual Lean
+extraction, pure recursive nodes and faithful reference execute on the 23-case
+corpus. Controls reject 552 altered values, 46 wrong path lengths, 276 wrong
+widths and eight malformed input shapes/ranges. All new scripts and the Rust
+oracle are enrolled in default gates and blocking push/PR path coverage.
+
+Production Rust and EasyCrypt proof inputs are unchanged. The completed
+1,998-check replay remains reusable only after exact input/source-binding
+comparison. This component theorem does not yet compose actual signer control
+flow, serialization, the twelve-tree forest or recovery into a whole-signer
+result. Hypertree key-generation trees, shuffled signing, randomness, concrete
+hash backends and the complete Rust/EasyCrypt signer/session relation remain
+open. No new cryptographic probability or hardware claim follows.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,
