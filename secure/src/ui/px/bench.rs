@@ -205,8 +205,50 @@ pub fn run() -> ! {
             crate::rng::NONSECRET_FALLBACKS.load(Relaxed),
         )
     });
+    // ---- #832 sizing: sweep the fill LENGTH, not just the 1-byte case ----
+    //
+    // The one-shot above exercises the delay draw, which is a 1-byte fill: one
+    // pass of the per-word loop. But the fan-out scales with length (~3 delays
+    // before the loop, ~28 inside it) and `rng_strong::fill` passes the
+    // caller's whole buffer straight through, so a 32-byte secret draw runs
+    // ~8 iterations and a far bigger fan-out. `POOL_LEN`/`REFILL_BELOW` were
+    // chosen to be covered by the per-output-word top-up — which is a DESIGN
+    // argument, and "designed, not measured" is the exact error that started
+    // this thread. So measure it: the largest hits-per-fill over the sweep is
+    // the true worst-case fan-out, and any miss is the pool running dry.
+    //
+    // 64 bytes is the largest `rng::fill` the tree issues (BIP-39 entropy and
+    // the SE folds are 32).
     #[cfg(feature = "ui-px-frametime")]
-    super::lcd::set_fallback_probe(one_shot_hits, one_shot_fallbacks);
+    let (max_hits, sweep_fallbacks, sweep_misses) = cortex_m::interrupt::free(|_| {
+        use core::sync::atomic::Ordering::Relaxed;
+        let mut buf = [0u8; 64];
+        let mut max_hits = one_shot_hits;
+        crate::rng::NONSECRET_FALLBACKS.store(0, Relaxed);
+        crate::fi_delay_pool::MISSES.store(0, Relaxed);
+        for len in [1usize, 4, 16, 32, 64] {
+            crate::fi_delay_pool::HITS.store(0, Relaxed);
+            let _ = crate::rng::fill(&mut buf[..len]);
+            let hits = crate::fi_delay_pool::HITS.load(Relaxed);
+            if hits > max_hits {
+                max_hits = hits;
+            }
+        }
+        // Not secret material, but it came from the TRNG — do not leave it on
+        // the bench stack.
+        buf.fill(0);
+        (
+            max_hits,
+            crate::rng::NONSECRET_FALLBACKS.load(Relaxed),
+            crate::fi_delay_pool::MISSES.load(Relaxed),
+        )
+    });
+    #[cfg(feature = "ui-px-frametime")]
+    super::lcd::set_fallback_probe(
+        max_hits,
+        one_shot_fallbacks + sweep_fallbacks,
+        sweep_misses,
+    );
 
     loop {
         // ---- A. the endless ambient record, animated against real input.

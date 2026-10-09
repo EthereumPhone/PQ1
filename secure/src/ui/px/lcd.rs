@@ -1203,13 +1203,18 @@ const ONE_SHOT_RESET_MS: u32 = 180_000;
 static FALLBACK_SHOT_CALLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 #[cfg(feature = "ui-px-frametime")]
 static FALLBACK_SHOT_FB: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-
-/// Publish the one-shot probe for the overlay.
 #[cfg(feature = "ui-px-frametime")]
-pub fn set_fallback_probe(calls: u32, fallbacks: u32) {
+static FALLBACK_SHOT_MISSES: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+
+/// Publish the boot probe for the overlay: worst-case pool draw of any single
+/// fill in the length sweep, total fallbacks, total pool misses.
+#[cfg(feature = "ui-px-frametime")]
+pub fn set_fallback_probe(max_hits: u32, fallbacks: u32, misses: u32) {
     use core::sync::atomic::Ordering::Relaxed;
-    FALLBACK_SHOT_CALLS.store(calls, Relaxed);
+    FALLBACK_SHOT_CALLS.store(max_hits, Relaxed);
     FALLBACK_SHOT_FB.store(fallbacks, Relaxed);
+    FALLBACK_SHOT_MISSES.store(misses, Relaxed);
 }
 
 /// An endless ambient screen, animated against real input (#783).
@@ -1440,17 +1445,18 @@ impl Ambient {
                 //
                 //   shot_calls / shot_fallbacks / running_pct
                 //
-                //   shot_hits   pool bytes served to ONE top-level
-                //               `fi::wait_random()`, measured at boot in
-                //               thread mode with a clean guard. Expect 31 —
-                //               the measured fan-out — and a 0 here means the
-                //               pool never armed, i.e. the #832 fix is inert.
+                //   max_hits    the LARGEST pool draw of any single fill in
+                //               the boot sweep (1, 4, 16, 32, 64 B) — i.e.
+                //               the true worst-case fan-out, which could not
+                //               be determined by reading the source. The
+                //               1-byte case is 31. A 0 here means the pool
+                //               never armed, i.e. the #832 fix is inert.
                 //   shot_fb     fallbacks on that same call. Expect 0. This
                 //               going to zero IS the fix: before #832 it was
                 //               31, every one of them replaying a single byte
                 //               and making the receipt-recheck separation a
                 //               known constant.
-                //   misses      pool exhaustion since boot: a delay that
+                //   misses      pool exhaustion over the sweep: a delay that
                 //               found the pool ARMED but empty and had to
                 //               replay after all. The one new degradation
                 //               #832 introduces, and the number that sizes
@@ -1463,14 +1469,16 @@ impl Ambient {
                 // ran, and `shot_calls = 1` with `shot_fallbacks = 1` means
                 // the OUTER draw failed too (RNG not yet initialised), so a
                 // misleading reading cannot pass as a real one.
-                let (shot_hits, shot_fb, misses) = {
+                let (max_hits, shot_fb, misses) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
                         (
                             FALLBACK_SHOT_CALLS.load(Relaxed),
                             FALLBACK_SHOT_FB.load(Relaxed),
-                            crate::fi_delay_pool::MISSES.load(Relaxed),
+                            FALLBACK_SHOT_MISSES
+                                .load(Relaxed)
+                                .max(crate::fi_delay_pool::MISSES.load(Relaxed)),
                         )
                     }
                     #[cfg(not(feature = "ui-px-frametime"))]
@@ -1481,7 +1489,7 @@ impl Ambient {
                 let _ = (isr_ms, gate_per_s, idle_s);
                 self.ft.len3 = frametime::format_raw(
                     &mut self.ft.buf3,
-                    shot_hits.min(999),
+                    max_hits.min(999),
                     shot_fb.min(999),
                     misses.min(999),
                 );
