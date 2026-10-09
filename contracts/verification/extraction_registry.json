@@ -10,18 +10,15 @@
     "extract_command_pattern": "cd <crate> && RUSTFLAGS=--cfg lean_extract $PQLEAN/charon cargo --preset=aeneas --opaque <deps> --start-from <symbol> --dest-file <llbc>; $PQLEAN/aeneas -backend lean -dest <out> [-split-files] <llbc>; check_extraction_regen_output.py <target> <out> [normalized Funs]"
   },
   "shared_rust_files": {
-    "sphincs-c10/src/hash.rs": [
-      "extract-fors-secret",
-      "extract-wots-keygen",
-      "extract-wots-secret",
+    "sphincs-c10/src/fors.rs": [
+      "extract-fors-root",
       "extract-fors-pk",
       "extract-verifier",
       "extract-fors-grind-r",
-      "extract-wots-find-count",
-      "extract-fors-recovery",
-      "extract-hash-fns"
+      "extract-fors-index"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-fors-root",
       "extract-fors-secret",
       "extract-wots-keygen",
       "extract-wots-secret",
@@ -36,14 +33,8 @@
       "extract-hash-fns",
       "extract-wots-digits"
     ],
-    "sphincs-c10/src/wots.rs": [
-      "extract-wots-keygen",
-      "extract-verifier",
-      "extract-wots-find-count",
-      "extract-wots-pkfromsig",
-      "extract-wots-digits"
-    ],
     "sphincs-c10/src/address.rs": [
+      "extract-fors-root",
       "extract-wots-keygen",
       "extract-fors-pk",
       "extract-verifier",
@@ -51,11 +42,24 @@
       "extract-sphincs-adrs",
       "extract-fors-recovery"
     ],
-    "sphincs-c10/src/fors.rs": [
+    "sphincs-c10/src/hash.rs": [
+      "extract-fors-root",
+      "extract-fors-secret",
+      "extract-wots-keygen",
+      "extract-wots-secret",
       "extract-fors-pk",
       "extract-verifier",
       "extract-fors-grind-r",
-      "extract-fors-index"
+      "extract-wots-find-count",
+      "extract-fors-recovery",
+      "extract-hash-fns"
+    ],
+    "sphincs-c10/src/wots.rs": [
+      "extract-wots-keygen",
+      "extract-verifier",
+      "extract-wots-find-count",
+      "extract-wots-pkfromsig",
+      "extract-wots-digits"
     ],
     "sphincs-c10/src/hypertree.rs": [
       "extract-verifier",
@@ -81,6 +85,7 @@
     ]
   },
   "required_targets": [
+    "extract-fors-root",
     "extract-fors-secret",
     "extract-wots-keygen",
     "extract-wots-secret",
@@ -108,6 +113,41 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-fors-root",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/fors.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/hash.rs"
+      ],
+      "rust_files_sha256": [
+        "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "af4165d3f4063dd28639cf21458e819096619a5488c4af9cbda618a5e05240f0",
+        "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "FunsExternal_Template.lean": "5ea53fa1c88dfde7b5465851cb54b430d7292e71864aab1d134a3376cd9275b4"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/ForsRoot/Funs.lean",
+        "contracts/verification/extracted/Extracted/ForsRoot/Types.lean",
+        "contracts/verification/extracted/Extracted/ForsRoot/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "fe91459290e8c8ff48192d3b9feb7a911094c1113930332b6dbc2f81b07f866c",
+        "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "52d4714794d0d7f6a9a346382515afd02253ad91c7bcc8d03a32b375afd6b577"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/ForsRootSpec.lean",
+      "headline_theorem": "fors_compute_root_spec",
+      "fresh": true
+    },
     {
       "target": "extract-fors-secret",
       "make_dir": "contracts/verification",

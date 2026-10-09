@@ -30,6 +30,11 @@ on:
   push:
     branches: [master]
     paths: &extracted_paths
+      - 'contracts/verification/scripts/test_fors_root_proof_controls.py'
+      - 'contracts/verification/scripts/test_fors_root_vendored_spec.py'
+      - 'sphincs-c10/tests/gen_fors_root_vectors.rs'
+      - 'contracts/verification/lean/SphincsCVerify/Spec/Treehash.lean'
+      - 'contracts/verification/lean/SphincsCVerify/Spec/Signer.lean'
       - 'contracts/smart-wallet/test/c10_test_vectors.json'
       - 'contracts/verification/scripts/test_wots_keygen_proof_controls.py'
       - 'contracts/verification/scripts/test_wots_keygen_vendored_spec.py'

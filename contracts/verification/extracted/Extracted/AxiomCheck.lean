@@ -232,3 +232,10 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.forsSecretPreimage_length
 #print axioms Extracted.Equiv.fors_secret_spec
 #print axioms Extracted.Equiv.firmware_fors_secret_matches_vendored
+
+-- FORS tree construction and final signature slot.
+#print axioms Extracted.Equiv.fors_root_schedule
+#print axioms Extracted.Equiv.fors_compute_root_spec
+#print axioms Extracted.Equiv.fors_root_node_matches_vendored
+#print axioms Extracted.Equiv.firmware_fors_root_matches_vendored
+#print axioms Extracted.Equiv.firmware_fors_final_slot_matches_vendored

@@ -118,6 +118,20 @@ def grindR
   decreasing_by simp_wf; omega
   loop 0
 
+/-- The value emitted in a FORS signature slot. The first `K-1` slots carry
+    a leaf secret; the forced-zero final slot carries the complete FORS tree
+    root, matching `hypertree::sign_inner` in Rust. The verifier hashes that
+    final value once more at the forced-zero leaf address. -/
+def forsSigningValue (seed skSeed : ByteVec 32) (htIdx treeIdx leafIdx : Nat) :
+    ByteVec 16 :=
+  if treeIdx = K - 1 then
+    forsMtNode seed (UInt64.ofNat htIdx) (UInt32.ofNat treeIdx)
+      (fun j => forsSecret skSeed (UInt32.ofNat htIdx) (UInt32.ofNat treeIdx)
+        (UInt32.ofNat j)) A 0
+  else
+    forsSecret skSeed (UInt32.ofNat htIdx) (UInt32.ofNat treeIdx)
+      (UInt32.ofNat leafIdx)
+
 /-- The top-level signing routine.
 
     Returns `none` if any grinding loop fails (vanishingly small under
@@ -137,10 +151,10 @@ noncomputable def sign
     let forsIndices := extractForsIndices digest
     let htIdxNat := extractHtIndex digest
     let htIdx : UInt64 := UInt64.ofNat htIdxNat
-    -- FORS+C: honest leaf secrets + honest Merkle auth paths (under sk_seed).
+    -- FORS+C: normal leaf secrets, final full tree root, and normal auth paths.
     let forsSecrets : Array (ByteVec 16) :=
       Array.ofFn (n := K) fun i =>
-        forsSecret sk.skSeed (UInt32.ofNat htIdxNat) (UInt32.ofNat i.val) (UInt32.ofNat (forsIndices.getD i.val 0))
+        forsSigningValue seed sk.skSeed htIdxNat i.val (forsIndices.getD i.val 0)
     let forsAuthPaths : Array (Array (ByteVec 16)) :=
       Array.ofFn (n := K - 1) fun t =>
         forsMtAuthPath seed htIdx (UInt32.ofNat t.val)
@@ -150,7 +164,7 @@ noncomputable def sign
       { secrets := forsSecrets, secretsLen := Array.size_ofFn,
         authPaths := forsAuthPaths, authPathsLen := Array.size_ofFn }
     -- The honest FORS public key = `computeForsPk` over the honest tree roots
-    -- (K-1 normal roots + the leaf-only forced-zero last tree) — layer 0's msg.
+    -- (K-1 normal roots + one hash of the final full tree root) — layer 0's msg.
     let forsPk : ByteVec 16 :=
       Fors.computeForsPk seed htIdx
         ((Array.ofFn (n := K - 1) fun t : Fin (K - 1) =>

@@ -81,6 +81,10 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-fors-root': (
+        ('sphincs-c10/src/fors.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/ForsRoot/Funs.lean', 'contracts/verification/extracted/Extracted/ForsRoot/Types.lean', 'contracts/verification/extracted/Extracted/ForsRoot/FunsExternal.lean'),
+    ),
     'extract-fors-secret': (
         ('sphincs-c10/src/hash.rs', 'sphincs-c10/src/params.rs'),
         ('contracts/verification/extracted/Extracted/ForsSecret/Funs.lean', 'contracts/verification/extracted/Extracted/ForsSecret/Types.lean', 'contracts/verification/extracted/Extracted/ForsSecret/FunsExternal.lean'),
@@ -216,7 +220,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "2226d1357a8d92d5ae4609c662e34d90ac67aa5d01823831a446b55c28d9dc7b"
+REGISTRY_BINDING_SHA256 = "d8bd18f4713f34e9267e935baf2367ef21cca03b59a1671b2652e3d05689a871"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")

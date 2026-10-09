@@ -21,8 +21,8 @@
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
 # Regenerate/verify against a fresh dump with the same 4-bucket structure:
-#   81 kernel-only + 4 sha256_pure_bytes + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes)
-#   + 4 keccak256_pure = 90 headlines.
+#   119 kernel-only + 4 sha256_pure_bytes + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes)
+#   + 4 keccak256_pure = 128 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
 #
@@ -174,3 +174,10 @@ Extracted.Equiv.firmware_wots_keygen_matches_vendored
 Extracted.Equiv.forsSecretPreimage_length
 Extracted.Equiv.fors_secret_spec
 Extracted.Equiv.firmware_fors_secret_matches_vendored
+
+# FORS tree construction and final signature slot
+Extracted.Equiv.fors_root_schedule
+Extracted.Equiv.fors_compute_root_spec
+Extracted.Equiv.fors_root_node_matches_vendored
+Extracted.Equiv.firmware_fors_root_matches_vendored
+Extracted.Equiv.firmware_fors_final_slot_matches_vendored

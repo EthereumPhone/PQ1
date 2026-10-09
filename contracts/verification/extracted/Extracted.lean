@@ -59,3 +59,5 @@ import Extracted.MerkleRecoveryBridge
 import Extracted.ForsRecoveryBridge
 
 import Extracted.ForsSecretBridge
+
+import Extracted.ForsRootBridge

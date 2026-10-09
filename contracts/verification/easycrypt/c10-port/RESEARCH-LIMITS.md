@@ -468,6 +468,52 @@ its proof definitions, axioms, numerical bounds and cryptographic assumptions
 are unchanged. FORS tree construction/membership, shuffled signing, randomness,
 concrete hash backends and full signer/session refinement remain open.
 
+FORS tree construction (2026-10-09) closes the root-building helper and the
+reference final-slot mismatch in #823. `ForsRootSpec.fors_compute_root_spec`
+proves termination, stack/index safety, all leaf derivations, ordered pair
+hashes and the exact height-11 result of the actual extracted
+`compute_fors_root`, for every pair of 32-byte seeds and all full-width
+hypertree/tree indices. A finite schedule certificate checks all 2,048 leaf
+positions and 12 possible heights using Lean's kernel (`decide +kernel`);
+it contains only indices/heights. The loop invariant separately proves every
+stack value equals the corresponding recursive hash node. No output-equality
+premise, native-code proof axiom or new hash/tree assumption is introduced.
+
+`ForsRootBridge.firmware_fors_root_matches_vendored` composes this with the
+faithfully copied recursive `forsMtNode`. The new reference
+`Signer.forsSigningValue` emits ordinary secrets in the first twelve slots and
+the complete root in slot twelve, matching Rust's existing construction.
+`firmware_fors_final_slot_matches_vendored` proves that root agrees with this
+final-slot helper. The reference honest-signature round-trip theorem still
+holds; that theorem alone would also have accepted the old leaf-secret rule,
+so it was not evidence of generation correspondence.
+
+Five new kernel-only headlines bring the extracted closure audit to **128**,
+with the same exact **27** environment axioms. The complete root extraction is
+registered and regenerates, giving 26 entries: 25 fresh and the unchanged
+tracked `tx-merkle` waiver. Both copied definitions have semantic-edit and
+declaration-deletion fidelity controls. Three fresh proof baselines and 19
+independently compiling mutations cover leaf count/start, secret inputs,
+address fields, carry condition, parent height/index, child order, stack
+writes, returned root and the reference tree/final-slot rules.
+
+The independent recursive Rust byte oracle checks 21 roots against the actual
+stack implementation in normal and extraction builds, including zero, maximum,
+mixed/full-width addresses, the final-slot tree and seed-byte changes. The
+actual extraction, pure tree and faithful reference execute against that corpus;
+42 altered values, 21 wrong widths and six malformed inputs are rejected.
+Every root differs from the old leaf-zero-secret rule. Two actual signing
+cases independently decode the digest position, check the forced-zero gate and
+compare the emitted final slot with the recursive root before verifying the
+signature. These are executable caller checks, not a proof of `sign_inner`.
+
+Production Rust is unchanged in this batch. The completed 1,998-check EasyCrypt
+replay for proof identity `27015a144ca3e10d6a96b4375c3e29e8` is reusable after exact
+proof-input and manual source-binding comparisons; no new numerical or
+cryptographic claim follows from reuse. FORS authentication-path generation,
+hypertree key-generation trees, shuffled signing, randomness, concrete hash
+backends and the complete Rust/EasyCrypt signer/session relation remain open.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

@@ -434,7 +434,12 @@
         "sphincs-c10/tests/gen_wots_secret_vectors.rs",
         "contracts/verification/scripts/test_fors_secret_proof_controls.py",
         "contracts/verification/scripts/test_fors_secret_vendored_spec.py",
-        "sphincs-c10/tests/gen_fors_secret_vectors.rs"
+        "sphincs-c10/tests/gen_fors_secret_vectors.rs",
+        "contracts/verification/scripts/test_fors_root_proof_controls.py",
+        "contracts/verification/scripts/test_fors_root_vendored_spec.py",
+        "sphincs-c10/tests/gen_fors_root_vectors.rs",
+        "contracts/verification/lean/SphincsCVerify/Spec/Treehash.lean",
+        "contracts/verification/lean/SphincsCVerify/Spec/Signer.lean"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",
