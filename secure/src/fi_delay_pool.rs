@@ -103,6 +103,13 @@ static ARMED: AtomicBool = AtomicBool::new(false);
 /// Inner delays served a fresh pre-drawn TRNG byte.
 pub static HITS: AtomicU32 = AtomicU32::new(0);
 
+/// Zero bytes rejection-sampled out of the pool.
+///
+/// Expected to grow slowly and forever: a TRNG byte is zero 1/256 of the time
+/// and a zero is not a usable delay length. It must NOT translate into a
+/// poisoned operation — that was the bug this counter exists to make visible.
+pub static ZERO_SKIPS: AtomicU32 = AtomicU32::new(0);
+
 /// Inner delays that found the pool armed but empty, i.e. the per-output-word
 /// top-up schedule did not keep up. Counted whether or not the in-place
 /// top-up then recovered, so this stays a true sizing signal. Expected 0.
@@ -146,53 +153,52 @@ pub fn take() -> Option<u8> {
     // A zero-length delay is the worst possible outcome, not a detectable one:
     // `wait_random_loop(0)` executes its body ZERO times and both completion
     // checks (`i == wait`, `j == 0`) pass, so the gap silently vanishes with
-    // nothing reporting it. That is the countermeasure switched off by an
-    // interrupt schedule rather than by an attacker. An earlier comment here
-    // called clear-on-read a safeguard that would "surface" a double take; it
-    // had the direction backwards.
+    // nothing reporting it. Masking interrupts across the pair is sufficient
+    // and cheap on a single core.
     //
-    // Masking interrupts across the pair is sufficient and cheap: this is two
-    // atomic loads and one byte store on a single core.
+    // A ZERO BYTE IS REJECTION-SAMPLED, NOT A FAILURE (measured on silicon,
+    // 2026-10-09). The first version of this treated a zero as a hard miss and
+    // returned `None`, with a comment claiming "the caller draws again". The
+    // caller is `fi::rng_byte`, whose next arm cannot draw while this fill
+    // holds the driver lock — so it fell through to the poison, and
+    // `fill_bound`'s exit check then poisoned the top-level draw as well. One
+    // zero byte therefore cost one miss and TWO poisonings, and a zero is a
+    // legitimate 1/256 TRNG outcome: the EVT unit read `15 / 2 / 1` climbing
+    // to `15 / 4 / 2` within seconds. Drawing another slot is the correct
+    // response — unbiased, bounded, and it keeps a genuine zero from ever
+    // becoming a zero-length gap.
     critical(|| {
-        let n = AVAIL.load(Relaxed);
-        if n == 0 {
-            // Armed but empty: the per-output-word top-up did not keep up.
-            // Counted whether or not the in-place draw below recovers, so it
-            // stays a true sizing signal.
-            MISSES.fetch_add(1, Relaxed);
-            if !refill_in_place() {
-                return None;
+        let mut refilled = false;
+        // Bounded: every iteration either consumes a slot or performs the one
+        // permitted refill, so this cannot spin.
+        for _ in 0..=POOL_LEN {
+            let n = AVAIL.load(Relaxed);
+            if n == 0 {
+                // Armed but empty: the per-output-word top-up did not keep up.
+                // Counted whether or not the refill below recovers, so it
+                // stays a true sizing signal.
+                MISSES.fetch_add(1, Relaxed);
+                if refilled || !refill_in_place() {
+                    return None;
+                }
+                refilled = true;
+                continue;
             }
-            let m = AVAIL.load(Relaxed);
-            if m == 0 {
-                return None;
+            AVAIL.store(n - 1, Relaxed);
+            // Clear on read: a consumed length never lingers in SRAM.
+            let b = POOL[n - 1].swap(0, Relaxed);
+            if b == 0 {
+                // A legitimate 1/256 TRNG zero, or a slot something else
+                // already consumed. Either way it is not a delay, so draw
+                // another rather than reporting a failure.
+                ZERO_SKIPS.fetch_add(1, Relaxed);
+                continue;
             }
-            AVAIL.store(m - 1, Relaxed);
             HITS.fetch_add(1, Relaxed);
-            return reserved_byte(m - 1);
+            return Some(b);
         }
-        AVAIL.store(n - 1, Relaxed);
-        HITS.fetch_add(1, Relaxed);
-        reserved_byte(n - 1)
+        None
     })
-}
-
-/// Read and clear one reserved slot. Treats a zero byte as a MISS rather than
-/// a zero-length delay.
-///
-/// Clearing on read keeps a consumed length from lingering in SRAM. The zero
-/// check is the safety net: a genuine TRNG zero byte is a legitimate 1/256
-/// outcome but still means "no delay", and a slot that reads zero because
-/// something already consumed it is a fault. Neither should become a gap of
-/// length zero, so both are reported as a shortfall and the caller draws again.
-#[inline]
-fn reserved_byte(index: usize) -> Option<u8> {
-    let b = POOL[index].swap(0, Relaxed);
-    if b == 0 {
-        MISSES.fetch_add(1, Relaxed);
-        return None;
-    }
-    Some(b)
 }
 
 /// Fill the pool from `word` if it has run low. Idempotent; call on entry to a
@@ -315,6 +321,7 @@ mod tests {
         TEST_REFILL_WORDS.store(0, Relaxed);
         HITS.store(0, Relaxed);
         MISSES.store(0, Relaxed);
+        ZERO_SKIPS.store(0, Relaxed);
         g
     }
 
@@ -422,6 +429,69 @@ mod tests {
             "the shortfall must still be counted even though it recovered, or \
              the per-output-word schedule failing stops being observable"
         );
+    }
+
+    /// The bug the EVT unit found that all seven other tests missed.
+    ///
+    /// A TRNG byte is zero 1/256 of the time. The first version of `take`
+    /// treated that as a hard miss and returned `None`, with a comment
+    /// claiming the caller would draw again — but the caller is
+    /// `fi::rng_byte`, whose next arm cannot draw while the fill holds the
+    /// driver lock, so it fell through to the poison and `fill_bound` then
+    /// poisoned the top-level draw too. On silicon that read `15 / 2 / 1`
+    /// climbing to `15 / 4 / 2` within seconds: two poisoned operations per
+    /// zero byte, several times a second, on healthy hardware.
+    ///
+    /// Every other test in this module passed throughout, because none of
+    /// them ever put a zero IN the pool.
+    #[test]
+    fn positive_a_zero_byte_is_drawn_past_rather_than_failing_the_operation() {
+        let _serial = reset();
+        // 0x00FF_00FF little-endian -> [0xFF, 0x00, 0xFF, 0x00]: half the
+        // pool is zeros, in alternating slots, so the skip path must run
+        // between two successful draws rather than only at an edge.
+        let mut once = Some(0x00FF_00FFu32);
+        replenish(|| once.take());
+        assert_eq!(state_for_test().1, 4);
+
+        let first = take().expect("a zero must not fail the draw");
+        let second = take().expect("a zero must not fail the draw");
+        assert_eq!(
+            (first, second),
+            (0xFF, 0xFF),
+            "both usable bytes must come back; zeros are skipped, not returned"
+        );
+        assert_eq!(
+            ZERO_SKIPS.load(Relaxed),
+            2,
+            "both zeros must be counted as skips so the rejection is visible"
+        );
+        assert_eq!(
+            MISSES.load(Relaxed),
+            0,
+            "a zero byte is NOT a pool shortfall — conflating them is what \
+             turned a 1/256 TRNG outcome into two poisoned operations"
+        );
+        assert_eq!(HITS.load(Relaxed), 2);
+    }
+
+    #[test]
+    fn negative_take_never_returns_a_zero_length_delay() {
+        let _serial = reset();
+        // An all-zero word is rejected by `delay_pool_word` on hardware, but
+        // the pool must not depend on that: a zero reaching a caller becomes
+        // `wait_random_loop(0)`, which runs its body zero times AND passes
+        // both completion checks, so the gap vanishes with nothing reporting
+        // it. That is the attacker-optimal outcome.
+        let mut words = [0x0000_0000u32, 0x0000_0000].into_iter();
+        replenish(|| words.next());
+        for _ in 0..16 {
+            assert_ne!(
+                take(),
+                Some(0),
+                "take must never hand out a zero-length delay"
+            );
+        }
     }
 
     #[test]

@@ -4,6 +4,14 @@
 # to surface it. `make help` also appends the FV / spec-assurance suite from
 # contracts/verification/; `make help-verify` shows just that suite.
 .DEFAULT_GOAL := help
+# Mutation controls for the FI delay-length path (#802/#832/#833/#835). Breaks
+# one mechanism at a time and demands that EXACTLY the named test(s) go red —
+# a green suite proves nothing until each test is shown to fail for its own
+# reason. These have caught four defects the host suite passed through.
+fi-delay-controls:
+	@python3 -I scripts/check_fi_delay_controls.py
+
+.PHONY: fi-delay-controls
 .PHONY: help help-verify
 help: ## Show the main runnable targets (root + the FV suite below)
 	@grep -hE '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sort | awk -F':.*## ' '!seen[$$1]++ {printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
