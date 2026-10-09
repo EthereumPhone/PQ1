@@ -33,7 +33,8 @@
 //! caller's whole buffer straight through, so no fixed pool can cover every
 //! call. [`replenish`] is therefore called once per output word as well as on
 //! entry. It is idempotent and cheap: a top-up is a few `DR` reads against the
-//! ~28 delay loops it serves, on the order of a few percent.
+//! ~25 delay loops it serves: measured at 89 us of TRNG against 3.2 ms of
+//! delay loops for a 64-byte fill, i.e. 2.7 %.
 //!
 //! # Failure direction
 //!
@@ -47,17 +48,46 @@
 
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering::Relaxed};
 
-/// Bytes held at most. Sized to cover one per-word loop iteration (~28 inner
-/// delays) with headroom, so a single top-up per output word suffices.
-pub const POOL_LEN: usize = 64;
+/// Delays one pass of `fill_bound`'s per-output-word loop actually draws.
+///
+/// MEASURED on silicon, 2026-10-09, `evt-images/px832sweep`, by sweeping the
+/// fill length and reading the largest single-fill pool draw:
+///
+/// ```text
+///   len  1 B -> 31 draws        len 64 B -> 406 draws
+///   =>   K(len) = 6 + 25 * ceil(len / 4)      (two-point fit)
+/// ```
+///
+/// It could not be obtained by reading: the sites sit behind six helper
+/// validators and three nested loops. The first version of this module put
+/// `REFILL_BELOW` at 32 from an eyeball estimate of "~28", which left a margin
+/// of 7 bytes — and had the estimate erred the other way, the pool would have
+/// missed on every long fill and quietly degraded to the pre-#832 constant
+/// separation on exactly the fills that produce secrets. [`MISSES`] would have
+/// caught it, but the margin was luck. Hence a measured constant and a
+/// deliberate multiple of it below.
+pub const MEASURED_PER_WORD_FANOUT: usize = 25;
 
-/// Top up when fewer than this many bytes remain. Must exceed the per-iteration
-/// fan-out or a single iteration could drain the pool between top-ups.
-pub const REFILL_BELOW: usize = 32;
+/// Bytes held at most.
+pub const POOL_LEN: usize = 128;
+
+/// Top up when fewer than this many bytes remain.
+///
+/// A top-up refills to [`POOL_LEN`], so the pool can only run dry if ONE loop
+/// iteration consumes more than this threshold. That makes
+/// `REFILL_BELOW >= MEASURED_PER_WORD_FANOUT` the correctness condition, and
+/// the margin above it is the headroom for paths the sweep did not exercise —
+/// the CRNGT `compare_exchange_weak` retry, a rejected word, an `init_locked`
+/// recovery — each of which adds delays to a single iteration.
+pub const REFILL_BELOW: usize = 64;
 
 const _: () = assert!(
     REFILL_BELOW < POOL_LEN,
     "a refill threshold at or above the pool size would top up on every take"
+);
+const _: () = assert!(
+    REFILL_BELOW >= 2 * MEASURED_PER_WORD_FANOUT,
+    "the pool runs dry whenever one loop iteration draws more than REFILL_BELOW;      keep at least 2x the measured per-word fan-out so a retry path inside a      single iteration cannot silently reinstate the #832 constant separation"
 );
 
 static POOL: [AtomicU8; POOL_LEN] = [const { AtomicU8::new(0) }; POOL_LEN];
