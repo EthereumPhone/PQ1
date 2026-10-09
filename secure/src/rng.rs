@@ -143,24 +143,21 @@ pub fn try_byte_nonsecret() -> Option<u8> {
     }
 }
 
-/// Whether the platform RNG has completed initialization at least once.
+/// Whether a FIXED FI delay length is currently permitted.
 ///
-/// The FI delay path may tolerate a failed draw ONLY before this is true.
-/// `hw::rng::init` holds the driver lock and runs a conditioning reset during
-/// which no word is available, and it calls `wait_random` itself — so a delay
-/// path that refused unconditionally would halt the device during its own RNG
-/// bring-up. No secret exists that early in boot, so tolerating there costs
-/// nothing; after it, a failed draw is a fault or an attack and is fatal.
-pub fn init_complete() -> bool {
+/// True only inside the RNG's own conditioning sequence — see
+/// `hw::rng::fixed_delay_permitted` for the two cases and the residual. The FI
+/// delay path refuses outside it rather than reusing a length (#833).
+pub fn fixed_delay_permitted() -> bool {
     #[cfg(feature = "stm32u585")]
     {
-        hw_rng::init_complete()
+        hw_rng::fixed_delay_permitted()
     }
-    // No bring-up sequence on the host/QEMU backend, so there is no
-    // bootstrap window to exempt.
+    // No bring-up or conditioning sequence on the host/QEMU backend, so
+    // there is no window to exempt.
     #[cfg(not(feature = "stm32u585"))]
     {
-        true
+        false
     }
 }
 

@@ -189,16 +189,40 @@ pub fn replenish(mut word: impl FnMut() -> Option<u32>) {
 /// directly. Safe because `ARMED` implies a held `DriverGuard`.
 #[inline]
 fn refill_in_place() -> bool {
-    #[cfg(feature = "stm32u585")]
+    #[cfg(all(feature = "stm32u585", not(test)))]
     {
         replenish(crate::hw::rng::delay_pool_word);
         AVAIL.load(Relaxed) > 0
     }
-    #[cfg(not(feature = "stm32u585"))]
+    // Host tests get an injectable source, because the real one is
+    // `stm32u585`-only and the recovery would otherwise be exercised solely
+    // on silicon, and there only when a shortfall actually occurs.
+    #[cfg(test)]
+    {
+        let budget = TEST_REFILL_WORDS.load(Relaxed);
+        if budget == 0 {
+            return false;
+        }
+        let mut left = budget;
+        replenish(|| {
+            if left == 0 {
+                return None;
+            }
+            left -= 1;
+            Some(0x0403_0201u32.wrapping_mul((budget - left) as u32))
+        });
+        TEST_REFILL_WORDS.store(0, Relaxed);
+        AVAIL.load(Relaxed) > 0
+    }
+    #[cfg(all(not(feature = "stm32u585"), not(test)))]
     {
         false
     }
 }
+
+/// Words the next [`refill_in_place`] may draw, for host tests only.
+#[cfg(test)]
+static TEST_REFILL_WORDS: AtomicUsize = AtomicUsize::new(0);
 
 /// Disarm and wipe. Called from `DriverGuard::drop`, before the busy flag is
 /// released, so the pool is never armed outside a guard's lifetime.
@@ -244,6 +268,7 @@ mod tests {
     fn reset() -> std::sync::MutexGuard<'static, ()> {
         let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         disarm();
+        TEST_REFILL_WORDS.store(0, Relaxed);
         HITS.store(0, Relaxed);
         MISSES.store(0, Relaxed);
         g
@@ -304,6 +329,9 @@ mod tests {
         for _ in 0..4 {
             assert!(take().is_some());
         }
+        // Deny the in-place top-up (budget 0) so this test still pins the
+        // DEFER behaviour; recovery has its own test above.
+        TEST_REFILL_WORDS.store(0, Relaxed);
         assert_eq!(take(), None, "an exhausted pool must defer, not wrap");
         assert_eq!(
             MISSES.load(Relaxed),
@@ -324,6 +352,31 @@ mod tests {
             MISSES.load(Relaxed),
             0,
             "a TRNG that refuses is not pool exhaustion and must not be counted as it"
+        );
+    }
+
+    #[test]
+    fn positive_a_shortfall_is_topped_up_in_place_rather_than_escalated() {
+        let _serial = reset();
+        let mut once = Some(0x0403_0201u32);
+        replenish(|| once.take());
+        for _ in 0..4 {
+            assert!(take().is_some());
+        }
+        // Armed and empty. Without the in-place top-up this reaches #833's
+        // refusal and HALTS the device over a shortage with an obvious
+        // remedy, so the recovery is a liveness requirement, not a nicety.
+        TEST_REFILL_WORDS.store(2, Relaxed);
+        assert!(
+            take().is_some(),
+            "an armed-but-empty pool must draw more in place: the guard is \
+             held, so the peripheral is ours"
+        );
+        assert_eq!(
+            MISSES.load(Relaxed),
+            1,
+            "the shortfall must still be counted even though it recovered, or \
+             the per-output-word schedule failing stops being observable"
         );
     }
 

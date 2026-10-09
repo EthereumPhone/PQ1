@@ -536,7 +536,55 @@ fn read_healthy_word_into(word_out: &mut u32, read_receipt: &mut u32) {
 /// Initialize the RNG peripheral. Must be called after `rcc::init()`.
 /// Returns `Err(())` unless conditioning reset completes and one healthy
 /// warm-up word is observed and discarded.
+/// Conditioning-reset window: while this is set, the RNG provably cannot
+/// deliver a word, so the FI delay path is permitted its one fixed length.
+///
+/// Set for the WHOLE of [`init_conditioning`], which covers `init` at boot and
+/// `fill_bound`'s recovery from a latched `SECS`/`CECS`. Without the recovery
+/// case, a documented transient error would reach #833's refusal and halt the
+/// device inside the very sequence meant to fix it — strictly worse than the
+/// fallback #833 removed.
+static CONDITIONING: AtomicBool = AtomicBool::new(false);
+
+/// Clears [`CONDITIONING`] on every exit path, including the early returns
+/// `init_conditioning` takes when a register read-back fails closed.
+struct ConditioningWindow;
+
+impl ConditioningWindow {
+    fn enter() -> Self {
+        CONDITIONING.store(true, Ordering::Release);
+        Self
+    }
+}
+
+impl Drop for ConditioningWindow {
+    fn drop(&mut self) {
+        CONDITIONING.store(false, Ordering::Release);
+    }
+}
+
+/// Whether a FIXED FI delay length is currently permitted (#833/#834).
+///
+/// True only while the RNG is inside its own conditioning sequence — before
+/// the first successful `init`, or during a recovery reset. Outside those the
+/// delay path refuses rather than reusing a length.
+///
+/// RESIDUAL, stated rather than hidden: an attacker who repeatedly induces
+/// `SECS`/`CECS` can repeatedly open this window. The delays inside it protect
+/// the conditioning-reset register writes, not key material, and a failed
+/// recovery still makes `fill` refuse — but the window is attacker-reachable,
+/// so `CONDITIONING_DELAYS` counts it and a climbing count means something is
+/// forcing resets.
+pub fn fixed_delay_permitted() -> bool {
+    !INIT_COMPLETE.load(Ordering::Acquire) || CONDITIONING.load(Ordering::Acquire)
+}
+
 fn init_locked() -> Result<(), ()> {
+    let _window = ConditioningWindow::enter();
+    init_conditioning()
+}
+
+fn init_conditioning() -> Result<(), ()> {
     // 1. Enter config mode with the NIST-compliant CR value.
     REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);
     // 1b. Health-test thresholds matching the CR configuration. Must happen

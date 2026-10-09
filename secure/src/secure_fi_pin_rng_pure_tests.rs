@@ -590,11 +590,13 @@ mod fi_source_text {
             .find("FI_DELAY_BOOTSTRAP")
             .expect("the bootstrap length must be named, not inlined");
         assert!(
-            body[..bootstrap].contains("!crate::rng::init_complete()"),
+            body[..bootstrap].contains("crate::rng::fixed_delay_permitted()"),
             "FI_DELAY_BOOTSTRAP must be reachable only while \
-             `!rng::init_complete()` — `hw::rng::init` calls wait_random while \
-             holding the driver lock, so the window is required, but anything \
-             wider is the fallback this change removes."
+             `rng::fixed_delay_permitted()` — the RNG's own conditioning \
+             sequence calls wait_random while holding the driver lock, at boot \
+             AND during `fill_bound`'s recovery from a latched SECS/CECS, so \
+             the window is required; anything wider is the fallback #833 \
+             removes."
         );
     }
 }

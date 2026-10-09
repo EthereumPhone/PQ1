@@ -1445,37 +1445,32 @@ impl Ambient {
                 //
                 //   shot_calls / shot_fallbacks / running_pct
                 //
-                //   max_hits    the LARGEST pool draw of any single fill in
-                //               the boot sweep (1, 4, 16, 32, 64 B) — i.e.
-                //               the true worst-case fan-out, which could not
-                //               be determined by reading the source. The
-                //               1-byte case is 31. A 0 here means the pool
-                //               never armed, i.e. the #832 fix is inert.
-                //   shot_fb     fallbacks on that same call. Expect 0. This
-                //               going to zero IS the fix: before #832 it was
-                //               31, every one of them replaying a single byte
-                //               and making the receipt-recheck separation a
-                //               known constant.
-                //   misses      pool exhaustion over the sweep: a delay that
-                //               found the pool ARMED but empty and had to
-                //               replay after all. The one new degradation
-                //               #832 introduces, and the number that sizes
-                //               `POOL_LEN`/`REFILL_BELOW`. Expect 0; anything
-                //               else means a fill length drains the pool
-                //               faster than the per-output-word top-up fills
-                //               it.
-                //
-                // Self-diagnosing: `shot_calls = 0` means the probe never
-                // ran, and `shot_calls = 1` with `shot_fallbacks = 1` means
-                // the OUTER draw failed too (RNG not yet initialised), so a
-                // misleading reading cannot pass as a real one.
-                let (max_hits, shot_fb, misses) = {
+                //   boot_fixed  arm-3 fixed delays + arm-2 retries taken
+                //               during boot. A LIVENESS WITNESS, not a
+                //               verdict: every `wait_random` inside
+                //               `init_conditioning` takes arm 2 three times
+                //               and arm 3 once, so a working build cannot
+                //               read 0. If it does, the counters are dead and
+                //               the next field proves nothing.
+                //   since_boot  the same two counters, accrued AFTER boot.
+                //               MUST BE 0 and stay 0. Anything else means the
+                //               fixed-delay window is not bounded — i.e. the
+                //               fallback #833 removed is back under another
+                //               name, or something is forcing RNG
+                //               conditioning resets.
+                //   misses      pool shortfall over the boot length sweep:
+                //               the per-output-word top-up not keeping up.
+                //               Expect 0; recovered in place either way.
+                let (boot_fixed, since_boot, misses) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
+                        let boot = FALLBACK_SHOT_CALLS.load(Relaxed);
+                        let now = crate::fi::BOOTSTRAP_DELAYS.load(Relaxed)
+                            + crate::fi::DELAY_RETRIES.load(Relaxed);
                         (
-                            FALLBACK_SHOT_CALLS.load(Relaxed),
-                            FALLBACK_SHOT_FB.load(Relaxed),
+                            boot,
+                            now.saturating_sub(boot),
                             FALLBACK_SHOT_MISSES
                                 .load(Relaxed)
                                 .max(crate::fi_delay_pool::MISSES.load(Relaxed)),
@@ -1489,8 +1484,8 @@ impl Ambient {
                 let _ = (isr_ms, gate_per_s, idle_s);
                 self.ft.len3 = frametime::format_raw(
                     &mut self.ft.buf3,
-                    max_hits.min(999),
-                    shot_fb.min(999),
+                    boot_fixed.min(999),
+                    since_boot.min(999),
                     misses.min(999),
                 );
                 self.ft.window_at = t;

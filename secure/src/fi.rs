@@ -67,13 +67,24 @@ fn rng_byte() -> u8 {
             DELAY_RETRIES.fetch_add(1, Ordering::Relaxed);
         }
 
-        // 3. The bootstrap window, and nothing wider. `hw::rng::init` holds
-        //    the driver lock, runs a conditioning reset during which no word
-        //    exists, and calls `wait_random` itself, so refusing here would
-        //    halt the device inside its own RNG bring-up. No secret exists
-        //    this early in boot, so a fixed length costs nothing — and the
-        //    window is closed for good by the first successful `init`.
-        if !crate::rng::init_complete() {
+        // 3. The RNG's own conditioning window, and nothing wider. Two cases,
+        //    both of which provably cannot yield a word and both of which
+        //    call `wait_random` while holding the driver lock:
+        //
+        //      * `hw::rng::init` at boot — refusing would halt the device
+        //        inside its own RNG bring-up, and no secret exists that early;
+        //      * `fill_bound`'s recovery from a latched `SECS`/`CECS` — the
+        //        documented transient error. Refusing THERE would halt the
+        //        device inside the very sequence meant to fix it, which is
+        //        strictly worse than the fallback arm 4 removes.
+        //
+        //    Residual, counted rather than hidden: the second case is
+        //    attacker-reachable by inducing `SECS`/`CECS` repeatedly. The
+        //    delays inside it protect conditioning-reset register writes, not
+        //    key material, and a failed recovery still makes `fill` refuse —
+        //    but a climbing `BOOTSTRAP_DELAYS` means something is forcing
+        //    resets, so it is observable.
+        if crate::rng::fixed_delay_permitted() {
             #[cfg(feature = "ui-px-frametime")]
             BOOTSTRAP_DELAYS.fetch_add(1, Ordering::Relaxed);
             return FI_DELAY_BOOTSTRAP;

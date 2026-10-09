@@ -351,13 +351,13 @@ fn positive_rng_htcr_an4230_written_inside_condrst_window() {
         "0xAAC7 is not one of E11's two permitted HTCR values for this part"
     );
     assert!(RNG_SRC.contains("htcr: Reg32::new(RNG + 0x10),"));
-    let init = extract_body(RNG_SRC, "fn init_locked() -> Result<(), ()> {");
+    let init = extract_body(RNG_SRC, "fn init_conditioning() -> Result<(), ()> {");
     let set = init
         .find("REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);")
         .expect("CONDRST set");
     let write = init
         .find("REG.htcr.write(RNG_HTCR_AN4230);")
-        .expect("HTCR write missing from init_locked");
+        .expect("HTCR write missing from init_conditioning");
     let clear = init
         .find("REG.cr.write(RNG_CR_NIST_DEFAULT);")
         .expect("CONDRST clear");
@@ -1789,7 +1789,7 @@ fn negative_rng_recovers_from_latched_seis_ceis_once() {
     let body = extract_body(RNG_SRC, "unsafe fn fill_bound(");
     assert!(body.contains("if sr0 & ERROR_FLAGS != 0 {"));
     assert!(body.contains("init_locked()?;"));
-    let init = extract_body(RNG_SRC, "fn init_locked() -> Result<(), ()> {");
+    let init = extract_body(RNG_SRC, "fn init_conditioning() -> Result<(), ()> {");
     assert!(init.contains("REG.sr.write(sr & !(SEIS | CEIS));"));
     assert!(init.contains("wait_for_conditioning_reset()?;"));
 }

@@ -243,12 +243,30 @@ pub fn run() -> ! {
             crate::fi_delay_pool::MISSES.load(Relaxed),
         )
     });
+    // ---- #834: is the fixed-delay window actually BOUNDED? ----
+    //
+    // Arm 3 of `fi::rng_byte` is the one place a fixed delay length survives,
+    // fenced to the RNG's own conditioning sequence. The claim that matters is
+    // not "it is small" but "it stops". So snapshot the counters now, after
+    // boot and after the sweep above, and publish everything that accrues
+    // AFTERWARDS. A device sitting idle must add nothing.
+    //
+    // The snapshot is also the liveness witness, and that is why it is shown.
+    // Every `wait_random` inside `init_conditioning` takes arm 2 three times
+    // (the driver lock is held by init itself, so each direct draw fails) and
+    // then arm 3 once, so a working build CANNOT read zero here. A zero would
+    // mean the counters are never incremented — in which case a zero in the
+    // second field proves nothing at all, rather than proving the window is
+    // bounded.
     #[cfg(feature = "ui-px-frametime")]
-    super::lcd::set_fallback_probe(
-        max_hits,
-        one_shot_fallbacks + sweep_fallbacks,
-        sweep_misses,
-    );
+    let boot_fixed_delays = {
+        use core::sync::atomic::Ordering::Relaxed;
+        crate::fi::BOOTSTRAP_DELAYS.load(Relaxed) + crate::fi::DELAY_RETRIES.load(Relaxed)
+    };
+    #[cfg(feature = "ui-px-frametime")]
+    super::lcd::set_fallback_probe(boot_fixed_delays, 0, sweep_misses);
+    #[cfg(feature = "ui-px-frametime")]
+    let _ = (max_hits, one_shot_fallbacks, sweep_fallbacks);
 
     loop {
         // ---- A. the endless ambient record, animated against real input.
