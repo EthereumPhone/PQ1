@@ -17,6 +17,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 #  of a stripped line, so include any attribute prefix like `@[inline] `)
 CHECKS = [
     ([ROOT/"lean/SphincsCVerify/Spec/Treehash.lean"],
+     ROOT/"extracted/Extracted/XmssRootVendored.lean",
+     ["def mtNode "]),
+    ([ROOT/"lean/SphincsCVerify/Spec/Treehash.lean"],
      ROOT/"extracted/Extracted/ForsAuthVendored.lean",
      ["def sibIdx ", "def forsMtAuthPath "]),
     ([ROOT/"lean/SphincsCVerify/Spec/Treehash.lean",

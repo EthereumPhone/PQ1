@@ -594,6 +594,48 @@ trees and complete Rust/EasyCrypt signer/session relation remain separate.
 Concrete backends, randomness, resources and hardware remain outside this
 component result.
 
+XMSS key-generation tree construction (2026-10-09) is now connected in
+`XmssRootSpec` and `XmssRootBridge`. The actual iterative `compute_subtree_root`
+processes all 512 WOTS public keys, preserves the exact stack frontier and
+ordered parent hashes, and returns the recursive height-nine root. The proof
+covers every seed, full-width 32-bit layer and 64-bit tree, and all byte-valued
+progress ranges. The actual `compute_pk_root` wrapper pads its sixteen-byte
+public seed and selects layer one, tree zero; its output equals the faithful
+recursive reference over the already-proved WOTS key-generation function.
+No desired-root premise or new hash assumption is introduced.
+
+Six additional kernel-only headlines bring the default audit to **142**, with
+the same **27** environment axioms. A finite index/height schedule certificate
+is checked by the kernel; symbolic hash values remain in the structural proof.
+The new extraction is regenerated completely, including Types and external
+interfaces; the registry now has 28 entries, 27 fresh and the unchanged,
+explicitly waived tx-merkle entry. Existing WOTS/hash bodies and the identical
+progress-sink definition are reused, without new opaque assumptions.
+
+Eight normal and extraction Rust cases compare actual roots with an independent
+recursive byte oracle, including full-width addresses, zero/max seeds and
+progress-range boundaries. The normal configuration also checks all 32 progress
+reports per subtree and the public progress wrapper's root. Two complete trees
+(public root and a full-width subtree) execute in Lean against those Rust roots,
+the pure tree and the faithful recursive reference; four changed values, two
+wrong output widths and eleven malformed test inputs are rejected. These
+bounded examples complement the universal proofs. Two positive proof baselines
+and 23 compiling semantic mutations exercise leaf counts, seeds and addresses,
+merge order, parent fields, stack slots and the public-root wrapper. The copied
+recursive tree definition has strict semantic-drift and deletion controls;
+resource/abnormal exits do not count as valid mutation rejection. All new gates
+and script paths are enrolled in blocking push/PR coverage.
+
+Production Rust and EasyCrypt proof inputs are unchanged. As elsewhere, formal
+totality applies to the callback-free `lean_extract` shape; arbitrary callback
+execution and its effects are outside that theorem. The normal/extraction
+corpus is empirical correspondence evidence, not a universal callback proof.
+XMSS authentication-path generation and signing/recovery composition, the
+actual shuffled forest/signer loop, serialization and special final-slot
+composition remain open, along with concrete backends, randomness and the
+complete Rust/EasyCrypt signer/session relation. No hardware or shipment claim
+follows from this component result.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

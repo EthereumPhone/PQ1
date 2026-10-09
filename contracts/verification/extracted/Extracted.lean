@@ -64,3 +64,4 @@ import Extracted.ForsAuthBridge
 import Extracted.ForsRootBridge
 
 import Extracted.ForsRoundtripSpec
+import Extracted.XmssRootBridge

@@ -1,3 +1,4 @@
+import Extracted.XmssRootBridge
 import Extracted.ForsRoundtripSpec
 import Extracted.ForsAuthBridge
 import Extracted.ForsRootBridge
@@ -253,3 +254,11 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.fors_auth_recovery_root
 #print axioms Extracted.Equiv.firmware_fors_sign_recover_root
 #print axioms Extracted.Equiv.firmware_fors_sign_recover_matches_vendored
+
+-- Actual XMSS key-generation trees and top-level public root.
+#print axioms Extracted.Equiv.xmss_root_schedule
+#print axioms Extracted.Equiv.xmss_compute_root_spec
+#print axioms Extracted.Equiv.xmss_compute_pk_root_spec
+#print axioms Extracted.Equiv.xmss_root_node_matches_vendored
+#print axioms Extracted.Equiv.firmware_xmss_root_matches_vendored
+#print axioms Extracted.Equiv.firmware_pk_root_matches_vendored

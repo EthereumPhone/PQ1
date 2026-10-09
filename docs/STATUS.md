@@ -50,8 +50,14 @@ every seed and full-width hypertree/tree index. The actual signing helper,
 eleven-level recovery helper and root builder now compose: the generated
 secret and path recover exactly the constructed root, also matching the
 faithful reference tree. This is a per-tree component theorem with an explicit
-valid-leaf bound. Hypertree key-generation trees, the complete signer loop
-and shuffled signing remain separate correspondence work.
+valid-leaf bound. XMSS key-generation tree construction now also agrees with
+the recursive reference: the actual stack processes all 512 WOTS leaves and
+returns the height-nine root, preserving full-width layer/tree addresses. The
+actual public-key-root wrapper pads the public seed and selects layer one,
+tree zero. These totality results concern the existing callback-free extraction;
+normal and extraction Rust corpora agree, with progress transcripts checked in
+the normal configuration. XMSS authentication-path generation, the complete
+signer loop and shuffled signing remain separate correspondence work.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

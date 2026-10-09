@@ -52,7 +52,7 @@ theorem firmware_th_pair_matches_vendored (seed adrs left right : Std.Array Std.
 
 attribute [local irreducible] Adrs.make
 
-private theorem merkle_tree_adrs (layer : Std.U32) (tree : Std.U64) (h pidx : Nat)
+theorem merkle_tree_adrs (layer : Std.U32) (tree : Std.U64) (h pidx : Nat)
     (hh : h + 1 < 2^32) (hi : pidx < 2^32) :
     toSpecDigest (treeAdrs layer tree h pidx) =
       Adrs.treeNode (UInt32.ofNat layer.val) (UInt64.ofNat tree.val)
@@ -119,7 +119,7 @@ theorem merkle_verifyAuthPath_eq_foldl
   simpa only [merkleStep, apply_ite, Bind.bind, Pure.pure, Id.instMonad] using hn
 
 
-private theorem merkle_pad (v : Std.Array Std.U8 16#usize) :
+theorem merkle_pad (v : Std.Array Std.U8 16#usize) :
     toSpecDigest (pad16p v) = ByteVec.pad16 (toSpecNode v) := by
   have h : pad16p v = pad16Pure v := by unfold pad16Pure; rfl
   rw [h, recovery_pad]

@@ -30,6 +30,8 @@ on:
   push:
     branches: [master]
     paths: &extracted_paths
+      - 'contracts/verification/scripts/test_xmss_root_proof_controls.py'
+      - 'contracts/verification/scripts/test_xmss_root_vendored_spec.py'
       - 'contracts/verification/scripts/test_fors_roundtrip_proof_controls.py'
       - 'contracts/verification/scripts/test_fors_auth_proof_controls.py'
       - 'contracts/verification/scripts/test_fors_auth_vendored_spec.py'

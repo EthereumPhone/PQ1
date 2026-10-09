@@ -81,6 +81,10 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-xmss-root': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/XmssRoot/Funs.lean', 'contracts/verification/extracted/Extracted/XmssRoot/Types.lean', 'contracts/verification/extracted/Extracted/XmssRoot/FunsExternal.lean'),
+    ),
     'extract-fors-auth': (
         ('sphincs-c10/src/fors.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
         ('contracts/verification/extracted/Extracted/ForsAuth/Funs.lean', 'contracts/verification/extracted/Extracted/ForsAuth/Types.lean', 'contracts/verification/extracted/Extracted/ForsAuth/FunsExternal.lean'),
