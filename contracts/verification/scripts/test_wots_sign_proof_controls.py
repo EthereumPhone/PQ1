@@ -17,7 +17,7 @@ FAMILIES = {
         ("oversized-bound", "let i1 ← i + 1#usize", "let i1 ← i + 2#usize"),
         ("stream-overrun", "let pos1 ← pos + 2#usize", "let pos1 ← pos + 3#usize"),
         ("stream-copy-index", "let a ← Array.update stream w i", "let a ← Array.update stream 128#usize i"),
-        ("negative-start", "let i ← n - 1#usize", "let i ← n - 2#usize"),
+        ("out-of-range-start", "let i ← n - 1#usize", "let i ← n - 0#usize"),
     ]),
     "sign": ("WotsSignSpec.lean", [
         ("skip-first", "{ start := 0#usize, «end» := params.L }", "{ start := 1#usize, «end» := params.L }"),
@@ -84,6 +84,20 @@ def main():
             source = fixture(family, before, after)
             typed = run(family + "-" + name + "-definitions", source.rsplit("namespace Extracted.Equiv", 1)[0])
             assert typed.returncode == 0, (name, typed.stdout, typed.stderr)
+            if name == "out-of-range-start":
+                # n-2 would still satisfy permutation: rejection of a proof
+                # script is not enough. This witness executes the changed
+                # function at a supported length and observes totality fail.
+                witness = source.rsplit("namespace Extracted.Equiv", 1)[0] + """
+#eval do
+  let seed := Aeneas.Std.Array.repeat 32#usize 1#u8
+  match sphincs_c10.shuffle.fisher_yates_probe seed 64#usize with
+  | .fail _ => IO.println "OK: out-of-range start fails on supported n=64"
+  | _ => throw (IO.userError "mutation does not violate totality on witness")
+"""
+                observed = run("shuffle-out-of-range-counterexample", witness)
+                assert observed.returncode == 0, (observed.stdout, observed.stderr)
+                assert "OK: out-of-range start fails on supported n=64" in observed.stdout
             require_semantic_rejection(run(family + "-" + name, source), family + "/" + name)
 
         with ThreadPoolExecutor(max_workers=3) as pool:
