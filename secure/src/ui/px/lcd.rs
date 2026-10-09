@@ -1460,8 +1460,15 @@ impl Ambient {
                 //   poisonings  poisonings in ordinary running since that
                 //               self-test. MUST be 0 — a device doing nothing
                 //               unusual should never fail to source a delay.
-                //   misses      pool shortfall over the boot length sweep.
-                let (selftest, poisonings_now, misses) = {
+                //   zeroskips   zero TRNG bytes rejection-sampled out of the
+                //               pool. A WITNESS, not a verdict: it must grow
+                //               slowly and forever (1/256 of draws), and a 0
+                //               here would mean the skip path never ran — in
+                //               which case the 0 in the middle field proves
+                //               nothing. This is the exact bug the device
+                //               found: treating these as failures poisoned
+                //               two operations per zero byte.
+                let (selftest, poisonings_now, zeroskips) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
@@ -1470,9 +1477,7 @@ impl Ambient {
                         (
                             FALLBACK_SHOT_CALLS.load(Relaxed),
                             now.saturating_sub(base),
-                            FALLBACK_SHOT_MISSES
-                                .load(Relaxed)
-                                .max(crate::fi_delay_pool::MISSES.load(Relaxed)),
+                            crate::fi_delay_pool::ZERO_SKIPS.load(Relaxed),
                         )
                     }
                     #[cfg(not(feature = "ui-px-frametime"))]
@@ -1485,7 +1490,7 @@ impl Ambient {
                     &mut self.ft.buf3,
                     selftest.min(999),
                     poisonings_now.min(999),
-                    misses.min(999),
+                    zeroskips.min(999),
                 );
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;
