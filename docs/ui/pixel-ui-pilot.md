@@ -52,6 +52,25 @@ details) → returning hero. Addresses: EIP-55, 2 × 21 chars at 22 px, or 3 × 
 when the uppercase-heavy string exceeds 276 px. Endings: `SIGNED SAFE TX`
 (branded disc + check), `SAFE TX DECLINED` (red disc + X).
 
+**UPDATE 2026-10-09 — `Confirm?` follows the CoW buy leg in Safe flows
+(owner decision).** In a Safe-wrapped CoW order (single-call presign or the
+multiSend `[approve, setPreSignature]` batch) the `Confirm?` no longer sits at
+index 5: it goes directly after the order's buy leg, so `SELL TOKEN`,
+`BUY MIN`/`BUY` and `BUY TOKEN` (or `BUYAMT` for a hex leg) are all shown before
+it — single call: `… COW ORDER, SELL, SELL TOKEN, BUY MIN, BUY TOKEN, Confirm?`
+(index 8); batch: index 14. One function decides the index for the inserter,
+the design checker and the sign-path `transcript_proof`
+(`pqsigner_ui_px::screen::confirm_index`); every other flow, including the
+direct CoW route, keeps index 5. This departs from upstream PQ-UI DESIGN.md
+§ Flow shape ("always the 6th screen"); the vendored `tools/pq-ui` reference
+was not changed. Cost: 288 B of secure flash.
+
+**UPDATE 2026-10-09 (later) — the direct CoW route follows suit (owner
+decision).** `confirm_index` now keys on a Safe **or** CoW hero, so the
+direct order reads `SIGN COWSWAP?, NETWORK, ORDER, SELL, SELL TOKEN, BUY MIN,
+BUY TOKEN, Confirm?` (index 7; hex legs end on `BUYAMT`). Every other flow
+keeps index 5.
+
 Host goldens: `secure/src/display_under_test/safe_screens_render_pure_tests.rs`
 (per-scenario record hashes + the legacy→screens fact differential) and
 `pqsigner-ui-px/tests/golden.rs` (frame hashes; `UI_PX_PNG=1` writes PNGs to
