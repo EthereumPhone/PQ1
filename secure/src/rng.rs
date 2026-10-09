@@ -156,11 +156,94 @@ pub fn byte_nonsecret(fallback: u8) -> u8 {
 /// `K / (K + 1)`; anything ABOVE that is a genuine TRNG seed/clock error
 /// (`SECS`/`CECS`) rather than guard contention, which is the one failure the
 /// structural read cannot predict.
+///
+/// MEASURED on the enclosed EVT screen unit, 2026-10-09, `evt-images/px805fb`
+/// (`mock-se,dev-testkey,ui-lcd,stm32u585,board-pq1,debug-log,ui-px,ui-px-dma,
+/// ui-px-frametime,ui-px-bench`), read off the glass:
+///
+/// ```text
+///   one top-level fi::wait_random()  ->  32 calls, 31 fallbacks
+///   running rate                     ->  96 %  == floor(100*31/32)
+/// ```
+///
+/// So `K = 31`, not the 27 asserted on #802, and the running rate lands
+/// exactly on the structural prediction.
+///
+/// WHAT THIS DOES AND DOES NOT SETTLE. The one success in that one-shot IS the
+/// top-level draw: the caller's delay got a fresh TRNG byte and the 31 replays
+/// all fell inside the extent of that one fill. By COUNT the fallback is the
+/// dominant path, 31:1; by ROLE it is confined to delays that harden the RNG
+/// driver itself. `CLAUDE.md` condition (d) says "NOT the dominant path"
+/// without saying which, so this measurement satisfies it on one reading and
+/// fails it on the other — an ambiguity in text written on 2026-10-08, to be
+/// resolved by the owner, not silently here.
+///
+/// WHO ACTUALLY LOSES THE GUARD. Not a thread-mode signing/auth/gateway
+/// delay: this is a single core and `DriverGuard` is released by `Drop` before
+/// any holder returns, so thread mode can only find `DRIVER_BUSY` set when
+/// thread mode is itself the holder — i.e. this very fan-out. The loser is
+/// always the PREEMPTING context, and it loses for its whole duration, because
+/// a handler that fires while thread mode is inside `fill_bound` finds the
+/// guard held until it returns. Two consequences, neither measured here:
+///
+///   * `consumption_mask::randomize()` runs from SysTick and once per ~1 s
+///     calls `rng::fill` to re-seed the sca-1 xorshift, FAIL-OPEN. Preempting
+///     a thread-mode fill silently skips that reseed — plausibly correlated
+///     with signing, which is when the PWM trace is worth collecting. That
+///     feature is production-forced and was ABSENT from the image above, so
+///     the agreement with `100*31/32` was guaranteed by the configuration.
+///   * The PendSV re-unlock runs `enter_pin` in exception context
+///     (`main.rs`), so a thread-mode fill in flight makes every delay on that
+///     PIN path replay and every `rng::fill` it attempts return `Err`.
+///
+/// Separating them needs fallbacks split by `IPSR != 0`; thread-mode
+/// fallbacks per fill should be exactly 31, and anything in exception context
+/// is the real contention. The bench cannot produce a production-shaped number
+/// on its own because it never signs.
+///
+/// WHAT THE REPLAYS ACTUALLY LEAK. `fi::rng_byte` passes `FI_DELAY_LAST_GOOD`
+/// as the fallback and stores the result only AFTER `fill` returns, so all 31
+/// inner delays of fill `N` use `b_{N-1}` — the fresh length of the PREVIOUS
+/// top-level delay, which an attacker watching the trace has already measured.
+/// They are not low-entropy, they are a deterministic function of an observed
+/// quantity.
 #[cfg(feature = "ui-px-frametime")]
 pub static NONSECRET_CALLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 #[cfg(feature = "ui-px-frametime")]
 pub static NONSECRET_FALLBACKS: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
+
+/// Fallbacks taken in EXCEPTION context (`IPSR != 0`).
+///
+/// This is the discriminating counter. A thread-mode fallback is the known
+/// fan-out — bounded, structural, 31 per fill. A fallback with `IPSR != 0` is a
+/// handler that preempted a thread-mode fill and lost the guard for its whole
+/// duration, which is the only way a delay OUTSIDE this driver ever replays.
+/// `consumption_mask::randomize()`'s fail-open sca-1 reseed and the PendSV
+/// `enter_pin` path are both in that class.
+#[cfg(feature = "ui-px-frametime")]
+pub static NONSECRET_FALLBACKS_ISR: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+
+/// Non-zero inside any exception handler. ARMv7-M/ARMv8-M B1.4.2: IPSR holds
+/// the active exception number, and 0 means thread mode.
+#[cfg(all(feature = "ui-px-frametime", target_arch = "arm"))]
+#[inline]
+fn in_exception() -> bool {
+    let ipsr: u32;
+    // SAFETY: `mrs` from IPSR is an unprivileged-safe status read with no
+    // side effects and no memory access.
+    unsafe {
+        core::arch::asm!("mrs {}, ipsr", out(reg) ipsr, options(nomem, nostack, preserves_flags));
+    }
+    ipsr != 0
+}
+
+#[cfg(all(feature = "ui-px-frametime", not(target_arch = "arm")))]
+#[inline]
+fn in_exception() -> bool {
+    false
+}
 
 #[cfg(feature = "ui-px-frametime")]
 #[inline]
@@ -169,5 +252,8 @@ fn nonsecret_tally(fell_back: bool) {
     NONSECRET_CALLS.fetch_add(1, Relaxed);
     if fell_back {
         NONSECRET_FALLBACKS.fetch_add(1, Relaxed);
+        if in_exception() {
+            NONSECRET_FALLBACKS_ISR.fetch_add(1, Relaxed);
+        }
     }
 }

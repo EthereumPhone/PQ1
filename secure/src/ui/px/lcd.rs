@@ -1444,26 +1444,28 @@ impl Ambient {
                 //               at boot in thread mode with a clean guard.
                 //               `shot_calls = 1 + K`, `shot_fallbacks = K`.
                 //               The reviewed reading of the source was 28/27.
-                //   running_pct fallback percentage over EVERY
-                //               `byte_nonsecret` since boot. It must land on
-                //               `100*K/(K+1)`; anything higher is a real TRNG
-                //               seed/clock error on top of guard contention.
+                //   isr_fb      fallbacks taken with `IPSR != 0`. THE
+                //               discriminating number: a thread-mode fallback
+                //               is the known 31-per-fill fan-out, but an
+                //               exception-context one is a handler that
+                //               preempted a thread-mode fill and lost the
+                //               guard for its whole duration — the only way a
+                //               delay outside the RNG driver ever replays.
+                //               `consumption_mask::randomize()`'s fail-open
+                //               sca-1 reseed is the production case.
                 //
                 // Self-diagnosing: `shot_calls = 0` means the probe never
                 // ran, and `shot_calls = 1` with `shot_fallbacks = 1` means
                 // the OUTER draw failed too (RNG not yet initialised), so a
                 // misleading reading cannot pass as a real one.
-                let (shot_calls, shot_fb, running_pct) = {
+                let (shot_calls, shot_fb, isr_fb) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
-                        let tot = crate::rng::NONSECRET_CALLS.load(Relaxed);
-                        let fb = crate::rng::NONSECRET_FALLBACKS.load(Relaxed);
-                        let pct = if tot == 0 { 0 } else { fb.saturating_mul(100) / tot };
                         (
                             FALLBACK_SHOT_CALLS.load(Relaxed),
                             FALLBACK_SHOT_FB.load(Relaxed),
-                            pct,
+                            crate::rng::NONSECRET_FALLBACKS_ISR.load(Relaxed),
                         )
                     }
                     #[cfg(not(feature = "ui-px-frametime"))]
@@ -1476,7 +1478,7 @@ impl Ambient {
                     &mut self.ft.buf3,
                     shot_calls.min(999),
                     shot_fb.min(999),
-                    running_pct.min(999),
+                    isr_fb.min(999),
                 );
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;

@@ -183,8 +183,12 @@ pub fn run() -> ! {
     //
     // Self-contained: thread mode, nothing else running, no wallet needed.
     // One call in, two counters out.
+    //
+    // Inside `interrupt::free`: otherwise an ISR that drew from the RNG during
+    // the window would add its own calls and the claim "all K fallbacks are
+    // this fill's fan-out" would be an assumption rather than a measurement.
     #[cfg(feature = "ui-px-frametime")]
-    let (one_shot_calls, one_shot_fallbacks) = {
+    let (one_shot_calls, one_shot_fallbacks) = cortex_m::interrupt::free(|_| {
         use core::sync::atomic::Ordering::Relaxed;
         crate::rng::NONSECRET_CALLS.store(0, Relaxed);
         crate::rng::NONSECRET_FALLBACKS.store(0, Relaxed);
@@ -193,7 +197,7 @@ pub fn run() -> ! {
             crate::rng::NONSECRET_CALLS.load(Relaxed),
             crate::rng::NONSECRET_FALLBACKS.load(Relaxed),
         )
-    };
+    });
     #[cfg(feature = "ui-px-frametime")]
     super::lcd::set_fallback_probe(one_shot_calls, one_shot_fallbacks);
 
