@@ -67,6 +67,11 @@ def fixture(family, before=None, after=None):
         proof = proof[:proof.index("def parsedSignature")] + "\nend Extracted.Equiv\n"
     if family == "counter":
         proof = proof[:proof.index("attribute [local irreducible] ByteVec.loadU32BE")] + "\nend Extracted.Equiv\n"
+    if family in ("byte-entry", "header"):
+        # The byte-entry theorem is the first consumer of these replacements.
+        # Later callers only repeat its failed obligation after Lean inserts an
+        # error placeholder; they add no independent mutation evidence.
+        proof = proof[:proof.index("theorem strict_accepts_implies_raw")] + "\nend Extracted.Equiv\n"
     for name in names:
         # Replace the unqualified declaration/self references, and only the
         # namespace-qualified uses in the unchanged proof. Never rename verify
@@ -96,7 +101,13 @@ def fixture(family, before=None, after=None):
         injected += "namespace SphincsCVerify.Spec.Signature\nopen SphincsCVerify.Spec\n" + entry + "\nend SphincsCVerify.Spec.Signature\n"
         proof = re.sub(r"Signature\.verify(?![A-Za-z0-9_])", "Signature.verify_probe", proof)
     marker = "namespace Extracted.Equiv"
-    proof = proof.replace(marker, injected + "\n" + marker, 1)
+    # These proofs rewrite H_msg explicitly. Keep the hash construction opaque
+    # to definitional equality so a wrong header binding fails immediately,
+    # instead of expanding SHA internals while reporting a semantic mismatch.
+    proof = proof.replace(marker, injected + "\n" + marker +
+                          "\nattribute [local irreducible] SphincsCVerify.Spec.hMsg "
+                          "SphincsCVerify.Spec.Hypertree.verifyWithDigest "
+                          "Extracted.Equiv.verifierDigest", 1)
     assert "sorry" not in proof and "axiom " not in proof
     return proof
 
