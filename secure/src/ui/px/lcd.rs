@@ -1445,26 +1445,31 @@ impl Ambient {
                 //
                 //   shot_calls / shot_fallbacks / running_pct
                 //
-                //   windows     conditioning windows opened during boot.
-                //               Separates "many windows" from "few windows
-                //               with ISR delays landing inside them" — the
-                //               380 total of the previous image could have
-                //               been either, and it decides whether the #834
-                //               residual is routine or exceptional.
-                //   recovered   fixed delays served by a DELIBERATE post-boot
-                //               conditioning window. Nonzero means the device
-                //               SURVIVED the path that halted it before
-                //               0a02fe54 — pre-fix this screen would never
-                //               paint. Expect 4: one `wait_random` in
-                //               `init_conditioning`, 3 retries plus 1 fixed.
+                //   selftest    #835 poison-boundary self-test bitmask,
+                //               run once at boot. Expect 15:
+                //                 bit 0 flag reads POISONED after poisoning
+                //                 bit 1 `rng::fill` REFUSES while poisoned
+                //                 bit 2 flag reads CLEAN after clearing
+                //                 bit 3 `rng::fill` SUCCEEDS again after
+                //               Four bits rather than a verdict, because a
+                //               single pass/fail cannot tell "it works" from
+                //               "it never ran". Bit 3 is what separates this
+                //               from the halt it replaced: under #833/#834
+                //               the device would be in a `wfe` loop and this
+                //               screen would never paint.
+                //   poisonings  poisonings in ordinary running since that
+                //               self-test. MUST be 0 — a device doing nothing
+                //               unusual should never fail to source a delay.
                 //   misses      pool shortfall over the boot length sweep.
-                let (windows, recovered, misses) = {
+                let (selftest, poisonings_now, misses) = {
                     #[cfg(feature = "ui-px-frametime")]
                     {
                         use core::sync::atomic::Ordering::Relaxed;
+                        let base = FALLBACK_SHOT_FB.load(Relaxed);
+                        let now = crate::fi::DELAY_POISONINGS.load(Relaxed);
                         (
                             FALLBACK_SHOT_CALLS.load(Relaxed),
-                            FALLBACK_SHOT_FB.load(Relaxed),
+                            now.saturating_sub(base),
                             FALLBACK_SHOT_MISSES
                                 .load(Relaxed)
                                 .max(crate::fi_delay_pool::MISSES.load(Relaxed)),
@@ -1478,8 +1483,8 @@ impl Ambient {
                 let _ = (isr_ms, gate_per_s, idle_s);
                 self.ft.len3 = frametime::format_raw(
                     &mut self.ft.buf3,
-                    windows.min(999),
-                    recovered.min(999),
+                    selftest.min(999),
+                    poisonings_now.min(999),
                     misses.min(999),
                 );
                 self.ft.window_at = t;

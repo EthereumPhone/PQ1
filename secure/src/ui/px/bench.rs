@@ -243,64 +243,66 @@ pub fn run() -> ! {
             crate::fi_delay_pool::MISSES.load(Relaxed),
         )
     });
-    // ---- #834: is the fixed-delay window actually BOUNDED? ----
+    // ---- #835: does the POISON BOUNDARY actually work on silicon? ----
     //
-    // Arm 3 of `fi::rng_byte` is the one place a fixed delay length survives,
-    // fenced to the RNG's own conditioning sequence. The claim that matters is
-    // not "it is small" but "it stops". So snapshot the counters now, after
-    // boot and after the sweep above, and publish everything that accrues
-    // AFTERWARDS. A device sitting idle must add nothing.
+    // Option 2 replaced #833/#834's device halt with a per-operation poison:
+    // a delay that cannot be given a fresh length performs no delay, raises
+    // the flag, and the OPERATION refuses at its boundary. Every claim about
+    // that so far is a source-text assertion. This exercises it for real.
     //
-    // The snapshot is also the liveness witness, and that is why it is shown.
-    // Every `wait_random` inside `init_conditioning` takes arm 2 three times
-    // (the driver lock is held by init itself, so each direct draw fails) and
-    // then arm 3 once, so a working build CANNOT read zero here. A zero would
-    // mean the counters are never incremented — in which case a zero in the
-    // second field proves nothing at all, rather than proving the window is
-    // bounded.
+    // Four sub-checks, one bit each, because a single pass/fail cannot
+    // distinguish "it works" from "it never ran":
+    //
+    //   bit 0  the flag reads POISONED after `poison_delay_source()`
+    //   bit 1  `rng::fill` REFUSES while poisoned          <- the boundary
+    //   bit 2  the flag reads CLEAN after `clear_delay_poison()`
+    //   bit 3  `rng::fill` SUCCEEDS again afterwards       <- not stuck
+    //
+    // Bit 3 is the one that distinguishes option 2 from the halt it replaced:
+    // under #833/#834 the device would already be dead in a `wfe` loop and
+    // this screen would never paint. Here the operation failed and the device
+    // carried on.
+    //
+    // Deliberately NOT exercising `pin_attempts_bump`: its poison check is the
+    // C3 fix, but if that check were ever missing the call would commit a
+    // flash write and durably spend one of this unit's ten PIN attempts. A
+    // probe must not be able to damage the device it is measuring, so that one
+    // stays covered by source tests only.
     #[cfg(feature = "ui-px-frametime")]
-    let (boot_windows, recovery_delta) = {
-        use core::sync::atomic::Ordering::Relaxed;
-        let windows_at_boot = crate::hw::rng::CONDITIONING_WINDOWS.load(Relaxed);
-        let before = crate::fi::BOOTSTRAP_DELAYS.load(Relaxed)
-            + crate::fi::DELAY_RETRIES.load(Relaxed);
+    let poison_selftest = cortex_m::interrupt::free(|_| {
+        let mut bits = 0u32;
+        let mut scratch = [0u8; 4];
 
-        // ---- #834: DEMONSTRATE the halt that was fixed, don't infer it ----
-        //
-        // `fill_bound` recovers from a latched `SECS`/`CECS` by calling
-        // `init_locked`, which calls `wait_random` while holding the driver
-        // lock. Before 0a02fe54 that reached the refusal and HALTED the
-        // device inside the sequence meant to fix the error. The fix is the
-        // conditioning window — and `since_boot` reading 0 means no recovery
-        // happened on its own, so the fix was never exercised.
-        //
-        // So open one deliberately. `init()` runs exactly the conditioning
-        // sequence recovery runs. Inside `interrupt::free` so SysTick cannot
-        // hold the driver lock and turn a real result into an ambiguous
-        // `Err`. If this image boots and shows a NONZERO delta, the device
-        // survived the path that used to kill it; pre-fix, it would be dead
-        // here and the screen would never paint.
-        let recovered = cortex_m::interrupt::free(|_| {
-            let ok = crate::hw::rng::init().is_ok();
-            let after = crate::fi::BOOTSTRAP_DELAYS.load(Relaxed)
-                + crate::fi::DELAY_RETRIES.load(Relaxed);
-            if ok {
-                after.saturating_sub(before)
-            } else {
-                0
-            }
-        });
-        (windows_at_boot, recovered)
-    };
+        crate::fi::poison_delay_source();
+        if crate::fi::delay_source_failed() {
+            bits |= 1 << 0;
+        }
+        if crate::rng::fill(&mut scratch).is_err() {
+            bits |= 1 << 1;
+        }
+
+        crate::fi::clear_delay_poison();
+        if !crate::fi::delay_source_failed() {
+            bits |= 1 << 2;
+        }
+        if crate::rng::fill(&mut scratch).is_ok() {
+            bits |= 1 << 3;
+        }
+
+        scratch.fill(0);
+        bits
+    });
+
+    // Baseline AFTER the self-test, so the overlay's second field counts only
+    // poisonings that happen in ordinary running. It must stay 0: a device
+    // doing nothing unusual should never fail to source a delay.
     #[cfg(feature = "ui-px-frametime")]
-    super::lcd::set_fallback_probe(boot_windows, recovery_delta, sweep_misses);
+    let poison_baseline = crate::fi::DELAY_POISONINGS.load(core::sync::atomic::Ordering::Relaxed);
+
     #[cfg(feature = "ui-px-frametime")]
-    let _ = (
-        max_hits,
-        one_shot_fallbacks,
-        sweep_fallbacks,
-        boot_fixed_unused(),
-    );
+    super::lcd::set_fallback_probe(poison_selftest, poison_baseline, sweep_misses);
+    #[cfg(feature = "ui-px-frametime")]
+    let _ = (max_hits, one_shot_hits, one_shot_fallbacks, sweep_fallbacks);
 
     loop {
         // ---- A. the endless ambient record, animated against real input.
