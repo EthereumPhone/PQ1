@@ -17,6 +17,8 @@
       "extract-fors-index"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-wots-keygen",
+      "extract-wots-secret",
       "extract-fors-pk",
       "extract-verifier",
       "extract-fors-grind-r",
@@ -29,6 +31,7 @@
       "extract-wots-digits"
     ],
     "sphincs-c10/src/address.rs": [
+      "extract-wots-keygen",
       "extract-fors-pk",
       "extract-verifier",
       "extract-wots-find-count",
@@ -36,6 +39,8 @@
       "extract-fors-recovery"
     ],
     "sphincs-c10/src/hash.rs": [
+      "extract-wots-keygen",
+      "extract-wots-secret",
       "extract-fors-pk",
       "extract-verifier",
       "extract-fors-grind-r",
@@ -49,6 +54,7 @@
       "extract-fors-recovery"
     ],
     "sphincs-c10/src/wots.rs": [
+      "extract-wots-keygen",
       "extract-verifier",
       "extract-wots-find-count",
       "extract-wots-pkfromsig",
@@ -73,6 +79,8 @@
     ]
   },
   "required_targets": [
+    "extract-wots-keygen",
+    "extract-wots-secret",
     "extract-fors-pk",
     "extract-verifier",
     "extract-fors-grind-r",
@@ -98,6 +106,72 @@
   ],
   "entries": [
     {
+      "target": "extract-wots-keygen",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/wots.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/hash.rs"
+      ],
+      "rust_files_sha256": [
+        "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "467deb815a3016fea8c8782a474d68a2bfea01dc373434456d458b5fd9ec83fc",
+        "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "FunsExternal_Template.lean": "8834d251b95dd8e88fb1260c1d9f7c05fe182ae8a4da6d3399a4706808cc5c64"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/WotsKeygen/Funs.lean",
+        "contracts/verification/extracted/Extracted/WotsKeygen/Types.lean",
+        "contracts/verification/extracted/Extracted/WotsKeygen/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "5dc3a503ab95f6c4f93eb25e60a8bf001725e7cecd6a4b8135da07ccada455ab",
+        "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "b9e36003716d7926bb1ab963d3291be09d6244668bd812a1ffacdecaf67857ab"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/WotsKeygenSpec.lean",
+      "headline_theorem": "wots_keygen_pk_spec",
+      "fresh": true
+    },
+    {
+      "target": "extract-wots-secret",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/params.rs"
+      ],
+      "rust_files_sha256": [
+        "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "82ac1bded54300244f2400d0685cdffddcbb9db0d5d3e62a1e4ea896ede42b4b",
+        "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "FunsExternal_Template.lean": "9ecc86e4125abc2e926b7933b0afcabe372332617278e6a27fc576981f4601d6"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/WotsSecret/Funs.lean",
+        "contracts/verification/extracted/Extracted/WotsSecret/Types.lean",
+        "contracts/verification/extracted/Extracted/WotsSecret/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "8ab491725baaa428af30a8ed93e44e523664f115cd74b81ce0966ea962c8f4ad",
+        "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
+        "0d3109b26f957365775d26b4119b0fd239a0fc9b13f3a079d9edb0e2e280ea88"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/WotsSecretSpec.lean",
+      "headline_theorem": "wots_secret_spec",
+      "fresh": true
+    },
+    {
       "target": "extract-fors-pk",
       "make_dir": "contracts/verification",
       "crate": "sphincs-c10",
@@ -111,7 +185,7 @@
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb"
+        "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "160318291e85c43e75cb80571f823806e0b083e353b366de7008b467e90a3b20",
@@ -149,7 +223,7 @@
         "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb",
+        "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45",
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef"
@@ -185,7 +259,7 @@
       "rust_files_sha256": [
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
-        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb"
+        "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "42c9aaed875972bb4a232c388ed3a6c88d5acb854fd23af70125615d3a70a1e3",
@@ -222,7 +296,7 @@
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb"
+        "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "f68e07c6eff2680c501857529e37d539bec5312ee6c76d72d1627f452313f0c2",
@@ -402,7 +476,7 @@
         "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb"
+        "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "03fdaae78900f26b748b182ec39b7a876881f1217520abc4e13d0129c6a34be8",
@@ -463,7 +537,7 @@
         "sphincs-c10/src/params.rs"
       ],
       "rust_files_sha256": [
-        "a85e81359964a9c434d7e11270ac279037cf5d0a70c7e4cd8f9cf0029c7cb5bb",
+        "4630e33e82028c1b252abd49032bdd0fb9744d5aa15824d4953c57640f1b5a45",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
       "raw_generated_sha256": {
@@ -479,7 +553,7 @@
       "generated_lean_sha256": [
         "c962d0645f1dd5fb23e486123444310a33feeb7d56c8d9fa40acc9f86e7c5404",
         "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
-        "46caf60336c71d92ecf1c6d3db765f56ddb85e7a5b06d39f3230008614528f01"
+        "3b2c51b255bd986e19843f4e4d968974ba68697864266c96b9459bd2ad1ada7b"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/HashSpecs.lean",
       "headline_theorem": "th_spec",

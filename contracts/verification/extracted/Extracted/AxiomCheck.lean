@@ -1,3 +1,4 @@
+import Extracted.WotsKeygenBridge
 import Extracted.WholeVerifierSpec
 import Extracted.HypertreeStrictSpec
 import Extracted.ForsVerifierPrefix
@@ -217,3 +218,11 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_verify_accepts_strict_signature
 #print axioms Extracted.Equiv.firmware_verify_matches_strict_success
 #print axioms Extracted.Equiv.firmware_verify_strict_forced_refusal
+
+-- Actual WOTS secret and complete public-key generation.
+#print axioms Extracted.Equiv.wotsSecretPreimage_length
+#print axioms Extracted.Equiv.wots_secret_spec
+#print axioms Extracted.Equiv.firmware_wots_secret_matches_vendored
+#print axioms Extracted.Equiv.wots_keygen_loop_spec
+#print axioms Extracted.Equiv.wots_keygen_pk_spec
+#print axioms Extracted.Equiv.firmware_wots_keygen_matches_vendored

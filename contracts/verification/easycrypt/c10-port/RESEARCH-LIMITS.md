@@ -372,7 +372,7 @@ result agrees, including a final root mismatch. A nonzero final FORS field
 forces both verifiers to refuse. Rust acceptance implying strict acceptance
 remains open because of the deliberate rejection/zero-node distinction.
 
-Eight additional kernel-only headlines bring the current audit to **114**, with
+Eight additional kernel-only headlines brought that batch to **114**, with
 the same exact **27** environment axioms. Sixteen copied top-verifier/decoder
 and byte-load declarations have semantic-edit and deletion fidelity controls.
 Forty-eight vectors execute the unchanged whole production Rust verifier and an
@@ -389,6 +389,46 @@ per-push/per-PR workflow paths, with path-deletion regression controls (#817).
 Tree construction/membership, concrete hash backends, randomness and full
 signer/session refinement remain open. EasyCrypt proof inputs and numerical
 bounds are unchanged.
+
+WOTS public-key generation (2026-10-09) now has an actual extraction and
+unconditional correspondence theorem. `WotsSecretSpec` proves the exact 80-byte
+secret preimage: 32-byte secret seed, `"wots"`, four-byte layer, full 64-bit tree
+right-aligned in a 32-byte word, four-byte keypair and four-byte chain index,
+followed by 16-byte truncation. `WotsSecretBridge` connects it to the faithful
+`wotsSecret`. `WotsKeygenSpec` proves termination and all 43 positional chain
+endpoints, each starting at zero and advancing seven steps, followed by ordered
+compression in the WOTS-public-key address domain. `WotsKeygenBridge` composes
+these with the faithful `Wots.keygenPk` for every input seed and address.
+
+The only production change routes `hash::wots_secret` through the existing
+`sha256_parts` helper. Its six updates preserve order and lengths
+`[32,4,4,32,4,4]`; the supplied SHA backend model is unchanged. This small refactor
+avoids an unsupported generic-Digest extraction path in the pinned translator.
+Normal, `lean_extract`, software and host hardware-adapter builds compare all
+195 secret cases against independent preimage assembly. The adapter cases check
+the exact six update segments, without claiming peripheral correctness. Another
+195 normal/extraction Rust cases compare actual `keygen_pk` to an independent
+address/secret/chain/compression oracle. Both Lean execution suites compare the
+actual extraction, pure result and faithful reference, each with 390 changed
+output-byte and 195 output-width controls, plus six/seven malformed-input cases.
+
+Six additional kernel-only headlines bring the audit to **120**, with the same
+**27** environment axioms. Both new extractions and all six existing targets
+sharing `hash.rs` have complete-output regeneration checks; the registry has
+24 entries, 23 fresh and the unchanged, explicitly waived tx-merkle entry.
+Four new copied definitions have semantic-edit and deletion fidelity controls.
+Seven positive proof baselines accompany 28 typed semantic mutation controls.
+The new controls and KAT JSON input are enrolled in the shared push/PR paths;
+removing any new path from either event fails a regression control (#819).
+
+Release `thumbv8m.main-none-eabi`, `hw-sha256` crate comparison measures 44 fewer
+code bytes, unchanged rodata/data/bss, and an eight-byte compiler-frame increase
+in `wots::keygen_pk` and `hypertree::sign_inner`. This is a bounded crate/frame
+delta, not a whole-program worst-case-stack or silicon receipt. The manual
+Rust/EasyCrypt source binding and split identity are deliberately updated;
+the EasyCrypt proof sources, assumption census and numerical bounds are unchanged.
+Tree construction/membership, FORS secret generation (#820), shuffled signing,
+concrete hash backends, randomness and full signer/session refinement remain open.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

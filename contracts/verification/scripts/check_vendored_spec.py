@@ -16,6 +16,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 #  byte-for-byte — semantic content; markers are matched against the start
 #  of a stripped line, so include any attribute prefix like `@[inline] `)
 CHECKS = [
+    ([ROOT/"lean/SphincsCVerify/Spec/Bytes.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Hash.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Wots.lean"],
+     ROOT/"extracted/Extracted/WotsKeygenVendored.lean",
+     ["def u64ToB32 ", "def wotsTag :", "def wotsSecret\n", "def keygenPk\n"]),
     ([ROOT/"lean/SphincsCVerify/Spec/Params.lean",
       ROOT/"lean/SphincsCVerify/Spec/Bytes.lean",
       ROOT/"lean/SphincsCVerify/Spec/Hypertree.lean"],

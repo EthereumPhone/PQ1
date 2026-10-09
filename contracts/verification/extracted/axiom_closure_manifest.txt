@@ -162,3 +162,11 @@ Extracted.Equiv.byteVerifier_eq_strictResult
 Extracted.Equiv.firmware_verify_accepts_strict_signature
 Extracted.Equiv.firmware_verify_matches_strict_success
 Extracted.Equiv.firmware_verify_strict_forced_refusal
+
+# WOTS generation: kernel-only under the existing supplied SHA backend.
+Extracted.Equiv.wotsSecretPreimage_length
+Extracted.Equiv.wots_secret_spec
+Extracted.Equiv.firmware_wots_secret_matches_vendored
+Extracted.Equiv.wots_keygen_loop_spec
+Extracted.Equiv.wots_keygen_pk_spec
+Extracted.Equiv.firmware_wots_keygen_matches_vendored

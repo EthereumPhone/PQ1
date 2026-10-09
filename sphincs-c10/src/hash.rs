@@ -384,14 +384,14 @@ pub fn wots_secret(
 ) -> [u8; N] {
     bump!(WOTS_SECRET);
     let tree_b32 = u64_to_b32(tree);
-    let mut h = Sha256::new();
-    h.update(sk_seed);
-    h.update(b"wots");
-    h.update(layer.to_be_bytes()); // to_b4(layer) — 4 bytes
-    h.update(&tree_b32); // to_b32(tree) — 32 bytes
-    h.update(kp.to_be_bytes()); // to_b4(kp) — 4 bytes
-    h.update(chain_idx.to_be_bytes()); // to_b4(chain_idx) — 4 bytes
-    truncate(&h.finalize().into())
+    truncate(&sha256_parts(&[
+        sk_seed,
+        b"wots",
+        &layer.to_be_bytes(), // to_b4(layer) — 4 bytes
+        &tree_b32, // to_b32(tree) — 32 bytes
+        &kp.to_be_bytes(), // to_b4(kp) — 4 bytes
+        &chain_idx.to_be_bytes(), // to_b4(chain_idx) — 4 bytes
+    ]))
 }
 
 // ---------------------------------------------------------------------------

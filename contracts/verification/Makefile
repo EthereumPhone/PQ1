@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1727,6 +1727,11 @@ _verify-lake-path-self-test:
 #   make verify-extract-differential GEN=1    re-execute the Rust to regenerate them
 verify-extract-differential: ## Extracted-Lean vs shipped-Rust differential
 ifeq ($(GEN),1)
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=1 cargo test --locked -p sphincs-c10 --features sim-internals \
+	  --target x86_64-unknown-linux-gnu --test gen_wots_secret_vectors --release gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_KEYGEN_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_keygen_corpus -- --nocapture
 	@echo "=== regenerating EXPECTED outputs from the SHIPPED Rust (ground truth) ==="
 	@cd $(REPO_ROOT) && cargo test -p fw-manifest --test gen_extract_vectors --release -- --nocapture 2>&1 \
 	  | grep -E 'gen_extract_vectors:|test result'
@@ -1759,6 +1764,20 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_KEYGEN_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_keygen_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_KEYGEN_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_keygen_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_WHOLE_VERIFIER_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release whole_verifier_corpus -- --nocapture
@@ -1836,6 +1855,10 @@ endif
 	@$(_FV_PYTHON3) scripts/test_fors_prefix_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HypertreeDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_hypertree_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsKeygenBridge Extracted.WotsSecretDiffVectors Extracted.WotsKeygenDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSecretDiffCheck.lean
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsKeygenDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_wots_keygen_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WholeVerifierDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_whole_verifier_proof_controls.py
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
@@ -1996,6 +2019,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/test_fors_prefix_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_hypertree_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_signature_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_wots_keygen_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See
@@ -2470,3 +2494,35 @@ _extract-verifier-impl:
 	@rm $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.dedup.lean
 	@diff -u $(EXTRACTED_DIR)/Extracted/Verify/Funs.lean $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-verifier $${EXTRACTION_TMP_ROOT}/verifyfors-out $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.fixed.lean
+
+# Actual WOTS generation; reused dependencies have already proved extracted bodies.
+_extract-wots-secret-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::sha256_parts' \
+	  --start-from 'sphincs_c10::hash::wots_secret' --dest-file $${EXTRACTION_TMP_ROOT}/wotssecret.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/wotssecret.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Wotssecret.=Extracted.WotsSecret.' \
+	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::truncate' \
+	  --add-import Extracted.Hash.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/WotsSecret/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-secret $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual WOTS generation; reused dependencies have already proved extracted bodies.
+_extract-wots-keygen-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::wots_secret' --opaque 'sphincs_c10::hash::chain_hash' --opaque 'sphincs_c10::hash::th_multi' \
+	  --start-from 'sphincs_c10::wots::keygen_pk' --dest-file $${EXTRACTION_TMP_ROOT}/wotskeygen.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/wotskeygen.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Wotskeygen.=Extracted.WotsKeygen.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::address::set_chain_index' --kill 'sphincs_c10::params::W' --kill 'sphincs_c10::params::L' --kill 'sphincs_c10::params::ADRS_WOTS' --kill 'sphincs_c10::params::ADRS_WOTS_PK' \
+	  --add-import Extracted.PkFromSig.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/WotsKeygen/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-keygen $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean

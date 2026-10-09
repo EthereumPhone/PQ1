@@ -427,7 +427,11 @@
         "contracts/verification/scripts/test_hypertree_vendored_spec.py",
         "contracts/verification/scripts/test_whole_verifier_proof_controls.py",
         "contracts/verification/scripts/test_signature_vendored_spec.py",
-        "contracts/verification/lean/SphincsCVerify/Spec/Signature.lean"
+        "contracts/verification/lean/SphincsCVerify/Spec/Signature.lean",
+        "contracts/smart-wallet/test/c10_test_vectors.json",
+        "contracts/verification/scripts/test_wots_keygen_proof_controls.py",
+        "contracts/verification/scripts/test_wots_keygen_vendored_spec.py",
+        "sphincs-c10/tests/gen_wots_secret_vectors.rs"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",

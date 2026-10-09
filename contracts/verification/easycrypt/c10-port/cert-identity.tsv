@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	aaf747777d1e559c722482ffa37f0152
+split	63463c2158987d54aacfa14a7707c673
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1560,3 +1560,8 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 2026-10-08: extractable bounded Rust WOTS search and test-only entry point.
 # Source binding changed; EasyCrypt proof sources and assumptions unchanged.
 # Split identity 88f7513fc775f338200a45ef5c38e086 -> eeccd2afca8898b60616feb1b501b927. Full replay required.
+
+# 2026-10-09: WOTS secret uses existing ordered streaming SHA helper.
+# Rust source-binding changes; EasyCrypt proof sources/census unchanged.
+# Split identity aaf747777d1e559c722482ffa37f0152 -> 63463c2158987d54aacfa14a7707c673.
+# Full replay required; software/extraction/hardware-adapter preimage checks accompany the refactor.

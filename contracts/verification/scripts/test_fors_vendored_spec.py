@@ -9,6 +9,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 COPY = [
     "scripts/check_vendored_spec.py",
+    "extracted/Extracted/WotsKeygenVendored.lean",
     "extracted/Extracted/VerifierTopVendored.lean",
     "extracted/Extracted/SignatureDecodeVendored.lean",
     "lean/SphincsCVerify/Spec/Signature.lean",

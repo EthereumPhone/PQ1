@@ -111,6 +111,20 @@ class GateControls(unittest.TestCase):
                 self.run_checker()
                 self.restore_workflow(relative)
 
+    def test_wots_generation_and_kat_paths_trigger_both_events(self):
+        row = next(r for r in BLOCKING if r['id'] == 'verify-extracted')
+        names = ['contracts/smart-wallet/test/c10_test_vectors.json', 'contracts/verification/scripts/test_wots_keygen_proof_controls.py', 'contracts/verification/scripts/test_wots_keygen_vendored_spec.py', 'sphincs-c10/tests/gen_wots_secret_vectors.rs']
+        for event in ['push', 'pull_request']:
+            for name in names:
+                with self.subTest(event=event, path=name):
+                    def remove(wf, job, step):
+                        trigger = gate._get_on(wf)[event]
+                        self.assertIn(name, trigger['paths'])
+                        trigger['paths'] = [p for p in trigger['paths'] if p != name]
+                    relative = self.change_workflow(row, remove)
+                    self.assertIn('verify-extracted:', self.run_checker())
+                    self.restore_workflow(relative)
+
     def test_every_registration_is_required(self):
         for row in BASELINE['gates']:
             with self.subTest(gate=row['id']):

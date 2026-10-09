@@ -32,7 +32,7 @@ theorem recovery_truncate (x : Std.Array Std.U8 32#usize) :
   apply byteVec_ext
   simp [toSpecNode, truncate16_val, ByteVec.truncate16, ByteVec.take, toSpecDigest]
 
-private theorem recovery_sha (data : List Std.U8) :
+theorem recovery_sha (data : List Std.U8) :
     (toSpecDigest (sha256_pure data)).data =
       Sha256Impl.sha256Bytes (Sha256Pure.toUInt8Array data) := by
   have roundtrip (bytes : Array UInt8) :
@@ -107,7 +107,7 @@ theorem recovery_th_multi (seed adrs : Std.Array Std.U8 32#usize)
   rw [flatten_segments]
   simp [Sha256Pure.toUInt8Array, toSpecDigest, List.map_append]
 
-private theorem recovery_u32be (n : Nat) (hn : n < 2^32) :
+theorem recovery_u32be (n : Nat) (hn : n < 2^32) :
     ((u32beBytes n).map (fun b => UInt8.ofNat b.val)).toArray =
       (ByteVec.ofU32BE (UInt32.ofNat n)).data := by
   have byte (m : Nat) : UInt8.ofNat (m % 256) = UInt8.ofNat m &&& 255 := by
@@ -248,7 +248,7 @@ theorem firmware_th_multi_matches_vendored (seed adrs : Std.Array Std.U8 32#usiz
   rw [hr]
   exact recovery_th_multi seed adrs vs
 
-private theorem recovery_adrs (layer : Std.U32) (tree : Std.U64)
+theorem recovery_adrs (layer : Std.U32) (tree : Std.U64)
     (atype kp ci cp ha : Std.U32) :
     toSpecDigest (adrsArr layer tree atype.val kp.val ci.val cp.val ha.val) =
       Adrs.make (UInt32.ofNat layer.val) (UInt64.ofNat tree.val)
@@ -276,17 +276,17 @@ private theorem recovery_adrs (layer : Std.U32) (tree : Std.U64)
     omega
   simp only [Function.comp_def, roundtrip, List.map_id']
 
-private theorem recovery_adrs_wots (layer : Std.U32) (tree : Std.U64) (kp : Std.U32) :
+theorem recovery_adrs_wots (layer : Std.U32) (tree : Std.U64) (kp : Std.U32) :
     toSpecDigest (adrsArr layer tree 0 kp.val 0 0 0) =
       Adrs.wots (UInt32.ofNat layer.val) (UInt64.ofNat tree.val) (UInt32.ofNat kp.val) := by
   exact recovery_adrs layer tree 0#u32 kp 0#u32 0#u32 0#u32
 
-private theorem recovery_adrs_pk (layer : Std.U32) (tree : Std.U64) (kp : Std.U32) :
+theorem recovery_adrs_pk (layer : Std.U32) (tree : Std.U64) (kp : Std.U32) :
     toSpecDigest (adrsArr layer tree 1 kp.val 0 0 0) =
       Adrs.wotsPk (UInt32.ofNat layer.val) (UInt64.ofNat tree.val) (UInt32.ofNat kp.val) := by
   exact recovery_adrs layer tree 1#u32 kp 0#u32 0#u32 0#u32
 
-private theorem recovery_adrs_index (layer : Std.U32) (tree : Std.U64) (kp : Std.U32)
+theorem recovery_adrs_index (layer : Std.U32) (tree : Std.U64) (kp : Std.U32)
     (j : Nat) (hj : j < 43) :
     toSpecDigest (adrsArr layer tree 0 kp.val j 0 0) =
       Adrs.setChainIndex
