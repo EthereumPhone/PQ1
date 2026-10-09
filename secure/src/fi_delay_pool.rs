@@ -122,13 +122,37 @@ pub static HITS: AtomicU32 = AtomicU32::new(0);
 /// matter: a 0 here would have meant the skip path never ran, in which case
 /// the 0 beside it would prove nothing.
 ///
-/// The rate cross-checks. ~0.2-0.5 skips/s implies 51-128 delay bytes drawn
-/// per second; the independently measured draw volume for this bench is the
-/// 1 Hz consumption-mask reseed at 31 delays (#805) plus a handful of UI/FI
-/// sites, so ~51 B/s and an expected ~0.2 skips/s. Same order. And the
-/// IRREGULAR spacing is itself part of the evidence — a 1/256 process should
-/// not tick on a fixed interval, so regular ticks would have indicated a
-/// deterministic cause wearing randomness as a disguise.
+/// CLOSED as a RATIO, 2026-10-09, `evt-images/px835clean`. The raw count could
+/// not settle the question — it tracks how many delay bytes are drawn, not
+/// anything about correctness, so an observed burst to ~1/s was equally
+/// consistent with 5x the work (benign) or with the TRNG emitting excess zeros
+/// (bias). Bias was worth instrumenting because BOTH #835 reviewers flagged
+/// that `delay_pool_word` checks only SR-clean and nonzero and deliberately
+/// skips the continuous-repetition test.
+///
+/// Reported as skips per 1000 draws, baselined after boot. On glass: the 999
+/// "no draws yet" sentinel, then 0, then
+/// `5,4,3,6,5,4,5,4,3,2,3,2,3` over a minute — mean 3.77 against the
+/// predicted 3.906, a 3.5 % deviation, jittering about the mean with NO decay
+/// from above. Three independent agreements:
+///
+/// ```text
+///   mean ratio                      3.77  vs  3.906 predicted  (1/256)
+///   spread (sd 1.19) implies        ~2760 draws accumulated, ~46/s
+///   draw volume estimated separately ~51/s  (1 Hz reseed x 31 + UI sites)
+/// ```
+///
+/// The value, its variance and the implied draw volume all land on a 1/256
+/// process, so there is no TRNG bias and the burst was work. The reviewers'
+/// repetition-test gap remains theoretical — still worth closing, but not
+/// observed.
+///
+/// An earlier reading of this same field decayed 11 -> 5 and briefly looked
+/// like bias. That was the instrument: the boot probe RESET `HITS` five times
+/// to measure per-fill draws while `ZERO_SKIPS` was never reset, dropping 780
+/// boot draws from the denominator and keeping their ~3 skips in the
+/// numerator. A probe that resets a cumulative counter biases every ratio
+/// built on it; both halves now measure by delta.
 pub static ZERO_SKIPS: AtomicU32 = AtomicU32::new(0);
 
 /// Inner delays that found the pool armed but empty, i.e. the per-output-word
