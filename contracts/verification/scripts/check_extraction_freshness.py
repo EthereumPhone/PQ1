@@ -81,6 +81,10 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-sign-forest': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/fors.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/shuffle.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs'),
+        ('contracts/verification/extracted/Extracted/SignForest/Funs.lean', 'contracts/verification/extracted/Extracted/SignForest/Types.lean', 'contracts/verification/extracted/Extracted/SignForest/FunsExternal.lean'),
+    ),
     'extract-shuffle': (
         ('sphincs-c10/src/shuffle.rs',),
         ('contracts/verification/extracted/Extracted/Shuffle/Funs.lean', 'contracts/verification/extracted/Extracted/Shuffle/Types.lean', 'contracts/verification/extracted/Extracted/Shuffle/FunsExternal.lean'),
@@ -240,7 +244,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "00f2775fc1a7dd4f15fb2c08105c3008c32e16c6360752fcfc0896a76c969835"
+REGISTRY_BINDING_SHA256 = "c2b5798df5b2a85c86f5becd692bb1cbca8bb151e885c60ae748c8925c6b3bb2"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")

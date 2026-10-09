@@ -730,8 +730,52 @@ noncanonical returns remain separately reported. This is sampled integration
 evidence, not full-body fault resistance, DPA resistance or shipment authority.
 
 The callback-free extraction boundary remains. This closes the WOTS signing
-component, not the shuffled FORS forest, whole hypertree signer, serialization,
-session relation, backend correctness, entropy freshness or physical leakage.
+component. The shuffled FORS forest is covered below; the whole hypertree signer, serialization,
+session relation, backend correctness, entropy freshness and physical leakage remain open.
+
+Shuffled FORS forest construction (2026-10-10) now covers the actual
+`sign_inner_loop0` extracted from the unchanged `hypertree.rs`. For every seed,
+full-width hypertree index and twelve valid leaf indices, the loop fills all
+natural positions despite shuffled scheduling. The complete forest phase
+computes the special tree-12 root, transmits that root, and hashes it once at
+the correct address for the thirteenth compression slot. The final digest
+index is not read by this phase. The resulting thirteen secrets and twelve
+paths agree with the faithful reference, recover the same public key through
+the actual verifier forest, and do not depend on the shuffle seed.
+
+`SignForestFactor` proves exact equality between the actual caller and its
+header, forest phase and unchanged suffix. `firmware_sign_fors_prefix` then
+replaces the forest with its specified values unconditionally: no successful
+search or desired-output premise is assumed, and failures/divergence remain
+in the header and suffix. This does not prove whole-signer success or the
+serialization/hypertree suffix. Six additional headlines bring the default
+audit to **162**: 148 kernel-only, five with the existing opaque `Formatter`
+type, four SHA-256, one SHA-256/HMAC and four Keccak closures. The environment
+remains at **27** axioms. The registry contains **32** entries: 31 fresh plus
+the existing tx-merkle waiver. Generated panic-string size witnesses are
+explicit kernel proofs; Aeneas's default native witness is not admitted.
+
+The explicit `ShuffleSeed.derive` boundary models the existing zero-seed fast
+path and exact SHA-256 domain/seed/label bytes. Its backend correspondence is
+empirical; the forest theorem requires only its totality and the proved
+permutation property. Fifteen independent derivation cases cover zero and
+nonzero seeds, empty/FORS/binary labels and a 256-byte label. In both normal
+and extraction configurations, six actual whole Rust signatures over two
+messages and three shuffle seeds agree byte for byte. Every transmitted
+secret and sibling agrees with an independently assembled, recursively
+hashed oracle. A separate full-width component case exercises leaf endpoints
+and an unrestricted final index. Two Lean cases execute the actual forest,
+recovery and compression; all 290 one-byte changes to transmitted secrets or
+siblings yield different recovered keys. Malformed input shapes and altered
+expected outputs are rejected. Three positive proof baselines and fifteen
+typed semantic changes cover positional writes, iteration, final-slot
+construction and the actual caller connection. Each changed definition must
+compile before a normal proof error counts as rejection. These checks and
+exact extraction regeneration are enrolled in the ordinary gates.
+
+Production Rust is unchanged by this batch. Callback, concrete hash backend,
+erasure, entropy and physical leakage limits remain. The forest component
+adds no full signer/session, cryptographic reduction or shipment claim.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

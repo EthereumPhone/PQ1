@@ -448,7 +448,9 @@
         "contracts/verification/scripts/test_xmss_root_vendored_spec.py",
         "contracts/verification/scripts/test_xmss_auth_proof_controls.py",
         "contracts/verification/scripts/test_wots_sign_proof_controls.py",
-        "contracts/verification/scripts/test_xmss_auth_vendored_spec.py"
+        "contracts/verification/scripts/test_xmss_auth_vendored_spec.py",
+        "contracts/verification/scripts/test_sign_forest_proof_controls.py",
+        "contracts/verification/scripts/normalize_sign_extraction.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",
@@ -478,7 +480,9 @@
       "make": "make -C contracts/verification verify-extract-differential",
       "polices_paths": [
         "contracts/verification/extracted/**",
-        "fw-manifest/src/**"
+        "fw-manifest/src/**",
+        "contracts/verification/scripts/test_sign_forest_proof_controls.py",
+        "contracts/verification/scripts/normalize_sign_extraction.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "nightly",

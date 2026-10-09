@@ -1,3 +1,4 @@
+import Extracted.SignForestPrefix
 import Extracted.WotsSignBridge
 import Extracted.XmssRootBridge
 import Extracted.XmssAuthRecovery
@@ -282,3 +283,11 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.wots_sign_shuffle_independent
 #print axioms Extracted.Equiv.firmware_wots_sign_recovers_keygen
 #print axioms Extracted.Equiv.firmware_wots_sign_matches_vendored
+
+-- Actual shuffled FORS signing forest and unconditional caller prefix.
+#print axioms Extracted.Equiv.firmware_sign_fors_normal_loop
+#print axioms Extracted.Equiv.signer_fors_phase_spec
+#print axioms Extracted.Equiv.firmware_sign_fors_recovers_pk
+#print axioms Extracted.Equiv.firmware_sign_fors_shuffle_independent
+#print axioms Extracted.Equiv.firmware_sign_fors_matches_vendored
+#print axioms Extracted.Equiv.firmware_sign_fors_prefix
