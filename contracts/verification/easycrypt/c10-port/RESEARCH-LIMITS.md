@@ -337,7 +337,7 @@ separately proves that **when** the faithful strict `verifyHypertree` returns
 to the Rust continuation. No production behavior changes, added assumptions
 or unconditional strict-acceptance equivalence are hidden in this relation.
 
-Eight new kernel-only headlines bring the current audit to **106**; the exact
+Eight kernel-only headlines brought that batch to **106**; the exact
 environment inventory remains **27** axioms. Four copied hypertree declarations
 have semantic-edit and deletion fidelity controls. Fifty execution vectors
 cover the actual parsers, extracted continuation, raw computation model and
@@ -352,9 +352,41 @@ the parsers, counter order/high byte, addresses, node/index handoffs, loop entry
 terminal comparison and strict reconstruction. The earlier prefix receipt now
 separates value changes from output-width rejection (#815).
 
-The remaining verifier bridge includes the complete signature-deserializer
-relation and the deliberate Rust/strict-verifier rejection distinction. Tree
-construction/membership, concrete hash backends, randomness and full
+The complete signature-deserializer relation is now proved (2026-10-09).
+[`SignatureDecodeSpec.lean`](../../extracted/Extracted/SignatureDecodeSpec.lean)
+proves that the faithful byte decoder returns exactly the actual parser's
+randomizer, all FORS secrets and siblings, both WOTS signatures and full counters,
+and both XMSS paths. The sixteen-byte load proof includes the final node at
+byte 3,992, whose thirty-two-byte intermediate load extends past the signature.
+No padding/default branch replaces an in-range signature byte.
+
+[`WholeVerifierSpec.lean`](../../extracted/Extracted/WholeVerifierSpec.lean)
+composes the existing actual-verifier proofs into an **unconditional** totality
+and computation theorem for every represented seed, root, message and 4,008-byte
+signature. Its raw model preserves the actual invalid-WOTS zero-node fallback.
+The faithful strict byte entry point is separately bound to its complete decoder,
+H_msg construction and parsed fields. **Strict byte-verifier acceptance implies
+Rust acceptance**; this is the completeness direction, not the security-soundness
+converse. When strict reconstruction returns a root, the complete Boolean
+result agrees, including a final root mismatch. A nonzero final FORS field
+forces both verifiers to refuse. Rust acceptance implying strict acceptance
+remains open because of the deliberate rejection/zero-node distinction.
+
+Eight additional kernel-only headlines bring the current audit to **114**, with
+the same exact **27** environment axioms. Sixteen copied top-verifier/decoder
+and byte-load declarations have semantic-edit and deletion fidelity controls.
+Forty-eight vectors execute the unchanged whole production Rust verifier and an
+independent SHA-byte oracle in normal and `lean_extract` configurations: all
+twelve published KATs, sixteen synthetic forced-zero signatures and twenty
+counter-boundary cases. The extracted Lean check executes the complete decoder,
+actual verifier, raw model and faithful strict byte verifier on those inputs,
+with 288 altered-value, 48 output-width and seven malformed-input controls.
+Six positive proof baselines accompany 21 compiling semantic mutations covering
+byte loads, full counters, parser offsets, header binding and verifier decisions.
+The control scripts and original signature specification are enrolled in the
+per-push/per-PR workflow paths, with path-deletion regression controls (#817).
+
+Tree construction/membership, concrete hash backends, randomness and full
 signer/session refinement remain open. EasyCrypt proof inputs and numerical
 bounds are unchanged.
 

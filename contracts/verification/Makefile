@@ -1741,6 +1741,9 @@ ifeq ($(GEN),1)
 	  | grep -E 'gen_wots_bridge_vectors:|test result'
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 \
 	  --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WHOLE_VERIFIER_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release whole_verifier_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_HYPERTREE_GENERATE=1 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release hypertree_continuation_corpus -- --nocapture
@@ -1756,6 +1759,12 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_WHOLE_VERIFIER_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release whole_verifier_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WHOLE_VERIFIER_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release whole_verifier_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_HYPERTREE_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release hypertree_continuation_corpus -- --nocapture
@@ -1807,7 +1816,8 @@ endif
 	  Extracted.ForsRecoveryBridge Extracted.ForsRecoveryDiffVectors \
 	  Extracted.ForsRejectSpec Extracted.ForsForestDiffVectors \
 	  Extracted.ForsVerifierPrefix Extracted.ForsPrefixDiffVectors \
-	  Extracted.HypertreeStrictSpec Extracted.HypertreeDiffVectors 2>&1 | tail -1
+	  Extracted.HypertreeStrictSpec Extracted.HypertreeDiffVectors \
+	  Extracted.WholeVerifierSpec Extracted.WholeVerifierDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
@@ -1826,6 +1836,8 @@ endif
 	@$(_FV_PYTHON3) scripts/test_fors_prefix_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HypertreeDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_hypertree_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WholeVerifierDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_whole_verifier_proof_controls.py
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
 	  --target x86_64-unknown-linux-gnu --features sim-internals --test wots_grind
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
@@ -1983,6 +1995,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/test_fors_forest_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_prefix_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_hypertree_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_signature_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See

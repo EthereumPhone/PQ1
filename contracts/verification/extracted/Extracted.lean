@@ -1,3 +1,4 @@
+import Extracted.WholeVerifierSpec
 import Extracted.HypertreeStrictSpec
 import Extracted.ForsVerifierPrefix
 import Extracted.ForsRejectSpec

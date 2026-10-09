@@ -17,6 +17,17 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 #  of a stripped line, so include any attribute prefix like `@[inline] `)
 CHECKS = [
     ([ROOT/"lean/SphincsCVerify/Spec/Params.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Bytes.lean",
+      ROOT/"lean/SphincsCVerify/Spec/Hypertree.lean"],
+     ROOT/"extracted/Extracted/VerifierTopVendored.lean",
+     ["def N :", "def SigR :", "def SigForsSecrets :", "def SigForsAuth :",
+      "def SigForsTotal :", "def SigHtLayer :", "def SignatureLen :",
+      "def loadWord32 ", "def loadValue16 ", "def loadU32BE ",
+      "structure Signature", "def verifyWithDigest\n", "def verify\n"]),
+    ([ROOT/"lean/SphincsCVerify/Spec/Signature.lean"],
+     ROOT/"extracted/Extracted/SignatureDecodeVendored.lean",
+     ["structure VerifyingKey", "def deserialise ", "def verify\n"]),
+    ([ROOT/"lean/SphincsCVerify/Spec/Params.lean",
       ROOT/"lean/SphincsCVerify/Spec/Hypertree.lean"],
      ROOT/"extracted/Extracted/HypertreeContinuationVendored.lean",
      ["def D :", "structure LayerSig", "def defaultLayerSig :", "def verifyHypertree\n"]),

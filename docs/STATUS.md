@@ -27,9 +27,15 @@ full verifier equals its unchanged WOTS/XMSS continuation supplied with the
 specified FORS public key and offset 2,336. The actual two-layer continuation
 is now total and computes the specified root comparison at final offset 4,008,
 including full four-byte WOTS counters and Rust's zero-node fallback. Successful
-strict-verifier reconstruction agrees with that result. Strict rejection is
-still distinct from Rust's zero-node continuation; an unconditional strict
-acceptance equivalence and the signer/session relation remain open.
+strict-verifier reconstruction agrees with that result. The complete 4,008-byte
+signature decoder now agrees with the actual parser fields, including the final
+partial-word load and all counter bytes. The whole actual verifier is total and
+agrees unconditionally with an executable model preserving Rust's zero-node
+fallback. Acceptance by the faithful strict byte verifier implies Rust acceptance;
+successful strict reconstruction gives the same final Boolean, and forced-zero
+refusal agrees in both. The converse acceptance implication remains open because
+strict rejection is distinct from Rust's zero-node continuation. These results
+do not close the signer/session relation.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

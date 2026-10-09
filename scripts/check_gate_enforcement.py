@@ -944,6 +944,24 @@ def main() -> int:
         if not any("does NOT cover" in failure for failure in fa):
             print("  SELF-TEST FAILED: uncovered-allowlist gate NOT caught — harness void.", file=sys.stderr)
             return 2
+        # #817: removing any newly enrolled proof/fidelity control or decoder
+        # source from either trigger must fail the live path contract.
+        extracted_gate = next(g for g in gates if g["id"] == "verify-extracted")
+        extracted_wf = load_workflow(REPO_ROOT / ".github/workflows/lean-extracted.yml")
+        extracted_triggers = triggers(extracted_wf)
+        for path in extracted_gate["polices_paths"]:
+            if path == "contracts/verification/extracted/**":
+                continue
+            for trigger in ("push", "pull_request"):
+                broken = json.loads(json.dumps(extracted_triggers))
+                broken[trigger]["paths"] = [p for p in broken[trigger]["paths"] if p != path]
+                failures, _ = _per_pr_trigger_failures(
+                    extracted_gate["id"], extracted_gate["runs_in"],
+                    extracted_gate["polices_paths"], broken)
+                if not any("does NOT cover" in failure and path in failure for failure in failures):
+                    print(f"  SELF-TEST FAILED: extracted {trigger} path deletion escaped: {path}", file=sys.stderr)
+                    return 2
+        print("  extracted proof/fidelity and decoder path-deletion controls passed")
         try:
             _load_yaml_unique(
                 "jobs:\n"

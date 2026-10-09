@@ -1,3 +1,4 @@
+import Extracted.WholeVerifierSpec
 import Extracted.HypertreeStrictSpec
 import Extracted.ForsVerifierPrefix
 import Extracted.ForsRejectSpec
@@ -206,3 +207,13 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_verifier_hypertree_continuation
 #print axioms Extracted.Equiv.strict_hypertree_success_eq_raw
 #print axioms Extracted.Equiv.firmware_continuation_matches_strict_success
+
+-- Complete signature bytes and whole verifier; strict acceptance is one-way.
+#print axioms Extracted.Equiv.loadValue16_signatureNode
+#print axioms Extracted.Equiv.loadU32BE_parsed_count
+#print axioms Extracted.Equiv.deserialise_matches_parsedSignature
+#print axioms Extracted.Equiv.firmware_verify_raw_result
+#print axioms Extracted.Equiv.byteVerifier_eq_strictResult
+#print axioms Extracted.Equiv.firmware_verify_accepts_strict_signature
+#print axioms Extracted.Equiv.firmware_verify_matches_strict_success
+#print axioms Extracted.Equiv.firmware_verify_strict_forced_refusal

@@ -422,7 +422,12 @@
       "id": "verify-extracted",
       "make": "make -C contracts/verification verify-extracted",
       "polices_paths": [
-        "contracts/verification/extracted/**"
+        "contracts/verification/extracted/**",
+        "contracts/verification/scripts/test_hypertree_proof_controls.py",
+        "contracts/verification/scripts/test_hypertree_vendored_spec.py",
+        "contracts/verification/scripts/test_whole_verifier_proof_controls.py",
+        "contracts/verification/scripts/test_signature_vendored_spec.py",
+        "contracts/verification/lean/SphincsCVerify/Spec/Signature.lean"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",
