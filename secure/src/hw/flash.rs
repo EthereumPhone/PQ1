@@ -914,6 +914,22 @@ unsafe fn pin_attempts_scan_reverse() -> u8 {
 /// catch.
 #[inline(never)]
 pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
+    // #835 C3 — CHECK BEFORE THE FLASH WRITE, NOT AFTER.
+    //
+    // This function commits the attempt to flash and only THEN delays. While
+    // the delay path's failure sink was a halt, a transient TRNG event during
+    // that delay left the attempt durably spent with no wrong PIN ever
+    // entered — and ten of those is the admin wipe (invariant #2). A dying
+    // TRNG could therefore destroy a user's wallet.
+    //
+    // The sink is no longer a halt, but the ordering is still wrong: a
+    // poisoned delay must not be able to spend an attempt. So refuse here,
+    // before anything durable happens. The caller treats `Err` as "could not
+    // charge the attempt" and must not proceed to compare the PIN.
+    if crate::fi::delay_source_failed() {
+        return Err(());
+    }
+
     let pre = pin_attempts_read();
     if (pre as u32) >= PIN_ATTEMPTS_CAPACITY {
         return Err(());

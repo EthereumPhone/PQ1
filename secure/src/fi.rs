@@ -43,92 +43,142 @@ pub use pqsigner_fi::{FAIL_SENTINEL, OK_SENTINEL};
 /// leak any secret. Cost/benefit clearly favours platform-only here.
 /// See §10 Phase 2 in `docs/archive/work-todo-retired-2026-07-19.md`.
 #[inline(always)]
-fn rng_byte() -> u8 {
+fn rng_byte() -> Option<u8> {
     #[cfg(not(test))]
     {
         // 1. A pre-drawn FRESH byte. Inside `rng::fill` the driver lock is
         //    already ours, so the inner delays are served from the pool the
         //    fill filled on entry (#832). This is the common case by 31:1.
         if let Some(b) = crate::fi_delay_pool::take() {
-            return b;
+            return Some(b);
         }
 
         // 2. A direct draw, retried. `fill_bound` performs RM0456's
-        //    conditioning reset on a latched `SECS`/`CECS`, so each attempt
-        //    carries its own recovery — which is the correct response to the
-        //    documented transient error, rather than substituting a value.
+        //    conditioning reset on a latched `SECS`/`CECS` BEFORE it delays
+        //    (#835 C1), so each attempt genuinely carries its own recovery.
         let mut attempt = 0u32;
         while attempt < FRESH_DELAY_ATTEMPTS {
+            // Do not spin against a source already known to be failing: the
+            // retries cannot fix it and each one re-enters `fill`.
+            if delay_source_failed() {
+                break;
+            }
             if let Some(b) = crate::rng::try_byte_nonsecret() {
-                return b;
+                return Some(b);
             }
             attempt = attempt.wrapping_add(1);
             #[cfg(feature = "ui-px-frametime")]
             DELAY_RETRIES.fetch_add(1, Ordering::Relaxed);
         }
 
-        // 3. The RNG's own conditioning window, and nothing wider. Two cases,
-        //    both of which provably cannot yield a word and both of which
-        //    call `wait_random` while holding the driver lock:
-        //
-        //      * `hw::rng::init` at boot — refusing would halt the device
-        //        inside its own RNG bring-up, and no secret exists that early;
-        //      * `fill_bound`'s recovery from a latched `SECS`/`CECS` — the
-        //        documented transient error. Refusing THERE would halt the
-        //        device inside the very sequence meant to fix it, which is
-        //        strictly worse than the fallback arm 4 removes.
-        //
-        //    MEASURED, enclosed EVT unit, 2026-10-09, `evt-images/px834demo`,
-        //    reading `windows / recovered / misses = 1 / 16 / 0`:
-        //
-        //      * exactly ONE conditioning window in a whole boot, and it is
-        //        `rng::init` itself — so there are ZERO recoveries in normal
-        //        operation. #698's "latched seed error after nearly every
-        //        idle gap" does not reproduce on this build, presumably
-        //        closed by #704's AN4230 `HTCR`/`NSCR` values. The recovery
-        //        window is therefore EXCEPTIONAL, not routine, and remains
-        //        reachable essentially only by inducing `SECS`/`CECS`.
-        //      * each window serves FOUR `wait_random` calls, not the one
-        //        this comment first claimed: `init_conditioning` holds one
-        //        directly and `read_healthy_word_into` contributes the rest
-        //        through its own `check_true_into_sentinel` and direct delay.
-        //        An attacker who forces a reset gets 4 fixed delays, and they
-        //        cover conditioning-reset register writes, not key material.
-        //      * the PRE-INIT half of this window is the large one: 91 calls
-        //        between reset and `rng::init`, covering SAU/RCC/SAES/flash
-        //        work before any RNG exists. Unavoidable and pre-secret, but
-        //        it is 91, not "a handful".
-        //
-        //    A failed recovery still makes `fill` refuse, and both halves are
-        //    counted, so a climbing count means something is forcing resets.
+        // 3. The RNG's own conditioning window: `init` at boot and
+        //    `fill_bound`'s recovery both call `wait_random` while holding the
+        //    driver lock during a reset where no word can exist. See
+        //    `rng::fixed_delay_permitted` for the measured size and residual.
         if crate::rng::fixed_delay_permitted() {
             #[cfg(feature = "ui-px-frametime")]
             BOOTSTRAP_DELAYS.fetch_add(1, Ordering::Relaxed);
-            return FI_DELAY_BOOTSTRAP;
+            return Some(FI_DELAY_BOOTSTRAP);
         }
 
-        // 4. Refuse (#833). There is deliberately NO reuse-the-last-byte arm.
+        // 4. No fresh length exists. There is deliberately NO reuse arm —
         //    `SECS`/`CECS` are the TRNG's seed- and clock-error flags, and
-        //    inducing them is what a voltage or clock glitcher does — so a
-        //    reuse path lets an attacker glitch the RNG, silently flatten
-        //    every delay to one constant, and then attack a known timing
-        //    window. Availability costs nothing real here either: a TRNG that
-        //    cannot yield a delay length after recovery also cannot yield key
-        //    material, and `rng::fill`/`rng_strong` already fail loudly for
-        //    that, so the operation was going to fail regardless.
-        secure_log!("[S] fi: no fresh delay length after {} attempts — HALT", FRESH_DELAY_ATTEMPTS);
-        pqsigner_fi::halt_countermeasure_unavailable()
+        //    inducing them is what a glitcher does, so reuse would let an
+        //    attacker flatten every delay to one constant and then attack a
+        //    known timing window.
+        //
+        //    But this is NOT a halt any more (#835). Halting here was
+        //    net-negative: it converted documented transient events into a
+        //    hang from any of ~800 delay sites, most of which need no entropy
+        //    at all, and `pin_attempts_bump` commits its flash write BEFORE
+        //    its delay, so a halt there burned a PIN attempt with no wrong PIN
+        //    entered — ten of those is an admin wipe. The claim that justified
+        //    it ("a TRNG that cannot yield a delay length cannot yield key
+        //    material, so the operation was failing anyway") was simply false
+        //    for the gateway, flash, display and UI callers.
+        //
+        //    So: poison the operation and let it FAIL, loudly, at its own
+        //    boundary. The caller gets an `Err`, not a dead device.
+        secure_log!(
+            "[S] fi: no fresh delay length after {} attempts — operation poisoned",
+            FRESH_DELAY_ATTEMPTS
+        );
+        poison_delay_source();
+        None
     }
     #[cfg(test)]
     {
-        7
+        Some(7)
     }
 }
 
-/// Last successfully-read TRNG byte, reused as the [`rng_byte`] fallback
-/// when a transient TRNG error would otherwise panic. Non-secret (delay
-/// length only); the seed value is irrelevant.
-#[cfg(not(test))]
+/// FI-hardened poison flag: "a delay in this operation could not be given a
+/// fresh length" (#835).
+///
+/// Replaces the halt that #833/#834 used as the sink. Two independent reviews
+/// rejected that halt: it is reachable from transient, documented, non-attacker
+/// events; from lock contention with perfectly healthy hardware; and — via
+/// `hw::flash::pin_attempts_bump`, which commits its flash write before its
+/// delay — it could durably spend a user's PIN attempts and eventually trigger
+/// the admin wipe. None of that is an acceptable price for refusing to reuse a
+/// delay length.
+///
+/// The policy is unchanged: no reuse, ever. What changed is the consequence.
+/// A delay that cannot be given a fresh length sets this flag and performs NO
+/// delay (not a reused one), and every operation boundary that can fail then
+/// refuses: `fill_bound` returns `Err`, `pin_attempts_bump` refuses BEFORE
+/// touching flash, the gateway returns a status, and no signature is released.
+///
+/// Stored as a `(val, complement)` pair in the `fih` style so a single bit-flip
+/// cannot clear it, and **fail-closed to POISONED**: anything other than the
+/// exact intact CLEAN codeword reads as poisoned. That direction is the safe
+/// one — a corrupted flag fails the operation rather than releasing it.
+///
+/// Cleared per operation, not per boot, so one transient does not disable the
+/// device: see [`clear_delay_poison`].
+use core::sync::atomic::Ordering::SeqCst;
+
+const DELAY_CLEAN: u32 = 0x1AAA_AAAA;
+const DELAY_POISONED: u32 = 0x1555_5555;
+
+static DELAY_POISON_VAL: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(DELAY_CLEAN);
+static DELAY_POISON_COMP: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(!DELAY_CLEAN);
+
+/// Mark the current operation's FI protection as incomplete.
+#[inline(never)]
+pub fn poison_delay_source() {
+    DELAY_POISON_VAL.store(DELAY_POISONED, SeqCst);
+    DELAY_POISON_COMP.store(!DELAY_POISONED, SeqCst);
+    #[cfg(feature = "ui-px-frametime")]
+    DELAY_POISONINGS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether any delay in the current operation went unprotected.
+///
+/// Fail-closed: a torn or bit-flipped pair reads POISONED.
+#[inline(never)]
+pub fn delay_source_failed() -> bool {
+    let v = DELAY_POISON_VAL.load(SeqCst);
+    let c = DELAY_POISON_COMP.load(SeqCst);
+    !(v == DELAY_CLEAN && c == !DELAY_CLEAN)
+}
+
+/// Start a fresh operation. Call at an operation BOUNDARY only — gateway
+/// dispatch, a sign entry point — never from inside one, or the flag stops
+/// meaning "this operation was protected".
+#[inline(never)]
+pub fn clear_delay_poison() {
+    DELAY_POISON_VAL.store(DELAY_CLEAN, SeqCst);
+    DELAY_POISON_COMP.store(!DELAY_CLEAN, SeqCst);
+}
+
+/// Poisonings since boot. Bench instrumentation (`ui-px-frametime`).
+#[cfg(feature = "ui-px-frametime")]
+pub static DELAY_POISONINGS: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+
 /// Direct-draw attempts before refusing. Each one carries `fill_bound`'s
 /// conditioning-reset recovery, so this is "retry the documented transient
 /// error a few times", not a spin.
@@ -167,7 +217,15 @@ pub fn wait_random() {
     }
     #[cfg(not(feature = "e2e-test"))]
     {
-        pqsigner_fi::wait_random_loop(rng_byte);
+        // #835: on `None` there is no delay at all — not a reused one. The
+        // glitch-detector half of `wait_random_loop` is lost for this call,
+        // which is why the operation is poisoned and must fail at its
+        // boundary; running the detector over a reused length would hand an
+        // attacker the predictable window this whole change exists to remove.
+        match rng_byte() {
+            Some(b) => pqsigner_fi::wait_random_loop(|| b),
+            None => poison_delay_source(),
+        }
     }
 }
 

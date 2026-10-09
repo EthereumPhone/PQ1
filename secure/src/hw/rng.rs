@@ -146,11 +146,18 @@ impl DriverGuard {
 
 impl Drop for DriverGuard {
     fn drop(&mut self) {
-        // #832: the delay pool is armed only for a guard's lifetime. Disarm
-        // BEFORE releasing the busy flag, so there is no window in which the
-        // pool is armed while no guard is held.
-        crate::fi_delay_pool::disarm();
-        DRIVER_BUSY.store(false, Ordering::Release);
+        // #832: the delay pool is armed only for a guard's lifetime, so disarm
+        // before releasing the busy flag — never the reverse, or the pool would
+        // be armed with no guard held.
+        //
+        // #835 H5: and both stores must be atomic together. With them
+        // separated, a preempting `wait_random` could observe
+        // `DRIVER_BUSY = true` with `ARMED = false`, find nothing to draw and
+        // nothing to acquire, and fail a delay on perfectly healthy hardware.
+        cortex_m::interrupt::free(|_| {
+            crate::fi_delay_pool::disarm();
+            DRIVER_BUSY.store(false, Ordering::Release);
+        });
     }
 }
 
@@ -743,12 +750,45 @@ unsafe fn fill_bound(
     // returns before any raw destination is constructed or touched.
     let _guard = DriverGuard::try_acquire()?;
 
+    // #835 C1 — RECOVER BEFORE YOU DELAY. This ordering is load-bearing and
+    // was wrong until today.
+    //
+    // Every `wait_random` below is the separation between a receipt check and
+    // its recheck, and inside a fill it can only be served from the pool,
+    // because arm 2 of `fi::rng_byte` cannot take the lock we are holding. If
+    // a `SECS`/`CECS` is already latched on entry, `delay_pool_word` refuses,
+    // the pool never arms, and the FIRST validator's delay has no source —
+    // which, while the sink was a halt, killed the device *before* reaching
+    // the conditioning reset that would have fixed the error. The recovery sat
+    // behind the delay that needed it.
+    //
+    // So: check the error first, recover first, and only then arm. `init_locked`
+    // opens its own `ConditioningWindow`, so its internal delays are served.
+    if REG.sr.read() & ERROR_FLAGS != 0 {
+        secure_log!("[S] rng::fill: error latched on entry — recovering before any delay");
+        init_locked()?;
+    }
+
     // #832: draw the inner delays' lengths NOW, while the guard is held and
-    // the peripheral is live. Every `wait_random` below is the separation
-    // between a receipt check and its recheck; without this they all replayed
-    // one byte and that separation was a known constant. Unarmed on refusal,
-    // which is exactly the previous behaviour.
-    crate::fi_delay_pool::replenish(delay_pool_word);
+    // the peripheral is live and (per above) known clean.
+    //
+    // #835 H5: arming must not be observable as a half-state. Between
+    // `try_acquire` and the pool publishing, a preempting `wait_random` saw
+    // `DRIVER_BUSY = true` with `ARMED = false` and nothing to draw from, so
+    // healthy hardware could fail the delay. Masking interrupts across the
+    // arm closes that window.
+    cortex_m::interrupt::free(|_| {
+        crate::fi_delay_pool::replenish(delay_pool_word);
+    });
+
+    // If the pool still cannot arm, the peripheral is not delivering words
+    // even after a conditioning reset. Refuse the OPERATION here — the caller
+    // sees `Err` and fails loudly, which is its contract — rather than walking
+    // into validators whose delays would poison and fail anyway.
+    if !crate::fi_delay_pool::is_armed() {
+        secure_log!("[S] rng::fill: no delay source after recovery — refusing the fill");
+        return Err(());
+    }
 
     let mut fill_binding_receipt = crate::fi::FAIL_SENTINEL;
     unsafe {
@@ -773,6 +813,12 @@ unsafe fn fill_bound(
     // pointer/length observations matched twice. Before this point no slice
     // was constructed and no rejection path dereferenced either raw region.
     let buf = unsafe { core::slice::from_raw_parts_mut(destination_base, destination_len) };
+    // #835: a fill whose own FI separations went unprotected must not be
+    // released as success. Checked again after the body, so a poisoning that
+    // happens mid-fill is caught too.
+    if crate::fi::delay_source_failed() {
+        return Err(());
+    }
     let result = (|| -> Result<(), ()> {
 
         let sr0 = REG.sr.read();
@@ -1017,6 +1063,14 @@ unsafe fn fill_bound(
     // redirect a bulk wipe. The failed receipt/Result is authoritative; every
     // current caller discards the buffer and the strong facade wipes its typed
     // slice. Successful completion still proves every requested byte.
+    //
+    // #835: and a fill that completed while one of its own FI separations went
+    // unprotected is not a success. The poison can be raised mid-body (the
+    // pool draining with the peripheral then refusing), so the check at entry
+    // is not sufficient on its own.
+    if crate::fi::delay_source_failed() {
+        return Err(());
+    }
     result
 }
 

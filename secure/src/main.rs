@@ -1390,6 +1390,16 @@ fn main() -> ! {
             panic!("TRNG initialization failed; refusing entropy consumers");
         }
         rng::retain_backend_receipt();
+        // #835: the pre-init window legitimately serves a fixed delay length
+        // (no RNG exists yet), and the first successful `init` closes it. If
+        // the poison is raised ANYWAY, a delay after that point found no
+        // source — i.e. the TRNG came up and then stopped delivering. Fail
+        // loudly here rather than carrying a device whose FI countermeasure is
+        // off; the panic handler zeroizes and draws the fatal screen, which is
+        // strictly better than the silent `wfe` this replaces.
+        if fi::delay_source_failed() {
+            panic!("FI delay source unavailable after TRNG init");
+        }
         #[cfg(feature = "boot-pulse")]
         hw::boot_pulse::pulse(5);
         secure_log!("[S] TRNG initialised");

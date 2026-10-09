@@ -130,34 +130,69 @@ pub fn take() -> Option<u8> {
     if !ARMED.load(Relaxed) {
         return None;
     }
-    // One atomic claim. `checked_sub` makes an empty pool an `Err` rather than
-    // a wrapped index, so a losing racer cannot read slot `usize::MAX`.
-    match AVAIL.fetch_update(Relaxed, Relaxed, |n| n.checked_sub(1)) {
-        Ok(n) => {
-            HITS.fetch_add(1, Relaxed);
-            // Clear on read: a consumed length never lingers in SRAM, and a
-            // double-take would surface as a zero-length delay rather than a
-            // silently reused one.
-            Some(POOL[n - 1].swap(0, Relaxed))
-        }
-        Err(_) => {
-            // Armed means a `DriverGuard` is held, which means the peripheral
-            // is ours and live — so draw more right here rather than reporting
-            // a shortfall. Without this, a sizing error or an unexpected retry
-            // path inside one loop iteration would reach the #833 refusal and
-            // halt the device over a shortage we can simply fix. Counted
-            // either way, because a top-up here means the per-output-word
-            // schedule did not keep up.
+    // #835 C2: RESERVE AND EXTRACT MUST BE ONE OPERATION.
+    //
+    // This used to claim a slot with `AVAIL.fetch_update` and then read
+    // `POOL[n-1]` as a SEPARATE step. Both are atomic individually, which is
+    // why a first review passed it, but the PAIR is not — and the interleaving
+    // is reachable:
+    //
+    //   thread: fetch_update 128 -> 127, preempted before reading POOL[127]
+    //   ISR:    drains the remaining 127 bytes
+    //   ISR:    take() -> refill_in_place() -> pool refilled, POOL[127] taken
+    //   thread: resumes, reads POOL[127] -> 0, because clear-on-read already
+    //           zeroed the slot it had reserved
+    //
+    // A zero-length delay is the worst possible outcome, not a detectable one:
+    // `wait_random_loop(0)` executes its body ZERO times and both completion
+    // checks (`i == wait`, `j == 0`) pass, so the gap silently vanishes with
+    // nothing reporting it. That is the countermeasure switched off by an
+    // interrupt schedule rather than by an attacker. An earlier comment here
+    // called clear-on-read a safeguard that would "surface" a double take; it
+    // had the direction backwards.
+    //
+    // Masking interrupts across the pair is sufficient and cheap: this is two
+    // atomic loads and one byte store on a single core.
+    critical(|| {
+        let n = AVAIL.load(Relaxed);
+        if n == 0 {
+            // Armed but empty: the per-output-word top-up did not keep up.
+            // Counted whether or not the in-place draw below recovers, so it
+            // stays a true sizing signal.
             MISSES.fetch_add(1, Relaxed);
-            if refill_in_place() {
-                if let Ok(n) = AVAIL.fetch_update(Relaxed, Relaxed, |n| n.checked_sub(1)) {
-                    HITS.fetch_add(1, Relaxed);
-                    return Some(POOL[n - 1].swap(0, Relaxed));
-                }
+            if !refill_in_place() {
+                return None;
             }
-            None
+            let m = AVAIL.load(Relaxed);
+            if m == 0 {
+                return None;
+            }
+            AVAIL.store(m - 1, Relaxed);
+            HITS.fetch_add(1, Relaxed);
+            return reserved_byte(m - 1);
         }
+        AVAIL.store(n - 1, Relaxed);
+        HITS.fetch_add(1, Relaxed);
+        reserved_byte(n - 1)
+    })
+}
+
+/// Read and clear one reserved slot. Treats a zero byte as a MISS rather than
+/// a zero-length delay.
+///
+/// Clearing on read keeps a consumed length from lingering in SRAM. The zero
+/// check is the safety net: a genuine TRNG zero byte is a legitimate 1/256
+/// outcome but still means "no delay", and a slot that reads zero because
+/// something already consumed it is a fault. Neither should become a gap of
+/// length zero, so both are reported as a shortfall and the caller draws again.
+#[inline]
+fn reserved_byte(index: usize) -> Option<u8> {
+    let b = POOL[index].swap(0, Relaxed);
+    if b == 0 {
+        MISSES.fetch_add(1, Relaxed);
+        return None;
     }
+    Some(b)
 }
 
 /// Fill the pool from `word` if it has run low. Idempotent; call on entry to a
@@ -183,6 +218,15 @@ pub fn replenish(mut word: impl FnMut() -> Option<u32>) {
             ARMED.store(true, Relaxed);
         }
     });
+}
+
+/// Whether the pool currently holds words for a held guard.
+///
+/// `fill_bound` uses this to refuse the OPERATION when no delay source exists
+/// after a conditioning reset, instead of proceeding into validators whose
+/// delays would poison (#835 C1).
+pub fn is_armed() -> bool {
+    ARMED.load(Relaxed) && AVAIL.load(Relaxed) > 0
 }
 
 /// Last-resort top-up from inside [`take`], using the platform word source

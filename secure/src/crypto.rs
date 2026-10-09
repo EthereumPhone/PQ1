@@ -439,6 +439,27 @@ fn c10_sign_verified_with_progress_inner(
         return Err(());
     }
 
+    // #835: the last gate before a signature leaves the secure world. The
+    // whole double-compute / compare / verify chain above is interleaved with
+    // `wait_random()` separations; if any one of them could not be given a
+    // fresh length then this signature was produced with its FI protection
+    // partly off, and it must not be released. Treated exactly like a short
+    // CFI counter: relock, wipe, refuse.
+    // NO RELOCK here, deliberately, and `positive_crypto_relocks_on_confirmed_
+    // fault_only` enforces that by counting: a poisoned delay is an
+    // UNAVAILABLE source, not a confirmed fault. The three relock sites
+    // (ct_eq, verify-gate, CFI) each mean "a glitch demonstrably landed", and
+    // wiping the session is the right answer to that. Wiping on a transient
+    // TRNG event instead would be the self-inflicted DoS that fi-2's
+    // DoS-exclusion rule exists to prevent — the same reason the pre-sign
+    // rng-fail path does not relock either. Refuse the signature, keep the
+    // session.
+    if crate::fi::delay_source_failed() {
+        opt_rand_buf.zeroize();
+        crate::fi::zeroize_barrier();
+        return Err(());
+    }
+
     opt_rand_buf.zeroize();
     crate::fi::zeroize_barrier();
     Ok(sig_a)

@@ -483,7 +483,16 @@ mod fi_source_text {
         let pos = FI_SRC
             .find("pub fn wait_random()")
             .expect("wait_random not found");
-        let body = &FI_SRC[pos..pos + 500];
+        // Slice to the function's actual end, not a fixed window. This was
+        // `pos + 500`; when wait_random's body grew past that the window
+        // stopped reaching the assertions below, so they passed on a truncated
+        // string. A gate that silently stops covering what it names is worse
+        // than no gate.
+        let end = FI_SRC[pos..]
+            .find("\n}\n")
+            .map(|i| pos + i + 2)
+            .expect("wait_random must have a closing brace");
+        let body = &FI_SRC[pos..end];
         assert!(
             body.contains("cfg(feature = \"e2e-test\")"),
             "wait_random must short-circuit on e2e-test builds (timing-only \
@@ -491,10 +500,20 @@ mod fi_source_text {
              attack)."
         );
         assert!(
-            body.contains("pqsigner_fi::wait_random_loop(rng_byte)"),
+            body.contains("pqsigner_fi::wait_random_loop(|| b)"),
             "production wait_random must delegate to the shared `pqsigner_fi` \
              crate's loop — that's the same invariant-checked loop FSBL \
              uses, and it must stay singular to be auditable."
+        );
+        // #835: and the no-length case must poison, not substitute and not
+        // halt. Pinned here because `wait_random` is the ONLY place that can
+        // decide what happens when no fresh length exists, and both wrong
+        // answers have shipped: reuse (#802, measured 31 of 32 identical
+        // gaps) and a device halt (#833/#834, rejected by two reviews).
+        assert!(
+            body.contains("None => poison_delay_source()"),
+            "wait_random's no-length arm must poison the operation — never \
+             reuse a length, never halt the device (#835)"
         );
     }
 
@@ -510,7 +529,7 @@ mod fi_source_text {
         // rationale block does), so we restrict the check to the
         // function body.
         let pos = FI_SRC
-            .find("fn rng_byte() -> u8")
+            .find("fn rng_byte() -> Option<u8>")
             .expect("rng_byte not found");
         let end = FI_SRC[pos..]
             .find("\n}\n")
@@ -546,7 +565,7 @@ mod fi_source_text {
     #[test]
     fn negative_rng_byte_never_substitutes_a_reused_delay_length() {
         let pos = FI_SRC
-            .find("fn rng_byte() -> u8")
+            .find("fn rng_byte() -> Option<u8>")
             .expect("rng_byte not found");
         let end = FI_SRC[pos..]
             .find("\n}\n")
@@ -569,8 +588,20 @@ mod fi_source_text {
              never `byte_nonsecret(fallback)` (whose contract is to substitute)."
         );
         assert!(
-            body.contains("halt_countermeasure_unavailable"),
-            "fi::rng_byte must REFUSE when no fresh length can be drawn (#833)"
+            body.contains("poison_delay_source();")
+                && body.contains("None"),
+            "fi::rng_byte must REFUSE when no fresh length can be drawn — by \
+             poisoning the operation and returning None (#835), NOT by \
+             halting the device (#833/#834, rejected: reachable from \
+             documented transient events, from lock contention with healthy \
+             hardware, and able to durably spend PIN attempts via \
+             pin_attempts_bump's commit-then-delay ordering)"
+        );
+        assert!(
+            !body.contains("halt_countermeasure_unavailable")
+                && !body.contains("halt_on_glitch"),
+            "fi::rng_byte must not halt the device over an unavailable delay \
+             source; the operation fails at its boundary instead (#835)"
         );
         // The retry must be in the LOOP CONDITION. A mutation control that
         // changed the bound to `< 0` left a bare `body.contains(
