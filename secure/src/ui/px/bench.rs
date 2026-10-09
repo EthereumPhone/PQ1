@@ -304,6 +304,22 @@ pub fn run() -> ! {
     #[cfg(feature = "ui-px-frametime")]
     let poison_baseline = crate::fi::DELAY_POISONINGS.load(core::sync::atomic::Ordering::Relaxed);
 
+    // ---- #835 C1: drive a REAL latched RNG error and prove recovery ----
+    //
+    // The poison self-test above raises the flag by hand. This provokes the
+    // actual hardware condition — stop HSI48, let a genuine SECS/CECS latch,
+    // restore the clock so the hardware is healthy with the flag still
+    // sticky, then call `rng::fill`. That is the exact state that halted the
+    // device before 0a02fe54, and until now the only evidence it was fixed
+    // was a source argument plus a window opened by hand.
+    //
+    // Outside `interrupt::free`: the recovery path must work under the normal
+    // interrupt regime, including the SysTick reseed that contends for the
+    // same driver lock. Masking would test a quieter system than the one that
+    // has to work.
+    #[cfg(all(feature = "ui-px-frametime", feature = "rng-fault-probe"))]
+    let poison_selftest = poison_selftest | crate::hw::rng::provoke_latched_error_and_recover();
+
     #[cfg(feature = "ui-px-frametime")]
     super::lcd::set_fallback_probe(poison_selftest, poison_baseline, sweep_misses);
     #[cfg(feature = "ui-px-frametime")]

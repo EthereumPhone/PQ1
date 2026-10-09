@@ -206,6 +206,87 @@ impl Drop for DriverGuard {
     }
 }
 
+/// Bench-only: provoke a GENUINE latched RNG error, then prove `fill`
+/// recovers from it instead of halting or poisoning (#835 C1).
+///
+/// This is the last inference in #835. Everything else about the
+/// recover-before-delay ordering is argued from source or demonstrated against
+/// a window opened by hand; nothing has driven the actual condition — a real
+/// `SECS`/`CECS` latched at `fill_bound` entry — which is what used to kill
+/// the device outright.
+///
+/// Sequence, and the shape is deliberate:
+///
+/// 1. stop HSI48, the kernel clock. Registers stay addressable (AHB bus clock
+///    untouched) but the noise source and clock checker lose their clock, so
+///    the hardware latches a real error.
+/// 2. poll `SR` until an `ERROR_FLAGS` bit appears, bounded.
+/// 3. **restore HSI48 and wait for ready.** The flag is sticky — cleared only
+///    by software or a conditioning reset — so this leaves exactly the state
+///    that matters: a LATCHED ERROR OVER HEALTHY HARDWARE. Testing with the
+///    clock still stopped would only prove that a dead RNG fails, which is
+///    not the interesting claim.
+/// 4. call `rng::fill` from thread mode. It must recover and return `Ok`.
+///
+/// Returns a bit mask. Bit 4 is a liveness witness: if the provocation did not
+/// latch anything, the remaining bits are left CLEAR rather than reported as
+/// passes, because they would be vacuous.
+///
+/// Note what CANNOT happen any more: if recovery fails, this returns a partial
+/// mask and the bench keeps running. Before #835 the same condition parked the
+/// CPU in a `wfe` loop, so a failed probe would have been indistinguishable
+/// from a dead board.
+#[cfg(feature = "rng-fault-probe")]
+pub fn provoke_latched_error_and_recover() -> u32 {
+    const BIT_LATCHED: u32 = 1 << 4;
+    const BIT_FILL_OK: u32 = 1 << 5;
+    const BIT_NOT_POISONED: u32 = 1 << 6;
+    const BIT_SR_CLEAN: u32 = 1 << 7;
+
+    let mut bits = 0u32;
+
+    // ---- 1 + 2: stop the kernel clock and wait for a real latch ----
+    crate::hw::rcc::set_hsi48(false);
+    let mut spin = 0u32;
+    let mut latched = false;
+    while spin < 2_000_000 {
+        // Touching DR encourages the seed/clock checkers to run; the value is
+        // discarded and never reaches a caller.
+        let _ = REG.dr.read();
+        if REG.sr.read() & ERROR_FLAGS != 0 {
+            latched = true;
+            break;
+        }
+        spin = spin.wrapping_add(1);
+    }
+
+    // ---- 3: healthy hardware again, error still latched ----
+    crate::hw::rcc::set_hsi48(true);
+
+    if !latched {
+        // Honest inconclusive: leave 5..7 clear. Nothing was tested.
+        secure_log!("[S] rng-probe: no error latched — inconclusive, not a pass");
+        return bits;
+    }
+    bits |= BIT_LATCHED;
+    secure_log!("[S] rng-probe: latched SR=0x{:08x}; now testing recovery", REG.sr.read());
+
+    // ---- 4: the claim under test ----
+    let mut buf = [0u8; 8];
+    let filled = fill(&mut buf).is_ok();
+    buf.fill(0);
+    if filled {
+        bits |= BIT_FILL_OK;
+    }
+    if !crate::fi::delay_source_failed() {
+        bits |= BIT_NOT_POISONED;
+    }
+    if status_is_clean(REG.sr.read()) {
+        bits |= BIT_SR_CLEAN;
+    }
+    bits
+}
+
 /// One raw TRNG word for the FI delay pool (#832). Caller must hold
 /// `DriverGuard`.
 ///

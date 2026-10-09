@@ -13,7 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SECURE = ROOT / "secure" / "src"
 
 EXCLUDED_FILES = {"rng.rs", "rng_strong.rs", "host_rng.rs"}
-CALL = re.compile(r"\b(?:crate::)?rng::(?:fill|byte|byte_nonsecret)\s*\(")
+# `try_byte_nonsecret` was added in #835 and this pattern did not cover it, so
+# the FI delay path — a direct platform-RNG consumer, and the single highest
+# call-rate one in the firmware — went INVISIBLE to this gate the moment the
+# old `byte_nonsecret` call was removed. A new accessor must not be able to
+# walk around the allowlist; matching the `byte` prefix family keeps any
+# future `byte_*` helper in scope by default.
+CALL = re.compile(r"\b(?:crate::)?rng::(?:fill|byte|byte_nonsecret|try_byte_nonsecret)\s*\(")
 SOFTWARE_RNG = re.compile(
     r"\b(?:StdRng|SmallRng|ChaCha(?:8|12|20)?Rng|thread_rng|fastrand|"
     r"yasmarang|xorshift(?:32|64)?|Lcg|seed_from_u64)\b|\brand::(?:rngs|thread_rng)"
@@ -31,8 +37,24 @@ NONSECRET_SOFTWARE_RNG_FILES = {
 # bench wrapper. Counts are deliberate: a second call under the same local
 # variable name is still a new bypass and fails this gate.
 EXPECTED = {
+    # #835: the substituting `byte_nonsecret(FI_DELAY_LAST_GOOD)` call is GONE.
+    # A delay that cannot be given a fresh length no longer reuses one; it
+    # poisons the operation, which then refuses at its own boundary. What
+    # remains is the NON-substituting accessor, which can say no.
     "secure/src/fi.rs": Counter(
-        {"let b = crate::rng::byte_nonsecret(FI_DELAY_LAST_GOOD.load(Ordering::Relaxed));": 1}
+        {"if let Some(b) = crate::rng::try_byte_nonsecret() {": 1}
+    ),
+    # Bench-only measurement probes (`ui-px-bench`, and the fault probe also
+    # needs `rng-fault-probe`, which is in PROD_FORBIDDEN and fenced in
+    # nsc/mod.rs). None of these bytes reaches a key, nonce, seed or
+    # signature: two are a poison-boundary self-test whose buffer is zeroed
+    # immediately, and one is the #832 fan-out length sweep.
+    "secure/src/ui/px/bench.rs": Counter(
+        {
+            "let _ = crate::rng::fill(&mut buf[..len]);": 1,
+            "if crate::rng::fill(&mut scratch).is_err() {": 1,
+            "if crate::rng::fill(&mut scratch).is_ok() {": 1,
+        }
     ),
     "secure/src/bench_masked_sha.rs": Counter(
         {"let _ = crate::rng::fill(&mut b);": 1}

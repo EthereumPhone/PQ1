@@ -404,6 +404,10 @@ compile_error!(
         // Frame-time overlay: prints render/blit timings over the trusted
         // display. Not destructive, but it paints over consent screens.
         feature = "ui-px-frametime",
+        // Deliberately stops the RNG kernel clock to provoke a real latched
+        // SECS/CECS. A fault-injection path has no business in a shipping
+        // image under any circumstances.
+        feature = "rng-fault-probe",
     )
 ))]
 compile_error!(

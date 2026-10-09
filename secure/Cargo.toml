@@ -218,6 +218,11 @@ ui-px-dma = ["ui-px", "ui-lcd"]
 # or measure the real presenter without the sign-dialog route, which #778/#779
 # document as blocked. Pair with `ui-px-frametime` to read the numbers.
 # PROD_FORBIDDEN: it replaces the boot flow outright.
+# Bench-only fault injection: deliberately stops the RNG kernel clock to
+# provoke a GENUINE latched SECS/CECS, so #835's recover-before-delay path can
+# be tested against a real error instead of a simulated one. Never ship:
+# fenced in `nsc/mod.rs` and listed in the Makefile's PROD_FORBIDDEN.
+rng-fault-probe = []
 ui-px-bench = ["ui-px", "ui-lcd"]
 # One-shot NV3007 tearing-effect measurement (#780): reads the panel's
 # scan-out pulse, paints the refresh rate and its jitter, and parks. Decides

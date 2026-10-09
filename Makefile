@@ -2680,7 +2680,7 @@ RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-
 override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key se-lcd-diag dev-dfu \
                  ui-capture bhk-hardcoded-master-key uart-console \
                  boot-pulse sca-trigger erc7730-dev-unattested optiga-reset-oids \
-                 erc7730-forced-blind \
+                 erc7730-forced-blind rng-fault-probe \
                  fw-rollback-e2e fwup-transport-e2e se050-scp03-allow-factory-fallback \
                  legacy-fw-rollback-unsafe prodtest factory-provisioning \
                  factory-provisioning-rehearsal factory-production-irreversible-im-sure \

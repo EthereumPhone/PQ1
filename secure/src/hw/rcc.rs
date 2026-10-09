@@ -151,6 +151,31 @@ pub unsafe fn init() -> u32 {
     sysclk
 }
 
+/// Bench-only: stop or restart HSI48, the RNG's kernel clock (#835).
+///
+/// Stopping it leaves the RNG peripheral addressable — register access runs on
+/// the AHB bus clock, which this does not touch — while its noise source and
+/// clock checker lose their clock, so the hardware latches a REAL `CECS`/`SECS`.
+/// That is the one condition `fill_bound`'s recover-before-delay ordering
+/// exists for, and the only honest way to test it.
+///
+/// Safe to toggle in the bench image specifically because `mock-se` builds
+/// carry no `usb`, so HSI48 feeds nothing but the RNG there. In a `usb` image
+/// it would also stall the OTG FS 48 MHz domain.
+#[cfg(feature = "rng-fault-probe")]
+pub fn set_hsi48(on: bool) {
+    if on {
+        REG.cr.set_bits(HSI48ON);
+        // Bounded: a hung ready bit must not wedge the bench.
+        let mut spin = 0u32;
+        while REG.cr.read() & HSI48RDY == 0 && spin < 1_000_000 {
+            spin = spin.wrapping_add(1);
+        }
+    } else {
+        REG.cr.clear_bits(HSI48ON);
+    }
+}
+
 /// Attempt to switch to VOS Range 1 and configure PLL1 for 160 MHz.
 /// Returns 160 on success, or 16 if VOS change fails (stays on HSI16).
 fn try_pll_160mhz() -> u32 {
