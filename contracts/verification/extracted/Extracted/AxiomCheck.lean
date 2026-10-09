@@ -1,3 +1,4 @@
+import Extracted.HypertreeStrictSpec
 import Extracted.ForsVerifierPrefix
 import Extracted.ForsRejectSpec
 /- Axiom-discipline check (extends the SphincsCVerify no-sorry/axiom-lint
@@ -195,3 +196,13 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_parse_fors_auth_value
 #print axioms Extracted.Equiv.forsForestPhase_matches_vendored
 #print axioms Extracted.Equiv.firmware_verify_fors_prefix
+
+-- Exact layer parsing and two-layer continuation, with a conditional strict bridge.
+#print axioms Extracted.Equiv.firmware_parse_layer_wots_value
+#print axioms Extracted.Equiv.firmware_parse_layer_xmss_value
+#print axioms Extracted.Equiv.parsedLayerCount_val
+#print axioms Extracted.Equiv.firmware_verify_layer_body
+#print axioms Extracted.Equiv.firmware_verify_hypertree_loop
+#print axioms Extracted.Equiv.firmware_verifier_hypertree_continuation
+#print axioms Extracted.Equiv.strict_hypertree_success_eq_raw
+#print axioms Extracted.Equiv.firmware_continuation_matches_strict_success

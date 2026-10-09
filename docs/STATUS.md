@@ -24,8 +24,12 @@ also has a universal early-refusal theorem for a nonzero final FORS index.
 The actual signature parsers and special last leaf now compose into a
 complete FORS prefix theorem (2026-10-09): on the forced-zero branch, the
 full verifier equals its unchanged WOTS/XMSS continuation supplied with the
-specified FORS public key and offset 2,336. Full WOTS/XMSS acceptance and
-the signer/session relation remain open.
+specified FORS public key and offset 2,336. The actual two-layer continuation
+is now total and computes the specified root comparison at final offset 4,008,
+including full four-byte WOTS counters and Rust's zero-node fallback. Successful
+strict-verifier reconstruction agrees with that result. Strict rejection is
+still distinct from Rust's zero-node continuation; an unconditional strict
+acceptance equivalence and the signer/session relation remain open.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

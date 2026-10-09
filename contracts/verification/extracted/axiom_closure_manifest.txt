@@ -142,3 +142,13 @@ Extracted.Equiv.firmware_parse_fors_secrets_value
 Extracted.Equiv.firmware_parse_fors_auth_value
 Extracted.Equiv.forsForestPhase_matches_vendored
 Extracted.Equiv.firmware_verify_fors_prefix
+
+# Actual hypertree continuation; strict relation assumes a successful strict result.
+Extracted.Equiv.firmware_parse_layer_wots_value
+Extracted.Equiv.firmware_parse_layer_xmss_value
+Extracted.Equiv.parsedLayerCount_val
+Extracted.Equiv.firmware_verify_layer_body
+Extracted.Equiv.firmware_verify_hypertree_loop
+Extracted.Equiv.firmware_verifier_hypertree_continuation
+Extracted.Equiv.strict_hypertree_success_eq_raw
+Extracted.Equiv.firmware_continuation_matches_strict_success

@@ -309,16 +309,54 @@ whole production verifier in normal and `lean_extract` configurations, its
 extracted counterpart, the exact prefix/continuation split and the faithful
 FORS computation on 22 cases: four accepting KAT signatures, two negative KATs,
 and sixteen synthetic signatures that pass the forced-zero check. It checks
-all parsed bytes and offsets and rejects 176 altered outputs and seven malformed
-inputs. Five positive proof baselines accompany 23 well-typed semantic controls
+all parsed bytes and offsets and rejects 132 value mutations, 44 incorrect
+output widths and seven malformed inputs. Five positive proof baselines accompany
+23 well-typed semantic controls
 for parser sources/destinations/offsets, the actual last-leaf/compression/handoff
 calls and verifier-side reconstruction. These controls supplement universal
 proofs; the corpus alone is not a full verifier refinement.
 
-The remaining composition starts at WOTS/XMSS, including the Rust zero-sentinel
-caller behavior. Tree construction/membership, concrete hash backends,
-randomness and full signer/session refinement remain open. EasyCrypt proof
-inputs and numerical bounds are unchanged.
+The WOTS/XMSS continuation (2026-10-09) closes its computation and totality
+obligations. [`HypertreeParseSpec.lean`](../../extracted/Extracted/HypertreeParseSpec.lean)
+proves both actual layer parsers and all four big-endian counter bytes. Each
+layer consumes 43 chain nodes, four counter bytes and nine siblings, exactly
+836 bytes. [`HypertreeLayerSpec.lean`](../../extracted/Extracted/HypertreeLayerSpec.lean)
+proves the actual body preserves the layer/tree/leaf addresses, shifts the tree
+index by nine bits and hands the recovered node to the next layer.
+[`HypertreeContinuationSpec.lean`](../../extracted/Extracted/HypertreeContinuationSpec.lean)
+proves the actual two-iteration loop terminates, finishes at offset 4,008 and
+returns the final root comparison. These results cover every represented
+32-bit index, every 4,008-byte signature and every full-width wire counter.
+
+The executable specification deliberately preserves Rust's invalid-WOTS
+zero-node fallback and subsequent XMSS computation. It does not identify a
+zero node with rejection. [`HypertreeStrictSpec.lean`](../../extracted/Extracted/HypertreeStrictSpec.lean)
+separately proves that **when** the faithful strict `verifyHypertree` returns
+`some expected`, the actual continuation returns exactly the comparison of
+`expected` with the public root. Its `none` branch is not claimed equivalent
+to the Rust continuation. No production behavior changes, added assumptions
+or unconditional strict-acceptance equivalence are hidden in this relation.
+
+Eight new kernel-only headlines bring the current audit to **106**; the exact
+environment inventory remains **27** axioms. Four copied hypertree declarations
+have semantic-edit and deletion fidelity controls. Fifty execution vectors
+cover the actual parsers, extracted continuation, raw computation model and
+strict specification. Forty-two also execute the unchanged whole production
+verifier (the prior 22 cases plus ten counter boundaries in each layer); eight
+additional cases cover index boundaries through `u32::MAX`. Both normal and
+`lean_extract` Rust configurations check the same vectors. Successful strict
+reconstruction and rejection at either WOTS layer are exercised. Controls
+reject 350 altered values, 50 wrong output widths and eight malformed inputs.
+Six positive proof baselines accompany 29 compiling semantic mutations across
+the parsers, counter order/high byte, addresses, node/index handoffs, loop entry,
+terminal comparison and strict reconstruction. The earlier prefix receipt now
+separates value changes from output-width rejection (#815).
+
+The remaining verifier bridge includes the complete signature-deserializer
+relation and the deliberate Rust/strict-verifier rejection distinction. Tree
+construction/membership, concrete hash backends, randomness and full
+signer/session refinement remain open. EasyCrypt proof inputs and numerical
+bounds are unchanged.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

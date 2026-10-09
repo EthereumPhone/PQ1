@@ -76,10 +76,12 @@ def check : IO Unit := do
     unless agrees result v.digest v.pk v.ht v.accepted do
       throw (IO.userError s!"FORS prefix/full-verifier disagreement: {v.label}")
     unless !(agrees result v.digest v.pk (v.ht ^^^ 1) v.accepted) &&
-        !(agrees result v.digest v.pk v.ht (!v.accepted)) &&
-        !(agrees result v.pk v.pk v.ht v.accepted) &&
+        !(agrees result v.digest v.pk v.ht (!v.accepted)) do
+      throw (IO.userError "altered prefix value accepted")
+    -- Exchanging these fields tests their distinct 16/32-byte widths.
+    unless !(agrees result v.pk v.pk v.ht v.accepted) &&
         !(agrees result v.digest v.digest v.ht v.accepted) do
-      throw (IO.userError "altered prefix output accepted")
+      throw (IO.userError "incorrect prefix output width accepted")
     match result with
     | some r =>
       for j in [0,15] do
@@ -100,6 +102,6 @@ def check : IO Unit := do
       (run v.seed v.root v.msg (v.sig ++ "00")).isNone &&
       (run v.seed v.root v.msg ("gg" ++ v.sig)).isNone do
     throw (IO.userError "malformed prefix input accepted")
-  IO.println "OK: 22 full-verifier/prefix/specification executions (4 accepting); 176 altered-output and 7 malformed-input controls"
+  IO.println "OK: 22 full-verifier/prefix/specification executions (4 accepting); 132 value mutations, 44 output-width and 7 malformed-input controls"
 #eval check
 end ForsPrefixDiff
