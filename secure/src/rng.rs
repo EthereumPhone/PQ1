@@ -112,6 +112,58 @@ pub fn byte() -> u8 {
 /// **Do NOT use for key/nonce/handshake material** — a `fallback` is a
 /// fixed byte, so anything that needs unpredictability must use `byte()` /
 /// `fill()` (which fail loudly).
+///
+/// **One remaining caller, and the FI delay path is no longer it** (#833).
+/// `ui::seed_wizard::pick_three_distinct` picks which 3 of the 24 words to
+/// re-verify; that choice leaks nothing about the seed, the seed itself came
+/// from `rng_strong` (which already failed loudly if the TRNG was broken), and
+/// its fallback must vary with the loop counter or the distinctness loop spins
+/// forever. Substitution is therefore harmless there and load-bearing for
+/// liveness. It is NOT harmless for a countermeasure parameter, which is why
+/// `fi::rng_byte` now uses [`try_byte_nonsecret`] and refuses.
+/// One TRNG byte, or `None` on a transient peripheral error. **No reuse.**
+///
+/// This is what the FI delay path uses (#833). It exists because
+/// [`byte_nonsecret`] cannot express "refuse": its contract is to substitute a
+/// caller-supplied value, and for a countermeasure parameter substitution is
+/// the attack — see [`pqsigner_fi::halt_countermeasure_unavailable`].
+pub fn try_byte_nonsecret() -> Option<u8> {
+    let mut b = [0u8; 1];
+    match fill(&mut b) {
+        Ok(()) => {
+            #[cfg(feature = "ui-px-frametime")]
+            nonsecret_tally(false);
+            Some(b[0])
+        }
+        Err(()) => {
+            #[cfg(feature = "ui-px-frametime")]
+            nonsecret_tally(true);
+            None
+        }
+    }
+}
+
+/// Whether the platform RNG has completed initialization at least once.
+///
+/// The FI delay path may tolerate a failed draw ONLY before this is true.
+/// `hw::rng::init` holds the driver lock and runs a conditioning reset during
+/// which no word is available, and it calls `wait_random` itself — so a delay
+/// path that refused unconditionally would halt the device during its own RNG
+/// bring-up. No secret exists that early in boot, so tolerating there costs
+/// nothing; after it, a failed draw is a fault or an attack and is fatal.
+pub fn init_complete() -> bool {
+    #[cfg(feature = "stm32u585")]
+    {
+        hw_rng::init_complete()
+    }
+    // No bring-up sequence on the host/QEMU backend, so there is no
+    // bootstrap window to exempt.
+    #[cfg(not(feature = "stm32u585"))]
+    {
+        true
+    }
+}
+
 pub fn byte_nonsecret(fallback: u8) -> u8 {
     let mut b = [0u8; 1];
     match fill(&mut b) {

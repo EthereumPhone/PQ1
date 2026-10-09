@@ -103,8 +103,9 @@ static ARMED: AtomicBool = AtomicBool::new(false);
 /// Inner delays served a fresh pre-drawn TRNG byte.
 pub static HITS: AtomicU32 = AtomicU32::new(0);
 
-/// Inner delays that found the pool armed but empty and had to replay
-/// `FI_DELAY_LAST_GOOD`. The residual of this fix; expected 0.
+/// Inner delays that found the pool armed but empty, i.e. the per-output-word
+/// top-up schedule did not keep up. Counted whether or not the in-place
+/// top-up then recovered, so this stays a true sizing signal. Expected 0.
 pub static MISSES: AtomicU32 = AtomicU32::new(0);
 
 /// Run `f` with interrupts masked, so a refill cannot interleave with an
@@ -140,7 +141,20 @@ pub fn take() -> Option<u8> {
             Some(POOL[n - 1].swap(0, Relaxed))
         }
         Err(_) => {
+            // Armed means a `DriverGuard` is held, which means the peripheral
+            // is ours and live — so draw more right here rather than reporting
+            // a shortfall. Without this, a sizing error or an unexpected retry
+            // path inside one loop iteration would reach the #833 refusal and
+            // halt the device over a shortage we can simply fix. Counted
+            // either way, because a top-up here means the per-output-word
+            // schedule did not keep up.
             MISSES.fetch_add(1, Relaxed);
+            if refill_in_place() {
+                if let Ok(n) = AVAIL.fetch_update(Relaxed, Relaxed, |n| n.checked_sub(1)) {
+                    HITS.fetch_add(1, Relaxed);
+                    return Some(POOL[n - 1].swap(0, Relaxed));
+                }
+            }
             None
         }
     }
@@ -169,6 +183,21 @@ pub fn replenish(mut word: impl FnMut() -> Option<u32>) {
             ARMED.store(true, Relaxed);
         }
     });
+}
+
+/// Last-resort top-up from inside [`take`], using the platform word source
+/// directly. Safe because `ARMED` implies a held `DriverGuard`.
+#[inline]
+fn refill_in_place() -> bool {
+    #[cfg(feature = "stm32u585")]
+    {
+        replenish(crate::hw::rng::delay_pool_word);
+        AVAIL.load(Relaxed) > 0
+    }
+    #[cfg(not(feature = "stm32u585"))]
+    {
+        false
+    }
 }
 
 /// Disarm and wipe. Called from `DriverGuard::drop`, before the busy flag is

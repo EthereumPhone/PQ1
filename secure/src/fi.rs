@@ -46,30 +46,50 @@ pub use pqsigner_fi::{FAIL_SENTINEL, OK_SENTINEL};
 fn rng_byte() -> u8 {
     #[cfg(not(test))]
     {
-        // Non-secret delay length only. A transient STM32U5 TRNG seed/clock
-        // error (`SECS`/`CECS`, a documented occasional event ST's own HAL
-        // treats as retry-able) must NOT be fatal here: `crate::rng::byte()`
-        // `.expect()`s on failure, and `wait_random` runs thousands of times
-        // per signature, so a single hiccup would panic the secure world
-        // mid-sign and hang the device until a power cycle. Degrade to the
-        // last good TRNG byte instead — the value only sets a delay duration
-        // and leaks no secret (see the rationale above). Still platform-only
-        // TRNG, never `rng_strong` (the sign-latency cliff).
-        // #832: inside `rng::fill` the driver is reentrancy-locked, so this
-        // used to fall through to `byte_nonsecret` -> `Err` -> replay
-        // `FI_DELAY_LAST_GOOD` for all 31 inner delays. They were therefore
-        // all the SAME length, which made the separation between each receipt
-        // check and its recheck a known constant and the burst self-revealing
-        // (measure the first, know the other thirty). Take a pre-drawn FRESH
-        // TRNG byte instead. `None` means no pool is armed — the ordinary
-        // top-level case — and falls through to exactly the old path.
+        // 1. A pre-drawn FRESH byte. Inside `rng::fill` the driver lock is
+        //    already ours, so the inner delays are served from the pool the
+        //    fill filled on entry (#832). This is the common case by 31:1.
         if let Some(b) = crate::fi_delay_pool::take() {
-            FI_DELAY_LAST_GOOD.store(b, Ordering::Relaxed);
             return b;
         }
-        let b = crate::rng::byte_nonsecret(FI_DELAY_LAST_GOOD.load(Ordering::Relaxed));
-        FI_DELAY_LAST_GOOD.store(b, Ordering::Relaxed);
-        b
+
+        // 2. A direct draw, retried. `fill_bound` performs RM0456's
+        //    conditioning reset on a latched `SECS`/`CECS`, so each attempt
+        //    carries its own recovery — which is the correct response to the
+        //    documented transient error, rather than substituting a value.
+        let mut attempt = 0u32;
+        while attempt < FRESH_DELAY_ATTEMPTS {
+            if let Some(b) = crate::rng::try_byte_nonsecret() {
+                return b;
+            }
+            attempt = attempt.wrapping_add(1);
+            #[cfg(feature = "ui-px-frametime")]
+            DELAY_RETRIES.fetch_add(1, Ordering::Relaxed);
+        }
+
+        // 3. The bootstrap window, and nothing wider. `hw::rng::init` holds
+        //    the driver lock, runs a conditioning reset during which no word
+        //    exists, and calls `wait_random` itself, so refusing here would
+        //    halt the device inside its own RNG bring-up. No secret exists
+        //    this early in boot, so a fixed length costs nothing — and the
+        //    window is closed for good by the first successful `init`.
+        if !crate::rng::init_complete() {
+            #[cfg(feature = "ui-px-frametime")]
+            BOOTSTRAP_DELAYS.fetch_add(1, Ordering::Relaxed);
+            return FI_DELAY_BOOTSTRAP;
+        }
+
+        // 4. Refuse (#833). There is deliberately NO reuse-the-last-byte arm.
+        //    `SECS`/`CECS` are the TRNG's seed- and clock-error flags, and
+        //    inducing them is what a voltage or clock glitcher does — so a
+        //    reuse path lets an attacker glitch the RNG, silently flatten
+        //    every delay to one constant, and then attack a known timing
+        //    window. Availability costs nothing real here either: a TRNG that
+        //    cannot yield a delay length after recovery also cannot yield key
+        //    material, and `rng::fill`/`rng_strong` already fail loudly for
+        //    that, so the operation was going to fail regardless.
+        secure_log!("[S] fi: no fresh delay length after {} attempts — HALT", FRESH_DELAY_ATTEMPTS);
+        pqsigner_fi::halt_countermeasure_unavailable()
     }
     #[cfg(test)]
     {
@@ -81,7 +101,24 @@ fn rng_byte() -> u8 {
 /// when a transient TRNG error would otherwise panic. Non-secret (delay
 /// length only); the seed value is irrelevant.
 #[cfg(not(test))]
-static FI_DELAY_LAST_GOOD: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0x5A);
+/// Direct-draw attempts before refusing. Each one carries `fill_bound`'s
+/// conditioning-reset recovery, so this is "retry the documented transient
+/// error a few times", not a spin.
+const FRESH_DELAY_ATTEMPTS: u32 = 3;
+
+/// The only fixed delay length in the firmware, reachable ONLY before the
+/// first successful `rng::init` (see arm 3 of [`rng_byte`]).
+const FI_DELAY_BOOTSTRAP: u8 = 0x5A;
+
+/// Draws that needed a retry. Bench instrumentation (`ui-px-frametime`).
+#[cfg(feature = "ui-px-frametime")]
+pub static DELAY_RETRIES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Draws served the fixed bootstrap length. MUST stay 0 after boot; a nonzero
+/// value growing at runtime would mean the exemption is not actually bounded.
+#[cfg(feature = "ui-px-frametime")]
+pub static BOOTSTRAP_DELAYS: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
 #[cfg(not(test))]
 use core::sync::atomic::Ordering;
 

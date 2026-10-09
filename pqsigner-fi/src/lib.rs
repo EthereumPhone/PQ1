@@ -273,6 +273,24 @@ fn halt_on_glitch() -> ! {
     panic!("fi: glitch sentinel tripped (non-arm test-build panic)");
 }
 
+/// Stop because a countermeasure cannot be run as specified.
+///
+/// Used when no FRESH delay length can be obtained (EthereumPhone/PQ1 #833).
+/// Reusing a previous length is not an option: `SECS`/`CECS` are the TRNG's
+/// seed- and clock-error flags, and inducing those is exactly what a voltage
+/// or clock glitcher does — so a reuse-on-error path lets an attacker glitch
+/// the RNG, silently flatten every delay to one constant, and mount the real
+/// fault attack against a known timing window. A countermeasure an attacker
+/// can switch off by attacking a different peripheral is not a countermeasure.
+///
+/// Silent, for the reason given on [`halt_on_glitch`]: the fault that put the
+/// TRNG into an error state may also own the display bus, so even a fatal
+/// screen is too much surface. Callers log under `debug-log` before arriving.
+#[inline(never)]
+pub fn halt_countermeasure_unavailable() -> ! {
+    halt_on_glitch()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -130,6 +130,9 @@ static PREVIOUS_WORD: AtomicU32 = AtomicU32::new(0);
 /// Contention fails immediately instead of spinning in an interrupt.
 static DRIVER_BUSY: AtomicBool = AtomicBool::new(false);
 
+/// Set once [`init`] succeeds; bounds the #833 bootstrap exemption.
+static INIT_COMPLETE: AtomicBool = AtomicBool::new(false);
+
 struct DriverGuard;
 
 impl DriverGuard {
@@ -167,7 +170,7 @@ impl Drop for DriverGuard {
 /// health ladder is not required here. A latched seed/clock error, a DRDY
 /// timeout or an all-zero word still refuse, which leaves the pool unarmed and
 /// the behaviour byte-identical to before this fix.
-fn delay_pool_word() -> Option<u32> {
+pub(crate) fn delay_pool_word() -> Option<u32> {
     let mut timeout = 0u32;
     loop {
         let sr = REG.sr.read();
@@ -620,7 +623,26 @@ fn init_locked() -> Result<(), ()> {
 /// Initialize the peripheral while excluding concurrent SysTick reads.
 pub fn init() -> Result<(), ()> {
     let _guard = DriverGuard::try_acquire()?;
-    init_locked()
+    let result = init_locked();
+    if result.is_ok() {
+        // #833: closes the bootstrap window. Until this is set the FI delay
+        // path tolerates a failed draw, because `init_locked` holds this very
+        // lock, runs a conditioning reset during which no word is available,
+        // and calls `wait_random` itself — refusing unconditionally would
+        // halt the device inside its own RNG bring-up. After it, a failed
+        // draw is a fault or an attack.
+        INIT_COMPLETE.store(true, Ordering::Release);
+    }
+    result
+}
+
+/// Whether [`init`] has ever completed successfully. See `rng::init_complete`.
+///
+/// Deliberately latching: it marks "past bootstrap", not "healthy right now".
+/// A later transient error is handled by `fill_bound`'s conditioning-reset
+/// recovery and, failing that, by refusal — not by reopening the exemption.
+pub fn init_complete() -> bool {
+    INIT_COMPLETE.load(Ordering::Acquire)
 }
 
 /// Fill `buf` with random bytes from the hardware TRNG.
