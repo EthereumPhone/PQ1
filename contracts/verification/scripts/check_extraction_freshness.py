@@ -81,6 +81,10 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-xmss-auth': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/XmssAuth/Funs.lean', 'contracts/verification/extracted/Extracted/XmssAuth/Types.lean', 'contracts/verification/extracted/Extracted/XmssAuth/FunsExternal.lean'),
+    ),
     'extract-xmss-root': (
         ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
         ('contracts/verification/extracted/Extracted/XmssRoot/Funs.lean', 'contracts/verification/extracted/Extracted/XmssRoot/Types.lean', 'contracts/verification/extracted/Extracted/XmssRoot/FunsExternal.lean'),
@@ -228,7 +232,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "5f1f7d6e49850ca4f995121761cad83f6d2e00f5e989dc58d49ed90500bd61ff"
+REGISTRY_BINDING_SHA256 = "9d876f0d73ac2bd4c9bc7a4f5cce5016111287def7ca47fb83962f5a4c06b33b"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")

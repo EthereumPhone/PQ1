@@ -9,6 +9,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 COPY = [
     "scripts/check_vendored_spec.py",
+    "extracted/Extracted/XmssAuthVendored.lean",
     "extracted/Extracted/XmssRootVendored.lean",
     "extracted/Extracted/ForsRootVendored.lean",
     "extracted/Extracted/ForsAuthVendored.lean",

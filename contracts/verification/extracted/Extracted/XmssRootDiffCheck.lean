@@ -1,4 +1,7 @@
-/- Two full extracted trees versus the Rust oracle, pure tree and faithful spec. -/
+/- Both actual root entries and faithful references versus the Rust oracle.
+   The internal pure tree is also executed on the public-root case; the
+   full-width case's duplicate pure evaluation is allocated to the actual
+   authentication builder in XmssAuthDiffCheck. Universal proofs cover both. -/
 import Extracted.XmssRootBridge
 import Extracted.XmssRootDiffVectors
 namespace XmssRootDiff
@@ -28,7 +31,7 @@ def run (v : Vector) : Option (_root_.Array UInt8) := do
         match sphincs_c10.merkle.compute_subtree_root seed sk layer tree () lo hi with
         | .ok result => some (toSpecNode result).data
         | _ => none
-      if actual != (toSpecNode (xmssRootNode seed sk layer tree 9 0)).data ||
+      if (v.publicRoot && actual != (toSpecNode (xmssRootNode seed sk layer tree 9 0)).data) ||
           actual != (mtNode (toSpecDigest seed) (UInt32.ofNat v.layer) (UInt64.ofNat v.tree)
             (fun j => Wots.keygenPk (toSpecDigest seed) (toSpecDigest sk)
               (UInt32.ofNat v.layer) (UInt64.ofNat v.tree) (UInt32.ofNat j)) 9 0).data then
@@ -56,6 +59,6 @@ def check : IO Unit := do
       {v with lo := 256}, {v with hi := 256},
       {v with seed := v.seed.set! 31 1}, {v with layer := 0}, {v with hi := 1}] do
     unless (run changed).isNone do throw (IO.userError "malformed XMSS root input accepted")
-  IO.println "OK: 2 complete actual/pure/vendored XMSS trees (public root and full-width subtree); independent Rust roots; 4 value, 2 width, 11 malformed controls"
+  IO.println "OK: 2 complete actual/vendored XMSS trees (public root and full-width subtree), public-root pure tree; independent Rust roots; 4 value, 2 width, 11 malformed controls"
 #eval check
 end XmssRootDiff

@@ -608,16 +608,20 @@ Six additional kernel-only headlines bring the default audit to **142**, with
 the same **27** environment axioms. A finite index/height schedule certificate
 is checked by the kernel; symbolic hash values remain in the structural proof.
 The new extraction is regenerated completely, including Types and external
-interfaces; the registry now has 28 entries, 27 fresh and the unchanged,
+interfaces; this checkpoint brought the registry to 28 entries, 27 fresh and the unchanged,
 explicitly waived tx-merkle entry. Existing WOTS/hash bodies and the identical
 progress-sink definition are reused, without new opaque assumptions.
 
 Eight normal and extraction Rust cases compare actual roots with an independent
 recursive byte oracle, including full-width addresses, zero/max seeds and
 progress-range boundaries. The normal configuration also checks all 32 progress
-reports per subtree and the public progress wrapper's root. Two complete trees
-(public root and a full-width subtree) execute in Lean against those Rust roots,
-the pure tree and the faithful recursive reference; four changed values, two
+reports per subtree and the public progress wrapper's root. Both actual entries
+(public root and a full-width subtree) execute in Lean against those Rust roots
+and the faithful recursive reference. The public-root case also executes the
+internal pure tree; the full-width case's duplicate pure evaluation is allocated
+to the actual authentication builder below, keeping six full-tree evaluations
+across the two corpora. Universal pure-tree correspondence covers both cases.
+Four changed values, two
 wrong output widths and eleven malformed test inputs are rejected. These
 bounded examples complement the universal proofs. Two positive proof baselines
 and 23 compiling semantic mutations exercise leaf counts, seeds and addresses,
@@ -630,11 +634,53 @@ Production Rust and EasyCrypt proof inputs are unchanged. As elsewhere, formal
 totality applies to the callback-free `lean_extract` shape; arbitrary callback
 execution and its effects are outside that theorem. The normal/extraction
 corpus is empirical correspondence evidence, not a universal callback proof.
-XMSS authentication-path generation and signing/recovery composition, the
-actual shuffled forest/signer loop, serialization and special final-slot
+The actual shuffled forest/signer loop, serialization and special final-slot
 composition remain open, along with concrete backends, randomness and the
 complete Rust/EasyCrypt signer/session relation. No hardware or shipment claim
 follows from this component result.
+
+XMSS authentication-path generation and membership (2026-10-09) are now
+connected in `XmssAuthSpec`, `XmssAuthBridge` and `XmssAuthRecovery`. For every
+seed, full-width layer/tree address, byte-valued progress range and target leaf
+below 512, the actual `build_subtree_with_auth` returns the reference height-nine
+root and all nine siblings from the faithful `mtAuthPath`. The carry invariant
+tracks each capture flag in both directions and binds every captured value;
+all flags are ready before the final copy loop, making its panic unreachable
+on this domain. No desired-path or desired-root premise is imposed.
+
+The actual builder, WOTS public-key leaf, authentication recovery and independent
+root builder compose into a membership theorem. Seven added headlines bring
+the default audit to **149**, with the same **27** environment axioms. Three
+new headlines are kernel-only; the four consuming the actual builder also
+reference the existing Aeneas `core.fmt.Formatter : Type` axiom through the
+debug-panic formatting branch. That branch is proved unreachable for valid
+leaves, but the syntactic type dependency is explicitly pinned in their exact
+closures. This is not a proof of Rust formatting or panic-message behavior;
+the environment inventory is unchanged. The regenerated extraction, normalized Types and imported external
+interfaces are enrolled together: 29 registry entries, 28 fresh and the existing
+tx-merkle waiver. The shared Rust-file metadata and checker-owned binding cover
+the new entry too. Production Rust and EasyCrypt proof inputs are unchanged.
+
+Twenty normal and extraction Rust cases compare the path, root and WOTS leaf
+with an independent recursive SHA byte oracle, including leaf boundaries and
+full-width addresses. Normal execution checks every progress transcript.
+The Rust corpus also executes 180 altered-sibling, 20 altered-leaf and 20
+wrong-index recoveries. One full-width extracted path build runs in Lean,
+checking all nine siblings, the root, WOTS leaf and recovered root against
+the independent corpus. It rejects 22 altered values, 16 malformed output
+shapes and ten malformed inputs; 21 executed changed-value/wrong-index
+recoveries must return a different root. These unequal-output examples are
+empirical controls, not a universal collision-freedom theorem.
+
+Three positive proof baselines and 37 typed semantic mutations cover leaf
+generation, capture flags and indices, child order, copy-loop behavior, copied
+path shape and recovery folding. Each mutated definition must compile before
+its unchanged consuming proof fails. Resource, malformed-definition and
+abnormal exits do not count. The copied path declaration has semantic-drift
+and deletion controls; the default gate and blocking push/PR paths run all
+new checks. The callback-free extraction boundary remains explicit. This does
+not yet prove complete WOTS signing, the shuffled forest/signer loop, serialized
+signature production or the full Rust/EasyCrypt signer/session relation.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

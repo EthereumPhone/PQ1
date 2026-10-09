@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1730,6 +1730,9 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_XMSS_ROOT_GENERATE=1 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release xmss_root_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_AUTH_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_auth_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=1 cargo test --locked -p sphincs-c10 --features sim-internals \
 	  --target x86_64-unknown-linux-gnu --test gen_wots_secret_vectors --release gen_wots_secret_vectors -- --nocapture
 	@cd $(REPO_ROOT) && PQ_WOTS_KEYGEN_GENERATE=1 cargo test --locked \
@@ -1770,9 +1773,15 @@ endif
 	@cd $(REPO_ROOT) && PQ_XMSS_ROOT_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release xmss_root_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_AUTH_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_auth_corpus -- --nocapture
 	@cd $(REPO_ROOT) && PQ_XMSS_ROOT_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release xmss_root_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_AUTH_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_auth_corpus -- --nocapture
 	@cd $(REPO_ROOT) && cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release fors_sign_recover_corpus -- --nocapture
@@ -1889,6 +1898,9 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.XmssRootBridge Extracted.XmssRootDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/XmssRootDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_xmss_root_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.XmssAuthRecovery Extracted.XmssAuthDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/XmssAuthDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_xmss_auth_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ForsRoundtripSpec Extracted.ForsAuthDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsAuthDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_fors_auth_proof_controls.py
@@ -2065,6 +2077,7 @@ verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) scripts/test_signature_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_root_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_xmss_root_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_xmss_auth_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_auth_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_secret_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_wots_keygen_vendored_spec.py
@@ -2624,6 +2637,27 @@ _extract-fors-auth-impl:
 	  --add-import Extracted.ForsRoot.Funs
 	@diff -u $(EXTRACTED_DIR)/Extracted/ForsAuth/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-auth $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual authentication capture and final copy loops; reuse the same proved dependencies.
+_extract-xmss-auth-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::wots::keygen_pk' --opaque 'sphincs_c10::hash::th_pair' \
+	  --opaque 'sphincs_c10::hash::pad16' \
+	  --start-from 'sphincs_c10::merkle::build_subtree_with_auth' --dest-file $${EXTRACTION_TMP_ROOT}/xmssauth.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/xmssauth.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Xmssauth.=Extracted.XmssAuth.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::hypertree::report' --kill 'sphincs_c10::merkle::REPORT_EVERY' \
+	  --kill 'sphincs_c10::params::ADRS_TREE' --kill 'sphincs_c10::params::D' --kill 'sphincs_c10::params::H' \
+	  --kill 'sphincs_c10::params::SUBTREE_H' --kill 'sphincs_c10::params::SUBTREE_LEAVES' \
+	  --add-import Extracted.XmssRoot.Funs
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
+	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
+	@diff -u $(EXTRACTED_DIR)/Extracted/XmssAuth/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-xmss-auth $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 
 # Actual XMSS stack construction and top-level public root; reuse proved dependencies.
 _extract-xmss-root-impl:

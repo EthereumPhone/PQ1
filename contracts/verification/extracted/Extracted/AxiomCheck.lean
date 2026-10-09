@@ -1,4 +1,5 @@
 import Extracted.XmssRootBridge
+import Extracted.XmssAuthRecovery
 import Extracted.ForsRoundtripSpec
 import Extracted.ForsAuthBridge
 import Extracted.ForsRootBridge
@@ -55,6 +56,15 @@ import Extracted.FormatDecimal.EmitSpec
 -- axiom gate elaborates them — the replay lives in Extracted/ExtractDiffCheck.lean)
 import Extracted.ExtractDiffVectors
 import Extracted.FormatDecimalDiffVectors
+
+-- XMSS authentication-path construction and actual-helper membership composition.
+#print axioms Extracted.Equiv.xmss_auth_leaf_schedule
+#print axioms Extracted.Equiv.xmss_build_auth_spec
+#print axioms Extracted.Equiv.xmss_auth_path_matches_vendored
+#print axioms Extracted.Equiv.firmware_xmss_auth_matches_vendored
+#print axioms Extracted.Equiv.xmss_auth_recovery_root
+#print axioms Extracted.Equiv.firmware_xmss_build_recover_root
+#print axioms Extracted.Equiv.firmware_xmss_build_recover_matches_vendored
 
 -- FV-#2 sequel: slot_entropy byte-layout (invariant #8). Closure = kernel triple
 -- + the disclosed `sha256_pure_bytes` hash axiom (the FV-#2 single-shot SHA-256

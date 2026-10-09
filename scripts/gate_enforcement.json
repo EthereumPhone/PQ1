@@ -445,7 +445,9 @@
         "sphincs-c10/tests/gen_fors_auth_vectors.rs",
         "contracts/verification/scripts/test_fors_roundtrip_proof_controls.py",
         "contracts/verification/scripts/test_xmss_root_proof_controls.py",
-        "contracts/verification/scripts/test_xmss_root_vendored_spec.py"
+        "contracts/verification/scripts/test_xmss_root_vendored_spec.py",
+        "contracts/verification/scripts/test_xmss_auth_proof_controls.py",
+        "contracts/verification/scripts/test_xmss_auth_vendored_spec.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",

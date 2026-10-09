@@ -18,11 +18,15 @@
 #   keccak256_pure            aa/userop keccak (UserOp/FunsExternal.lean:14)
 #   sha256_pure_bytes         slot KDF single-shot SHA-256 (SlotKdf/FunsExternal.lean:27)
 #   hmac_sha512_pure_bytes    bip39 seed HMAC-SHA512 (SlotKdf/FunsExternal.lean:41)
+#   Aeneas.Std.core.fmt.Formatter   opaque Type in debug-panic formatting (Aeneas/Std/Core/Fmt.lean).
+#     Already present in the 27-axiom environment. The XMSS valid-leaf proof
+#     makes the formatting branch unreachable; this is not a formatting or
+#     error-message correctness claim. Pin the syntactic dependency exactly.
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
-# Regenerate/verify against a fresh dump with the same 4-bucket structure:
-#   133 kernel-only + 4 sha256_pure_bytes + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes)
-#   + 4 keccak256_pure = 142 headlines.
+# Regenerate/verify against a fresh dump with the same 5-bucket structure:
+#   136 kernel-only + 4 Formatter + 4 sha256_pure_bytes
+#   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 149 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
 #
@@ -201,3 +205,12 @@ Extracted.Equiv.xmss_compute_pk_root_spec
 Extracted.Equiv.xmss_root_node_matches_vendored
 Extracted.Equiv.firmware_xmss_root_matches_vendored
 Extracted.Equiv.firmware_pk_root_matches_vendored
+
+# XMSS authentication paths and actual-helper membership composition.
+Extracted.Equiv.xmss_auth_leaf_schedule
+Extracted.Equiv.xmss_build_auth_spec  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.xmss_auth_path_matches_vendored
+Extracted.Equiv.firmware_xmss_auth_matches_vendored  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.xmss_auth_recovery_root
+Extracted.Equiv.firmware_xmss_build_recover_root  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_xmss_build_recover_matches_vendored  Aeneas.Std.core.fmt.Formatter

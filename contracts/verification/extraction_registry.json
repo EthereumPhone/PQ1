@@ -11,17 +11,20 @@
   },
   "shared_rust_files": {
     "sphincs-c10/src/hypertree.rs": [
+      "extract-xmss-auth",
       "extract-xmss-root",
       "extract-verifier",
       "extract-wots-find-count",
       "extract-fors-recovery"
     ],
     "sphincs-c10/src/merkle.rs": [
+      "extract-xmss-auth",
       "extract-xmss-root",
       "extract-verifier",
       "extract-merkle-verify"
     ],
     "sphincs-c10/src/wots.rs": [
+      "extract-xmss-auth",
       "extract-xmss-root",
       "extract-wots-keygen",
       "extract-verifier",
@@ -30,6 +33,7 @@
       "extract-wots-digits"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-xmss-auth",
       "extract-xmss-root",
       "extract-fors-auth",
       "extract-fors-root",
@@ -48,6 +52,7 @@
       "extract-wots-digits"
     ],
     "sphincs-c10/src/address.rs": [
+      "extract-xmss-auth",
       "extract-xmss-root",
       "extract-fors-auth",
       "extract-fors-root",
@@ -59,6 +64,7 @@
       "extract-fors-recovery"
     ],
     "sphincs-c10/src/hash.rs": [
+      "extract-xmss-auth",
       "extract-xmss-root",
       "extract-fors-auth",
       "extract-fors-root",
@@ -95,6 +101,7 @@
     ]
   },
   "required_targets": [
+    "extract-xmss-auth",
     "extract-xmss-root",
     "extract-fors-auth",
     "extract-fors-root",
@@ -125,6 +132,45 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-xmss-auth",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/hypertree.rs",
+        "sphincs-c10/src/merkle.rs",
+        "sphincs-c10/src/wots.rs",
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/hash.rs"
+      ],
+      "rust_files_sha256": [
+        "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
+        "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
+        "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "dcd625d38e59d0051d394c0dd971e326c6ff1f0f1d0bc900117dddc6b895a213",
+        "Types.lean": "b915a476dc32b9513747ca9917f4e398b1a9e729b18ba04d69d3b09f5575b15e",
+        "FunsExternal_Template.lean": "bf7f8787fb9f74f13a4152b2538a967fdeaca51b915488febcebc090cb1f98e8"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/XmssAuth/Funs.lean",
+        "contracts/verification/extracted/Extracted/XmssAuth/Types.lean",
+        "contracts/verification/extracted/Extracted/XmssAuth/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "a9788ff0ba6938ff9755dce6150d8d1499b2e73cf93a0fc90e3cfd6b0498ea62",
+        "04b7fe2cdf43e0087d770a67ad33dc27fac4de89757e1ecaac00326696a38b16",
+        "86365e235605af313216f0971f1a02ad9faefc8892f0b11e2f425ab40e1fee89"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/XmssAuthSpec.lean",
+      "headline_theorem": "xmss_build_auth_spec",
+      "fresh": true
+    },
     {
       "target": "extract-xmss-root",
       "make_dir": "contracts/verification",

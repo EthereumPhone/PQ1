@@ -12,6 +12,7 @@ fn main() {
     let keygen = base.join("keygen.rs");
     let roundtrip = base.join("roundtrip.rs");
     let xmssroot = base.join("xmssroot.rs");
+    let xmssauth = base.join("xmssauth.rs");
     println!("cargo:rerun-if-changed={}", source.display());
     println!("cargo:rerun-if-changed={}", corpus.display());
     let body = fs::read_to_string(source).unwrap();
@@ -22,6 +23,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", keygen.display());
     println!("cargo:rerun-if-changed={}", roundtrip.display());
     println!("cargo:rerun-if-changed={}", xmssroot.display());
+    println!("cargo:rerun-if-changed={}", xmssauth.display());
     let tests = fs::read_to_string(corpus).unwrap()
         + "\n"
         + &fs::read_to_string(forest).unwrap()
@@ -36,7 +38,9 @@ fn main() {
         + "\n"
         + &fs::read_to_string(roundtrip).unwrap()
         + "\n"
-        + &fs::read_to_string(xmssroot).unwrap();
+        + &fs::read_to_string(xmssroot).unwrap()
+        + "\n"
+        + &fs::read_to_string(xmssauth).unwrap();
     let output =
         format!("mod hypertree {{\n{body}\n#[cfg(test)] mod recovery_corpus {{\n{tests}\n}}\n}}\n");
     fs::write(

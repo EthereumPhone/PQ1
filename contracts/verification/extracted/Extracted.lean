@@ -65,3 +65,4 @@ import Extracted.ForsRootBridge
 
 import Extracted.ForsRoundtripSpec
 import Extracted.XmssRootBridge
+import Extracted.XmssAuthRecovery

@@ -54,10 +54,18 @@ valid-leaf bound. XMSS key-generation tree construction now also agrees with
 the recursive reference: the actual stack processes all 512 WOTS leaves and
 returns the height-nine root, preserving full-width layer/tree addresses. The
 actual public-key-root wrapper pads the public seed and selects layer one,
-tree zero. These totality results concern the existing callback-free extraction;
+tree zero. The actual XMSS authentication-path builder now returns that same
+root and all nine reference siblings for every valid leaf below 512. Its capture
+flags and final copy loop are proved total; the actual WOTS public-key leaf and
+recovery helper recover the independently constructed root. Complete WOTS
+signature generation is outside this component result.
+Four builder-consuming headlines explicitly retain Aeneas's existing opaque
+`Formatter` type dependency from the unreachable debug-panic branch; the
+environment axiom inventory remains unchanged.
+These totality results concern the existing callback-free extraction;
 normal and extraction Rust corpora agree, with progress transcripts checked in
-the normal configuration. XMSS authentication-path generation, the complete
-signer loop and shuffled signing remain separate correspondence work.
+the normal configuration. The complete signer loop and shuffled signing remain
+separate correspondence work.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.
