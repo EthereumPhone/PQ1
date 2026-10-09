@@ -118,7 +118,8 @@ jobs:
   lean-extracted:
     name: lake build Extracted + no-sorryAx axiom gate
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # Full differential reached its final proof controls at the former 90m limit (#833).
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
