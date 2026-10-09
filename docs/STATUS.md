@@ -46,7 +46,11 @@ seed and full-width index. The reference signer's final FORS slot carries that
 full root (#823), and its honest round-trip proof still holds. The actual FORS
 authentication-path generator now also terminates and returns the reference
 secret and all eleven recursive-tree siblings for every valid 11-bit leaf,
-every seed and full-width hypertree/tree index. Hypertree key-generation trees
+every seed and full-width hypertree/tree index. The actual signing helper,
+eleven-level recovery helper and root builder now compose: the generated
+secret and path recover exactly the constructed root, also matching the
+faithful reference tree. This is a per-tree component theorem with an explicit
+valid-leaf bound. Hypertree key-generation trees, the complete signer loop
 and shuffled signing remain separate correspondence work.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation

@@ -559,6 +559,41 @@ result. Hypertree key-generation trees, shuffled signing, randomness, concrete
 hash backends and the complete Rust/EasyCrypt signer/session relation remain
 open. No new cryptographic probability or hardware claim follows.
 
+FORS signing/recovery composition (2026-10-09) now connects the actual
+per-tree helpers. `ForsRoundtripSpec.fors_auth_recovery_root` proves that
+folding the generated secret and eleven canonical siblings reaches the
+height-11 root. Its intermediate invariant tracks the exact ancestor node,
+index and ordered children at every level. It uses the existing kernel-checked
+sibling geometry and adds no hash-collision or desired-root assumption.
+`firmware_fors_sign_recover_root` composes the total extracted signing,
+recovery and root-construction results: for every pair of seeds, full-width
+hypertree/tree index and leaf below 2,048, recovery of the generated secret
+and path equals the actual constructed root. A second actual-call headline
+relates the recovered value to the faithful reference tree. The only input
+precondition is the explicit valid-leaf bound.
+
+Three added headlines bring the audit to **136**, with the same **27**
+environment axioms. The independent Rust recursive oracle now supplies roots
+for all 23 authentication-path cases; the Lean corpus compares actual signing,
+recovery and construction against those roots. It retains the prior value,
+shape and malformed-input controls and adds 46 altered-root controls, 552
+executed altered-secret/path recoveries and 23 wrong-leaf recoveries. These
+concrete unequal-output checks are corpus evidence, not a universal
+collision-freedom theorem. A test child of the unchanged private Rust module
+also checks all 2,048 leaves, 22,528 changed siblings and six full-width
+positions, in both normal and extraction configurations. Seven typed fold
+mutations exercise parity, child order, missing sibling, parent height/index,
+next index and discarded merge; normal proof-error termination is required,
+and resource or malformed-definition failures do not count.
+
+Production Rust and extraction registration are unchanged. No new EasyCrypt
+proof input or source binding is introduced. This result closes per-tree
+membership and the signing/recovery connection; the actual shuffled forest
+loop, serialization, special final-slot composition, hypertree key-generation
+trees and complete Rust/EasyCrypt signer/session relation remain separate.
+Concrete backends, randomness, resources and hardware remain outside this
+component result.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

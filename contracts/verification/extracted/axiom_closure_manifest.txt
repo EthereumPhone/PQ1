@@ -188,3 +188,8 @@ Extracted.Equiv.fors_auth_carry_schedule
 Extracted.Equiv.fors_sign_tree_spec
 Extracted.Equiv.fors_auth_path_matches_vendored
 Extracted.Equiv.firmware_fors_auth_matches_vendored
+
+# Actual FORS signing/recovery composition
+Extracted.Equiv.fors_auth_recovery_root
+Extracted.Equiv.firmware_fors_sign_recover_root
+Extracted.Equiv.firmware_fors_sign_recover_matches_vendored

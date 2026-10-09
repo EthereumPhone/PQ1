@@ -442,7 +442,8 @@
         "contracts/verification/lean/SphincsCVerify/Spec/Signer.lean",
         "contracts/verification/scripts/test_fors_auth_proof_controls.py",
         "contracts/verification/scripts/test_fors_auth_vendored_spec.py",
-        "sphincs-c10/tests/gen_fors_auth_vectors.rs"
+        "sphincs-c10/tests/gen_fors_auth_vectors.rs",
+        "contracts/verification/scripts/test_fors_roundtrip_proof_controls.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",

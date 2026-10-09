@@ -1,3 +1,4 @@
+import Extracted.ForsRoundtripSpec
 import Extracted.ForsAuthBridge
 import Extracted.ForsRootBridge
 import Extracted.ForsSecretBridge
@@ -247,3 +248,8 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.fors_sign_tree_spec
 #print axioms Extracted.Equiv.fors_auth_path_matches_vendored
 #print axioms Extracted.Equiv.firmware_fors_auth_matches_vendored
+
+-- Actual FORS signing/recovery composition
+#print axioms Extracted.Equiv.fors_auth_recovery_root
+#print axioms Extracted.Equiv.firmware_fors_sign_recover_root
+#print axioms Extracted.Equiv.firmware_fors_sign_recover_matches_vendored
