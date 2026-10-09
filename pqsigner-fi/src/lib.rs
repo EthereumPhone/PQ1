@@ -273,6 +273,65 @@ fn halt_on_glitch() -> ! {
     panic!("fi: glitch sentinel tripped (non-arm test-build panic)");
 }
 
+/// Pure decision table for the fixed-delay exemption (EthereumPhone/PQ1 #835).
+///
+/// `fi::wait_random` normally needs a fresh TRNG byte, but the RNG's own
+/// conditioning sequence calls it while holding the driver lock during a reset
+/// where no word can exist. That window is the one place a FIXED length is
+/// permitted, and this is who may use it.
+///
+/// It lives in this crate rather than beside the state it reads, because that
+/// state is in `secure/src/hw/rng.rs` (`stm32u585`-only, never compiled
+/// host-side) and `secure/src/rng.rs` (`#[cfg(not(test))]`, excluded from host
+/// test builds) — so branches kept in either could only be "tested" by
+/// grepping their source text. Three tests written in those files during #835
+/// silently never ran. This is the security-relevant logic, so it goes where
+/// tests execute.
+#[must_use]
+pub fn fixed_delay_decision(
+    init_done: bool,
+    conditioning: bool,
+    ctx_matches: bool,
+    used: u32,
+    cap: u32,
+) -> bool {
+    // Pre-init: no RNG exists yet, and no secret either. Every caller is
+    // covered, including an interrupt — refusing here would halt the device
+    // inside its own RNG bring-up.
+    if !init_done {
+        return true;
+    }
+    // Outside a conditioning window there is no excuse at all.
+    if !conditioning {
+        return false;
+    }
+    // CALLER CONFINEMENT: only the context that OPENED the window. A
+    // preempting handler's delays have nothing to do with conditioning the
+    // RNG, so it must not inherit the exemption and should poison its own
+    // operation instead of running a known-constant gap.
+    if !ctx_matches {
+        return false;
+    }
+    // AND bounded by construction, not by observation. The measured "4 per
+    // window" was a clean-path reading; the CRNGT publish loop adds delays per
+    // failed compare-exchange, and Cortex-M clears the exclusive monitor
+    // across exceptions.
+    used < cap
+}
+
+/// Pure reading of the FI-hardened "RNG init completed" receipt (#835).
+///
+/// **Fail-closed in the direction that CLOSES the exemption.** The dangerous
+/// reading is "init has not completed", because that keeps the fixed-delay
+/// window open forever — so anything other than the exact intact PENDING
+/// codeword counts as completed. A plain `AtomicBool` had the opposite
+/// failure: a skipped publication left the window wide open while `init`
+/// reported success.
+#[must_use]
+pub fn init_receipt_says_completed(val: u32, complement: u32, pending: u32) -> bool {
+    !(val == pending && complement == !pending)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,5 +403,97 @@ mod tests {
         assert_eq!(fi_min(usize::MAX, 1), 1);
         assert_eq!(fi_min(1, usize::MAX), 1);
         assert_eq!(fi_min(usize::MAX, usize::MAX), usize::MAX);
+    }
+}
+
+#[cfg(test)]
+mod fixed_delay_tests {
+    use super::{fixed_delay_decision, init_receipt_says_completed};
+
+    const PENDING: u32 = 0x1555_5555;
+    const DONE: u32 = 0x1AAA_AAAA;
+
+    #[test]
+    fn positive_the_exemption_table_is_exhaustively_as_specified() {
+        // A LITERAL truth table over the whole boolean space, not a handful of
+        // hand-picked rows. The first version of this test listed rows and
+        // omitted the (true, true, false) one, so deleting the caller-
+        // confinement branch left it GREEN — a test named "exhaustively" that
+        // was not. Caught by a mutation control, not by reading it.
+        //
+        // The expectations are written out rather than computed, because an
+        // expected-value formula here would just be a second copy of the
+        // implementation and would agree with any change to it.
+        const TABLE: &[(bool, bool, bool, bool)] = &[
+            // init_done, conditioning, ctx_matches  ->  permitted (used < cap)
+            (false, false, false, true), // pre-init covers everyone:
+            (false, false, true, true),  //   no RNG exists yet, and refusing
+            (false, true, false, true),  //   would halt the device inside its
+            (false, true, true, true),   //   own bring-up
+            (true, false, false, false), // post-init, no window: never
+            (true, false, true, false),
+            (true, true, false, false), // WRONG CONTEXT: never. A preempting
+            //                             handler must not inherit it.
+            (true, true, true, true), // the one permitted case
+        ];
+        for &(init_done, cond, ctx, expect) in TABLE {
+            for &used in &[0u32, 1, 31] {
+                assert_eq!(
+                    fixed_delay_decision(init_done, cond, ctx, used, 32),
+                    expect,
+                    "row (init_done={init_done}, conditioning={cond}, \
+                     ctx_matches={ctx}, used={used})"
+                );
+            }
+        }
+
+        // And the cap binds on the one row that is otherwise permitted.
+        assert!(fixed_delay_decision(true, true, true, 31, 32));
+        assert!(
+            !fixed_delay_decision(true, true, true, 32, 32),
+            "the cap must BIND: 'four per window' was an observation, and the \
+             CRNGT publish loop can add delays per failed compare-exchange"
+        );
+        assert!(!fixed_delay_decision(true, true, true, 9999, 32));
+    }
+
+    #[test]
+    fn negative_a_preempting_handler_cannot_inherit_the_exemption() {
+        // The concrete trace from the review: thread mode opens a recovery
+        // window, PendSV fires, and its `is_unlocked()` reaches wait_random.
+        // Before confinement that handler got the fixed length for a delay
+        // protecting PIN handling rather than RNG conditioning.
+        assert!(
+            !fixed_delay_decision(true, true, false, 0, 32),
+            "a different context must refuse, so it poisons its own operation"
+        );
+    }
+
+    #[test]
+    fn negative_every_single_bit_corruption_of_the_receipt_closes_the_window() {
+        // Intact PENDING is the ONLY state that keeps the exemption open.
+        assert!(!init_receipt_says_completed(PENDING, !PENDING, PENDING));
+        assert!(init_receipt_says_completed(DONE, !DONE, PENDING));
+
+        for bit in 0..32 {
+            let m = 1u32 << bit;
+            assert!(
+                init_receipt_says_completed(PENDING ^ m, !PENDING, PENDING),
+                "a flipped value bit must CLOSE the window, never open it"
+            );
+            assert!(
+                init_receipt_says_completed(PENDING, !PENDING ^ m, PENDING),
+                "a flipped complement bit must CLOSE the window"
+            );
+        }
+        // The exact failure the review named: a skipped publication.
+        assert!(
+            init_receipt_says_completed(DONE, !PENDING, PENDING),
+            "value stored, complement skipped -> closed"
+        );
+        assert!(
+            init_receipt_says_completed(PENDING, !DONE, PENDING),
+            "complement stored, value skipped -> closed"
+        );
     }
 }

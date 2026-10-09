@@ -131,7 +131,52 @@ static PREVIOUS_WORD: AtomicU32 = AtomicU32::new(0);
 static DRIVER_BUSY: AtomicBool = AtomicBool::new(false);
 
 /// Set once [`init`] succeeds; bounds the #833 bootstrap exemption.
-static INIT_COMPLETE: AtomicBool = AtomicBool::new(false);
+///
+/// FI-hardened as a `(val, complement)` pair, and **fail-closed in the
+/// direction that CLOSES the exemption** (#835 M7). The dangerous reading is
+/// "init has not completed", because that keeps the fixed-delay window open
+/// forever — so anything other than the exact intact NOT-COMPLETE codeword
+/// reads as COMPLETE. A single skipped store therefore leaves an invalid pair
+/// and shuts the window, where a plain `AtomicBool` left it wide open while
+/// `init` reported success.
+const INIT_PENDING: u32 = 0x1555_5555;
+const INIT_DONE: u32 = 0x1AAA_AAAA;
+static INIT_VAL: AtomicU32 = AtomicU32::new(INIT_PENDING);
+static INIT_COMP: AtomicU32 = AtomicU32::new(!INIT_PENDING);
+
+/// True unless the pair is exactly the intact PENDING codeword.
+#[inline(never)]
+fn init_has_completed() -> bool {
+    pqsigner_fi::init_receipt_says_completed(
+        INIT_VAL.load(Ordering::Acquire),
+        INIT_COMP.load(Ordering::Acquire),
+        INIT_PENDING,
+    )
+}
+
+/// Which execution context opened the current conditioning window.
+///
+/// IPSR at `ConditioningWindow::enter`. ARMv8-M B1.4.2: 0 is thread mode,
+/// otherwise the active exception number.
+static CONDITIONING_CTX: AtomicU32 = AtomicU32::new(CTX_NONE);
+const CTX_NONE: u32 = 0xFFFF_FFFF;
+
+/// Fixed delays already served inside the current window, and the cap.
+///
+/// #835 M7: the measured "4 per window" was a clean-path observation, not a
+/// bound — `read_healthy_word_into`'s `compare_exchange_weak` loop adds three
+/// delays per failed CAS and Cortex-M clears the exclusive monitor across
+/// exceptions. Rather than assert a bound, enforce one: past this many the
+/// window stops permitting a fixed length and the delay poisons instead.
+/// Headroom over the measured 4 so an ordinary retry cannot trip it.
+static CONDITIONING_FIXED_USED: AtomicU32 = AtomicU32::new(0);
+const MAX_FIXED_PER_WINDOW: u32 = 32;
+
+/// Fixed delays REFUSED — wrong context, or past the per-window cap.
+///
+/// Unconditional, not bench-gated: this is the signal that the exemption is
+/// being pushed on.
+pub static CONDITIONING_REFUSED: AtomicU32 = AtomicU32::new(0);
 
 struct DriverGuard;
 
@@ -493,7 +538,20 @@ fn read_healthy_word_into(word_out: &mut u32, read_receipt: &mut u32) {
     // word between our load and compare-exchange, re-evaluate against that
     // newer predecessor before committing.
     let mut previous = PREVIOUS_WORD.load(Ordering::Relaxed);
+    // #835 M7: each iteration of this loop costs a `wait_random`, and a
+    // `compare_exchange_weak` can fail spuriously or lose to an interrupt, so
+    // the delay count per conditioning window was unbounded. Cap it. Exiting
+    // without publishing leaves the caller's receipt FAILED, so the word is
+    // rejected — fail-closed, and far more headroom than a single core with
+    // one preempting ISR can plausibly need.
+    let mut cas_attempts = 0u32;
+    const MAX_CAS_ATTEMPTS: u32 = 8;
     loop {
+        if cas_attempts >= MAX_CAS_ATTEMPTS {
+            secure_log!("[S] rng: CRNGT publish exceeded {} attempts — rejecting", MAX_CAS_ATTEMPTS);
+            return;
+        }
+        cas_attempts = cas_attempts.wrapping_add(1);
         let mut health_receipt = crate::fi::FAIL_SENTINEL;
         let checked_health = crate::fi::check_true_into_sentinel(|| {
             crate::rng_health::word_is_acceptable(status_clean, word, previous)
@@ -559,10 +617,37 @@ struct ConditioningWindow;
 
 impl ConditioningWindow {
     fn enter() -> Self {
-        #[cfg(feature = "ui-px-frametime")]
         CONDITIONING_WINDOWS.fetch_add(1, Ordering::Relaxed);
+        CONDITIONING_FIXED_USED.store(0, Ordering::Relaxed);
+        // #835 M7: remember WHO opened it. The exemption used to be a global
+        // boolean every `wait_random` caller observed, so a handler that
+        // preempted a recovery — PendSV's `enter_pin`, SysTick's reseed — got
+        // the fixed length for delays that had nothing to do with conditioning.
+        CONDITIONING_CTX.store(current_context(), Ordering::Release);
         CONDITIONING.store(true, Ordering::Release);
         Self
+    }
+}
+
+/// IPSR: 0 in thread mode, else the active exception number.
+#[inline(always)]
+fn current_context() -> u32 {
+    #[cfg(target_arch = "arm")]
+    {
+        let ipsr: u32;
+        // SAFETY: `mrs` from IPSR is a side-effect-free status read.
+        unsafe {
+            core::arch::asm!(
+                "mrs {}, ipsr",
+                out(reg) ipsr,
+                options(nomem, nostack, preserves_flags)
+            );
+        }
+        ipsr
+    }
+    #[cfg(not(target_arch = "arm"))]
+    {
+        0
     }
 }
 
@@ -572,12 +657,12 @@ impl ConditioningWindow {
 /// landing inside them" — a distinction the fixed-delay count alone cannot
 /// make, and which decides whether the #834 residual is routine or
 /// exceptional.
-#[cfg(feature = "ui-px-frametime")]
 pub static CONDITIONING_WINDOWS: AtomicU32 = AtomicU32::new(0);
 
 impl Drop for ConditioningWindow {
     fn drop(&mut self) {
         CONDITIONING.store(false, Ordering::Release);
+        CONDITIONING_CTX.store(CTX_NONE, Ordering::Release);
     }
 }
 
@@ -594,7 +679,34 @@ impl Drop for ConditioningWindow {
 /// so `CONDITIONING_DELAYS` counts it and a climbing count means something is
 /// forcing resets.
 pub fn fixed_delay_permitted() -> bool {
-    !INIT_COMPLETE.load(Ordering::Acquire) || CONDITIONING.load(Ordering::Acquire)
+    // The DECISION lives in `pqsigner_fi::fixed_delay_decision`, which is a
+    // pure host-tested crate. This function only gathers the
+    // live inputs and owns the counters — this module is `stm32u585`-only, so
+    // branch logic kept here could never be tested except by grepping it.
+    let init_done = init_has_completed();
+    let conditioning = CONDITIONING.load(Ordering::Acquire);
+    let ctx_matches = CONDITIONING_CTX.load(Ordering::Acquire) == current_context();
+    // Consume a slot only while actually inside a window, or ordinary running
+    // would exhaust the cap before any window opens.
+    let used = if conditioning && ctx_matches {
+        CONDITIONING_FIXED_USED.fetch_add(1, Ordering::Relaxed)
+    } else {
+        0
+    };
+
+    let permitted = pqsigner_fi::fixed_delay_decision(
+        init_done,
+        conditioning,
+        ctx_matches,
+        used,
+        MAX_FIXED_PER_WINDOW,
+    );
+    // Refusals only count post-init: before that the exemption is universal
+    // by design and nothing is being refused.
+    if !permitted && init_done {
+        CONDITIONING_REFUSED.fetch_add(1, Ordering::Relaxed);
+    }
+    permitted
 }
 
 fn init_locked() -> Result<(), ()> {
@@ -697,7 +809,15 @@ pub fn init() -> Result<(), ()> {
         // and calls `wait_random` itself — refusing unconditionally would
         // halt the device inside its own RNG bring-up. After it, a failed
         // draw is a fault or an attack.
-        INIT_COMPLETE.store(true, Ordering::Release);
+        INIT_VAL.store(INIT_DONE, Ordering::Release);
+        INIT_COMP.store(!INIT_DONE, Ordering::Release);
+        // Read back. A skipped publication now shuts the window rather than
+        // leaving it open (the pair fails closed to COMPLETE), but a boot that
+        // cannot even record its own completion should not proceed quietly —
+        // `main` panics on `Err`, which zeroizes and draws the fatal screen.
+        if !init_has_completed() {
+            return Err(());
+        }
     }
     result
 }
@@ -708,7 +828,7 @@ pub fn init() -> Result<(), ()> {
 /// A later transient error is handled by `fill_bound`'s conditioning-reset
 /// recovery and, failing that, by refusal — not by reopening the exemption.
 pub fn init_complete() -> bool {
-    INIT_COMPLETE.load(Ordering::Acquire)
+    init_has_completed()
 }
 
 /// Fill `buf` with random bytes from the hardware TRNG.

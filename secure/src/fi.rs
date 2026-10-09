@@ -76,7 +76,6 @@ fn rng_byte() -> Option<u8> {
         //    driver lock during a reset where no word can exist. See
         //    `rng::fixed_delay_permitted` for the measured size and residual.
         if crate::rng::fixed_delay_permitted() {
-            #[cfg(feature = "ui-px-frametime")]
             BOOTSTRAP_DELAYS.fetch_add(1, Ordering::Relaxed);
             return Some(FI_DELAY_BOOTSTRAP);
         }
@@ -151,7 +150,6 @@ static DELAY_POISON_COMP: core::sync::atomic::AtomicU32 =
 pub fn poison_delay_source() {
     DELAY_POISON_VAL.store(DELAY_POISONED, SeqCst);
     DELAY_POISON_COMP.store(!DELAY_POISONED, SeqCst);
-    #[cfg(feature = "ui-px-frametime")]
     DELAY_POISONINGS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 }
 
@@ -174,8 +172,13 @@ pub fn clear_delay_poison() {
     DELAY_POISON_COMP.store(!DELAY_CLEAN, SeqCst);
 }
 
-/// Poisonings since boot. Bench instrumentation (`ui-px-frametime`).
-#[cfg(feature = "ui-px-frametime")]
+/// Poisonings since boot.
+///
+/// Unconditional, not bench-gated (#835 M7): "an operation ran with an
+/// unprotected FI delay" is a production security signal, and a counter that
+/// only exists in bench images cannot be production monitoring. Surfacing it
+/// to the companion is a separate decision; existing at all is the
+/// prerequisite.
 pub static DELAY_POISONINGS: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 
@@ -192,9 +195,12 @@ const FI_DELAY_BOOTSTRAP: u8 = 0x5A;
 #[cfg(feature = "ui-px-frametime")]
 pub static DELAY_RETRIES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
-/// Draws served the fixed bootstrap length. MUST stay 0 after boot; a nonzero
-/// value growing at runtime would mean the exemption is not actually bounded.
-#[cfg(feature = "ui-px-frametime")]
+/// Draws served the fixed bootstrap length.
+///
+/// Unconditional for the same reason as [`DELAY_POISONINGS`]. Measured at 91
+/// during boot (pre-RNG) plus 4 per conditioning window; growth outside those
+/// means the exemption is being pushed on, which is exactly what production
+/// should be able to see.
 pub static BOOTSTRAP_DELAYS: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 #[cfg(not(test))]

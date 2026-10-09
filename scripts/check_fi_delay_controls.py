@@ -31,6 +31,7 @@ ENV = {k: v for k, v in os.environ.items() if k != "RUSTFLAGS"}
 
 FILES = {
     "fi": "secure/src/fi.rs",
+    "fipure": "pqsigner-fi/src/lib.rs",
     "pool": "secure/src/fi_delay_pool.rs",
     "rng": "secure/src/hw/rng.rs",
     "crypto": "secure/src/crypto.rs",
@@ -54,6 +55,12 @@ NOREUSE = F + "negative_rng_byte_never_substitutes_a_reused_delay_length"
 DELEG = F + "negative_wait_random_delegates_to_shared_crate_on_prod"
 STRONG = F + "negative_rng_byte_does_not_route_through_rng_strong"
 RELOCK = "secure_crypto_glue_under_test::pure_tests::positive_crypto_relocks_on_confirmed_fault_only"
+
+# pqsigner-fi (a separate crate, so a separate cargo invocation below)
+X = "fixed_delay_tests::"
+TABLE = X + "positive_the_exemption_table_is_exhaustively_as_specified"
+CONFINE = X + "negative_a_preempting_handler_cannot_inherit_the_exemption"
+RECEIPT = X + "negative_every_single_bit_corruption_of_the_receipt_closes_the_window"
 
 # (file, description, exact-anchor, replacement, tests that MUST go red)
 MUTATIONS = [
@@ -116,6 +123,17 @@ MUTATIONS = [
      "if let Some(b) = Some(crate::rng::byte_nonsecret(0)) {",
      {NOREUSE, STRONG}),
     # ---- the fi-2 DoS exclusion ----
+    # ---- the conditioning exemption (#835 M7) ----
+    ("fipure", "the exemption stops being caller-confined",
+     "    if !ctx_matches {\n        return false;\n    }", "",
+     {TABLE, CONFINE}),
+    ("fipure", "the per-window cap stops binding",
+     "    used < cap\n}", "    let _ = (used, cap);\n    true\n}",
+     {TABLE}),
+    ("fipure", "the init receipt fails OPEN instead of closed",
+     "    !(val == pending && complement == !pending)",
+     "    val != pending || complement != !pending && false",
+     {RECEIPT}),
     ("crypto", "the poison refusal relocks (violating the fi-2 DoS exclusion)",
      "    if crate::fi::delay_source_failed() {\n        opt_rand_buf.zeroize();",
      "    if crate::fi::delay_source_failed() {\n        #[cfg(not(test))]\n"
@@ -125,12 +143,21 @@ MUTATIONS = [
 
 
 def run():
-    p = subprocess.run(
+    out = ""
+    built = True
+    for args in (
         ["cargo", "test", "-p", "sphincs-tz-secure", "--tests",
          "--features", "mock-se", "--no-fail-fast", "--quiet"],
-        cwd=REPO, env=ENV, capture_output=True, text=True, timeout=2400)
-    out = p.stdout + p.stderr
-    return ("test result:" in out), set(re.findall(r"^(\S+) --- FAILED", out, re.M)), out
+        # pqsigner-fi is a separate crate and holds the exemption decision
+        # table; omitting it here is how three of its tests could have been
+        # added without ever being controlled.
+        ["cargo", "test", "-p", "pqsigner-fi", "--no-fail-fast", "--quiet"],
+    ):
+        p = subprocess.run(args, cwd=REPO, env=ENV, capture_output=True,
+                           text=True, timeout=2400)
+        out += p.stdout + p.stderr
+        built = built and ("test result:" in (p.stdout + p.stderr))
+    return built, set(re.findall(r"^(\S+) --- FAILED", out, re.M)), out
 
 
 def restore():
@@ -141,6 +168,12 @@ def restore():
 
 
 def main():
+    # `--only <substring>` re-verifies one control without re-running all of
+    # them; a full pass is ~45 min, which is long enough that it discourages
+    # exactly the re-check a fixed expectation needs.
+    only = None
+    if len(sys.argv) > 2 and sys.argv[1] == "--only":
+        only = sys.argv[2]
     for k in SRC:
         shutil.copyfile(SRC[k], BAK[k])
     log, bad = [], False
@@ -153,6 +186,8 @@ def main():
         log.append(f"baseline: GREEN")
 
         for tgt, name, old, new, expect in MUTATIONS:
+            if only is not None and only not in name:
+                continue
             src = open(BAK[tgt]).read()
             if src.count(old) != 1:
                 log.append(f"SKIP [{name}] -> anchor matches {src.count(old)}x, not 1")
