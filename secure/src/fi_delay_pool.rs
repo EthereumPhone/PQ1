@@ -108,6 +108,27 @@ pub static HITS: AtomicU32 = AtomicU32::new(0);
 /// Expected to grow slowly and forever: a TRNG byte is zero 1/256 of the time
 /// and a zero is not a usable delay length. It must NOT translate into a
 /// poisoned operation — that was the bug this counter exists to make visible.
+///
+/// MEASURED on the enclosed EVT unit, 2026-10-09, `evt-images/px835zero`,
+/// `selftest / poisonings / zeroskips`:
+///
+/// ```text
+///   15 / 0 / 2 -> 3 -> 4 -> 5 -> 6, at irregular intervals
+/// ```
+///
+/// All four boundary bits pass, poisonings stay at ZERO in ordinary running
+/// (the fix), and the skips accumulate — so zeros are genuinely occurring and
+/// are genuinely being drawn past rather than failing operations. Both halves
+/// matter: a 0 here would have meant the skip path never ran, in which case
+/// the 0 beside it would prove nothing.
+///
+/// The rate cross-checks. ~0.2-0.5 skips/s implies 51-128 delay bytes drawn
+/// per second; the independently measured draw volume for this bench is the
+/// 1 Hz consumption-mask reseed at 31 delays (#805) plus a handful of UI/FI
+/// sites, so ~51 B/s and an expected ~0.2 skips/s. Same order. And the
+/// IRREGULAR spacing is itself part of the evidence — a 1/256 process should
+/// not tick on a fixed interval, so regular ticks would have indicated a
+/// deterministic cause wearing randomness as a disguise.
 pub static ZERO_SKIPS: AtomicU32 = AtomicU32::new(0);
 
 /// Inner delays that found the pool armed but empty, i.e. the per-output-word
