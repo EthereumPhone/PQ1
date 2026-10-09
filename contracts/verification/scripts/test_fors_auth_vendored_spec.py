@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every copied recovery declaration must participate in the fidelity gate."""
+"""Every copied authentication-path declaration must participate in the fidelity gate."""
 from pathlib import Path
 import re
 import shutil
@@ -16,7 +16,51 @@ MUTATIONS = {
 }
 
 
+def require_fidelity_rejection(result, filename, marker, kind):
+    """Accept only a complete, normal checker rejection for this declaration."""
+    assert result.returncode == 1, ("abnormal or successful exit", result.returncode,
+                                    result.stdout, result.stderr)
+    assert not result.stderr, ("checker error stream", result.stderr)
+    lines = result.stdout.splitlines()
+    prefix = f"[{filename}] {kind} {marker!r}"
+    if kind == "DRIFT in":
+        assert len(lines) == 3 and lines[0] == prefix + ":", result.stdout
+        assert lines[1].startswith("  src: ") and lines[2].startswith("  ven: "), result.stdout
+    else:
+        assert kind == "MISSING in vendored:", kind
+        assert lines == [prefix], result.stdout
+
+
+def test_result_classifier():
+    """A drift marker followed by an interrupted checker is not valid evidence."""
+    filename, marker = "ForsAuthVendored.lean", "def sibIdx "
+    invalid_count = 0
+    for kind, stdout in [
+        ("DRIFT in", f"[{filename}] DRIFT in {marker!r}:\n  src: original\n  ven: changed\n"),
+        ("MISSING in vendored:", f"[{filename}] MISSING in vendored: {marker!r}\n"),
+    ]:
+        require_fidelity_rejection(subprocess.CompletedProcess([], 1, stdout, ""), filename, marker, kind)
+        invalid = [subprocess.CompletedProcess([], code, stdout, "")
+                   for code in [0, -9, -15, 2, 124, 130, 134, 137, 139]]
+        for diagnostic in ["Traceback (most recent call last):\nMemoryError\n",
+                           "MemoryError\n", "Killed\n", "KeyboardInterrupt\n", "OSError\n"]:
+            invalid += [subprocess.CompletedProcess([], 1, stdout, diagnostic),
+                        subprocess.CompletedProcess([], 1, stdout + diagnostic, "")]
+        invalid += [subprocess.CompletedProcess([], 1, "", ""),
+                    subprocess.CompletedProcess([], 1, stdout + stdout, ""),
+                    subprocess.CompletedProcess([], 1, stdout.replace(filename, "Other.lean"), "")]
+        for result in invalid:
+            try:
+                require_fidelity_rejection(result, filename, marker, kind)
+            except AssertionError:
+                invalid_count += 1
+                continue
+            raise AssertionError(("invalid fidelity result accepted", result))
+    print(f"OK: fidelity-result classifier: 2 complete rejections accepted; {invalid_count} invalid outcomes rejected")
+
+
 def main():
+    test_result_classifier()
     with tempfile.TemporaryDirectory(prefix="fors-auth-fidelity-") as td:
         root = Path(td)
         for name in COPY:
@@ -40,12 +84,12 @@ def main():
                 assert body.count(before) == 1, (marker, "ambiguous mutation")
                 p.write_text(original[:start] + body.replace(before, after) + original[end:])
                 result = check()
-                assert result.returncode != 0 and f"DRIFT in {marker!r}" in result.stdout, (marker, result.stdout, result.stderr)
+                require_fidelity_rejection(result, filename, marker, "DRIFT in")
                 renamed = re.sub(r"^(def |structure )(\w+)", r"\1deleted_\2", body, count=1)
                 assert renamed != body
                 p.write_text(original[:start] + renamed + original[end:])
                 result = check()
-                assert result.returncode != 0 and f"MISSING in vendored: {marker!r}" in result.stdout, (marker, result.stdout, result.stderr)
+                require_fidelity_rejection(result, filename, marker, "MISSING in vendored:")
                 p.write_text(original)
     print("OK: FORS auth fidelity baseline, 2 semantic mutations, 2 declaration deletions")
 
