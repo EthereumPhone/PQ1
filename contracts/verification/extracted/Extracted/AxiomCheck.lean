@@ -1,3 +1,6 @@
+import Extracted.SignForestSerializeCaller
+import Extracted.SignLayerSerializeCaller
+import Extracted.SignSerializationDiffVectors
 import Extracted.SignForestPrefix
 import Extracted.WotsSignBridge
 import Extracted.XmssRootBridge
@@ -291,3 +294,18 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_sign_fors_shuffle_independent
 #print axioms Extracted.Equiv.firmware_sign_fors_matches_vendored
 #print axioms Extracted.Equiv.firmware_sign_fors_prefix
+
+-- Actual signer serialization, complete byte frame and decoded fields.
+#print axioms Extracted.Equiv.firmware_write16
+#print axioms Extracted.Equiv.firmware_write_fors_secrets
+#print axioms Extracted.Equiv.firmware_write_fors_auth
+#print axioms Extracted.Equiv.firmware_write_wots_chains
+#print axioms Extracted.Equiv.firmware_write_xmss_path
+#print axioms Extracted.Equiv.firmware_write_count
+#print axioms Extracted.Equiv.firmware_serialize_forest
+#print axioms Extracted.Equiv.serializedForest_fields
+#print axioms Extracted.Equiv.firmware_signer_forest_serialization
+#print axioms Extracted.Equiv.firmware_serialize_layer
+#print axioms Extracted.Equiv.serializedLayer_fields
+#print axioms Extracted.Equiv.signer_layer_serialization_factor
+#print axioms Extracted.Equiv.firmware_serialize_layer_at_params

@@ -730,7 +730,7 @@ noncanonical returns remain separately reported. This is sampled integration
 evidence, not full-body fault resistance, DPA resistance or shipment authority.
 
 The callback-free extraction boundary remains. This closes the WOTS signing
-component. The shuffled FORS forest is covered below; the whole hypertree signer, serialization,
+component. The shuffled FORS forest is covered below; the whole hypertree signer and
 session relation, backend correctness, entropy freshness and physical leakage remain open.
 
 Shuffled FORS forest construction (2026-10-10) now covers the actual
@@ -776,6 +776,47 @@ exact extraction regeneration are enrolled in the ordinary gates.
 Production Rust is unchanged by this batch. Callback, concrete hash backend,
 erasure, entropy and physical leakage limits remain. The forest component
 adds no full signer/session, cryptographic reduction or shipment claim.
+
+Signature serialization (2026-10-10) now has universal byte-level contracts
+for the actual extracted sixteen-byte writer and all secret, FORS-path,
+WOTS-chain and XMSS-path loops. Each contract specifies both the bytes written
+and preservation outside the destination range. The thirteen secrets and
+twelve eleven-node paths occupy bytes 16 through 2,335, preserving the nonce
+and remaining suffix. The existing decoders recover every supplied field.
+An unconditional equality replaces that forest serialization in the actual
+signer suffix while preserving all later failures and divergence.
+
+Each 836-byte layer consists of 43 sixteen-byte chains, all four big-endian
+counter bytes and nine sixteen-byte siblings. For every in-range starting
+offset, the extracted loops and literal counter-write fragment terminate with
+that exact layout and offset. The computed subtree height is proved to be nine.
+At each of the two wire positions, decoding recovers the original chains,
+full-width counter and path. A kernel equality factors that serializer from
+the actual layer body without changing its cryptographic calls or Result
+behavior. This is serialization correspondence, not a theorem that the whole
+hypertree signer succeeds, produces the reference cryptographic fields, or
+satisfies the complete session relation. The nonce-generation/header bridge
+and cryptographic components retain their separately documented scope.
+
+Thirteen additional audited headlines bring the default total to **175**:
+159 kernel-only, seven retaining the existing opaque Formatter type, four
+SHA-256, one SHA-256/HMAC and four Keccak closures. The environment remains
+at 27 axioms and the extraction registry is unchanged. The caller equality
+uses a continuation argument to keep kernel checking small; no kernel check,
+axiom audit or mutation acceptance condition is bypassed.
+
+Eight independent concatenation cases execute the unchanged inline production
+fragments in both Rust configurations and the extracted Lean writers. They
+cover unaligned starts, both layer positions, the final buffer boundary and
+counters from zero through 0xffffffff, including upper-byte changes. Every
+output byte is compared, including the unchanged frame. Malformed corpus
+inputs, changed expected bytes and a one-byte-overrun write must be rejected.
+Nine positive proof baselines and twelve independently typechecked semantic
+mutations check ranges, order, iteration counts, field selection and both
+caller connections. Resource failures do not count as semantic rejections.
+These checks run in the ordinary differential gate. Production Rust and
+extraction artifacts are unchanged; backend, callback, erasure, entropy,
+physical leakage, full signer/session and research-reduction limits remain.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

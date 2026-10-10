@@ -1727,6 +1727,9 @@ _verify-lake-path-self-test:
 #   make verify-extract-differential GEN=1    re-execute the Rust to regenerate them
 verify-extract-differential: ## Extracted-Lean vs shipped-Rust differential
 ifeq ($(GEN),1)
+	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
 	@cd $(REPO_ROOT) && PQ_SIGN_FOREST_GENERATE=1 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_forest_corpus -- --exact --nocapture
@@ -1779,6 +1782,9 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
 	@cd $(REPO_ROOT) && PQ_SIGN_FOREST_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_forest_corpus -- --exact --nocapture
@@ -1788,6 +1794,9 @@ endif
 	@cd $(REPO_ROOT) && PQ_WOTS_SIGN_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release wots_sign_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
 	@cd $(REPO_ROOT) && PQ_SIGN_FOREST_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_forest_corpus -- --exact --nocapture
@@ -1928,6 +1937,9 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignForestPrefix Extracted.SignForestDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignForestDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_sign_forest_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignLayerSerializeCaller Extracted.SignForestSerializeCaller Extracted.SignSerializationDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignSerializationDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_sign_serialization_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsSignBridge Extracted.ShuffleDiffVectors Extracted.WotsSignDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ShuffleDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSignDiffCheck.lean
@@ -1989,8 +2001,7 @@ verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@# bidirectional and fails closed: an UNLISTED headline (rogue/undisclosed
 	@# theorem), a MISSING headline (silently dropped / dump truncated), or a
 	@# closure carrying an undisclosed axiom all fail. Manifest =
-	@# extracted/axiom_closure_manifest.txt (70 kernel-only + 4 sha256_pure_bytes
-	@# + 1 sha256+hmac + 4 keccak256_pure = 79 headlines).
+	@# extracted/axiom_closure_manifest.txt (the authoritative per-headline list).
 	@$(_FV_PYTHON3) scripts/check_axiom_closure.py --manifest $(EXTRACTED_DIR)/axiom_closure_manifest.txt /tmp/pq_axiomcheck.out
 	@# WIRED-IN NEGATIVE CONTROL: the Evil:False canary MUST be rejected. A *pass*
 	@# of the checker here is a *failure* of the meta-gate (the gate is toothless).

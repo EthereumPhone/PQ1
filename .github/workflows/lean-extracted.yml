@@ -35,6 +35,7 @@ on:
       - 'contracts/verification/scripts/test_xmss_auth_proof_controls.py'
       - 'contracts/verification/scripts/test_wots_sign_proof_controls.py'
       - 'contracts/verification/scripts/test_sign_forest_proof_controls.py'
+      - 'contracts/verification/scripts/test_sign_serialization_proof_controls.py'
       - 'contracts/verification/scripts/normalize_sign_extraction.py'
       - 'contracts/verification/scripts/test_xmss_auth_vendored_spec.py'
       - 'contracts/verification/scripts/test_fors_roundtrip_proof_controls.py'

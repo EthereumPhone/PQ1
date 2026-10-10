@@ -16,6 +16,7 @@ fn main() {
     let wotssign = base.join("wotssign.rs");
     let shuffle = base.join("shuffle.rs");
     let signforest = base.join("signforest.rs");
+    let serialization = base.join("serialization.rs");
     println!("cargo:rerun-if-changed={}", source.display());
     println!("cargo:rerun-if-changed={}", corpus.display());
     let body = fs::read_to_string(source).unwrap();
@@ -30,6 +31,33 @@ fn main() {
     println!("cargo:rerun-if-changed={}", wotssign.display());
     println!("cargo:rerun-if-changed={}", shuffle.display());
     println!("cargo:rerun-if-changed={}", signforest.display());
+    println!("cargo:rerun-if-changed={}", serialization.display());
+    // Execute the exact unchanged inline writer fragments with arbitrary fields.
+    // Keep the complete production module above; these test-only wrappers expose
+    // inputs that a whole signature's bounded grinder does not readily produce.
+    fn fragment<'a>(body: &'a str, start: &str, end: &str) -> &'a str {
+        assert_eq!(body.matches(start).count(), 1, "ambiguous serializer start");
+        assert_eq!(body.matches(end).count(), 1, "ambiguous serializer end");
+        body.split_once(start).unwrap().1.split_once(end).unwrap().0
+    }
+    let forest_fragment = fragment(&body, "    // Write ALL secrets (K * N bytes).", "    // Compute FORS public key");
+    let layer_fragment = fragment(&body, "        // Write WOTS chain values (L * N bytes)", "        // Compute the reconstructed root for the next layer");
+    let serializers = format!(r#"
+fn serialization_forest_fragment(initial: &[u8; SIGNATURE_LEN], fors_secrets: &[[u8; N]; K],
+    fors_auth_paths: &[[[u8; N]; A]; K-1]) -> ([u8; SIGNATURE_LEN], usize) {{
+    let mut sig = *initial;
+    let mut offset = N;
+    // Write ALL secrets (K * N bytes).{forest_fragment}
+    (sig, offset)
+}}
+fn serialization_layer_fragment(initial: &[u8; SIGNATURE_LEN], initial_offset: usize,
+    wots_sigma: &[[u8; N]; L], count: u32, auth_path: &[[u8; N]; SUBTREE_H]) -> ([u8; SIGNATURE_LEN], usize) {{
+    let mut sig = *initial;
+    let mut offset = initial_offset;
+    {layer_fragment}
+    (sig, offset)
+}}
+"#);
     let tests = fs::read_to_string(corpus).unwrap()
         + "\n"
         + &fs::read_to_string(forest).unwrap()
@@ -52,7 +80,11 @@ fn main() {
         + "\n"
         + &fs::read_to_string(shuffle).unwrap()
         + "\n"
-        + &fs::read_to_string(signforest).unwrap();
+        + &fs::read_to_string(signforest).unwrap()
+        + "\n"
+        + &serializers
+        + "\n"
+        + &fs::read_to_string(serialization).unwrap();
     let output =
         format!("mod hypertree {{\n{body}\n#[cfg(test)] mod recovery_corpus {{\n{tests}\n}}\n}}\n");
     fs::write(
