@@ -11,11 +11,13 @@
   },
   "shared_rust_files": {
     "sphincs-c10/src/shuffle.rs": [
+      "extract-sign-release",
       "extract-sign-forest",
       "extract-shuffle",
       "extract-wots-sign"
     ],
     "sphincs-c10/src/wots.rs": [
+      "extract-sign-release",
       "extract-sign-forest",
       "extract-wots-sign",
       "extract-xmss-auth",
@@ -27,6 +29,7 @@
       "extract-wots-digits"
     ],
     "sphincs-c10/src/address.rs": [
+      "extract-sign-release",
       "extract-sign-forest",
       "extract-wots-sign",
       "extract-xmss-auth",
@@ -41,6 +44,7 @@
       "extract-fors-recovery"
     ],
     "sphincs-c10/src/params.rs": [
+      "extract-sign-release",
       "extract-sign-forest",
       "extract-wots-sign",
       "extract-xmss-auth",
@@ -62,6 +66,7 @@
       "extract-wots-digits"
     ],
     "sphincs-c10/src/hash.rs": [
+      "extract-sign-release",
       "extract-sign-forest",
       "extract-wots-sign",
       "extract-xmss-auth",
@@ -79,6 +84,7 @@
       "extract-hash-fns"
     ],
     "sphincs-c10/src/hypertree.rs": [
+      "extract-sign-release",
       "extract-sign-forest",
       "extract-wots-sign",
       "extract-xmss-auth",
@@ -88,6 +94,7 @@
       "extract-fors-recovery"
     ],
     "sphincs-c10/src/merkle.rs": [
+      "extract-sign-release",
       "extract-sign-forest",
       "extract-xmss-auth",
       "extract-xmss-root",
@@ -95,6 +102,7 @@
       "extract-merkle-verify"
     ],
     "sphincs-c10/src/fors.rs": [
+      "extract-sign-release",
       "extract-sign-forest",
       "extract-fors-auth",
       "extract-fors-root",
@@ -118,6 +126,7 @@
     ]
   },
   "required_targets": [
+    "extract-sign-release",
     "extract-sign-forest",
     "extract-shuffle",
     "extract-wots-sign",
@@ -152,6 +161,50 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-sign-release",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/hypertree.rs",
+        "sphincs-c10/src/fors.rs",
+        "sphincs-c10/src/wots.rs",
+        "sphincs-c10/src/merkle.rs",
+        "sphincs-c10/src/shuffle.rs",
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/address.rs",
+        "sphincs-c10/src/params.rs"
+      ],
+      "rust_files_sha256": [
+        "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
+        "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
+        "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
+        "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
+        "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023",
+        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "ce5ef2c5d98d00f210aab79e7dfe5e2e29a9e5d11b0280b115f3f014b60f4e52",
+        "Types.lean": "7427b8c6f5dde0e6ccd57964b3fc8af141f52a3b50d930783daade8d8586d533",
+        "FunsExternal_Template.lean": "5e8689480b6848564aa2942817c4623717a74ad37f2f612cb81ff39bf4f64b8c"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/SignRelease/Funs.lean",
+        "contracts/verification/extracted/Extracted/SignRelease/Types.lean",
+        "contracts/verification/extracted/Extracted/SignRelease/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "36ff1ffad031e110ec18d751406cf2c038a25fab89487d979e4d3831f9c6603b",
+        "f02e6cf5966452496932a1d027ea58af8c72d6c7033f9c85b51a5eea300982f5",
+        "e94d0e3c500bebe6e30907100e0725b46881b402ff983af170b089263094d1d3"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/SignReleaseSpec.lean",
+      "headline_theorem": "firmware_sign_release_pure",
+      "fresh": true,
+      "note": "Caller MIR with debug assertions disabled and overflow checking enabled. Shared opaque helper/backend models are NOT release-configuration equivalence proofs."
+    },
     {
       "target": "extract-sign-forest",
       "make_dir": "contracts/verification",

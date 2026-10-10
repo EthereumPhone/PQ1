@@ -93,11 +93,18 @@ functional signer result under the existing backend model. The extraction
 retains the source’s final offset/root debug assertions; the normal release
 profile omits them. Root-mismatch failure and success implying a matching root
 are therefore extracted-model facts, not a release-build guarantee. Release
-caller correspondence and the complete Rust/EasyCrypt signer/session relation
-remain open.
-Hash backend correctness, randomness freshness, progress-callback
-correspondence and the complete Rust/EasyCrypt signer/session relation
-remain open.
+caller correspondence is now narrower: a separately generated caller with
+all four signer debug assertions disabled has an unconditional pure Result
+relation (2026-10-10). For a root returned by the extracted key-generation call,
+it agrees with the checked caller, including all bounded failures. For arbitrary
+roots the exact relation retains the checked caller's final root guard.
+This release-configured caller still uses the existing opaque helper/backend
+models; equivalence of every release-compiled dependency is not established.
+Four host build configurations compare all 4,008 output bytes in both OptRand
+modes and distinguish checked root-mismatch panic from release output rejected
+by verification. The secure wrapper's double-sign/compare/verify/CFI release
+effects, hash backend correctness, randomness freshness, progress callbacks
+and the complete Rust/EasyCrypt signer/session relation remain open.
 
 **EasyCrypt coverage tightening (2026-10-08):** canonical witness counting
 reduces the adaptive FORS coverage term while retaining the initialized byte

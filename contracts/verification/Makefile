@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-sign-forest extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-sign-release extract-sign-forest extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1964,6 +1964,9 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignWholeSpec Extracted.SignHeaderDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignHeaderDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_sign_whole_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignReleaseBridge 2>&1 | tail -1
+	@$(_FV_PYTHON3) scripts/test_sign_release_proof_controls.py
+	@$(_FV_PYTHON3) scripts/test_sign_release_profiles.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsSignBridge Extracted.ShuffleDiffVectors Extracted.WotsSignDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ShuffleDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSignDiffCheck.lean
@@ -2834,3 +2837,55 @@ _extract-sign-forest-impl:
 	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
 	@diff -u $(EXTRACTED_DIR)/Extracted/SignForest/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-sign-forest $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Signer caller with release debug assertions disabled; shared opaque component models remain explicit.
+_extract-sign-release-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas \
+	  --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on \
+	  --opaque 'sha2' \
+	  --opaque 'zeroize' \
+	  --opaque 'sphincs_c10::fors::grind_r' \
+	  --opaque 'sphincs_c10::fors::extract_fors_indices' \
+	  --opaque 'sphincs_c10::fors::extract_ht_index' \
+	  --opaque 'sphincs_c10::fors::sign_fors_tree' \
+	  --opaque 'sphincs_c10::fors::compute_fors_root' \
+	  --opaque 'sphincs_c10::fors::compute_fors_pk' \
+	  --opaque 'sphincs_c10::hypertree::reconstruct_fors_root' \
+	  --opaque 'sphincs_c10::merkle::build_subtree_with_auth' \
+	  --opaque 'sphincs_c10::wots::sign_with_shuffle' \
+	  --opaque 'sphincs_c10::shuffle::fisher_yates' \
+	  --opaque 'sphincs_c10::shuffle::_::derive' \
+	  --opaque 'sphincs_c10::hash::th' \
+	  --opaque 'sphincs_c10::wots::pk_from_sig' \
+	  --opaque 'sphincs_c10::merkle::verify_auth_path' \
+	  --start-from 'sphincs_c10::hypertree::sign_inner' --dest-file $${EXTRACTION_TMP_ROOT}/signrelease.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/signrelease.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean \
+	  --sed-import 'Signrelease.=Extracted.SignRelease.' \
+	  --kill 'sphincs_c10::address::make_adrs' \
+	  --kill 'sphincs_c10::params::N' \
+	  --kill 'sphincs_c10::hash::pad16' \
+	  --kill 'sphincs_c10::hypertree::report' \
+	  --kill 'sphincs_c10::params::ADRS_FORS_TREE' \
+	  --kill 'sphincs_c10::params::L' \
+	  --kill 'sphincs_c10::params::D' \
+	  --kill 'sphincs_c10::params::H' \
+	  --kill 'sphincs_c10::params::SUBTREE_H' \
+	  --kill 'sphincs_c10::params::SIG_HT_LAYER' \
+	  --kill 'sphincs_c10::params::A' \
+	  --kill 'sphincs_c10::params::K' \
+	  --kill 'sphincs_c10::params::SIG_FORS_AUTH' \
+	  --kill 'sphincs_c10::params::SIG_FORS_SECRETS' \
+	  --kill 'sphincs_c10::params::SIG_R' \
+	  --kill 'sphincs_c10::params::SIG_FORS_TOTAL' \
+	  --kill 'sphincs_c10::params::SIGNATURE_LEN' \
+	  --add-import Extracted.Verify.Funs
+	@$(_FV_PYTHON3) scripts/normalize_verify_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean
+	@$(_FV_PYTHON3) scripts/normalize_release_sign_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@rm $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean
+
+	@diff -u $(EXTRACTED_DIR)/Extracted/SignRelease/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-sign-release $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean

@@ -453,6 +453,10 @@
         "contracts/verification/scripts/test_sign_serialization_proof_controls.py",
         "contracts/verification/scripts/test_sign_hypertree_proof_controls.py",
         "contracts/verification/scripts/test_sign_whole_proof_controls.py",
+        "contracts/verification/scripts/test_sign_release_proof_controls.py",
+        "contracts/verification/scripts/test_sign_release_profiles.py",
+        "contracts/verification/scripts/normalize_release_sign_extraction.py",
+        "sphincs-c10/tests/release_sign_assertions.rs",
         "contracts/verification/scripts/normalize_sign_extraction.py"
       ],
       "runs_in": "lean-extracted.yml",
@@ -488,6 +492,10 @@
         "contracts/verification/scripts/test_sign_serialization_proof_controls.py",
         "contracts/verification/scripts/test_sign_hypertree_proof_controls.py",
         "contracts/verification/scripts/test_sign_whole_proof_controls.py",
+        "contracts/verification/scripts/test_sign_release_proof_controls.py",
+        "contracts/verification/scripts/test_sign_release_profiles.py",
+        "contracts/verification/scripts/normalize_release_sign_extraction.py",
+        "sphincs-c10/tests/release_sign_assertions.rs",
         "contracts/verification/scripts/normalize_sign_extraction.py"
       ],
       "runs_in": "lean-extracted.yml",

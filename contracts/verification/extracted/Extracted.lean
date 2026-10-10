@@ -1,3 +1,4 @@
+import Extracted.SignReleaseBridge
 import Extracted.WotsSignBridge
 import Extracted.WotsKeygenBridge
 import Extracted.WholeVerifierSpec

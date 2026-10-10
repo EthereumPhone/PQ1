@@ -1,3 +1,4 @@
+import Extracted.SignReleaseBridge
 import Extracted.SignWholeSpec
 import Extracted.SignHeaderDiffVectors
 import Extracted.SignHypertreeCaller
@@ -338,3 +339,19 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_sign_nonce_exhausted
 #print axioms Extracted.Equiv.signer_root_check_success
 #print axioms Extracted.Equiv.firmware_sign_whole_success
+
+-- Release-assertion caller: shared backend/helper models remain explicit.
+#print axioms Extracted.Equiv.release_layer_body_projection
+#print axioms Extracted.Equiv.firmware_release_sign_loop_step
+#print axioms Extracted.Equiv.firmware_release_sign_loop_done
+#print axioms Extracted.Equiv.firmware_release_sign_hypertree_loop
+#print axioms Extracted.Equiv.release_caller_factor
+#print axioms Extracted.Equiv.release_after_forest_pure
+#print axioms Extracted.Equiv.firmware_sign_release_pure
+#print axioms Extracted.Equiv.whole_sign_nodes_root
+#print axioms Extracted.Equiv.checked_whole_nodes_factor
+#print axioms Extracted.Equiv.firmware_sign_checked_release_relation
+#print axioms Extracted.Equiv.firmware_sign_release_valid_key
+#print axioms Extracted.Equiv.firmware_keygen_sign_release
+#print axioms Extracted.Equiv.firmware_sign_release_shuffle_independent
+#print axioms Extracted.Equiv.firmware_sign_release_nonce_exhausted

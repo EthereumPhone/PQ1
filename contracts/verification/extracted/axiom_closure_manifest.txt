@@ -25,8 +25,8 @@
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
 # Regenerate/verify against a fresh dump with the same 5-bucket structure:
-#   169 kernel-only + 18 Formatter + 4 sha256_pure_bytes
-#   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 196 headlines.
+#   170 kernel-only + 31 Formatter + 4 sha256_pure_bytes
+#   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 210 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
 #
@@ -268,3 +268,19 @@ Extracted.Equiv.firmware_sign_whole_shuffle_independent  Aeneas.Std.core.fmt.For
 Extracted.Equiv.firmware_sign_nonce_exhausted  Aeneas.Std.core.fmt.Formatter
 Extracted.Equiv.signer_root_check_success
 Extracted.Equiv.firmware_sign_whole_success  Aeneas.Std.core.fmt.Formatter
+
+# Release-configured caller; existing opaque helper/backend boundaries retained.
+Extracted.Equiv.release_layer_body_projection  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_release_sign_loop_step  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_release_sign_loop_done  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_release_sign_hypertree_loop  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.release_caller_factor  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.release_after_forest_pure  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_release_pure  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.whole_sign_nodes_root  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.checked_whole_nodes_factor
+Extracted.Equiv.firmware_sign_checked_release_relation  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_release_valid_key  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_keygen_sign_release  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_release_shuffle_independent  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_release_nonce_exhausted  Aeneas.Std.core.fmt.Formatter

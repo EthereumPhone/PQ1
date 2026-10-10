@@ -892,6 +892,39 @@ unchanged. This closes the functional nonce/header and whole-signer composition
 slice, not the cross-language EasyCrypt simulation or session relation; backend,
 callback, entropy, erasure, physical and cryptographic reduction limits remain.
 
+Release-configured signer caller (2026-10-10): `extract-sign-release` now
+independently generates `sign_inner` with debug assertions disabled and overflow
+checks enabled. All four debug checks disappear, including the forced-zero and
+post-forest offset checks. Regeneration compares every shared caller helper
+byte for byte before deduplication and checks the complete raw/generated output.
+The three changed caller/loop bodies are retained with identifier renaming only.
+`firmware_sign_release_pure` proves an unconditional Result relation through the
+same canonical nonce, forest and two-layer computation without a final root guard.
+`firmware_sign_checked_release_relation` gives the exact all-input relation:
+the checked caller applies its final root guard to the release caller's result.
+`firmware_sign_release_valid_key` proves equality when the root belongs to this
+key, and `firmware_keygen_sign_release` discharges that condition using the actual
+extracted key-root computation. Shuffle independence and bounded nonce exhaustion
+also hold for the release-configured caller. No successful signing premise is
+needed for these Result equalities.
+
+This is a **caller configuration refinement under shared component models**.
+The extraction's opaque dependencies still use the existing checked helper and
+hash models; it does not prove all release-compiled dependencies, machine code,
+or the secure wrapper's double-compute/compare/verify/CFI release effect. In
+particular, no matching-root consequence is asserted for arbitrary release
+caller inputs. Host software tests execute both OptRand modes in four shapes
+(debug assertions on/off, normal/`lean_extract`), compare every signature byte,
+and distinguish the exact checked root-mismatch panic from unchecked output
+that the verifier rejects. Typed proof controls retain independent positive
+baselines and reject changed inputs, omitted layers and altered returned bytes;
+resource or syntax errors do not count as semantic rejection. These run in the
+ordinary differential gate. Fourteen new audited headlines bring the total to
+**210**: 170 kernel-only, 31 with the existing opaque Formatter type, four SHA-256,
+one SHA-256/HMAC and four Keccak closures; the 27-axiom environment is unchanged.
+Production Rust is unchanged. This retires the caller's debug-assertion mismatch
+as an unmodeled step, not the remaining runtime or cross-language session limits.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,
