@@ -65,7 +65,7 @@ a permutation of every prefix of length at most 64; no desired-permutation
 premise is imposed. Its private SHA-block helper has an explicit computable
 backend model. The unchanged RustCrypto byte computation is factored into that
 helper for extraction; this does not verify RustCrypto or physical shuffling.
-Fourteen builder/caller-consuming headlines explicitly retain Aeneas's existing opaque
+Eighteen builder/caller-consuming headlines explicitly retain Aeneas's existing opaque
 `Formatter` type dependency from the unreachable debug-panic branch; the
 environment axiom inventory remains unchanged.
 These totality results concern the existing callback-free extraction;
@@ -83,8 +83,14 @@ factoring for both forest and layer writes. An unconditional Result equality
 now composes both actual signer layers with first accepted WOTS counts,
 canonical chains and paths, exact wire offsets, preserved nonce/FORS bytes
 and the top tree root. It preserves bounded signing failure and connects the
-post-FORS caller through the existing final root check. Nonce/header and the
-complete signer/session composition remain separate work.
+post-FORS caller through the existing final root check. The actual nonce/header
+now has exact first-success/exhaustion semantics, nonce bytes, all digest fields
+and their bounds. An unconditional whole-signer Result equality composes that
+header, canonical FORS forest, both serialized layers and the final root check,
+including shuffle independence. Successful output retains the first nonce bytes
+and matches the independently constructed top key-generation root. This is a
+functional signer result under the existing backend model; it does not close
+the complete Rust/EasyCrypt signer/session relation.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

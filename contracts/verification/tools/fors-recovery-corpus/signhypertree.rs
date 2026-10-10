@@ -25,7 +25,7 @@ fn sign_hypertree_witness(case: usize, index: u32) -> ([u8; 32], [u8; 32], [u8; 
 #[test]
 fn sign_hypertree_corpus() {
     let mut out = String::from("-- Independent recursive byte oracle for both actual signer iterations.\nnamespace SignHypertreeDiff\nstructure Vector where\n  pattern : Nat\n  seed : Array UInt8\n  sk : Array UInt8\n  current : Array UInt8\n  shuffle : Array UInt8\n  index : Nat\n  signature : String\n  root : Array UInt8\n  counts : Array Nat\n  deriving Inhabited\ndef vectors : List Vector := [\n");
-    for (case, index) in [262143u32, u32::MAX].into_iter().enumerate() {
+    for (case, index) in [262143u32, u32::MAX, u32::MAX-1].into_iter().enumerate() {
         let (seed, sk, current) = sign_hypertree_witness(case, index);
         let shuffle = std::array::from_fn(|i| serialization_byte(case, 8, i));
         let initial = std::array::from_fn(|i| serialization_byte(case, 0, i));
@@ -76,5 +76,5 @@ fn sign_hypertree_corpus() {
     } else {
         assert_eq!(std::fs::read_to_string(path).unwrap(), out, "hypertree corpus drift");
     }
-    println!("OK: two full-byte two-layer signer cases versus independent recursive oracle; 18-bit and full-u32 indices, four first counts, top roots and shuffle independence");
+    println!("OK: three full-byte two-layer signer cases versus independent recursive oracle; 18-bit and full-u32 indices, six first counts, top roots, different per-layer leaves and shuffle independence");
 }

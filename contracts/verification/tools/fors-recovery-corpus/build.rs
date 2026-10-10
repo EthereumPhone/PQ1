@@ -18,6 +18,7 @@ fn main() {
     let signforest = base.join("signforest.rs");
     let serialization = base.join("serialization.rs");
     let signhypertree = base.join("signhypertree.rs");
+    let signheader = base.join("signheader.rs");
     println!("cargo:rerun-if-changed={}", source.display());
     println!("cargo:rerun-if-changed={}", corpus.display());
     let body = fs::read_to_string(source).unwrap();
@@ -34,6 +35,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", signforest.display());
     println!("cargo:rerun-if-changed={}", serialization.display());
     println!("cargo:rerun-if-changed={}", signhypertree.display());
+    println!("cargo:rerun-if-changed={}", signheader.display());
     // Execute the exact unchanged inline writer fragments with arbitrary fields.
     // Keep the complete production module above; these test-only wrappers expose
     // inputs that a whole signature's bounded grinder does not readily produce.
@@ -45,7 +47,16 @@ fn main() {
     let forest_fragment = fragment(&body, "    // Write ALL secrets (K * N bytes).", "    // Compute FORS public key");
     let layer_fragment = fragment(&body, "        // Write WOTS chain values (L * N bytes)", "        // Compute the reconstructed root for the next layer");
     let hypertree_fragment = fragment(&body, "    // 4. Sign hypertree: D=2 layers", "    report(progress, 100);");
+    let header_with_signature = fragment(&body, "fn sign_inner(", "    // 3. Sign FORS+C: K trees");
+    let (_, header_fragment) = header_with_signature.split_once(") -> [u8; SIGNATURE_LEN] {").expect("signer header signature changed");
     let serializers = format!(r#"
+fn sign_header_fragment(sk_seed: &[u8; 32], pk_seed: &[u8; N], pk_root: &[u8; N],
+    msg_hash: &[u8; 32], opt_rand: Option<&[u8; N]>, progress: &ProgressSink)
+    -> ([u8; 32], [u8; SIGNATURE_LEN], [u32; K], u32, usize, [u8; 32]) {{
+    {header_fragment}
+    (seed, sig, fors_indices, ht_idx, offset, digest)
+}}
+
 fn serialization_forest_fragment(initial: &[u8; SIGNATURE_LEN], fors_secrets: &[[u8; N]; K],
     fors_auth_paths: &[[[u8; N]; A]; K-1]) -> ([u8; SIGNATURE_LEN], usize) {{
     let mut sig = *initial;
@@ -97,7 +108,9 @@ fn sign_hypertree_fragment(initial: &[u8; SIGNATURE_LEN], seed: [u8; 32], sk_see
         + "\n"
         + &fs::read_to_string(serialization).unwrap()
         + "\n"
-        + &fs::read_to_string(signhypertree).unwrap();
+        + &fs::read_to_string(signhypertree).unwrap()
+        + "\n"
+        + &fs::read_to_string(signheader).unwrap();
     let output =
         format!("mod hypertree {{\n{body}\n#[cfg(test)] mod recovery_corpus {{\n{tests}\n}}\n}}\n");
     fs::write(

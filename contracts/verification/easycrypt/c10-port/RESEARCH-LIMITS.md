@@ -827,20 +827,21 @@ unchanged and the returned node is the top tree root; for an 18-bit input index
 that tree is zero. A further unconditional equality connects forest
 serialization, FORS compression, both actual layers and the existing final
 root check to the real post-FORS caller. Matching the computed root passes
-that check. Nonce generation and the earlier header/FORS caller are not yet
-composed into a whole-signer theorem.
+that check. The whole-signer extension below composes the nonce/header and
+earlier FORS caller with this result.
 
-Nine additional audited headlines bring the default total to **184**:
+This two-layer batch added nine audited headlines, bringing its total to **184**:
 161 kernel-only, fourteen retaining the existing opaque Formatter type, four
 SHA-256, one SHA-256/HMAC and four Keccak closures. The environment remains
 at 27 axioms. No production Rust, extraction artifact or registry changes are
 needed for this composition.
 
-Two full-byte cases compare the unchanged production two-layer fragment with
+Three full-byte cases compare the unchanged production two-layer fragment with
 an independent recursive byte/preimage oracle in normal and extraction Rust,
-covering the maximum 18-bit and full-u32 indices, first accepted counts, top
+covering the maximum 18-bit and full-u32 indices and 0xfffffffe, first accepted counts, top
 roots and shuffle independence. The extracted Lean loop executes the full-u32
-case and compares every signature byte, root, offset and count, with eighteen
+case with distinct lower/upper leaves (510/511) and compares every signature
+byte, root, offset and count, with eighteen
 altered-output, four output-shape and eight malformed-input controls. The
 fixtures deterministically select counts below 64 to keep routine execution
 bounded; the universal proof retains the production ten-million-count limit
@@ -850,6 +851,37 @@ body/loop arithmetic and the final caller check. Resource and syntax failures
 are not accepted as semantic rejections. These checks are enrolled in the
 ordinary differential gate. Callback, backend, entropy, erasure, physical and
 complete Rust/EasyCrypt session boundaries remain unchanged.
+
+Actual nonce/header and whole signing (2026-10-10) now have an unconditional
+functional Result relation from the real `sign_inner` entry point to a pure
+composition. The nonce model selects the first accepted count below ten million,
+in both OptRand modes, and retains the extracted assertion failure on exhaustion.
+The actual header writes exactly the 16 nonce bytes into a zeroed 4,008-byte
+buffer, pads the public seed, extracts all thirteen 11-bit FORS fields and the
+18-bit hypertree field, and establishes the final FORS field is zero on success.
+The composition connects that header to the canonical forest, its serialization,
+FORS compression, both first-count signer layers and the unchanged final root
+check. It does not assume grinder success or bypass a root mismatch. Shuffle
+seed changes preserve the complete returned Result. A successful whole signature
+retains the first accepted nonce bytes and its supplied public root equals the
+independently constructed layer-one, tree-zero key-generation root.
+
+Twelve additional audited headlines bring the current default total to **196**:
+169 kernel-only, eighteen with the existing opaque Formatter type, four SHA-256,
+one SHA-256/HMAC and four Keccak closures. The 27-axiom environment is unchanged.
+Two header fixtures use independent Rust nonce-preimage and digest-window
+oracles, with first counts zero and seven and both OptRand modes. Normal and
+extraction Rust execute the unchanged production header fragment; Lean executes
+the actual extracted header and grinder. Every output byte, digest, padded seed,
+index and offset is checked, with 34 altered-output, eight expected-shape and
+sixteen malformed-input controls. Four positive proof baselines and twelve
+separately typechecked mutations check nonce inputs, exhaustion, digest windows,
+header writes and whole-signer composition. Syntax/resource failures never count
+as semantic rejection. The header checks and mixed-leaf two-layer case run in
+the ordinary differential gate. Production Rust and extraction artifacts remain
+unchanged. This closes the functional nonce/header and whole-signer composition
+slice, not the cross-language EasyCrypt simulation or session relation; backend,
+callback, entropy, erasure, physical and cryptographic reduction limits remain.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

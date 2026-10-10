@@ -1,3 +1,5 @@
+import Extracted.SignWholeSpec
+import Extracted.SignHeaderDiffVectors
 import Extracted.SignHypertreeCaller
 import Extracted.SignHypertreeDiffVectors
 import Extracted.SignForestSerializeCaller
@@ -322,3 +324,17 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_signer_hypertree_suffix
 #print axioms Extracted.Equiv.firmware_signer_after_forest_pure
 #print axioms Extracted.Equiv.signer_root_check_match
+
+-- Actual nonce/header and complete functional signer composition.
+#print axioms Extracted.Equiv.firmware_grind_r_pure
+#print axioms Extracted.Equiv.pure_grind_r_success
+#print axioms Extracted.Equiv.firmware_sign_header_pure
+#print axioms Extracted.Equiv.firmware_sign_header_tail
+#print axioms Extracted.Equiv.header_indices_bound
+#print axioms Extracted.Equiv.grind_header_forced_zero
+#print axioms Extracted.Equiv.serialized_nonce_decodes
+#print axioms Extracted.Equiv.firmware_sign_whole_pure
+#print axioms Extracted.Equiv.firmware_sign_whole_shuffle_independent
+#print axioms Extracted.Equiv.firmware_sign_nonce_exhausted
+#print axioms Extracted.Equiv.signer_root_check_success
+#print axioms Extracted.Equiv.firmware_sign_whole_success

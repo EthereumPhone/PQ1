@@ -25,8 +25,8 @@
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
 # Regenerate/verify against a fresh dump with the same 5-bucket structure:
-#   161 kernel-only + 14 Formatter + 4 sha256_pure_bytes
-#   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 184 headlines.
+#   169 kernel-only + 18 Formatter + 4 sha256_pure_bytes
+#   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 196 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
 #
@@ -254,3 +254,17 @@ Extracted.Equiv.firmware_sign_hypertree_top_root  Aeneas.Std.core.fmt.Formatter
 Extracted.Equiv.firmware_signer_hypertree_suffix  Aeneas.Std.core.fmt.Formatter
 Extracted.Equiv.firmware_signer_after_forest_pure  Aeneas.Std.core.fmt.Formatter
 Extracted.Equiv.signer_root_check_match
+
+# Actual nonce/header and complete functional signer, preserving failure.
+Extracted.Equiv.firmware_grind_r_pure
+Extracted.Equiv.pure_grind_r_success
+Extracted.Equiv.firmware_sign_header_pure
+Extracted.Equiv.firmware_sign_header_tail
+Extracted.Equiv.header_indices_bound
+Extracted.Equiv.grind_header_forced_zero
+Extracted.Equiv.serialized_nonce_decodes
+Extracted.Equiv.firmware_sign_whole_pure  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_whole_shuffle_independent  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_nonce_exhausted  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.signer_root_check_success
+Extracted.Equiv.firmware_sign_whole_success  Aeneas.Std.core.fmt.Formatter

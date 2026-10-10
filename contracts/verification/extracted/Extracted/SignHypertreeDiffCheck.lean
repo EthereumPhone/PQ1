@@ -54,12 +54,13 @@ def agrees (out : Output) (v : Vector) : Bool :=
       out.signature == expected.toArray && out.offset == 4008 && out.root == v.root && out.counts == v.counts
 
 def check : IO Unit := do
-  unless vectors.length == 2 && (vectors[0]!).index == 262143 &&
-      (vectors[1]!).index == 4294967295 && vectors.all (fun v => v.counts.all (· < 64)) do
-    throw (IO.userError "two-layer corpus boundary inventory changed")
-  -- Both are checked in normal/extraction Rust. One full-u32 case executes
+  unless vectors.length == 3 && (vectors[0]!).index == 262143 &&
+      (vectors[1]!).index == 4294967295 && (vectors[2]!).index == 4294967294 &&
+      (vectors[2]!).index % 512 != ((vectors[2]!).index / 512) % 512 && vectors.all (fun v => v.counts.all (· < 64)) do
+    throw (IO.userError "two-layer corpus boundary/mixed-leaf inventory changed")
+  -- All three are checked in normal/extraction Rust. One full-width case executes
   -- both expensive actual Lean trees; universal proofs cover every index.
-  for v in vectors.drop 1 do
+  for v in vectors.drop 2 do
     let some out := run v | throw (IO.userError "actual signer loop did not return")
     unless agrees out v do throw (IO.userError "two-layer signer/oracle mismatch")
     IO.println s!"PASS actual two-layer signer index {v.index}"
@@ -82,7 +83,7 @@ def check : IO Unit := do
         {v with sk := #[]}, {v with current := #[]}, {v with current := v.current.push 0},
         {v with shuffle := #[]}, {v with shuffle := v.shuffle.push 0}, {v with index := 2^32}] do
       unless (run changed).isNone do throw (IO.userError "malformed signer input accepted")
-  IO.println "OK: one actual full-u32 two-layer signer loop matches independent full-byte/root/count oracles; all prefix bytes preserved; 18 altered-output, 4 output-shape and 8 malformed-input controls"
+  IO.println "OK: one actual full-width mixed-leaf two-layer signer loop matches independent full-byte/root/count oracles; all prefix bytes preserved; 18 altered-output, 4 output-shape and 8 malformed-input controls"
 
 #eval check
 end SignHypertreeDiff
