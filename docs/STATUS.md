@@ -65,7 +65,7 @@ a permutation of every prefix of length at most 64; no desired-permutation
 premise is imposed. Its private SHA-block helper has an explicit computable
 backend model. The unchanged RustCrypto byte computation is factored into that
 helper for extraction; this does not verify RustCrypto or physical shuffling.
-Seven builder/caller-consuming headlines explicitly retain Aeneas's existing opaque
+Fourteen builder/caller-consuming headlines explicitly retain Aeneas's existing opaque
 `Formatter` type dependency from the unreachable debug-panic branch; the
 environment axiom inventory remains unchanged.
 These totality results concern the existing callback-free extraction;
@@ -79,8 +79,12 @@ this result to the unchanged actual signer caller; it preserves header failures
 and the remaining serialization/hypertree continuation. Signature serialization
 now also has exact byte/frame contracts for the actual extracted writers,
 decoder recovery of every supplied field, full four-byte counters and caller
-factoring for both forest and layer writes. These are component results;
-complete hypertree signing success and the session relation remain separate work.
+factoring for both forest and layer writes. An unconditional Result equality
+now composes both actual signer layers with first accepted WOTS counts,
+canonical chains and paths, exact wire offsets, preserved nonce/FORS bytes
+and the top tree root. It preserves bounded signing failure and connects the
+post-FORS caller through the existing final root check. Nonce/header and the
+complete signer/session composition remain separate work.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.

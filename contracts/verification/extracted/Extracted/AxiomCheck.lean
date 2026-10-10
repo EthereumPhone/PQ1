@@ -1,3 +1,5 @@
+import Extracted.SignHypertreeCaller
+import Extracted.SignHypertreeDiffVectors
 import Extracted.SignForestSerializeCaller
 import Extracted.SignLayerSerializeCaller
 import Extracted.SignSerializationDiffVectors
@@ -309,3 +311,14 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.serializedLayer_fields
 #print axioms Extracted.Equiv.signer_layer_serialization_factor
 #print axioms Extracted.Equiv.firmware_serialize_layer_at_params
+
+-- Actual two-layer signer and post-FORS caller, preserving bounded failure.
+#print axioms Extracted.Equiv.firmware_wots_sign_pure
+#print axioms Extracted.Equiv.firmware_xmss_signing_path
+#print axioms Extracted.Equiv.firmware_sign_layer_body
+#print axioms Extracted.Equiv.firmware_sign_hypertree_loop
+#print axioms Extracted.Equiv.firmware_sign_hypertree_success
+#print axioms Extracted.Equiv.firmware_sign_hypertree_top_root
+#print axioms Extracted.Equiv.firmware_signer_hypertree_suffix
+#print axioms Extracted.Equiv.firmware_signer_after_forest_pure
+#print axioms Extracted.Equiv.signer_root_check_match

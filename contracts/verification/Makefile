@@ -1727,6 +1727,9 @@ _verify-lake-path-self-test:
 #   make verify-extract-differential GEN=1    re-execute the Rust to regenerate them
 verify-extract-differential: ## Extracted-Lean vs shipped-Rust differential
 ifeq ($(GEN),1)
+	@cd $(REPO_ROOT) && PQ_SIGN_HYPERTREE_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_hypertree_corpus -- --exact --nocapture
 	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=1 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
@@ -1782,6 +1785,9 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_SIGN_HYPERTREE_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_hypertree_corpus -- --exact --nocapture
 	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
@@ -1794,6 +1800,9 @@ endif
 	@cd $(REPO_ROOT) && PQ_WOTS_SIGN_GENERATE=0 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release wots_sign_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_HYPERTREE_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_hypertree_corpus -- --exact --nocapture
 	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
 	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
@@ -1940,6 +1949,9 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignLayerSerializeCaller Extracted.SignForestSerializeCaller Extracted.SignSerializationDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignSerializationDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_sign_serialization_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignHypertreeCaller Extracted.SignHypertreeDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignHypertreeDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_sign_hypertree_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsSignBridge Extracted.ShuffleDiffVectors Extracted.WotsSignDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ShuffleDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSignDiffCheck.lean

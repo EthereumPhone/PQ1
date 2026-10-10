@@ -451,6 +451,7 @@
         "contracts/verification/scripts/test_xmss_auth_vendored_spec.py",
         "contracts/verification/scripts/test_sign_forest_proof_controls.py",
         "contracts/verification/scripts/test_sign_serialization_proof_controls.py",
+        "contracts/verification/scripts/test_sign_hypertree_proof_controls.py",
         "contracts/verification/scripts/normalize_sign_extraction.py"
       ],
       "runs_in": "lean-extracted.yml",
@@ -484,6 +485,7 @@
         "fw-manifest/src/**",
         "contracts/verification/scripts/test_sign_forest_proof_controls.py",
         "contracts/verification/scripts/test_sign_serialization_proof_controls.py",
+        "contracts/verification/scripts/test_sign_hypertree_proof_controls.py",
         "contracts/verification/scripts/normalize_sign_extraction.py"
       ],
       "runs_in": "lean-extracted.yml",

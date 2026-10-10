@@ -793,14 +793,12 @@ that exact layout and offset. The computed subtree height is proved to be nine.
 At each of the two wire positions, decoding recovers the original chains,
 full-width counter and path. A kernel equality factors that serializer from
 the actual layer body without changing its cryptographic calls or Result
-behavior. This is serialization correspondence, not a theorem that the whole
-hypertree signer succeeds, produces the reference cryptographic fields, or
-satisfies the complete session relation. The nonce-generation/header bridge
-and cryptographic components retain their separately documented scope.
+behavior. These serialization contracts are composed with the cryptographic
+components in the two-layer result below. The nonce-generation/header bridge
+and complete session relation remain separate work.
 
-Thirteen additional audited headlines bring the default total to **175**:
-159 kernel-only, seven retaining the existing opaque Formatter type, four
-SHA-256, one SHA-256/HMAC and four Keccak closures. The environment remains
+The thirteen serialization headlines are included in the default audit total
+reported below. The environment remains
 at 27 axioms and the extraction registry is unchanged. The caller equality
 uses a continuation argument to keep kernel checking small; no kernel check,
 axiom audit or mutation acceptance condition is bypassed.
@@ -817,6 +815,41 @@ caller connections. Resource failures do not count as semantic rejections.
 These checks run in the ordinary differential gate. Production Rust and
 extraction artifacts are unchanged; backend, callback, erasure, entropy,
 physical leakage, full signer/session and research-reduction limits remain.
+
+Actual two-layer signing (2026-10-10) now has an unconditional Result equality
+from the extracted signer loop to two pure layer operations. Each operation
+uses the first accepted bounded WOTS count, the canonical positional chains
+and nine independently specified XMSS siblings. The equality preserves bounded
+search failure; it does not assume that either grinder succeeds. It retains
+the full input index and the actual layer/tree/leaf arithmetic, writes at
+2,336 and 3,172, and finishes at byte 4,008. On success the nonce/FORS prefix is
+unchanged and the returned node is the top tree root; for an 18-bit input index
+that tree is zero. A further unconditional equality connects forest
+serialization, FORS compression, both actual layers and the existing final
+root check to the real post-FORS caller. Matching the computed root passes
+that check. Nonce generation and the earlier header/FORS caller are not yet
+composed into a whole-signer theorem.
+
+Nine additional audited headlines bring the default total to **184**:
+161 kernel-only, fourteen retaining the existing opaque Formatter type, four
+SHA-256, one SHA-256/HMAC and four Keccak closures. The environment remains
+at 27 axioms. No production Rust, extraction artifact or registry changes are
+needed for this composition.
+
+Two full-byte cases compare the unchanged production two-layer fragment with
+an independent recursive byte/preimage oracle in normal and extraction Rust,
+covering the maximum 18-bit and full-u32 indices, first accepted counts, top
+roots and shuffle independence. The extracted Lean loop executes the full-u32
+case and compares every signature byte, root, offset and count, with eighteen
+altered-output, four output-shape and eight malformed-input controls. The
+fixtures deterministically select counts below 64 to keep routine execution
+bounded; the universal proof retains the production ten-million-count limit
+and failure behavior. Five positive proof baselines and fourteen separately
+typechecked semantic mutations test crypto selection, byte offsets, actual
+body/loop arithmetic and the final caller check. Resource and syntax failures
+are not accepted as semantic rejections. These checks are enrolled in the
+ordinary differential gate. Callback, backend, entropy, erasure, physical and
+complete Rust/EasyCrypt session boundaries remain unchanged.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
