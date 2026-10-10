@@ -79,7 +79,7 @@ def require_semantic_rejection(result, name):
     assert result.returncode == 1, (name, "abnormal or successful exit", result.returncode, output)
     assert any(x in output for x in
         ("unsolved goals", "Type mismatch", "Application type mismatch", "Tactic `rewrite` failed",
-         "'show' tactic failed", "`simp` made no progress", "Tactic `rfl` failed",
+         "'show' tactic failed", "'change' tactic failed", "`simp` made no progress", "Tactic `rfl` failed",
          "Tactic `apply` failed", "Could not unify", "Tactic `assumption` failed",
          "omega could not prove", "scalar_tac failed")), (name, output)
     lowered = output.lower()
@@ -94,32 +94,32 @@ def require_semantic_rejection(result, name):
 
 def test_result_classifier():
     """Mixed proof/resource output and abnormal exits must fail closed."""
-    semantic = "error: unsolved goals"
-    require_semantic_rejection(subprocess.CompletedProcess([], 1, semantic, ""), "positive proof error")
-    rejected = [
-        subprocess.CompletedProcess([], code, semantic, "")
-        for code in [0, -9, -15, 2, 124, 130, 134, 137, 139]
-    ]
-    rejected += [subprocess.CompletedProcess([], 1, semantic + "\n" + diagnostic, "")
-        for diagnostic in [
-            "(kernel) excessive memory consumption detected", "out of memory", "out-of-memory",
-            "memory allocation failed", "cannot allocate memory", "std::bad_alloc",
-            "Interrupted", "interrupt requested", "Killed", "segmentation fault", "stack overflow",
-            "fatal error", "internal exception", "assertion failed", "core dumped",
-            "maximum recursion depth", "maximum number of heartbeats", "timeout",
-            "Unknown identifier", "unknown module", "Unknown constant", "unexpected token",
-            "declaration uses sorry",
-        ]]
-    # Resource diagnostics on stderr are equally disqualifying.
-    rejected.append(subprocess.CompletedProcess([], 1, semantic, "(kernel) excessive memory consumption detected"))
-    rejected.append(subprocess.CompletedProcess([], 1, "", ""))
-    for index, result in enumerate(rejected):
-        try:
-            require_semantic_rejection(result, f"classifier-control-{index}")
-        except AssertionError:
-            continue
-        raise AssertionError(("invalid proof result accepted", result))
-    print(f"OK: proof-result classifier: one normal proof error accepted; {len(rejected)} invalid outcomes rejected")
+    for semantic in ("error: unsolved goals", "error: 'change' tactic failed"):
+        require_semantic_rejection(subprocess.CompletedProcess([], 1, semantic, ""), "positive proof error")
+        rejected = [
+            subprocess.CompletedProcess([], code, semantic, "")
+            for code in [0, -9, -15, 2, 124, 130, 134, 137, 139]
+        ]
+        rejected += [subprocess.CompletedProcess([], 1, semantic + "\n" + diagnostic, "")
+            for diagnostic in [
+                "(kernel) excessive memory consumption detected", "out of memory", "out-of-memory",
+                "memory allocation failed", "cannot allocate memory", "std::bad_alloc",
+                "Interrupted", "interrupt requested", "Killed", "segmentation fault", "stack overflow",
+                "fatal error", "internal exception", "assertion failed", "core dumped",
+                "maximum recursion depth", "maximum number of heartbeats", "timeout",
+                "Unknown identifier", "unknown module", "Unknown constant", "unexpected token",
+                "declaration uses sorry",
+            ]]
+        # Resource diagnostics on stderr are equally disqualifying.
+        rejected.append(subprocess.CompletedProcess([], 1, semantic, "(kernel) excessive memory consumption detected"))
+        rejected.append(subprocess.CompletedProcess([], 1, "", ""))
+        for index, result in enumerate(rejected):
+            try:
+                require_semantic_rejection(result, f"classifier-control-{index}")
+            except AssertionError:
+                continue
+            raise AssertionError(("invalid proof result accepted", result))
+        print(f"OK: proof-result classifier: one normal proof error accepted; {len(rejected)} invalid outcomes rejected")
 
 
 def main():
