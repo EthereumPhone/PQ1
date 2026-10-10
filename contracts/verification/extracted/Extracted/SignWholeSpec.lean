@@ -1,5 +1,8 @@
 /- Compose the actual signer from the first nonce through its final root check.
-   This is a functional Result relation under the existing backend model. -/
+   This is a functional Result relation under the existing backend model.
+   The extraction retains final offset/root debug assertions that release Rust
+   omits. Root-mismatch failure and success-implies-root are model-level facts;
+   release caller/verification correspondence remains separate. -/
 import Extracted.SignHeaderSpec
 import Extracted.SignForestPrefix
 import Extracted.SignHypertreeCaller
@@ -67,7 +70,7 @@ theorem firmware_sign_nonce_exhausted (sk msg : Std.Array Std.U8 32#usize)
   rw [← firmware_grind_r_pure, grind_r_exhausted sk msg seed root opt hr]
   simp only [bind_tc_fail]
 
-/-- The final check can return only its input bytes and the matching root. -/
+/-- The extracted final check can return only its input bytes and the matching root. -/
 theorem signer_root_check_success (root node : Std.Array Std.U8 16#usize)
     (progress : hypertree.ProgressSink) (sig out : C10Signature)
     (h : signerRootCheck root progress sig node = .ok out) :
@@ -84,7 +87,7 @@ theorem signer_root_check_success (root node : Std.Array Std.U8 16#usize)
     simp only [if_true, Result.ok.injEq] at h
     exact ⟨h.symm,hbeq.mp rfl⟩
 
-/-- Any successful whole signature retains the first accepted nonce bytes and
+/-- Any successful whole signature in this extracted model retains the first accepted nonce bytes and
     passes the public-root check against the actual top key-generation tree. -/
 theorem firmware_sign_whole_success (sk msg : Std.Array Std.U8 32#usize)
     (seed root : Std.Array Std.U8 16#usize) (opt : Option (Std.Array Std.U8 16#usize))

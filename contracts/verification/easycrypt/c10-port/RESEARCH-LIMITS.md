@@ -853,7 +853,7 @@ ordinary differential gate. Callback, backend, entropy, erasure, physical and
 complete Rust/EasyCrypt session boundaries remain unchanged.
 
 Actual nonce/header and whole signing (2026-10-10) now have an unconditional
-functional Result relation from the real `sign_inner` entry point to a pure
+functional Result relation from the extracted `sign_inner` entry point to a pure
 composition. The nonce model selects the first accepted count below ten million,
 in both OptRand modes, and retains the extracted assertion failure on exhaustion.
 The actual header writes exactly the 16 nonce bytes into a zeroed 4,008-byte
@@ -865,6 +865,15 @@ check. It does not assume grinder success or bypass a root mismatch. Shuffle
 seed changes preserve the complete returned Result. A successful whole signature
 retains the first accepted nonce bytes and its supplied public root equals the
 independently constructed layer-one, tree-zero key-generation root.
+
+**Build-profile boundary:** the final offset and root checks are Rust
+`debug_assert_eq!` sites retained by the extraction and omitted by the normal
+release profile. Consequently root-mismatch failure and the whole-success
+root conjunct are facts about that extracted model; they do not establish
+those behaviors for release Rust. The runtime corpora execute the header and
+two-layer fragments before these final checks. Release caller/verification
+correspondence remains a separate obligation. The bounded nonce-exhaustion
+`panic!` is not a debug assertion.
 
 Twelve additional audited headlines bring the current default total to **196**:
 169 kernel-only, eighteen with the existing opaque Formatter type, four SHA-256,

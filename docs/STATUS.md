@@ -89,8 +89,12 @@ and their bounds. An unconditional whole-signer Result equality composes that
 header, canonical FORS forest, both serialized layers and the final root check,
 including shuffle independence. Successful output retains the first nonce bytes
 and matches the independently constructed top key-generation root. This is a
-functional signer result under the existing backend model; it does not close
-the complete Rust/EasyCrypt signer/session relation.
+functional signer result under the existing backend model. The extraction
+retains the source’s final offset/root debug assertions; the normal release
+profile omits them. Root-mismatch failure and success implying a matching root
+are therefore extracted-model facts, not a release-build guarantee. Release
+caller correspondence and the complete Rust/EasyCrypt signer/session relation
+remain open.
 Hash backend correctness, randomness freshness, progress-callback
 correspondence and the complete Rust/EasyCrypt signer/session relation
 remain open.
