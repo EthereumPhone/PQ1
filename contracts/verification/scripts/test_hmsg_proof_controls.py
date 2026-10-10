@@ -10,6 +10,8 @@ import pwd
 import subprocess
 import tempfile
 
+from test_fors_auth_proof_controls import require_semantic_rejection
+
 ROOT = Path(__file__).resolve().parents[1] / "extracted"
 LAKE = Path(pwd.getpwuid(__import__('os').getuid()).pw_dir) / ".elan/bin/lake"
 
@@ -26,9 +28,9 @@ def main():
         ("message", "Array.to_slice message", "Array.to_slice r"),
         ("order", "[ s, s1, s2, s3, s4 ]", "[ s4, s3, s2, s1, s ]")]
     with tempfile.TemporaryDirectory(prefix="hmsg-proof-controls-") as td:
-        def run(name, changed):
+        def run(name, changed, with_proof=True):
             path = Path(td) / (name + ".lean")
-            source = (prefix + changed + "\n" + proof + "\nend sphincs_c10\n").replace("hash.h_msg", "hash.h_msg_probe")
+            source = (prefix + changed + "\n" + (proof if with_proof else "") + "\nend sphincs_c10\n").replace("hash.h_msg", "hash.h_msg_probe")
             assert "sorry" not in source and "axiom " not in source
             path.write_text(source)
             return subprocess.run([str(LAKE), "env", "lean", str(path)], cwd=ROOT,
@@ -38,11 +40,14 @@ def main():
         def negative(mutation):
             name, before, after = mutation
             assert body.count(before) == 1, (name, "ambiguous mutation")
-            result = run(name, body.replace(before, after))
-            assert result.returncode != 0 and "unsolved goals" in result.stdout and "timeout" not in result.stdout, (name, result.stdout, result.stderr)
+            changed = body.replace(before, after)
+            typed = run(name + "-definition", changed, with_proof=False)
+            assert typed.returncode == 0, (name, typed.stdout, typed.stderr)
+            result = run(name, changed)
+            require_semantic_rejection(result, name)
         with ThreadPoolExecutor(max_workers=3) as pool:
             list(pool.map(negative, mutations))
-    print("OK: H_msg proof positive baseline + 6 semantic input mutations rejected")
+    print("OK: H_msg proof positive baseline + 6 typed semantic input mutations rejected")
 
 if __name__ == "__main__":
     main()

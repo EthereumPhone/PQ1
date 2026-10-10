@@ -11,6 +11,8 @@ import os
 import subprocess
 import tempfile
 
+from test_fors_auth_proof_controls import require_semantic_rejection
+
 ROOT = Path(__file__).resolve().parents[1] / "extracted"
 LAKE = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".elan/bin/lake"
 
@@ -68,12 +70,7 @@ def main():
             typed = run(family + "-" + name + "-definition", source.split("namespace Extracted.Equiv", 1)[0])
             assert typed.returncode == 0, (name, typed.stdout, typed.stderr)
             result = run(family + "-" + name, source)
-            output = result.stdout + result.stderr
-            # Require a proof/type obligation, never parser/import/tool failure.
-            assert result.returncode != 0 and any(x in output for x in
-                ("unsolved goals", "Type mismatch", "Application type mismatch", "Tactic `rewrite` failed", "Insufficient number of fields")), (name, output)
-            assert not any(x in output for x in ("unknown module", "Unknown constant", "unexpected token",
-                "maximum recursion", "maximum number of heartbeats", "timeout", "declaration uses")), (name, output)
+            require_semantic_rejection(result, name)
 
         with ThreadPoolExecutor(max_workers=3) as pool:
             list(pool.map(negative, jobs))

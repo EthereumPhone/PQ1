@@ -12,6 +12,8 @@ import pwd
 import subprocess
 import tempfile
 
+from test_fors_auth_proof_controls import require_semantic_rejection
+
 ROOT = Path(__file__).resolve().parents[1] / "extracted"
 LAKE = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".elan/bin/lake"
 
@@ -52,16 +54,7 @@ def main():
             typed = run(name + "-definition", altered)
             assert typed.returncode == 0, (name, typed.stdout, typed.stderr)
             result = run(name, altered + rest)
-            output = result.stdout + result.stderr
-            assert result.returncode != 0 and any(s in output for s in (
-                "unsolved goals", "Type mismatch", "Application type mismatch",
-                "Tactic `rewrite` failed", "Tactic `rfl` failed", "Tactic `assumption` failed",
-                "Could not unify the theorem with the target",
-            )), (name, output)
-            assert not any(s in output for s in (
-                "unknown module", "Unknown constant", "unexpected token", "maximum recursion",
-                "maximum number of heartbeats", "timeout", "declaration uses",
-            )), (name, output)
+            require_semantic_rejection(result, name)
 
         with ThreadPoolExecutor(max_workers=3) as pool:
             list(pool.map(negative, mutations))

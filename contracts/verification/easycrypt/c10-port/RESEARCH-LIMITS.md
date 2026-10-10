@@ -945,8 +945,10 @@ physical erasure, progress callbacks or the modeled shuffle sub-seed backend.
 The obsolete flag-only authentication-path control is retired: release output
 does not expose those flags, so breaking a flag invariant alone is not an
 observable-output mutation. The remaining 36 authentication controls retain
-typed semantic rejection. The affected root and verifier control suites reject
-killed or resource-failed proof runs instead of counting them as evidence.
+typed semantic rejection. All 24 enrolled proof-control suites use the strict
+result classifier and reject killed or resource-failed proof runs instead of
+counting them as evidence. H_msg mutations separately type-check their changed
+definitions before running the unchanged proof.
 
 The total audited headline count remains **210**; removing the formatting path
 removes the opaque Formatter dependency from 31 closures, leaving **201
