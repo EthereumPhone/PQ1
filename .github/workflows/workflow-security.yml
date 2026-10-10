@@ -219,7 +219,7 @@ jobs:
       # updates, this refuses a PR that ADDS a vulnerable or policy-violating
       # dependency. `cargo-deny`/`cargo-vet` remain the authoritative gates —
       # this one reads the GitHub advisory graph, which is a different corpus.
-      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
           comment-summary-in-pr: on-failure
