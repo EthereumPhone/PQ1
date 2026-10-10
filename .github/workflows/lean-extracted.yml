@@ -127,7 +127,7 @@ jobs:
     # Full differential reached its final proof controls at the former 90m limit (#833).
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           persist-credentials: false
       - name: install elan (toolchain pinned by extracted/lean-toolchain = v4.30.0-rc2)
