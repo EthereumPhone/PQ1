@@ -64,8 +64,8 @@ def run (seed root sig current : String) (idx : Nat) : Option Outcome := do
         (strict.isSome && strict.map (·.data) != some raw.data) then none else do
       match sphincs_c10.hypertree.verify_loop3 {start := 0#u32, «end» := 2#u32}
           signature s 2336#usize c i, verifierHypertreeContinuation s r signature c i with
-      | .ok (off, node), .ok accepted =>
-        if off != 4008#usize || (toSpecNode node).data != raw.data ||
+      | .ok node, .ok accepted =>
+        if (toSpecNode node).data != raw.data ||
             accepted != (raw.data == (toSpecNode r).data) then none else
           some ⟨raw.data, w0.isSome, w1.isSome, l0.wots.count.toNat, l1.wots.count.toNat, accepted⟩
       | _, _ => none

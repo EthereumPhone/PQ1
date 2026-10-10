@@ -219,7 +219,6 @@ def shuffle.fisher_yates
   (seed : Array Std.U8 32#usize) (n : Std.Usize) :
   Result (Array Std.U8 64#usize)
   := do
-  massert (n <= 64#usize)
   let buf := Array.repeat 64#usize 0#u8
   let buf1 ← shuffle.fisher_yates_loop0 n buf 0#usize
   let nonzero ← shuffle.fisher_yates_loop1 seed 0#u8 0#usize

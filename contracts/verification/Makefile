@@ -2088,7 +2088,7 @@ _extract-sphincs-adrs-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --start-from 'sphincs_c10::address' --dest-file $${EXTRACTION_TMP_ROOT}/adrs.llbc 2>&1 | tail -1 )
 	@rm -rf $${EXTRACTION_TMP_ROOT}/out && mkdir -p $${EXTRACTION_TMP_ROOT}/out
 	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/adrs.llbc
@@ -2117,7 +2117,7 @@ _extract-fors-index-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --start-from 'sphincs_c10::fors::extract_ht_index' \
 	  --start-from 'sphincs_c10::fors::extract_fors_indices' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/fors.llbc 2>&1 | tail -1 )
@@ -2188,7 +2188,7 @@ _extract-wots-digits-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --start-from 'sphincs_c10::wots::extract_digits' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/wots.llbc 2>&1 | tail -1 )
 	@rm -rf $${EXTRACTION_TMP_ROOT}/wout && mkdir -p $${EXTRACTION_TMP_ROOT}/wout
@@ -2288,7 +2288,7 @@ _extract-merkle-verify-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::th_pair' \
 	  --start-from 'sphincs_c10::merkle::verify_auth_path' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/merkle.llbc 2>&1 | tail -1 )
@@ -2309,7 +2309,7 @@ _extract-merkle-verify-impl:
 _extract-fors-recovery-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::th' --opaque 'sphincs_c10::hash::th_pair' \
 	  --start-from 'sphincs_c10::hypertree::reconstruct_fors_root' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/forsroot.llbc 2>&1 | tail -1 )
@@ -2333,7 +2333,7 @@ _extract-wots-pkfromsig-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::chain_hash' --opaque 'sphincs_c10::hash::th_multi' \
 	  --opaque 'sphincs_c10::hash::wots_digest' \
 	  --start-from 'sphincs_c10::wots::pk_from_sig' \
@@ -2357,7 +2357,7 @@ _extract-wots-pkfromsig-impl:
 _extract-wots-find-count-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::wots_digest' \
 	  --opaque 'sphincs_c10::address::make_adrs' \
 	  --opaque 'sphincs_c10::wots::extract_digits' \
@@ -2376,7 +2376,7 @@ _extract-wots-find-count-impl:
 _extract-fors-grind-r-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::sha256_parts' \
 	  --opaque 'sphincs_c10::hash::pad16' --opaque 'sphincs_c10::hash::truncate' \
 	  --opaque 'sphincs_c10::hash::h_msg' --opaque 'sphincs_c10::fors::read_bits_le' \
@@ -2475,7 +2475,7 @@ _extract-hash-fns-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::sha256_bytes' \
 	  --opaque 'sphincs_c10::hash::sha256_parts' \
 	  --start-from 'sphincs_c10::hash::th' \
@@ -2578,7 +2578,7 @@ verify-easycrypt-split: ## Full current split proof replay in the pinned image (
 _extract-fors-pk-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::th_multi' \
 	  --start-from 'sphincs_c10::fors::compute_fors_pk' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/forspk.llbc 2>&1 | tail -1 )
@@ -2595,7 +2595,7 @@ _extract-fors-pk-impl:
 _extract-verifier-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::h_msg' \
 	  --opaque 'sphincs_c10::hash::th' \
 	  --opaque 'sphincs_c10::fors::extract_fors_indices' \
@@ -2632,7 +2632,7 @@ _extract-verifier-impl:
 _extract-wots-secret-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::sha256_parts' \
 	  --start-from 'sphincs_c10::hash::wots_secret' --dest-file $${EXTRACTION_TMP_ROOT}/wotssecret.llbc 2>&1 | tail -1 )
 	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
@@ -2648,7 +2648,7 @@ _extract-wots-secret-impl:
 _extract-wots-keygen-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::wots_secret' --opaque 'sphincs_c10::hash::chain_hash' --opaque 'sphincs_c10::hash::th_multi' \
 	  --start-from 'sphincs_c10::wots::keygen_pk' --dest-file $${EXTRACTION_TMP_ROOT}/wotskeygen.llbc 2>&1 | tail -1 )
 	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
@@ -2664,7 +2664,7 @@ _extract-wots-keygen-impl:
 _extract-fors-secret-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::sha256_parts' \
 	  --start-from 'sphincs_c10::hash::fors_secret' --dest-file $${EXTRACTION_TMP_ROOT}/forssecret.llbc 2>&1 | tail -1 )
 	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
@@ -2680,7 +2680,7 @@ _extract-fors-secret-impl:
 _extract-fors-root-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::fors_secret' --opaque 'sphincs_c10::hash::th' \
 	  --opaque 'sphincs_c10::hash::th_pair' --opaque 'sphincs_c10::hash::pad16' \
 	  --start-from 'sphincs_c10::fors::compute_fors_root' --dest-file $${EXTRACTION_TMP_ROOT}/forsroot.llbc 2>&1 | tail -1 )
@@ -2697,7 +2697,7 @@ _extract-fors-root-impl:
 _extract-fors-auth-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::fors_secret' --opaque 'sphincs_c10::hash::th' \
 	  --opaque 'sphincs_c10::hash::th_pair' --opaque 'sphincs_c10::hash::pad16' \
 	  --start-from 'sphincs_c10::fors::sign_fors_tree' --dest-file $${EXTRACTION_TMP_ROOT}/forsauth.llbc 2>&1 | tail -1 )
@@ -2714,7 +2714,7 @@ _extract-fors-auth-impl:
 _extract-xmss-auth-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::wots::keygen_pk' --opaque 'sphincs_c10::hash::th_pair' \
 	  --opaque 'sphincs_c10::hash::pad16' \
 	  --start-from 'sphincs_c10::merkle::build_subtree_with_auth' --dest-file $${EXTRACTION_TMP_ROOT}/xmssauth.llbc 2>&1 | tail -1 )
@@ -2735,7 +2735,7 @@ _extract-xmss-auth-impl:
 _extract-xmss-root-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::wots::keygen_pk' --opaque 'sphincs_c10::hash::th_pair' \
 	  --opaque 'sphincs_c10::hash::pad16' \
 	  --start-from 'sphincs_c10::hypertree::compute_pk_root' --dest-file $${EXTRACTION_TMP_ROOT}/xmssroot.llbc 2>&1 | tail -1 )
@@ -2755,7 +2755,7 @@ _extract-xmss-root-impl:
 _extract-shuffle-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::shuffle::shuffle_hash_block' \
 	  --start-from 'sphincs_c10::shuffle::fisher_yates' --dest-file $${EXTRACTION_TMP_ROOT}/shuffle.llbc 2>&1 | tail -1 )
 	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
@@ -2769,7 +2769,7 @@ _extract-shuffle-impl:
 _extract-wots-sign-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::wots::find_count' --opaque 'sphincs_c10::hash::wots_secret' \
 	  --opaque 'sphincs_c10::hash::chain_hash' --opaque 'sphincs_c10::shuffle::fisher_yates' \
 	  --start-from 'sphincs_c10::wots::sign_with_shuffle' --dest-file $${EXTRACTION_TMP_ROOT}/wotssign.llbc 2>&1 | tail -1 )
@@ -2790,7 +2790,7 @@ _extract-wots-sign-impl:
 _extract-sign-forest-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=on --rustc-arg=-Coverflow-checks=on \
 	  --opaque 'sha2' \
 	  --opaque 'zeroize' \
 	  --opaque 'sphincs_c10::fors::grind_r' \

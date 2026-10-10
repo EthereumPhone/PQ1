@@ -86,14 +86,13 @@ def fors.compute_fors_root_loop0.body
   (stack : Array (Array Std.U8 16#usize) 12#usize)
   (stack_heights : Array Std.U32 12#usize) (sp : Std.Usize) :
   Result (ControlFlow ((core.ops.range.Range Std.Usize) × (Array (Array Std.U8
-    16#usize) 12#usize) × (Array Std.U32 12#usize) × Std.Usize) ((Array
-    (Array Std.U8 16#usize) 12#usize) × (Array Std.U32 12#usize) ×
-    Std.Usize))
+    16#usize) 12#usize) × (Array Std.U32 12#usize) × Std.Usize) (Array (Array
+    Std.U8 16#usize) 12#usize))
   := do
   let (o, iter1) ←
     core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
   match o with
-  | none => ok (done (stack, stack_heights, sp))
+  | none => ok (done stack)
   | some j =>
     let i ← lift (UScalar.cast .U32 j)
     let secret ← hash.fors_secret sk_seed ht_idx tree_idx i
@@ -120,8 +119,7 @@ def fors.compute_fors_root_loop0
   (sk_seed : Array Std.U8 32#usize) (ht_idx : Std.U32) (tree_idx : Std.U32)
   (stack : Array (Array Std.U8 16#usize) 12#usize)
   (stack_heights : Array Std.U32 12#usize) (sp : Std.Usize) :
-  Result ((Array (Array Std.U8 16#usize) 12#usize) × (Array Std.U32 12#usize)
-    × Std.Usize)
+  Result (Array (Array Std.U8 16#usize) 12#usize)
   := do
   loop
     (fun (iter1, stack1, stack_heights1, sp1) =>
@@ -141,13 +139,9 @@ def fors.compute_fors_root
   let a := Array.repeat 16#usize 0#u8
   let stack := Array.repeat 12#usize a
   let stack_heights := Array.repeat 12#usize 0#u32
-  let (stack1, stack_heights1, sp) ←
+  let stack1 ←
     fors.compute_fors_root_loop0 { start := 0#usize, «end» := n_leaves } seed
       sk_seed ht_idx tree_idx stack stack_heights 0#usize
-  massert (sp = 1#usize)
-  let right_val ← lift (UScalar.cast .U32 params.A)
-  let left_val ← Array.index_usize stack_heights1 0#usize
-  massert (left_val = right_val)
   Array.index_usize stack1 0#usize
 
 end sphincs_c10

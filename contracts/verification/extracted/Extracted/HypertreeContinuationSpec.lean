@@ -29,8 +29,7 @@ theorem rawLayerPrefix_step (seed : Std.Array Std.U8 32#usize) (sig : C10Signatu
 theorem firmware_verify_hypertree_loop (seed : Std.Array Std.U8 32#usize)
     (sig : C10Signature) (current : Std.Array Std.U8 16#usize) (idx : Std.U32) :
     hypertree.verify_loop3 {start := 0#u32, «end» := 2#u32} sig seed 2336#usize current idx
-      ⦃ r => r.1 = 4008#usize ∧
-        toSpecNode r.2 = rawHypertreeRoot seed sig idx.val (toSpecNode current) ⦄ := by
+      ⦃ r => toSpecNode r = rawHypertreeRoot seed sig idx.val (toSpecNode current) ⦄ := by
   unfold hypertree.verify_loop3
   apply loop.spec_decr_nat
     (measure := fun s : core.ops.range.Range Std.U32 × Std.Usize × Std.Array Std.U8 16#usize × Std.U32 =>
@@ -48,7 +47,6 @@ theorem firmware_verify_hypertree_loop (seed : Std.Array Std.U8 32#usize)
       rcases hpost with ⟨ho, _⟩ | ⟨l, it', heq, hl, hlt, hend', hstart'⟩
       · subst ho
         simp only [WP.spec_ok]
-        refine ⟨UScalar.eq_of_val_eq (by scalar_tac), ?_⟩
         simpa only [hd, rawLayerPrefix, Nat.reduceEqDiff, if_false] using hnode
       · omega
     · have hl : it.start.val < 2 := by omega
@@ -112,7 +110,7 @@ theorem verifier_signature_len : params.SIGNATURE_LEN ⦃ r => r = 4008#usize �
   simp only [params.L, params.N, params.H, params.D, params.K, params.A, params.SIG_R]
   step* <;> first | scalar_tac | skip
 
-/-- The full remaining caller terminates, checks the exact final offset and
+/-- The full release caller terminates after the proved exact layout and
     returns precisely the root comparison of the two specified layers. -/
 theorem firmware_verifier_hypertree_continuation (seed : Std.Array Std.U8 32#usize)
     (root current : Std.Array Std.U8 16#usize) (sig : C10Signature) (idx : Std.U32) :
@@ -124,10 +122,7 @@ theorem firmware_verifier_hypertree_continuation (seed : Std.Array Std.U8 32#usi
     rw [UScalar.cast_val_eq]
     decide
   simp only [params.D, lift, hc]
-  let* ⟨off, node, ho, hn⟩ ← firmware_verify_hypertree_loop seed sig current idx
-  let* ⟨len, hlen⟩ ← verifier_signature_len
-  rw [ho, hlen]
-  step
+  let* ⟨node, hn⟩ ← firmware_verify_hypertree_loop seed sig current idx
   let* ⟨b, hb⟩ ← verifier_node_compare node root
   apply Bool.eq_iff_iff.mpr
   simp only [decide_eq_true_eq]

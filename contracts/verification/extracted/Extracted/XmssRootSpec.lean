@@ -171,7 +171,8 @@ theorem xmss_root_stack_update (seed sk : Std.Array Std.U8 32#usize) (layer : St
     exact hstack p (by omega)
 
 /-- All 512 leaves are processed. The final frontier consists of the height-9
-    root alone, so both extracted debug assertions and the final access hold. -/
+    root alone. The release loop returns only the node stack; the frontier
+    invariant still establishes its final access without a runtime assertion. -/
 theorem xmss_root_loop_spec (seed sk : Std.Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)
     (progress : hypertree.ProgressSink) (pct_lo pct_hi : Std.U8) (n_leaves : Std.Usize)
     (iter : core.ops.range.Range Std.Usize)
@@ -181,8 +182,7 @@ theorem xmss_root_loop_spec (seed sk : Std.Array Std.U8 32#usize) (layer : Std.U
     (hsp : sp.val = (xmssRootSlots iter.start.val).length)
     (hstack : xmssRootStack seed sk layer tree iter.start.val stack heights) :
     merkle.compute_subtree_root_loop0 iter seed sk layer tree progress pct_lo pct_hi n_leaves stack heights sp
-      ⦃ r => r.2.2.val = 1 ∧ r.2.1.val[0]!.val = 9 ∧
-        r.1.val[0]! = xmssRootNode seed sk layer tree 9 0 ⦄ := by
+      ⦃ r => r.val[0]! = xmssRootNode seed sk layer tree 9 0 ⦄ := by
   unfold merkle.compute_subtree_root_loop0
   apply loop.spec_decr_nat
     (measure := fun (s : core.ops.range.Range Std.Usize ×
@@ -204,7 +204,7 @@ theorem xmss_root_loop_spec (seed sk : Std.Array Std.U8 32#usize) (layer : Std.U
       have hx := hst 0 (by simp [hit])
       simp only [hit, xmssRootSlots_final, List.length_singleton, List.getElem!_cons_zero] at hx hsp0
       simp only [WP.spec_ok]
-      exact ⟨hsp0, hx⟩
+      exact hx.2
     · simp only [Prod.mk.injEq] at heq
       obtain ⟨rfl, rfl⟩ := heq
       have hjv : j.val = it.start.val := by rw [hj]
@@ -267,18 +267,14 @@ theorem xmss_root_loop_spec (seed sk : Std.Array Std.U8 32#usize) (layer : Std.U
     simp only [Usize.size, Usize.numBits]
     rcases System.Platform.numBits_eq with hb | hb <;>
       norm_num [Nat.shiftLeft_eq, UScalarTy.numBits, hb, x_post]
-  let* ⟨stack, heights, sp, hsp, hh, hroot⟩ ← xmss_root_loop_spec seed sk layer tree progress pct_lo pct_hi n_leaves
+  let* ⟨stack, hroot⟩ ← xmss_root_loop_spec seed sk layer tree progress pct_lo pct_hi n_leaves
     { start := 0#usize, «end» := n_leaves }
     (Array.repeat 10#usize (Array.repeat 16#usize 0#u8))
     (Array.repeat 10#usize 0#u32) 0#usize hn hn (by simp) (by simp)
     (by intro p hp; simpa using hp)
-  have hsp1 : sp = 1#usize := by apply UScalar.eq_of_val_eq; exact hsp
   step* <;> first | scalar_tac | skip
-  · apply UScalar.eq_of_val_eq
-    rw [left_val_post, ← getElem!_pos heights.val 0 (by simpa using heights.property)]
-    simpa [right_val_post, UScalar.cast_val_eq, i_post] using hh
-  · rw [r_post, ← getElem!_pos stack.val 0 (by simpa using stack.property)]
-    exact hroot
+  rw [r_post, ← getElem!_pos stack.val 0 (by simpa using stack.property)]
+  exact hroot
 
 /-- The public key uses the top layer/tree and pads the public seed exactly. -/
 @[step] theorem xmss_compute_pk_root_spec (sk : Std.Array Std.U8 32#usize)

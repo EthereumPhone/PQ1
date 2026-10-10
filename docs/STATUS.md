@@ -98,8 +98,15 @@ all four signer debug assertions disabled has an unconditional pure Result
 relation (2026-10-10). For a root returned by the extracted key-generation call,
 it agrees with the checked caller, including all bounded failures. For arbitrary
 roots the exact relation retains the checked caller's final root guard.
-This release-configured caller still uses the existing opaque helper/backend
-models; equivalence of every release-compiled dependency is not established.
+All 20 registered C10 component extractions now also disable debug assertions
+and retain overflow checks (2026-10-10). Six generated bodies change; their
+bit-window, tree-root, authentication-path, shuffle and whole-verifier proofs
+have been re-established on the release bodies. The other 14 complete raw
+outputs are byte-identical. The 210 audited headlines now comprise 201 with
+only kernel axioms and nine with the existing disclosed hash assumptions;
+none consumes the assertion-formatting type. The helper assertion-profile
+mismatch is closed for these registered components. Concrete hash backends,
+shuffle sub-seed modeling and callback/erasure effects remain explicit boundaries.
 Four host build configurations compare all 4,008 output bytes in both OptRand
 modes and distinguish checked root-mismatch panic from release output rejected
 by verification. The secure wrapper's double-sign/compare/verify/CFI release

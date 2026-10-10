@@ -486,6 +486,8 @@
       "id": "verify-extract-differential",
       "make": "make -C contracts/verification verify-extract-differential",
       "polices_paths": [
+        "Cargo.toml",
+        "Cargo.lock",
         "contracts/verification/extracted/**",
         "fw-manifest/src/**",
         "contracts/verification/scripts/test_sign_forest_proof_controls.py",
@@ -525,6 +527,8 @@
       "id": "verify-extraction-freshness",
       "make": "make -C contracts/verification verify-extraction-freshness",
       "polices_paths": [
+        "Cargo.toml",
+        "Cargo.lock",
         "contracts/verification/extracted/**",
         "contracts/verification/extraction_registry.json",
         "contracts/verification/Makefile",

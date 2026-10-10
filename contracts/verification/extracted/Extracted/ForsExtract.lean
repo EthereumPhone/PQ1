@@ -223,8 +223,6 @@ theorem read_bits_le_spec (digest : Std.Array Std.U8 32#usize)
     fors.read_bits_le digest bit_offset num_bits
       ⦃ r => r.val = (digestWord digest >>> bit_offset.val) % 2 ^ num_bits.val ⦄ := by
   unfold fors.read_bits_le
-  let* ⟨_, _⟩ ← massert_spec
-  let* ⟨_, _⟩ ← massert_spec
   let* ⟨i, hi⟩ ← Std.Usize.div_spec
   let* ⟨byte_start, hbsv, hile⟩ ← Std.Usize.sub_spec
   let* ⟨bib, hbib⟩ ← Std.Usize.rem_spec

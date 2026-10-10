@@ -18,14 +18,12 @@
 #   keccak256_pure            aa/userop keccak (UserOp/FunsExternal.lean:14)
 #   sha256_pure_bytes         slot KDF single-shot SHA-256 (SlotKdf/FunsExternal.lean:27)
 #   hmac_sha512_pure_bytes    bip39 seed HMAC-SHA512 (SlotKdf/FunsExternal.lean:41)
-#   Aeneas.Std.core.fmt.Formatter   opaque Type in debug-panic formatting (Aeneas/Std/Core/Fmt.lean).
-#     Already present in the 27-axiom environment. The XMSS valid-leaf proof
-#     makes the formatting branch unreachable; this is not a formatting or
-#     error-message correctness claim. Pin the syntactic dependency exactly.
+#   The release helper proofs consume no opaque debug-panic Formatter type.
+#     Formatter remains in the dependency environment but no headline closure.
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
-# Regenerate/verify against a fresh dump with the same 5-bucket structure:
-#   170 kernel-only + 31 Formatter + 4 sha256_pure_bytes
+# Regenerate/verify against a fresh dump with the same 4-bucket structure:
+#   201 kernel-only + 4 sha256_pure_bytes
 #   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 210 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
@@ -208,12 +206,12 @@ Extracted.Equiv.firmware_pk_root_matches_vendored
 
 # XMSS authentication paths and actual-helper membership composition.
 Extracted.Equiv.xmss_auth_leaf_schedule
-Extracted.Equiv.xmss_build_auth_spec  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.xmss_build_auth_spec
 Extracted.Equiv.xmss_auth_path_matches_vendored
-Extracted.Equiv.firmware_xmss_auth_matches_vendored  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_xmss_auth_matches_vendored
 Extracted.Equiv.xmss_auth_recovery_root
-Extracted.Equiv.firmware_xmss_build_recover_root  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_xmss_build_recover_matches_vendored  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_xmss_build_recover_root
+Extracted.Equiv.firmware_xmss_build_recover_matches_vendored
 
 Extracted.Equiv.shuffle_permutation_spec
 Extracted.Equiv.wots_sign_first_success
@@ -228,7 +226,7 @@ Extracted.Equiv.signer_fors_phase_spec
 Extracted.Equiv.firmware_sign_fors_recovers_pk
 Extracted.Equiv.firmware_sign_fors_shuffle_independent
 Extracted.Equiv.firmware_sign_fors_matches_vendored
-Extracted.Equiv.firmware_sign_fors_prefix  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_fors_prefix
 
 # Actual signature byte writers, parser correspondence and signer caller factoring.
 Extracted.Equiv.firmware_write16
@@ -239,20 +237,20 @@ Extracted.Equiv.firmware_write_xmss_path
 Extracted.Equiv.firmware_write_count
 Extracted.Equiv.firmware_serialize_forest
 Extracted.Equiv.serializedForest_fields
-Extracted.Equiv.firmware_signer_forest_serialization  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_signer_forest_serialization
 Extracted.Equiv.firmware_serialize_layer
 Extracted.Equiv.serializedLayer_fields
-Extracted.Equiv.signer_layer_serialization_factor  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.signer_layer_serialization_factor
 Extracted.Equiv.firmware_serialize_layer_at_params
 
 Extracted.Equiv.firmware_wots_sign_pure
-Extracted.Equiv.firmware_xmss_signing_path  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_layer_body  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_hypertree_loop  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_hypertree_success  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_hypertree_top_root  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_signer_hypertree_suffix  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_signer_after_forest_pure  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_xmss_signing_path
+Extracted.Equiv.firmware_sign_layer_body
+Extracted.Equiv.firmware_sign_hypertree_loop
+Extracted.Equiv.firmware_sign_hypertree_success
+Extracted.Equiv.firmware_sign_hypertree_top_root
+Extracted.Equiv.firmware_signer_hypertree_suffix
+Extracted.Equiv.firmware_signer_after_forest_pure
 Extracted.Equiv.signer_root_check_match
 
 # Actual nonce/header and complete functional signer, preserving failure.
@@ -263,24 +261,24 @@ Extracted.Equiv.firmware_sign_header_tail
 Extracted.Equiv.header_indices_bound
 Extracted.Equiv.grind_header_forced_zero
 Extracted.Equiv.serialized_nonce_decodes
-Extracted.Equiv.firmware_sign_whole_pure  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_whole_shuffle_independent  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_nonce_exhausted  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_whole_pure
+Extracted.Equiv.firmware_sign_whole_shuffle_independent
+Extracted.Equiv.firmware_sign_nonce_exhausted
 Extracted.Equiv.signer_root_check_success
-Extracted.Equiv.firmware_sign_whole_success  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_whole_success
 
 # Release-configured caller; existing opaque helper/backend boundaries retained.
-Extracted.Equiv.release_layer_body_projection  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_release_sign_loop_step  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_release_sign_loop_done  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_release_sign_hypertree_loop  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.release_caller_factor  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.release_after_forest_pure  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_release_pure  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.whole_sign_nodes_root  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.release_layer_body_projection
+Extracted.Equiv.firmware_release_sign_loop_step
+Extracted.Equiv.firmware_release_sign_loop_done
+Extracted.Equiv.firmware_release_sign_hypertree_loop
+Extracted.Equiv.release_caller_factor
+Extracted.Equiv.release_after_forest_pure
+Extracted.Equiv.firmware_sign_release_pure
+Extracted.Equiv.whole_sign_nodes_root
 Extracted.Equiv.checked_whole_nodes_factor
-Extracted.Equiv.firmware_sign_checked_release_relation  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_release_valid_key  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_keygen_sign_release  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_release_shuffle_independent  Aeneas.Std.core.fmt.Formatter
-Extracted.Equiv.firmware_sign_release_nonce_exhausted  Aeneas.Std.core.fmt.Formatter
+Extracted.Equiv.firmware_sign_checked_release_relation
+Extracted.Equiv.firmware_sign_release_valid_key
+Extracted.Equiv.firmware_keygen_sign_release
+Extracted.Equiv.firmware_sign_release_shuffle_independent
+Extracted.Equiv.firmware_sign_release_nonce_exhausted

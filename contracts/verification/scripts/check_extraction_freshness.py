@@ -70,6 +70,8 @@ import hashlib
 import json
 import re
 import sys
+import shlex
+import tomllib
 from pathlib import Path, PurePosixPath
 
 VERIF_DIR = Path(__file__).resolve().parents[1]
@@ -248,7 +250,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "198970b7a5c317b745291470fbbdae7fdc7261cfe123af84baf691a49cde0a07"
+REGISTRY_BINDING_SHA256 = "da67bacbbf37cf916553fd213127855f9677bd3866903afd914e008ea4d914ab"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")
@@ -417,6 +419,50 @@ def max_attempts_consistency_errors(
     return []
 
 
+def c10_profile_errors(make_text: str | None = None, cargo_text: str | None = None) -> list[str]:
+    """Bind the extracted MIR assertion/overflow modes to the intended callers.
+
+    This is a configuration tripwire, not a compiler-correctness proof. The
+    checked signer caller is retained solely for its explicit comparison theorem.
+    Every registered C10 component and the release caller use assertions off.
+    """
+    make_text = make_text if make_text is not None else (VERIF_DIR / "Makefile").read_text()
+    cargo_text = cargo_text if cargo_text is not None else (REPO_ROOT / "Cargo.toml").read_text()
+    errors = []
+    for target, (rust_paths, _) in REQUIRED_ENTRY_PATHS.items():
+        if not rust_paths[0].startswith("sphincs-c10/"):
+            continue
+        mode = "on" if target == "extract-sign-forest" else "off"
+        blocks = re.findall(r"(?ms)^_" + re.escape(target) + r"-impl:\n(.*?)(?=\n\n|\Z)", make_text)
+        if len(blocks) != 1:
+            errors.append(f"{target}: missing/duplicate extraction recipe")
+            continue
+        block = blocks[0]
+        commands = re.findall(r"\$\(PQLEAN\)/charon (.*?) 2>&1", block, re.S)
+        if len(commands) != 1:
+            errors.append(f"{target}: missing/duplicate Charon command")
+            continue
+        try:
+            args = shlex.split(commands[0].replace("\\\n", " "))
+        except ValueError:
+            errors.append(f"{target}: malformed Charon arguments")
+            continue
+        profile_args = [a for a in args if "debug-assertions" in a or "overflow-checks" in a]
+        expected = [f"--rustc-arg=-Cdebug-assertions={mode}", "--rustc-arg=-Coverflow-checks=on"]
+        if profile_args != expected:
+            errors.append(f"{target}: expected exact assertion/overflow flags {expected}, got {profile_args}")
+    try:
+        profile = tomllib.loads(cargo_text)["profile"]["release"]
+        if profile.get("debug-assertions", False) is not False or profile.get("overflow-checks") is not True:
+            errors.append("Cargo release must disable debug assertions and enable overflow checks")
+        for name, override in profile.get("package", {}).items():
+            if "debug-assertions" in override or "overflow-checks" in override:
+                errors.append(f"Cargo package profile {name}: assertion/overflow override requires review")
+    except (tomllib.TOMLDecodeError, KeyError, TypeError) as exc:
+        errors.append(f"Cargo release profile unreadable: {exc}")
+    return errors
+
+
 def evaluate(reg: dict) -> tuple[list[str], list[str], list[str], int, int]:
     """The check core, against an in-memory registry dict (self_test passes mutated
     copies here — the real extraction_registry.json is never touched).
@@ -428,6 +474,7 @@ def evaluate(reg: dict) -> tuple[list[str], list[str], list[str], int, int]:
 
     try:
         floor_fails.extend(max_attempts_consistency_errors())
+        floor_fails.extend(c10_profile_errors())
     except OSError as exc:
         floor_fails.append(f"PinState MAX_ATTEMPTS cross-check unreadable: {exc}")
 
@@ -710,6 +757,29 @@ def self_test() -> int:
     reg = load_registry()
     fw = next(e for e in reg["entries"] if e["target"] == "extract-fwmanifest-preimage")
     ok = True
+
+    make_text = (VERIF_DIR / "Makefile").read_text()
+    cargo_text = (REPO_ROOT / "Cargo.toml").read_text()
+    if c10_profile_errors(make_text, cargo_text):
+        print("  FAIL: clean C10 extraction/release profile check")
+        ok = False
+    else:
+        controls = [
+            make_text.replace("--rustc-arg=-Cdebug-assertions=off", "--rustc-arg=-Cdebug-assertions=on", 1),
+            make_text.replace("--rustc-arg=-Cdebug-assertions=off", "", 1),
+            make_text.replace("--rustc-arg=-Coverflow-checks=on", "--rustc-arg=-Coverflow-checks=off", 1),
+            make_text.replace("--rustc-arg=-Coverflow-checks=on", "", 1),
+            make_text.replace("--rustc-arg=-Coverflow-checks=on", "--rustc-arg=-Coverflow-checks=on --rustc-arg=-Coverflow-checks=off", 1),
+            make_text.replace("--rustc-arg=-Cdebug-assertions=on", "--rustc-arg=-Cdebug-assertions=off", 1),
+        ]
+        rejected = all(c10_profile_errors(value, cargo_text) for value in controls)
+        rejected = rejected and bool(c10_profile_errors(make_text, cargo_text.replace("overflow-checks = true", "overflow-checks = false")))
+        rejected = rejected and bool(c10_profile_errors(make_text, cargo_text + '\n[profile.release.package."profile-probe"]\ndebug-assertions = false\n'))
+        if rejected:
+            print("  ok: eight wrong/missing/conflicting C10 profile controls rejected")
+        else:
+            print("  FAIL: a C10 profile control survived")
+            ok = False
 
     if registry_binding(reg) == REGISTRY_BINDING_SHA256:
         print("  ok: clean registry matches its checker-owned integrity binding")

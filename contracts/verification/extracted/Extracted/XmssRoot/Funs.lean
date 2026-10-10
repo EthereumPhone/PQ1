@@ -97,14 +97,13 @@ def merkle.compute_subtree_root_loop0.body
   (stack : Array (Array Std.U8 16#usize) 10#usize)
   (stack_heights : Array Std.U32 10#usize) (sp : Std.Usize) :
   Result (ControlFlow ((core.ops.range.Range Std.Usize) × (Array (Array Std.U8
-    16#usize) 10#usize) × (Array Std.U32 10#usize) × Std.Usize) ((Array
-    (Array Std.U8 16#usize) 10#usize) × (Array Std.U32 10#usize) ×
-    Std.Usize))
+    16#usize) 10#usize) × (Array Std.U32 10#usize) × Std.Usize) (Array (Array
+    Std.U8 16#usize) 10#usize))
   := do
   let (o, iter1) ←
     core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
   match o with
-  | none => ok (done (stack, stack_heights, sp))
+  | none => ok (done stack)
   | some kp =>
     let i ← lift (UScalar.cast .U32 kp)
     let node ← wots.keygen_pk seed sk_seed layer tree i
@@ -147,8 +146,7 @@ def merkle.compute_subtree_root_loop0
   (progress : hypertree.ProgressSink) (pct_lo : Std.U8) (pct_hi : Std.U8)
   (n_leaves : Std.Usize) (stack : Array (Array Std.U8 16#usize) 10#usize)
   (stack_heights : Array Std.U32 10#usize) (sp : Std.Usize) :
-  Result ((Array (Array Std.U8 16#usize) 10#usize) × (Array Std.U32 10#usize)
-    × Std.Usize)
+  Result (Array (Array Std.U8 16#usize) 10#usize)
   := do
   loop
     (fun (iter1, stack1, stack_heights1, sp1) =>
@@ -169,15 +167,10 @@ def merkle.compute_subtree_root
   let a := Array.repeat 16#usize 0#u8
   let stack := Array.repeat 10#usize a
   let stack_heights := Array.repeat 10#usize 0#u32
-  let (stack1, stack_heights1, sp) ←
+  let stack1 ←
     merkle.compute_subtree_root_loop0 { start := 0#usize, «end» := n_leaves }
       seed sk_seed layer tree progress pct_lo pct_hi n_leaves stack
       stack_heights 0#usize
-  massert (sp = 1#usize)
-  let i ← params.SUBTREE_H
-  let right_val ← lift (UScalar.cast .U32 i)
-  let left_val ← Array.index_usize stack_heights1 0#usize
-  massert (left_val = right_val)
   Array.index_usize stack1 0#usize
 
 /-- [sphincs_c10::hypertree::compute_pk_root_inner]:

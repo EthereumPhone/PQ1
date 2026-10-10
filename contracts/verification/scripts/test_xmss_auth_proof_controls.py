@@ -34,7 +34,7 @@ FAMILIES = {
         ("returned-root", "Array.index_usize stack1 0#usize", "Array.index_usize stack1 1#usize"),
         ("copy-read", "let a ← Array.index_usize keep h", "let a ← Array.index_usize keep 0#usize"),
         ("copy-write", "Array.update auth_path h a", "Array.update auth_path 0#usize a"),
-        ("copy-assertion", "if b\n    then\n      let a ← Array.index_usize keep h", "if !b\n    then\n      let a ← Array.index_usize keep h"),
+        ("copy-skip-first", "merkle.build_subtree_with_auth_loop1.body keep\n      iter1 auth_path1", "merkle.build_subtree_with_auth_loop1.body keep\n      {start := 1#usize, «end» := iter1.«end»} auth_path1"),
         ("copy-length", "{ start := 0#usize, «end» := i }", "{ start := 0#usize, «end» := 8#usize }"),
         ("returned-path", "ok (auth_path1, root)", "ok (auth_path, root)"),
     ]),

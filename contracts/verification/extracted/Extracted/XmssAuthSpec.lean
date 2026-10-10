@@ -147,8 +147,8 @@ theorem xmss_auth_loop_spec (seed sk : Std.Array Std.U8 32#usize)
     (hstack : xmssRootStack seed sk layer tree iter.start.val stack heights) :
     merkle.build_subtree_with_auth_loop0 iter seed sk layer tree leaf progress pct_lo pct_hi
       n_leaves stack heights sp keep flags ⦃ r =>
-        r.2.1.val = 1 ∧ r.1.val[0]! = xmssRootNode seed sk layer tree 9 0 ∧
-        xmssAuthKeepAt seed sk layer tree leaf.val 512 0 r.2.2.1 r.2.2.2 ⦄ := by
+        r.1.val[0]! = xmssRootNode seed sk layer tree 9 0 ∧
+        ∃ finalFlags, xmssAuthKeepAt seed sk layer tree leaf.val 512 0 r.2 finalFlags ⦄ := by
   unfold merkle.build_subtree_with_auth_loop0
   apply loop.spec_decr_nat
     (measure := fun (s : core.ops.range.Range Std.Usize ×
@@ -173,7 +173,7 @@ theorem xmss_auth_loop_spec (seed sk : Std.Array Std.U8 32#usize)
       have hx := hst 0 (by simp [hit])
       simp only [hit, xmssRootSlots_final, List.length_singleton, List.getElem!_cons_zero] at hx hsp0
       simp only [WP.spec_ok]
-      exact ⟨hsp0, hx.2, by simpa [hit] using hap⟩
+      exact ⟨hx.2, marked, by simpa [hit] using hap⟩
     · simp only [Prod.mk.injEq] at heq
       obtain ⟨rfl, rfl⟩ := heq
       have hjv : j.val = it.start.val := by rw [hj]
@@ -224,11 +224,10 @@ theorem xmss_auth_loop_spec (seed sk : Std.Array Std.U8 32#usize)
 
 theorem xmss_auth_copy_spec
     (keep auth : Std.Array (Std.Array Std.U8 16#usize) 9#usize)
-    (flags : Std.Array Bool 9#usize) (iter : core.ops.range.Range Std.Usize)
-    (hflags : ∀ k, k < 9 → flags.val[k]! = true)
+    (iter : core.ops.range.Range Std.Usize)
     (hend : iter.«end».val = 9) (hle : iter.start.val ≤ 9)
     (hp : ∀ k, k < iter.start.val → auth.val[k]! = keep.val[k]!) :
-    merkle.build_subtree_with_auth_loop1 iter auth keep flags ⦃ out => out = keep ⦄ := by
+    merkle.build_subtree_with_auth_loop1 iter auth keep ⦃ out => out = keep ⦄ := by
   unfold merkle.build_subtree_with_auth_loop1
   apply loop.spec_decr_nat
     (measure := fun (s : core.ops.range.Range Std.Usize ×
@@ -257,11 +256,6 @@ theorem xmss_auth_copy_spec
       obtain ⟨rfl, rfl⟩ := heq
       have hjv : j.val = it.start.val := by rw [hj]
       have hjb : j.val < 9 := by omega
-      let* ⟨b, hb⟩ ← Array.index_usize_spec flags j (by scalar_tac)
-      have htrue : b = true := by
-        have hsz : flags.val.length = 9 := by simpa using flags.property
-        rw [hb, ← getElem!_pos flags.val j.val (by omega), hflags j.val hjb]
-      simp only [htrue, Bool.true_eq, ↓reduceIte]
       let* ⟨node, hn⟩ ← Array.index_usize_spec keep j (by scalar_tac)
       let* ⟨out, hout⟩ ← Array.update_spec ap j node (by scalar_tac)
       refine ⟨by rw [hend']; exact he, by omega, ?_, by omega⟩
@@ -300,7 +294,7 @@ theorem xmss_auth_copy_spec
     simp only [Usize.size, Usize.numBits]
     rcases System.Platform.numBits_eq with hb | hb <;>
       norm_num [Nat.shiftLeft_eq, UScalarTy.numBits, hb, x_post]
-  let* ⟨stack, sp, keep, flags, hsp, hroot, hkeep⟩ ←
+  let* ⟨stack, keep, hroot, flags, hkeep⟩ ←
     xmss_auth_loop_spec seed sk layer leaf tree progress pct_lo pct_hi n_leaves
       { start := 0#usize, «end» := n_leaves }
       (Array.repeat 10#usize (Array.repeat 16#usize 0#u8))
@@ -309,12 +303,11 @@ theorem xmss_auth_copy_spec
       hleaf (xmss_auth_keep_initial seed sk layer tree leaf.val _) hn hn
       (by simp) (by simp) (by intro p hp; simpa using hp)
   have hfinal := xmss_auth_keep_final seed sk layer tree leaf.val keep flags hleaf hkeep
-  have hsp1 : sp = 1#usize := by apply UScalar.eq_of_val_eq; exact hsp
   step* <;> first | scalar_tac | skip
   let* ⟨path, hpath⟩ ← xmss_auth_copy_spec keep
-    (Array.repeat 9#usize (Array.repeat 16#usize 0#u8)) flags
+    (Array.repeat 9#usize (Array.repeat 16#usize 0#u8))
     { start := 0#usize, «end» := i }
-    (fun k hk => (hfinal k hk).1) (by scalar_tac) (by simp) (by intro k hk; simp at hk)
+    (by scalar_tac) (by simp) (by intro k hk; simp at hk)
   constructor
   · rw [root_post, ← getElem!_pos stack.val 0 (by simpa using stack.property)]
     exact hroot

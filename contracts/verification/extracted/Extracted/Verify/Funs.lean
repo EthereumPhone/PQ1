@@ -336,12 +336,12 @@ def hypertree.verify_loop3.body
   (iter : core.ops.range.Range Std.U32) (offset : Std.Usize)
   (current_node : Array Std.U8 16#usize) (idx_tree : Std.U32) :
   Result (ControlFlow ((core.ops.range.Range Std.U32) × Std.Usize × (Array
-    Std.U8 16#usize) × Std.U32) (Std.Usize × (Array Std.U8 16#usize)))
+    Std.U8 16#usize) × Std.U32) (Array Std.U8 16#usize))
   := do
   let (o, iter1) ←
     core.iter.range.IteratorRange.next U32.Insts.CoreIterRangeStep iter
   match o with
-  | none => ok (done (offset, current_node))
+  | none => ok (done current_node)
   | some layer =>
     let i ← params.SUBTREE_H
     let i1 ← 1#u32 <<< i
@@ -384,7 +384,7 @@ def hypertree.verify_loop3
   (iter : core.ops.range.Range Std.U32) (sig : Array Std.U8 4008#usize)
   (seed : Array Std.U8 32#usize) (offset : Std.Usize)
   (current_node : Array Std.U8 16#usize) (idx_tree : Std.U32) :
-  Result (Std.Usize × (Array Std.U8 16#usize))
+  Result (Array Std.U8 16#usize)
   := do
   loop
     (fun (iter1, offset1, current_node1, idx_tree1) =>
@@ -446,11 +446,9 @@ def hypertree.verify
     let fors_roots2 ← Array.update fors_roots1 i1 a6
     let fors_pk ← fors.compute_fors_pk seed ht_idx fors_roots2
     let i5 ← lift (UScalar.cast .U32 params.D)
-    let (offset2, current_node) ←
+    let current_node ←
       hypertree.verify_loop3 { start := 0#u32, «end» := i5 } sig seed offset1
         fors_pk ht_idx
-    let right_val ← params.SIGNATURE_LEN
-    massert (offset2 = right_val)
     core.array.equality.PartialEqArray.eq core.cmp.PartialEqU8 current_node
       pk_root
 

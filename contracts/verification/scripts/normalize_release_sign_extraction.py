@@ -3,7 +3,8 @@
 
 The input is fresh Aeneas output with debug assertions disabled, after the same
 parameter/range-trait deduplication used by SignForest. No expression, guard or
-return value is rewritten. Opaque dependencies keep their existing models.
+return value is rewritten. Opaque dependencies share the separately extracted helper bodies; backend
+models remain explicit.
 """
 import hashlib
 import json

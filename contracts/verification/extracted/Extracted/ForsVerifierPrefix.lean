@@ -67,11 +67,9 @@ def verifierAfterHead (seed : Std.Array Std.U8 32#usize) (pk_root : Std.Array St
     let fors_roots2 ← Array.update fors_roots1 i1 a6
     let fors_pk ← fors.compute_fors_pk seed ht_idx fors_roots2
     let i5 ← lift (UScalar.cast .U32 params.D)
-    let (offset2, current_node) ←
+    let current_node ←
       hypertree.verify_loop3 { start := 0#u32, «end» := i5 } sig seed offset1
         fors_pk ht_idx
-    let right_val ← params.SIGNATURE_LEN
-    massert (offset2 = right_val)
     core.array.equality.PartialEqArray.eq core.cmp.PartialEqU8 current_node
       pk_root
 
@@ -80,11 +78,9 @@ def verifierAfterHead (seed : Std.Array Std.U8 32#usize) (pk_root : Std.Array St
 def verifierHypertreeContinuation (seed : Std.Array Std.U8 32#usize) (pk_root : Std.Array Std.U8 16#usize)
     (sig : C10Signature) (fors_pk : Std.Array Std.U8 16#usize) (ht_idx : Std.U32) : Result Bool := do
   let i5 ← lift (UScalar.cast .U32 params.D)
-  let (offset2, current_node) ←
+  let current_node ←
     hypertree.verify_loop3 { start := 0#u32, «end» := i5 } sig seed 2336#usize
       fors_pk ht_idx
-  let right_val ← params.SIGNATURE_LEN
-  massert (offset2 = right_val)
   core.array.equality.PartialEqArray.eq core.cmp.PartialEqU8 current_node
     pk_root
 

@@ -213,7 +213,6 @@ theorem shuffle_initialized_permutation (n : Nat) (a : Std.Array Std.U8 64#usize
     (n : Std.Usize) (hn : n.val ≤ 64) :
     shuffle.fisher_yates seed n ⦃ r => shufflePermutation n.val r ⦄ := by
   unfold shuffle.fisher_yates
-  simp only [massert, if_pos (show n ≤ 64#usize from by scalar_tac), bind_tc_ok]
   let* ⟨initial, hi⟩ ← shuffle_init_spec n 0#usize (Array.repeat 64#usize 0#u8)
     hn (by simp) (by
       intro j hj

@@ -30,6 +30,8 @@ on:
   push:
     branches: [master]
     paths: &extracted_paths
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'contracts/verification/scripts/test_xmss_root_proof_controls.py'
       - 'contracts/verification/scripts/test_xmss_root_vendored_spec.py'
       - 'contracts/verification/scripts/test_xmss_auth_proof_controls.py'

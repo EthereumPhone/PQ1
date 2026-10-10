@@ -1,3 +1,3 @@
-/- Release-caller extraction reuses the existing opaque component models.
-   This is not release-configuration correspondence for those dependencies. -/
+/- Release caller and registered C10 helpers use assertion-off extraction.
+   Hash backend, shuffle sub-seed, callback and erasure models remain explicit. -/
 import Extracted.SignForest.FunsExternal

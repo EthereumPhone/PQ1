@@ -925,6 +925,33 @@ one SHA-256/HMAC and four Keccak closures; the 27-axiom environment is unchanged
 Production Rust is unchanged. This retires the caller's debug-assertion mismatch
 as an unmodeled step, not the remaining runtime or cross-language session limits.
 
+Release component configuration (2026-10-10): all 20 registered C10 component
+extraction recipes now explicitly set `debug-assertions=off` and
+`overflow-checks=on`. The checked signer caller remains explicitly assertion-on
+for its comparison theorem; the independently generated release caller remains
+off. Fresh generation changes six bodies: digest-bit extraction, FORS roots,
+XMSS roots, XMSS authentication capture/copy, shuffle, and the complete verifier.
+The other fourteen complete raw module sets are identical to their previous
+pinned output. The existing functional statements are re-proved against the
+release bodies. Tree frontier and path-capture invariants establish the required
+bounds and values without runtime debug assertions. Loop outputs that existed
+only for assertions are no longer exposed; exact layout remains in the loop
+invariants and parser specifications. The top-level signer and verifier claims
+retain their previous inputs, failure behavior and scope.
+
+This supersedes the helper assertion-profile limitation above for the registered
+C10 components. It is not a proof of RustCrypto, hardware SHA, compiler lowering,
+physical erasure, progress callbacks or the modeled shuffle sub-seed backend.
+The total audited headline count remains **210**; removing the formatting path
+removes the opaque Formatter dependency from 31 closures, leaving **201
+kernel-only**, four SHA-256, one SHA-256/HMAC and four Keccak closures. The exact
+27-axiom environment is unchanged. Typed tree/path/verifier mutation controls now
+exercise the release bodies, including path copying without its removed debug
+guard. The extraction freshness gate rejects missing, reversed or conflicting
+profile flags and incompatible Cargo release overrides. Root Cargo profile and
+lockfile changes trigger the blocking extraction/profile checks. No production
+Rust or byte format changes in this batch.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

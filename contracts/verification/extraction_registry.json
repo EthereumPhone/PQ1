@@ -198,12 +198,12 @@
       "generated_lean_sha256": [
         "36ff1ffad031e110ec18d751406cf2c038a25fab89487d979e4d3831f9c6603b",
         "f02e6cf5966452496932a1d027ea58af8c72d6c7033f9c85b51a5eea300982f5",
-        "e94d0e3c500bebe6e30907100e0725b46881b402ff983af170b089263094d1d3"
+        "53094f77fc69df10b3f8a3b4ef560ab27f7f09c37d602f5e6c9b9dc7c413d879"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/SignReleaseSpec.lean",
       "headline_theorem": "firmware_sign_release_pure",
       "fresh": true,
-      "note": "Caller MIR with debug assertions disabled and overflow checking enabled. Shared opaque helper/backend models are NOT release-configuration equivalence proofs."
+      "note": "Caller MIR and registered C10 helpers use debug assertions disabled and overflow checking enabled. Hash backend, shuffle sub-seed, callback and erasure models remain explicit."
     },
     {
       "target": "extract-sign-forest",
@@ -259,7 +259,7 @@
         "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "d57fe87f51f5262b9769f46e777b4b615a8850050a756681ff92ebf2527f6dc4",
+        "Funs.lean": "d73dad3fca2dd1718013facb86912ab00cfa85e6b028d44c085bad86730dfb70",
         "Types.lean": "f76039f8a48fb9021879686236722086b4ab85aa49aa9ca60518b9ceeb4f4cf4",
         "FunsExternal_Template.lean": "13c7d24bd20a930751d5d7f3446f177fa5fbd0fd9649956b7b5233e32f9a1c3e"
       },
@@ -269,13 +269,14 @@
         "contracts/verification/extracted/Extracted/Shuffle/FunsExternal.lean"
       ],
       "generated_lean_sha256": [
-        "ae4784f7df5ff79e516de19f0be4dcc560fa42cc30e0ddecd541ac97a0652474",
+        "86d9a0622aeb3a947b33c356547a7e977e6604fa66f0c062307de6b78de87bad",
         "f76039f8a48fb9021879686236722086b4ab85aa49aa9ca60518b9ceeb4f4cf4",
         "8c79d778f8c7588078a112d081ff763cd9907a178c6662357029e3015dadea83"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/ShuffleSpec.lean",
       "headline_theorem": "shuffle_permutation_spec",
-      "fresh": true
+      "fresh": true,
+      "note": "Extracted with debug assertions disabled and overflow checking enabled; functional helper specs prove the same outputs under their stated domain bounds."
     },
     {
       "target": "extract-wots-sign",
@@ -337,7 +338,7 @@
         "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "dcd625d38e59d0051d394c0dd971e326c6ff1f0f1d0bc900117dddc6b895a213",
+        "Funs.lean": "32cbdd1567dbd07ae37785e93337394e3c676f1964bee97edf92b726cc18cd56",
         "Types.lean": "b915a476dc32b9513747ca9917f4e398b1a9e729b18ba04d69d3b09f5575b15e",
         "FunsExternal_Template.lean": "bf7f8787fb9f74f13a4152b2538a967fdeaca51b915488febcebc090cb1f98e8"
       },
@@ -347,13 +348,14 @@
         "contracts/verification/extracted/Extracted/XmssAuth/FunsExternal.lean"
       ],
       "generated_lean_sha256": [
-        "a9788ff0ba6938ff9755dce6150d8d1499b2e73cf93a0fc90e3cfd6b0498ea62",
+        "b5c8cafda99068fe15a65b2c26f843c49b4b291b75fd708b4ec5c09af91642ec",
         "04b7fe2cdf43e0087d770a67ad33dc27fac4de89757e1ecaac00326696a38b16",
         "86365e235605af313216f0971f1a02ad9faefc8892f0b11e2f425ab40e1fee89"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/XmssAuthSpec.lean",
       "headline_theorem": "xmss_build_auth_spec",
-      "fresh": true
+      "fresh": true,
+      "note": "Extracted with debug assertions disabled and overflow checking enabled; functional helper specs prove the same outputs under their stated domain bounds."
     },
     {
       "target": "extract-xmss-root",
@@ -376,7 +378,7 @@
         "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "447166ab162d079e35cd0489c8b35ce3b3a614866c288a00b8a3fb2e4433e449",
+        "Funs.lean": "971d73a4f6e07bb410cd4656ac22e300b9db1e62cfda942c9ebde9547acd16c7",
         "Types.lean": "b915a476dc32b9513747ca9917f4e398b1a9e729b18ba04d69d3b09f5575b15e",
         "FunsExternal_Template.lean": "74535a87655d44076633bf695a52992978a497ec98fbfc339e341db446851352"
       },
@@ -386,13 +388,14 @@
         "contracts/verification/extracted/Extracted/XmssRoot/FunsExternal.lean"
       ],
       "generated_lean_sha256": [
-        "611cad90efbf576dc34d6701007c48be8bdb180db1226bdff79ecfdc116ffd86",
+        "7e3fdf59bfca0b14772789600b97203fc37c9b6c5dffb9270dbde2b154d4c887",
         "04b7fe2cdf43e0087d770a67ad33dc27fac4de89757e1ecaac00326696a38b16",
         "86365e235605af313216f0971f1a02ad9faefc8892f0b11e2f425ab40e1fee89"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/XmssRootSpec.lean",
       "headline_theorem": "xmss_compute_root_spec",
-      "fresh": true
+      "fresh": true,
+      "note": "Extracted with debug assertions disabled and overflow checking enabled; functional helper specs prove the same outputs under their stated domain bounds."
     },
     {
       "target": "extract-fors-auth",
@@ -446,7 +449,7 @@
         "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "af4165d3f4063dd28639cf21458e819096619a5488c4af9cbda618a5e05240f0",
+        "Funs.lean": "781b363e69989dd67c24d6f9269ed955dbc40c801ec32a7db826cef81ed1183d",
         "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
         "FunsExternal_Template.lean": "5ea53fa1c88dfde7b5465851cb54b430d7292e71864aab1d134a3376cd9275b4"
       },
@@ -456,13 +459,14 @@
         "contracts/verification/extracted/Extracted/ForsRoot/FunsExternal.lean"
       ],
       "generated_lean_sha256": [
-        "fe91459290e8c8ff48192d3b9feb7a911094c1113930332b6dbc2f81b07f866c",
+        "febb9ccfefd477e1b1f7e7f627ea1f7bfb252de9eb285c6c3bf99a9d33e8f2a3",
         "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
         "52d4714794d0d7f6a9a346382515afd02253ad91c7bcc8d03a32b375afd6b577"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/ForsRootSpec.lean",
       "headline_theorem": "fors_compute_root_spec",
-      "fresh": true
+      "fresh": true,
+      "note": "Extracted with debug assertions disabled and overflow checking enabled; functional helper specs prove the same outputs under their stated domain bounds."
     },
     {
       "target": "extract-fors-secret",
@@ -619,7 +623,7 @@
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "977ec3cac638c70003648da8b0943eeef8452464cb61bec1d8c1a164b45fe3d1",
+        "Funs.lean": "7fee0a1fb6b42b891b47f590d62c11e7e9e9c78a9299da43ff80854a91c91804",
         "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
         "FunsExternal_Template.lean": "040a4b4b056fd7ec158ac646d8acd6c496900870c12cd9e3e7091c1b385beb08"
       },
@@ -629,13 +633,14 @@
         "contracts/verification/extracted/Extracted/Verify/FunsExternal.lean"
       ],
       "generated_lean_sha256": [
-        "491b0be3bfccec4f46473fd1165b6287b6968e3cfbce5a1330ac0da3fe0b4a28",
+        "e24f9e0a3057bcfac3c88c27c6b96d0465724213529ea3dec3b98611121ce20d",
         "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
         "b55d32e8f47d2263eb49d1194290d0702bb366547951eb3a3e7049b084362f8f"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/ForsForestSpec.lean",
       "headline_theorem": "firmware_fors_normal_roots",
-      "fresh": true
+      "fresh": true,
+      "note": "Extracted with debug assertions disabled and overflow checking enabled; functional helper specs prove the same outputs under their stated domain bounds."
     },
     {
       "target": "extract-fors-grind-r",
@@ -776,7 +781,7 @@
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "d78b097d426d69532270ed9ea3891f96a16d1dd3ebfb72b5e710018606ff2c3a",
+        "Funs.lean": "734d2300acc2259455289f6e15b89468da1d0f127d535d0ca329c6c864248eb6",
         "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66"
       },
       "generated_lean": [
@@ -784,12 +789,13 @@
         "contracts/verification/extracted/Extracted/Fors/Types.lean"
       ],
       "generated_lean_sha256": [
-        "1e81e635541eddcd507784dd39e1a04b2e3e91c6529a0090036573d2938f2ef3",
+        "e65a16ea750f254c40ec818bc0271a7d4d079b2d6258006a536a5467186a8571",
         "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/ForsExtract.lean",
       "headline_theorem": "extract_ht_index_terminates",
-      "fresh": true
+      "fresh": true,
+      "note": "Extracted with debug assertions disabled and overflow checking enabled; functional helper specs prove the same outputs under their stated domain bounds."
     },
     {
       "target": "extract-tx-merkle",
