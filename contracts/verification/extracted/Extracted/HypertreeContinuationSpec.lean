@@ -24,8 +24,9 @@ theorem rawLayerPrefix_step (seed : Std.Array Std.U8 32#usize) (sig : C10Signatu
       rawLayerPrefix seed sig idx current (n.val + 1) := by
   fin_cases n <;> simp [rawLayerPrefix, rawHypertreeRoot]
 
-/-- The actual loop consumes exactly both 836-byte layers and returns the
-    specified root for all represented inputs, including invalid WOTS sums. -/
+/-- The release loop returns the specified root for all represented inputs,
+    including invalid WOTS sums. Its internal invariant tracks both 836-byte
+    layers through offset 4008; the release return value contains only the root. -/
 theorem firmware_verify_hypertree_loop (seed : Std.Array Std.U8 32#usize)
     (sig : C10Signature) (current : Std.Array Std.U8 16#usize) (idx : Std.U32) :
     hypertree.verify_loop3 {start := 0#u32, «end» := 2#u32} sig seed 2336#usize current idx

@@ -672,7 +672,7 @@ shapes and ten malformed inputs; 21 executed changed-value/wrong-index
 recoveries must return a different root. These unequal-output examples are
 empirical controls, not a universal collision-freedom theorem.
 
-Three positive proof baselines and 37 typed semantic mutations cover leaf
+Three positive proof baselines and 36 typed semantic mutations cover leaf
 generation, capture flags and indices, child order, copy-loop behavior, copied
 path shape and recovery folding. Each mutated definition must compile before
 its unchanged consuming proof fails. Resource, malformed-definition and
@@ -942,6 +942,12 @@ retain their previous inputs, failure behavior and scope.
 This supersedes the helper assertion-profile limitation above for the registered
 C10 components. It is not a proof of RustCrypto, hardware SHA, compiler lowering,
 physical erasure, progress callbacks or the modeled shuffle sub-seed backend.
+The obsolete flag-only authentication-path control is retired: release output
+does not expose those flags, so breaking a flag invariant alone is not an
+observable-output mutation. The remaining 36 authentication controls retain
+typed semantic rejection. The affected root and verifier control suites reject
+killed or resource-failed proof runs instead of counting them as evidence.
+
 The total audited headline count remains **210**; removing the formatting path
 removes the opaque Formatter dependency from 31 closures, leaving **201
 kernel-only**, four SHA-256, one SHA-256/HMAC and four Keccak closures. The exact

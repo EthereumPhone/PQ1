@@ -24,7 +24,6 @@ FAMILIES = {
         ("right-index", "left_idx + 1#u32", "left_idx + 2#u32"),
         ("left-capture", "Array.update keep h left", "Array.update keep h node"),
         ("right-capture", "Array.update keep h node", "Array.update keep h left"),
-        ("discard-flags", "cont (i, keep1, keep_set1, node1, i2)", "cont (i, keep1, keep_set, node1, i2)"),
         ("discard-capture", "cont (i, keep1, keep_set1, node1, i2)", "cont (i, keep, keep_set1, node1, i2)"),
         ("parent-domain", "address.make_adrs layer tree params.ADRS_TREE", "address.make_adrs layer tree 3#u32"),
         ("parent-index", "0#u32 0#u32 i2 parent_idx", "0#u32 0#u32 i2 0#u32"),

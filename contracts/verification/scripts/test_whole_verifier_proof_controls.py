@@ -8,6 +8,8 @@ import re
 import subprocess
 import tempfile
 
+from test_fors_auth_proof_controls import require_semantic_rejection
+
 ROOT = Path(__file__).resolve().parents[1] / "extracted"
 LAKE = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".elan/bin/lake"
 # file, declaration start/end, namespace, names to rename, proof, mutations
@@ -131,15 +133,7 @@ def main():
                         source.split("namespace Extracted.Equiv", 1)[0])
             assert typed.returncode == 0, (family, name, typed.stdout, typed.stderr)
             result = run(family + "-" + name, source)
-            output = result.stdout + result.stderr
-            assert result.returncode != 0 and any(x in output for x in
-                ("unsolved goals", "Type mismatch", "Application type mismatch", "Tactic `rewrite` failed",
-                 "'show' tactic failed", "'change' tactic failed", "`simp` made no progress", "Tactic `rfl` failed",
-                 "Tactic `apply` failed", "Could not unify", "Tactic `assumption` failed",
-                 "omega could not prove", "scalar_tac failed")), (family, name, output)
-            assert not any(x in output for x in ("unknown module", "Unknown constant", "unexpected token",
-                "Unknown identifier", "maximum recursion", "maximum number of heartbeats", "timeout",
-                "declaration uses")), (family, name, output)
+            require_semantic_rejection(result, family + "/" + name)
         def checked(job):
             try:
                 negative(job)
