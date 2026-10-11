@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	01b6d821baae24efe8b63a52ded33d9a
+split	d7c8071703400ab2f8f6050122278fb0
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1573,3 +1573,10 @@ fork	9c2d21280c84d52c30b22111151f1135
 # EasyCrypt proof sources, statements, assumptions and controls are unchanged.
 # Split identity 27015a144ca3e10d6a96b4375c3e29e8 -> 01b6d821baae24efe8b63a52ded33d9a.
 # Full pinned-image replay required; source pins alone are not proof evidence.
+
+# 2026-10-11: paired Lean/EasyCrypt digest and complete wire representations.
+# Two checked EasyCrypt modules, nine common definitions and 12 lemmas;
+# 664 targets / 696 controls. Existing assumptions are unchanged.
+# Includes the shared expression generator, endpoint controls and source pins.
+# Split identity 01b6d821baae24efe8b63a52ded33d9a -> d7c8071703400ab2f8f6050122278fb0.
+# Fresh full pinned-image replay required; focused passes are insufficient.
