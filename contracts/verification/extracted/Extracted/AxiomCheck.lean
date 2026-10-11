@@ -1,3 +1,6 @@
+import Extracted.SecureWrapperBridge
+import Extracted.SecureWrapperCleanup
+import Extracted.SecureWrapperRefusal
 import Extracted.SignReleaseBridge
 import Extracted.SignWholeSpec
 import Extracted.SignHeaderDiffVectors
@@ -355,3 +358,15 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_keygen_sign_release
 #print axioms Extracted.Equiv.firmware_sign_release_shuffle_independent
 #print axioms Extracted.Equiv.firmware_sign_release_nonce_exhausted
+
+-- Sequential source-lifted wrapper; environmental and translation boundaries remain explicit.
+#print axioms secure_wrapper_model.wrapper_success_certificate
+#print axioms secure_wrapper_model.wrapper_entry_success_certificate
+#print axioms secure_wrapper_model.wrapper_entry_success_verified
+#print axioms secure_wrapper_model.wrapper_rate_refusal
+#print axioms secure_wrapper_model.wrapper_rate_readback_refusal
+#print axioms secure_wrapper_model.wrapper_rate_sentinel_refusal
+#print axioms secure_wrapper_model.wrapper_inner_cleanup
+#print axioms secure_wrapper_model.wrapper_inner_refusal
+#print axioms secure_wrapper_model.wrapper_firmware_release
+#print axioms secure_wrapper_model.wrapper_success_requires_rate

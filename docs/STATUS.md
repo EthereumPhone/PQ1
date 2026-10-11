@@ -102,16 +102,34 @@ All 20 registered C10 component extractions now also disable debug assertions
 and retain overflow checks (2026-10-10). Six generated bodies change; their
 bit-window, tree-root, authentication-path, shuffle and whole-verifier proofs
 have been re-established on the release bodies. The other 14 complete raw
-outputs are byte-identical. The 210 audited headlines now comprise 201 with
+outputs are byte-identical. The 220 audited headlines now comprise 211 with
 only kernel axioms and nine with the existing disclosed hash assumptions;
 none consumes the assertion-formatting type. The helper assertion-profile
 mismatch is closed for these registered components. Concrete hash backends,
 shuffle sub-seed modeling and callback/erasure effects remain explicit boundaries.
 Four host build configurations compare all 4,008 output bytes in both OptRand
 modes and distinguish checked root-mismatch panic from release output rejected
-by verification. The secure wrapper's double-sign/compare/verify/CFI release
-effects, hash backend correctness, randomness freshness, progress callbacks
-and the complete Rust/EasyCrypt signer/session relation remain open.
+by verification.
+
+The ordinary secure-wrapper entry now has a sequential, source-linked model
+(2026-10-11). Its release theorem requires an accepted rate charge and exact
+wrapping read-back, two equal signatures using the same key/message/OptRand,
+verification of the returned bytes, a matching CFI sum, then wipe and barrier.
+Every normally returning inner path has a cleanup certificate; refusal tails
+distinguish entropy cleanup from bad comparison/sentinel/CFI gates followed by
+relock, wipe and barrier. Instantiating its oracles with the extracted release
+signer and raw Rust verifier proves the returned bytes satisfy those models.
+Three production-cfg host builds compare 12,232 cases each; typed Lean and
+compiled Rust mutations test release and refusal gates.
+
+This uses a mechanical explicit-state transformation of the exact wrapper
+slice, Unit progress callbacks and defined dependency models. The transformation,
+SigningKey/backend interpretation and callback non-interference remain trusted
+boundaries, checked by source pins, complete regeneration and finite corpora;
+this is not an all-input proof of the original effectful Rust program. Forced
+receipt validation, physical erasure/fault resistance, hash backend correctness,
+randomness freshness and the complete Rust/EasyCrypt signer/session relation
+remain open. The raw verifier's zero-node continuation remains explicit.
 
 **EasyCrypt coverage tightening (2026-10-08):** canonical witness counting
 reduces the adaptive FORS coverage term while retaining the initialized byte

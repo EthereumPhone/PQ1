@@ -1,0 +1,9 @@
+[package]
+name = "secure-wrapper-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[dependencies]
+secure-wrapper-model = { path = ".." }
+[features]
+erc7730-forced-blind = ["secure-wrapper-model/erc7730-forced-blind"]

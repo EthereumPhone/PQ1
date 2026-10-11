@@ -83,6 +83,10 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-secure-wrapper': (
+        ('secure/src/crypto.rs', 'secure/src/fi.rs', 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', 'contracts/verification/tools/secure-wrapper-model/build.rs', 'contracts/verification/tools/secure-wrapper-model/generate.rs', 'contracts/verification/tools/secure-wrapper-model/Cargo.toml', 'contracts/verification/tools/secure-wrapper-model/Cargo.lock', 'contracts/verification/scripts/materialize_secure_wrapper.py', 'contracts/verification/scripts/normalize_secure_wrapper_extraction.py'),
+        ('contracts/verification/extracted/Extracted/SecureWrapper/Funs.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/Types.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/FunsExternal.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/TypesExternal.lean'),
+    ),
     'extract-sign-release': (
         ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/fors.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/shuffle.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs'),
         ('contracts/verification/extracted/Extracted/SignRelease/Funs.lean', 'contracts/verification/extracted/Extracted/SignRelease/Types.lean', 'contracts/verification/extracted/Extracted/SignRelease/FunsExternal.lean'),
@@ -250,7 +254,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "da67bacbbf37cf916553fd213127855f9677bd3866903afd914e008ea4d914ab"
+REGISTRY_BINDING_SHA256 = "fbf973b43398a3fe0965ee2246c0276a8b06a6184d721a7f21b18bb58da60364"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")
@@ -430,7 +434,7 @@ def c10_profile_errors(make_text: str | None = None, cargo_text: str | None = No
     cargo_text = cargo_text if cargo_text is not None else (REPO_ROOT / "Cargo.toml").read_text()
     errors = []
     for target, (rust_paths, _) in REQUIRED_ENTRY_PATHS.items():
-        if not rust_paths[0].startswith("sphincs-c10/"):
+        if not rust_paths[0].startswith("sphincs-c10/") and target != "extract-secure-wrapper":
             continue
         mode = "on" if target == "extract-sign-forest" else "off"
         blocks = re.findall(r"(?ms)^_" + re.escape(target) + r"-impl:\n(.*?)(?=\n\n|\Z)", make_text)

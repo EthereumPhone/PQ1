@@ -126,6 +126,7 @@
     ]
   },
   "required_targets": [
+    "extract-secure-wrapper",
     "extract-sign-release",
     "extract-sign-forest",
     "extract-shuffle",
@@ -161,6 +162,57 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-secure-wrapper",
+      "make_dir": "contracts/verification",
+      "crate": "contracts/verification/tools/secure-wrapper-model",
+      "rust_files": [
+        "secure/src/crypto.rs",
+        "secure/src/fi.rs",
+        "contracts/verification/tools/secure-wrapper-model/src/lib.rs",
+        "contracts/verification/tools/secure-wrapper-model/generated/production.rs",
+        "contracts/verification/tools/secure-wrapper-model/build.rs",
+        "contracts/verification/tools/secure-wrapper-model/generate.rs",
+        "contracts/verification/tools/secure-wrapper-model/Cargo.toml",
+        "contracts/verification/tools/secure-wrapper-model/Cargo.lock",
+        "contracts/verification/scripts/materialize_secure_wrapper.py",
+        "contracts/verification/scripts/normalize_secure_wrapper_extraction.py"
+      ],
+      "rust_files_sha256": [
+        "6eb9043bcf29ec4e933bac0ec50fd84f74b786aeff072756258eea74e7c56b66",
+        "a1d6aa7d558c18d7054218e9795ffc4561e095a85bd1fec206f368612877c86e",
+        "8a64dccf1e4a114e140ff3c052f8f7169627a86680a90a25a5a775dc034de69c",
+        "cfe5715c4ba639a73d997c89abb6f9a46e2441b342f649b2ff1bc00935dfb9f3",
+        "731b2b44256861f9ac42fbcaea43c7e88c99aa5bc2afe1b1acb0c80839405d62",
+        "0fa245b50ed369985a5e48c16d32499ef9fdcb191d13502dc41604fe1b08e1aa",
+        "f92d075671eeb1dc78fa764586fc32a2d1f4359d5b25c46af372798802c1bb16",
+        "74539fe05a0d80738fc6d9f1ffbaccec71663cc4aeda57d94a95f58de6dd0e03",
+        "91a5ab2c773aa6fbbfc8a23ba951dbd9eed84023b81ded333872a8fda9a76271",
+        "f4aea4ea077d099106d5217679254d3f4786ad2d61220ea7bdc70cbf1080600b"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "11c7fe2d5d1e87a0634d963de8be0d28d93854435dca260ad35fc85ae775529e",
+        "Types.lean": "49bbe7fc8135ccecd70bc3a6ffd74f419a6e18323f8496e60e24166a715b15da",
+        "FunsExternal_Template.lean": "ba5cec8974e2a4a72efa00c666a173f09b07a25b802f8abde5db3b633148f0fe",
+        "TypesExternal_Template.lean": "9b6bc143feb7fb832dd9dfef19e0302ec155e79efd5c27910450b39411550205"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/SecureWrapper/Funs.lean",
+        "contracts/verification/extracted/Extracted/SecureWrapper/Types.lean",
+        "contracts/verification/extracted/Extracted/SecureWrapper/FunsExternal.lean",
+        "contracts/verification/extracted/Extracted/SecureWrapper/TypesExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "f6409425a24d5fc502cc7163c75d61dfdd1d69bfbc96ab670013ee6addcc0da1",
+        "7b5af0cef552ae0bd7f4cfebc3cc638e6bf6859a53232909124a5b124441f4d0",
+        "487c49ec4d83d3de22a014aa9751261a50e72c3425343484cb73e211a17fbd9d",
+        "ae8e6404baa2be581102e12d2323274fe2eeadb9f88e1d36faa44034cecba7a7"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/SecureWrapperBridge.lean",
+      "headline_theorem": "wrapper_firmware_release",
+      "fresh": true,
+      "note": "Sequential production-cfg wrapper slice with explicit effect-state lifting and Unit callbacks. Source lifting and dependency interpretation remain disclosed translation/model boundaries; no physical entropy, erasure or fault-resistance claim. Ordinary public entry only; forced receipt validation is not proved."
+    },
     {
       "target": "extract-sign-release",
       "make_dir": "contracts/verification",

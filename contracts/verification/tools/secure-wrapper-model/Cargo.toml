@@ -1,0 +1,12 @@
+[package]
+name = "secure-wrapper-model"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[workspace]
+members = ["native"]
+[features]
+erc7730-forced-blind = []
+[profile.release]
+debug-assertions = false
+overflow-checks = true

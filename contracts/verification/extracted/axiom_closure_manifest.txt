@@ -23,8 +23,8 @@
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
 # Regenerate/verify against a fresh dump with the same 4-bucket structure:
-#   201 kernel-only + 4 sha256_pure_bytes
-#   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 210 headlines.
+#   211 kernel-only + 4 sha256_pure_bytes
+#   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 220 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
 #
@@ -282,3 +282,14 @@ Extracted.Equiv.firmware_sign_release_valid_key
 Extracted.Equiv.firmware_keygen_sign_release
 Extracted.Equiv.firmware_sign_release_shuffle_independent
 Extracted.Equiv.firmware_sign_release_nonce_exhausted
+
+secure_wrapper_model.wrapper_success_certificate
+secure_wrapper_model.wrapper_entry_success_certificate
+secure_wrapper_model.wrapper_entry_success_verified
+secure_wrapper_model.wrapper_rate_refusal
+secure_wrapper_model.wrapper_rate_readback_refusal
+secure_wrapper_model.wrapper_rate_sentinel_refusal
+secure_wrapper_model.wrapper_inner_cleanup
+secure_wrapper_model.wrapper_inner_refusal
+secure_wrapper_model.wrapper_firmware_release
+secure_wrapper_model.wrapper_success_requires_rate

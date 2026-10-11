@@ -960,6 +960,51 @@ profile flags and incompatible Cargo release overrides. Root Cargo profile and
 lockfile changes trigger the blocking extraction/profile checks. No production
 Rust or byte format changes in this batch.
 
+Sequential secure-wrapper model (2026-10-11): `extract-secure-wrapper` extracts
+the ordinary public signing entry and shared inner function from an exact
+production-cfg slice of `secure/src/crypto.rs`. A counted source adapter threads
+an explicit `Effects` argument through backend calls and replaces progress
+function pointers with Unit. Its generated Rust module is committed verbatim,
+checked against fresh adapter output, and materialized as a normal source module
+before Charon/Aeneas; import and source-provenance normalization changes no Lean
+body. Complete raw output, source dependencies, generated declarations and
+external-interface types are pinned and replayed.
+
+Ten new kernel-only headlines raise the audit to **220** (211 kernel-only and
+nine existing hash-boundary closures), with the same 27-axiom environment.
+`wrapper_success_requires_rate` proves the accepted charge and exact wrapping
+read-back. `wrapper_entry_success_certificate` proves two equal signing results
+from the same key/message/OptRand, verification of the returned bytes, the
+matching final CFI sum and the final wipe/barrier; it also retains actual backend
+Result equalities for composition. `wrapper_inner_cleanup` covers every normal
+return after valid rate evidence; `wrapper_inner_refusal` classifies its final
+trace as early rate refusal, entropy cleanup, or a bad comparison/sentinel/CFI
+guard immediately followed by relock, wipe and barrier. These trace predicates
+are suffix guarantees, not a physical trace or an entropy-distribution theorem.
+A failed or divergent modeled dependency is not converted to Rust's recoverable
+Err. `wrapper_firmware_release` instantiates the signing and verification oracles
+with the existing extracted functions and proves release bytes agree with the
+pure release signer and pass the faithful raw verifier.
+
+The literal source and lifted source execute against scripted dependencies in
+three host build configurations: debug, release, and release with the forced
+feature enabled. Each compares 8,192 guard combinations, all 4,008 mismatch
+positions and 32 sparse-entropy cases, including call arguments and wiped-buffer
+contents. The forced feature build provides compilation coverage; it does not
+exercise or prove forced-rate receipt validation. Twelve typed Lean mutations
+and five compiled Rust controls check that changes to gate, message, randomizer,
+release, relock and cleanup behavior are rejected; resource failures never count
+as semantic rejection.
+
+The new theorem remains about the sequential source-lifted model. The lifting
+pass, SigningKey-to-field interpretation, hardware/dependency interpretations
+and callback non-interference are translation/model trust boundaries; source
+pins and finite examples do not prove their all-input correspondence. Entropy
+freshness, physical erasure, timing, hardware FI and LLVM/assembly remain outside
+the certificate. The verifier composition intentionally preserves Rust's
+zero-node continuation and does not assert raw-acceptance implies strict byte
+verification. No production source or signature format changes in this batch.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,

@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-sign-release extract-sign-forest extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-secure-wrapper extract-sign-release extract-sign-forest extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1967,6 +1967,9 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignReleaseBridge 2>&1 | tail -1
 	@$(_FV_PYTHON3) scripts/test_sign_release_proof_controls.py
 	@$(_FV_PYTHON3) scripts/test_sign_release_profiles.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SecureWrapperBridge Extracted.SecureWrapperCleanup Extracted.SecureWrapperRefusal 2>&1 | tail -1
+	@$(_FV_PYTHON3) scripts/test_secure_wrapper_source.py
+	@$(_FV_PYTHON3) scripts/test_secure_wrapper_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsSignBridge Extracted.ShuffleDiffVectors Extracted.WotsSignDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ShuffleDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSignDiffCheck.lean
@@ -2889,3 +2892,28 @@ _extract-sign-release-impl:
 
 	@diff -u $(EXTRACTED_DIR)/Extracted/SignRelease/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-sign-release $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Exact production-cfg source slice with explicit dependency state; no production edits.
+_extract-secure-wrapper-impl:
+	@$(_begin_private_extraction)
+	@$(_FV_PYTHON3) scripts/materialize_secure_wrapper.py $${EXTRACTION_TMP_ROOT}/model
+	@( cd $${EXTRACTION_TMP_ROOT}/model/crate && RUSTFLAGS="" \
+	  $(PQLEAN)/charon cargo --preset=aeneas \
+	  --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on \
+	  --opaque secure_wrapper_model::Effects \
+	  --opaque secure_wrapper_model::fi --opaque secure_wrapper_model::sign_rate \
+	  --opaque secure_wrapper_model::rng_strong --opaque secure_wrapper_model::nsc \
+	  --opaque secure_wrapper_model::zeroize --opaque secure_wrapper_model::subtle \
+	  --opaque secure_wrapper_model::sphincs_c10 \
+	  --include secure_wrapper_model::sphincs_c10::shuffle::ShuffleSeed \
+	  --include secure_wrapper_model::sphincs_c10::SigningKey \
+	  --include secure_wrapper_model::sphincs_c10::params \
+	  --include secure_wrapper_model::fi::CfiCounter \
+	  --include secure_wrapper_model::fi::OK_SENTINEL \
+	  --start-from secure_wrapper_model::production::c10_sign_verified_with_progress \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/securewrapper.llbc 2>&1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/securewrapper.llbc
+	@$(_FV_PYTHON3) scripts/normalize_secure_wrapper_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/normalize_secure_wrapper_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-secure-wrapper $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
