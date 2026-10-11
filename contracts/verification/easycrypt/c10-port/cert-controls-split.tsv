@@ -834,3 +834,27 @@ scratch/CanonicalCountPos.ec	MUST-PASS	-
 scratch/CanonicalIndexNeg.ec	MUST-FAIL	the given proof-term proves:
 scratch/CanonicalIndexPos.ec	MUST-PASS	-
 scratch/CanonicalAssignmentWitness.ec	MUST-PASS	-
+
+# Paired representation: unchanged positive, typed changes, unchanged proof rejections.
+scratch/c10_rep_positive.ec	MUST-PASS	-
+scratch/c10_rep_word_endian_typed.ec	MUST-PASS	-
+scratch/c10_rep_word_endian_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_rep_word_base_typed.ec	MUST-PASS	-
+scratch/c10_rep_word_base_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_ht_bit_typed.ec	MUST-PASS	-
+scratch/c10_rep_ht_bit_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_fors_width_typed.ec	MUST-PASS	-
+scratch/c10_rep_fors_width_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_wots_stride_typed.ec	MUST-PASS	-
+scratch/c10_rep_wots_stride_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_counter_width_typed.ec	MUST-PASS	-
+scratch/c10_rep_counter_width_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_rep_counter_high_bits_typed.ec	MUST-PASS	-
+scratch/c10_rep_counter_high_bits_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_rep_auth_last_node_typed.ec	MUST-PASS	-
+scratch/c10_rep_auth_last_node_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_rep_layer_stride_typed.ec	MUST-PASS	-
+scratch/c10_rep_layer_stride_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_rep_forest_last_tree_typed.ec	MUST-PASS	-
+scratch/c10_rep_forest_last_tree_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_C10RepresentationBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

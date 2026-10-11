@@ -102,7 +102,7 @@ All 20 registered C10 component extractions now also disable debug assertions
 and retain overflow checks (2026-10-10). Six generated bodies change; their
 bit-window, tree-root, authentication-path, shuffle and whole-verifier proofs
 have been re-established on the release bodies. The other 14 complete raw
-outputs are byte-identical. The 220 audited headlines now comprise 211 with
+outputs are byte-identical. The 229 audited headlines now comprise 220 with
 only kernel axioms and nine with the existing disclosed hash assumptions;
 none consumes the assertion-formatting type. The helper assertion-profile
 mismatch is closed for these registered components. Concrete hash backends,
@@ -110,6 +110,14 @@ shuffle sub-seed modeling and callback/erasure effects remain explicit boundarie
 Four host build configurations compare all 4,008 output bytes in both OptRand
 modes and distinguish checked root-mismatch panic from release output rejected
 by verification.
+
+The paired Lean/EasyCrypt representation endpoints now cover every 32-byte
+digest and every 4,008-byte signature, including both full-width counters. Both
+proofs consume definitions emitted from one integer/list expression tree, with
+fidelity and typed mutation checks. The generator and cross-tool arithmetic/list
+interpretation remain explicit TCB; this is a representation component, not a
+full Rust/EasyCrypt session theorem. The research owner documents the remaining
+hash/caller, oracle-history and wrapper-cost obligations.
 
 The ordinary secure-wrapper entry now has a sequential, source-linked model
 (2026-10-11). Its release theorem requires an accepted rate charge and exact

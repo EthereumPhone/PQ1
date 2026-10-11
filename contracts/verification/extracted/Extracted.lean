@@ -1,3 +1,4 @@
+import Extracted.C10RepresentationBridge
 import Extracted.SecureWrapperBridge
 import Extracted.SecureWrapperCleanup
 import Extracted.SecureWrapperRefusal

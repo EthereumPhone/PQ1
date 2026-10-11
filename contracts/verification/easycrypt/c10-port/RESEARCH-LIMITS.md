@@ -1005,11 +1005,48 @@ the certificate. The verifier composition intentionally preserves Rust's
 zero-node continuation and does not assert raw-acceptance implies strict byte
 verification. No production source or signature format changes in this batch.
 
+Paired representation endpoints (2026-10-11):
+`cdrafts-split/C10RepresentationBridge.ec` and
+`extracted/Extracted/C10RepresentationBridge.lean` prove their actual digest
+readers and signature-parser values against common integer/list normal forms.
+`tools/c10_representation.py` emits both definitions from one closed typed
+expression tree; a byte-for-byte fidelity check runs in the Lean fidelity gate,
+the EasyCrypt pin gate and the full-replay launcher. Words use signed mathematical
+integers; offsets/counts use nonnegative integers (Lean `Nat`, EasyCrypt `int`
+restricted to that domain). The Lean byte-domain lemmas discharge EasyCrypt's
+0..255 premises. The generated tuple represents an ordered collection of fields,
+with each language's own product/list encoding.
+
+The endpoints cover all 32-byte digests and all 4,008-byte signatures, including
+both full-width unsigned wire counters and the final node at offset 3992.
+No accepted-digest or valid-signature premise hides rejected inputs. Nine new
+Lean headlines are kernel-only, taking the audited total to **229** (220
+kernel-only and nine existing hash-boundary closures); the 27-axiom environment
+is unchanged. The EasyCrypt side retains its existing imported logical/model
+foundation and adds no project axiom or admit. Ten typed arithmetic/layout
+changes per language must break the unchanged endpoint proofs; changed
+definitions first typecheck; timeouts, resource failures and unfinished runs
+never count as semantic rejection. Static controls also enforce generated-file fidelity and
+exact enrollment of the EasyCrypt controls. Each new EasyCrypt dependency and
+proof enters the existing complete direct/CLI replay and statement/taint census.
+
+This retires manual byte-order, digest-field and wire-decoder ambiguity **under
+the disclosed common representation interpretation**. The generator and the
+cross-tool interpretation of integer arithmetic, lists and tuples remain TCB.
+These are two independently checked endpoint proofs, not a cross-kernel proof
+exporter, an automatic Aeneas-to-EasyCrypt translator, or a whole-game theorem.
+Hash-input/primitive and caller relations, bounded-search/error behavior across
+languages, oracle histories and arbitrary adaptive sessions remain open. The
+secure wrapper's two signing calls and internal verification also need their own
+cost accounting; the single-library-sign session budget cannot be attached to
+the wrapper unchanged. Concrete SHA, QROM and physical claims are unaffected.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
-fixed-width arithmetic, byte/bit order, the full wire counter, bounded search,
-all error returns, caller-supplied randomness, hash backends and session
-semantics. Source hashes and differential examples detect drift but do not
+the remaining fixed-width operations, primitive/caller computations, bounded
+search, all error returns, caller-supplied randomness, hash backends and session
+semantics. The paired representation endpoints above are one component; their
+interpretation TCB does not disappear when composing the rest. Source hashes and differential examples detect drift but do not
 prove that relation for all inputs. No automatic Aeneas-to-EasyCrypt bridge is
 part of the current certificate.
 

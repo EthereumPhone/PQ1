@@ -512,7 +512,13 @@
         "contracts/verification/scripts/test_secure_wrapper_proof_controls.py",
         "contracts/verification/scripts/normalize_release_sign_extraction.py",
         "sphincs-c10/tests/release_sign_assertions.rs",
-        "contracts/verification/scripts/normalize_sign_extraction.py"
+        "contracts/verification/scripts/normalize_sign_extraction.py",
+        "contracts/verification/easycrypt/c10-port/tools/c10_representation.py",
+        "contracts/verification/easycrypt/c10-port/tools/c10_representation_controls.py",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Representation.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RepresentationBridge.ec",
+        "contracts/verification/easycrypt/c10-port/scratch/c10_rep_*.ec",
+        "contracts/verification/scripts/test_c10_representation_controls.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "nightly",
@@ -608,7 +614,13 @@
       "make": "make -C contracts/verification verify-spec-vendored-fidelity",
       "polices_paths": [
         "contracts/verification/extracted/Extracted/SpecVendored.lean",
-        "contracts/verification/lean/SphincsCVerify/Spec/Bytes.lean"
+        "contracts/verification/lean/SphincsCVerify/Spec/Bytes.lean",
+        "contracts/verification/easycrypt/c10-port/tools/c10_representation.py",
+        "contracts/verification/easycrypt/c10-port/tools/c10_representation_controls.py",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Representation.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RepresentationBridge.ec",
+        "contracts/verification/easycrypt/c10-port/scratch/c10_rep_*.ec",
+        "contracts/verification/scripts/test_c10_representation_controls.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "nightly",

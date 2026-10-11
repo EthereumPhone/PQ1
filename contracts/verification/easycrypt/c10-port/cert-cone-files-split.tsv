@@ -92,6 +92,8 @@ cdrafts-split/C10RawGrind.ec
 cdrafts-split/C10RawOracle.ec
 cdrafts-split/C10ReductionChoose.ec
 cdrafts-split/C10ReductionForge.ec
+cdrafts-split/C10Representation.ec
+cdrafts-split/C10RepresentationBridge.ec
 cdrafts-split/C10SearchBounds.ec
 cdrafts-split/C10SharedSearch.ec
 cdrafts-split/C10SpecControls.ec

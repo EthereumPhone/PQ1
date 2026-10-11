@@ -1,3 +1,4 @@
+import Extracted.C10RepresentationBridge
 import Extracted.SecureWrapperBridge
 import Extracted.SecureWrapperCleanup
 import Extracted.SecureWrapperRefusal
@@ -370,3 +371,14 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms secure_wrapper_model.wrapper_inner_refusal
 #print axioms secure_wrapper_model.wrapper_firmware_release
 #print axioms secure_wrapper_model.wrapper_success_requires_rate
+
+-- Source-linked paired representation endpoints; kernel-only.
+#print axioms Extracted.C10RepresentationBridge.digest_byte_word
+#print axioms Extracted.C10RepresentationBridge.digest_word_window
+#print axioms Extracted.C10RepresentationBridge.extracted_ht_word
+#print axioms Extracted.C10RepresentationBridge.extracted_fors_words
+#print axioms Extracted.C10RepresentationBridge.extracted_wots_words
+#print axioms Extracted.C10RepresentationBridge.counter_word
+#print axioms Extracted.C10RepresentationBridge.signature_words
+#print axioms Extracted.C10RepresentationBridge.signature_byte_domain
+#print axioms Extracted.C10RepresentationBridge.digest_byte_domain

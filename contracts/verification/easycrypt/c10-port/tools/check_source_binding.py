@@ -392,6 +392,35 @@ SOURCES = (
     *(PORT + 'tools/fullsign_model/' + f for f in (
         'Cargo.toml', 'Cargo.lock', 'check.py', 'src/main.rs')),
 
+    'contracts/verification/easycrypt/c10-port/tools/c10_representation.py',
+    'contracts/verification/easycrypt/c10-port/tools/c10_representation_controls.py',
+    'contracts/verification/easycrypt/c10-port/cdrafts-split/C10Representation.ec',
+    'contracts/verification/easycrypt/c10-port/cdrafts-split/C10RepresentationBridge.ec',
+    'contracts/verification/extracted/Extracted/C10Representation.lean',
+    'contracts/verification/extracted/Extracted/C10RepresentationBridge.lean',
+    'contracts/verification/scripts/test_c10_representation_controls.py',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_auth_last_node_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_auth_last_node_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_counter_high_bits_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_counter_high_bits_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_counter_width_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_counter_width_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_forest_last_tree_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_forest_last_tree_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_fors_width_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_fors_width_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_ht_bit_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_ht_bit_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_layer_stride_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_layer_stride_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_word_base_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_word_base_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_word_endian_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_word_endian_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_wots_stride_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_rep_wots_stride_typed.ec',
+
 )
 
 
