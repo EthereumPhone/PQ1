@@ -1,0 +1,471 @@
+{
+ "surface": "Malicious-hardware / supply-chain implant detection (key=implant). Threat: CryptoBilis-style display-bus logger/exfil MCU behind the screen, PCB implants, swapped components, probe residue, reseller tampering before first power. Scope read: secure/src/hw/{tamp,tamp_reason,tzic,bhk,se_power,boot_pulse,usb_hw,rng,dbgmcu,aw99703,aw21036,se_i2c_probe,spi_hw,lcd_nv3007}.rs, secure/src/board/pq1.rs, secure/src/sau.rs, secure/src/first_boot/, secure/src/measured_boot.rs, secure/src/ui/{secret_text,seed_wizard,px/assets}.rs, secure/src/nsc/{mod,prodtest}.rs, fsbl/src/{main,verify,optbytes,sau,render,aw99703,nv3007}.rs, shared/src/lockdown.rs, tools/{verify_ship_state.py,verify-fsbl-identity.sh,factory-provisioning-verify.sh}, docs/hardware/*, docs/provisioning/*, docs/security/{HARDENING,threat-model,measured-boot,red-teaming,user-device-verification,production-security,supply-chain-defense-research-brief}.md, adversarial-review playbooks, README shipping checklist, CLAUDE.md invariant #10, and `gh issue list` searches (implant/tamper/supply chain/mesh/attestation/genuine/interposer/display/backlight/VBUS/enclosure/first power/RDP-0/verify flash/SWD/SBU/transparency log/birth certificate/tamper-evident/DNP/anti-counterfeit/UID). Bottom line: the repo's ONLY implemented defence against a pre-first-power implant is 'firmware bytes are verifiable over SWD at RDP-0' (off-device, bench-profile tooling) plus encrypted SE tunnels; there is NO code path that can detect a hardware implant on the display SPI bus, the buttons, or the PCB, and the docs say so honestly (user-device-verification.md 'What this explicitly does NOT prove' item 1). Everything board-level (mesh, case switch, EMI can, temp sensor, tamper-evident packaging, SE genuine-check, birth certificate/transparency log, MCU anti-counterfeit probes) is requirements/issue-only.",
+ "has": [
+  {
+   "item": "RDP-0 shipping model + first-boot Phase A ship-profile verification (TZEN/RDP/SECWM/SECBOOTADD0/WRP1A/OEM) before the RDP-2 self-lock",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:165-190 (run_pre_lock_and_maybe_lock \u2192 lockdown::verify_ship_profile, halt UNLOCKED on mismatch via halt_first_boot)",
+    "shared/src/lockdown.rs:338 (SHIP_PROFILE_U585), :366 (phase_profile), :381 (optr_matches_ship)",
+    "secure/src/hw/flash.rs:84 (rdp_level), :431 (optr_raw), :455 (wrp1ar_raw), :478 (oem_lock_status_raw)",
+    "CLAUDE.md 'Shipping model (owner decision 2026-07-14)' + invariant #10"
+   ],
+   "status": "fenced-off",
+   "notes": "Only compiled under `rdp2-self-lock` (implies mode-production + dual-se); every `mode-production + optiga-trust-m` build is rejected by the OPTIGA_S2_PRODUCTION_BLOCKED fence, so this code cannot be linked into a shipping image today. WRP1A and OEM-lock predicates are fail-CLOSED while `WRP1A_MASK_PINNED`/`OEM_LOCK_MASK_PINNED` are false (shared/src/lockdown.rs:290, :445), i.e. the production profile check cannot pass on real silicon until the register layouts are bench-pinned (#46, #270). Silicon-lockdown playbook SL9 notes the OPTR check is a spot-check, not an exact masked compare. On-device verification is explicitly worth zero against interdiction (tools/verify_ship_state.py:9-16; Draft 1.2 \u00a72.2) \u2014 it catches factory escapes, not implants."
+  },
+  {
+   "item": "Phase A blank-check of per-device pages 123..=127 (anti pre-planted journal/BHK/counters)",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:197-205 (loop over 123..=127, FirstBootError::PerDevicePageNotBlank)",
+    "secure/src/hw/flash.rs:488 (is_secure_page_blank)",
+    "docs/provisioning/first-boot-provisioning.md:205 (E080B)"
+   ],
+   "status": "fenced-off",
+   "notes": "Same `rdp2-self-lock` gating as above. Addresses a transit attacker planting a page-127 salt or journal; does not address anything off the MCU."
+  },
+  {
+   "item": "Phase A pre-lock OTP-master-burned check (fail unlocked/returnable rather than weld shut a wrong unit)",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:207-213 (otp::is_device_master_burned \u2192 OtpMasterMissingPreLock)"
+   ],
+   "status": "fenced-off",
+   "notes": "Candidate only; factory handoff/receipt protocol that would authenticate the OTP content is OPEN (#76, #268)."
+  },
+  {
+   "item": "Confirm-gated RDP-2 burn: trusted-UI 'lock device' prompt with both-buttons chord + FI sentinel before program_rdp_level2_and_launch; decline parks unlocked and re-prompts next boot",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:215-262 (build_lock_confirm_pages, confirm_checked, rdp_burn_authorized != OK_SENTINEL \u2192 park_unlocked_reprompt_next_boot; program_rdp_level2_and_launch)",
+    "secure/src/hw/flash.rs:531 (program_rdp_level2_and_launch)",
+    "docs/provisioning/first-boot-provisioning.md:122-134 (owner decision 2026-07-17)"
+   ],
+   "status": "fenced-off",
+   "notes": "IMPLEMENTED in code but two docs still say it is not (see drift). This is the one firmware change the user-device-verification design required; it converts a transit 'power it on to lock it' attack into a returned unit."
+  },
+  {
+   "item": "Phase B anti-pre-plant: unconditional page-126 (BHK) erase + fresh 3-source BHK before any final-credential derivation; journaled, resumable transport\u2192final SE credential rotation (SE050 SCP03/admin \u2192 BHK axis, OPTIGA PBS \u2192 DHUK+persisted TRNG salt)",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:296-335 (bhk_provision_and_lock: erase_secure_page(BHK_PAGE_NUM) unconditionally, rng_strong::fill_with_source_draw)",
+    "secure/src/first_boot/mod.rs:337-392 (se050_rotate_scp03, se050_rekey_admin, optiga_rotate_pbs, trng_salt)",
+    "secure/src/first_boot/mod.rs:405-441 (run_post_lock_provisioning)",
+    "docs/security/user-device-verification.md 'Why in-transit malware cannot survive a green result' (SE state neutralised by Phase B)"
+   ],
+   "status": "fenced-off",
+   "notes": "Neutralises transit-known transport SE keys, which is the only implant-adjacent property the design claims. Production blocked on: authenticated per-unit handoff/receipt, authenticate-before-rotate, PUT KEY atomicity (#386), E140 order, silicon receipts (#268, #76, #34, #712, #707)."
+  },
+  {
+   "item": "External read-only ship-state verifier: option bytes + declared flash regions over SWD, connect-under-reset, write verbs refused by allow-list",
+   "evidence": [
+    "tools/verify_ship_state.py:1-45 (docstring: 'the external half of invariant #10(a)'; PROVES/DOES NOT PROVE), :47-66 (WRITE_VERBS, assert_read_only), :112-114 (--mode default UR = connect under reset), :147-153 (flash regions sha256 compare)",
+    "Makefile:2437-2452 (make verify-ship-state, default profile tools/ship-profiles/bench-rdp0-tzen.json)",
+    "tools/ship-profiles/ (bench-rdp0-tzen.json, ship-option-b.template.json)"
+   ],
+   "status": "partial",
+   "notes": "This is the ONLY implemented artefact of the 'verify before first power' story. Gaps: bench profile only (ship-option-b is a template); OTP area is named in the docstring but no OTP read/compare exists in the script (grep: OTP appears only in the header); no MCU-UID / birth-certificate cross-check; depends on STM32_Programmer_CLI on the host; not the consumer-grade `pq1-verify`/WebUSB tool the design calls for (user-device-verification.md work items 1-2, no issue found). Explicitly states it does not prove the die is the one you think it is (needs attestation, #249)."
+  },
+  {
+   "item": "FSBL vendor-key identity check of an FSBL ELF against a release bundle (partial mitigation of #742)",
+   "evidence": [
+    "tools/verify-fsbl-identity.sh:1-30 (WHAT IT PROVES / DOES NOT PROVE)",
+    "Makefile:2421-2435 (make verify-fsbl-identity)"
+   ],
+   "status": "partial",
+   "notes": "Proves only that the FSBL carries the same vendor pubkey; two different FSBLs signed under one vendor key are indistinguishable. The signed bundle has no FSBL field (#742 OPEN)."
+  },
+  {
+   "item": "FSBL slot admission: structural/CRC/digest/vendor-fpr/C10-signature/rollback chain with FI sentinel gating, then image re-hash vs signed hashes with aggregate sentinel verdict (F15)",
+   "evidence": [
+    "fsbl/src/main.rs:283-320 (filter_valid; check_true_into_sentinel on digest/fpr/signature/rollback; scrub_sentinel_register)",
+    "fsbl/src/verify.rs:40-115 (verify_images: length bounds, hash_flash_region volatile reads, F15 aggregate gate)",
+    "fsbl/src/otp.rs:24-35 (rollback floor read twice, max())"
+   ],
+   "status": "partial",
+   "notes": "Legacy bench FSBL only: `mode-production` is compile_error'd (fsbl/src/main.rs:62-69) and bench builds must opt into `legacy-fw-rollback-unsafe`. Defends firmware-substitution, not hardware implants. Not an immutable trust root until geometry (#540/#758), WRP ceremony, HDP1 (#39), SECBOOTADD0 (#37), BOOT_LOCK ordering (#753), silicon receipts close."
+  },
+  {
+   "item": "FSBL tz-1 option-byte read-back tripwire before branch (TZEN/RDP-phase/SECWM/SECBOOTADD0), halt on PERSISTENT mismatch, never writes option bytes",
+   "evidence": [
+    "fsbl/src/optbytes.rs:1-85 (confirmed_fields_match, persistent_confirmed_match: two sentinel passes, halt only when both mismatch)",
+    "fsbl/src/main.rs:210-235 (tz-1 call site, halt())"
+   ],
+   "status": "partial",
+   "notes": "Deliberately does NOT act on WRP1A/OEM locks while unpinned, so 'a unit whose WRP was cleared before RDP-2 passes this tripwire' (optbytes.rs:24-30). Single-fault 'match' suppresses the trip (accepted). Issue #270 OPEN."
+  },
+  {
+   "item": "FSBL fingerprint render is RECOVERABLE FAIL-CLOSED: refuses slot handoff if any SPI transfer timed out or the AW99703 did not reach Backlight mode",
+   "evidence": [
+    "fsbl/src/main.rs:240-275 (#705 policy comment; display_verdict != fi::OK_SENTINEL \u2192 halt())",
+    "fsbl/src/render.rs:1-80 (FINGERPRINT_HOLD_MS=4_000 owner decision 2026-09-24; 'What the verdict does NOT mean': write-only panel, no MISO, OK_SENTINEL means only no observable step failed)"
+   ],
+   "status": "implemented",
+   "notes": "Bench FSBL. Cannot detect a swapped/intercepted panel: SPI TXP/EOT are internal to the peripheral, the NV3007 is write-only and PA6 (MISO) is NC on pq1 (secure/src/board/pq1.rs:93-97). A display-bus implant (the CryptoBilis shape) is invisible to this verdict by construction."
+  },
+  {
+   "item": "FSBL AW99703 backlight bring-up gated on CHIP_ID==0x03 read-back + BSTCTR1 OVP read-back; `Configured` token makes enable() unreachable after a failed configure",
+   "evidence": [
+    "fsbl/src/aw99703.rs:61-70 (REG_CHIP_ID, CHIP_ID_AW99703=0x03, receipt #733 sealed EVT 003B0022), :392-452 (configure: HWEN cycle, bus_idle/recover_bus, CHIP_ID gate, OVP read-back), :455-470 (enable: MODE read-back)",
+    "fsbl/src/nv3007.rs:56-62 (backlight header updated for #705)"
+   ],
+   "status": "implemented",
+   "notes": "A bus-presence/identity check on the backlight driver IC over bit-banged I2C2 \u2014 the closest thing to component-identity verification in the boot path. A malicious part that answers CHIP_ID=0x03 is undetectable. Issue #705 is still OPEN although the driver landed."
+  },
+  {
+   "item": "Secure-world second fingerprint row (measured_boot::run) over the same byte range and the same `firmware_fingerprint_lines` grid as the FSBL; honest divergence = tamper signal",
+   "evidence": [
+    "secure/src/measured_boot.rs:1-10, :104-135 (firmware_hash over [__vector_table, __veneer_limit)), :160 (WORDS_MS=4_000), :235-359 (run)",
+    "fsbl/src/render.rs:1-14",
+    "docs/security/measured-boot.md:228-260 ('Same byte range on both rows')"
+   ],
+   "status": "implemented",
+   "notes": "Advisory row (updatable firmware). Divergence detection is HUMAN-ONLY \u2014 no on-device comparator (docs/security/red-teaming.md \u00a76.2 'Known gaps'). Both rows render on the same write-only SPI bus, so an implant that records or substitutes frames defeats the comparison."
+  },
+  {
+   "item": "Internal TAMP monitoring (ITAMP1/2/3/5/6/7/8/9/11/12/13, Trezor port) wired into boot and SysTick; IRQ mode under `tamp-irq`",
+   "evidence": [
+    "secure/src/hw/tamp.rs:57-67 (init), :82-116 (poll), :133 (TAMP=0x5600_7C00 corrected base), :268-325 (init_tamp_registers: FLTCR preconfigured for external pins, CR1 internal mask, CR3=0 confirmed/erase mode, IER), :353-380 (on_tamp_irq)",
+    "secure/src/main.rs:1395-1405 (hw::tamp::init()), :4327 (hw::tamp::poll() from SysTick), :4395 (DefaultHandler irqn 2 \u2192 on_tamp_irq under tamp-irq)",
+    "secure/src/hw/tamp_reason.rs:34,50,72 (ITAMP6F 'SWD_ACCESS' decode)"
+   ],
+   "status": "partial",
+   "notes": "Detects die-level anomalies (backup-domain voltage, temperature, LSE, SWD-at-RDP>0, crypto-peripheral fault, IWDG) \u2014 not board implants. No external TAMP_INx pin is ever enabled (`negative_tamp_init_skips_external_pins`, secure/src/hw_platform_under_test/pure_tests.rs:1728) and pq1 has no case switch/mesh net. Never silicon-validated (docs/hardware/evt-silicon-validation.md:929 \u00a710.1). Open: #75 (escalation receipts), #256 (IRQ default), #208 (mask debug-triggerable tampers before tamp+bhk), #248 (TAMP+CSS+PVD), #47 (HW-mode erase), #50 (SECCFGR zones/privilege)."
+  },
+  {
+   "item": "Production intrusion response: `tamp-wipe` + `tzic-wipe` escalation to `tzic::trigger_intrusion_wipe` (zeroize SRAM + arm page-125 wipe flag + reset), FORCED ON for shipping dual-SE images by a compile_error fence",
+   "evidence": [
+    "secure/src/hw/tamp.rs:95-115 (poll escalation under tamp-wipe), :370-380 (IRQ escalation)",
+    "secure/src/hw/tzic.rs:1-30 (TZIC GTZC illegal-access controller, shared wipe primitive)",
+    "secure/src/nsc/mod.rs:727-765 (MEDIUM-1 fence: dual-se && !e2e-test && !dev-testkey requires tamp+tamp-wipe+tzic-wipe)"
+   ],
+   "status": "implemented",
+   "notes": "Code exists and the fence is live; silicon validation of the wipe firing on a real tamper is OPEN (#75, red-teaming \u00a76.3). hardware_requirements.md / threat-model \u00a79.5 still describe the handler as log-only-pending (drift)."
+  },
+  {
+   "item": "TAMP confirmed mode (CR3=0) \u2192 silicon erase of BKP0R..7R, where the Tier-2 BHK lives; BHKLOCK hides it from software",
+   "evidence": [
+    "secure/src/hw/tamp.rs:296-303 (CR3=0 comment)",
+    "secure/src/hw/bhk.rs:1-60 (BHK in TAMP backup registers, BHKLOCK, cleared by hardware on tamper)",
+    "docs/hardware/hardware_requirements.md cross-ref row 'TAMP event \u2192 erase BHK + lockout-wipe' (\ud83d\udfe1)"
+   ],
+   "status": "claimed-not-verified",
+   "notes": "Issue #47 body still describes the wrong-base bug (fixed 2026-06-02 per #208) and asks for HW-mode erase to be relied on only after bench confirmation; #50 (BKPRWSEC zones + TAMPSEC/TAMPPRIV so NS cannot disable the erase) is OPEN."
+  },
+  {
+   "item": "GTZC/SAU: I2C1 (OPTIGA), I2C2 (backlight/RGB), I2C4 (SE050 on pq1), SPI1 (trusted display, under spi1-arduino), UCPD1, TIM2, TIM3 marked SECURE with exact-equality const asserts; enforcement silicon-validated 7/7 (iota2) and 8/8 (pq1)",
+   "evidence": [
+    "secure/src/sau.rs:257-271 (I2C1/I2C2), :285-314 (UCPD1 second handle on PA15/PB15), :333-352 (TIM2/TIM3), :354-370 (SPI1 under spi1-arduino)",
+    "docs/hardware/evt-silicon-validation.md:477-511 (I2C4 SECCFGR receipt + control run)",
+    "CLAUDE.md 'TZSC config (invariant #4)'"
+   ],
+   "status": "partial",
+   "notes": "Keeps NS firmware off the display and SE buses \u2014 irrelevant to a physical implant on the copper. #390 OPEN: the enforcement receipt is built with ui-semihosting, so the SPI1 bit is NOT covered by the cited 7/7 receipt. #83 (iota2 GPIOE pins + SPI1 RCC clock-enable) OPEN."
+  },
+  {
+   "item": "GPIO security: TZEN=1 defaults all pins secure; pq1 hands only PA11/PA12 (USB D-/D+) to NS; PA15/PB5/PB15 (SE_RST/SE1_EN/LCM_EN) and the LCD/I2C2/VBUS/FLAGB/SCA pins are in NS_FORBIDDEN/EXTRA_RESERVED_PINS with const asserts",
+   "evidence": [
+    "secure/src/hw/usb_hw.rs:157-170 (one gpioa/gpiob SECCFGR clear per port using board::USB_NS_PINS_*)",
+    "secure/src/board/pq1.rs:270-291 (USB_NS_PINS_A=(1<<11)|(1<<12), USB_NS_PINS_B=0), :316-323 (EXTRA_RESERVED_PINS)"
+   ],
+   "status": "implemented",
+   "notes": "Firmware-side only."
+  },
+  {
+   "item": "Encrypted SE tunnels (OPTIGA Shielded Connection CCM-8, SE050 SCP03) so an I2C interposer/implant sees only ciphertext; invariant #3",
+   "evidence": [
+    "CLAUDE.md invariant #3 + 'ML-KEM-1024 inner wrap DESCOPED 2026-07-07'",
+    "docs/security/threat-model.md:174, :232 (Grover-2^64 tapped-session residual ACCEPTED; per-device rotation load-bearing)"
+   ],
+   "status": "partial",
+   "notes": "Per-device rotation (the condition the acceptance rests on) is the un-approved Phase B candidate. Secure-element playbook SE5 (docs/security/adversarial-review/secure-element-adversarial-review.md:26): OPTIGA PRL handshake carries NO host nonce \u2192 a recorded session replays end-to-end (replayed E120 read can forge E120>page124 \u2192 tamper-wipe; optiga-only builds: replayed unlock = PIN bypass); send_command falls back to plaintext when shield.active==false (optiga/apdu.rs:432-434) \u2014 an interposer can force the plaintext branch. SE10: forged bare SW 0x6986 \u2192 unconditional wipe. These are implant-reachable."
+  },
+  {
+   "item": "SE supply-rail gating (LDO2_EN PA8, SE1_EN PB5, OPTIGA SE_RST PA15 released explicitly) with observed-state read-back",
+   "evidence": [
+    "secure/src/hw/se_power.rs:1-60 (module header: read-back is ODR, not the rail; 'Making it fail closed is a policy decision ... deliberately not made here'), :178-230 (init \u2192 SePowerState)",
+    "secure/src/main.rs:1567-1575 (call site)"
+   ],
+   "status": "partial",
+   "notes": "Production builds DISCARD the read-back (only logged under debug-log). No detection of an absent/swapped SE at this layer \u2014 an OPTIGA held in reset is indistinguishable from an absent one (pq1.rs:160-180)."
+  },
+  {
+   "item": "Non-destructive zero-byte SE I2C address probe (bench) \u2014 does the chip that should be at 0x30/0x48 ACK?",
+   "evidence": [
+    "secure/src/hw/se_i2c_probe.rs:1-45 (contract: NBYTES=0, AUTOEND; never grows into a handshake)",
+    "docs/hardware/evt-silicon-validation.md:523-557 (make se-i2c-probe-hw BOARD=pq1 PASS; feature in PROD_FORBIDDEN)"
+   ],
+   "status": "fenced-off",
+   "notes": "Presence-only, bench-only. Proves nothing about identity."
+  },
+  {
+   "item": "AW21036 RGB driver identity (VER=0xA8, RESET_ID=0x18) + per-channel open/short detection; AW99703 secure-world CHIP_ID gate + one-shot fault snapshot",
+   "evidence": [
+    "secure/src/hw/aw21036.rs:70-80 (VER_EXPECTED, RESET_ID_EXPECTED), :309-355 (open_short_scan)",
+    "secure/src/nsc/prodtest.rs:756-758, :798, :880-898 (CMD_PRODTEST_RGB_TEST/OSD; pass requires ver==VER_EXPECTED && all ACKs)",
+    "secure/src/hw/aw99703.rs:270-281 (CHIP_ID read FIRST), :307-320 (bus_trustworthy), :357-385 (read_fault_snapshot)",
+    "docs/hardware/evt-silicon-validation.md:286-328 (sealed EVT receipts; dead-LED detection found a defect independently)"
+   ],
+   "status": "implemented",
+   "notes": "Factory prodtest / dev-image diagnostics on the display-module I2C2 bus. Chip-ID checks defeat a dead bus, not a correctly-identifying malicious part. FLAGB (PB10, AW35602 USB fault flag) is never read (pq1.rs:286-289)."
+  },
+  {
+   "item": "TRNG: NIST CR profile + AN4230 HTCR + hardware SEIS/SECS/CEIS/CECS checks + software zero/repetition continuous tests with FI-sentinel gating",
+   "evidence": [
+    "secure/src/hw/rng.rs:95 (RNG_CR_NIST_DEFAULT), :113 (RNG_HTCR_AN4230, #704/#698), :401-470 (read_healthy_word_into with rng_health::word_is_acceptable + sentinel), :493-575 (init_locked: CONDRST, HTCR write + read-back, warm-up word)"
+   ],
+   "status": "implemented",
+   "notes": "Detects a faulty/degraded on-die noise source, not an external substitution. Issues #594 (entropy assessment beyond STM32 row), #834/#835 (halt-sink regressions) OPEN."
+  },
+  {
+   "item": "DBGMCU_IDCODE die-identity read and SESIP-scope report at boot (DEV_ID 0x482 / REV_ID 0x3003)",
+   "evidence": [
+    "secure/src/hw/dbgmcu.rs:1-60 (report-only by design; 'an IDCODE read proves nothing against an attacker who controls the part')",
+    "secure/src/die_id.rs:1-60 (pure decode)",
+    "secure/src/main.rs:1217 (hw::dbgmcu::report_die_id())"
+   ],
+   "status": "partial",
+   "notes": "The larger anti-counterfeit boot policy (CPUID r0p4 + UID plausibility at 0x0BFA_0590 + DHUK fingerprint vs factory record + errata fingerprinting, halt-on-anomaly) is NOT implemented \u2014 grep finds only comments; tracked in #249 P0 and threat-model.md:341."
+  },
+  {
+   "item": "ui-px glyph atlas integrity: NS-slot atlas re-hashed (volatile reads, ct_eq to pinned ATLAS_ROOT) before AND after every pixel dialog and again in the sign handler; mismatch = refusal",
+   "evidence": [
+    "secure/src/ui/px/assets.rs:10-22, :95-105 (atlas_root_proof), :109-150 (verify_atlas), :158-165 (atlas_verified)",
+    "CLAUDE.md 'Atlas in the NS slot (owner decision 2026-09-23)'"
+   ],
+   "status": "implemented",
+   "notes": "Defends against a swapped font in flash (a WYSIWYS input), not against a display-side implant. ui-px is out of `make release` (76,949 B over the secure slot)."
+  },
+  {
+   "item": "Constant-time glyph blit for secret-bearing rows (seed words) so font-table address traces do not encode the mnemonic; seed pages render via `word_bytes` with no word-indexed load",
+   "evidence": [
+    "secure/src/ui/secret_text.rs:1-30 (F-24 stage D; stage E panel/bus EM leakage accepted residual)",
+    "secure/src/ui/seed_wizard.rs:4-5, :84-96 (px_mnemonic_page, show_with secret cells)"
+   ],
+   "status": "implemented",
+   "notes": "The 24 words still cross the LCD SPI bus (PA7 MOSI) as plaintext RGB565 pixel data during the wizard \u2014 exactly what a CryptoBilis-style SPI logger captures. No mitigation exists or is tracked for the bus-logger case (only #237 emanation, #260 constant-pixel-count)."
+  },
+  {
+   "item": "Factory prodtest acceptance: GET_ID, DISPLAY_PATTERN (camera/operator verify), SAES/BHK/TRNG self-tests, OPTIGA/SE050 handshakes, USB loopback, BUTTON_TEST, RGB test/OSD; atomic per-unit JSON receipt",
+   "evidence": [
+    "secure/src/nsc/prodtest.rs:24 (supported profile), :51-95 (GET_ID)",
+    "docs/provisioning/factory-prodtest.md:20-50, :98-285, :330-339 (first complete acceptance run 2026-09-21)",
+    "docs/hardware/prodtest-receipt-example-pq1.json"
+   ],
+   "status": "implemented",
+   "notes": "Factory-side, reversible profile (PRODTEST_PERSISTENT_ACTION_FORBIDDEN fence, nsc/mod.rs:351-361). Not per-unit cryptographic attestation (HARDENING.md:410). Option-byte read-back per unit is #595 OPEN. Nothing in the receipt binds the board/display module identity."
+  },
+  {
+   "item": "Legacy factory-ceremony OTP sentinel verifier (host, probe-rs) \u2014 report-only, RDP2 bump refused",
+   "evidence": [
+    "tools/factory-provisioning-verify.sh:1-35",
+    "docs/provisioning/factory-provisioning.md:47-60 ('Current procedure: stop'), :283-290"
+   ],
+   "status": "fenced-off",
+   "notes": "Quarantined legacy receipt codec; no authority."
+  },
+  {
+   "item": "Reproducible builds + shared 8-word fingerprint derivation (`sphincs_tz_bip39::firmware_fingerprint_lines`) + host `fwmeasure`/measurement.txt so the user can compare screen words to a published release",
+   "evidence": [
+    "docs/security/measured-boot.md:107-230",
+    "fsbl/src/render.rs:1-14",
+    "secure/src/measured_boot.rs:150-175 (render_all_words)"
+   ],
+   "status": "implemented",
+   "notes": "Words are PUBLIC; a malicious FSBL at RDP-0 can print them (verify_ship_state.py:12-15). Only meaningful after WRP+RDP-2 close."
+  },
+  {
+   "item": "End-user device verification procedure (probe not from the box, reset-halt dump of all persistent MCU state, diff vs release + ship profile, power-cycle, compare on-screen words, then confirm lock)",
+   "evidence": [
+    "docs/security/user-device-verification.md:1-12 ('Status: DESIGN (2026-07-17). Nothing here is implemented'), 'User procedure', 'Ground-truth dump mechanics' table, 'What this explicitly does NOT prove' items 1-3, 'Work breakdown' 1-8",
+    "docs/security/threat-model.md:343 (pre-first-boot intercept row: 'Non-verifying users stay exposed')"
+   ],
+   "status": "planned",
+   "notes": "Design only. Work items 1 (pq1-verify CLI), 2 (WebUSB), 5 (SBU\u2194SWD + no-VBAT board reqs), 6 (birth certificate + transparency log), 7 (quickstart card), 8 (verify cable) have no dedicated issues (only #249/#68 cover item 6). Item 3 (confirm-gated Phase A) IS implemented despite the doc. Item 1 of 'does NOT prove' names hardware implants around a genuine MCU (LCD SPI logger, button injector) as the residual with 'tamper-evident packaging/case, published board photos, SE-CA genuine-check' as layers \u2014 none of which exist."
+  },
+  {
+   "item": "Boot-time SE attestation / genuine check (SE050 ReadObject_W_Attst + pinned NXP root + pinned UID; OPTIGA 0xE0E0 cert chain to Infineon Root CA 2 + 0xE0C2 UID; AppletConfig=0x3F9F variant pin)",
+   "evidence": [
+    "docs/security/HARDENING.md:178-187 (\u00a73.4 'On every boot, before trusting the SE050')",
+    "README.md:184 ('SE chip attestation ... \u274c Proof-of-presence only')",
+    "docs/security/threat-model.md:339-345 (7.11 rows all PRE-PROD-CAVEAT), :505-506 (\u00a79.4 not landed)",
+    "grep secure/src/se050 secure/src/optiga for attest/0xF0000013/AppletConfig/0xE0C2 \u2192 no runtime implementation; factory_provisioning.rs:304 comment only"
+   ],
+   "status": "planned",
+   "notes": "The firmware trusts both SEs unconditionally on boot (#210 'NOT STARTED'). Related: #206 (AppletConfig pin), #272 (te-3 genuineness gate in factory_provisioning), #27 (E0E0+E0C2 identity), #245 (OPTIGA chain, optional), #244 (SE050 attestation every boot, optional), #63 (LockState). Even when built, SE attestation cannot see a display/button implant \u2014 the Ledger case passed Genuine Check with intact SEs."
+  },
+  {
+   "item": "Supply-chain attestation: triple-UID binding manifest (MCU UID + 2 SE UIDs), HSM-signed SLH-DSA factory manifest, transparency log append per device, WebUSB box-opening ceremony",
+   "evidence": [
+    "docs/security/production-security.md:344-360 (\u00a72.5), :570-583",
+    "docs/security/supply-chain-defense-research-brief.md:1-30, :127 ('what it CANNOT prove remotely (hardware implants added before/...')",
+    "docs/security/threat-model.md:343"
+   ],
+   "status": "planned",
+   "notes": "#249 (ship-blocker, NOT STARTED), #68 (transparency log, ship-blocker), #67 (SLH-DSA factory manifest, ship-blocker), #597 (SFI/HSMv2 anti-overbuild). Research brief explicitly scopes hardware implants OUT of what remote attestation can prove."
+  },
+  {
+   "item": "Board-level anti-tamper requirements: 4-layer tamper mesh over U585 + both SEs \u2192 TAMP_INx, case/enclosure switch \u2192 TAMP_INx with pull + RC filter, EMI can, power-rail filtering, no test pads on S-world buses, internal temp sensor cold-boot refuse, crystal-vs-RC decision",
+   "evidence": [
+    "docs/hardware/hardware_requirements.md 'Anti-tamper & physical security' + 'Open items' + cross-ref table rows (\u274c board not started; ext-pin cfg open)",
+    "README.md:449-453 (\u00a7A checklist unchecked)",
+    "docs/security/HARDENING.md:233 ('TAMP: wire any tamper inputs (case switch, mesh) into the wipe handler')",
+    "secure/src/hw/tamp.rs:274-281 (FLTCR preconfigured for external pins; TAMPxE never set)",
+    "secure/src/board/pq1.rs:337-345 (FREE_PINS PA10/PC13/PB4 \u2014 all NC)"
+   ],
+   "status": "planned",
+   "notes": "The as-built AL_A66_MB_V10 has NO tamper mesh net, NO case-switch net, and no TAMP_IN pin assigned (pq1.rs lists none). gh searches for 'mesh', 'enclosure', 'TAMP_IN', 'temperature' return no issue \u2014 these live only in README/hardware_requirements checklists. Observation (needs RM0456 pin-table confirmation): PC13, which pq1 lists as bonded+NC/free, is the conventional TAMP_IN1/RTC_TS pad on STM32 parts, so a case switch may not need a pin remap. Trezor's stm32u5 tamper.c also leaves external tamper input commented out (trezor-firmware core/embed/sec/tamper/stm32u5/tamper.c:131-151) \u2014 parity, not a lead."
+  },
+  {
+   "item": "Board documentation in-repo for visual/structural comparison: V10 copper plots (6 layers) + V10 schematic (image-only PDF) + vendor pin-function table",
+   "evidence": [
+    "docs/hardware/pcb/README.md ('no signal-integrity, EMC, or tamper/side-channel review is implied')",
+    "docs/hardware/schematics/README.md ('The cross-check itself has not been done'; 'There is no BOM in this repo'; image-only export)",
+    "docs/hardware/evt-debug-pins.md 'As built' section"
+   ],
+   "status": "partial",
+   "notes": "Published-board-photo comparison (user-device-verification residual layer) would need reference photos/X-ray of a known-good assembled unit; none exist. BOM absent; SE050 E2 vs C2 unconfirmed with ODM (#697)."
+  },
+  {
+   "item": "Debug/verification access on the production board: 10-pin SWD header J210 + NRST, UART J211/TP101-103, BOOT0 pad; sealed EVT units reachable only via USB-C SBU\u2192BOOT0 LDO (ROM DFU) with a modified cable",
+   "evidence": [
+    "docs/hardware/evt-debug-pins.md:5 ('Populate for EVT/DVT, DNP / remove for MP'), :63-66, :75-100 (J210 as built), :157-185 (BOOT0 via USB-C sideband R132\u2192U111 EN\u2192R131; MP strap to GND removes USB flashing entirely), :161-162 ('the 10-pin connector is removed on lab/MP units, the pads stay')",
+    "docs/hardware/evt-dev-loop.md:1-10, :72 (sealed units: SBU-bridged adapter or SWD only)",
+    "gh #695 (enclosed EVT has no exposed SWD; ODM flashes with a custom SBU-bridged cable; BOOT0 to be strapped at MP), #696"
+   ],
+   "status": "partial",
+   "notes": "Security-relevant in both directions: (a) today a sealed EVT can be reflashed over USB-C with a trivial A8\u2194VBUS bridge \u2014 exactly the transit reflash the threat model names; BOOT0 strap at MP is the ODM's plan, not a verified fact; (b) after MP the user's 'before first power' SWD verification needs physical pad access inside the enclosure unless SBU\u2194SWD routing (user-device-verification design) is adopted \u2014 no issue tracks that routing decision."
+  },
+  {
+   "item": "Owner-facing honest-caveats page and 'known limitations' doc listing vendor supply-chain as unprotected",
+   "evidence": [
+    "README.md:514 (\u00a7J 'vendor supply-chain' in the not-protected list)",
+    "docs/security/HARDENING.md:14 (out of scope: supply-chain compromise of silicon vendors)"
+   ],
+   "status": "planned",
+   "notes": "Checklist item only."
+  },
+  {
+   "item": "Lookalike-device-swap defence: user-personalised boot artifact rendered before PIN entry",
+   "evidence": [
+    "gh #601 (design-first, owner-gated; no free flash page per geometry/src/lib.rs:103-118)"
+   ],
+   "status": "planned",
+   "notes": "Would make a substituted whole device (not an implant in the genuine one) visibly wrong before PIN entry."
+  },
+  {
+   "item": "USB VBUS/ESD robustness and VBUS sense",
+   "evidence": [
+    "secure/src/board/pq1.rs:286-291 (USB_FAULT_FLAG PB10 'Nothing reads it today'; USB_VBUS_SENSE PA9)",
+    "gh #598 (no ESD/TVS designator on the production schematic text)"
+   ],
+   "status": "planned",
+   "notes": "Availability/destruction residual only."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "No mechanism, in code or design, can detect a logger/injector on the LCD SPI bus (PA4/PA5/PA7), the DC/RST/TE lines, or the display module connector. The panel is write-only, PA6/MISO is NC, the FSBL/secure-world render verdict only proves the SPI peripheral finished, and the 24 seed words cross that bus as plaintext pixels in the wizard. This is the exact CryptoBilis shape.",
+   "tracked_in": "Not tracked as an issue. Named only as an accepted residual in docs/security/user-device-verification.md ('What this explicitly does NOT prove' item 1) and fsbl/src/render.rs:50-80. Adjacent: #237 (OLED emanation, seed-wizard scope), #260 (constant-pixel encoding), #705 (backlight).",
+   "notes": "Candidate levers for the research agent: a display with a readable ID/status path (NV3007 RDID over a 3-/4-wire SPI with SDO) so the firmware can at least challenge the panel controller; bus-timing/impedance self-test (drive-strength/TE-line round-trip); seed-word display alternatives that never put the full mnemonic on the bus in the clear (companion-free paper backup via visual secret sharing is research-grade); physical: display-FPC under the EMI can, potting, mesh over the connector. None are in the repo."
+  },
+  {
+   "gap": "Buttons are raw GPIO (PA0/PA1) with no injector/short detection; a button-press implant can confirm dialogs. Only the S-world GPIO ownership and the scroll-to-end chord gate exist.",
+   "tracked_in": "Not tracked. user-device-verification.md names 'a button injector' as residual.",
+   "notes": "Trezor comparison not applicable (same exposure)."
+  },
+  {
+   "gap": "External TAMP_INx inputs (case/enclosure switch, PCB tamper mesh) exist neither on the AL_A66_MB_V10 board nor in firmware: tamp.rs preconfigures FLTCR only; no TAMPxE/CR2 code; pq1.rs assigns no TAMP_IN pin.",
+   "tracked_in": "README \u00a7A checklist + docs/hardware/hardware_requirements.md 'Open items' only; no GitHub issue (searches 'mesh', 'enclosure', 'TAMP_IN' empty). Partial overlap: #248 (TAMP+CSS+PVD Stage 2).",
+   "notes": "Supercap-only VBAT bounds post-unplug tamper monitoring to ~12-24 h (brownout-hardening.md 'VBAT power source'); a pre-first-power implant installed while unpowered would not trip a mesh anyway \u2014 mesh helps post-ownership evil-maid, not transit."
+  },
+  {
+   "gap": "No boot-time SE genuine check / attestation of either SE, no pinned UID comparison, no OPTIGA cert-chain verification; firmware trusts both SEs unconditionally.",
+   "tracked_in": "#210 (NOT STARTED), #206, #272, #27, #245, #244, #63; threat-model \u00a79.4; HARDENING \u00a73.4; README:184",
+   "notes": "Would not have caught the Ledger implant (genuine SE intact) but closes chip-swap/clone-board. Both SEs have vendor ECDSA certs \u2014 a classical verifier in-device must respect invariant #5 (verification-only is allowed; dbgen precedent fences classical code)."
+  },
+  {
+   "gap": "STM32 anti-counterfeit boot probes (CPUID r0p4, UID plausibility at 0x0BFA_0590, DHUK fingerprint vs factory record, errata fingerprint) are documented plans only; dbgmcu.rs is report-only.",
+   "tracked_in": "#249 P0; threat-model.md:341; docs/security/production-security.md \u00a72.5",
+   "notes": "DHUK-fingerprint binding is impossible at RDP-0 (factory never runs at RDP>=1, #249 note) \u2014 binding must lean on UIDs + SE attestation."
+  },
+  {
+   "gap": "Per-device birth certificate (MCU UID + SE UIDs + salted OTP hash + ship profile id + release hash) signed into a transparency log, and the user-facing verifier that checks it, do not exist; the factory receipt is a completion-flag JSON, not attestation.",
+   "tracked_in": "#249, #68 (ship-blocker), #67 (ship-blocker), #595 (option-byte read-back per unit); HARDENING.md:410",
+   "notes": "Also the only layer the design offers against 'counterfeit board with SWD-emulating fake MCU + transplanted genuine SEs' (user-device-verification 'does NOT prove' item 2)."
+  },
+  {
+   "gap": "Consumer-grade pre-first-power verifier does not exist: tools/verify_ship_state.py covers option bytes + named flash regions against a BENCH profile, does not read OTP or the MCU UID, needs STM32_Programmer_CLI, and tools/ship-profiles/ship-option-b.template.json is a template. No `pq1-verify` CLI, no WebUSB page, no quickstart card.",
+   "tracked_in": "user-device-verification.md work breakdown items 1,2,7,8 \u2014 no dedicated issues; loosely under #268/#34 (#36 closure)",
+   "notes": "The full-flash dump + diff is the one defence the repo claims is unconditional on factory honesty; it is currently an operator script."
+  },
+  {
+   "gap": "Physical access for that verification on a sealed MP unit is unresolved: evt-debug-pins.md says DNP the SWD connector at MP (pads stay inside the enclosure), sealed EVT units expose no SWD (#695), and the SBU1/SBU2\u2194SWD routing + ESD that user-device-verification.md requires is not on the V10 schematic (SBU drives the BOOT0 LDO instead). hardware_requirements.md says pads MUST stay accessible.",
+   "tracked_in": "#695 (DFU route), #696, #753 partially; no issue for SBU\u2194SWD routing or enclosure access decision",
+   "notes": "Today the sealed unit's ROM DFU is reachable with a modified USB-C cable (transit reflash with no tools); BOOT0-strap-at-MP is an ODM statement, not a verified board fact (#695 open questions)."
+  },
+  {
+   "gap": "VBAT/backup-domain facts conflict across docs: user-device-verification.md assumes NO VBAT retention so a power-cycle clears backup registers; hardware_requirements.md/brownout-hardening.md specify a 0.47-1 F supercap and the schematic lists a VBAT rail. If the supercap exists, TAMP backup registers (BHK home) survive the user's power-cycle for hours.",
+   "tracked_in": "Not tracked",
+   "notes": "Phase B re-provisions the BHK from flash on every boot (bhk load_and_lock) and erases page 126 unconditionally, so the practical impact is on the design doc's correctness, not on seed secrecy; but a pre-planted RTC/backup-register state is not in the dump table."
+  },
+  {
+   "gap": "No tamper-evident packaging spec, no published reference photos/X-ray/weight of a known-good assembled unit, no PCB security review by a non-layout engineer, no BOM in repo, schematic-vs-firmware pin cross-check never done.",
+   "tracked_in": "README \u00a7A/\u00a7B checklists; docs/hardware/pcb/README.md and schematics/README.md state the gaps; #697 (SE050 E2 vs C2); no issue for packaging/photos/PCB review",
+   "notes": "These are the only layers the design names against targeted per-unit implants."
+  },
+  {
+   "gap": "TAMP escalation, HW-mode backup-register erase, SECCFGR backup-register zones/privilege, IRQ-mode default, debug-triggerable ITAMP masking, and ECC-SRAM-as-tamper are all unvalidated on silicon.",
+   "tracked_in": "#75, #47, #50, #256, #208, #48, #248; evt-silicon-validation.md \u00a710.1; red-teaming.md \u00a76.3",
+   "notes": "A false ITAMP9 on a noisy rail would wipe a production unit; threshold characterisation is owed."
+  },
+  {
+   "gap": "FSBL/secure-world fingerprint divergence detection is human-only; no on-device comparator; FSBL window is non-dismissible 4 s on a panel that may be dark if the backlight I2C leg fails (#705 still OPEN though fsbl/src/aw99703.rs landed).",
+   "tracked_in": "red-teaming.md \u00a76.2 'Known gaps' (residual); #705; #742 (bundle does not bind FSBL)",
+   "notes": "Invariant #10 names 'a later fake screen' as the accepted residual; an implant that replays a recorded good frame during the boot window defeats the anchor."
+  },
+  {
+   "gap": "OPTIGA Shielded Connection handshake has no host nonce (whole-session replay by an I2C interposer) and the channel layer accepts unauthenticated error SWs that map to wipe/PIN-burn; plaintext fallback when shield.active==false.",
+   "tracked_in": "docs/security/adversarial-review/secure-element-adversarial-review.md SE5, SE10 (candidates); #117 (OP17-2), #126 (OP17-11)",
+   "notes": "Implant-reachable (I2C1 test pads PB8/PB9 are brought out on EVT per evt-debug-pins.md)."
+  },
+  {
+   "gap": "se_power read-back and SE presence are not fail-closed in production (result discarded without debug-log); FLAGB never read.",
+   "tracked_in": "Not tracked (se_power.rs header says 'deliberately not made here')",
+   "notes": "Low value for implant detection but a free consistency check."
+  },
+  {
+   "gap": "Seed-wizard rule 'treat all pre-existing SE user-object state as hostile \u2014 delete/recreate, never adopt' is a design requirement whose current-code status was never verified.",
+   "tracked_in": "user-device-verification.md work item 4; no issue",
+   "notes": "dual_se.rs has admin-wipe/factory-reset flows (dual_se.rs:627-735) but no explicit 'first wizard entry wipes any pre-existing objects' verification was found in this pass."
+  },
+  {
+   "gap": "External hardware-lab review / device donation and a second-opinion hardware audit have not happened; PCB tamper/SCA review not performed.",
+   "tracked_in": "#614, #612/#613, README \u00a7H",
+   "notes": ""
+  }
+ ],
+ "drift": [
+  "docs/hardware/hardware_requirements.md ('Anti-tamper & physical security' intro and 'Open items': 'TAMP driver, currently log-only and not yet wired into main()' / 'Wire tamp::init() into main() \u2014 currently init()/poll()/on_tamp_irq() exist but aren't called from the boot path') vs secure/src/main.rs:1395-1405 (hw::tamp::init() under stm32u585+tamp), :4327 (hw::tamp::poll() from SysTick), :4395 (DefaultHandler irqn 2 \u2192 on_tamp_irq). The wiring exists; the doc is stale.",
+  "docs/security/threat-model.md:508-509 (\u00a79.5 'TAMP IRQ handler is log-only ... pattern needs to be ported and the IRQ handler must wipe before production'), hardware_requirements.md 'Flip the TAMP IRQ from log-only' open item, and #75 body vs secure/src/hw/tamp.rs:95-115/:370-380 (tamp-wipe escalation to tzic::trigger_intrusion_wipe) + secure/src/nsc/mod.rs:747-765 (forced ON for shipping dual-SE). The escalation is implemented and fenced; what remains open is silicon validation, not porting.",
+  "docs/provisioning/first-boot-provisioning.md:122-134 ('Not yet implemented \u2014 current code runs Phase A unconditionally right after ui::init()') and docs/security/user-device-verification.md 'Required design delta: confirm-gated Phase A' ('Today's #36 candidate runs Phase A ... unconditionally') vs secure/src/first_boot/mod.rs:215-243 (build_lock_confirm_pages + confirm_checked + rdp_burn_authorized sentinel; decline \u2192 park_unlocked_reprompt_next_boot). The confirm gate is implemented.",
+  "docs/security/user-device-verification.md 'Hardware + factory requirements' ('No VBAT retention on the production board (no coin cell / supercap)') and its dump table ('Backup domain ... volatile \u2014 PQ1 has no VBAT battery; cleared by the step-4 power removal') vs docs/hardware/hardware_requirements.md \u00a7Power ('VBAT backup-domain power = supercap, not a coin cell', 0.47\u20131 F, 12\u201324 h retention), docs/security/brownout-hardening.md 'VBAT power source', docs/hardware/schematics/README.md:42 (VBAT rail listed). Task statement says pq1 is supercap-only. The verification design's 'power-cycle clears backup registers' premise is wrong if the supercap is populated.",
+  "docs/security/user-device-verification.md ('Route SWDIO/SWCLK to USB-C SBU1/SBU2 ... No NRST needed') vs as-built docs/hardware/evt-debug-pins.md 'Boot select' (SBU drives the BOOT0 LDO enable via R132/U111/R131; SWD is on J210, 'DNP / remove for MP', 'the pads stay') and docs/hardware/hardware_requirements.md:21,154,166 ('SWD + NRST pads MUST stay accessible after assembly'). Three documents disagree on where pre-first-power access comes from; the board implements none of the design's routing.",
+  "docs/security/measured-boot.md:349-353 ('the FSBL has no I2C stage ... absence of visible words on pq1 is therefore not by itself evidence that measured boot failed') and issue #705 (OPEN) vs fsbl/src/aw99703.rs (bit-banged I2C2 AW99703 driver, CHIP_ID-gated) + fsbl/src/render.rs 'Returns OK_SENTINEL iff every SPI transfer completed and the backlight came on' + fsbl/src/nv3007.rs:56-62 (header updated). Backlight is now a fail-closed control input in the FSBL; doc and issue lag.",
+  "secure/src/die_id.rs:14-17 ('no code reads DBGMCU_IDCODE at all') vs secure/src/hw/dbgmcu.rs:20-30 (IDCODE read) and secure/src/main.rs:1217 (report_die_id). In-code comment drift.",
+  "docs/security/threat-model.md:233 ('freshness nonce on each session' for the Shielded Connection) and the 20260611 audit claim that a replaced chip cannot produce a valid SlaveFinished vs docs/security/adversarial-review/secure-element-adversarial-review.md:26 (SE5: MasterHello is two constant bytes, session keys = PRF(PBS,'Platform Binding',random_S), post-handshake dec_seq=0 \u2192 a recorded session replays end-to-end; plaintext fallback at optiga/apdu.rs:432-434). Claim-vs-code on the exact interposer/implant surface.",
+  "docs/security/threat-model.md:280 ('NS races/spoofs the LCD ... NV3007 LCD SPI bus is S-owned via GTZC; TZSC enforcement silicon-validated 2026-05-20') vs #390 (gtzc-enforcement-hw builds ui-semihosting against seccfgr2==0, so the SPI1-secure bit is NOT covered by the 7/7 receipt) and evt-silicon-validation.md:931 (\u00a710.3). The receipt does not cover the display bit it is cited for.",
+  "Issue #47 body still states the tamp.rs TAMP base-address bug (0x5600_4400) as unfixed, while secure/src/hw/tamp.rs:133 uses 0x5600_7C00 and #208 records the fix on 2026-06-02; the issue's remaining asks (confirm HW-mode erase on silicon) are still valid but its first checkbox is stale.",
+  "docs/hardware/hardware_requirements.md 'Status' banner ('No custom PCB exists yet \u2014 the design runs today on a B-U585I-IOT02A dev board') vs AL_A66_MB_V10 production board in secure/src/board/pq1.rs, docs/hardware/pcb/, docs/hardware/schematics/, sealed EVT receipts (evt-silicon-validation.md:1064-1074). The requirements doc never re-baselined against the real board (e.g. 'the two SEs share I2C1 today' \u2014 pq1 already splits SE050 onto I2C4, pq1.rs:117-150).",
+  "docs/security/HARDENING.md:233 and README.md Phase-3 ('wire case switch / tamper mesh / temp sensor / BOR to the wipe ISR') read as planned firmware deltas on a board that would carry those nets; the V10 board assigns no TAMP_IN, mesh or temp-sensor-related net (pq1.rs full pin map; FREE_PINS PA10/PC13/PB4 all NC), so the firmware item has no hardware consumer."
+ ],
+ "owner_decisions": [
+  "Ship at RDP-0 with user-verifiable flash/option-bytes/OTP over SWD before first power; first field boot self-locks RDP-2; NO factory/fixture RDP-2 burn and NO factory-held final pairing secret (owner 2026-07-14, work-todo #36; CLAUDE.md 'Shipping model'). Any implant-detection proposal must not reintroduce a factory lock or a factory-held secret.",
+  "Invariant #10 verify-once-physically trust chain (owner 2026-07-21): the FSBL must own the display for its boot-time fingerprint window; 'a later fake screen is the accepted residual \u2014 the boot-time window is the anchor'; no runtime write path may touch the FSBL range; WRP-set \u2192 RDP-2 ordering mandatory. Proposals that rely on post-boot display attestation are outside the accepted anchor.",
+  "Option B (owner 2026-07-21, recorded in tools/verify_ship_state.py and Makefile verify-ship-state): on-device self-verification at RDP-0 is worth zero against interdiction; the load-bearing check is OFF-device. Do not propose on-device 'genuine firmware' self-checks as implant/interdiction defences.",
+  "Phase A RDP-2 burn must be CONFIRM-GATED on the trusted UI (owner 2026-07-17); a profile mismatch halts UNLOCKED so a bad flash is never turned into an RDP-2 brick (first_boot/mod.rs:165-190).",
+  "ML-KEM-1024 inner wrap DESCOPED 2026-07-07 \u2014 do not re-raise (work-todo #9): the I2C bus-tap residual (an implant on I2C1/I2C4 during a live unlock) is ACCEPTED at Grover-2^64/Cat-1 per tunnel, conditional on per-device final rotation being load-bearing. Implant research may strengthen rotation/replay freshness but must not re-propose a PQ KEM wrap.",
+  "TROPIC01 removed 2026-07-14 \u2014 dual-SE (OPTIGA + SE050) only; no third SE as an attestation anchor.",
+  "OPTIGA S-1/S-2/S-3 lockdown ship-blockers are deferred BY DESIGN (chips cost money, LcsO is irreversible; memory note). The OPTIGA_S2_PRODUCTION_BLOCKED fence makes every mode-production + optiga-trust-m build (and therefore rdp2-self-lock) unbuildable today; this is not avoidance.",
+  "tamp-wipe/tzic-wipe are default-OFF on bench builds and FORCED ON for shipping dual-SE images via the nsc/mod.rs fence (audit tz-tamper 20260611 MEDIUM-1); a bench board under probe-rs must not brick on a false ITAMP9. Any proposal to make tamper detection stricter must preserve the bench/prod split.",
+  "Pixel UI (ui-px) owner decisions 2026-09-22/23/24: atlas lives in the NS slot and is SHA-256-pinned; scroll-to-end gate is ON; sign gesture is the two-button chord. ui-px stays out of make release until the flash lever lands. Display-integrity proposals touching the sign gesture or atlas placement must not re-litigate these.",
+  "FSBL fingerprint hold = 4 s (owner 2026-09-24, down from 10 s), non-dismissible; trading reading time for boot latency is an owner call.",
+  "SHAKE-vs-SHA2 is DECIDED (stay on plain SHA-2); SE050 SCP03 stays on the BHK axis (answered 2026-09-21, memory). Not implant-specific but constrain any 'swap the primitive/root' suggestions.",
+  "Factory responsibilities (first-boot-provisioning.md 'Done at the FACTORY'): set every option byte EXCEPT RDP, burn the per-device OTP master, provision SE-internal structure on transport keysets, read-back QA over SWD; the line must not generate or retain final pairing secrets (README \u00a7B)."
+ ]
+}

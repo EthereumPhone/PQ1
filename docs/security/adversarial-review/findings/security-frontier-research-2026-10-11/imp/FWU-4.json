@@ -1,0 +1,26 @@
+{
+ "id": "FWU-4",
+ "title": "Make the boot-time and install-time 8-word fingerprint cover the whole signed preimage (version + secure + NS hashes) and publish the expected words per release",
+ "threat": "A supply-chain or hostile-companion install whose NS image (USB router, APDU parser \u2014 the pre-setup hostile-host surface BitBox just patched) differs from the published build displays IDENTICAL boot words to the genuine release, and even for the secure image nobody publishes a value to compare against, so detection probability is zero by construction.",
+ "proposal": "Change the rendered digest from `secure_hash` to `manifest_digest = SHA-256(signed_preimage)` (already computed by verify_digest and already covering version, secure_hash, nonsecure_hash) in all three places: fsbl::verify_images return value / render_fingerprint, secure measured_boot::run, and fw_update::confirm_install; keep the vendor-key words page. Pin the three to one function in sphincs_tz_bip39 and extend fsbl-tests/tests/paired_constants.rs. Process half: `make release` writes the 8 expected words (+ key words) into release.json and the public release notes, and the companion shows them next to the install prompt so the user compares device-rendered vs published words.",
+ "rationale": "The vendor-signing-key-compromise review already verified this gap and ranked 'publish expected fingerprints' as one of six achievable wins: two builds differing only in the NS image display identical words today. Trezor's fingerprint is the hash of the header with signature bytes zeroed \u2014 it covers everything signed \u2014 and headertool prints it before the ceremony so auditors can compare. The on-device render in pq1 is stronger (immutable stage renders) but is currently less complete than what it verifies.",
+ "repo_evidence": [
+  "fsbl/src/verify.rs:109 (`Some(actual_secure)` \u2014 NS hash verified but not returned)",
+  "fsbl/src/main.rs:286 (`render_fingerprint(&secure_digest)`)",
+  "secure/src/fw_update/mod.rs:135 (`hash_to_word_indices(manifest.secure_hash())` at install confirm)",
+  "docs/security/vendor-signing-key-compromise.md:371-381 (verified finding + recommendation; 'detection probability is 0 today by construction')",
+  "fsbl-tests/tests/source_invariants.rs:103-134 (render-before-branch pin exists; extend, do not bypass)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/image/image.c:168-176 (get_image_fingerprint over signature-zeroed header), bootloader/bootui.c:72-86 (fingerprint on install screen), headertool prints pre-ceremony fingerprint; Trezor Suite shows version/fingerprint before install. Ledger publishes firmware hashes per release.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "Changes the word set users have seen on bench devices (none shipped, so acceptable now, impossible later). The FSBL and secure measured_boot MUST change together or honest-row divergence (a documented tamper signal) becomes a permanent false alarm \u2014 bind with the paired-constants test. The words still change only when bytes/key change: under a stolen legitimate key they match a genuinely published malicious release (the VSKC note's explicit caveat); state this in the release notes rather than overclaiming.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/bootui.c",
+  "docs/security/vendor-signing-key-compromise.md"
+ ],
+ "surface": "fwupdate"
+}

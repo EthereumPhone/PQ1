@@ -1,0 +1,23 @@
+{
+ "id": "D-09",
+ "title": "SE-keyed anti-phishing words at PIN entry (Coldcard / Passport 'Security Words'): detect a swapped or cloned device before the full PIN is typed",
+ "threat": "Evil-maid / reseller swap: a look-alike device (or an implanted one with its own firmware) harvests the PIN as the user types it on the trusted UI; the boot fingerprint proves the firmware, not that this is the user's own unit, and a device with the same firmware shows the same 8 words.",
+ "proposal": "After the first 4 PIN digits, compute inside an SE (SE050 HMAC over the prefix with a per-device SE-resident secret, or OPTIGA CMAC via a protected object, rate-limited by SE policy to ~2 s per distinct prefix) and render two BIP-39 words via the CT secret path; the user learns them at setup (shown once, written next to the device) and aborts PIN entry if they differ. Opt-in (Passport default-off) or default-on with an explicit setup step. Keep PIN comparison itself in SE silicon (invariant #2 untouched; the prefix MAC is a separate keyed object, never the PIN object).",
+ "rationale": "Zero hardware cost, directly addresses the user's 'malicious hardware' question for the swap case (a clone cannot reproduce the SE-keyed words), and complements the FSBL fingerprint which only answers 'which firmware'.",
+ "repo_evidence": [
+  "secure/src/ui/pin_entry.rs:8-30 (F-20 only; no device-authenticity words); grep anti-phish/security words/prefix in pin_entry.rs, cmd_request_unlock.rs, threat-model.md, trezor-comparison.md: none",
+  "secure/src/ui/secret_text.rs:73-82 (CT secret row primitive available to render the words)"
+ ],
+ "vendor_precedent": "Coldcard Mk4 anti-phishing words (HMAC over hashed PIN prefix in SE1, 2 s rate limit); Foundation Passport Prime 'Security Words' (off by default).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "Exposes a rate-limited 4-digit-prefix oracle on the SE (10,000 prefixes; with 2 s/attempt ~5.5 h to enumerate, which reveals the PIN prefix only if the user's words are known \u2014 the words are secret to the user, so the oracle yields nothing to an attacker without them). The words themselves become a secret displayed every unlock \u2014 must go through the CT/forced path (D-01) and the constant-weight pair (D-04). Needs an SE050 object/policy design and an attempt-counter interaction review so it cannot consume page-124/E120 budget.",
+ "sources": [
+  "https://blog.coinkite.com/understanding-mk4-security-model/",
+  "https://coldcard.com/docs/pins/",
+  "https://docs.foundation.xyz/prime/prime-apps/settings/general/"
+ ],
+ "surface": "display"
+}

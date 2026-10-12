@@ -1,0 +1,277 @@
+{
+ "surface": "Malicious-hardware / supply-chain implant detection (key=implant): CryptoBilis-style display-bus logger/exfil MCU behind the screen, PCB implants, swapped components, probe residue, reseller tampering before first power. Verified bottom line (read-only pass over secure/src, fsbl/src, shared/src, tools/, docs/, trezor-firmware @6ab39e95): the repo's only implemented pre-first-power defence is off-device SWD readout of flash+option bytes against a BENCH profile (tools/verify_ship_state.py, no OTP/UID read) plus encrypted SE tunnels. Nothing in firmware can observe the LCD SPI bus (write-only NV3007, PA6 NC \u2014 secure/src/hw/lcd_nv3007.rs:104, fsbl/src/render.rs:62-72), the buttons, or the PCB; the 24 seed words cross PA7 as plaintext RGB565 pixels (secure/src/ui/seed_wizard.rs:89-96; secret_text.rs:16-18 accepts panel/bus leakage as residual). No TSC/ADC/COMP/active-tamper (ATCR/ATOR) code exists; PC13/PA10/PB4 are free (secure/src/board/pq1.rs:345). Neither Trezor nor Ledger ships anything against a passive display-bus tap, so the top items below are 'beyond', the middle ones are Trezor parity.",
+ "improvements": [
+  {
+   "id": "IMP-01",
+   "title": "No-cavity, destructive-open enclosure with the display module and its SPI/DC/TE/button nets physically unreachable (EVT board + mechanical spec)",
+   "threat": "CryptoBilis shape exactly: an implant MCU + LTE module parked in the padding behind the screen, soldered to the display SPI bus (pq1: PA4 CS / PA5 SCK / PA7 MOSI, PB0 DC, PB2 TE) or to the button nets (PA0/PA1), installed between factory and first power. Firmware cannot see this (write-only panel, no MISO), so the only deterministic counter is to leave no space and no reachable copper.",
+   "proposal": "Write and adopt a mechanical/PCB security spec for the MP revision of AL_A66_MB: (1) zero void behind the panel \u2014 panel bonded to a rigid backer that fills the cavity, display FPC captured under the EMI can with the connector potted; (2) SPI1/DC/TE/button traces routed on inner layers with no vias to the outer layers in the display region, and NO test pads on SPI1, I2C1, I2C4, PA0/PA1 at MP (EVT currently brings out PB8/PB9 and the 10-pin SWD pads); (3) ultrasonic-welded or otherwise destructive-open shell (Ledger Gen5 / Cypherock model) so any opening is irreversible and visible; (4) verify the ODM's BOOT0-strap-at-MP claim on silicon so the sealed unit's ROM-DFU via the SBU bridge (A8<->VBUS) is physically gone; (5) publish Gerbers, pinned BOM (exact passives), and reference photos / X-ray / weight of a sealed known-good unit so the design is golden-free comparable (Parasitic Circus). Keep the SWD pads reachable ONLY through the deliberately-documented verification route (see IMP-02).",
+   "rationale": "Ledger's own threat model concedes Genuine Check cannot see an implant around an intact SE; its only remedy was photos and a casing that cannot be opened without damage. pq1 has nothing on this axis yet (no enclosure spec, no BOM, cross-check never done) and its EVT units are reflashable over USB-C with a modified cable. Removing the cavity and the copper access is the one measure that does not depend on detection thresholds or on who calibrated a baseline.",
+   "repo_evidence": [
+    "secure/src/hw/lcd_nv3007.rs:104 ('The panel is write-only so MISO is free')",
+    "fsbl/src/render.rs:62-72 (verdict cannot prove panel received a byte; PA6 NC)",
+    "secure/src/ui/seed_wizard.rs:89-96 (px_mnemonic_page renders the 24 words as pixels over SPI1)",
+    "docs/hardware/evt-debug-pins.md: SWD J210 'DNP / remove for MP, the pads stay'; BOOT0 via USB-C SBU LDO; I2C1 pads PB8/PB9 brought out",
+    "docs/hardware/schematics/README.md: 'There is no BOM in this repo'; 'The cross-check itself has not been done'",
+    "docs/hardware/pcb/README.md: no tamper/side-channel review implied",
+    "gh #695 (sealed EVT flashable over SBU bridge; BOOT0 strap is an ODM statement)",
+    "grep -rl 'enclosure|no-cavity|potting' docs/ -> only checklist mentions in README \u00a7A / hardware_requirements.md"
+   ],
+   "vendor_precedent": "Ledger Nano Gen5 casing 'cannot be opened without visible and irreversible damage' (support article 4404382029329); Cypherock ultrasonic-welded shell + Keylabs audit flagging exposed test points as a supply-chain jig vector; Foundation Passport Prime screen-removal tamper; Coldcard clear case with exposed circuit for visual implant check.",
+   "novelty": "parity",
+   "kind": "hardware",
+   "cost": "L",
+   "priority": "P0",
+   "risks": "Destructive-open kills user-side 'open and compare' inspection (Ledger's 2018 stance) \u2014 pq1 must choose evidence-of-opening over inspectability deliberately and document it. Potting/welding complicates RMA and the SWD verification route (IMP-02). Does nothing against a factory-inserted implant that ships inside the sealed shell \u2014 that is IMP-02/IMP-03's job. Thermal/ESD rework of the display module needs ODM sign-off; EVT-003B-class units are already sealed and cannot be retrofitted.",
+   "sources": [
+    "https://donjon.ledger.com/threat-model/device-genuineness",
+    "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+    "https://www.cypherock.com/keylabs.pdf",
+    "https://docs.foundation.xyz/glossary/home/",
+    "https://arxiv.org/abs/2403.12252"
+   ]
+  },
+  {
+   "id": "IMP-02",
+   "title": "Consumer-grade verify-before-first-power pack: pq1-verify reads flash + option bytes + OTP + UID + OEM-lock status, plus a per-unit PDN-impedance signature and a signed interior-photo/glitter baseline taken by the verifier, not the factory",
+   "threat": "Reseller/transit interdiction before first power: reflash at RDP-0, planted OEM regression key, planted page-123..127 state, swapped MCU/board with transplanted genuine SEs, and implants on the PDN. Today the 'verify before first power' story that invariant #10 rests on is an operator script against a bench profile that reads no OTP, no UID and no OEM-lock bits, so a non-expert user has no check at all and an expert's check misses the write-only OEM keys.",
+   "proposal": "(a) Replace tools/verify_ship_state.py's bench profile with the ship profile and extend the read set to: full bank-1/bank-2 dump diff vs the reproducible release, FLASH_OPTR/SECBOOTADD0/SECWM/WRP1A/B, FLASH_NSSR OEM1LOCK/OEM2LOCK (must be clear), full OTP area, 96-bit UID at 0x0BFA_0590, DBGMCU_IDCODE, TAMP backup registers (expected erased) \u2014 all read-only, connect-under-reset, refusing on any write verb; (b) ship it as a single-binary `pq1-verify` + WebUSB page with a quickstart card and a published expected-digest file per release; (c) add an optional 'bench tier' that records a 2-port shunt-through PDN impedance profile (PDNPulse: 300 kHz\u20133 GHz, Fr\u00e9chet distance vs a per-BATCH golden set published by the project) and a signed photo of the opened unit + glitter-varnish pattern (Purism anti-interdiction model), delivered out-of-band encrypted to the buyer; (d) rule: the baseline is recorded by the independent verifier or buyer, never by the factory, so it is unconditional on factory honesty (UF taxonomy: calibration trust is the whole game).",
+   "rationale": "This is the one defence the repo claims is unconditional on factory honesty, and it is currently an expert-only, bench-profile, OTP-less script. Trezor and Ledger offer no pre-power verification at all, so a tooled, published version is a genuine differentiator; the OEM-key gap is specifically what makes RDP-2 'irreversible' only nominally (Trezor writes 0xFFFFFFFF and checks NSSR lock bits for exactly this reason). PDN impedance is the only published per-unit method that detects added board-level components without firmware cooperation (100% TPR / 0% FPR on four boards with multi-port probing, sub-ohm sensitivity).",
+   "repo_evidence": [
+    "tools/verify_ship_state.py:5 (only mention of OTP is the docstring; no OTP/UID/NSSR read exists), :112-114 (bench profile default), :147-153 (flash sha256 compare only)",
+    "tools/ship-profiles/ship-option-b.template.json (template, not a ship profile)",
+    "shared/src/lockdown.rs:264-290 (OEM lock predicate exists but OEM_LOCK_MASK_PINNED=false \u2192 cannot pass; bench pin #46/#270 outstanding)",
+    "docs/security/user-device-verification.md: 'Status: DESIGN. Nothing here is implemented'; work items 1,2,6,7,8 have no issues",
+    "docs/security/HARDENING.md:410 (factory receipt is a completion flag, not attestation)",
+    "gh #249 (triple-UID binding NOT STARTED), #68/#67 (transparency log / SLH-DSA manifest ship-blockers), #595 (per-unit option-byte read-back)"
+   ],
+   "vendor_precedent": "Trezor option_bytes.c:210-222 (OEM keys written 0xFFFFFFFF; NSSR OEMxLOCK checked every boot); Purism Anti-Interdiction (glitter + signed interior photos); Star Labs pre-dispatch verification pack; Coldcard numbered tamper bag shown on first boot; PDNPulse (IEEE TIFS 2023) as the bench method. No wallet vendor ships a user-run pre-power flash verifier.",
+   "novelty": "beyond",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P0",
+   "risks": "OEM-lock bit positions and WRP1A mask must first be pinned on a sacrificial RDP-0 board (lockdown.rs:281-290) or the check is vacuous; the full-flash dump needs physical SWD access on a sealed unit, which IMP-01 removes unless an SBU<->SWD route (not on V10) or a documented pad access is chosen \u2014 three docs currently disagree (user-device-verification vs evt-debug-pins vs hardware_requirements). PDN baselines produce false positives across batches (per-batch golden sets required) and cannot see a battery-powered passive logger that is not on the PDN. Photo/glitter baselines are per-unit labour. VBAT supercap (if populated) means backup registers survive a power-cycle, so 'expected erased' must be qualified.",
+   "sources": [
+    "https://arxiv.org/abs/2204.02482",
+    "https://puri.sm/posts/anti-interdiction-services/",
+    "https://starlabs.systems/blogs/news/anti-interdiction-service",
+    "https://cyan.engineering.osu.edu/media/document/2023-01-09/vlsi.pdf",
+    "https://trezor.io/support/troubleshooting/device-issues/is-my-device-safe-to-use"
+   ]
+  },
+  {
+   "id": "IMP-03",
+   "title": "Boot-time electrical self-fingerprint of the display, button and SE nets using the STM32U585 TSC/ADC (capacitance + rail current), compared to a design-derived band and a verifier-enrolled baseline; anomaly refuses the seed wizard and signing",
+   "threat": "A logger or injector soldered to SPI1/DC/TE, PA0/PA1 or the SE I2C nets adds pad/trace capacitance (pF-scale) and, if active, mW-scale current on the LCD or SE rail. Nothing on the board or in firmware measures either today; the FSBL render verdict only proves the SPI peripheral finished.",
+   "proposal": "Firmware spike + minimal board delta: (1) at each boot, before the FSBL fingerprint window and again before the seed wizard/sign, drive each candidate net (SPI1 CS/SCK/MOSI, DC, TE, LEFT/RIGHT buttons, I2C1/I2C4 SDA/SCL while the SE rail is OFF via LDO2_EN/SE1_EN) through the Touch Sensing Controller charge-transfer measurement (AN5105) and record the transfer count per net; (2) with the rails ON, sample the LCD and SE rail current via a low-side shunt + ADC4 (one shunt each, placed on the EVT board) and the VDD level via ADC4 analog watchdogs wired to ITAMP7/12/13 (already enabled in CR1 but never configured because no ADC code exists); (3) compare counts to (a) a published design band derived from the Gerbers/BOM and fleet statistics (golden-free, so a pre-first-boot implant outside the band is caught) and (b) a baseline enrolled during the confirm-gated first boot and stored in page 127; (4) a persistent out-of-band reading refuses to enter the seed wizard or sign and shows a loud 'HARDWARE CHANGED' page; an AWD trip goes to TAMP confirmed-mode erase. Temperature-compensate the threshold (PACTOR's documented FPR driver) using the on-die temp sensor.",
+   "rationale": "It is the only firmware-reachable mechanism that can notice a soldered tap on the write-only display bus; the TSC is already on this die (no new silicon) and the consumption-mask timer is a ready stimulus source. The literature (ImpedanceVerif, PACTOR, Piliposyan) establishes both the feasibility and the honest floors: pF capacitance and mW current, so it catches a probe clip, an added IC or an active LTE implant, not a femtofarad passive. Combined with IMP-01/02 it turns 'accepted residual' into 'detected unless sub-pF and battery-powered'.",
+   "repo_evidence": [
+    "grep -rln 'TSC|ADC1|ADC4|COMP1|0x4202_8000' secure/src fsbl/src -> no matches (no ADC/TSC/COMP driver exists)",
+    "secure/src/hw/tamp.rs:199-221 (ITAMP7/12/13 bits set in CR1 but no ADC4 AWD configuration anywhere)",
+    "secure/src/hw/se_power.rs:200-232 (rail enables exist; read-back is ODR only, result discarded in production)",
+    "secure/src/board/pq1.rs:286-291 (FLAGB PB10 never read), :345 (FREE_PINS PA10/PC13/PB4)",
+    "secure/src/hw/consumption_mask.rs:1-25 (TIM3_CH1 on PA6 NC \u2014 unused stimulus source)",
+    "fsbl/src/render.rs:62-72 (verdict cannot observe the panel)"
+   ],
+   "vendor_precedent": "none in any shipped wallet; academic only (ImpedanceVerif TCHES 2023 on-chip PDN analyzer, PACTOR ISSCC 2024 0.5 pF trace sensing with temperature-selected threshold, Piliposyan IEEE TC 2022 ~1 mW current floor, NAIST on-IC capacitance variation re-identifies individual PCBs). Trezor/Ledger measure nothing on the display path.",
+   "novelty": "beyond",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P1",
+   "risks": "Research-grade: FPR vs temperature/humidity/aging must be characterised on pq1 silicon before it can gate anything, else it bricks or nags honest units (the #835 halt-sink lesson). A self-enrolled first-boot baseline cannot catch an implant present at enrolment \u2014 only the design band can, and the band must be wide enough for lot variation. An adversary who also spoofs the sensing path (CryptoBilis replaced the NTC and bypassed the fuel gauge) defeats rail-current sensing; capacitance is harder to spoof but a buffered high-impedance tap stays sub-pF. Shunts cost two parts and a board spin; TSC needs a sampling capacitor per group (one more part per net group). Must respect the bench/prod split (no refusal on bench builds).",
+   "sources": [
+    "https://eprint.iacr.org/2022/946",
+    "https://spectrum.ieee.org/hardwired-to-self-destruct",
+    "https://livrepository.liverpool.ac.uk/3166747/6/PCB_Hardware_Trojan_Run-Time_Detection_Through_Machine_Learning.pdf",
+    "https://www.st.com/resource/en/application_note/an5105-getting-started-with-touch-sensing-control-on-stm32-mcus-stmicroelectronics.pdf",
+    "https://ken.ieice.org/ken/paper/202110198C57/eng/"
+   ]
+  },
+  {
+   "id": "IMP-04",
+   "title": "Active tamper mesh over the display connector, both SEs and the MCU on PC13 (TAMP_IN1) driven by the U585 active-tamper PRNG (ATCR/ATOR/ATSEEDR), routed into TAMP confirmed-mode erase",
+   "threat": "Physical opening/drilling/re-soldering of the display region or SE area in transit or after purchase (evil maid). The V10 board has no mesh, no case switch and no TAMP_IN pin assigned; firmware preconfigures FLTCR only and never sets any TAMPxE bit.",
+   "proposal": "Board: a 4-layer LDS/PCB mesh over the display connector + U585 + OPTIGA + SE050 whose return goes to PC13 (bonded on the 48-pin part, listed free; confirm TAMP_IN1 mapping in the STM32U585CIU6 pin table before committing) with TAMP_OUT on a second free pad (PA10/PB4 candidate), backed by the already-specified 0.47\u20131 F VBAT supercap (12\u201324 h armed when unplugged; no battery, per owner decision). Firmware: configure ATCR1/ATCR2 active mode (open AND short detection), seed ATSEEDR from the 3-source TRNG, read ATOR twice (trust only on match), set TAMP1E with precharge/filter per RM0456, keep CR3=0 so a trip erases BKP0R..7R (BHK) in hardware; production-only arm (Trezor arms external tamper only in PRODUCTION kernel) with prodtest 'tamper-read' for factory QA. Pair with #50 (TAMPSEC/TAMPPRIV so NS cannot disable it).",
+   "rationale": "The U585 ships the active-tamper block for exactly this (RM0456 \u00a764.1; ST confirms open+short detection); it is the shipped answer in Keystone/GridPlus/Foundation and the one that works unpowered in the sense that a mesh an implant had to cut stays cut and trips at the next power-on. Trezor T3W1 only uses a passive TAMP_IN2 and no active pair, so this is parity-plus. It closes the post-ownership evil-maid class that IMP-01's destructive-open shell only makes visible.",
+   "repo_evidence": [
+    "secure/src/hw/tamp.rs (grep 'ATCR|ATOR|ATSEEDR|TAMP1E|TAMP2E' -> none; only ITAMPxE at :194-221, :288-298)",
+    "secure/src/hw/tamp.rs:274-281 (FLTCR preconfigured for external pins, TAMPxE never set); secure/src/hw_platform_under_test/pure_tests.rs:1728 (negative_tamp_init_skips_external_pins)",
+    "secure/src/board/pq1.rs:345 (FREE_PINS PA10/PC13/PB4, all NC)",
+    "docs/hardware/hardware_requirements.md 'Anti-tamper & physical security' (board not started; ext-pin cfg open); gh search 'mesh'/'enclosure'/'TAMP_IN' -> no issue",
+    "gh #50 (BKPRWSEC/TAMPSEC OPEN), #47 (HW-mode erase unconfirmed on silicon), #248"
+   ],
+   "vendor_precedent": "GridPlus Lattice1 LDS mesh with constant waveform (bricks on short/alteration, 5-year battery); Keystone 3 Pro PCI-level anti-tamper; Foundation Passport Prime screen-removal factory reset; Trezor T3W1 passive TAMP_IN2 (tamper.c:131-160, PRODUCTION-only arm).",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P1",
+   "risks": "An implant installed while unpowered that does not breach the mesh (e.g. soldered to an unmeshed net) is not detected \u2014 mesh coverage must include the display FPC/connector and the button nets. Supercap-only VBAT bounds unplugged arming to hours; after that only persistent opens are caught. False trips (ESD, flex, moisture) wipe the BHK and force re-provisioning \u2014 the TAMP/ITAMP stack is not yet silicon-validated at all (#75, evt-silicon-validation \u00a710.1), so characterise before shipping it armed. ATOR must be read twice per RM0456 or a glitch can defeat the comparator. Costs a board spin and a pin or two.",
+   "sources": [
+    "https://community.st.com/stm32-mcus-products-25/stm32u585-tamp-mechanism-165329",
+    "https://docs.gridplus.io/lattice1/security-features",
+    "https://github.com/KeystoneHQ/keystone3-firmware",
+    "https://docs.foundation.xyz/glossary/home/",
+    "file:///home/nicola/repos/trezor-firmware/core/embed/sec/tamper/stm32u5/tamper.c"
+   ]
+  },
+  {
+   "id": "IMP-05",
+   "title": "Per-boot SE identity pin and configuration attestation: pin OPTIGA 0xE0C2 UID + 0xE0E0 cert hash and SE050 UID/applet version at first boot, then read back every security-relevant OID/object metadata and policy against a firmware-pinned table on every boot; mismatch = refuse (+ wipe)",
+   "threat": "Swapped-but-genuine SE (clone board with transplanted chips, SE050 E2 vs C2 variant substitution already hit on the bench), an SE re-provisioned with looser metadata in transit (S-1/S-2/S-3 remain open so the factory ratchets are not yet irreversible), or a replayed/forged OPTIGA session. Firmware today trusts both SEs unconditionally on boot.",
+   "proposal": "Secure world, after rail-up and before unlock: (1) first boot (inside the confirm-gated Phase A/B journal) records OPTIGA 0xE0C2 coprocessor UID, sha256(0xE0E0 device cert), SE050 UID + GetVersion/applet version into a page-127 record; (2) every boot re-reads them and refuses on any difference ('SE IDENTITY CHANGED', with wipe under tamp-wipe policy); (3) every boot does the tropic_ensure_configuration analogue: GetDataObject(metadata) for E120/E140/F1D0-F1D4/E0E0-E0E3/the type-0x11 pool and SE050 ReadObject attributes/policy for the UserID, admin and half_E objects, compared bit-exact to a firmware-pinned expected table (change=NEVER, read=NEVER, execute gated on E140, LcsO=OP once S-1 closes) \u2014 refuse on looser-than-expected, never auto-tighten in the field; (4) while on it, remove the silent plaintext fallback in optiga::apdu::send_command (shield.active==false \u2192 transceive in clear) for every security-bearing command, and add a host nonce to the Shielded handshake if the Trust M V3 PRL allows it (SE5). Device-side verification of the vendor ECDSA cert chain stays OFF (invariant #5); chain verification happens in the host verifier (IMP-02) with per-element root binding (Trezor Aug-2026 bug).",
+   "rationale": "Trezor ships exactly this for TROPIC01 (batch-ID allowlist, I/R-config bit-exact compare with crash-safe slots, silicon-revision gate) and for Optiga (lock-check compares metadata). It turns S-1/S-2/S-3 closure from a factory promise into a per-boot invariant, costs a few hundred ms, and converts 'generic I2C/auth error' into a deliberate identity decision. It does not see a display implant (the Ledger case passed Genuine Check), but it closes chip-swap/clone-board and the re-provisioning window cheaply.",
+   "repo_evidence": [
+    "grep -rln attest secure/src/se050 secure/src/optiga -> only secure/src/optiga/apdu.rs mentions; secure/src/factory_provisioning.rs:304 comment only",
+    "secure/src/optiga/apdu.rs:523-533 (send_command: if !shield.active \u2192 plaintext transceive)",
+    "docs/security/adversarial-review/secure-element-adversarial-review.md SE5/SE10 (no host nonce; forged SW 0x6986 \u2192 wipe)",
+    "gh #210 (SE genuine check NOT STARTED), #206 (AppletConfig pin), #27 (E0E0+E0C2), #63 (LockState), #697 (E2 vs C2 unconfirmed), #244/#245",
+    "README.md:184 ('SE chip attestation \u2026 Proof-of-presence only'); docs/security/threat-model.md:339-345, :505-506"
+   ],
+   "vendor_precedent": "Trezor tropic.c:574-676 / :784-799 / :1007-1023 (config ensure, batch allowlist, silicon rev), prodtest_optiga.c:173-285 (lock-check metadata compare), tropic.c:383-404 (pinned peer pubkey, chip-presented fallback compiled out in PRODUCTION); trezorlib authentication.py per-element root binding fix (Aug 2026).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Pinned tables must track the OPTIGA S-1/S-2/S-3 end state, which is not yet decided \u2014 ship the comparison as 'refuse on looser' with the current candidate metadata and update the table with the lockdown decision. A wipe-on-mismatch policy plus an unauthenticated OPTIGA error path (SE10) is a DoS lever for an I2C interposer; gate the wipe on the shielded channel being up and the mismatch being persistent across two reads. Reading E0E0 (~500 B) and all metadata adds boot time. Must not become a device-side classical verifier.",
+   "sources": [
+    "file:///home/nicola/repos/trezor-firmware/core/embed/sec/tropic/tropic.c",
+    "file:///home/nicola/repos/trezor-firmware/core/embed/projects/prodtest/cmd/prodtest_optiga.c",
+    "https://trezor.io/vulnerability/authenticity-proofs-not-bounded-to-their-secure-element",
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+    "https://arxiv.org/abs/2608.17082"
+   ]
+  },
+  {
+   "id": "IMP-06",
+   "title": "Option-byte self-enforcement delta: pin WRP1A/OEM-lock masks on silicon, write OEM keys to 0xFFFFFFFF in Phase A, measure the WHOLE slot window (declared length + 0xFF tail) in FSBL and secure world, and escalate a persistent tz-1 mismatch or an OBLRSTF boot to wipe instead of halt",
+   "threat": "Transit attacker at RDP-0 plants an OEM1/OEM2 regression password (write-only, invisible to the SWD dump) so the later RDP-2 is reversible; parks a payload in the unmeasured tail of a slot (FSBL hashes only manifest-declared secure_len/ns_len); or glitches/reloads option bytes at boot \u2014 today the tripwire halts with secrets intact and ignores WRP1A/OEM by design.",
+   "proposal": "(1) Close #46/#270: pin OEM1LOCK/OEM2LOCK and WRP1A bit positions on a sacrificial RDP-0 board with a positive detection (provision an OEM1 key, confirm the predicate trips), flip OEM_LOCK_MASK_PINNED/WRP1A_MASK_PINNED; Phase A writes OEM1KEYR1/2 and OEM2KEYR1/2 = 0xFFFFFFFF before programming RDP=0xCC and asserts NSSR OEMxLOCK clear afterwards; (2) FSBL verify_images hashes [secure_base, SLOT_SECURE_CAPACITY) and [ns_base, SLOT_NS_CAPACITY) with the tail required to be 0xFF (or random-filled at first boot and pinned, Krux model), and measured_boot::firmware_hash covers the same windows; fw_update COMMIT verifies the tail is erased; (3) FSBL reads RCC_CSR before the secure world and refuses to branch on OBLRSTF/IWDG/WWDG (secure world already classifies these \u2014 reset_cause.rs \u2014 but only after the FSBL has already measured and branched); (4) tz-1 persistent mismatch and Phase-A profile mismatch after RDP-2 arm the page-125 wipe flag before halting (Trezor secret_safety_erase); pre-RDP-2 mismatch keeps the current halt-unlocked-returnable policy.",
+   "rationale": "Trezor's boardloader treats any option-byte difference as an attack and wipes; it explicitly zeroes the write-only OEM keys because the lock bits are the only observable. pq1 already has the predicates but they are unpinned and fail closed, so the production profile cannot pass; and the compressible-firmware assumption Donjon used to bypass Trezor's hash check applies to pq1's unmeasured slot tails. All firmware, mostly small, and it hardens the one anchor invariant #10 rests on.",
+   "repo_evidence": [
+    "shared/src/lockdown.rs:264-290 (OEM lock bits 26/27, OEM_LOCK_MASK_PINNED=false \u2192 oem_locks_absent fails closed), :513-514",
+    "secure/src/first_boot/mod.rs:179-191 (Phase A reads oem_lock_status_raw but no OEM key write exists; grep 'OEM1KEYR' -> none)",
+    "fsbl/src/optbytes.rs:24-30 ('deliberately does NOT act on WRP1A or the OEM locks'; halt only)",
+    "fsbl/src/verify.rs:40-65 (hash_flash_region(secure_base, secure_len) / (ns_base, ns_len) \u2014 manifest lengths, tail unmeasured)",
+    "secure/src/measured_boot.rs:102-120 (hash over [__vector_table, __veneer_limit) only)",
+    "secure/src/reset_cause.rs:1-38, :170 (OBLRSTF classified in secure world only; fsbl/src has no RCC_CSR flag read)",
+    "secure/src/fw_update/staging.rs:44-90 (0xFF padding within declared length; no tail check at COMMIT)",
+    "gh #46, #270, #82 (SRAM_RST), #753 (BOOT_LOCK order)"
+   ],
+   "vendor_precedent": "Trezor option_bytes.c:210-222 (OEM keys 0xFFFFFFFF) + :247-250 (OEM lock check) + boardloader main.c:325-340 (mismatch \u2192 secret_safety_erase); reset_flags.c (written, uncalled); Krux TC Flash Hash fills empty flash and hashes the whole region.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Wipe-on-mismatch after RDP-2 is a brick lever for an FI attacker who can fake a mismatch \u2014 require a persistent two-pass mismatch (the existing F-2 sentinel pattern) and keep it off bench builds. OEM key write requires the silicon-pin evidence first; done blind it could itself set a lock. Whole-slot hashing adds ~2x FSBL verify time on pq1 (2.9 s measured today) \u2014 stays under the 4 s window only if the HASH peripheral is used in the FSBL. OBLRSTF is also set by a legitimate first-boot RDP-2 launch, so the FSBL rule must whitelist the journaled Phase-A path.",
+   "sources": [
+    "file:///home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+    "file:///home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+    "https://selfcustody.github.io/krux/getting-started/features/tamper-detection/",
+    "https://www.ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security",
+    "https://tches.iacr.org/index.php/TCHES/article/download/7390/6562/2561"
+   ]
+  },
+  {
+   "id": "IMP-07",
+   "title": "Device birth certificate with per-element binding and user-anchored enrolment: factory SLH-DSA manifest binds MCU UID + OPTIGA UID + SE050 UID + salted OTP hash + ship-profile id + release hash into a transparency log; at the confirm-gated first boot the device derives a per-die C10 attestation key (DHUK-rooted, regenerated per use, never stored) whose pubkey the user's verifier appends to the log; later genuine checks require every proof to bind to its own element",
+   "threat": "Counterfeit board with an SWD-emulating fake MCU and transplanted genuine SEs; genuine chips moved to a Frankenstein PCB; a factory escape that re-uses UIDs; and the Trezor Aug-2026 bug class where one element's proof satisfies all slots. pq1 has no per-die attestation and the factory receipt is a completion-flag JSON.",
+   "proposal": "Process + firmware: (1) factory emits per unit `manifest = {mcu_uid, dbgmcu_idcode, optiga_e0c2_uid, sha256(e0e0 cert), se050_uid, sha256(otp_area||salt), ship_profile_id, fsbl_hash, release_hash, bag/seal serial}` signed by an HSM-held SLH-DSA key and appended to a public transparency log (#67/#68); the bag/seal serial is burned in OTP and shown by the FSBL on first boot (Coldcard model); (2) pq1-verify (IMP-02) checks the dumped UIDs/OTP against the log entry before first power; (3) at first field boot, after RDP-2 and BHK, the device derives `att_sk = KDF(DHUK, 'pq1-attest-v1')` on demand (C10, single-primitive; invariant #5 \u2014 the key signs only `AuthenticateDevice:`-prefixed challenges, never wallet/FW material) and shows its pubkey fingerprint; the user's verifier appends `(manifest_hash, att_pk)` to the log so subsequent companion genuine checks are challenge-response against a key whose enrolment the owner witnessed, not the factory; (4) the companion verifier binds each proof (OPTIGA cert chain, SE050 attestation, MCU C10) to its own root set and requires identical UID tuple across all three.",
+   "rationale": "Trezor Safe 7 ships three-chain attestation with a PQ MCU leg on the same silicon family, so a PQ MCU attestation is table stakes; pq1 can do strictly better by making the MCU key per-die (DHUK, which does not exist until the device self-locks) and owner-enrolled instead of factory-certified \u2014 removing the factory-held-secret problem the owner already excluded. Donjon's Safe 3 result shows an attestation keyed from an MCU-held secret is only as good as glitch resistance, so the design keeps the FSBL fingerprint + pre-power verification as the anchor and uses attestation for chip-swap/clone detection only.",
+   "repo_evidence": [
+    "gh #249 (ship-blocker, NOT STARTED: triple-UID binding), #68 (transparency log), #67 (SLH-DSA factory manifest), #601 (user-personalised boot artifact, design-first)",
+    "secure/src/hw/dbgmcu.rs:1-60 (report-only IDCODE); secure/src/die_id.rs",
+    "docs/security/production-security.md:344-360 \u00a72.5 (planned); docs/security/HARDENING.md:410 (receipt is not attestation)",
+    "docs/hardware/prodtest-receipt-example-pq1.json (no UID/SE binding)",
+    "grep -rn 'AuthenticateDevice|attestation key|att_sk' secure/src -> none"
+   ],
+   "vendor_precedent": "Trezor mcu_attestation.c:45-79 (ML-DSA-44 key from secret_key_mcu_device_auth, regenerated per sign) + authentication.py:609-700 (same root/serial/CN across chains) + the Aug-2026 per-element binding fix; Ledger Genuine Check (SE-held key + HSM); Coldcard bag number burned at factory and shown on first boot; Tillitis UDS-derived per-device identity.",
+   "novelty": "beyond",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P1",
+   "risks": "Adds a second C10 key purpose in the secure world \u2014 must be fenced so it can never sign a userOpHash/replaySafeHash/FW manifest (domain-prefix + separate KDF label + Lean/Kani check). Owner-enrolled keys mean a lost verifier record = no genuine check (fall back to log lookup by UID). The factory HSM key is a classical-free SLH-DSA but the OPTIGA/SE050 vendor chains are ECDSA \u2014 verification lives host-side only. Transparency-log operation is an ongoing process cost. None of this sees a display-bus implant.",
+   "sources": [
+    "https://trezor.io/learn/security-privacy/how-trezor-keeps-you-safe/trezor-safe-device-authentication-check",
+    "https://trezor.io/vulnerability/authenticity-proofs-not-bounded-to-their-secure-element",
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+    "https://donjon.ledger.com/threat-model/device-genuineness",
+    "https://dev.tillitis.se/intro/"
+   ]
+  },
+  {
+   "id": "IMP-08",
+   "title": "Measurement-bound credential release (DICE-style): derive the page-126 BHK wrap context and the OPTIGA PBS salt context from the FSBL-measured active-slot hash so a modified or glitched-past secure image cannot unwrap the SE tunnels",
+   "threat": "Malicious firmware that boots despite the FSBL check (glitched verify, future signing-key compromise, RDP-regressed die) still has the DHUK and can recompute every transport/final key today, because the key derivation depends only on die identity (DHUK) + persisted salt, not on what code is running. The Donjon Safe 3 result is exactly 'possession of the pairing secret proves access, not the software running'.",
+   "proposal": "FSBL (immutable after WRP+RDP-2) computes H_img = sha256 over the measured slot windows and writes it into a register/SRAM mailbox that the secure image reads once (and that NS can never reach); the secure world derives `wrap_ctx = CMAC_DHUK('pq1-bhk-wrap-v2' || H_img || salt)` for page 126 and the OPTIGA PBS salt context likewise, so an image with a different hash unwraps garbage and the SE handshakes fail closed. Firmware update becomes a journaled re-wrap: COMMIT runs under the OLD image, pre-computes H_img_new from the staged slot (same measurement code path as the FSBL, pinned by a paired-constants test), re-wraps page 126 / re-derives PBS under the new context and writes a two-slot journal before switching; rollback to the old slot re-uses the old wrap. Optional SE-side variant: SE050 UserID for half_E is additionally gated on a session value derived from H_img (Trezor VTRUST analogy, but measurement- not signature-driven).",
+   "rationale": "It turns the FSBL fingerprint from a human-checked indicator into a cryptographic gate (Tillitis cdi = H(UDS, H(app)) is the shipped example), closes the 'glitch the measurer then run anything' residual that Donjon exploited on Safe 3, and directly answers the user's 'malicious code in the FSBL/secure slot' question without touching the FSBL range or adding a primitive. Trezor only releases SE pairing material to VTRUST-approved images; measurement is stronger than a trust bit.",
+   "repo_evidence": [
+    "grep -n 'measure|firmware_hash|image hash|epoch' secure/src/hw/secret_keys.rs -> none (keys derive from OTP master / DHUK+salt / BHK only)",
+    "secure/src/first_boot/mod.rs:296-335 (bhk_provision_and_lock: BHK wrap context has no image binding)",
+    "secure/src/measured_boot.rs:102-120 (hash computed but used only for display)",
+    "fsbl/src/main.rs:283-320, fsbl/src/verify.rs:40-115 (verdict is boolean; no measurement handed to the slot)",
+    "docs/security/user-device-verification.md 'does NOT prove' items; invariant #10 'a later fake screen is the accepted residual'"
+   ],
+   "vendor_precedent": "Tillitis TKey (CDI = blake2s(UDS, H(app), USS), no persistent storage); Trezor secret.c:598-651 (unofficial firmware gets only public slots; secret_disable_access) and VTRUST bitmap; Ledger SE-verifies-MCU-flash (bypassed in LSB-002 precisely because the reader was adversary-controlled \u2014 pq1's FSBL reads flash directly).",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "L",
+   "priority": "P2",
+   "risks": "Every legitimate firmware update becomes a crypto migration with a power-cut window \u2014 needs the same atomic old/new/KVN journal that is still an OPEN gate for first boot (#712, #386 PUT KEY atomicity). A bug in the re-wrap bricks the wallet (seed halves become unreachable) \u2014 the SE halves are still recoverable from the 24 words, so the failure is availability, not loss, but it must be stated. The mailbox from FSBL to slot must be unforgeable by NS and by a later secure image (write-once SRAM or TAMP backup register set before branch). Interacts with the rollback A/B design (Draft 1.1), which is not implementation-approved; sequence after #540.",
+   "sources": [
+    "https://dev.tillitis.se/intro/",
+    "file:///home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c",
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+    "https://donjon.ledger.com/lsb/002/"
+   ]
+  },
+  {
+   "id": "IMP-09",
+   "title": "Anti-klepto for the SPHINCS+C10 randomizer: companion-committed OptRand (OptRand = H(host_commitment || device_nonce || M)) with a verifiable transcript so malicious firmware or an implant cannot leak key bits through R or the target-sum grind",
+   "threat": "A compromised secure image (malicious update, RDP-regressed die, hostile insider) or any implant with influence over the TRNG path can encode slot/bootstrap secret-key bits into the per-signature randomizer R (Dark-Skippy class) and, for C10, into the target-sum grinding choice; signatures are public on-chain, so exfiltration needs no radio. Today OptRand is drawn from the 3-source TRNG with no host commitment and no transcript (#238 OPEN).",
+   "proposal": "Extend CMD_SIGN_USEROP/BATCH/OFFCHAIN input with a 32-byte host commitment `c = H(host_secret)`; device sets `opt_rand = H('pq1-ak-v1' || c || n_dev || M)` where n_dev is a fresh device nonce it returns alongside the signature; after signing the host reveals host_secret and the companion (or any auditor) recomputes R = PRF(sk_prf, opt_rand, M)?? \u2014 R itself is secret-keyed, so instead the device returns `(n_dev, opt_rand)` and the verifier checks `opt_rand == H(c || n_dev || M)` and that the signature's embedded R matches `grind_r(.., opt_rand, ..)` structure where observable; at minimum the device commits to n_dev before learning host_secret (two-round: host sends c, device returns H(n_dev), host reveals, device signs) so the device cannot grind n_dev to bias opt_rand. Keep the draw-once rule so the double-compute FI byte-equality gate still holds. Document residual: the target-sum grind consumes additional freedom; bound it by fixing the grind nonce schedule from opt_rand.",
+   "rationale": "Jade and BitBox02 ship anti-klepto for ECDSA/Schnorr; no PQ wallet does, and SPHINCS+'s R is an explicit randomizer the signer controls, so the covert channel is real (upstream SPHINCS- analysis already flags it, #238). It is a pure-firmware, protocol-level defence against the one exfiltration path that survives a perfect enclosure, a perfect mesh and a verified image \u2014 and it is cheap compared with everything above it.",
+   "repo_evidence": [
+    "secure/src/crypto.rs:206-237 (OptRand drawn from rng_strong::fill, no host commitment; drawn once for the FI byte-equality gate)",
+    "gh #238 OPEN ('anti-klepto covert channel exists in the SLH-DSA randomizer R')",
+    "CLAUDE.md wire format: unified sign input has no commitment field (offsets 0..330)",
+    "grep -rn 'anti.klepto|host_commit|commitment' secure/src/nsc -> none"
+   ],
+   "vendor_precedent": "Blockstream Jade anti-exfil (firmware 0.1.24, 2021), BitBox02 anti-klepto; none for a PQ signer.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "Wire-format change to a frozen input (append-only field with a flag bit keeps v1 clients working); the verifier can only check what is observable in the signature \u2014 for SPHINCS+ the host can verify opt_rand derivation but R = PRF(sk_prf, opt_rand, M) is only checkable by the device, so the achievable guarantee is 'device cannot choose opt_rand freely', not full nonce verifiability; the C10 grind still leaves bounded freedom (state it). Must not weaken the F-9 TVLA property (per-call freshness comes from n_dev, fine). Two-round protocol adds a USB round trip per sign.",
+   "sources": [
+    "https://blog.blockstream.com/blockstream-jade-tech-overview-part-1/",
+    "https://bitbox.swiss/bitbox02/compare-hardware-wallets/",
+    "https://github.com/EthereumPhone/PQ1/issues/238"
+   ]
+  },
+  {
+   "id": "IMP-10",
+   "title": "Anti-swap 'security words' at PIN entry: after the first PIN digits the SE050 (or OPTIGA) returns a CMAC over the prefix under a per-device SE secret, rate-limited in silicon, rendered as two BIP-39 words; a wrong pair tells the user the device in hand is not theirs before the full PIN is typed (pairs with #601 personalised boot artifact)",
+   "threat": "Lookalike device substitution and evil-maid swap: a trojan pq1 (or a genuine one with an implant and a cloned shell) harvests the full PIN during entry; the boot fingerprint words are public and a malicious image can print them, so the user has no proof of 'my device' before committing the PIN. pq1's F-20 per-position random start digit protects against shoulder/bus observation, not against a swapped unit.",
+   "proposal": "Firmware: after the user confirms the first 4 PIN digits (prefix never leaves S-world in clear), send `CMAC_K(prefix)` request to the SE050 via SCP03 using a dedicated per-device symmetric key object created at first boot (or a derivation inside the OPTIGA E140-bound DeriveKey), with the SE's own rate limit (one query per ~2 s; separate from the PIN attempt counter so it cannot burn page-124 attempts); map the 22 MSBs to two BIP-39 words and render them; user continues only if they match the pair they memorised at setup. Enable off by default (Foundation model) with a wizard step to learn the words. Render through the secret_text constant-time path.",
+   "rationale": "Coldcard has shipped anti-phishing words since Mk1 and Foundation added 'Security Words' in Passport Prime; it is near-zero cost, needs no board change, and it covers the one swap scenario where every other layer (attestation, fingerprint, mesh) is either bypassed by a whole-device substitution or only checked by the companion. It complements #601 (pre-PIN personalised artifact) by binding the check to the SE instead of flash.",
+   "repo_evidence": [
+    "secure/src/ui/pin_entry.rs:10-31 (F-20 digit scrambling only; no prefix-derived words)",
+    "grep -rni 'anti.phish|security word|phishing word|prefix word' secure/src docs/security -> none",
+    "gh #601 (user-personalised boot artifact: design-first, no free flash page)",
+    "secure/src/ui/secret_text.rs (constant-time glyph path available for the rendering)"
+   ],
+   "vendor_precedent": "Coldcard anti-phishing words (SE1 HMAC over hashed prefix, 2 s rate limit); Foundation Passport Prime 'Security Words' (off by default).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "The two words cross the display bus and are observable by the same implant \u2014 acceptable because they reveal nothing beyond the prefix an injector/logger already sees, but they must be derived with a per-device secret so a trojan cannot precompute them. Rate limit must live in the SE (SE050 policy or OPTIGA E120-style counter) to avoid an offline 4-digit oracle; user burden and recovery (forgotten words) need UX design. DROPPED: hardware-erased secret SRAM (move S-world secret .bss into SRAM2 under TAMP erase; SRAM2 is NS today, memory-stm32u585.x:8-9; #48/#82); ADC4 analog-watchdog VDD/rail glitch detector into ITAMP7/12/13 (folded into IMP-03); FSBL-side RCC_CSR reset-cause refusal (folded into IMP-06); OPTIGA Shielded-Connection host nonce + no-plaintext-fallback (folded into IMP-05, belongs to the SE surface); cargo-vet/cargo-deny dependency audit gate (software supply chain, S); SE-driven genuine LED (Coldcard \u2014 no SE GPIO on OPTIGA/SE050 as wired); 2-of-N threshold C10 release signing (#486 adjacent, fwupdate surface); IRIS backside imaging / WLCSP package selection for a future revision; stateless 'vault' mode (SeedSigner model); se_power read-back + FLAGB fail-closed in production (S, low value); Hardware-revision strap pin read by the FSBL to refuse iota2-vs-pq1 image mismatch (Trezor hw_revision).",
+   "sources": [
+    "https://blog.coinkite.com/understanding-mk4-security-model/",
+    "https://coldcard.com/docs/pins/",
+    "https://docs.foundation.xyz/prime/prime-apps/settings/general/",
+    "https://media.ccc.de/v/35c3-9597-modchips_of_the_state"
+   ]
+  }
+ ]
+}

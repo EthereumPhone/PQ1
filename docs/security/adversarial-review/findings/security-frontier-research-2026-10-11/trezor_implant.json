@@ -1,0 +1,337 @@
+{
+ "surface": "Malicious-hardware / supply-chain implant detection (key=implant)",
+ "vendor": "Trezor (trezor-firmware @ 6ab39e95, 2026-10-07; model focus T3W1 / Safe 7 on STM32U5G9 + Optiga + TROPIC01 + nRF52)",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "STM32U5 internal TAMP detectors in 'confirmed' mode (backup-domain voltage, temperature, LSE clock loss, RTC overflow, JTAG/SWD access at RDP>0, ADC4 analog watchdogs x3, monotonic-counter overflow, crypto-peripheral fault, IWDG-while-tamper) -> hardware erase of backup registers/SRAM2 + RSOD",
+   "evidence": [
+    "core/embed/sec/tamper/stm32u5/tamper.c:125-129 (PWR BDCR1 MONEN enables battery/power monitoring)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:138-151 (ITAMP1,2,3,5,6,7,8,9,11,12,13 enabled; 4 and 10 skipped)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:153-155 (TAMP->CR3 = 0: 'confirmed mode => all secrets deleted when any tamper event is triggered')",
+    "core/embed/sec/tamper/stm32u5/tamper.c:162-170 (IER + NVIC at IRQ_PRI_HIGHEST)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:252-276 (TAMP_IRQHandler: re-init MPU because 'tamper erases part of RAM', build pminfo, reboot_with_rsod)",
+    "core/embed/sys/linker/stm32u5g/secmon.ld:66-69 (secmon .data/.bss deliberately placed in SRAM2 'which is cleared on security events')",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:78-84 (OPTR includes FLASH_OPTR_SRAM_RST)",
+    "core/embed/models/T3W1/model.toml:26 (feature 'tamper')"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Same silicon family (STM32U585 has the identical TAMP block, ITAMPx set, BKPxR, SRAM2 erase). pq1 already ports this as `tamp`/`tamp-wipe`; the Trezor-specific points worth copying are (a) CR3=0 so every internal tamper is 'confirmed' (hardware erases BKP regs/SRAM2 before any software runs), (b) placing all S-world secret-holding .data/.bss in SRAM2 so the hardware erase is the zeroization, not just software zeroize-on-drop, (c) TAMP_IRQ at highest priority re-initialising the MPU before touching anything. Note what it does NOT cover: none of these detect a passive implant on the display bus (CryptoBilis); they detect voltage/clock/temperature glitching, debug probing and crypto faults.",
+   "notes": "Trezor comment tamper.c:139-140: 'We select all of them despite some of them are never triggered'. pq1 has no battery, so backup-domain monitoring (ITAMP1) and any detection is only live while USB-powered; Trezor T3W1 has a battery so the backup domain stays armed when 'off'."
+  },
+  {
+   "item": "External tamper input TAMP_IN2 (PA0 on T3W1, level-high trigger, digital filter 4 samples @128 Hz, 8-cycle precharge) \u2014 armed only in PRODUCTION kernel, disabled in secmon, exposed read-only to prodtest",
+   "evidence": [
+    "core/embed/sec/tamper/stm32u5/tamper.c:131-136 (FLTCR: precharge 8 RTCCLK, filter 4 samples, 128 Hz sampling)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:157-160 (TAMP2TRG level-high when TAMPER_INPUT_2)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:175-207 (tamper_external_read/enable/disable)",
+    "core/embed/projects/kernel/main.c:139-143 (tamper_init(); tamper_external_enable() only #if PRODUCTION)",
+    "core/embed/projects/secmon/main.c:112-114 (secmon calls tamper_external_disable())",
+    "core/embed/projects/prodtest/cmd/prodtest_tamper.c:30-46 ('tamper-read' CLI returns pin level)",
+    "core/embed/models/T3W1/boards/trezor_t3w1_revC.h:326 (#define TAMPER_INPUT_2 1; only T3W1 revA/B/C define it)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "This is the only mechanism in the tree that can react to physical intrusion (a case-open switch / mesh on the TAMP_IN2 line). The repo does not document what the pin is wired to on T3W1. On pq1 PA0 is the LEFT KEY and the 48-pin part bonds only PA0-15/PB0-15/PC13, so a free TAMP_INx pin would have to be found (TAMP_IN1=PC13 is bonded on pq1 and is the classic tamper pin, but is also the usual wake pin). With no battery the sensor is unarmed while unplugged, so pq1 can only detect an opening that persists at power-on (e.g. a broken mesh / latching switch) \u2014 a one-shot latch needs a battery or an NV fuse.",
+   "notes": "Only enabled in PRODUCTION builds; manufacturing-mode exception in bootloader main.c:133-135 ('tester needs to run without touch and tamper') until the OTP manufacturing lock is written."
+  },
+  {
+   "item": "Boardloader re-verifies the full option-byte profile on every boot (RDP2, WRP over boardloader pages, TZEN, BOOT_LOCK + SECBOOTADD0, secure watermarks, HDP1 over the secret sector, BOR level, OEM1/OEM2 RDP-regression keys cleared) and, if anything differs, re-programs them in a loop AND performs a safety erase (regenerates BHK -> storage unrecoverable)",
+   "evidence": [
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:32-38 (PRODUCTION: RDP level 2 + WRP over BOARDLOADER_SECTOR_START..END)",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:78-101 (exact OPTR/SECBOOTADD0R/SECWM/HDP values)",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:124-170 (flash_check_option_bytes: exact-equality compare of OPTR, SECBOOTADD0R, WRP1AR/1BR/2AR/2BR, SECWM1R1/1R2/2R1/2R2)",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:213-222 (OEM1KEYR/OEM2KEYR written to 0xFFFFFFFF 'to ensure that there is no ability to reverse the RDP')",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:247-250 (option_bytes_check_oem_keys: ensure OEM1LOCK/OEM2LOCK clear)",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:252-264 (configure loop until check passes)",
+    "core/embed/projects/boardloader/main.c:325-340 (mismatch => 'potential hardware fault or exploit attempt' => secret_safety_erase())",
+    "core/embed/projects/secmon/main.c:125-128 (USE_OEM_KEYS_CHECK: secmon re-checks OEM keys every boot)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's FSBL has the tz-1 option-byte read-back tripwire and the first-boot self-lock Phase A; Trezor adds two things pq1's docs do not mention: (1) the OEM1/OEM2 RDP-regression keys are WRITE-ONLY, so an attacker with RDP-0 access could have programmed them before first boot and the SWD verify-before-first-power cannot read them back \u2014 the only observable is NSSR.OEM1LOCK/OEM2LOCK; pq1's Phase A must assert both bits clear before burning RDP=0xCC (otherwise RDP2 is 'irreversible' only nominally). (2) HDP1 (hide-protect) over the secret pages plus SECHDPCR ACCDIS at hand-off, so even secure code cannot read the secret sector after boot. Also the response policy: a changed option byte is treated as evidence of attack and wipes, rather than being silently corrected.",
+   "notes": "Directly relevant to pq1's ship-at-RDP-0 model: anything an attacker can set at RDP-0 that is not readable over SWD (OEM keys) must be checked by the device itself at first boot."
+  },
+  {
+   "item": "Secret sector + BHK: BHK copied to TAMP backup registers then BHKLOCK (SAES-only), per-device keys stored DHUK-encrypted in a hidden flash page, cached into BKP regs, HDP access disabled before firmware runs; unofficial firmware gets only 'public' slots",
+   "evidence": [
+    "core/embed/sec/secret/stm32u5/secret.c:170-185 (SECHDPCR HDP1/HDP2 ACCDIS; TAMP_S SECCFGR BHKLOCK)",
+    "core/embed/sec/secret/stm32u5/secret.c:312-371 (secret_key_set encrypts with SECURE_AES_KEY_DHUK_SP; secret_key_get reads BKP regs and decrypts)",
+    "core/embed/sec/secret/stm32u5/secret.c:393-424 (secret_bhk_load; reboot if already locked)",
+    "core/embed/sec/secret/stm32u5/secret.c:598-651 (secret_prepare_fw: untrusted firmware -> show_install_restricted_screen; cache public keys only; secret_disable_access unconditionally)",
+    "core/embed/models/T3W1/secret_layout.h:22-59 (slot map: privileged master key, 2 monotonic counters, unprivileged master key, Tropic pubkey slot, MCU device cert 4 KiB, lock record, BHK on separate page)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already uses DHUK-wrapped BHK on page 126 and SAES; the transferable ideas are HDP hide-protect of the pages holding wrapped credentials after boot (so a post-boot compromise cannot even read ciphertext), and the single 'privileged master key' from which every pairing/attestation key is derived (secret_keys.c) so one factory random seeds all bindings. Not a hardware-implant detector per se, but it is what makes the SE-pairing bindings below meaningful.",
+   "notes": "STM32U5 OTP has no real per-block lock: flash_otp_lock() only checks every quadword was programmed (core/embed/sys/flash/stm32u5/flash_otp.c:70-93). Same caveat applies to pq1's hw/otp.rs."
+  },
+  {
+   "item": "Per-device MCU attestation: ML-DSA-44 key derived from the privileged master key, X.509 device certificate issued by the factory HSM and stored in the secret sector, challenge-response signature exposed via AuthenticateDevice, chain verified host-side against pinned roots",
+   "evidence": [
+    "core/embed/sec/mcu_attestation/mcu_attestation.c:45-79 (derive seed via secret_key_mcu_device_auth, mldsa keypair_internal, sign challenge with fresh rnd)",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:40-44 (KEY_INDEX_MCU_DEVICE_AUTH from SECRET_PRIVILEGED_MASTER_KEY_SLOT)",
+    "core/embed/sec/secret/stm32u5/secret.c:660-696 (cert write/read with 2-byte length prefix)",
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:185-220 (pubkey exported only encrypted to HSM via secure_channel_encrypt)",
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:222-311 (device signs a zero challenge and prodtest checks the HSM-issued chain binds to this key before writing it)",
+    "core/embed/projects/bootloader/main.c:383-410 (bootloader passes cert to firmware via startup_args before HDP lockout)",
+    "core/src/apps/management/authenticate_device.py:68-80 (mcu.sign + mcu.get_certificate)",
+    "python/src/trezorlib/authentication.py:499-606 (verify_authentication_response: challenge sig, chain, allowlist, root match)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 has 'SE attest' in its lifecycle but no MCU-level per-die attestation; the MCU is exactly what a motherboard-swap or mod-chip replaces. A C10 (or DHUK/HMAC-derived) attestation key per die, certified at the factory over the authenticated handoff pq1 already lists as an open gate, lets the companion verify 'this exact die' not just 'a genuine Optiga'. Invariant #5 (single signer) is about wallet/FW authority; Trezor shows attestation as a separate key purpose (here ML-DSA-44) \u2014 pq1 can keep it SPHINCS+C10 or a symmetric MAC to the factory to avoid a second algorithm.",
+   "notes": "Trezor's Genuine Check is three independent chains (Optiga P-256, Tropic Ed25519, MCU ML-DSA-44)."
+  },
+  {
+   "item": "Host-side cross-binding of all attestation chains: Optiga, Tropic and MCU certificates must share the SAME root authority, SAME serial number and SAME common name, and the CN must match the model the device reports",
+   "evidence": [
+    "python/src/trezorlib/authentication.py:609-700 (authenticate_device: verifies each chain, then 'All chains must be issued by the same root authority', 'same serial number and common name', CN must start with session.model.internal_name)",
+    "python/src/trezorlib/authentication.py:86-104 (AllowList of CA pubkeys / revoked pubkeys)",
+    "python/src/trezorlib/authentication.py:134-158 (RootCertificate table with devel flag)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "This is the measure that defeats 'genuine SE in a Frankenstein board': a genuine Optiga moved to a counterfeit PCB with a different MCU (or vice-versa) yields chains with mismatched serial/CN/root. pq1 can issue one factory 'device manifest' binding OPTIGA cert (E0E0/E0E1), SE050 UID/cert, the STM32 96-bit UID and the DHUK-derived attestation pubkey under one signature, and have the companion require all three to answer the same challenge.",
+   "notes": "Does not help against the CryptoBilis implant (all original chips present); it covers chip swaps and board transplants."
+  },
+  {
+   "item": "MCU<->SE cryptographic marriage: pairing secrets derived from the MCU-held master key are burned into the SEs at the factory (Optiga E140 platform-binding secret; TROPIC01 pairing-key slots 1 and 2 with factory slot 0 invalidated), so the SE's sensitive keys execute only inside a channel keyed by that secret",
+   "evidence": [
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:48-52 (optiga pairing secret = KDF(privileged master key))",
+    "core/embed/sec/optiga/optiga_init.c:47-64 (optiga_sec_chan_handshake with pairing secret; on failure soft-reset and continue WITHOUT attestation keys; open_application is ensure'd)",
+    "core/embed/sec/optiga/optiga_transport.c:747-773 (TLS-PRF 'Platform Binding' shielded connection)",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:109-160 (optiga-pair writes E140)",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:173-285 (optiga-lock: delete trust anchor, KEY_DEV/KEY_FIDO execute=Conf(KEY_PAIRING), change=NEVER, LcsO=Operational; lock-check compares metadata)",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:448-590 (tropic-pair: write privileged+unprivileged X25519 pubkeys, invalidate factory key; 'idempotent, irreversible, self-recovering')",
+    "core/embed/sec/tropic/inc/sec/tropic.h:57-64 (slot roles)",
+    "docs/core/misc/optiga.md:7-33 (OID access-condition table)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already has PBS/SCP03 pairing; the Trezor reference answers two of pq1's open questions: the factory does the irreversible pairing under HSM authentication (no field rotation), and the pairing secret is derived rather than stored. One explicit design difference to flag: Trezor tolerates a failed Optiga shielded handshake (optiga_init.c:54-59 comment) instead of refusing to boot \u2014 pq1's dual-SE XOR split cannot tolerate that, which is stricter.",
+   "notes": "The Optiga metadata set Trezor ships with is concrete evidence for pq1's open S-1/S-2/S-3 lockdown: change=NEVER on cert/key objects, read=NEVER on keys, execute gated on E140, LcsO=OP, trust anchor deleted."
+  },
+  {
+   "item": "MCU pins the TROPIC01 chip's static public key (parsed from the chip's own cert chain at pairing time) in a secret-sector slot and uses the pinned value, not the chip-presented one, for every session start; pairing refuses if the chip's current key differs from the pinned one",
+   "evidence": [
+    "core/embed/sec/tropic/tropic.c:240-305 (cache_tropic_cert_chain / lt_get_st_pub from GET_INFO cert store)",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:502-531 (store tropic_public in SECRET_TROPIC_TROPIC_PUBKEY_SLOT; mismatch => 'Tropic public key does not match the expected value')",
+    "core/embed/sec/tropic/tropic.c:383-404 (session start uses secret_key_tropic_public(); fallback to chip-presented key only in !PRODUCTION or prodtest)",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:80-83",
+    "core/embed/models/T3W1/secret_layout.h:58-59"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Pinning the peer's identity in MCU flash means a substituted-but-genuine SE fails at the transport layer before any application logic. pq1's two tunnels are symmetric (PBS / SCP03 static keys), so a swapped SE already fails the handshake; the extra value for pq1 is pinning non-secret identity (Optiga coprocessor UID 0xE0C2, SE050 UID / platform cert hash) in the page-12x area so the failure mode is a deliberate 'SE identity changed -> refuse + wipe' decision rather than a generic I2C/auth error.",
+   "notes": "Chip-presented-key fallback is compiled out in PRODUCTION (tropic.c:386-389)."
+  },
+  {
+   "item": "Boot-time SE configuration attestation: secmon reads TROPIC01 chip_id, maps batch_id -> expected 'distribution version', reads the full irreversible (I) and reversible (R) config objects, compares bit-exactly against the firmware-pinned expected config, rewrites if looser (I-config bits only flip 1->0), crash-safe via two R-mem version slots, then restarts the chip",
+   "evidence": [
+    "core/embed/sec/tropic/tropic.c:106-114 (TROPIC_BATCHES_V1 batch-ID allowlist)",
+    "core/embed/sec/tropic/tropic.c:574-676 (compare_config_strictness, tropic_ensure_i_config, tropic_ensure_r_config with read-back verify)",
+    "core/embed/sec/tropic/tropic.c:784-799 (get_expected_tropic_config from chip_id.batch_id)",
+    "core/embed/sec/tropic/tropic.c:825-998 (set_expected_config / tropic_set_config_main with slot-6/slot-7 crash recovery)",
+    "core/embed/sec/tropic/tropic.c:1007-1023 (tropic_silicon_revision_matches: ABAB/ACAB)",
+    "core/embed/projects/secmon/main.c:117-126 (tropic_ensure_configuration() ensure'd at every secmon boot when bootloader locked)",
+    "core/embed/sec/tropic/config/tropic_configs.json + docs/core/misc/tropic_configs.md:1-60 (pinned I-config incl. sensors: shield, voltage, glitch, laser, EM-pulse detectors)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 provisions OPTIGA/SE050 policy once and checks LUC/UserID at runtime, but there is no boot-time read-back of every security-relevant object's metadata/policy against a pinned expectation. A chip that was re-provisioned (or swapped for a genuine one with looser metadata) would be caught by an 'optiga_get_data_object(oid, metadata=true) for every OID, compare to pinned table, refuse on mismatch' step in the secure world at every boot \u2014 the direct analogue of tropic_ensure_configuration(). SE050: ReadObject attributes / policy for every object ID. Cheap (few hundred ms) and it turns S-1/S-2/S-3 closure into a per-boot invariant rather than a factory promise.",
+   "notes": "The pinned Tropic I-config also enumerates the SE's own physical sensors (SHIELD_DIS, GLITCH_DET_DIS, LASER_DET_DIS, EM_PULSE_DET_DIS, VOLTAGE_MON_DIS) \u2014 i.e. the MCU asserts that the SE's anti-tamper sensors are armed."
+  },
+  {
+   "item": "Secure-element firmware floor: TROPIC01 RISC-V + SPECT firmware images are bundled in the Trezor firmware; secmon records the installed versions in R-memory, refuses unknown silicon revision, updates only after PIN unlock, and resumes an interrupted update at boot (maintenance mode detected via CFG_START_UP)",
+   "evidence": [
+    "core/embed/sec/tropic/tropic.c:36-42 (fw_CPU/fw_SPECT embedded)",
+    "core/embed/sec/tropic/tropic.c:1026-1031 (lt_do_mutable_fw_update)",
+    "core/embed/sec/tropic/tropic.c:1227-1278 (tropic_get_update_state: version slot, maintenance bit)",
+    "core/embed/sec/tropic/tropic.c:1280-1370 (update_possible requires silicon rev match; ensure_fw_updated gated on storage_is_unlocked; check_and_restore at boot 'must never enable the Maintenance bit')",
+    "core/embed/projects/secmon/main.c:119-121"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Neither OPTIGA Trust M nor SE050 is host-updatable, so the update path does not apply; the floor/identity half does: pq1 can pin the OPTIGA coprocessor UID + firmware identifier (0xE0C2) and SE050 GetVersion/applet version and refuse an unknown/older combination, which catches a genuine-but-different SE variant (e.g. SE050 C2 vs E2, which pq1 already hit on the bench) or a downgraded part.",
+   "notes": "Trezor also pins a batch-ID allowlist for TROPIC01 (tropic.c:106-114) \u2014 same idea applied to the SE's own lot."
+  },
+  {
+   "item": "Co-processor authentication: production firmware challenges the nRF52 BLE MCU with 32 random bytes and requires HMAC-SHA256 under a pairing secret derived from the MCU master key (burned into the nRF at the factory); failure = error_shutdown('Bluetooth authentication failed')",
+   "evidence": [
+    "core/embed/io/nrf/stm32u5/nrf.c:571-636 (nrf_authenticate: rng challenge, MGMT_CMD_AUTH_CHALLENGE, 100 ms window, secret_validate_nrf_pairing)",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:119-157 (KEY_INDEX_NRF_PAIRING from unprivileged master key; constant-time compare; key derivation refused once the secret sector is locked)",
+    "core/embed/projects/firmware/src/stm32/main.c:115-119 (#if PRODUCTION error_shutdown on failure)",
+    "core/embed/sys/smcall/stm32/smcall_verifiers.c:621-633 (validated across the TZ boundary)",
+    "core/embed/models/T3W1/boards/revC.toml:23 ([nrf_auth])"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 has no companion MCU, so there is nothing to authenticate today; the pattern is the right one for any future smart peripheral (e.g. a display controller with a programmable core or a secure-display bridge): every component that executes code gets a factory-derived shared secret and is challenged at boot. The NV3007 is a dumb write-only panel and cannot participate.",
+   "notes": "Also shows Trezor's threat model includes a swapped/counterfeit radio module even though it holds no wallet secrets."
+  },
+  {
+   "item": "Display panel identification (RDDID 0x04 / ID4 0xD3 read-back) \u2014 used ONLY to select init/rotation sequences for ST7789V/GC9307/ILI9341 on older models; NOT a security check; T3W1 (LTDC/DSI) has no panel identification; display is driven from the NON-secure kernel",
+   "evidence": [
+    "core/embed/io/display/st-7789/display_panel.c:54-94 (read_display_id, display_panel_identify)",
+    "core/embed/io/display/st-7789/display_nofb.c:49-50 (id used for TE sync selection)",
+    "core/embed/models/T2T1/boards/trezor_t.h:4, core/embed/models/T3T1/boards/trezor_t3t1_revE.h:8, core/embed/models/T3T2/boards/devkit.h:13 (DISPLAY_IDENTIFY only on these; absent on T3W1)",
+    "core/embed/projects/kernel/main.c:173,293 (display_init in non-secure kernel)",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:234-255 (secmon: all peripherals NS by default; only RNG/SAES/IWDG/HASH/RAMCFG etc. secure)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Trezor implements nothing that authenticates the display or the display bus; the panel ID is a functional probe and is absent on the newest model. This is precisely the CryptoBilis gap and Trezor is exposed to it the same way. pq1's NV3007 has no MISO, so even the functional ID read-back is impossible; the only inbound signal from the panel is TE (PB2), which a man-in-the-middle can pass through. Nothing to port; this is an area where pq1 must look beyond Trezor. Comparison point in pq1's favour: pq1's S-world owns the LCD, whereas Trezor renders from the NS kernel.",
+   "notes": "Observed absence, not a documented decision. No doc in the repo mentions display authenticity, tamper-evident seals or genuine-check packaging (grep over docs/ hit only embed-arch.md:33)."
+  },
+  {
+   "item": "Hardware-revision strap pins (3-4 GPIOs with pull-up/down) read at boot, and hw_model/hw_revision fields in bootloader, secmon and firmware headers checked against the compile-time HW_MODEL/HW_REVISION of the running stage ('Wrong firmware model')",
+   "evidence": [
+    "core/embed/sec/hw_revision/stm32/hw_revision.c:35-100 (strap read, then GPIO de-init)",
+    "core/embed/models/T3W1/boards/trezor_t3w1_revC.h:315-324 (PI1/PI2/PI3 pull-down straps)",
+    "core/embed/sec/image/image.c:140-165 (check_image_model: expiry-bit trick + hw_model + hw_revision)",
+    "core/embed/sec/image/image.c:213-223 (check_secmon_model)",
+    "core/embed/projects/bootloader/fw_check.c:88,189",
+    "core/embed/projects/prodtest/cmd/prodtest_hw_revision.c:26 (runtime value only surfaced in prodtest)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Cheap board-identity sanity: the firmware refuses images built for another model/revision, and prodtest can read the board straps. Note that the runtime strap value is not compared against the image in production code \u2014 the image check uses compile-time constants. For pq1 it maps onto the iota2-vs-pq1 trap already documented (wrong pin map on wrong silicon): one or two strap pins read by the FSBL and compared to the image's board tag would make that a refusal instead of a silent mis-drive. It does not detect implants.",
+   "notes": "pq1 has only PA/PB/PC13 bonded; a strap costs a pin."
+  },
+  {
+   "item": "Boardloader 'board capabilities' TLV at a fixed address (magic 'TRZC', model name, boardloader version) parsed by bootloader/secmon/kernel under a dedicated MPU window",
+   "evidence": [
+    "core/embed/sec/board_capabilities/inc/sec/board_capabilities.h:32-66",
+    "core/embed/sec/board_capabilities/stm32/board_capabilities.c:38-88 (parse with bounds checks; error_shutdown on bad format)",
+    "core/embed/projects/boardloader/main.c:131-144 (section .capabilities_section)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Lets later stages learn which immutable first stage they are running under (model + version) without trusting a header they could have written. pq1's measured-FSBL design could publish an equivalent identity block (FSBL version + geometry registry hash) that the secure image cross-checks against the fingerprint it renders; low cost, modest value, no implant coverage.",
+   "notes": ""
+  },
+  {
+   "item": "OTP-backed unit identity and manufacturing lock: batch/date, device variant, serial number in OTP; a dedicated OTP block whose programming is the irreversible exit from 'manufacturing mode' (in which touch/tamper may be absent); prodtest command is dry-run unless PRODUCTION or --execute",
+   "evidence": [
+    "docs/core/misc/memory.md:33-52 (OTP block map)",
+    "core/embed/sec/unit_properties/stm32/unit_properties.c:90-178 (variant, rework block, manufacturing lock, production date)",
+    "core/embed/sec/unit_properties/stm32/unit_properties.c:211-229 (serial number block)",
+    "core/embed/projects/prodtest/cmd/prodtest_manufacturing_lock.c:48-110",
+    "core/embed/projects/bootloader/main.c:123-145 (is_manufacturing_mode: VTRUST_ALLOW_PROVISIONING && !locked)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's equivalent is the first-field-boot RDP-2 self-lock plus page-127 journal, which is stronger (it freezes option bytes) but later (the device leaves the factory unlocked). Trezor's point is that the FACTORY exit is itself an irreversible, device-visible event (OTP block locked) that gates which boot path runs; pq1 could record a factory-exit marker in OTP at the end of the handoff so the first-boot flow can distinguish 'never provisioned' from 'provisioned then tampered'.",
+   "notes": "STM32U5 OTP 'lock' is emulated by full programming (flash_otp.c:70-93)."
+  },
+  {
+   "item": "Factory provisioning over an HSM-authenticated Noise_KK1 channel: prodtest holds a static X25519 key, pins PRODUCTION (and backup) HSM public keys, and device-generated public material (MCU attestation pubkey, access credentials) leaves the device only encrypted to the HSM; certificate chains are integrity-checked on-device before being stored",
+   "evidence": [
+    "core/embed/projects/prodtest/cmd/secure_channel.c:40-84 (prodtest_private_key constant, hsm_public_keys PROD/BACKUP vs DEBUG, handshake_1/2)",
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:206-215 (secure_channel_encrypt of MCU pubkey)",
+    "core/embed/projects/prodtest/cmd/common.c:417-480 (check_cert_chain \u2014 'THIS IS NOT A FULL VERIFICATION', checks AKI linkage and that the device cert matches this device's key)",
+    "core/embed/projects/prodtest/cmd/prodtest_secure_channel.c:80-92"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "This is the concrete shape of pq1's open 'authenticated per-unit factory handoff/receipt' gate. Note the weakness: the device-side static key is a build constant (secure_channel.c:40-43), so the HSM authenticates 'a prodtest image', not 'this die'. pq1 can do strictly better by deriving the device-side Noise static key from DHUK (per-die, no shared constant) and having the HSM receipt bind the die UID \u2014 which is what makes a later 'is this the unit the factory signed?' check possible.",
+   "notes": ""
+  },
+  {
+   "item": "Idempotent, irreversible, self-recovering provisioning steps with explicit pre-checks that refuse to re-run once locked (secrets-init refuses if secret sector locked / Optiga locked / Tropic pairing started; secret lock record; monotonic counters as unary flash records)",
+   "evidence": [
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:90-131",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:449-463 (contract comment)",
+    "core/embed/sec/secret/stm32u5/secret.c:544-588 (secret_lock / secret_is_locked, HDP read returns zeros)",
+    "core/embed/sec/monoctr/stm32u5/monoctr.c:61-158 (16-byte unary cells, validity check that no set cell follows a clear one)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's rdp2-self-lock journal (page 127) and the open 'atomic durable old/new/KVN recovery' gate need exactly these properties; Trezor's prodtest code is a worked example of ordering writes so that any power-cut leaves a state the next run can recognise and finish. Also relevant: Trezor's monoctr validity check (a programmed cell after an erased cell = invalid, refuse) is the same shape as pq1's rejected legacy unary tally \u2014 pq1 already knows the ECC/interruption caveats.",
+   "notes": ""
+  },
+  {
+   "item": "Vendor-trust gating of secrets: bootloader classifies the firmware by its signed vendor header (VTRUST bits: allow secret access, allow provisioning, warnings/delays/red screen); unofficial firmware on a locked bootloader sees 'Install restricted' and never receives SE pairing material; secmon is always verified against production keys and cannot be replaced",
+   "evidence": [
+    "core/embed/projects/bootloader/fw_check.c:233-263",
+    "core/embed/sec/secret/stm32u5/secret.c:613-617,642-650",
+    "core/embed/sec/rsod/rsod_special.c:61-65",
+    "docs/core/misc/boot.md:188-212 (vendor trust bitmap)",
+    "docs/core/embed-arch/embed-arch.md:86-92"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 has no third-party-firmware model, but the underlying idea \u2014 SE credentials are only released to an image whose identity the root of trust approves \u2014 maps onto pq1's measured-boot design: derive the DHUK wrap context for the SE050 BHK / OPTIGA PBS from the FSBL-measured active-slot hash (or an epoch the FSBL asserts), so a modified image cannot unwrap the tunnels even if it boots. Trezor does this with a signed trust bit, pq1 can do it with measurement.",
+   "notes": ""
+  },
+  {
+   "item": "Fault-injection hardening of the boot chain: random 0-127 us delay before/around every critical ensure (fih_delay/fih_ensure, no stack protector), volatile next-stage address zeroed then set only at the end, default jump target = error_shutdown('(glitch)'), sigmask + inverse-mask double bookkeeping in signature verification, firmware_present double variable, and on a FATAL workflow error (observed random flag flips) the bootloader regenerates BHK + erases storage + protected backup RAM",
+   "evidence": [
+    "core/embed/projects/boardloader/main.c:111-129 (fih_delay, fih_ensure)",
+    "core/embed/projects/boardloader/main.c:250-280,356-369 (next_stage_addr FIH pattern)",
+    "core/embed/projects/bootloader/main.c:120-121,380 (firmware_jump_fn default failed_jump_to_firmware -> '(glitch)')",
+    "core/embed/projects/bootloader/main.c:672-690 (WF_ERROR_FATAL: 'erase storage if we saw flips randomly flip, most likely due to glitch')",
+    "core/embed/sec/image/boot_header.c:57,98-106 (sigmask_inv FIH)",
+    "core/embed/sec/image/boot_header.c:66-93 (hybrid Ed25519 + SPHINCS+ bootloader signature, EC checked before PQ)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's FSBL and c10_sign_verified already carry CfiCounter / Hamming-distant sentinels / double-compute; the Trezor items worth checking against pq1's FSBL are (a) jitter on the verification path itself, (b) a response policy where a detected glitch (inconsistent redundant state) is treated as an attack and wipes the BHK rather than just halting, and (c) hybrid classical+PQ boot signature \u2014 the latter is a deliberate Trezor choice that pq1's invariant #5 ('one algorithm in the FSBL') explicitly rejects.",
+   "notes": "Trezor Safe 7 boot headers are Merkle-rooted and signed with Ed25519 AND SPHINCS+ (vendor/sphincsplus ref) by the same key index; pq1 is SPHINCS+C10 only."
+  },
+  {
+   "item": "Production reset-cause check: proceed only if RCC_CSR reset flags equal exactly PIN|BOR (a clean power-on), rejecting LPWR/WWDG/IWDG/SFT/OBL-induced resets as 'lesser resets' \u2014 implemented, PRODUCTION-only, but currently has no callers in the tree",
+   "evidence": [
+    "core/embed/sys/startup/stm32u5/reset_flags.c:26-38 (comment: 'effective enough that it makes development painful, so only use it for production')",
+    "core/embed/sys/startup/stm32u5/reset_flags.c:40-42 (reset_flags_reset clears flags; called from boardloader main.c:323)",
+    "grep over core/ : reset_flags_check defined in stm32f4/stm32u5 + header only; no call site found"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "An option-byte-loader (OBL) or watchdog reset that the firmware did not request is a signature of glitching / option-byte manipulation / RDP-regression attempts. pq1's FSBL could read RCC_CSR before clearing it and refuse (or count) anomalous reset causes, in particular OBLRSTF, which is what an attacker's option-byte write would leave behind. Trezor's own tree shows the trade-off: they wrote it, then left it uncalled.",
+   "notes": "Report as 'present but inert at this commit' \u2014 verify before citing it as a shipped control."
+  },
+  {
+   "item": "ITAMP6 (JTAG/SWD access while RDP>0) and ITAMP9 (SAES/AES/PKA/TRNG fault) wired to the confirmed-tamper wipe; debug access after lock is treated as an attack indicator rather than a benign event",
+   "evidence": [
+    "core/embed/sec/tamper/stm32u5/tamper.c:145,148",
+    "core/embed/sec/tamper/stm32u5/tamper.c:231-238 (reason strings 'SWD ACCESS', 'CRYPTO ERROR')"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "At RDP-2 the debug port is physically disabled so ITAMP6 can only fire at RDP-1; pq1 ships RDP-0 (verify-over-SWD by design) and goes straight to RDP-2, so the window where ITAMP6 adds anything is the first-boot flow itself. Still worth enabling (it is free) because a device that is somehow at RDP-1 \u2014 e.g. OEM-key regression \u2014 would then wipe on probe contact. ITAMP9 crypto-fault tamper is directly useful on pq1's SAES/HASH-heavy signing path as a hardware FI detector.",
+   "notes": ""
+  },
+  {
+   "item": "TrustZone partition: boardloader/bootloader run with ALL peripherals secure+privileged; secmon flips the default to non-secure+privileged and re-secures only RNG/SAES/IWDG/HASH/RAMCFG and a few others; GTZC illegal-access interrupt enabled at highest priority; TAMP/SAES/GFXMMU privilege toggled at runtime",
+   "evidence": [
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:213-224 (pre-secmon: GTZC_PERIPH_ALL SEC|PRIV)",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:234-270 (secmon: ALL NSEC|PRIV then RNG/SAES/IWDG/HASH/RAMCFG secure)",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:103-112 (TZIC illegal-access IRQ)",
+    "core/embed/sys/trustzone/stm32u5/trustzone.c:279-294 (tz_set_tamper_unpriv / gfxmmu)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's sau.rs already enforces a stricter allowlist (I2C1/I2C4, TIM2/TIM3, UCPD1, AHB2 crypto all secure) and was silicon-validated; the comparison is in pq1's favour: Trezor leaves the display, touch and both SE buses' I2C/SPI... (note: Optiga I2C is handled by secmon via OPTIGA_I2C macro at tz_init.c:229-231) \u2014 confirm which buses secmon secures before claiming parity. The illegal-access interrupt with wipe escalation is what pq1 already calls tzic-wipe.",
+   "notes": "Evidence cut-off: tz_init.c:229-231 defines OPTIGA_I2C(FIELD) concat; the I2C-securing lines were beyond the excerpt read (270+). Treat 'Trezor secures Optiga I2C in secmon' as likely but unverified in this pass."
+  },
+  {
+   "item": "Rust dependency supply-chain audit with cargo-vet (imports from Mozilla, Google, Zcash, ISRG, Bytecode Alliance audit sets; per-crate exemptions and in-house audits)",
+   "evidence": [
+    "core/embed/supply-chain/config.toml:1-22",
+    "core/embed/supply-chain/audits.toml:1-40 (in-house safe-to-deploy audits by Trezor developers)",
+    "core/embed/supply-chain/imports.lock"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Not hardware, but the task asked for supply-chain measures: pq1's secure image pulls ~50 feature-gated crates plus host tools; CLAUDE.md lists reproducible builds but no dependency-audit gate. cargo-vet (or cargo-deny + vet) is a cheap CI gate and directly addresses the 'swapped component' threat at the software layer.",
+   "notes": ""
+  },
+  {
+   "item": "Random delay interrupts (floating-mean RDI refreshed on USB traffic) and consumption masking, started in secmon/kernel at boot; IWDG secure-only with 4 h cap",
+   "evidence": [
+    "core/embed/sec/random_delays/inc/sec/random_delays.h:19-60",
+    "core/embed/projects/kernel/main.c:144-147",
+    "core/embed/sec/consumption_mask/inc/sec/consumption_mask.h",
+    "core/embed/sec/iwdg/inc/sec/iwdg.h:24-37"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already ports consumption-mask and FI shuffling; listed for completeness because they are the side-channel half of Trezor's 'attack detection and mitigation' driver group (embed-arch.md:166). Nothing new to port on this surface.",
+   "notes": ""
+  },
+  {
+   "item": "Things Trezor explicitly does NOT do (documented or evident in code) on this surface",
+   "evidence": [
+    "core/embed/sec/optiga/optiga_init.c:54-59 (tolerate failed shielded-connection handshake: soft reset and continue without attestation keys)",
+    "core/embed/sys/startup/stm32u5/reset_flags.c:27-29 (reset-cause check kept out of dev builds; and uncalled)",
+    "core/embed/projects/bootloader/main.c:133-135 (manufacturing-mode exception: run without touch and tamper until OTP variant written)",
+    "core/embed/projects/prodtest/cmd/common.c:426 (device-side cert-chain check is integrity only, 'NOT A FULL VERIFICATION')",
+    "core/embed/sec/tamper/stm32u5/tamper.c:139-140 (enable all internal tampers even those never expected to trigger)",
+    "core/embed/io/display/st-7789/display_panel.c:54-94 + absence on T3W1 (no display authentication of any kind; display driven from NS kernel)",
+    "core/embed/projects/secmon/main.c:112-114 (external tamper disabled while secmon runs; enabled only by PRODUCTION kernel)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "For the downstream synthesis: Trezor's supply-chain story is attestation of the three programmable parts (MCU, Optiga, Tropic) plus optional nRF, a battery-backed tamper line, option-byte self-enforcement and a factory HSM channel. It has NO measure against a passive implant on a write-only display bus, no bus encryption, no panel authentication, and no documented tamper-evident packaging in the firmware repo. pq1 inherits the same gap and will not close it by porting Trezor code.",
+   "notes": "No file under /home/nicola/repos/trezor-firmware was blocked; SECURITY.md is a 6-line disclosure policy with no technical content."
+  }
+ ]
+}

@@ -1,0 +1,270 @@
+{
+ "surface": "Fault-injection hardening (voltage/EM/laser glitch) \u2014 key=fi. Branch feat/pq1-board-target. Threat: glitching FSBL image verify, PIN gate / attempt counter, SE tunnel establishment, signature release, RDP/option-byte checks, wipe paths.",
+ "improvements": [
+  {
+   "id": "FI-01",
+   "title": "Run and publish the first on-silicon FI campaign on the U585: RDP-2 fetch, FSBL verify chain, gated_unlock, c10 ct_eq gate",
+   "threat": "Every FI gate in the tree is evidenced only by source shape, host tests and Unicorn emulation; HW-ASSUME-RDP2 (RDP-2 resists glitching) is the single highest-leverage unverified premise. Bozzato/Focardi 2019 downgraded RDP-2\u2192RDP-1 on STM32F373 with one 11 \u00b5s glitch; Kraken/Unciphered did the same class on F2/F4; Donjon glitched Safe 3's MCU integrity check; \u03bc-Glitch defeated TZ-M on the L5 sibling; \u0160imon\u00edk reports ~76% PIN-check bypass on a U5 sibling. Neither Trezor nor Ledger has published a U5 data point.",
+   "proposal": "Treat it as a release gate with receipts: (1) Scaffold/ChipWhisperer-Husky crowbar + PicoEMP campaign on a sacrificial RDP-2 pq1 board, sweeping the boot-time option-byte fetch (RDP/TZEN latch) for RDP-1 behaviour; (2) glitch sweep of fsbl::filter_valid + verify_images with a deliberately corrupted slot (goal: branch into unsigned slot); (3) gated_unlock pre-commit bump and the SE verdict sentinel with a wrong PIN (goal: unlock or no page-124 charge); (4) c10_sign_verified ct_eq/verify gate with a grafting oracle (Gen\u00eat's SPHINCSplus-FA tooling) to measure exploitable-fault rate with the double-compute ON vs OFF; (5) fixed-vs-random TVLA (1k traces) on the secret-seed PRF to put a number on F-16. Publish scripts + traces under tools/bench as reproducible evidence (Ledger does not publish its own).",
+   "rationale": "Converts 'countermeasures present' into 'countermeasures measured' and either closes HW-ASSUME-RDP2 or forces the design to stop leaning on it. Both the FSBL (frozen forever after RDP-2 per invariant #10) and the first-boot ceremony depend on this answer, so it must precede the shipping ceremony, not follow it.",
+   "repo_evidence": [
+    "docs/hardware/evt-silicon-validation.md:12 ('fault-injection resistance \u2014 has *never* been exercised on any hardware at all')",
+    "tools/bench/ (probe_scaffold.py, probe_rigol.py exist; no fault campaign script)",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json HW-ASSUME-RDP2",
+    "gh #301 OPEN (ChipWhisperer-Husky + PicoEMP + U585 RDP-downgrade question), #376 OPEN ship-blocker (on-silicon descriptor-authority fault campaign), #236 OPEN, #232 OPEN (C10 full sweep never completed)",
+    "secure/Cargo.toml:644-652 sca-trigger feature present, never used (#301)"
+   ],
+   "vendor_precedent": "Ledger Donjon runs Scaffold/laser/EMFI campaigns on its own and competitors' parts and publishes write-ups (Safe 3, TROPIC01, Tangem, RP2350); Trezor's U5 resistance claim rests on 'no public attack yet' \u2014 same unevidenced assumption pq1 currently shares.",
+   "novelty": "parity",
+   "kind": "process",
+   "cost": "L",
+   "priority": "P0",
+   "risks": "Burns sacrificial boards; a positive RDP-downgrade result would force a redesign of the verify-once-physically story (but that is exactly why it must run first). Campaign must be fault-model-complete (voltage, clock, EM; laser out of budget) and must not be read as proof of absence beyond the swept windows.",
+   "sources": [
+    "https://tches.iacr.org/index.php/TCHES/article/download/7390/6562/2561",
+    "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+    "https://github.com/AymericGenet/SPHINCSplus-FA",
+    "https://github.com/Ledger-Donjon/scaffold",
+    "https://eprint.iacr.org/2024/367.pdf"
+   ]
+  },
+  {
+   "id": "FI-02",
+   "title": "Hardware-in-the-loop voltage-glitch sensing: arm PVD (~2.8 V) \u2192 zeroize, pin BOR_LEV high in the ship profile and the tripwire, and configure ADC4 analog watchdogs on VDD/VBUS/VREFINT so ITAMP7/12/13 wipe via TAMP confirmed mode",
+   "threat": "USB-C VBUS is the only supply and the primary glitch-injection point; today nothing in firmware bounds the dwell window on the rails. The BOR is at the 1.71 V default, PVD is disabled, and the ADC4-backed internal tampers (ITAMP7/12/13) are armed in tamp.rs but have no ADC behind them, so they can never fire. \u03bc-Glitch had to defeat the L5 brown-out detector to succeed \u2014 a raised BOR plus PVD is the cheapest bar-raiser on this silicon.",
+   "proposal": "(a) Pin BOR_LEV = level 4 (~2.8 V for a 3V3 part) in SHIP_PROFILE_U585, make lockdown::bor_lev_ok load-bearing (currently 'still being pinned'), and include it in both the FSBL tz-1 tripwire and first-boot Phase A. (b) Secure-world PVD driver: PWR_SVMCR PVDLS=level 5, PVDE=1, EXTI line secure, PVD_PVM_IRQn at highest secure priority \u2192 zeroize_sensitive_state + relock (not a halt). (c) Configure ADC4 in continuous mode on VREFINT/VDD (and the VBUS sense if routed) with tight AWD1/2/3 windows, so ITAMP7/12/13 trip in hardware under CR3=0 confirmed mode \u2192 BKP erase + intrusion wipe with no software in the loop. (d) Enable the ECC double-error / CSS NMI path tracked as #21-tamp-css_pvd. Run ITAMP rail-glitch characterisation as part of FI-01.",
+   "rationale": "Trezor ships PVD at 2.8 V + BOR level 4 + the same ITAMP set, but even Trezor leaves the ADC watchdogs un-driven ('never triggered'); driving ADC4 turns an existing hardware-enforced tamper into a real voltage-glitch detector, which no wallet vendor currently does on U5. PVD/BOR are slow (\u00b5s) and will not catch ns crowbars, but they catch cheap USB-supply attacks and constrain glitch parameters for the rest.",
+   "repo_evidence": [
+    "grep PVD|PVDE|PVDLS|CSSON secure/src \u2192 only a comment at secure/src/main.rs:4643 and the USB USV bit in hw/usb_hw.rs:140 (no PVD driver)",
+    "grep ADC4|analog.watchdog secure/src \u2192 empty",
+    "shared/src/lockdown.rs:519-522 ('shipped BOR_LEV target is still being pinned (#36)')",
+    "docs/security/brownout-hardening.md:305-325 (BOR default, PVD disabled, ECC double-bit NMI off)",
+    "secure/src/first_boot/mod.rs:244-246 (BOR/VBUS stability check during OPTSTRT deferred)",
+    "secure/src/hw/tamp.rs:301 (CR3=0 confirmed mode) but ITAMP7/12/13 have no ADC source",
+    "gh #49 OPEN ship-blocker/high; #248 OPEN; #48 OPEN ship-blocker (ECC NMI)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sys/pvd/stm32/pvd.c:28-56 (PVD level 5, highest IRQ, error_shutdown), option_bytes.c:40-48/78-84 (BOR level 4 forced), tamper.c:125-173 (ITAMP7/12/13 enabled; ADC not configured).",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "A too-tight AWD window or PVD level causes spurious wipes on marginal USB hosts/cables \u2014 thresholds must be characterised on pq1 silicon across hosts (evt-silicon-validation). ADC4 conflicts with any pq1 pin already claimed must be checked (ADC on VREFINT/VDD needs no pin). ITAMP9 false-trips during legitimate SAES BHK use (#208) must be resolved before confirmed-mode wipe ships.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/pvd/stm32/pvd.c",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/tamper/stm32u5/tamper.c",
+    "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+    "https://www.st.com/resource/en/application_note/an5156-introduction-to-security-for-stm32-mcus-stmicroelectronics.pdf",
+    "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf"
+   ]
+  },
+  {
+   "id": "FI-03",
+   "title": "FSBL verify-chain FI bundle before the range freezes: TRNG-driven delays, default-poisoned jump target set only after the full chain, volatile secbool staircase across slot admission, tail-padding check, and checksum-redundant C10 verify",
+   "threat": "The FSBL becomes physically immutable after RDP-2 (invariant #10), so any FI weakness in it is permanent. Today: wait_random uses the constant 0x42 (an attacker's second fault needs no new timing, so check_true's double-eval collapses to one setup); the branch target is a plain `Slot` enum flowing through `Option` (niche-encoded, one bit from `None` to `Some(Slot::A)`) with no final re-check before into_slot; verify_images hashes only secure_len/ns_len bytes and never checks the slot tail, so attacker-written gadgets after the signed image survive; the C10 verifier is one code path, and Wagner et al. 2023 / BSI-AISEC 2025 show a faulted WOTS checksum during VERIFICATION accepts forged signatures.",
+   "proposal": "(1) Bring up the RNG peripheral in the FSBL (RCC clock + TRNG, same driver as hw/rng.rs) so fsbl::fi::wait_random draws TRNG lengths; fail = halt. (2) Trezor next_stage_addr pattern: a `volatile u32 next_stage = 0` written with the slot's secure address only as the last statement after filter_valid + verify_images + tz-1 + render all return OK_SENTINEL; into_slot takes that address, so a skipped check branches to 0 (reset vector/fault), never into a slot. (3) Replace the Option/enum flow with volatile Hamming-distant verdict words per stage (manifest_ok, images_ok, optbytes_ok, render_ok) folded with an AND over sentinels, and a triple redundant compare immediately before the branch (Trezor firmware_present/backup). (4) verify_images: after hashing, scan secure_len..SLOT_SECURE_CAPACITY and ns_len..SLOT_NS_CAPACITY and require a uniform 0xFF/0x00 fill (Trezor check_image_contents). (5) Make the signature verify redundant with independent inputs: verify once, wait_random, verify again with the WOTS target-sum/checksum recomputed from a separately-copied message digest, and compare the two root outputs under ct_eq before the sentinel; add a Hamming-distant `sigmask/sigmask_inv`-style step mask that must equal the expected set at exit. (6) Set MSPLIM in the FSBL (fsbl/src/main.rs:172 note). Land a rainbow sweep for fsbl::verify_images (#591) as the regression test.",
+   "rationale": "This is the EF-swarm F15 'FI-hardened FSBL image verify' gate plus the Trezor boardloader patterns, bundled because they all touch the frozen range and must land before the WRP/RDP-2 ceremony. Each closes a distinct single-fault class (retiming, jump-target, data-flow, hidden tail, verifier checksum) that the current sentinel-only gating does not.",
+   "repo_evidence": [
+    "fsbl/src/fi.rs:5-33 (fixed delay byte 0x42; 'Future: swap for TRNG'; no issue tracks it)",
+    "fsbl/src/main.rs:220-222 (`let Some((slot, secure_digest)) = pick_slot(...) else { halt() }`), :297 (`branch::into_slot(slot)`), :367-381 (pick_slot returns Option<(Slot, digest)>)",
+    "fsbl/src/branch.rs:36-50 (into_slot takes `Slot` enum, derives address, no default-fail target)",
+    "fsbl/src/verify.rs:38-108 (hashes secure_len/ns_len only; no tail scan)",
+    "fsbl/src/main.rs:321-354 (filter_valid: single verify_signature path inside check_true_into_sentinel)",
+    "fsbl/src/main.rs:172 and fsbl/src/manifest.rs:30 ('16 KB stack, no MSPLIM')",
+    "gh #591 OPEN high (no sweep for fsbl::verify_images)"
+   ],
+   "vendor_precedent": "Trezor boardloader main.c:111-129 fih_delay/fih_ensure, :250-279/:356-369 volatile next_stage_addr; bootloader main.c:118-121,593-595,630-632,693-701 default-fail jump fn + triple compare; fw_check.c:59-66,111-153 volatile secbool staircase; image.c:428-523 chunk hashes + padding scan; boot_header.c:49-109 sigmask/sigmask_inv.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "FSBL flash budget (40,960 B registry, 28,704 B LOAD span today) and 16 KiB stack bound (10,372 B used) \u2014 a second verify pass must reuse the same stack frame; TRNG init adds boot time to the measured 2.9 s. Must not add any option-byte write path (Draft 1.2 C1). Changes the measured FSBL bytes, so the reproducible-build receipts and geometry gate (#540) re-pin.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/boardloader/main.c",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/bootloader/fw_check.c",
+    "https://eprint.iacr.org/2023/1572",
+    "https://eprint.iacr.org/2025/2096",
+    "https://donjon.ledger.com/blog/tropic01-laser-fault-injection/"
+   ]
+  },
+  {
+   "id": "FI-04",
+   "title": "Always-on secure Random Delay Interrupt (floating-mean, refreshed at every NSC veneer / USB packet) plus a non-reusing TRNG policy for all countermeasure delays on master",
+   "threat": "Jitter exists only at annotated wait_random call sites; every linear path between them (USB-triggered dispatch before the first wait_random, the multi-second C10 sign, SE tunnel setup, LCD render windows) is trigger-lockable from an externally observable event. Separately, master's FI-delay fallback reuses the last good TRNG byte on SECS/CECS, so a glitcher that latches the TRNG into error collapses every delay to a constant (the no-reuse rework exists only on perf/flash-opt-level-z).",
+   "proposal": "(1) Secure-only periodic timer (TIM2/TIM3 are already SAU-secured; or a secure SysTick slot) firing every 1 ms with a cycle-exact asm wait of `drbg8() + session_delay` where session_delay is a second TRNG-seeded byte refreshed only on externally observable events: NSC veneer entry (nsc/mod.rs dispatcher), USB packet receipt, button edge. Keep an FihBool `rdi_enabled` and treat a corrupted value as a fault. Pause only inside the ~\u00b5s-critical SPI/I2C timing windows that cannot tolerate it, and prove those windows are not FI-critical. (2) Feed it from a ChaCha/AES-CTR DRBG seeded from the TRNG (reseed every N draws) so the 1 kHz draw does not starve rng_strong. (3) Merge #834/#835 option-2 onto master: a failed TRNG draw fails the operation (not halt, not reuse), and RDI switches to 'fault' on TRNG error. (4) Budget check: ~255 cycles/ms \u2248 0.2 % at 160 MHz; re-measure test-key-speed.",
+   "rationale": "Trezor has shipped RDI since 2019 (Clavier/Coron/Dabbous floating mean); Donjon's DS28C36 double-fault paper concludes double verification 'is not efficient enough if it is used alone' and must be combined with hardware and/or software jitter. pq1's signer is stronger than Trezor's per-site, but site-based jitter leaves the attacker a profiled linear path to each gate.",
+   "repo_evidence": [
+    "grep -riE 'random.delay.interrupt|\\bRDI\\b' secure/src \u2192 empty; gh #805 OPEN ('No global timing jitter')",
+    "secure/src/fi.rs:46-72 (rng_byte: byte_nonsecret(FI_DELAY_LAST_GOOD) last-good reuse arm LIVE on this branch and master); gh #834/#835 OPEN",
+    "secure/src/timeout.rs (S-only TIM exists; no jitter handler)",
+    "secure/src/sau.rs (TIM2/TIM3 secured \u2014 a secure periodic source is available)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/random_delays/stm32/random_delays.c:105-180 (rdi_handler, session_delay, refresh on USB usb.c:728/748 and SMCALL smcall_dispatch.c:161-167, ensure on corrupted rdi_disabled).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Jitter during NV3007 SPI/TE-synchronised frame writes could reintroduce tearing (#780 closed on glass with 27.9 < 31.4 ms margin) \u2014 RDI must be masked or bounded inside the TE wait; bench DWT timings gain \u00b1jitter; the #835 critique (spurious halts, zero-length-delay race, PIN-budget burn) must be re-applied to the RDI error arm.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/random_delays/stm32/random_delays.c",
+    "https://fdtc.deib.polimi.it/FDTC23/slides/FDTC2023-slides-3-3.pdf",
+    "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+    "https://nrfconnectdocs.nordicsemi.com/ncs/latest/tfm/design_docs/tfm_physical_attack_mitigation.html"
+   ]
+  },
+  {
+   "id": "FI-05",
+   "title": "Fault-detected \u21d2 escalate: charge the three-way PIN budget on every sentinel/CFI/receipt trip, re-entrant fault \u21d2 wipe, and zeroize SRAM before any glitch halt",
+   "threat": "Every FI detection today ends in a refusal (return FAIL_SENTINEL / relock) or a bare `wfe` loop with master_secret still in SRAM and HandlerGuard suppressing the idle wipe. A stolen unlocked-capable device can therefore be glitch-characterised indefinitely: each failed attempt costs nothing, and a halt leaves the secrets resident for the next pulse.",
+   "proposal": "(1) A single `fi::handle_fault(code)` sink (Trezor handle_fault + WF_ERROR_FATAL policy): static FihBool `in_progress` \u2014 a fault reported while one is being handled \u21d2 immediate dual-SE admin wipe + page-125 flag; otherwise charge page 124 via pin_attempts_bump (which also advances E120/UserID on the next unlock by construction of the directional reconciliation), read back `pre+1`, zeroize_sensitive_state, then reset. Route check_true_into_sentinel failures at authorization sites, CfiCounter mismatches, ct_eq mismatches in c10_sign_verified, SCP03/CCM receipt failures, read_volatile_voted CounterUnstable, and `default:` arms of the fw_update/first-boot/sign-dispatch state machines through it. (2) halt_on_glitch and the panic path: zeroize SRAM secrets + TAMP BKERASE (BHK regs) + mask interrupts before `wfe`, on a fresh stack (Trezor call_with_new_stack); FSBL halt stays bare (no secrets). (3) Encode the state machines' phase words as sparse random u32s so a flipped enum lands in `default:`. Decide explicitly (owner) that genuine faults consume attempts \u2014 Trezor accepts this.",
+   "rationale": "Bounds the attacker's glitch trials to the 10-attempt budget before self-destruction and makes the fault handler itself fault-hardened; cheap because every primitive (bump, admin wipe, zeroize, page-125 flag) already exists and only the policy wiring is missing. #835 H4 already adjudicated the halt-with-secrets problem; it is fixed only on a side branch.",
+   "repo_evidence": [
+    "pqsigner-fi/src/lib.rs:274-285 (halt_on_glitch: bare wfe loop, no zeroize)",
+    "secure/src/fi.rs:106-117 (check_true/check_true_into_sentinel return a verdict; no escalation)",
+    "grep pin_attempts_bump secure/src \u2192 only nsc/mod.rs:1473 (gated_unlock) and cmd_test_pin_lockout.rs:158; no FI-trip site charges an attempt",
+    "secure/src/crypto.rs:373-391 (ct_eq mismatch \u2192 zeroize_sensitive_state relock only)",
+    "gh #835 OPEN critical (H4: halt retains secrets; fix on perf/flash-opt-level-z only)"
+   ],
+   "vendor_precedent": "Trezor storage/storage.c:181-182,1815-1844 (handle_fault: in_progress \u21d2 wipe; increment+verify PIN counter then halt); bootloader/main.c:677-690 (WF_ERROR_FATAL \u21d2 secret_bhk_regenerate + erase_storage + backup_ram_erase); sys/startup/stm32/bootutils.c:103-199 (fresh stack, BKERASE, RAM fill before halt/reset).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Interacts with #109/#692/#715 (page-124 charged on genuine SE InternalError; e2e images burn the budget on a persistent SE fault) \u2014 the policy must distinguish 'SE unreachable' from 'verdict inconsistent' or a flaky board bricks itself; owner decision #484 (halts must not touch peripherals) still holds, zeroize is register/SRAM only. Wipe-on-fault makes a bench FI campaign (FI-01) consume boards faster.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/storage/storage.c",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/bootloader/main.c",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/startup/stm32/bootutils.c",
+    "https://donjon.ledger.com/blog/bypassing-tangem-card-security-with-laser-attack/"
+   ]
+  },
+  {
+   "id": "FI-06",
+   "title": "Option-byte posture after RDP-2: persistent mismatch \u21d2 wipe (not halt), silicon-pin the OEM1/OEM2 lock check and BOOT_LOCK, engage HDP1 over the FSBL at boot-exit, and assert BHKLOCK before the first SE/sign operation",
+   "threat": "A regressed/altered option-byte set (RDP, TZEN, WRP, BOR, SECBOOTADD0, OEM keys) is the enabling state for every MCU-side attack. Today the FSBL tripwire halts with secrets intact (a halted device with intact secrets is a better glitch target than a wiped one); the OEM-lock gate fails closed only because it is unpinned, so an OEM2 password planted in transit is caught by a halt, not a verified detector; HDP1 is 0 so the FSBL pages remain readable all session; nothing asserts BHKLOCK is set before the SAES/BHK consumers run.",
+   "proposal": "(1) Post-RDP-2 (TZEN+RDP=0xCC observed in the ship profile), route a persistent tz-1 mismatch in the secure world's own re-check (not the FSBL, which must stay write-free) to the intrusion wipe (BHK BKERASE + dual-SE admin wipe), keeping the FSBL halt as the pre-secret stage. (2) Close #46/#387: pin FLASH_NSSR OEM1LOCK/OEM2LOCK (register + bits) on a sacrificial RDP-0 board with a provisioned OEM1 key, flip OEM_LOCK_MASK_PINNED, and in Phase A write OEM1KEYR/OEM2KEYR = 0xFFFFFFFF before OPTSTRT as belt-and-braces; add BOOT_LOCK to the confirmed field set. (3) #39: HDP1EN + HDP1_PEND over pages 0..4 in the ship profile and HDP1_ACCDIS engaged by the secure world right after measured_boot (never by the FSBL). (4) bhk.rs: before the first SAES/BHK use and before every sign, read TAMP_SECCFGR and require BHKLOCK set through check_true_into_sentinel; unlocked \u21d2 handle_fault. (5) Include BOR_LEV (FI-02) in the same confirmed set.",
+   "rationale": "Trezor's shipped posture is 'option bytes exactly right or the device erases its BHK and repairs them' plus OEM-key clearing and HDP over the secret sector; pq1 cannot repair (invariant #10, read-only FSBL) but can wipe. RP2350's lesson: 'a software-write lock is not a fault-resistant lock' \u2014 detection must be followed by secret destruction, and every security-relevant latch (OEM, BOOT_LOCK, BHKLOCK) must be checked, not assumed.",
+   "repo_evidence": [
+    "fsbl/src/optbytes.rs:24-40 (does NOT act on WRP1A/OEM; halt only on persistent mismatch; single-fault suppression accepted)",
+    "shared/src/lockdown.rs:264-290 (OEM_LOCK_MASK_PINNED = false; fails closed; gh #46/#387 OPEN)",
+    "secure/src/first_boot/mod.rs:185-196 (Phase A verifies oem_lock_status_raw but never writes OEMxKEYR)",
+    "docs/security/threat-model.md:652 ('ship profile sets HDP1EN = HDP2EN = 0 and nothing in secure/src engages HDP'); gh #39 OPEN critical ship-blocker",
+    "secure/src/hw/bhk.rs:390 (already_locked read only at load; no pre-sign BHKLOCK assertion)",
+    "grep SECHDPCR secure/src \u2192 empty"
+   ],
+   "vendor_precedent": "Trezor option_bytes.c:124-170,188-264 (exact-equality check, force-rewrite loop, secret_safety_erase on mismatch), :213-222/:247-261 (OEM keys 0xFFFFFFFF + OEMxLOCK ensure), :86-87/:196 (SECBOOTADD0 BOOT_LOCK); secret.c:170-185,393-424,598-651 (BHKLOCK, secret_disable_access HDP).",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "HDP1 range is a prefix of the secure watermark, so it cannot also hide pages 123-127 (page 123/124 are written at runtime; 126/127 would need relocation) \u2014 scope HDP1 to the FSBL only. A wipe-on-mismatch policy plus the accepted single-fault suppression in optbytes means a transient read fault could brick a genuine device: require the secure-world re-check to be voted (read_volatile_voted) and persistent across a reset before wiping. OEM-key semantics must be confirmed against RM0456 before relying on the 0xFFFFFFFF idiom.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/secret/stm32u5/secret.c",
+    "https://donjon.ledger.com/blog/rp2350-secure-debug-laser-fault-injection/",
+    "https://www.cypherock.com/keylabs.pdf"
+   ]
+  },
+  {
+   "id": "FI-07",
+   "title": "Make the emulation FI story a CI gate: nightly rainbow sweeps over fsbl::verify_images, cmd_fw_commit + staging window, confirm/chord gate and the real c10 signer with the correlated-fault model, plus an ELF-level check that double-read/compare sequences survived LTO",
+   "threat": "A green tree says nothing about FI regressions since the last manual sweep: ci.yml has no rainbow step, the full C10 sweep was only smoke-run, the harness c10 target signs twice with plain sk.sign (no F-16 independent shuffle), the correlated-fault class (same deterministic HASH/position fault in both passes) is unmodelled, and TF-M's documented hazard \u2014 the compiler folding redundant reads under -Os/LTO \u2014 has only a local fi_min IR check that is not in invariant-gates.",
+   "proposal": "(1) Add a nightly CI job (self-hosted runner, time-boxed) running tools/sca fault_sweep_* under the three single-fault models + two-fault, publishing the SECURE/INSECURE map as an artifact and failing on any new INSECURE site vs a committed baseline (fi_check style). (2) New targets: fsbl::verify_images + filter_valid (#591), cmd_fw_commit + staging BEGIN\u2192CHUNK\u2192COMMIT (#633), confirm_checked + px chord arming (#211), batch member loop (#335). (3) Correlated-fault mode: inject the identical fault at the identical hash-call index in both sign passes, with and without the F-16 shuffle seeds, and assert ct_eq catches it only when seeds differ (#592/#296). (4) Disassembly gate over the release secure ELF and FSBL ELF: for each `check_true*`, `read_volatile_voted`, FihBool double-read and ct_eq site, assert the expected volatile load/compare count is present (objdump + a small script), added to `make invariant-gates` with check-fi-ir. (5) Retain sweep receipts in-tree so CLAUDE.md claims are auditable.",
+   "rationale": "Ledger ships exactly this workflow (rainbow + fi_check in CI mapping hits to source) and TF-M explicitly warns that optimisation removes FIH code; it is cheaper than the on-silicon gates and is the regression net for every other item here.",
+   "repo_evidence": [
+    ".github/workflows/ci.yml (no rainbow/sca step); nightly.yml:147-215 (cargo-checkct only)",
+    "tools/sca/out/ (only scp03_fi_*.log + f29_regression_matrix.log retained)",
+    "Makefile:4431-4433 check-fi-ir vs :4445-4460 invariant-gates (not included); gh #130 OPEN",
+    "gh #232 OPEN (C10 full sweep), #591 OPEN high, #633 OPEN, #211 OPEN, #592/#296/#593 (correlated fault), #335 (batch loop)",
+    "tools/sca/README.md:55-58 (harness stub contract no longer matches fi.rs's byte_nonsecret/AtomicU8 \u2014 fi_target may not build)"
+   ],
+   "vendor_precedent": "Ledger Donjon rainbow fault_skip/fault_stuck_at + fi_check in CI (blog 'fault-injection-simulation'); TF-M FIH design doc (compiler-elimination warning, simulated skip list for SAU/MPC/PSP-limit/NS-entry).",
+   "novelty": "parity",
+   "kind": "process",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "~40 h host compute for the full C10 sweep \u2014 needs sharding or a reduced per-night subset with the full sweep weekly; emulation cannot find unmodelled effects (Ledger's own caveat), so it complements FI-01, not replaces it. Baseline-diff gating can be gamed by moving a site; review the baseline on every change.",
+   "sources": [
+    "https://www.ledger.com/blog/fault-injection-simulation",
+    "https://github.com/Ledger-Donjon/rainbow",
+    "https://nrfconnectdocs.nordicsemi.com/ncs/latest/tfm/design_docs/tfm_physical_attack_mitigation.html",
+    "https://eprint.iacr.org/2023/042"
+   ]
+  },
+  {
+   "id": "FI-08",
+   "title": "SE-bound release of the entropy halves on a firmware measurement: each SE releases its half only after the measured-boot digest matches a value sealed at first boot, so a glitched FSBL/MCU integrity check cannot unlock funds",
+   "threat": "Donjon's Safe 3 result is the concrete 'malicious hardware/firmware in the MCU' case: SE pairing secrets prove possession of a key, not what code is running, so a glitch on the MCU's own integrity check yields a reprogrammed device that still passes SE attestation. pq1 is structurally the same: OPTIGA PBS / SE050 SCP03 keys are DHUK/BHK-derived and any code running on the die can recompute them; a glitched FSBL verify (or an RDP downgrade) therefore still reaches both halves after PIN.",
+   "proposal": "At first boot (Phase B), seal `M0 = SHA-256(fingerprint_digest_slotA \u2016 fingerprint_digest_slotB_or_empty \u2016 fsbl_digest \u2016 option_byte_profile)` into each SE: OPTIGA as an AuthRef/confidentiality-protected data object whose read of half_O requires a session bound to a HMAC(M_current) proof via Shielded Connection (or as a key-derivation input into the PBS-equivalent session), SE050 by binding the UserID-protected object policy to a `HMAC-SHA256(K_se050_meas, M_current)` presented as part of the SCP03 session key derivation. The secure world recomputes M_current every boot from measured_boot::run (not the FSBL, since the FSBL is pre-secret) and derives the per-boot session material from it; a wrong measurement produces an undecryptable half rather than a visible refusal. Legitimate A/B updates re-seal under the PIN-gated fw_commit path (COMMIT already requires unlock) by writing the new M under the old session before the boot pointer flips, with a journaled rollback. Pair with a C10 MCU attestation (fingerprint-signed challenge) for the companion.",
+   "rationale": "Moves the trust anchor for fund release from 'the MCU's integrity check was not glitched' to 'the SEs saw the expected measurement', which no public attack on an SE-less path can forge without also faulting the SE policy; it is the only design that makes a successful RDP downgrade or FSBL-verify glitch insufficient on its own. Trezor's May-2026 ML-DSA MCU attestation shows vendors are moving toward measured-MCU evidence, but none bind the seed release to it.",
+   "repo_evidence": [
+    "secure/src/dual_se.rs:461-477 (unlock cross-check is entropy\u2192master self-consistency only; no measurement input)",
+    "secure/src/measured_boot.rs (advisory fingerprint; not consumed by any SE policy)",
+    "secure/src/hw/secret_keys.rs (PBS/SCP03 derive from DHUK+salt / BHK \u2014 possession keys, no code binding)",
+    "docs/security/threat-model.md (no SE-bound measurement entry); issue search 'measurement SE release' \u2192 none"
+   ],
+   "vendor_precedent": "None binds seed release to a firmware measurement. Nearest: Trezor mcu_attestation.c (ML-DSA MCU attestation for Suite, not for seed release); Ledger Secure Screen/Genuine Check attests the SE only.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "L",
+   "priority": "P2",
+   "risks": "Touches invariants #1/#3 adjacent code (SE provisioning, S-1/S-2/S-3 OPTIGA lockdown is already a ship-blocker \u2014 this adds another object/policy to that ceremony); a fw_update that fails between re-seal and boot-pointer flip could brick (needs the journaled recovery proof the first-boot flow already lacks); the FSBL cannot participate (pre-secret, frozen), so the measurement is the secure world's \u2014 a fully compromised secure image could lie, which is why FI-03/FI-06 (FSBL + RDP integrity) remain load-bearing. Must stay SPHINCS+C10-only for any attestation signature.",
+   "sources": [
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+    "https://www.ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/mcu_attestation/mcu_attestation.c",
+    "https://trezor.io/learn/security-privacy/how-trezor-keeps-you-safe/trezor-safe-device-authentication-check"
+   ]
+  },
+  {
+   "id": "FI-09",
+   "title": "Timing canaries around FI-critical blocks (software Instruction Timer) and write\u2192jitter\u2192readback of the clock tree and TZ configuration",
+   "threat": "CfiCounter catches skipped steps but not clock-glitch or stuck-at faults that leave the counter intact; the RCC/PLL setup is itself a fault target (\u03bc-Glitch had to glitch the L5 PLL config to get under the BoD), and while sau.rs has a post-write readback the RCC path has none and neither inserts a random delay before the readback.",
+   "proposal": "(1) `fi::TimedWindow`: snapshot a secure-only TIM (or DWT CYCCNT with LAR unlocked, secured) at block entry, compute the expected cycle envelope at build time per block (min/max with RDI jitter budget), and on exit require entry+min \u2264 now \u2264 entry+max through check_true_into_sentinel; apply to ct_eq of the two 4008-B sigs, verify-before-release, gated_unlock pre-commit \u2192 SE verdict, SCP03/CCM unwrap, SAU/GTZC/AIRCR setup and the first-boot RDP authorisation. Over/under-run \u21d2 handle_fault (FI-05). (2) rcc.rs: after PLL/SWS switch, wait_random then re-read CFGR1/PLL1CFGR/PLL1DIVR and compare to the constants under a sentinel; mirror in the FSBL once it has a TRNG. (3) sau.rs: insert wait_random before each readback pass and add a second voted pass (read_volatile_voted) of SAU_RBAR/RLAR, GTZC SECCFGR and AIRCR, since the existing F6 verifier is a single pass.",
+   "rationale": "NXP's LPC55 Code Watchdog pairs a secure counter with an instruction timer precisely because counters alone miss timing faults; RP2350's digital glitch detectors are the hardware form of the same idea. A software window on a secure timer is the closest U585 equivalent and is cheap. Readback after jitter is the standard answer to the \u03bc-Glitch SAU/PLL targets.",
+   "repo_evidence": [
+    "grep CYCCNT|DWT|timing canary secure/src \u2192 only test-key-speed register strings in main_sau_pure_tests.rs:1073-1099; no runtime canary",
+    "secure/src/hw/rcc.rs (PLL1/SWS constants at :62-81; grep 'read.?back|verify|mismatch' \u2192 empty)",
+    "secure/src/sau.rs:401-409 (single-pass post-write readback verifier F6; no wait_random before it)",
+    "secure/src/fi.rs:199-252 (CfiCounter: control-flow only; doc admits 2-fault stack-write bypass)"
+   ],
+   "vendor_precedent": "NXP AN12912 Code Watchdog (Secure Counter + Instruction Timer); RP2350 datasheet \u00a710.9 glitch detectors; \u03bc-Glitch countermeasure (random 0\u20139 cycle pre-delay per fault target).",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "Envelopes must absorb legitimate variance (C10 target-sum grinding spreads sign time by \u00b11 s, HASH DMA stalls, RDI jitter) \u2014 set them on measured distributions, not estimates, or they become a reliability bug; DWT is a debug resource and must be locked/secured so NS cannot reset CYCCNT. Adds flash to the already-over-budget ui-px image.",
+   "sources": [
+    "https://www.nxp.com/docs/en/application-note/AN12912.pdf",
+    "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf",
+    "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf"
+   ]
+  },
+  {
+   "id": "FI-10",
+   "title": "Memory and counter integrity under faults: MSPLIM in both worlds, secrets in an ECC-NMI bank, an authentication tag over the page-123 live record set, and a non-trivial page-124 encoding",
+   "threat": "A fault-induced stack-pointer corruption or deep recursion silently overwrites page-123/124 buffers (no MSPLIM anywhere); an SRAM bit-flip in master_secret/SLOT_CACHE corrupts silently (ECC double-error NMI off), which SLasH-DSA shows is exploitable during hash-based signing; a glitch or flash manipulation that drops the newest page-123 tally record lowers local_offchain_count with no detector; page 124 is a unary count of zero quadwords where an erased page decodes to 0 attempts (the exact 0xFF read-as-zero shape Trezor was defeated by via USB voltage manipulation).",
+   "proposal": "(1) Program MSPLIM_S (and PSPLIM if used) 256 B above the stack base in the secure world's startup and in the FSBL; overflow \u21d2 UsageFault \u21d2 existing zeroize+reset path. (2) Place master_secret, SLOT_CACHE and the sign buffers in SRAM2 (or an ECC-enabled region per #48), enable RAMCFG ECC double-error NMI and route it to zeroize + handle_fault. (3) Page 123: maintain an HMAC-SHA256 (DHUK-rooted via saes_cmac) over the folded set of live per-slot counters written as the last quadword of each commit and verified on every read; mismatch \u21d2 refuse to sign + handle_fault (Trezor STORAGE_TAG). (4) Page 124: replace the plain zero-quadword with a Hamming-structured marker (e.g. 01/10-expanded attempt index + complement) so neither 0x00\u202600 nor 0xFF\u2026FF quadwords are well-formed, decode every copy and require agreement; keep the SE counters as primary. (5) Kani/rainbow fault-model tests for both decoders (the existing Kani work covers logic, not stuck-at reads).",
+   "rationale": "These are shipped Trezor properties (MSPLIM, storage auth tag, blockwise 01/10 PIN counter) and a ship-blocker (#48); page-124 is the user-facing 10-attempt bound and page-123 is the off-chain cap, both read by FI-critical gates. Trezor explicitly justifies a simplified counter encoding when SE counters exist \u2014 pq1 is in the same position \u2014 but not an unencoded one.",
+   "repo_evidence": [
+    "grep MSPLIM secure/src \u2192 empty; fsbl/src/main.rs:172, fsbl/src/manifest.rs:30 ('no MSPLIM')",
+    "docs/security/brownout-hardening.md:321-322 (ECC double-bit NMI off, RAMCFG untouched); gh #48 OPEN ship-blocker",
+    "grep -iE 'hmac|tag|cmac|auth' secure/src/offchain_state.rs \u2192 no authentication tag over the record set",
+    "secure/src/hw/flash.rs:824-834,837-895 (page-124 = count of all-zero quadwords; erased \u21d2 0 attempts; fwd/rev scan only)",
+    "gh #230 OPEN (crash-atomic page-123 compaction)"
+   ],
+   "vendor_precedent": "Trezor sysutils.c:91-95 (MSPLIM), storage.c:253-388 (auth tag over protected keys), storage/pinlogs_blockwise.h:8-87 (01/10 expansion + all-copies-agree), docs/storage/index.md:176-215 (0xFFFFFFFF counter defeated by USB voltage manipulation).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "Changing the page-124/123 layouts re-provisions every bench board and touches the Kani/Miri-proven decoders and the E2E pin-gate harnesses; the page-123 tag adds 16 B per commit against the 16 B/increment log budget (compaction cadence halves). DROPPED: consumption-mask GPDMA circular refresh (consumption_mask.rs:14-20, SCA not FI); sign_rate pre_sign FI wrapper (#139); SE alarm/reset counting \u21d2 escalate instead of silent retry (ifx_i2c.rs retry paths); production reset-cause gating (refuse unlock until PINRSTF|BORRSTF cold boot, reset_cause.rs:108); secure-world MPU windowing / SRAM XN (trezor-comparison.md:429); Hamming-distant phase words for fw_update/first-boot journals (folded into FI-05); per-sign HASH KAT (#367); ct_eq loop-completion wrapper over subtle; pixel-UI seen_last plain bool (HARDENING.md:114-118) and unvoted button timing (#185); TAMP\u00d7BHK ITAMP6/9 masking (#208, prerequisite for FI-02); seed entropy XOR of SE TRNGs \u2014 already implemented via rng_strong (dual_se.rs:86-108,565-590), not proposed.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/storage/pinlogs_blockwise.h",
+    "https://github.com/trezor/trezor-firmware/blob/main/docs/storage/index.md",
+    "https://github.com/trezor/trezor-firmware/blob/main/storage/storage.c",
+    "https://arxiv.org/abs/2509.13048"
+   ]
+  }
+ ]
+}

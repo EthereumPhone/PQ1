@@ -1,0 +1,26 @@
+{
+ "id": "SE-10",
+ "title": "User-contributed entropy phase in the seed wizard (dice/coin/key-press rolls) mixed into the 3-source TRNG draw, with an on-screen proof that the user's input changed the words",
+ "threat": "A backdoored or mis-configured entropy path at seed generation that every on-device check passes (Coldcard 2021\u20132026: PRNG fallback + 32-bit reseed survived its health checks; #704 shows pq1's TRNG runs RM0456 configuration C, not the certifiable A): all three XOR'd sources sit behind firmware the user cannot audit at runtime, and a factory/pre-power image that fixes the output is invisible to the SWD verify if it lives in a rotated slot.",
+ "proposal": "Insert a mandatory wizard step between PIN set and `rng_strong::fill`: the user enters \u226550 dice rolls (or 128 coin flips / 65 key presses, Coldcard's thresholds) on the two-button UI; firmware computes `entropy = rng_strong(32) XOR SHA-256('pqsigner/user-entropy-v1' \u2016 rolls)` and, before showing the 24 words, shows a 2-word 'entropy check' derived from `SHA-256(rolls)` that the user can recompute offline (documented procedure), proving the rolls were consumed. Keep the strict 3-source draw unchanged; the user term is an additional XOR share. Allow a documented 'skip' only in bench builds.",
+ "rationale": "After the Coldcard incident, user-manipulated entropy is the one defence that provably held when the device's own RNG failed; NGRAVE and Coldcard ship it. pq1 already does the vendor-side part (STM32 \u2295 OPTIGA \u2295 SE050, Cypherock/Trezor parity) so the delta is small and purely additive. It also partially answers 'what if the factory image was swapped before my SWD check' for the seed itself.",
+ "repo_evidence": [
+  "secure/src/main.rs:955-975 wizard draws entropy with a single rng_strong::fill and immediately builds the mnemonic; no user term",
+  "secure/src/ui/seed_wizard.rs \u2014 grep 'dice|coin' hits nothing; the only entropy calls are decoy generation (:430-456)",
+  "secure/src/rng_strong.rs:1-30 \u2014 3-source XOR already implemented (parity half done)",
+  "Issue #704 (TRNG configuration C, HW-ASSUME-TRNG-ENTROPY false as stated)"
+ ],
+ "vendor_precedent": "Coldcard Mk4 (\u226565 key presses / 50 dice rolls / 128 coin flips mixed with device entropy); NGRAVE ZERO (user shuffles key characters); Cypherock (XOR of two chip TRNGs at generation).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Two-button UI makes 50 rolls tedious \u2014 UX cost is the real risk; rolls must be zeroized like the entropy; the on-screen check must not leak enough of the rolls to reduce entropy (2 words = 22 bits of a 32-byte hash is fine). DROPPED: SE-rail shunt/ADC current budget at boot (hardware, mW-class only); PRL self-heal on the unlock path (#119, already tracked); D1 split of OptigaError::Shield (#385, tracked); PUT KEY atomicity bench (#386/#398, tracked); SE050 LockState/transport-lock assertion (#63, folds into SE-04); E2-vs-C2 BOM confirmation (#697, process); CCM-8 tag-forgery bound 2^-64 statement in HARDENING.md (doc-only); OPTIGA transport retry taxonomy port (optiga_transport.c:225-307); 'delta-mode' duress signing (PIN surface); remote blind-oracle fourth XOR share (Jade VSE \u2014 systemic, needs network); C10 MCU attestation as a standalone item (folded into SE-01).",
+ "sources": [
+  "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware",
+  "https://coldcard.com/mk4",
+  "https://support.ngrave.io/hc/en-us/articles/4409561457041-Could-someone-pre-program-their-own-key-in-my-device-before-I-receive-it-Supply-chain-attacks",
+  "https://docs.cypherock.com/getting-started/how-cypherock-generates-your-24-word-seed-phrase"
+ ],
+ "surface": "se"
+}

@@ -1,0 +1,418 @@
+{
+ "surface": "Firmware update and rollback (key=fwupdate) \u2014 secure-world CMD_FW_BEGIN/CHUNK/COMMIT/STATUS/ABORT streaming updater (`secure/src/fw_update/`, `secure/src/nsc/cmd_fw_*.rs`), the legacy bench FSBL A/B selector (`fsbl/`), the v0x02/`PQFW_V1` manifest + Draft-1.1 `PQFW_V6` pure core (`fw-manifest/`), the host signer (`fwsign/`), the rejected unary OTP floor + boot-state page (`secure/src/hw/{otp,boot_state}.rs`), the nonshipping `pqsigner-rollback`/`pqsigner-geometry` cores, and the reproducible-build/measurement chain. Read-only inventory at branch feat/pq1-board-target (HEAD c75b0d9c), 2026-10-10. Headline: the vendor-signature/verify-chain/staging half is implemented and FI-hardened on both the update and boot paths, but there is NO working anti-rollback backend, NO working A/B try-once recovery, NO activation path in COMMIT (fail-closed refusal since FA-1.5), and every production/real-key/factory build is compile-blocked by build.rs + Rust fences; the whole surface is bench-only by construction.",
+ "has": [
+  {
+   "item": "Unified verify chain at BEGIN (structural -> CRC -> digest -> vendor fpr -> C10 signature -> rollback floor), timing-normalised (every step runs on every input), with signature/digest/rollback verdicts routed through fi::check_true_into_sentinel + scrub_sentinel_register (F-7/F15)",
+   "evidence": [
+    "secure/src/fw_update/mod.rs:468-555",
+    "fw-manifest/src/lib.rs:450-570"
+   ],
+   "status": "implemented",
+   "notes": "Reports errors in documented chain order after all work is done. Only reachable under stm32u585 (module is cfg-gated; QEMU never dispatches CMD_FW_*, issue #167)."
+  },
+  {
+   "item": "Vendor SPHINCS+C10 public key baked into BOTH the secure image and the FSBL in a dedicated allocated ELF section `.pqsigner.vendor_pubkey`, consumed via key_parts() (single runtime copy, black_box'd); fwsign release gate hashes that section from the final ELFs",
+   "evidence": [
+    "secure/src/fw_update/vendor_pubkey.rs:29-42",
+    "fsbl/src/vendor_pubkey.rs:20-33",
+    "fwsign/src/artifact_key.rs:1-50",
+    "secure/build.rs:146-270"
+   ],
+   "status": "implemented",
+   "notes": "Secure-side verify uses the compiled-in key, NOT the running slot's manifest fpr (contradicts firmware-update.md 'Known gotchas' \u2014 see drift)."
+  },
+  {
+   "item": "Build-script + Rust compile fences: stm32u585+mode-production -> FW_ROLLBACK_PRODUCTION_BLOCKED; factory-provisioning -> FW_ROLLBACK_FACTORY_BLOCKED; bench STM32 builds must opt in with `legacy-fw-rollback-unsafe`; real production vendor key (policy-hash match) cannot compose with the legacy backend outside mode-production (FW_ROLLBACK_REAL_KEY_BLOCKED, #541 measurement-profile carve-out); all-zero/relative/dev key rejected for production",
+   "evidence": [
+    "secure/build.rs:14-55",
+    "secure/build.rs:197-253",
+    "secure/src/nsc/mod.rs:446-467",
+    "fsbl/src/main.rs:67-74",
+    "fsbl/build.rs:31-66",
+    "fsbl-tests/tests/rollback_ship_fences.rs:177-220",
+    "fsbl-tests/tests/rollback_ship_fences.rs:617-700"
+   ],
+   "status": "implemented",
+   "notes": "rollback_ship_fences runs real cargo builds and asserts the exact failure strings; enrolled in CI (.github/workflows/ci.yml:182)."
+  },
+  {
+   "item": "Production vendor-key policy intentionally `UNPROVISIONED`; release-pubkey-check refuses zero key, dev key, malformed/unprovisioned policy; `make release`/`_release`/`fsbl-release`/`prod-check`/`prod-check-ship` hard-$(error) at make-eval time",
+   "evidence": [
+    "config/production-firmware-vendor-key.sha256:1",
+    "config/README.md:1-20",
+    "Makefile:2508-2509",
+    "Makefile:2516-2560",
+    "Makefile:2770-2777",
+    "Makefile:2913-2917"
+   ],
+   "status": "fenced-off",
+   "notes": "No production packaging path exists; fwsign sign requires --legacy-bench-unsafe and emits only PQFW_V1 (fwsign/src/subcommands/sign.rs:47-54)."
+  },
+  {
+   "item": "CMD_FW_BEGIN handler: PIN sentinel gate, exact 8 KB length, sentinel-gated NS read-pointer validation, volatile TOCTOU snapshot to S-stack, static one-shot trusted-UI authorization BEFORE the verifier runs, wait_random jitter, verify chain, image-length-vs-slot-capacity bound (the SOLE bound on the unsigned len fields), trusted-display install confirm (version/direction + fw fingerprint + key fingerprint + prompt) BEFORE any flash op, inactive slot chosen from hardware VTOR (not boot-state), erase inactive slot, seed SRAM ctx",
+   "evidence": [
+    "secure/src/nsc/cmd_fw_begin.rs:32-228",
+    "secure/src/fw_update/mod.rs:53-78",
+    "secure/src/fw_update/mod.rs:120-171",
+    "secure/src/fw_update/mod.rs:445-462"
+   ],
+   "status": "implemented",
+   "notes": "ui-px screens exist for both prompts (secure/src/ui/px/status_map.rs:436,477). confirm_install is short-circuited under e2e-test (mod.rs:121-125) \u2014 fenced out of production. SESSION_COUNTER is bumped but discarded (cmd_fw_begin.rs:226) and STATUS has no session field: documented contract not wired (#138)."
+  },
+  {
+   "item": "CMD_FW_CHUNK: HandlerGuard (blocks SysTick idle-wipe during the mutable borrow), PIN gate, bounded total_len, sentinel-gated pointer validation, snapshot, declared-vs-actual len check, strict monotonic append with checked_add on offset+len AND base+offset, QW-aligned writes via write_slot_quadword_verified with 0xFF pad on the final short chunk, hasher bumped only after a successful write",
+   "evidence": [
+    "secure/src/nsc/cmd_fw_chunk.rs:31-130",
+    "secure/src/fw_update/mod.rs:559-596",
+    "secure/src/fw_update/staging.rs:28-120"
+   ],
+   "status": "implemented",
+   "notes": "Host pure tests pin these (secure/src/fw_update_boot_pure_tests.rs:545-905)."
+  },
+  {
+   "item": "COMMIT-time verify_images: length match, running-hash vs fresh volatile flash re-hash vs manifest signed hashes, all constant-time compares, aggregate verdict re-evaluated inside check_true_into_sentinel with black_box after wait_random; failure drops the context (retry needs a fresh user-gated BEGIN), never arms a wipe",
+   "evidence": [
+    "secure/src/fw_update/verify.rs:41-115",
+    "secure/src/nsc/cmd_fw_commit.rs:86-130"
+   ],
+   "status": "implemented",
+   "notes": "Closed the 'COMMIT single-fault bypass' audit finding; rainbow FI sweep over this function still untracked-as-executed (#591)."
+  },
+  {
+   "item": "CMD_FW_COMMIT activation: REMOVED. After verify_images it writes the inactive manifest page with try_once=TRIED (CRC recomputed), writes the boot-state page, re-verifies the staged manifest FROM FLASH (structural/CRC/digest/verify_rollback(new_version-1)) + boot-state pointer through sentinel gates, then unconditionally returns FwUpdateFlashError with no OTP program, no floor write, no reset (FA-1.5, commit 2bad0c86)",
+   "evidence": [
+    "secure/src/nsc/cmd_fw_commit.rs:1-43",
+    "secure/src/nsc/cmd_fw_commit.rs:163-375",
+    "secure/src/hw/boot_state.rs:129-141"
+   ],
+   "status": "partial",
+   "notes": "There is no success path in any build. The staged slot can still be selected by the FSBL at next reset under its own re-verification (legacy try-once fall-through), so staging is diagnostic, not activation. The retained FI gate is source-level only ('not live FI coverage today', cmd_fw_commit.rs:288-294). `otp::bump_to` has zero Rust call sites."
+  },
+  {
+   "item": "CMD_FW_STATUS / CMD_FW_ABORT both hold HandlerGuard and are PIN-gated; STATUS validates the NS write pointer through a sentinel and emits volatile byte stores; ABORT drops the ZeroizeOnDrop ctx",
+   "evidence": [
+    "secure/src/nsc/cmd_fw_status.rs:20-87",
+    "secure/src/nsc/cmd_fw_abort.rs:23-50"
+   ],
+   "status": "implemented",
+   "notes": "This is the LCR-F2 fix (commit 1ebc0c28). Issue #418 is still OPEN with 0 comments although the code is fixed \u2014 stale tracker (see drift)."
+  },
+  {
+   "item": "FwUpdateCtx is SRAM-only, Zeroize+ZeroizeOnDrop (manifest copy/hashers skipped by design), dropped on idle-wipe/lock/abort/re-BEGIN; stm32u585 idle-wipe explicitly nulls FW_UPDATE",
+   "evidence": [
+    "secure/src/fw_update/mod.rs:308-344",
+    "secure/src/nsc/state.rs:415-428",
+    "secure/src/nsc/state.rs:565"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Software-reset secret scrub at boot (ResetCause::requires_secret_scrub covers Software) as belt-and-braces for any reset path that might carry an unlocked session into a successor image (the D1 defect)",
+   "evidence": [
+    "secure/src/main.rs:1310-1333"
+   ],
+   "status": "implemented",
+   "notes": "Primary D1 fix was in cmd_fw_commit (vendor-signing-key-compromise.md:101); with FA-1.5 the handler has no reset arm at all, so this is now the only live mechanism. #88 (LCR-F3) still open for the eventual replacement backend."
+  },
+  {
+   "item": "Legacy bench FSBL: borrows both manifest pages from flash (no 8 KB stack copies), reads voted max(a,b) OTP floor, runs the same sentinel-hardened verify chain per slot (filter_valid), re-hashes both images per slot with aggregate sentinel gate, picks highest fw_version with legacy TRIED/COMMITTING arbitration, tz-1 option-byte read-only tripwire (halts on persistent mismatch, never writes), renders the 8-word fingerprint and halts if the display verdict is not OK_SENTINEL, scrubs GPRs and branches via VTOR",
+   "evidence": [
+    "fsbl/src/main.rs:114-300",
+    "fsbl/src/main.rs:321-355",
+    "fsbl/src/main.rs:367-411",
+    "fsbl/src/verify.rs:38-110",
+    "fsbl/src/otp.rs:27-42",
+    "fsbl/src/optbytes.rs:80-85",
+    "fsbl/src/branch.rs:38-98",
+    "fsbl/src/manifest.rs:41-48"
+   ],
+   "status": "implemented",
+   "notes": "Bench build only (mode-production compile_error at fsbl/src/main.rs:67-70). Silicon receipt 2026-09-16: verify + render + branch into slot A on pq1 with a stage-marker diagnostic build (docs/firmware/firmware-update.md:443-463). HASH peripheral port is optional (`hw-sha256`)."
+  },
+  {
+   "item": "FSBL has no flash/OTP/option-byte write path in normal builds; `stage-marker` (the only writer) is compile_error'd under mode-production; source_invariants pins that main.rs's branch gate never touches write_volatile/boot_state/crate::otp",
+   "evidence": [
+    "fsbl/src/marker.rs:36-41",
+    "fsbl/src/optbytes.rs:12-15",
+    "fsbl-tests/tests/source_invariants.rs:135-200",
+    "fsbl-tests/tests/source_invariants.rs:570-620"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "FSBL geometry MEASUREMENT gate: scripts/check_fsbl_geometry.py reads the physical LOAD span from program headers, derives the WRP page range from the image; `make fsbl` runs it (32 KiB legacy regression gate)",
+   "evidence": [
+    "Makefile:2454",
+    "CLAUDE.md invariant #10 text"
+   ],
+   "status": "implemented",
+   "notes": "Geometry MIGRATION to the frozen 40 KiB / pages 0..4 registry is NOT done (#540, blocked by #758: the 5th page is Manifest A and boot-state has no page in the frozen registry)."
+  },
+  {
+   "item": "Frozen flash geometry registry crate `pqsigner-geometry` (16 rows, exact-once compile-time coverage proof, Fsbl owner pages 0..4 in BOTH banks, Route-1 journal pages 64/122, `updater_must_preserve`)",
+   "evidence": [
+    "geometry/src/lib.rs:18-53",
+    "geometry/src/lib.rs:121-137",
+    "geometry/src/lib.rs:186-206"
+   ],
+   "status": "implemented",
+   "notes": "`updater_must_preserve` is NOT enforced by the live flash policy \u2014 secure/src/flash_policy.rs:70-73,280-283 explicitly says enforcing it would break the live NS update because the bank-2 FSBL mirror pages 0..4 are currently INSIDE live NS slot A. Its 8 tests run in no CI workflow (#720)."
+  },
+  {
+   "item": "Runtime flash policy types: GenericSecurePage excludes only bank-1 page 127 and out-of-range; GenericSecureQwAddr excludes misalignment, out-of-bank, and the page-127 journal window. erase_slot touches only the inactive slot's pages + its manifest page",
+   "evidence": [
+    "secure/src/flash_policy.rs:124-170",
+    "secure/src/flash_policy.rs:30-55",
+    "secure/src/hw/flash.rs:1307-1395"
+   ],
+   "status": "partial",
+   "notes": "No software guard excludes FSBL pages 0..3/0..4 or the manifest/boot-state pages from erase_secure_page/write_quadword_verified; invariant #10's 'no runtime write path may touch the FSBL range' is meant to rest on WRP, which is never programmed anywhere in the tree (vendor-signing-key-compromise.md:11-13; grep for WRP1A write sites returns nothing). Only the call sites keep the updater inside the inactive slot."
+  },
+  {
+   "item": "Manifest v0x02 / PQFW_V1 wire format: 8 KB page, 75-byte signed preimage (tag||fw_version||secure_hash||nonsecure_hash), unsigned slot/len/fpr/build_id/boot_ctr/try_once, CRC-32 over [0..8188), reserved-region hygiene checks (BadReserved), strict verify_rollback (fw_version > floor)",
+   "evidence": [
+    "fw-manifest/src/lib.rs:168-244",
+    "fw-manifest/src/lib.rs:450-485",
+    "fw-manifest/src/lib.rs:563-570"
+   ],
+   "status": "implemented",
+   "notes": "Image lengths and slot byte are NOT signed; capacity bound at BEGIN is the sole defence (cmd_fw_begin.rs:122-136). One signature installs into either slot."
+  },
+  {
+   "item": "Draft-1.1 manifest-v6 pure core in fw-manifest::v6: schema 0x06, `PQFW_V6` 121-byte slot-bound preimage incl. security_epoch + vendor_fpr, domain-separated vendor fingerprint, normalized CRC over the 5-QW journal window, flag-day legacy rejection, C10 signature verify + embedded-key verify, release-package validation; typed Attribution/JournalRead so ECC/durability enter only as explicit parameters",
+   "evidence": [
+    "fw-manifest/src/v6.rs:1-132",
+    "fw-manifest/src/v6.rs:388-630"
+   ],
+   "status": "partial",
+   "notes": "Pure/host-only. No FSBL, updater, or fwsign consumer parses V6; fwsign emits only V1. Research candidate per CLAUDE.md 'Rollback manifest work is not implementation-approved'."
+  },
+  {
+   "item": "Nonshipping `pqsigner-rollback` pure core (FROZEN-JRN-IFACE-3 arm token, FROZEN-OTP-API-3 FloorView/FreshQwRead/QW accountancy, journal install-identity, lifecycle acceptance table, evidence keys), #![forbid(unsafe_code)], no physical writers, fake backend compile_error'd on bare metal",
+   "evidence": [
+    "rollback/src/lib.rs:1-60",
+    "rollback/src/*.rs",
+    "rollback/tests/*.rs"
+   ],
+   "status": "partial",
+   "notes": "156 tests execute in NO CI workflow (#720). FA-1.1/1.2/1.3/1.4/1.5 landed; FA-G1 (#541), FA-2 (#542), physical backend (#543/#546), silicon campaign (#544) open."
+  },
+  {
+   "item": "Rejected legacy OTP rollback tally: rollback_floor() = voted max of two raw 32-word zero-bit counts; bump_to() reads twice and fails closed on disagreement, walks bits LSB-first, re-programs the containing QW (invalid on STM32U585 ECC OTP after first program), readback-gated; program_otp_qw is interrupt-free with full error-flag logging",
+   "evidence": [
+    "secure/src/hw/otp.rs:1-73",
+    "secure/src/hw/otp.rs:266-399",
+    "secure/src/hw/otp.rs:413-483"
+   ],
+   "status": "fenced-off",
+   "notes": "bump_to has zero call sites. The 1,024-bit capacity model is documented as invalid; production is compile-blocked (#31 ship-blocker)."
+  },
+  {
+   "item": "OTP device-master region (bytes 128..160): per-QW Virgin/Partial/Complete classification, double-read fail-closed, Partial burn completion, readback verify, read refuses non-Complete (D4 fix); factory sentinel QW retained as quarantined legacy receipt",
+   "evidence": [
+    "secure/src/hw/otp.rs:519-785",
+    "secure/src/hw/otp.rs:800-850",
+    "secure/src/factory_provisioning.rs:229",
+    "secure/src/factory_provisioning.rs:501"
+   ],
+   "status": "implemented",
+   "notes": "Adjacent to this surface (same OTP region map); its factory ceremony/evidence is tracked under #268/#41/#704, not fw-update."
+  },
+  {
+   "item": "Legacy boot-state page 6: BSTE magic + active_slot + last_good_version + CRC-32, two 16-B replicas 4 KB apart, erase-then-write-both; FSBL reads only",
+   "evidence": [
+    "secure/src/hw/boot_state.rs:1-141",
+    "fsbl/src/boot_state.rs:1-58"
+   ],
+   "status": "fenced-off",
+   "notes": "Only writer is the refusing COMMIT handler; no TRIED->COMMITTED confirm-alive writer exists (#271). Both-copies-torn coerces the selector to try the unproven winner (#138). Page has no owner in the frozen registry (#758)."
+  },
+  {
+   "item": "fwsign host tool: Argon2id+XChaCha20 keystore, deterministic C10 sign over the 75-B preimage, .pqfw bundle, extract-sig / verify / verify-release / inspect / pubkey / dev fixtures, final-artifact vendor-key section cross-check (FSBL == secure == policy), `--legacy-bench-unsafe` acknowledgement required to sign",
+   "evidence": [
+    "fwsign/src/subcommands/sign.rs:1-60",
+    "fwsign/src/main.rs:116-170",
+    "fwsign/src/artifact_key.rs:1-50",
+    "fwsign/tests/cli_*.rs"
+   ],
+   "status": "implemented",
+   "notes": "Legacy format only. Signing consumes the C10 key's global signature budget (OPEN-C10-1, #225)."
+  },
+  {
+   "item": "Reproducible builds: pinned nightly toolchain, locked deps, REPRO_FLAGS path-remap + build-id none, `make verify-repro` double-build byte-diff of secure+nonsecure ELFs, Nix flake + measure.sh for cross-host x86_64-linux closure",
+   "evidence": [
+    "docs/firmware/reproducible-builds.md:44-130",
+    "Makefile:2597-2620",
+    "flake.nix",
+    "flake.lock",
+    "measure.sh"
+   ],
+   "status": "partial",
+   "notes": "verify-repro diffs only secure+nonsecure for the invoked FEATURES; FSBL is never byte-diffed and evidence covers only the dev QEMU cfg (#189)."
+  },
+  {
+   "item": "Measured-boot fingerprint parity: FSBL and secure-world measured_boot derive the same 8 words via sphincs_tz_bip39::firmware_fingerprint_lines; render-before-branch pinned by source_invariants",
+   "evidence": [
+    "fsbl-tests/tests/source_invariants.rs:103-134",
+    "fsbl-tests/tests/source_invariants.rs:729-770",
+    "docs/security/measured-boot.md:1-80"
+   ],
+   "status": "implemented",
+   "notes": "Trust-root status explicitly NOT claimed until WRP/RDP-2 gates close; #742 demonstrated on silicon that a different FSBL boots the unchanged signed bundle (bundle binds no FSBL field)."
+  },
+  {
+   "item": "Reversible on-device anti-rollback logic test `fw-rollback-e2e` (drives the real verify_manifest with dev-signed v1/v2/v3 manifests against literal floors; no OTP/flash side effects) and over-USB transport e2e `fwup-transport-e2e` + tools/fwup-transport-test.py (BEGIN/CHUNK/COMMIT through verify_images on real USB, stops before staging; 21 consecutive bad manifests must not wipe/reset)",
+   "evidence": [
+    "secure/src/fw_rollback_e2e.rs:1-60",
+    "secure/src/nsc/cmd_fw_commit.rs:141-161",
+    "tools/fwup-transport-test.py:1-40",
+    "Makefile:4297-4360",
+    "secure/src/nsc/mod.rs:418-423",
+    "secure/src/nsc/mod.rs:492-500"
+   ],
+   "status": "implemented",
+   "notes": "Both features compile_error against mode-production. They are manual hardware runs (mock-se), not CI."
+  },
+  {
+   "item": "Host assurance on the parser: fw-manifest Kani harnesses (rollback_boundary + preimage), proptest, two cargo-fuzz targets (full verify chain + structural/CRC), ProVerif fw_update_authenticity.pv (no-forgery + domain separation under cross-protocol vendor signing, anti-vacuity query), source-text pins for handler gates and chain order",
+   "evidence": [
+    "fw-manifest/src/lib.rs:994-1135",
+    "fw-manifest/fuzz/fuzz_targets/",
+    "contracts/verification/proverif/fw_update_authenticity.pv:1-116",
+    "secure/src/nsc_fw_update_pure_tests.rs:1-20",
+    "secure/src/fw_update_boot_pure_tests.rs:308-470"
+   ],
+   "status": "partial",
+   "notes": "fw-manifest/fuzz is NOT enrolled in ClusterFuzzLite (.clusterfuzzlite/build.sh builds only top-level fuzz/; #635). No Tamarin/ProVerif anti-rollback model exists (stated in the .pv header). Nightly Kani has not completed since 09-06 (#776)."
+  },
+  {
+   "item": "Status-code surface: NscStatus FwUpdateBadState/BadManifest/BadVersion/BadChunk/BadImage/FlashError; code 16 FwUpdateOtpExhausted RETIRED with FA-1.5; USB INS 0x70..0x74 with per-INS chain-buffer bound",
+   "evidence": [
+    "proto/src/lib.rs:2114-2140",
+    "proto/src/lib.rs:1072-1088",
+    "nonsecure/src/usb/commands.rs:104-110",
+    "nonsecure/src/usb/commands.rs:957-1012"
+   ],
+   "status": "implemented",
+   "notes": "Granular wire codes retained (clamping deferred, usb-fw-update-hardening.md \u00a79 row C)."
+  },
+  {
+   "item": "Draft 1.1/1.2 rollback specification freeze: exact-digest dual review + owner ratification 2026-07-26, re-closed at current bytes by owner de-minimis acceptance 2026-09-16, CI-pinned by `make -C contracts/verification verify-rollback-freeze-pin`; 2026-07-26 errata strikes RecoverySameEpoch and FloorBoundAccepted (service/RMA instead)",
+   "evidence": [
+    "docs/security/a-b-firmware-rollback-architecture.md:35-86",
+    "docs/security/a-b-firmware-rollback-architecture.md:4356-4450",
+    "docs/STATUS.md:326",
+    "docs/STATUS.md:386",
+    "contracts/verification/Makefile:464-466"
+   ],
+   "status": "planned",
+   "notes": "Specification stage only; implementation NO-GO."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "No valid anti-rollback backend: the unary OTP tally is physically invalid on STM32U585 ECC quad-words, the runtime floor writer is removed, and no replacement physical codec (OPEN-OTP-1..3, OPEN-ECC-1, OPEN-JRN-HW-1, OPEN-JRN-DUR-1) is selected. A validly-signed downgrade is therefore only blocked by a floor that can never move past its factory value.",
+   "tracked_in": "#31 (ship-blocker), #543, #546, #545, #540",
+   "notes": "CLAUDE.md invariant #10 + 'Rollback manifest work is not implementation-approved'. docs/STATUS.md FW-RB row says implementation NO-GO."
+  },
+  {
+   "gap": "No field activation path at all: CMD_FW_COMMIT always refuses after staging, so a user cannot install an update on any build; FSBL may still pick the staged slot at next reset via the legacy fall-through, which is undefined behaviour from the product's perspective.",
+   "tracked_in": "#540 (FA-1 floor-writer removal), #696 (MP: CMD_FW_* is the ONLY field path once BOOT0 is strapped + RDP-2)",
+   "notes": "secure/src/nsc/cmd_fw_commit.rs:332-375. #696 also records that a sealed MP unit losing both slots is unrecoverable."
+  },
+  {
+   "gap": "A/B try-once recovery is nonfunctional: no TRIED->COMMITTED confirm-alive writer, single-candidate fast path skips arbitration, both-copies-torn boot-state coerces 'try the unproven winner', no health milestone implemented.",
+   "tracked_in": "#271, #138, #226, Draft 1.1 Milestones 1-2",
+   "notes": "fsbl/src/main.rs:384-411; docs/security/vulns/VULN-fwcommit-otp-before-commit-brick.md status PARTIAL FIX ONLY."
+  },
+  {
+   "gap": "FSBL immutability is not implemented: WRP is never programmed anywhere in the tree, no software guard excludes FSBL/manifest/boot-state pages from erase_secure_page/write_quadword_verified, `updater_must_preserve` is deliberately not enforced (bank-2 FSBL mirror pages 0..4 lie inside live NS slot A), geometry cutover to 40 KiB is blocked because page 4 is Manifest A and boot-state has no registry page.",
+   "tracked_in": "#35, #39, #42, #43, #45, #540, #758, #752, #226",
+   "notes": "secure/src/flash_policy.rs:70-73,280-283; docs/security/vendor-signing-key-compromise.md:11-13."
+  },
+  {
+   "gap": "The signed bundle does not bind the FSBL: a different FSBL boots the unchanged signed bundle (demonstrated on silicon 2026-09-28); FSBL identity rests only on out-of-band measurement until WRP+RDP-2 close. No vendor-pubkey OTP hash lock exists.",
+   "tracked_in": "#742, #220",
+   "notes": "docs/security/measured-boot.md \u00a7'Any claim about WHICH FSBL is on the part'; threat-model.md \u00a79.8."
+  },
+  {
+   "gap": "Production vendor signing key does not exist (policy UNPROVISIONED); no HSM ceremony, no release-set authority (OPEN-REL-1), no per-key C10 signature cap (OPEN-C10-1), no key-compromise recovery design decision, no hw-model binding in the preimage.",
+   "tracked_in": "#69 (ship-blocker), #225, #486, #266, #487",
+   "notes": "docs/security/vendor-signing-key-compromise.md says the rotation decision expires at the WRP freeze."
+  },
+  {
+   "gap": "No FI sweep covers the firmware-update staging window (CHUNK-accumulate -> COMMIT-verify, the wallet.fail shape) or fsbl::verify_images / cmd_fw_commit; COMMIT's retained sentinel gate is explicitly 'not live FI coverage today'.",
+   "tracked_in": "#633, #591",
+   "notes": "cmd_fw_commit.rs:282-300."
+  },
+  {
+   "gap": "The update path has never been exercised end-to-end on hardware with a slot flip; only fwup-transport-hw (mock-se, stops at verify_images) and the FSBL boot-proof (stage-marker build, dev key, RDP-0, no WRP) have silicon receipts. No old-to-new upgrade e2e with archived prior images; QEMU never dispatches CMD_FW_*; monolithic bench images let BEGIN erase 8 KB of the running image's own .text.",
+   "tracked_in": "#480, #167, #164, #696",
+   "notes": "docs/firmware/firmware-update.md:443-463 scopes the receipt honestly."
+  },
+  {
+   "gap": "Assurance that exists is partly unexecuted: pqsigner-rollback (156 tests) and pqsigner-geometry (8) run in no CI workflow; fsbl-tests geometry_consistency + qemu_integration are not enrolled; fw-manifest/fuzz gets zero CI fuzzing; nightly Kani has not completed since 09-06; FSBL never byte-diffed for reproducibility.",
+   "tracked_in": "#720, #721, #635, #776, #189",
+   "notes": "ci.yml:253-262 enrols only draft09_*, draft11_deletion_experiments, source_invariants, paired_constants, rollback_ship_fences, erc7730_provenance_fences, footprint."
+  },
+  {
+   "gap": "FSBL resource envelope (OPEN-RAM-1 worst-case stack via call graph, combined FLASH+RAM warning build with real key + tz-1) and ECC-NMI/QEMU power-cut suite are open; tz-1 tripwire does not act on WRP1A/OEM locks (layouts unpinned), so a unit whose WRP was cleared before RDP-2 passes.",
+   "tracked_in": "#541, #542, #46, #270",
+   "notes": "fsbl/src/optbytes.rs:21-27."
+  },
+  {
+   "gap": "On a sealed pq1 the FSBL cannot light the panel (no AW99703 I2C stage), so the boot fingerprint invariant #10 depends on is invisible; the bench board has no LCD.",
+   "tracked_in": "#705",
+   "notes": "Trusted-display dependency of this surface's user-consent story."
+  },
+  {
+   "gap": "Secondary OPTIGA monotonic counter (E1E0/F1E0) for anti-rollback is advertised in older docs but not implemented; decision implement-vs-OTP-only still pending.",
+   "tracked_in": "#212, #242",
+   "notes": "Playbook row FW10 treats any such claim as drift."
+  },
+  {
+   "gap": "Companion-side resume from CMD_FW_STATUS and a companion updater tool do not exist (tools/fwupdate.py referenced in firmware-update.md status table is absent; only tools/fwup-transport-test.py exists).",
+   "tracked_in": "#267",
+   "notes": "Low priority; wire format already supports it."
+  },
+  {
+   "gap": "Stale open issue: #418 (STATUS/ABORT omit HandlerGuard) is fixed in code (commit 1ebc0c28) but remains OPEN with no closing evidence.",
+   "tracked_in": "#418 (should be closed with evidence)",
+   "notes": "cmd_fw_status.rs:28, cmd_fw_abort.rs:33."
+  },
+  {
+   "gap": "LCR-F3: no enforced full zeroize_sensitive_state() contract before any future reset arm in the replacement backend (today moot because COMMIT never resets; boot-side scrub is the only belt).",
+   "tracked_in": "#88",
+   "notes": "secure/src/main.rs:1310-1333."
+  }
+ ],
+ "drift": [
+  "docs/firmware/firmware-update.md:484-491 ('Known gotchas') claims the secure firmware checks the new manifest's vendor fpr against the CURRENTLY-RUNNING slot's manifest fpr and that FSBL's pubkey check is the defining gate; the code verifies against the compiled-in key (secure/src/fw_update/mod.rs:516-517, vendor_pubkey.rs:37-42) and the running slot's manifest is never read.",
+  "docs/firmware/firmware-update.md:214-219 says COMMIT 'attempts otp::bump_to(fw_version - 1), then resets'; cmd_fw_commit.rs:332-375 removed both (FA-1.5, commit 2bad0c86) and otp::bump_to has zero call sites. Same stale claim in secure/src/fw_rollback_e2e.rs:17, nonsecure/src/usb/commands.rs:982-984 ('may not return if the commit succeeds (the device resets)'), tools/fwup-transport-test.py:8-9, and docs/security/usb-fw-update-hardening.md:87 (COMMIT row lists confirm_commit dialog + otp::bump_to + sys_reset).",
+  "docs/firmware/firmware-update.md:416-441 'Current implementation status' table says 'Trusted-UI confirm dialog \u26a0 stubbed (returns false)' and 'A/B slot linker scripts \u26a0 not reshaped (current firmware still boots at 0x0C00_0000)'; both are stale \u2014 confirm_install/confirm_verify_request are implemented with ui-px screens (fw_update/mod.rs:53-171) and secure/memory-stm32u585-slot-a.x + PQSIGNER_SECURE_SLOT=a exist and were used for the silicon boot proof (Makefile:2341-2342).",
+  "docs/firmware/firmware-update.md:465-473 cites `tools/ob-configurator/src/main.rs:124` for a SECBOOTADD0 bug; no tools/ob-configurator directory exists in the tree.",
+  "docs/security/usb-fw-update-hardening.md:89 says cmd_fw_abort has '(no PIN)'; cmd_fw_abort.rs:36-38 PIN-gates it. The same doc's \u00a72.2 table predates HandlerGuard in STATUS/ABORT.",
+  "docs/security/usb-fw-update-hardening.md:164 (scenario 23) and firmware-update.md:206 say BEGIN 'rejects if manifest claims the active [slot]'; the slot byte is informational and never checked against the target (cmd_fw_begin.rs:174-178).",
+  "secure/src/fw_update/mod.rs:400-409 documents SESSION_COUNTER as a session tag 'used by CMD_FW_STATUS'; BEGIN discards it (cmd_fw_begin.rs:226 `let _session`) and STATUS emits no session field (proto/src/lib.rs:969-974). Already noted in #138 and playbook row FW5.",
+  "README.md:430 ('Phase 0 \u2014 bring-up complete ... the FSBL firmware-update path all run end-to-end') overclaims against docs/firmware/firmware-update.md:443-446 ('BEGIN / CHUNK / COMMIT and the slot flip have never been exercised on hardware') and #696.",
+  "docs/security/adversarial-review/firmware-update-secure-boot-adversarial-review.md row FW11 describes `manifest_ok`/`pointer_ok` as plain booleans before otp::bump_to at cmd_fw_commit.rs:229-237; the current code routes both through check_true_into_sentinel (cmd_fw_commit.rs:301-315) and there is no bump \u2014 the row is historical.",
+  "CLAUDE.md invariant #10 calls the geometry crate 'CI-pinned'; #720 records that pqsigner-geometry's tests execute in no workflow (memory note 'Never-run tests gate' agrees).",
+  "Issue #418 is OPEN while the described gap is closed in code (cmd_fw_status.rs:28, cmd_fw_abort.rs:33, commit 1ebc0c28) \u2014 tracker drift in the opposite direction.",
+  "fw-manifest/src/lib.rs:4-7 and v6.rs header describe V6 as Draft 1.1's format; CLAUDE.md 'What NOT to do' still lists Draft 0.9's V4/80-byte as 'a preserved historical reference' and #99 keeps the V4-vs-V6 owner reconciliation open \u2014 consistent, but any reader of fw-manifest alone would assume V6 is the adopted schema."
+ ],
+ "owner_decisions": [
+  "Rollback manifest work is NOT implementation-approved (CLAUDE.md 'What NOT to do'): Draft 0.9 V4/80-byte is historical; Draft 1.1's 121-byte PQFW_V6 preimage is a research candidate; adoption or any schema change needs an exact approved spec digest, dual review, and an owner stage decision. Do not treat fw-manifest::v6 or pqsigner-rollback as current implementation authority.",
+  "No 'reset rollback floor' path \u2014 OTP is one-way by design; no `rotateMasterKeys`-style escape for the floor.",
+  "No runtime writes to the eventual approved FSBL range; the pages-0..3/32 KiB layout is legacy bench-only; Draft 1.1 proposes pages 0..4 but geometry/both-bank protection/factory/silicon gates stay open (CLAUDE.md invariant #10, owner decision 2026-07-21: WRP-set -> RDP-2 ordering mandatory, FSBL owns the display window, monolithic builds are bench-only).",
+  "Shipping model (owner decision 2026-07-14, work-todo #36): ship at RDP-0, verify-before-first-power over SWD, device self-locks to RDP-2 on first field boot; there is NO factory/fixture RDP-2 burn. Invariant #10 consequence for this surface: after lock, CMD_FW_* is the only field update path (#696).",
+  "No classical signer anywhere incl. the FW-update path and FSBL (invariant #5); single SPHINCS+C10 vendor key; Trezor-style cosi m-of-n key committees were DECLINED (#486 assessment) \u2014 the residual is a documented key-compromise recovery design, not aggregation.",
+  "Owner errata 2026-07-26: `RecoverySameEpoch` and `FloorBoundAccepted` availability paths are DECLINED (service/RMA instead); `Aborted` has no new-release path; epoch never decreases. Do not re-raise.",
+  "Draft 1.1/1.2 Milestone 0 is owner-accepted at specification stage (2026-07-26 dual APPROVE + 2026-09-16 de-minimis re-close at current bytes) but implementation remains NO-GO; Foundation A proceeds only on nonshipping/abstract backends until OPEN-OTP/ECC/JRN gates close and both exact adversarial reviewers approve the same frozen diff digest.",
+  "FA-1.5 (Draft 1.1 \u00a714 L4375): runtime floor writer REMOVED; COMMIT must refuse fail-closed; production/real-vendor-key builds must compile-fail on every epoch-bump success path (secure/build.rs + nsc/mod.rs + fsbl fences). Makefile refusals are defense in depth only.",
+  "Per-message idle-timer reset on CHUNK is deliberately NOT ported from Trezor (CLAUDE.md: NS pings do not reset the inactivity timer); only BEGIN and a live-context COMMIT reset activity.",
+  "Repeated malformed manifests must NEVER arm a wipe, write persistent failure counters, reset, or wear flash (2026-07 security review replaced the Trezor-inspired 5-strike wipe); every verifier invocation needs a fresh physical trusted-UI authorization.",
+  "OPTIGA S-1/S-2/S-3 ship blockers are deferred by design (chips cost money, LcsO irreversible) and `OPTIGA_S2_PRODUCTION_BLOCKED` keeps mode-production+optiga unbuildable; this independently blocks any production image this surface would ship in \u2014 do not frame FV/doc work on fw-update as avoidance of those.",
+  "ui-px scroll-to-end is ON (owner decision 2026-09-24, PX_COMMIT_REQUIRES_SEEN_LAST = true) and applies to the pixel firmware-update consent screens; do not re-litigate.",
+  "ML-KEM inner wrap descoped 2026-07-07 (not this surface, but the same 'do not re-raise' discipline applies to any proposal to add a second signature algorithm or hybrid verifier to the FSBL)."
+ ]
+}

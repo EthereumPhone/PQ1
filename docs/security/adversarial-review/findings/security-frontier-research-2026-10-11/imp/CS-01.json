@@ -1,0 +1,28 @@
+{
+ "id": "CS-01",
+ "title": "Make RAW32 a compile-time fenced, default-off tier with a per-signature re-authentication ceremony if ever enabled",
+ "threat": "Hostile companion downgrades supported typed data (Permit/Permit2/SafeTx/GPv2Order) to a 32-byte hash and the user approves a '! BLIND RAW32' page; the structured clear-sign guarantee is bypassed entirely. Permit-class signatures were 3 of the 11 largest 2025 drains.",
+ "proposal": "Add `offchain-raw32` feature (default OFF) gating kind=0 in cmd_sign_offchain; add it to PROD_FORBIDDEN and a `mode-production` compile_error fence alongside forced-blind; with the feature OFF return a dedicated NscStatus 'RAW32 disabled'. If the owner records a compatibility acceptance, require for every RAW32 release: a fresh PIN entry on-device (not session unlock), a per-session RAW32 cap (e.g. 3) in SRAM, a 'NO INTENT - dapp hash only' danger interstitial before the hash pages, and companion-visible counter in OFFCHAIN_STATUS so audits can see RAW32 use.",
+ "rationale": "Trezor core ships NO blind typed-hash path at all (only legacy T1 has EthereumSignTypedHash); Ledger requires blind signing to be disabled by default. pq1 currently has no switch at all, so a production image necessarily carries the downgrade oracle the CLAUDE.md scope paragraph warns about. A fence makes the owner decision (#381) executable rather than documentary.",
+ "repo_evidence": [
+  "secure/Cargo.toml: no `raw32` feature exists (grep -i raw32 secure/Cargo.toml \u2192 empty)",
+  "secure/src/nsc/cmd_sign_offchain.rs:213-218 (RAW32 accepted unconditionally after replay_safe_hash nesting)",
+  "secure/src/nsc/cmd_sign_offchain.rs:918-1120 (RAW32 page set)",
+  "Makefile:2672-2675 PROD_FORBIDDEN lists forced-blind etc. but not a raw32 flag",
+  "docs/companion/companion-app-integration.md:963-969 (companion-policy-only mitigation)",
+  "tracked: #381 (ship-blocker, owner decision pending)"
+ ],
+ "vendor_precedent": "Trezor core: absence of EthereumSignTypedHash handler (trezor-firmware core/src/apps/ethereum has no sign_typed_hash; legacy/firmware/ethereum.c:1210-1228 only). Ledger app security requirements: blind signing must be disabled by default.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P0",
+ "risks": "Breaks dapps that only offer eth_sign/raw isValidSignature flows (Safe approveHash via EOA-style UIs); companion must surface a clear 'unsupported on PQ1' error. Fresh-PIN-per-RAW32 burns PIN attempts under an SE fault (see #692 class) \u2014 bound retries.",
+ "sources": [
+  "https://donjon.ledger.com/lsb/020/",
+  "https://drops.scamsniffer.io/scam-sniffer-2025-crypto-phishing-losses-fall-83-to-84-million/",
+  "https://developers.ledger.com/docs/device-app/develop/requirements/security",
+  "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/ (no typed-hash handler)"
+ ],
+ "surface": "clearsign"
+}

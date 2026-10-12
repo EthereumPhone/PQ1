@@ -1,0 +1,233 @@
+{
+ "merge": {
+  "cluster": "glitch-environment-sensing",
+  "title": "Close the NS clock/power/tamper levers (RCC/PWR/SYSCFG/TAMP secure attribution), then add PVD-5 over BOR-3 with an SRAM-only zeroize, pin BOR_LEV in the ship profile, and run ADC4 analog watchdogs as a log-only slow supply/temperature tamper",
+  "threat": "Two distinct attackers. (1) Software: any NS code execution (compromised or buggy NS image, the USB stack) can today reprogram the clock tree and, by desk analysis, the power and tamper controls, because RCC_SECCFGR / PWR_SECCFGR / SYSCFG_SECCFGR / TAMP_SECCFGR.TAMPSEC / GTZC2 are never written. This gives a board-free fault lever (overclock or re-prescale under secure crypto, CLKSCREW class), a way to stretch the 120 s idle wipe in wall-clock time (SysTick runs off the core clock), and a way to disable or clear the internal tampers that the release feature set relies on. (2) Physical: USB VBUS is the only supply; BOR sits at the 1.71 V chip default, PVD is off, no analog monitor exists, so slow (microsecond-class) rail sags, under/over-voltage and thermal manipulation during the unlocked window are invisible. ITAMP7/12/13 are enabled but inert (no ADC4 driver).",
+  "proposal": "Staged, ordered so each step makes the next one trustworthy.\n\nStage A (P0, firmware S-M, parity with Trezor): deny NS the levers.\n- Move secure/src/hw/rcc.rs off the NS alias (0x4602_0C00, rcc.rs:10) to 0x5602_0C00 FIRST, otherwise the SECCFGR write makes PLL bring-up fail and boot silently drops to 16 MHz.\n- In sau.rs before lock_security_config: write RCC_SECCFGR (full clock tree: HSI/MSI/LSI/SYSCLK/PRESC/PLL1-3/ICLK/HSI48/RMVF; RCC+0x110 = 0x5602_0D10), RCC_PRIVCFGR.SPRIV, PWR_SECCFGR (LPMSEC, VDMSEC, VBSEC, APCSEC, WUPx; PWR+0x30), SYSCFG_SECCFGR (SYSCFGSEC|CLASSBSEC|FPUSEC), set SCB_SCR.SLEEPDEEPS, set TAMP_SECCFGR.TAMPSEC via read-modify-OR preserving BHKLOCK (#81 ordering: DBP clear only after BHK writes), configure GTZC2 for TAMP/RTC and ADC4 and only then lock it. Add all to the exact-equality const asserts and verify_or_halt; extend gtzc_test with NS-alias probes for RCC/PWR/SYSCFG/TAMP.\n- Compile out the DHCSR-gated NS RCC read (nonsecure/src/main.rs:190) or it becomes a TZIC illegal access and, under tzic-wipe, a wipe.\n- Add tamp-irq to RELEASE_FEATURES in the same diff as the #75 IER/NVIC audit.\n\nStage B (P0, already ship-blocker #49): PVD + BOR.\n- Ordered pair BOR_LEV=3 (falling typ 2.50 V) + PVDLS=5 (falling typ 2.78 V), NOT Trezor's BOR4+PVD5: on DS13086 those two thresholds coincide, so a zeroize handler races the reset. BOR3 is also the safer value to freeze forever at RDP-2 on a USB-fed 3V3 LDO.\n- Secure PVD driver: PWR_SVMCR PVDE/PVDLS, EXTI16 secure, PVD_PVM IRQ at highest secure priority, handler = zeroize_sensitive_state + fi barrier + sys_reset. SRAM-only: no flash write, no SE I2C, never trigger_intrusion_wipe. Lock with VDMSEC (Stage A).\n- Add a BOR_LEV field to SHIP_PROFILE_U585, make it a hard gate in first-boot Phase A (before the RDP burn) and a read-only compare in the FSBL tz-1 tripwire; BOR_LEV is set in the factory option-byte image at RDP-0. Add PVD to the production fence.\n\nStage C (P2, firmware M-L, beyond parity but marginal): ADC4 analog watchdogs.\n- Secure ADC4 driver on internal channels only (VREFINT ratio for VDD, VCORE, temperature), secure-timer triggered, AWD1/2/3 -> ITAMP7/12/13. Thresholds from ST factory VREFINT_CAL/TS_CAL plus guard bands measured on EVT.\n- Framed honestly as a slow supply-drift/temperature tamper (VREFINT sampling >= 12.65 us), not a glitch detector. It is where HARDENING.md 4.7 (refuse operation when cold) lands; ITAMP2 already gives a fixed silicon temperature tamper.\n- Log-only (ITAMPxNOER set for these three, or tamp-wipe masked for them) until #391 characterisation gives a false-positive rate; then escalate to zeroize+relock, never directly to the dual-SE wipe.\n- Resolve #208 first (ITAMP6/ITAMP9 in confirmed mode with BHK in BKP0R..7R under tamp-wipe).\n\nOptional: read the AW35602 FLAGB input on PB10 (routed, never read) as a USB-port fault signal, after checking its datasheet semantics.",
+  "members": [
+   {
+    "id": "FI-02",
+    "disposition": "modified",
+    "note": "Core kept (PVD, BOR pin in ship profile/Phase A/tz-1, ADC4 AWD). Round-1 corrections applied: BOR3+PVD5 instead of coincident BOR4+PVD5; PVD handler SRAM-only; ADC4 demoted from P0 FI detector to P2 slow supply tamper; VBUS watchdog moved to hardware ask; no routing into the intrusion wipe; CSS dropped as not applicable. ECC double-error NMI (#48) is adjacent, left to its own issue."
+   },
+   {
+    "id": "pin-09",
+    "disposition": "modified",
+    "note": "Same ADC4 idea; kept the log-only-first characterisation, secure timer trigger and tamp-irq. Its claim that ITAMP7/12/13 can never fire is confirmed (no ADC driver anywhere). Its stale-comment observation is confirmed: tamp.rs:301-306 still says no data is at risk under CR3=0 although the BHK lives in BKP0R..7R. Dropped the eventual escalation to tamp-wipe."
+   },
+   {
+    "id": "SCA-04",
+    "disposition": "modified",
+    "note": "Kept ADC4 on VREFINT/VCORE/temperature and the GTZC2 prerequisite. Dropped per-die calibration and an excursion counter on page 127 (page 127 is owned by the first-boot journal and salt; the counter is new flash state; the shipping model has no factory ADC step) - use ST factory calibration words instead. Dropped direct BHK-erase + tzic wipe on excursion."
+   },
+   {
+    "id": "SYS-01",
+    "disposition": "modified",
+    "note": "Superset proposal; kept PVD, BOR pin with Phase A verify, ADC4, GTZC2/TAMPSEC lock, tamp-irq in the ship set, #208 and #391 as gates. Dropped PVD in the FSBL. Its evidence checks out: no PVD/CSS/ADC code, RTC on LSI makes ITAMP3 vacuous, RELEASE_FEATURES lacks tamp-irq (Makefile:2662), GTZC2 unconfigured (sau.rs:672-675)."
+   },
+   {
+    "id": "USB-04",
+    "disposition": "modified",
+    "note": "Kept and promoted to Stage A: RCC/PWR/SYSCFG attribution is absent (verified). Two of its evidence items are wrong: nonsecure/src/usb/mod.rs:41 enable() is an empty no-op, so NS does not touch RCC there (the only NS RCC access is a debugger-gated read at nonsecure/src/main.rs:190); and the inactivity timer is SysTick-driven (timeout.rs:3), not TIM-driven. The STOP-mode claim is plausible but unverified. PVD part merged into Stage B with the corrected levels."
+   }
+  ],
+  "dropped_parts": [
+   "Routing ADC4 AWD / PVD events into tamp-wipe -> trigger_intrusion_wipe (pin-09, SCA-04, SYS-01, FI-02c): bricking design. That path arms the page-125 flag and factory-resets both SEs next boot (tzic.rs:204-258); a voltage-sag detector feeding it wipes wallets on marginal hosts/cables and does a flash write during the sag.",
+   "BOR level 4 with PVD level 5 (FI-02, SYS-01, USB-04): thresholds coincide on STM32U585 (round-1, DS13086), so the zeroize handler may never run. Replaced by BOR3 + PVD5; BOR3 is also the existing repo target (Makefile:364-380, brownout-hardening.md:311).",
+   "ADC4 AWD claimed as a voltage-glitch detector (all four ADC members): VREFINT sampling floor is >= 12.65 us, blind to 100-400 ns glitches. Kept only as a slow supply/temperature tamper.",
+   "VBUS analog watchdog as firmware (FI-02c): PA9 is a digital OTG VBUS-sense input, and no free bonded pad is an ADC4 input except PA6, which is NC and holds the consumption-mask PWM. Moved to hardware_asks.",
+   "CSS / CSSON (FI-02d, #248): not applicable. The clock tree is HSI16 -> PLL1 with no HSE or LSE in use (evt-silicon-validation.md:729-730), and the RTC runs on LSI so ITAMP3 (LSECSS) is vacuous (tamp.rs:238-258).",
+   "Per-die AWD calibration and an excursion counter on page 127 (SCA-04): page 127 is exclusively the first-boot journal and salt (CLAUDE.md invariant #3), and a counter is new flash state.",
+   "PVD in the FSBL (SYS-01a): FSBL holds no secrets (pre-PIN), a microsecond detector does not stop nanosecond verify-skip glitches (EF-swarm F15 needs code redundancy), and the FSBL is frozen at RDP-2 inside a 32 KiB region. Only the BOR_LEV read-only compare is kept there.",
+   "USB-04's requirement to turn the NS UsbPeripheral::enable() into a no-op: already a no-op (nonsecure/src/usb/mod.rs:41-45).",
+   "USB-04's assertion that NS-entered STOP freezes TIM2/TIM3-driven inactivity timing: timer source is wrong (SysTick), and STOP entry from NS is unverified; restated as a lead."
+  ],
+  "tracked_issues": [
+   "#49 (OPEN, ship-blocker): arm PVD -> zeroize/lockout and raise BOR above 1.71 V - covers Stage B intent, not the level pairing or handler policy",
+   "#248 (OPEN, priority:low): TAMP + CSS + PVD hardware supervisor Stage 2 - BOR_LEV 3/4, PVDE+PVDLS, CSSON, ECCD NMI; its ITAMP list is stale",
+   "#227 (OPEN): power management, brownout zeroize",
+   "#80 (OPEN, priority:high): F3 RCC/PWR clock security on silicon - NOTE its body gives RCC_SECCFGR at 0x5602_0C10, which is RCC_ICSCR3 (offset 0x10); SECCFGR is offset 0x110 = 0x5602_0D10",
+   "#269 (OPEN): tz-3 program RCC/PWR/SYSCFG SECCFGR + RCC_PRIVCFGR and fold the lock over them",
+   "#366 (OPEN): Trezor June-2026 critical-port backlog umbrella (includes tz-3)",
+   "#81 (OPEN, priority:high): TAMPSEC + DBP hygiene",
+   "#50 (OPEN, ship-blocker): TAMP backup-register secure-zone + privilege configuration",
+   "#70 (OPEN, ship-blocker): GTZC allowlist / GTZC2",
+   "#208 (OPEN, priority:high): TAMP x BHK - mask ITAMP6/ITAMP9 before any tamp+bhk build",
+   "#47 (OPEN): hardware-mode tamper erase for BHK-protecting tampers",
+   "#75 (OPEN): TAMP escalation, polled -> IRQ, IER audit in one diff",
+   "#256 (OPEN, priority:low): tamp-irq default-on flip",
+   "#391 (OPEN): give TAMP a silicon test - acceptance gate",
+   "#48 (OPEN, ship-blocker): ECC double-error as tamper - adjacent, out of this cluster"
+  ],
+  "untracked_delta": "No issue covers: (1) ADC4 analog watchdogs driving ITAMP7/12/13 (zero hits for ADC4 in the tracker); (2) BOR_LEV as a load-bearing field of SHIP_PROFILE_U585 / Phase A / the FSBL tripwire - lockdown.rs:519 defers it to #36, which is a different topic, so it has no owner; (3) the BOR4/PVD5 threshold coincidence and the choice of BOR3+PVD5; (4) the SRAM-only PVD handler policy and the rule that supply events never reach the dual-SE wipe; (5) the concrete consequence of the open RCC gap: NS can stretch the SysTick-driven 120 s idle wipe by re-prescaling the core clock; (6) SCB_SCR.SLEEPDEEPS / PWR LPMSEC, and the conflict with the planned IWDG_STOP=0 option byte (brownout-hardening.md:353-354), which would remove the watchdog bound on an NS-entered Stop; (7) rcc.rs must move off the NS alias before RCC is secured; (8) the wrong register address in #80; (9) AW35602 FLAGB on PB10 is routed and never read; (10) doc drift: CLAUDE.md says the inactivity timer is an 'S-only TIM' while the code uses SysTick, and tamp.rs:301-306 / tamp.rs:84 comments are stale.",
+  "decision_conflicts": [
+   "CLAUDE.md 'NS does not control the inactivity timer' and Lifecycle 'S-only TIM; NS pings do NOT reset it': the timer is the secure SysTick clocked from the core clock (timeout.rs:3, main.rs:852-866, 1194), and RCC is NS-writable, so the claim does not hold against an NS that re-prescales the clock. A claim-vs-code drift, not an owner decision against the fix.",
+   "Shipping model (owner decision 2026-07-14) and invariant #10: BOR_LEV must be in the factory option-byte image at RDP-0 and is frozen at RDP-2. Consistent with the proposal, but it means the level needs pq1 characterisation across USB hosts before any unit ships, and cannot be corrected in the field.",
+   "'No new per-signature flash state' and page-127 ownership: respected by dropping the excursion counter and per-die calibration storage.",
+   "Retired work-todo argument against a global random-delay interrupt (and open #805): not touched; the ADC4 trigger is a fixed-rate secure timer, not an RDI.",
+   "tzic-wipe is production-mandatory: securing RCC/PWR turns any stray NS access into an illegal-access wipe, so Stage A cannot ship before the NS image is audited for such accesses and run on pq1 silicon.",
+   "#208 says do not co-enable tamp and bhk until ITAMP6/9 are masked, yet RELEASE_FEATURES (Makefile:2662) contains tamp, tamp-wipe and bhk together with tamp.rs unchanged. Existing internal inconsistency this cluster depends on."
+  ],
+  "hardware_asks": [
+   "Optional, next board spin: a VBUS (or VDD1_3V3 SE-rail) resistor divider to an ADC4-capable pad so a rail watchdog is possible. The only candidate today is PA6, which is NC and assigned to the consumption-mask PWM; that PWM drives no load, so the owner must choose between loading the mask and using the pad for sensing.",
+   "Confirm on the schematic how VBAT is tied (no battery, supercap only), since ITAMP1 backup-domain monitoring and the BKP-register erase semantics depend on it.",
+   "Confirm AW35602 FLAGB (PB10) polarity and what faults it reports before firmware reads it.",
+   "EVT bench time: rail sweep, USB host/cable matrix, SE-rail (PA8 LDO2_EN) switching transients and a thermal sweep to set PVD/AWD thresholds and measure false-positive rates. No enclosure change needed."
+  ],
+  "prerequisites": [
+   "rcc.rs moved from the NS alias to the secure alias before RCC_SECCFGR is written",
+   "NS image audited for RCC/PWR/SYSCFG/TAMP accesses; the debugger-gated RCC read at nonsecure/src/main.rs:190 compiled out",
+   "Confirm against RM0456 which PWR fields are NS-writable at reset and the SYSCLKSEC to VOS coupling (#80 asks this; the rcc.rs:12-13 comment claims PWR NS-alias writes are ignored, unverified)",
+   "#81 TAMPSEC + DBP ordering and GTZC2 configuration (ADC4 is a GTZC2 peripheral: stm32u5xx_hal_gtzc.h:348) before ADC4 or PVD is load-bearing",
+   "#208 resolved (ITAMP6/ITAMP9 policy with BHK in BKP registers) and #391 run before any tamper response beyond log-only for the new sources",
+   "pq1 silicon run of gtzc-enforcement plus USB enumeration after Stage A",
+   "BOR/PVD threshold characterisation on pq1 before the option-byte profile is frozen",
+   "Flash budget: secure slot has 34,071 B headroom without ui-px and is 76,949 B over with it; PVD + SECCFGR writes are small, the ADC4 driver is roughly 1-2 KB"
+  ],
+  "precedent": "Trezor ships Stage A and B: core/embed/sec/trustzone/stm32u5/tz_init.c:296-326 (SYSCFG_SECCFGR, RCC_SECCFGR all bits except PLL3, RCC_PRIVCFGR, PWR_SECCFGR all bits, PWR_PRIVCFGR); core/embed/sys/pvd/stm32/pvd.c:28-56 (PVD level 5, rising+falling, highest IRQ priority, handler error_shutdown), armed in boardloader, bootloader and kernel (main.c:82, :321, :170); core/embed/sec/option_bytes/stm32u5/option_bytes.c:41-45 (BOR level 4). Trezor's tamper.c:139-151 enables the same ITAMP7/12/13 with the comment 'some of them are never triggered', and a grep of core/embed outside vendor code finds no ADC4/AWD configuration, so Stage C has no shipping wallet precedent. On-die glitch detectors exist on other silicon (RP2350, nRF54L, TI CC27xx) and inside Ledger's certified SE per vendor claim.",
+  "novelty": "parity",
+  "kind": "mixed",
+  "cost": "L",
+  "priority": "P0",
+  "rationale": "P0 applies to Stages A and B only: #49 already carries the ship-blocker label, and the RCC gap is a live, cheap-to-close lever that Trezor closes on the same silicon. Stage C (ADC4) is a P2 sub-item: the only part beyond vendor parity, but slow, dependent on GTZC2/TAMPSEC, and needing silicon characterisation. Cost is M for A+B, L with C and the bench work. Kind is mixed because the firmware is the core and the only hardware element is the optional rail divider.",
+  "live_defects": [
+   {
+    "what": "RCC is non-secure: NS can reprogram PLL1, the SYSCLK switch and the AHB/APB prescalers. No RCC_SECCFGR, RCC_PRIVCFGR, PWR_SECCFGR or SYSCFG_SECCFGR write exists anywhere.",
+    "evidence": "grep for RCC_SECCFGR|PWR_SECCFGR|SYSCFG_SECCFGR|PRIVCFGR over secure/src, fsbl/src, shared/src, nonsecure/src returns only two doc comments in secure/src/board/mod.rs:166,169. secure/src/hw/rcc.rs:10 drives the whole clock bring-up through the NS alias 0x4602_0C00 and the board reaches 160 MHz, which is only possible while the RCC bits are non-secure. Tracked as #80/#269, 'specified, not committed'.",
+    "severity": "medium-high (software fault-injection lever on secure crypto; no direct secret read)",
+    "reachable_in_production_config": "Yes in any stm32u585 image, given NS code execution (compromised or buggy NS image). Exploitability as a fault lever against c10_sign_verified is not demonstrated; the double-compute/compare/verify chain still applies. The mode-production set is currently unbuildable behind the S-2 fence."
+   },
+   {
+    "what": "NS can stretch the 120 s inactivity wipe in wall-clock time by raising the clock prescalers, because the timeout counts secure SysTick ticks derived from the core clock.",
+    "evidence": "secure/src/timeout.rs:3,27 (tick count, TIMEOUT_TICKS = 120000); secure/src/main.rs:852-866 and :1194 (SYSTICK_RELOAD = MHz*1000 fixed at boot); IWDG is fed from the same tick with a roughly 1-3 s hardware period (secure/src/hw/iwdg.rs:109-117), so a slowdown up to a few hundred times survives the watchdog. Desk-derived, not run on silicon.",
+    "severity": "medium (breaks a stated guarantee; extends the unlocked-secrets window to hours)",
+    "reachable_in_production_config": "Same condition as above: needs NS code execution. Not verified on pq1."
+   },
+   {
+    "what": "The TAMP block is not secured: TAMPSEC is never set and GTZC2 is unconfigured, so NS can likely disable or clear the internal tampers; in the release set tampers are polled at 1 ms (no tamp-irq), widening the clear window.",
+    "evidence": "secure/src/hw/bhk.rs:420-421 ORs only BHKLOCK into TAMP_SECCFGR; no TAMPSEC anywhere in secure/src; secure/src/sau.rs:672-675 (GTZC2 intentionally not configured or locked); Makefile:2662 lacks tamp-irq; tamp.rs:84-91 poll path. Tracked as #81/#50/#256/#75.",
+    "severity": "medium",
+    "reachable_in_production_config": "By code reading yes; NS write access to TAMP_CR1/SCR at reset defaults is not silicon-verified (TAMP was never run on silicon, #391)."
+   },
+   {
+    "what": "ITAMP7/12/13 are enabled in confirmed mode but can never fire: no ADC4 driver exists.",
+    "evidence": "secure/src/hw/tamp.rs:290-307 (CR1 enables, CR3=0); grep for ADC4|adc4|AWD|analog watchdog over secure/src, fsbl/src, shared/src, hal, nonsecure/src returns nothing.",
+    "severity": "low (dormant control, matches Trezor; over-claims coverage in comments)",
+    "reachable_in_production_config": "Yes, in every tamp build."
+   },
+   {
+    "what": "PVD is disabled and BOR_LEV is unpinned: nothing in firmware arms PVD, and the ship profile has no BOR field, so a unit can ship and lock at the 1.71 V default.",
+    "evidence": "grep PVD|SVMCR over firmware finds only the USB USV bit (secure/src/hw/usb_hw.rs:140) and comments (main.rs:4643); shared/src/lockdown.rs:338-345 (SHIP_PROFILE_U585 has no BOR field), :517-522 (bor_lev advisory); secure/src/first_boot/mod.rs:245-246 (check deferred); Makefile:375-380 sets BOR_LEV=3 only in a bench recipe.",
+    "severity": "medium (ship-blocker #49)",
+    "reachable_in_production_config": "Yes; at RDP-2 the option bytes freeze, so an unpinned BOR level becomes permanent for that die."
+   },
+   {
+    "what": "Candidate, unverified on silicon: the release set co-enables tamp + tamp-wipe + bhk with ITAMP6 and ITAMP9 in confirmed mode, so a false ITAMP9 during legitimate SAES/BHK use would erase the loaded BHK and factory-reset both SEs.",
+    "evidence": "Makefile:2662; secure/src/hw/tamp.rs:290-307; issue #208 (open) says not to co-enable before masking; evt-silicon-validation.md:929.",
+    "severity": "high if it occurs (wallet wipe); probability unmeasured",
+    "reachable_in_production_config": "Only in the intended production set, which does not build today; never exercised on silicon."
+   },
+   {
+    "what": "Tracked issue #80 specifies the wrong register address for RCC_SECCFGR (0x5602_0C10). That address is RCC_ICSCR3 (HSI trim); implementing the issue as written would write 0xCE9 into the HSI16 calibration register.",
+    "evidence": "gh issue #80 body and docs/archive/work-todo-retired-2026-07-19.md:54-55 versus stm32u585xx.h RCC_TypeDef (ICSCR3 at 0x10, SECCFGR at 0x110).",
+    "severity": "low (tracker defect, not code), but a trap for the implementer",
+    "reachable_in_production_config": "Not in code."
+   }
+  ],
+  "residual_after": "Still possible after all three stages: nanosecond crowbar, EMFI and laser glitches, and split sub-threshold pulses (the mu-Glitch technique) pass under PVD/BOR and far under ADC4's sampling floor, so software redundancy in the signing and PIN paths remains the only defence against them. An attacker who removes decoupling or injects on VCORE directly is not seen by VDD monitoring. There is no detector for clock injection on the internal HSI. With no battery, a BHK-register erase only matters while powered and the dual-SE wipe only completes at the next powered boot, so an attacker can cut power after a trip and retry; PVD gives a best-effort SRAM wipe that the BOR reset may pre-empt on a fast edge. A glitcher who learns the AWD windows shapes the excursion inside them. Securing RCC/PWR stops the software levers but not a physical attacker, and a malicious secure-world image is unaffected. Thresholds frozen at RDP-2 cannot be corrected in the field, so a mis-set BOR level is either permanently too permissive or a permanent nuisance-reset source. Display-window and trusted-UI residuals are untouched by this cluster.",
+  "repo_evidence": [
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/rcc.rs:10-14 (RCC via NS alias; unverified comment that PWR NS-alias writes are ignored)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/sau.rs:200-220, 460-480, 660-680 (GTZC1 TZSC only; GTZC2 not configured, not locked)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/tamp.rs:59-110, 285-323 (ITAMP set, CR3=0, IER written unconditionally, polled wipe path)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/bhk.rs:105, 420-421 (only BHKLOCK set in TAMP_SECCFGR)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/tzic.rs:204-258 (intrusion wipe = flash write + dual-SE reset next boot)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/timeout.rs:1-27 and secure/src/main.rs:852-866, 1194 (SysTick-driven idle timer, reload from core clock)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/iwdg.rs:109-117 (about 2 s LSI watchdog fed per tick)",
+   "/home/nicola/repos/PQSigner_OS/nonsecure/src/usb/mod.rs:41-45 (enable() is empty) and nonsecure/src/main.rs:186-193 (debugger-gated NS RCC read)",
+   "/home/nicola/repos/PQSigner_OS/shared/src/lockdown.rs:258-262, 314-345, 517-522 (BOR_LEV advisory, absent from ship profile)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/first_boot/mod.rs:245-246",
+   "/home/nicola/repos/PQSigner_OS/Makefile:364-380, 2662",
+   "/home/nicola/repos/PQSigner_OS/secure/src/board/pq1.rs:292-296, 301-309 (FLAGB PB10 unread, VBUS sense PA9, PA6 NC)",
+   "/home/nicola/repos/PQSigner_OS/docs/security/brownout-hardening.md:311-312, 353-354",
+   "/home/nicola/repos/PQSigner_OS/docs/security/HARDENING.md:253-256",
+   "/home/nicola/repos/PQSigner_OS/docs/hardware/evt-silicon-validation.md:729-730, 929-932",
+   "/home/nicola/repos/PQSigner_OS/docs/archive/work-todo-retired-2026-07-19.md:54-55, 2658",
+   "/home/nicola/repos/STM32CubeU5/Drivers/CMSIS/Device/ST/STM32U5xx/Include/stm32u585xx.h (RCC SECCFGR offset 0x110, PWR SECCFGR offset 0x30, bit positions) and Drivers/STM32U5xx_HAL_Driver/Inc/stm32u5xx_hal_gtzc.h:348, 353-354 (ADC4, RTC, TAMP under GTZC2)",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:296-326; core/embed/sys/pvd/stm32/pvd.c:28-56; core/embed/sec/tamper/stm32u5/tamper.c:139-170; core/embed/sec/option_bytes/stm32u5/option_bytes.c:41-45"
+  ],
+  "sources": [
+   "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+   "https://www.st.com/resource/en/application_note/an5156-introduction-to-security-for-stm32-mcus-stmicroelectronics.pdf",
+   "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf",
+   "https://tches.iacr.org/index.php/TCHES/article/download/7390/6562/2561",
+   "ST DS13086 (STM32U585 datasheet) BOR/PVD threshold and VREFINT sampling tables, as extracted by the round-1 verifier",
+   "ST RM0456 RCC_SECCFGR / PWR_SECCFGR / SYSCFG_SECCFGR / TAMP sections",
+   "round-1 verdicts: scratchpad data/verify/FI-02.json"
+  ]
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.8,
+  "reason": "The core survives. I confirmed by reading code that no RCC/PWR/SYSCFG SECCFGR write and no TAMPSEC exist, PVD is not armed, BOR_LEV is absent from the ship profile, and no ADC4 driver exists. The register facts check out against the CMSIS header and RM0456 (RCC_SECCFGR at offset 0x110, #80's 0x5602_0C10 is ICSCR3; PWR_SECCFGR at 0x30; VOS secured by SYSCLKSEC per RM0456 \u00a710.8.1 Table 109; ITAMP7/12/13 are the ADC4 AWD1/2/3). The Trezor precedent for RCC/PWR/SYSCFG, PVD level 5 and BOR level 4 is real.\n\nIt is not refuted, but it over-claims in four places that need fixing:\n\n1. **Stage A does not close the board-free fault lever.** RM0456 \u00a77.9.1 says FLASH_ACR \"is nonsecure. It can be read and written by both secure and nonsecure access\", protectable only by NSPRIV. pq1's NS image is privileged bare-metal, so after Stage A NS can still set LATENCY=0 at 160 MHz (rcc.rs:181 sets 4 wait states once at boot and never re-checks) and then call the gateway. ICACHE and RAMCFG are also still NS (#150, not in the tracked list).\n2. **Raising BOR without SRAM_RST=0 creates an unscrubbed-reset path.** reset_cause.rs:182-185 classifies BORRSTF as Cold, and `requires_secret_scrub` excludes Cold. A sag to just under 2.5 V resets with SRAM1 fully retained and no scrub. #82 is missing from the cluster.\n3. **\"Parity with Trezor\" is wrong for TAMPSEC and SLEEPDEEPS.** Trezor writes `TAMP_S->SECCFGR = 8<<BKPRWSEC | BHKLOCK` (secret.c:178) with no TAMPSEC, and has no SLEEPDEEPS.\n4. **Two mechanics are misstated.** rcc::init (main.rs:1193) runs before sau::init (main.rs:1351), so the \"PLL bring-up fails\" ordering argument is wrong. TAMP and RTC have no TZSC2 secure bit; GTZC2 only gives TZIC2 illegal-access flags for them.\n\nPriority P0 for Stages A+B stands (#49 and #50 are ship-blockers). Stage C stays P2.",
+  "corrections": "**Bypass / residual**\n\n1. Add FLASH_ACR to the Stage A threat and residual. It is architecturally nonsecure (RM0456 \u00a77.9.1), so NS can change LATENCY/PRFTEN/LPM. Stage A removes the overclock and prescaler levers but leaves a wait-state lever. Mitigation to scope: secure re-assert and verify of FLASH_ACR (LATENCY==4) at every NSC gateway entry and in SysTick. NS has no interrupts (grep of nonsecure/src finds no handlers), so an entry check is sufficient against NS. Untracked; file an issue. Trezor's protection here is privilege separation, which pq1 lacks.\n2. Fold #150 (ICACHE_REG + RAMCFG NS-attributed) into Stage A. sau.rs:555-561 pins SECCFGR3 to exactly AES|HASH|RNG|PKA|SAES; Trezor secures RAMCFG/ICACHE/DCACHE (tz_init.c:271-281).\n3. Reword the idle-timer defect. The claim is confirmed (SysTick CSR=0x07 is the processor clock, main.rs:893; reload fixed at boot, main.rs:1194), but the gain is modest: NS still cannot sign without the physical chord. It only extends secret residency for a later physical attacker. Call it low-medium. The slowdown also slows the TAMP poll and the consumption-mask randomise by the same factor (main.rs:4327).\n\n**Stage A mechanics**\n\n4. The \"move rcc.rs first or PLL bring-up fails\" claim is wrong as stated: rcc::init runs at main.rs:1193, before sau::init at 1351. The alias move is still required, for a different reason: any later secure access through the NS alias becomes RAZ/WI.\n5. reset_cause.rs:19 also uses the NS alias for the RCC_CSR read and RMVF clear; with RMVFSEC set it must move too.\n6. Three host tests pin the NS-alias string and will fail when it moves: hw_platform_under_test/pure_tests.rs:286, main_sau_pure_tests.rs:407, and the flash-latency pin at pure_tests.rs:314.\n7. Split \"configure GTZC2 for TAMP/RTC\". TAMP is secured by TAMP_SECCFGR.TAMPSEC + TAMP_PRIVCFGR; RTC by RTC_SECCFGR. GTZC2 TZSC SECCFGR1 covers ADC4; TAMP/RTC/PWR/RCC/SYSCFG appear only as TZIC2 illegal-access sources (stm32u5xx_hal_gtzc.h:348-356). Add RTC_SECCFGR and BKPRWSEC>=8 (#50) to the list.\n8. `PROD_SHIP_FEATURES` is an `override` at Makefile:2718; tamp-irq must be added there as well as at 2662.\n9. Label TAMPSEC and SLEEPDEEPS as beyond Trezor, not parity.\n\n**Stage B**\n\n10. Add SRAM_RST=0 (#82) to the ship option-byte profile, and/or make BORRSTF require a secret scrub. Without it the higher BOR level produces unscrubbed warm resets.\n11. A PVD at \"highest secure priority\" ties with SysTick, which is already at priority 0 (main.rs:886), so it cannot preempt SysTick. That matters because SysTick can run trigger_intrusion_wipe (flash write) under tamp-wipe. State the priority relation explicitly.\n12. Define PVD behaviour in irreversible windows. A PVD sys_reset at 2.78 V during the RDP-2 OPTSTRT window (first_boot/mod.rs:244-250) or a Phase B key-rotation step turns a survivable sag into an interrupted write. Mask PVD for OPTSTRT and rely on BOR there.\n13. Reconcile the BOR level across docs. evt-silicon-validation.md:792 asks for BOR_LEV >= 4, production-security.md:98 says \"3 or 4\", brownout-hardening.md says BOR3 \"~2.7 V\" (DS falling typ is 2.50 V), and the Makefile:367 comment is likewise off. BOR3+PVD5 is the only strictly ordered pair at worst-case tolerances (VBOR3 falling max 2.61 < VPVD5 falling min 2.66, round-1 DS extract); BOR4+PVD6 overlaps. I could not re-read DS13086 locally; those numbers rest on the round-1 extract.\n14. lockdown.rs:258-261 still marks the BOR_LEV position BENCH-CONFIRM. The CMSIS header confirms bits [10:8] (stm32u585xx.h:8833), so the field can be promoted.\n\n**Stage C**\n\n15. ADC4 sits in the SRD domain and needs PWR_SVMCR.ASV set and a kernel clock. TIM2 is free and already secured on pq1 as a trigger. Feasible, no board change.\n16. Keeping ITAMP7/12/13 out of the erase path requires ITAMPxNOER in CR3, which contradicts today's unconditional CR3=0 (tamp.rs:307). poll() also wipes on any ITAMP flag (tamp.rs:88-110), so its flag mask must exclude these three.\n\n**Tracker**\n\n17. Add #150, #82 and #79 (IWDG secure) to tracked_issues.\n18. #70 is still OPEN on GitHub while CLAUDE.md says the TZSC regression is fixed and silicon-validated. That is tracker lag, not a GTZC2 dependency of this cluster.\n\n**Live defects**\n\n- **1 (RCC non-secure):** confirmed. The stated evidence location is wrong: there are no SECCFGR hits in board/mod.rs; the grep over secure/fsbl/shared/nonsecure is simply empty for RCC/PWR/SYSCFG.\n- **2 (idle stretch):** confirmed by code reading; lower severity as above.\n- **3 (TAMP not secured):** confirmed, and RM0456 \u00a764.4.5 upgrades \"likely\" to documented: all TAMP registers are NS-writable with TAMPSEC=0. NS can also write TAMP_CR2.BKERASE to erase the loaded BHK, a denial of service until reboot (lead, unverified on silicon).\n- **4 (ITAMP7/12/13 inert):** confirmed.\n- **5 (PVD off, BOR unpinned):** confirmed.\n- **6 (tamp+tamp-wipe+bhk with ITAMP6/9):** confirmed as a configuration fact at Makefile:2662/2718; still a candidate, never run on silicon.\n- **7 (#80 address):** confirmed. #80's mask 0xCE9 also omits MSI, PLL2, PLL3 and RMVF.",
+  "corrected_priority": "P0",
+  "corrected_cost": "L",
+  "corrected_kind": "firmware",
+  "decision_conflicts": [
+   "CLAUDE.md 'NS does not control the inactivity timer' / 'S-only TIM': the timer is the secure SysTick on the processor clock (main.rs:893 CSR=0x07) and RCC is NS-writable. Claim-vs-code drift; the fix is consistent with the stated intent.",
+   "BOR level is recorded inconsistently: evt-silicon-validation.md:792 says BOR_LEV >= 4, production-security.md:98 and #248 say 3 or 4, brownout-hardening.md:311/556 says BOR3. Choosing BOR3+PVD5 needs an explicit owner decision because the value freezes at RDP-2 (invariant #10).",
+   "Shipping model (2026-07-14): BOR_LEV and SRAM_RST must be in the factory RDP-0 option-byte image, since first boot writes only the RDP byte. Consistent, but both become permanent.",
+   "tzic-wipe and tamp-wipe are production-mandatory: after Stage A any stray NS access to RCC/PWR/SYSCFG/TAMP is an illegal-access wipe (the NS RCC read at nonsecure/src/main.rs:190 is DHCSR-gated but must be compiled out), and any new ITAMP source reaches trigger_intrusion_wipe unless poll()'s flag mask and CR3 NOER are changed.",
+   "#208 says do not co-enable tamp and bhk before masking ITAMP6/9, yet RELEASE_FEATURES and PROD_SHIP_FEATURES (Makefile:2662, 2718) contain tamp, tamp-wipe and bhk. Existing inconsistency this cluster depends on.",
+   "'Parity with Trezor' framing: Trezor does not set TAMPSEC (secret.c:178) or SLEEPDEEPS, and relies on an unprivileged application for FLASH_ACR. Those parts are beyond-parity work tracked in #81/#50.",
+   "No conflict with the SHAKE, RDI, BHK-axis or OPTIGA-deferral decisions: no RDI is introduced, no new per-signature flash state, page 127 untouched."
+  ],
+  "evidence": [
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/rcc.rs:10,181-183 (RCC via NS alias; FLASH_ACR latency set once)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/reset_cause.rs:19,182-185 and :60-110 (NS alias; BORRSTF classified Cold, excluded from requires_secret_scrub)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/main.rs:852-893,1193-1194,1351,4285-4327 (SysTick on processor clock at priority 0; rcc::init before sau::init; tick feeds timeout, IWDG and tamp::poll)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/sau.rs:555-561,672-675 (SECCFGR3 image is crypto block only; GTZC2 not configured or locked)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/tamp.rs:82-110,283-323 (poll wipes on any ITAMP flag under tamp-wipe; CR1 enables ITAMP6/7/9/12/13; CR3=0)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/bhk.rs:420-421 (only BHKLOCK ORed into TAMP_SECCFGR)",
+   "/home/nicola/repos/PQSigner_OS/shared/src/lockdown.rs:258-262,314-345,517-522 (BOR_LEV advisory, absent from ShipProfile)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/first_boot/mod.rs:244-250 (BOR check deferred; OPTSTRT window)",
+   "/home/nicola/repos/PQSigner_OS/Makefile:364-380,2662,2718 (BOR_LEV=3 bench recipe; release and ship feature sets lack tamp-irq, include tamp+tamp-wipe+bhk)",
+   "/home/nicola/repos/PQSigner_OS/nonsecure/src/main.rs:186-193 and nonsecure/src/usb/mod.rs:41-45 (only NS RCC access is a debugger-gated read; enable() is empty)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw_platform_under_test/pure_tests.rs:286,314 and secure/src/main_sau_pure_tests.rs:407 (host tests pin the NS-alias strings)",
+   "/home/nicola/repos/PQSigner_OS/docs/hardware/evt-silicon-validation.md:792 (BOR_LEV >= 4 + SRAM2_RST=0 + PVD; 'brownout currently bypasses the SRAM wipe')",
+   "/home/nicola/repos/blinky/docs/rm0456-*.pdf (RM0456 Rev 7): \u00a77.9.1 FLASH_ACR 'This register is nonsecure'; \u00a710.8.1 Table 109 (VOS secured by SYSCLKSEC); \u00a764.4.5 (all TAMP registers NS-writable unless TAMPSEC); TAMP table (tamp_itamp7/12/13 = adc4_awd1/2/3)",
+   "/home/nicola/repos/STM32CubeU5/Drivers/CMSIS/Device/ST/STM32U5xx/Include/stm32u585xx.h:1012,1071,957,8833,14193-14197 (ICSCR3 0x10, RCC SECCFGR 0x110, PWR SECCFGR 0x30, BOR_LEV bit 8, PVDE/PVDLS)",
+   "/home/nicola/repos/STM32CubeU5/Drivers/STM32U5xx_HAL_Driver/Inc/stm32u5xx_hal_gtzc.h:348-356 (ADC4 in GTZC2 REG1; TAMP/RTC/PWR/RCC/SYSCFG only in REG2)",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:271-281,296-326,415; core/embed/sec/secret/stm32u5/secret.c:178 (no TAMPSEC); core/embed/sys/pvd/stm32/pvd.c:28-56; core/embed/sec/option_bytes/stm32u5/option_bytes.c:41-45; core/embed/sec/tamper/stm32u5/tamper.c:139-151",
+   "GitHub EthereumPhone/PQ1: #49, #50, #80, #81, #82, #150, #208, #248, #269, #391 read; searches for ADC4, FLASH_ACR, SLEEPDEEP, LPMSEC, FLAGB return nothing",
+   "scratchpad data/verify/FI-02.json (DS13086 Rev 10 extract: VBOR3 falling 2.39/2.5/2.61, VBOR4 falling 2.67/2.79/2.9, VPVD5 falling 2.66/2.78/2.9, VPVD6 falling 2.76/2.88/3.0, tS_vrefint 12.65 us) - not re-read from the datasheet"
+  ],
+  "tracked_issues": [
+   "#49 (OPEN, ship-blocker): PVD + BOR",
+   "#248 (OPEN): TAMP + CSS + PVD Stage 2",
+   "#227 (OPEN): power management / brownout zeroize",
+   "#80 (OPEN): RCC/PWR clock security - wrong SECCFGR address and partial mask 0xCE9",
+   "#269 (OPEN): tz-3 RCC/PWR/SYSCFG SECCFGR + PRIVCFGR",
+   "#366 (OPEN): Trezor critical-port umbrella",
+   "#81 (OPEN): TAMPSEC + DBP hygiene",
+   "#50 (OPEN, ship-blocker): TAMP BKPRWSEC/TAMPSEC/TAMPPRIV",
+   "#208 (OPEN): TAMP x BHK, ITAMP6/9",
+   "#47 (OPEN, ship-blocker): hardware-mode tamper erase",
+   "#75 (OPEN, ship-blocker): TAMP escalation + IER audit",
+   "#256 (OPEN): tamp-irq default-on",
+   "#391 (OPEN): TAMP silicon test",
+   "#48 (OPEN, ship-blocker): ECC double-error - adjacent",
+   "#150 (OPEN) - MISSING from the merge: ICACHE + RAMCFG NS-attributed; same NS-lever class, belongs in Stage A",
+   "#82 (OPEN, priority:high) - MISSING: SRAM_RST=0 option byte; required companion to raising BOR",
+   "#79 (OPEN) - MISSING, adjacent: IWDG secure (silicon)",
+   "#70 (OPEN on GitHub, described as fixed in CLAUDE.md): tracker lag; its 'GTZC2' wording concerns the OTG confusion, not TAMP"
+  ],
+  "untracked_delta": "The merge's ten untracked items stand, with item (7) reworded: the alias move is needed because of later RAZ/WI accesses, not PLL bring-up, and it covers reset_cause.rs and three host-test pins. Additional untracked items:\n\n(a) FLASH_ACR is nonsecure by design, so NS keeps a wait-state fault lever after Stage A; a gateway-entry re-assert is needed.\n(b) BORRSTF is classified Cold and not scrubbed (reset_cause.rs:182-185), which becomes reachable with SRAM retained once BOR is raised; it couples to #82.\n(c) PVD priority relative to SysTick (both at priority 0) and PVD masking during the RDP-2 OPTSTRT window and Phase B rotation.\n(d) With TAMPSEC=0, NS can write TAMP_CR2.BKERASE and erase the loaded BHK (RM0456 \u00a764.4.5; lead).\n(e) Adding ADC4 tampers requires changing poll()'s any-ITAMP wipe mask and the unconditional CR3=0.\n(f) TAMP and RTC have no TZSC2 secure bit; the \"GTZC2 for TAMP\" wording in sau.rs:474 and the proposal is imprecise.\n(g) BOR level doc inconsistency (evt-silicon-validation.md:792 vs brownout-hardening.md) and the \"~2.7 V\" label for BOR3.",
+  "live_defect": {
+   "is_defect": true,
+   "severity": "medium-high overall. RCC/PWR/SYSCFG unsecured: medium-high, software fault lever, no direct secret read. TAMP unsecured: medium, RM-documented. PVD off and BOR unpinned: medium, ship-blocker #49. Idle-timer stretch: low-medium. ITAMP7/12/13 inert: low. tamp+tamp-wipe+bhk with ITAMP6/9: high if it fires, unmeasured. New: FLASH_ACR NS-writable (medium, not closable by attribution) and BORRSTF unscrubbed (low-medium, worsens with higher BOR).",
+   "evidence": "All seven listed defects confirmed by reading executing code under the ship feature set (Makefile:2718). No RCC/PWR/SYSCFG SECCFGR or TAMPSEC write exists in secure/, fsbl/, shared/ or nonsecure/. rcc.rs:10 uses the NS alias. SysTick is on the processor clock (main.rs:893). bhk.rs:420-421 sets only BHKLOCK. RM0456 \u00a764.4.5 makes every TAMP register NS-writable without TAMPSEC. No PVD or ADC4 code exists. ShipProfile has no BOR field (lockdown.rs:318-345). #80's address 0x5602_0C10 is ICSCR3 (stm32u585xx.h:1012 vs 1071). Additional: RM0456 \u00a77.9.1 FLASH_ACR is nonsecure; reset_cause.rs:182-185 classifies BORRSTF as Cold with no scrub. The cited board/mod.rs:166,169 doc-comment hits do not exist.",
+   "reachable_in_production_config": "Yes for every stm32u585 image given NS code execution (RCC, TAMP, FLASH_ACR, idle stretch) or physical supply control (PVD/BOR, BORRSTF). Nothing was run on silicon; exploitability against the double-compute/compare/verify signing chain is not demonstrated. The mode-production set does not build today (S-2 fence), so the tamp-wipe+bhk candidate is unexercised."
+  }
+ }
+}

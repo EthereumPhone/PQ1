@@ -1,0 +1,26 @@
+{
+ "id": "SE-07",
+ "title": "Wipe as a verified, redundant, BHK-first transaction: regenerate the page-126 BHK before touching the SEs, Hamming-distant double-checked wipe verdicts, and a boot-time 'wipe verified' assertion that keeps the armed flag until every region and both SEs are confirmed gone",
+ "threat": "A wipe (10 wrong PINs, tamper, admin) that is interrupted, glitched or partially executed leaves recoverable state: the SE050 half remains readable under still-valid SCP03 keys, the OPTIGA half survives a failed factory_reset, a single-bool verdict is coerced to 'wiped' (SE17-3), and the next boot has no obligation to finish. Today the page-125 flag covers only the SE050 admin object.",
+ "proposal": "(1) Make the first irreversible step of every wipe path the regeneration of the BHK page (fresh 3-source TRNG words into page 126 + TAMP BKP reload) \u2014 Trezor's `secret_safety_erase` \u2014 so the SE050 SCP03/admin credentials are dead instantly even if the SE delete never runs; then erase page-124/123/127 and run both SE factory resets. (2) Replace plain-bool wipe verdicts with `fi::CfiCounter`-style sentinels with FI-double reads, and treat 'unknown' as 'not wiped' (never coerce). (3) At boot, if the page-125 flag is armed, re-assert: pages 123\u2013127 blank (except flag), OPTIGA F1E1/F1D1 absent via check_exists through the shield, SE050 ENTROPY/USERID absent via CheckObjectExists \u2014 only then clear the flag; otherwise resume the wipe. (4) Include the duress object set (F1D8/E121, DURESS_*) in the wipe list so decoys do not survive. (5) Record one receipt line in the journal so a forensic read shows 'wiped at boot N'.",
+ "rationale": "Ledger's 1.4 fix made the user-zone wipe 'verified at startup'; Trezor's BHK regeneration gives a single atomic action that invalidates every BHK-wrapped secret regardless of what happens afterwards. pq1 already owns the BHK axis for SE050 (owner decision 2026-09-21) so the BHK-first step costs one page program and immediately strengthens the 10-wrong-PIN brick and the tamp-wipe path against power-cut and glitch interruption.",
+ "repo_evidence": [
+  "secure/src/hw/flash.rs:626-691 wipe flag: ADMIN_PAGE_ADDR+16, covers the SE050 admin object only",
+  "secure/src/se050/mod.rs:3168-3238 Se050::factory_reset_admin; secure/src/dual_se.rs:631-648 factory_reset_admin \u2014 no BHK regeneration step",
+  "secure/src/nsc/cmd_request_unlock.rs:190-211 trigger_lockout_wipe \u2014 sequential, no boot-time verification contract",
+  "secure/src/hw/bhk.rs:318-421 load_and_lock exists; no 'regenerate' wipe primitive",
+  "Issues #106 (SE17-3 verdict coercion), #123 (OP17-8 atomicity), #107 (duress objects survive wipes), #129, #168 (F23), #47"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/secret/stm32u5/secret.c:393-442,655-658 (secret_safety_erase regenerates BHK \u2192 all BHK-wrapped storage invalid); Ledger firmware 1.4 'wipe verified at startup' (LSB-003 fix); Trezor storage.c:1163-1303 (wipe when any counter says so, verified increments).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "BHK-first wipe interacts with the #712/#204 recoverability bug (a regenerated BHK is exactly the 'SE050 unreachable' state) \u2014 acceptable here because the goal IS unrecoverability, but the re-pair/OID-range-bump story for the next wallet (#168) must be designed alongside; boot-time resume must be idempotent under repeated power cuts; wipe decisions must still never be driven by an unauthenticated SW (SE-03).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c:393-442",
+  "https://donjon.ledger.com/lsb/003/",
+  "https://www.ledger.com/firmware-1-4-deep-dive-security-fixes"
+ ],
+ "surface": "se"
+}

@@ -1,0 +1,26 @@
+{
+ "id": "SYS-09",
+ "title": "RAM remanence hygiene: random-then-zero fill of all SRAM in the FSBL, wipe-all-but-stack before every stage handoff and before every reset/halt, clear unused stack, clear TAMP BKP registers, and pin SRAM2_RST",
+ "threat": "Cold-boot / data-remanence recovery of a previous session's reconstructed entropy or slot SigningKey from SRAM (Donjon's 'unfixable' Trezor extraction class, RDP Freeze on STM32), and stale secrets surviving a FSBL->secure or secure->NS handoff or a reset that only zeroizes NAMED caches.",
+ "proposal": "(1) In the FSBL reset path, after TRNG init (SYS-02), fill every SRAM region except the live stack with a TRNG word and then with 0 before .bss/.data init; (2) in the secure world, before branching to NS and inside the HardFault/NMI/panic/lock/idle-wipe paths, `memregion_fill` all runtime secure SRAM except the current stack via volatile stores (not memset), then clear the unused stack; (3) clear the TAMP backup registers that are not the BHK on handoff; (4) set SRAM2_RST=0 (SRAM2 erased on system reset) in the ship option-byte profile and verify it in Phase A; (5) pair with the SYS-01 temperature floor so a frozen-SRAM attack is refused at boot.",
+ "rationale": "pq1 zeroizes named secret types and relies on .bss re-zero at startup; the 24-word entropy and C10 signing scratch (4008-B signatures, hypertree buffers) live on the stack and in temporaries that `ZeroizeOnDrop` covers only when destructors run \u2014 a fault, glitch or power cut skips them. Trezor's boardloader fills all RAM with random then zero, and every jump/reboot/halt wipes everything except the stack; the U585 SRAM2_RST option byte gives a hardware guarantee for the bank secrets can be placed in (SYS-03 c).",
+ "repo_evidence": [
+  "grep fill_ram|memregion|clear_unused|wipe.*sram over secure/src/main.rs fsbl/src/main.rs secure/src/nsc/mod.rs: zero hits \u2014 only named-cache wipes (main.rs:4683-4686 `zeroize_sensitive_state`)",
+  "secure/src/main.rs:1311-1333 \u2014 abnormal reset path zeroizes sensitive STATE, not all SRAM",
+  "Makefile:364-380 \u2014 `stm32-harden-opts` (SRAM2_RST=0, BOR_LEV) is a bench STM32_Programmer_CLI recipe, not in the ship profile (inventory)",
+  "docs/security/HARDENING.md:251-256 \u2014 cold-boot mitigation stated as requirement only"
+ ],
+ "vendor_precedent": "Trezor core/embed/sys/startup/stm32u5/startup_init.c:353-368 (memregion_fill(rng_get()) then 0 in boardloader), core/embed/sys/startup/stm32/bootutils.c:98-129,240-258 (reset peripherals, clear_unused_stack, fill all RAM except stack/bootargs on halt/reboot/jump; U5 also clears BKP regs + SRAM2), core/embed/sys/linker/linker_utils.c:156-168 (volatile fill).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "A whole-RAM wipe in the HardFault path must not run on the corrupted stack (use a fresh stack like Trezor's call_with_new_stack); wiping before NS branch must exclude the NS shared mailbox / heartbeat region the NsPtr typestate validates; ~1 ms of extra boot per 256 KB fill at HSI16 in the FSBL; SRAM2_RST joins the single Phase A option-byte profile and the RDP-0 pre-power check; the BHK in BKP0R..7R must be excluded from the BKP clear (SYS-01 f).",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/startup/stm32u5/startup_init.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/startup/stm32/bootutils.c",
+  "https://ieeexplore.ieee.org/document/11107115/",
+  "https://www.ledger.com/blog/Unfixable-Key-Extraction-Attack-on-Trezor"
+ ],
+ "surface": "systemic"
+}

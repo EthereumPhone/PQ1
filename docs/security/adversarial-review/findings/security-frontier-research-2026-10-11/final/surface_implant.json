@@ -1,0 +1,221 @@
+{
+ "surface": "implant",
+ "items_written_here": [
+  {
+   "id": "M09",
+   "type": "cluster",
+   "key": "device-attestation-and-external-verifier",
+   "home": "implant",
+   "members": [
+    "IMP-07",
+    "USB-05",
+    "IMP-02",
+    "BOOT-04"
+   ],
+   "title": "Verify-before-first-power tool plus a host-verified birth record, with each leg scoped to the attacker it actually stops (MCU attestation demoted to an optional post-enrolment die-identity check)",
+   "priority": "P0",
+   "merger_priority": "P0",
+   "cost": "XL",
+   "kind": "mixed",
+   "novelty": "beyond",
+   "status": "recommended",
+   "tracked": [
+    "#27",
+    "#34",
+    "#37",
+    "#39",
+    "#40",
+    "#42",
+    "#43",
+    "#44",
+    "#46",
+    "#67",
+    "#68",
+    "#76",
+    "#193",
+    "#206",
+    "#210",
+    "#226",
+    "#244",
+    "#249",
+    "#250",
+    "#268",
+    "#270",
+    "#272",
+    "#387",
+    "#456",
+    "#540",
+    "#595",
+    "#601",
+    "#626",
+    "#695",
+    "#696",
+    "#697",
+    "#705",
+    "#742",
+    "#753",
+    "#758"
+   ],
+   "live_defects": 5,
+   "hardware_asks": 7,
+   "file": "data/round2/cluster_device-attestation-and-external-verifier.json"
+  },
+  {
+   "id": "M10",
+   "type": "cluster",
+   "key": "electrical-fingerprint-implant-detection",
+   "home": "implant",
+   "members": [
+    "IMP-03",
+    "D-02",
+    "D-03",
+    "BOOT-10"
+   ],
+   "title": "Display/button-net RC-decay self-check in the secure world against a factory OTP baseline, gated on a bench go/no-go study; input-current sense as an optional EVT-spin add-on",
+   "priority": "P3",
+   "merger_priority": "P2",
+   "cost": "L",
+   "kind": "mixed",
+   "novelty": "beyond",
+   "status": "recommended",
+   "tracked": [
+    "#47",
+    "#75",
+    "#208",
+    "#220",
+    "#248",
+    "#249",
+    "#258",
+    "#260",
+    "#268",
+    "#540",
+    "#595",
+    "#601",
+    "#695",
+    "#705",
+    "#712",
+    "#758",
+    "#784",
+    "#835"
+   ],
+   "live_defects": 0,
+   "hardware_asks": 5,
+   "file": "data/round2/cluster_electrical-fingerprint-implant-detection.json"
+  },
+  {
+   "id": "M11",
+   "type": "cluster",
+   "key": "enclosure-and-tamper-mesh",
+   "home": "implant",
+   "members": [
+    "IMP-01",
+    "IMP-04",
+    "D-08"
+   ],
+   "title": "MP-revision physical-access spec (buried/shielded display nets, no S-world test pads, no void behind the panel, destructive-open shell, published comparables) plus an optional passive PC13 case/display-removal input; active mesh dropped",
+   "priority": "P1",
+   "merger_priority": "P1",
+   "cost": "L",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#36",
+    "#47",
+    "#50",
+    "#52",
+    "#75",
+    "#81",
+    "#208",
+    "#248",
+    "#256",
+    "#391",
+    "#695",
+    "#696",
+    "#697",
+    "#705",
+    "#753"
+   ],
+   "live_defects": 3,
+   "hardware_asks": 10,
+   "file": "data/round2/cluster_enclosure-and-tamper-mesh.json"
+  },
+  {
+   "id": "IMP-09",
+   "type": "single",
+   "home": "implant",
+   "title": "Anti-klepto for the SPHINCS+C10 randomizer: companion-committed OptRand (OptRand = H(host_commitment || device_nonce || M)) with a verifiable transcript so malicious firmware or an implant cannot leak key bits through R or the target-sum grind",
+   "priority": "P2",
+   "orig_priority": "P2",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "beyond",
+   "status": "redesign needed (refuted as written; a narrower residue survives)",
+   "tracked": [],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible",
+    "vendor-claim"
+   ],
+   "file": "data/verify/IMP-09.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M01",
+   "key": "measurement-bound-release",
+   "home": "boot",
+   "title": "Measurement-bound secret release: drop. HDP makes it constructible, but the gain is one extra FSBL fault at XL cost; fold the HDP hygiene into #39",
+   "priority": "drop",
+   "status": "rejected",
+   "members_from_this_surface": [
+    "IMP-08"
+   ]
+  },
+  {
+   "id": "M02",
+   "key": "option-byte-posture",
+   "home": "boot",
+   "title": "Option-byte posture: pin the unpinned masks on silicon (OEM-lock bits are wrong today), make the surviving production-silent verdicts halt, measure the whole slot window, and keep halt (not wipe) as the mismatch response",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "IMP-06"
+   ]
+  },
+  {
+   "id": "M08",
+   "key": "whole-slot-measurement",
+   "home": "fwupdate",
+   "title": "Erased-tail check on the selected slot (FSBL boot + CMD_FW_COMMIT), Trezor check_image_contents shape; optionally widen the 8-word fingerprint to the signed manifest digest",
+   "priority": "P3",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "IMP-06"
+   ]
+  },
+  {
+   "id": "M13",
+   "key": "security-words-anti-swap",
+   "home": "pin",
+   "title": "Pre-PIN \"device words\": two BIP-39 words from SAES-CMAC(DHUK) over the PIN prefix, shown mid-entry so a substituted unit is noticed before the last four digits are typed",
+   "priority": "P3",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "IMP-10"
+   ]
+  },
+  {
+   "id": "M17",
+   "key": "se-identity-attestation",
+   "home": "se",
+   "title": "Per-boot refuse-only SE configuration audit over authenticated, fresh channels, with SE identity proven host-side against a factory per-unit record (no on-device classical verify, no DHUK-keyed attestation)",
+   "priority": "P2",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "IMP-05"
+   ]
+  }
+ ]
+}

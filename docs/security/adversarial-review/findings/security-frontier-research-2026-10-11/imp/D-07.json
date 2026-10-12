@@ -1,0 +1,26 @@
+{
+ "id": "D-07",
+ "title": "Zeroize pixel-form secret residue and clear the panel GRAM/backlight on every lock, wipe and idle-timeout",
+ "threat": "Post-lock SRAM dump, a later NS-reachable secure-world bug, or a powered-but-locked device whose TFT GRAM still holds the last wizard frame: the legacy `Display::cell` (720 B), the px `STRIP` static (13,696 B), `secret_rows_storage`/`wb` in the legacy mnemonic/candidate renderers, and the NV3007 GRAM all retain the last secret glyphs in pixel form after the wizard; `CMD_LOCK` only paints 'Locked'.",
+ "proposal": "(1) Zeroize `cell` after each secret glyph blit and `STRIP` at the end of every forced frame (and at `invalidate_shown`), and zeroize `secret_rows_storage`/`wb` in `render_mnemonic_page` / legacy `render_candidate_screen` (the px twins already do). (2) On `cmd_lock`, idle-timeout wipe, tamper wipe and wizard exit: `fill_screen(BG)` the whole GRAM (not just the 16x4 text window), then de-assert LCM_EN / set AW99703 brightness 0 on pq1 and, where drivable, pulse the panel reset so GRAM is cleared in hardware. (3) Add a host test that the row/cell/strip buffers are all-zero after a forced frame completes.",
+ "rationale": "Trezor clears both physical framebuffers on display init and gates FB access by MPU; pq1 keeps everything in S-SRAM (stronger) but never erases it. Residue in pixel form is a seed-recovery oracle for any future bug, and the GRAM case is a physical one (a locked device on a desk still holds the frame until overwritten).",
+ "repo_evidence": [
+  "grep zeroize/Zeroize in secure/src/ui/lcd.rs, secure/src/ui/px/lcd.rs, pqsigner-ui-px/src/raster.rs, pqsigner-ui-px/src/font.rs: none",
+  "secure/src/ui/lcd.rs:111 (`cell: [BG; CELL_N]` persistent scratch, never cleared after a secret blit)",
+  "secure/src/ui/px/lcd.rs:304-322, 695-697 (forced frame invalidates SHOWN but does not zero STRIP)",
+  "secure/src/nsc/cmd_lock.rs:13 (`show_status(\"Locked\", \"\")` \u2014 no fill_screen/backlight-off/GRAM reset)",
+  "secure/src/ui/seed_wizard.rs:414 (`show_status(\"Words shown\")` overwrites the text window only)",
+  "gh #124 OPEN (secret residue twins \u2014 SE driver buffers only; framebuffers untracked)"
+ ],
+ "vendor_precedent": "Trezor core/embed/io/display/st-7789/display_fb.c:118-124 (`display_fb_clear` memsets both physical FBs) and DISPLAY_RESET_CONTENT mode; MPU revocation of the FB at refresh (vg-2864 display_driver.c:420-424).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "Zeroize must use the same volatile/compiler-fence discipline as other secret types (`zeroize::ZeroizeOnDrop`); a plain store can be elided. Blanking the GRAM on lock costs one full-frame SPI write (~20 ms). On pq1 the backlight enable is also the AW99703 HWEN \u2014 re-enabling needs the I2C re-program sequence already in `lcd_nv3007::init`.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/io/display/st-7789/display_fb.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/io/display/vg-2864/display_driver.c"
+ ],
+ "surface": "display"
+}

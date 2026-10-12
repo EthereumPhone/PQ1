@@ -1,0 +1,26 @@
+{
+ "id": "FI-04",
+ "title": "Always-on secure Random Delay Interrupt (floating-mean, refreshed at every NSC veneer / USB packet) plus a non-reusing TRNG policy for all countermeasure delays on master",
+ "threat": "Jitter exists only at annotated wait_random call sites; every linear path between them (USB-triggered dispatch before the first wait_random, the multi-second C10 sign, SE tunnel setup, LCD render windows) is trigger-lockable from an externally observable event. Separately, master's FI-delay fallback reuses the last good TRNG byte on SECS/CECS, so a glitcher that latches the TRNG into error collapses every delay to a constant (the no-reuse rework exists only on perf/flash-opt-level-z).",
+ "proposal": "(1) Secure-only periodic timer (TIM2/TIM3 are already SAU-secured; or a secure SysTick slot) firing every 1 ms with a cycle-exact asm wait of `drbg8() + session_delay` where session_delay is a second TRNG-seeded byte refreshed only on externally observable events: NSC veneer entry (nsc/mod.rs dispatcher), USB packet receipt, button edge. Keep an FihBool `rdi_enabled` and treat a corrupted value as a fault. Pause only inside the ~\u00b5s-critical SPI/I2C timing windows that cannot tolerate it, and prove those windows are not FI-critical. (2) Feed it from a ChaCha/AES-CTR DRBG seeded from the TRNG (reseed every N draws) so the 1 kHz draw does not starve rng_strong. (3) Merge #834/#835 option-2 onto master: a failed TRNG draw fails the operation (not halt, not reuse), and RDI switches to 'fault' on TRNG error. (4) Budget check: ~255 cycles/ms \u2248 0.2 % at 160 MHz; re-measure test-key-speed.",
+ "rationale": "Trezor has shipped RDI since 2019 (Clavier/Coron/Dabbous floating mean); Donjon's DS28C36 double-fault paper concludes double verification 'is not efficient enough if it is used alone' and must be combined with hardware and/or software jitter. pq1's signer is stronger than Trezor's per-site, but site-based jitter leaves the attacker a profiled linear path to each gate.",
+ "repo_evidence": [
+  "grep -riE 'random.delay.interrupt|\\bRDI\\b' secure/src \u2192 empty; gh #805 OPEN ('No global timing jitter')",
+  "secure/src/fi.rs:46-72 (rng_byte: byte_nonsecret(FI_DELAY_LAST_GOOD) last-good reuse arm LIVE on this branch and master); gh #834/#835 OPEN",
+  "secure/src/timeout.rs (S-only TIM exists; no jitter handler)",
+  "secure/src/sau.rs (TIM2/TIM3 secured \u2014 a secure periodic source is available)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/random_delays/stm32/random_delays.c:105-180 (rdi_handler, session_delay, refresh on USB usb.c:728/748 and SMCALL smcall_dispatch.c:161-167, ensure on corrupted rdi_disabled).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Jitter during NV3007 SPI/TE-synchronised frame writes could reintroduce tearing (#780 closed on glass with 27.9 < 31.4 ms margin) \u2014 RDI must be masked or bounded inside the TE wait; bench DWT timings gain \u00b1jitter; the #835 critique (spurious halts, zero-length-delay race, PIN-budget burn) must be re-applied to the RDI error arm.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/random_delays/stm32/random_delays.c",
+  "https://fdtc.deib.polimi.it/FDTC23/slides/FDTC2023-slides-3-3.pdf",
+  "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+  "https://nrfconnectdocs.nordicsemi.com/ncs/latest/tfm/design_docs/tfm_physical_attack_mitigation.html"
+ ],
+ "surface": "fi"
+}

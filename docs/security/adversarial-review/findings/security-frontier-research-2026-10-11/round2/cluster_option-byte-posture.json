@@ -1,0 +1,232 @@
+{
+ "merge": {
+  "cluster": "option-byte-posture",
+  "title": "Option-byte posture: pin the unpinned masks on silicon (OEM-lock bits are wrong today), make the surviving production-silent verdicts halt, measure the whole slot window, and keep halt (not wipe) as the mismatch response",
+  "threat": "Transit or factory attacker on an RDP-0 ship unit who (a) plants an OEM1/OEM2 RDP-regression key, making the later RDP-2 reversible to RDP-1 without erasing code; the key value is write-only and FLASH_NSSR.OEMxLOCK is the only observable. (b) Clears or narrows WRP on the FSBL pages before the self-lock, so RDP-2 freezes a writable trust root and invariant #10 is forfeited for that die. (c) Leaves BOOT_LOCK clear so SECBOOTADD0 and SWAP_BANK stay mutable at RDP-2. (d) Lowers BOR_LEV to ease voltage glitching. (e) Pre-stages a payload in the unmeasured tail of a slot. Secondary: a post-lock boot that bypasses the FSBL (redirected SECBOOTADD0) currently produces no effect in a production image. Not addressed: an RDP glitch at option-byte load, which opens debug before any firmware instruction runs.",
+  "proposal": "One work package in five ordered parts. No wipe, no on-device option-byte write other than RDP.\n\nA. Silicon pin ceremony (extends #46, #387, #400, #45, #753; one sacrificial U585CIU6 plus read-back on both boards).\n- Correct OEM1LOCK/OEM2LOCK to FLASH_NSSR bits 18/19. shared/src/lockdown.rs:279-280 has 1<<26 / 1<<27, which are reserved bits; the register offset read (FLASH_NS+0x20) is right.\n- Positive detection: provision an OEM1 key at RDP-0 and confirm the predicate trips. Then confirm that a factory write of OEMxKEYR = 0xFFFFFFFF clears the lock bit, and check OPTWERR.\n- Pin the WRP1AR/WRP2AR layout (STRT, END, UNLOCK), BOOT_LOCK and BOR_LEV[10:8]. Decide an exact OPTR expected value plus don't-care mask (SL9: nSWBOOT0, nBOOT0, NRST_MODE are not compared today).\n- Only then flip OEM_LOCK_MASK_PINNED and WRP1A_MASK_PINNED. Flip require_boot_lock after #753 fixes the factory order (SECBOOTADD0/SWAP_BANK before BOOT_LOCK).\n- Promote BOR_LEV from advisory to a hard field.\n\nB. Widen the every-boot check once pinned.\n- FSBL tz-1 (fsbl/src/optbytes.rs) moves from verify_confirmed_fields to the full phase profile: WRP1A, WRP2A, OEM locks, BOOT_LOCK, BOR_LEV. It stays read-only, two-pass persistent, halt-only. About +100-200 B, which must land before the #540 geometry freeze.\n- Add a secure-world re-check on every RDP-2 boot before SE unlock, since first_boot returns immediately at L2 (first_boot/mod.rs:174-176). Trezor repeats the OEM check in its kernel (kernel/main.c:180-181).\n- Response is halt with an E08xx screen.\n\nC. Make the production-silent verdicts executable.\n- The SECBOOTADD0 check at secure/src/main.rs:1280-1290 has no action outside secure_log!. Give it a sentinel-gated halt under mode-production.\n- Resolve #192: remove or fence rdp-enforce-halt against rdp2-self-lock, and state that Phase A is the pre-ALL_DONE RDP gate.\n- Add a source-invariant host test that fails on any security verdict branch in a mode-production cfg whose only effect is secure_log!. It must demonstrably fail on the pre-fix lines.\n\nD. Whole-slot-window measurement.\n- FSBL verify_images hashes the declared length, then requires [len, SLOT_*_CAPACITY) to be 0xFF. This is Trezor's check_image_contents padding check, not Krux random fill.\n- fw_update COMMIT verifies the tail is erased.\n- Leave the measured_boot hash range and the 8 words unchanged; add only the tail-is-0xFF check in the secure world so the two rows stay identical.\n\nE. Cheap adjuncts.\n- Pass the already-classified reset cause (main.rs:1186) into Phase A and refuse the RDP burn after Watchdog, LowPower or Unknown. Park and re-prompt, never halt. Allow Cold, and Software on the documented re-prompt path.\n- Add FLASH_NSSR bits 18/19, WRP1AR/WRP2AR, the BOOT_LOCK bit and BOR_LEV to the published SWD connect-under-reset checklist (docs/security/user-device-verification.md) and to the #595 factory record.\n- The factory, not Phase A, writes OEMxKEYR = 0xFFFFFFFF as its \"OEM-key finalization\" step.",
+  "members": [
+   {
+    "id": "IMP-06",
+    "disposition": "modified",
+    "note": "Kept: the mask pin (re-pointed to #46/#270/#387/#595), whole-slot tail check in the 0xFF variant only, COMMIT tail check. Dropped: Phase-A OEM key write, FSBL wipe escalation, FSBL refuse-to-branch on OBLRSTF/IWDG, Krux random fill. Round-1 corrections honoured: OEM bits are 18/19; the cost is the tail bytes only, not about 2x."
+   },
+   {
+    "id": "FI-06",
+    "disposition": "modified",
+    "note": "Kept: OEM/BOOT_LOCK/BOR_LEV pinning and the new secure-world every-boot re-check site, with halt as the response. HDP1 is already #39/#214/#43, so pointer only; round 1 notes Trezor's HDP hides secrets, not loader code. Dropped: secure-world wipe, Phase-A OEM key write, BHKLOCK assertion before every sign."
+   },
+   {
+    "id": "BOOT-01",
+    "disposition": "modified",
+    "note": "No round-1 verdict; verified here. Evidence is accurate except the claim that main.rs:1240-1290 is entirely log-only: the post-ALL_DONE RDP regression really halts at :1251-1259. Kept: full-profile pin, exact OPTR mask, FSBL full compare, factory JSON and SWD checklist listing OEM lock bits. Dropped: wipe on mismatch. Priority lowered from P0 to P1; the unpinned predicates fail closed, so this blocks shipping rather than being a live hole."
+   },
+   {
+    "id": "BOOT-06",
+    "disposition": "modified",
+    "note": "No round-1 verdict; verified here. The headline defect is one-third true: only the SECBOOTADD0 verdict is silent in production (see live_defects). RDP<L2 after ALL_DONE halts for real. RDP<L2 before ALL_DONE is handled by Phase A at main.rs:1630, which halts on any RDP byte other than 0xAA and on non-blank pages 123-127. 'No reset-cause read anywhere' is false: reset_cause::classify_and_clear runs at main.rs:1186. Kept: SECBOOTADD0 halt, #192 resolution, the secure_log!-only host test, reset-cause input to Phase A (narrowed). Dropped: fatal die-id, RDP-1 wipe, Trezor's exact POR rule."
+   },
+   {
+    "id": "FWU-6",
+    "disposition": "modified",
+    "note": "No round-1 verdict; verified here. Evidence accurate: first_boot/mod.rs:174-176 returns early at L2 and lockdown.rs has both pin flags false. Kept: pin, FSBL OEM/BOOT_LOCK compare, every-boot secure-world verify at RDP-2. Dropped: wipe escalation, Phase-A OEM key write. The member reads C1 as permitting the OEM write inside the ceremony; C1's text says only the RDP path is permitted."
+   }
+  ],
+  "dropped_parts": [
+   "Wipe or BHK-erase on option-byte mismatch (IMP-06 item 4, FI-06 item 1, BOOT-01 item 4, BOOT-06 items 1 and 3, FWU-6 item 3). Against recorded decisions: owner decision 2026-07-23 (fw-rollback-draft12-candidate-2026-07-21.md:397-407, tz-1 halts on persistent mismatch and never writes) and trezor-comparison-critical-port-2026-06.md:44,79 (reserve the destructive SE wipe for confirmed TAMP/GTZC tamper; do not infer SE-wipe authority). Also low value: no plaintext seed is on the MCU at that point, and a real RDP regression gives the attacker debug halt before any firmware runs. It is an FI brick lever, and it collides with BHK recoverability (#707/#712). The FSBL variant is additionally a no-op: the FSBL has no flash-write path and the page-125 flag's consumer never runs while the FSBL halts.",
+   "Phase A writing OEM1KEYR/OEM2KEYR = 0xFFFFFFFF (IMP-06, FI-06, FWU-6). Violates first-boot-requirements.md R2.1 (must not program any option byte other than RDP) and Draft 1.2 corollary C1 (absolute). first-boot-provisioning.md:46-50 assigns OEM-key finalization to the factory. Re-scoped to a factory step plus the Phase-A read check.",
+   "FSBL refusing to branch on OBLRSTF/IWDG/WWDG (IMP-06 item 3). OBLRSTF is set by the legitimate first-boot OBL_LAUNCH. Sticky flags without RMVF make any watchdog bite a permanent no-boot, and clearing them in the FSBL starves secure/src/reset_cause.rs. A glitched option-byte load sets no flag. Trezor's reset_flags_check has zero callers.",
+   "Normal-boot POR-only rule as 'Trezor's rule' (BOOT-06 item 2). Trezor does not call it (only reset_flags_reset at boardloader/main.c:323). Reduced to an input to the Phase-A burn decision.",
+   "Fatal die-id check (BOOT-06 item 1). die_id.rs:22-30 deliberately scopes it as a report, not a fault: a non-rev-U die is a certificate-scope fact, and an attacker who controls the part can present any IDCODE. No bench die has been through HW-ASSUME-REV-U (#400).",
+   "Random-fill-and-pin of slot tails (Krux model, IMP-06 item 2 alternative). Incompatible with the vendor-signed manifest hash and with identical 8 words across units.",
+   "Changing the measured_boot::firmware_hash range to the whole window (IMP-06 item 2). measured-boot.md makes the FSBL and secure-world byte-range identity deliberate; a tail-is-0xFF check gives the same guarantee without moving the fingerprint.",
+   "BHKLOCK assertion before every sign (FI-06 item 4). No vendor precedent. bhk.rs:390-455 already handles the lock at load and proves the active key by KAT. BHKLOCK is cleared only by tamper or RDP regression, which the retained every-boot option-byte check covers.",
+   "HDP1 over the FSBL as a new item (FI-06 item 3). Already #39, #214 and #43; the Trezor precedent hides a secret sector, not reproducible loader code. Pointer only.",
+   "The claim that whole-slot hashing adds about 2x FSBL verify time (IMP-06 risks). Round 1 corrected this: the delta is only the tail bytes, as a compare."
+  ],
+  "tracked_issues": [
+   "#46 (OPEN): register-exact option-byte pins incl. OEM key registers and BOR_LEV; carries part A",
+   "#270 (OPEN): FSBL read-only option-byte verifier; carries part B's FSBL leg",
+   "#387 (OPEN): OEM2KEY deviation and default-OEM2-password probe",
+   "#400 (OPEN): no-FI bench settlers incl. OEM2-ABSENT and REV-U",
+   "#595 (OPEN): per-unit factory record of every security-relevant option byte",
+   "#35 (OPEN): WRP over the FSBL range in both banks",
+   "#42 (OPEN): same FSBL staged in both banks",
+   "#193 (OPEN): WRP1A check accepts over-wide spans",
+   "#38 (OPEN): BOOT_LOCK = 1",
+   "#214 (OPEN): BOOT_LOCK and HDP1EN boot-verify",
+   "#753 (OPEN): factory order SECBOOTADD0/SWAP_BANK before BOOT_LOCK; gates require_boot_lock",
+   "#45 (OPEN): sacrificial BOOT_LOCK / both-bank WRP dry-run",
+   "#44 (OPEN): SWAP_BANK = 0",
+   "#37 (OPEN): SECBOOTADD0 set to the FSBL base",
+   "#39 (OPEN): HDP1 over the FSBL",
+   "#43 (OPEN): HDP2/SECWM2 mirror",
+   "#192 (OPEN): rdp-enforce-halt x rdp2-self-lock contradiction; carries part of C",
+   "#366 (OPEN): Trezor critical-port backlog, tz-1 row",
+   "#82 (OPEN): SRAM_RST option byte",
+   "#268 (OPEN): first-boot provisioning production blocker",
+   "#540 (OPEN): FSBL geometry cutover; FSBL growth must land before it",
+   "#835 (OPEN): halt sinks that burn availability; constrains any new halt",
+   "#707 (OPEN) and #712 (OPEN): BHK recoverability; reason a BHK-erase wipe is unsafe"
+  ],
+  "untracked_delta": "No issue found for the following (searches: OBLRSTF, slot tail, padding, reset cause, secure_log silent, OEM key, SWD verify NSSR).\n1. The OEM1LOCK/OEM2LOCK constants are on reserved bits 26/27; the SVD says 18/19. #46 covers pinning in general but does not record that the current guess is known wrong and would pass vacuously if the flag were flipped.\n2. The production-silent SECBOOTADD0 verdict at main.rs:1280-1290, and a source-invariant test against log-only verdicts.\n3. Slot-tail 0xFF check in the FSBL, the secure world and fw_update COMMIT.\n4. A secure-world every-boot option-byte re-check at RDP-2.\n5. Reset cause as an input to the Phase-A burn decision.\n6. NSSR OEM lock bits, WRP, BOOT_LOCK and BOR_LEV in the user SWD verification checklist; user-device-verification.md has no OEM/NSSR mention.\n7. An exact OPTR compare with a don't-care mask (SL9 is noted in code at lockdown.rs:373-379 as handled separately; no issue located).\n8. Promoting BOR_LEV from advisory to a hard field.",
+  "decision_conflicts": [
+   "Wipe on mismatch conflicts with the owner decision of 2026-07-23 (tz-1 halts on persistent mismatch, never writes) and the June-2026 critical-port adjudication (SE wipe reserved for confirmed TAMP/GTZC tamper). Resolved by dropping; re-raising needs new evidence and an owner re-decision.",
+   "An on-device OEM key write conflicts with R2.1 and Draft 1.2 C1 (the only on-device option-byte write is the confirm-gated RDP burn). Resolved by moving it to the factory.",
+   "Any FSBL flash write conflicts with the FSBL read-only posture (fsbl/src/marker.rs bench-only fence, invariant #10). Resolved: the FSBL stays read-only and halt-only.",
+   "Changing the measured-boot hash range conflicts with the deliberate FSBL/secure-world range identity in measured-boot.md. Resolved by a tail check outside the hash.",
+   "A fatal die-id conflicts with die_id.rs's stated scope (report, not fault). Resolved by dropping.",
+   "Part A consumes sacrificial silicon, and the owner defers irreversible chip work by design. No conflict, but schedule it with the #45/#268 ceremony rather than alone.",
+   "New halts must respect #835. The every-boot checks stay two-pass persistent with a visible E08xx code."
+  ],
+  "hardware_asks": [
+   "One sacrificial STM32U585CIU6 unit (or bare die on a breakout) for the OEM1-key positive detection and the WRP UNLOCK=0 / BOOT_LOCK dry-run; share it with #45.",
+   "Factory line: add 'write OEM1KEYR/OEM2KEYR = 0xFFFFFFFF, then read FLASH_NSSR bits 18/19 = 0' to the option-byte step, and record NSSR, WRP1AR/WRP2AR, SECBOOTADD0R and OPTR per unit (#595).",
+   "No board or enclosure change. SWD on SBU for user verification is already requested in user-device-verification.md."
+  ],
+  "prerequisites": [
+   "#753 factory sequencing decision, before require_boot_lock flips.",
+   "#540 geometry cutover ordering: the FSBL compare growth and the tail check must fit the 38,912 B load span and land before the freeze. The current image is 28,704 B.",
+   "An RM0456 citation plus bench read-back on both boards (iota2 and pq1) before any *_MASK_PINNED flag flips.",
+   "Confirm on silicon that 0xFFFFFFFF un-sets a planted OEM lock at RDP-0; round 1 found RM0456 internally inconsistent on OEM2 write levels.",
+   "The production feature set cannot be built today (the S-2 fence blocks mode-production + optiga-trust-m), so the part C fix needs a cfg-level or source-invariant test rather than a production link."
+  ],
+  "precedent": "Trezor (STM32U5 boardloader), verified in /home/nicola/repos/trezor-firmware:\n- core/embed/sec/option_bytes/stm32u5/option_bytes.c:78-101: full OPTR / SECBOOTADD0R with BOOT_LOCK / SECWM / WRP constants.\n- option_bytes.c:213-222: OEM keys written 0xFFFFFFFF. :247-250: ensure NSSR OEM1LOCK/OEM2LOCK clear.\n- core/embed/projects/kernel/main.c:180-181: OEM check repeated in the kernel under USE_OEM_KEYS_CHECK.\n- core/embed/projects/boardloader/main.c:323-336: reset_flags_reset, then a mismatch leads to secret_safety_erase. pq1 deliberately does not port the repair or the erase.\n- core/embed/sec/image/image.c:469-500: check_image_contents requires padding to the end of the area to be uniform 0xFF or 0x00.\n- core/embed/sys/startup/stm32u5/reset_flags.c:26-38: POR-only rule exists but has zero callers.\nKrux hashes the whole flash region (TC Flash Hash). Ledger publishes no MCU option-byte posture. The secure_log!-only source gate has no vendor precedent; it is a process control.",
+  "novelty": "parity",
+  "kind": "mixed",
+  "cost": "M",
+  "priority": "P1",
+  "live_defects": [
+   {
+    "what": "The secure-world SECBOOTADD0 check does nothing in a production image. The only statement in the mismatch branch is secure_log!, which expands to nothing without debug-log, and mode-production forbids debug-log.",
+    "evidence": "secure/src/main.rs:1276-1290 (branch body is secure_log! only); secure/src/main.rs:62-64 (no-op arm under not(debug-log)). Contrast the real halt loop at main.rs:1251-1259.",
+    "reachable_in_production_config": "Yes by cfg reading (mode-production, with or without rdp2-self-lock). Not link-verified: the S-2 fence makes mode-production + optiga-trust-m unbuildable. Pre-lock impact is nil, because Phase A's verify_ship_profile halts on SecBootAdd0 (first_boot/mod.rs:185-196). Post-lock it is the only detector for the case where boot bypasses the FSBL, since the FSBL tz-1 check does not run in that case. Reaching that state needs a secure option-byte write while BOOT_LOCK is clear (require_boot_lock=false).",
+    "severity": "low-medium"
+   },
+   {
+    "what": "The OEM1LOCK/OEM2LOCK mask constants point at reserved bits 26/27 of FLASH_NSSR; the real bits are 18/19. Latent, not exploitable today: OEM_LOCK_MASK_PINNED=false keeps the gate fail-closed. If the flag were flipped without correcting the bits, a planted OEM2 regression key would pass Phase A vacuously.",
+    "evidence": "shared/src/lockdown.rs:279-280 against /home/nicola/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32U585.svd:6409-6420 (bitOffset 18 and 19). Trezor uses FLASH_NSSR_OEM1LOCK at option_bytes.c:248-249.",
+    "reachable_in_production_config": "No. The gate fails closed at lockdown.rs:513-514; consequently no production first boot can pass Phase A at all today.",
+    "severity": "latent-high if pinned wrong; currently none"
+   },
+   {
+    "what": "BOOT-06's other 'silent' claims are refuted or by design. RDP<L2 after ALL_DONE halts unconditionally. RDP<L2 before ALL_DONE is log-only at :1260-1266 but Phase A is the gate. Die-id is report-only by documented design. 'No reset-cause read anywhere' is false.",
+    "evidence": "secure/src/main.rs:1251-1259 (wfe loop outside the macro); main.rs:1630 -> first_boot/mod.rs:174-203 (halt on any RDP byte other than 0xAA and on non-blank pages 123-127); secure/src/die_id.rs:22-30; secure/src/main.rs:1186 and :1330.",
+    "reachable_in_production_config": "n/a (refuted)",
+    "severity": "none"
+   },
+   {
+    "what": "Post-lock, no code checks WRP, OEM locks, BOOT_LOCK or BOR_LEV. The FSBL tz-1 covers only TZEN/RDP/SECWM/boot address/SWAP_BANK, and first_boot returns immediately at RDP-2. This is a documented, accepted gap pending #46, not a regression.",
+    "evidence": "fsbl/src/optbytes.rs:24-30; shared/src/lockdown.rs verify_confirmed_fields (doc comment: 'a unit whose WRP was cleared before RDP-2 PASSES this subset'); secure/src/first_boot/mod.rs:174-176.",
+    "reachable_in_production_config": "Yes, once any unit is locked. No unit is shipped or locked today.",
+    "severity": "medium (tracked)"
+   }
+  ],
+  "residual_after": "- An RDP or option-byte-load glitch at power-on still opens debug before any FSBL or secure-world instruction runs, so no check fires. Only SRAM_RST (#82) and the fact that secrets are PIN-gated in the SEs limit it.\n- With halt rather than wipe, a stolen unit whose posture was weakened stays intact for repeated physical attempts, bounded by the SE PIN counters and E120.\n- A single-fault attacker can still force one of the two tz-1 passes to read 'match' (accepted trade-off).\n- Until the factory BOOT_LOCK ceremony lands, secure code can still move SECBOOTADD0 and SWAP_BANK at RDP-2.\n- The FSBL code is not hidden or made non-executable until HDP1 (#39).\n- OEM key absence is inferred from lock bits only. A factory that plants a key and a matching fake read-back is caught only by the user's own SWD read of NSSR.\n- A compromised secure image can lie on the advisory fingerprint row regardless of the tail check.\n- Nothing here detects BOR or WRP tampering on bench units, which carry no WRP.",
+  "rationale": "All five members describe the same gap, and it has two cheap real halves. The two predicates that decide whether invariant #10 holds are unpinned, and one of them is known wrong. One production verdict has no action. Everything else the members add is either already tracked, or is a port of Trezor's repair-and-erase that this project has explicitly rejected twice. Priority is P1, not P0: the unpinned predicates fail closed, so this is a ship blocker rather than a live hole, and nothing has shipped. Cost M is dominated by the silicon ceremony; the firmware parts are each S.",
+  "repo_evidence": [
+   "shared/src/lockdown.rs:258-292 (BOR_LEV advisory; OEM bits 26/27; OEM_LOCK_MASK_PINNED=false)",
+   "shared/src/lockdown.rs:334-356 (require_boot_lock=false in both profiles)",
+   "shared/src/lockdown.rs:373-395 (optr_matches_ship is a partial mask, SL9)",
+   "shared/src/lockdown.rs:445 (WRP1A_MASK_PINNED=false); :556-600 (verify_ship_profile vs verify_confirmed_fields)",
+   "fsbl/src/optbytes.rs:11-43,66-88 (read-only, confirmed subset, two-pass, halt)",
+   "fsbl/src/main.rs:243-252 (tz-1 wired in production and stage-marker arms)",
+   "secure/src/main.rs:26-64 (secure_log! arms); :1186 (reset cause classified and cleared); :1240-1290 (RDP and SECBOOTADD0 checks); :1630 (Phase A call)",
+   "secure/src/first_boot/mod.rs:170-250 (Phase A: early return at L2, verify_ship_profile, blank pages, confirm gate, RDP burn; no reset-cause input, no OEM key write)",
+   "secure/src/nsc/mod.rs:618-690 (mode-production forces rdp2-self-lock)",
+   "secure/Cargo.toml:156 (rdp-enforce-halt opt-in)",
+   "fsbl/src/verify.rs:38-65 (hashes manifest-declared lengths only)",
+   "secure/src/measured_boot.rs:95-122 (hashes [__vector_table, __veneer_limit))",
+   "secure/src/fw_update/verify.rs:41-60 (COMMIT hashes received bytes only)",
+   "secure/src/hw/flash.rs:1366-1386 (erase_slot erases the whole slot at BEGIN)",
+   "secure/src/die_id.rs:22-30 and secure/src/hw/dbgmcu.rs:42-61 (report-only by design)",
+   "secure/src/hw/bhk.rs:390-455 (BHKLOCK handled at load)",
+   "docs/security/fw-rollback-draft12-candidate-2026-07-21.md:64-73 (C1), :397-407 (tz-1 decision)",
+   "docs/provisioning/first-boot-requirements.md:43-68 (R2.1-R2.6)",
+   "docs/provisioning/first-boot-provisioning.md:44-51 (factory owns OEM-key finalization)",
+   "docs/architecture/trezor-comparison-critical-port-2026-06.md:44,79"
+  ],
+  "sources": [
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+   "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c:318-340",
+   "/home/nicola/repos/trezor-firmware/core/embed/projects/kernel/main.c:180-181",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c:466-500",
+   "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32u5/reset_flags.c:26-42",
+   "/home/nicola/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32U585.svd:6409-6420",
+   "RM0456 sections 7.4.2, 7.6, 7.9 (as cited by round-1 verifiers; not re-read here)",
+   "https://selfcustody.github.io/krux/getting-started/features/tamper-detection/",
+   "Round-1 verdicts: scratchpad/data/verify/IMP-06.json and verify/FI-06.json"
+  ]
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.8,
+  "reason": "The core survives: the two predicates that gate invariant #10 are unpinned, the OEM-lock mask is on the wrong bits, and one production verdict has no action. I confirmed these in code, the SVD and RM0456 Rev 7. Wipe and the on-device OEM key write were correctly dropped (Draft 1.2 C1 at fw-rollback-draft12-candidate-2026-07-21.md:66-72, first-boot-requirements.md R2.1, tz-1 decision at :397-407). All 24 tracked issues exist and are OPEN.\n\nSeveral parts are over-valued or rest on a wrong reading of RM0456, though:\n\n- **SECBOOTADD0 is frozen at RDP-2 regardless of BOOT_LOCK.** RM0456 Rev 7 \u00a77.6.2 (\"Option bytes cannot be programmed nor erased except the SWAP_BANK option bit\") and the OPTWERR list (\"to modify the option bytes, except the SWAP_BANK option bit, when RDP is set to level 2\") say so. Threat (c), the residual \"secure code can still move SECBOOTADD0 at RDP-2\", and the post-lock reach of live defect 1 are therefore wrong. Only SWAP_BANK (and the DUALBANK rule) is at stake post-lock, and tz-1 already checks SWAP_BANK.\n- **OEM keys cannot be written at RDP-2** (RM0456 \u00a77.6.x: OEM1KEY modifiable at RDP 0/0.5/1, OEM2KEY at 0/0.5/1). WRP, OEM locks, BOOT_LOCK and BOR_LEV are all immutable post-lock. Part B's every-boot re-check can only detect a state Phase A already gated, i.e. a Phase A that was fault-skipped. It is an FI tripwire, not a new detector.\n- **An OEM2-key holder regresses RDP under reset before any instruction runs** (RM0456: \"it is not possible to execute instructions when the key is matching\"). No post-lock firmware check stops the actual attack. The Phase-A gate and the user's SWD read are the only effective controls.\n- **Every on-device check runs in flash the RDP-0 transit attacker can rewrite.** They stop only an attacker who alters option bytes but leaves flash genuine. The SWD checklist item in part E is the load-bearing control and should lead the package.\n- **Part E's reset-cause gate is bypassed by the attack it targets.** A voltage glitch presents as BOR, which is classified Cold (secure/src/reset_cause.rs:182-184) and allowed.\n- **The fw_update COMMIT tail check is moot today.** cmd_fw_commit refuses fail-closed (secure/src/nsc/cmd_fw_commit.rs:12-36,192), and erase_slot already erases the whole slot at BEGIN.\n\nFeasibility is fine: no board change, FSBL growth of a few hundred bytes against 4,064 B of headroom in the 32 KiB region, and a tail compare of at most ~0.1 s. No conflict with a recorded decision remains after the drops. The tz-1 decision text itself already names \"OPTR/WRP/SECWM\", so widening the FSBL compare is inside it.",
+  "corrections": "1. **Fix the RM0456 reading.** Delete \"secure code can still move SECBOOTADD0 ... at RDP-2\" from the threat and residual. At RDP-2 only SWAP_BANK remains writable. BOOT_LOCK's post-lock value is locking SWAP_BANK/DUALBANK; pre-lock it locks SECBOOTADD0. The comment in verify_ship_profile (shared/src/lockdown.rs, BOOT_LOCK block: \"a clear BOOT_LOCK also leaves SECBOOTADD0 and SWAP_BANK mutable at RDP-2 (RM0456 \u00a77.4.2)\") carries the same stale claim and should be corrected in the pin commit.\n\n2. **Re-scope part C.** The SECBOOTADD0 secure-world halt is P3 hygiene (FI / option-byte-load-glitch tripwire only).\n   - Pre-lock it must not fire before Phase A. The check at main.rs:1280 runs before ui::init (:1620) and before first_boot (:1630), so a halt there is a blank-screen halt that hides the R5.1 E08xx code. Let Phase A own the pre-lock case and gate the new halt on RDP==L2, two-pass, with a visible code (#835).\n   - Keep the #192 fix and the source-invariant \"verdict whose only effect is secure_log!\" test.\n\n3. **Re-scope part B.**\n   - FSBL leg: keep at P2, justified by the freeze asymmetry. Flipping *_MASK_PINNED does not make it deployable: bench units carry no WRP, BOOT_LOCK or raised BOR, and verify_ship_profile compares against FSBL_LAST_PAGE_FROZEN (page 4) while the linker still occupies pages 0..3 (#540). The FSBL needs an explicit production-profile cfg or a bench/ship split; otherwise every bench board halts.\n   - Secure-world every-boot re-check: demote to optional/P3. The fields are immutable at RDP-2, and Phase A, which lives in the same updatable image, already gated them. Trezor's kernel re-check exists because Trezor repairs option bytes; that rationale does not port.\n\n4. **Part A.**\n   - Land the one-line 18/19 correction now, with a host test bound to the SVD values. It is independent of the silicon ceremony and removes a vacuous-pass trap. The current 26/27 coincide with OPTR nSWBOOT0/nBOOT0 (#46 body; secure/src/hw/dev_dfu.rs:42-43), which is likely where the guess came from.\n   - The positive-detection test must provision an OEM2 key, not only OEM1. OEM2 is what governs the 2\u21921 regression; OEM1 governs 1\u21920.\n   - Keys are 64-bit: write OEM1KEYR1/R2 and OEM2KEYR1/R2 (Trezor option_bytes.c:219-222).\n   - RM0456 Rev 7 is consistent that both keys are modifiable at RDP-0 regardless of the lock bit, and that the lock bit is latched at option-byte load. The factory must OBL or power-cycle before reading NSSR.\n   - The exact compare of nSWBOOT0/nBOOT0 has near-zero post-lock security value: RDP-2 disables system-memory boot, and with TZEN=1 the BOOT0 path leads only to ROM RSS (RM0456 Table 26; no SECBOOTADD1 exists on U5). Treat it as reliability.\n\n5. **Part D.**\n   - Drop or defer the COMMIT tail check to the FA-1/manifest-v6 path.\n   - The claim \"measure the whole slot window\" overstates coverage. The inactive slot, the manifest pages, the page between the manifests and the slot, and the rest of secure bank 1 stay unmeasured; Phase A blank-checks only pages 123-127 (first_boot/mod.rs:201-205).\n   - A tail payload is inert without a control-flow hijack, so this is P2/P3.\n   - The check itself is feasible. The ui-px atlas sits at NS ORIGIN+0x1000, inside the declared length (nonsecure/memory-stm32u585-px.x:21), so it does not collide. Worst-case tail is under 976 KB of compare at HSI16, roughly 0.1 s against 2.9 s of verify; not blocking.\n\n6. **Drop part E's reset-cause gate.**\n   - BOR/glitch is classified Cold and allowed, so the gate misses its target.\n   - A PINRSTF-only reset is classified Unknown (reset_cause.rs:187-190). A user who has just done the documented SWD connect-under-reset verification could be refused until a power cycle.\n   - A hardware-mode IWDG during the indefinite confirm wait would loop.\n\n7. **Promote the user SWD checklist and the #595 factory record to the head of the package** (P1, docs/tooling only). user-device-verification.md has no OEM/NSSR line; line 87 lists option bytes generically. Lead for the ceremony, untested: per RM0456 \u00a77.6.2, at RDP-2 SWD stays alive under reset when an OEM2 key exists and is \"definitively disabled\" otherwise. That would be an external post-lock observable for a planted OEM2 key.\n\n8. **untracked_delta fixes.**\n   - Item 7 (exact OPTR compare, SL9) was carried by #141, which is CLOSED while lockdown.rs:373-379 still says \"handled separately\". That is closed-but-unimplemented drift: reopen or refile.\n   - Item 8 (BOR_LEV) and nBOOT0/nSWBOOT0 are already in #46's body; #248 is tangential for BOR.\n   - The OEM 26/27\u219218/19 fact is genuinely untracked.\n\n9. **Check that came back clean.** dev-dfu's secure-world OPTR write (secure/src/hw/dev_dfu.rs:125) is compile-fenced against production (secure/src/nsc/mod.rs:399-408), so there is no C1 conflict.\n\n10. **Priority split.** P1: the OEM-bit fix, the SWD checklist and factory record, the silicon pin and Phase-A flags. P2: FSBL full-profile compare and FSBL tail check, before #540. P3: SECBOOTADD0 halt, secure-world re-check, log-only-verdict test. Drop: reset-cause gate, COMMIT tail check.",
+  "corrected_priority": "P1",
+  "corrected_cost": "M",
+  "corrected_kind": "mixed",
+  "live_defect": {
+   "is_defect": true,
+   "severity": "low overall; latent-high for the OEM mask if the pin flag is flipped without fixing the bits",
+   "reachable_in_production_config": "Defect 1 is compiled into the shipping feature set, but its mismatch state is not reachable post-lock by an option-byte write (frozen at RDP-2), and pre-lock Phase A halts first. Defect 2 is not reachable while OEM_LOCK_MASK_PINNED=false. Defect 4 is reachable only via a fault-skipped Phase A. Not link-verified: the S-2 fence makes the production image unbuildable.",
+   "evidence": "Defect 1 (SECBOOTADD0 verdict is log-only): CONFIRMED as code, severity lowered to low. secure/src/main.rs:1276-1290 has secure_log! as the only statement; the no-op arm is main.rs:62-64; Makefile:2718 PROD_SHIP_FEATURES has no debug-log. RM0456 Rev 7 freezes SECBOOTADD0 at RDP-2, so the claim that it is 'the only detector for a post-lock FSBL bypass' has no option-byte-write path behind it. Defect 2 (OEM1LOCK/OEM2LOCK on bits 26/27): CONFIRMED latent. shared/src/lockdown.rs:279-280 against STM32U585.svd:6409-6420 (bitOffset 18/19); register FLASH_NS+0x20 at secure/src/hw/flash.rs:478-481 is correct; fail-closed via oem_locks_absent (lockdown.rs:513-514). 'No production first boot can pass Phase A today' is also confirmed: wrp_covers_fsbl is gated on WRP1A_MASK_PINNED=false (lockdown.rs:485-487). Defect 3 (BOOT-06 refutations): CONFIRMED as refuted. Halt loop at main.rs:1251-1259 sits outside the macro; Phase A at first_boot/mod.rs:183-196; reset cause at main.rs:1186. The #192 contradiction is real: the rdp-enforce-halt loop at main.rs:~1267 precedes Phase A at :1630. Defect 4 (no post-lock WRP/OEM/BOOT_LOCK/BOR check): CONFIRMED as fact (fsbl/src/optbytes.rs:66-77 uses verify_confirmed_fields; first_boot/mod.rs:173-175 returns at L2), but 'medium' is overstated. Those fields are immutable at RDP-2 and Phase A gates them pre-burn, so the gap is only detection of a fault-skipped Phase A: low."
+  },
+  "evidence": [
+   "shared/src/lockdown.rs:279-280 (OEM1LOCK=1<<26, OEM2LOCK=1<<27); :291 OEM_LOCK_MASK_PINNED=false; :445 WRP1A_MASK_PINNED=false; :485-487 wrp_covers_fsbl fail-closed; :373-379 SL9 partial mask 'handled separately'",
+   "/home/nicola/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32U585.svd:6409-6420 (FLASH_NSSR OEM1LOCK bitOffset 18, OEM2LOCK 19; 'OEM RDP key read during the OBL is not virgin')",
+   "secure/src/main.rs:62-64 (secure_log! no-op without debug-log); :1240-1259 (post-ALL_DONE RDP halt is real); :1267-1270 (rdp-enforce-halt loop precedes Phase A); :1276-1290 (SECBOOTADD0 branch is log-only); :1186 reset cause; :1630 Phase A call after ui init",
+   "Makefile:2718 PROD_SHIP_FEATURES (mode-production, rdp2-self-lock, no debug-log, no rdp-enforce-halt)",
+   "secure/src/first_boot/mod.rs:173-175 (L2 early return), :183-196 (verify_ship_profile then halt_first_boot), :201-205 (blank check of pages 123-127 only)",
+   "fsbl/src/optbytes.rs:66-88 (confirmed subset, two-pass, read-only); fsbl/src/main.rs:243-252",
+   "RM0456 Rev 7 (/home/nicola/Downloads/rm0456-...pdf) p.~318 \u00a77.6.2 Level 2: 'Option bytes cannot be programmed nor erased except the SWAP_BANK option bit'; with an OEM2 key provided, JTAG/SWD 'remain enabled under reset only' for DBGMCU auth, otherwise 'definitively disabled'",
+   "RM0456 Rev 7 OPTWERR list (p.~300): 'to modify the option bytes, except the SWAP_BANK option bit, when RDP is set to level 2'; 'to modify SECBOOTADD0 option bit while BOOT_LOCK is set'",
+   "RM0456 Rev 7 p.323-324: OEM1KEY modifiable at RDP 0, or 0.5/1 if OEM1LOCK=0; OEM2KEY at RDP 0/0.5, or 1 if OEM2LOCK=0; keys are 64-bit across KEYR1/KEYR2; a 2\u21921 regression with a matching key is 'launched by hardware (it is not possible to execute instructions when the key is matching)'",
+   "RM0456 Rev 7 Table 26 (p.193): with TZEN=1 the alternate boot target is ROM RSS at 0x0FF80000; there is no SECBOOTADD1 on U5",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c:78-88 (OPTR value, BOOT_LOCK in SECBOOTADD0R), :219-222 (four OEM key registers written 0xFFFFFFFF), :247-250 (NSSR OEM lock check)",
+   "secure/src/reset_cause.rs:182-190 (BORRSTF \u2192 Cold; PINRSTF-only \u2192 Unknown)",
+   "secure/src/nsc/cmd_fw_commit.rs:12-36,192 (COMMIT refuses fail-closed)",
+   "nonsecure/memory-stm32u585-px.x:21 (atlas window at ORIGIN+0x1000, inside the NS image); fw-manifest/src/lib.rs:177,180 (slot capacities 464 KiB / 512 KiB)",
+   "secure/src/nsc/mod.rs:399-408 (dev-dfu compile-fenced against mode-production); secure/src/hw/dev_dfu.rs:42-43 (OPTR bits 26/27 are nSWBOOT0/nBOOT0)",
+   "docs/security/fw-rollback-draft12-candidate-2026-07-21.md:66-72 (C1 absolute), :397-407 (tz-1 KEEP: 'read OPTR/WRP/SECWM ... halt ... never write', persistent-mismatch refinement)",
+   "docs/provisioning/first-boot-requirements.md R2.1/R2.6; docs/provisioning/first-boot-provisioning.md:46-50 (factory owns OEM-key finalization); docs/security/user-device-verification.md:87 (generic option-byte row, no OEM/NSSR)",
+   "gh: all 24 listed issues verified OPEN; #141 CLOSED carries SL8/SL9 ('make it an exact masked compare'); #46 body lists nBOOT0/nSWBOOT0 as OPTR bits 27/26 and BOR_LEV[10:8]; no issue matches OEM1LOCK or SECBOOTADD1"
+  ],
+  "tracked_issues": [
+   "#46 OPEN (register-exact option-byte pins; body already covers BOR_LEV[10:8] and nBOOT0/nSWBOOT0, but has no OEM-lock bit positions)",
+   "#270 OPEN (FSBL read-only option-byte verifier)",
+   "#387 OPEN (OEM2KEY deviation / default OEM2 password probe)",
+   "#400 OPEN (bench settlers incl. OEM2-ABSENT, REV-U)",
+   "#595 OPEN (per-unit factory option-byte record)",
+   "#35 OPEN",
+   "#42 OPEN",
+   "#193 OPEN",
+   "#38 OPEN",
+   "#214 OPEN",
+   "#753 OPEN",
+   "#45 OPEN",
+   "#44 OPEN",
+   "#37 OPEN",
+   "#39 OPEN",
+   "#43 OPEN",
+   "#192 OPEN",
+   "#366 OPEN",
+   "#82 OPEN",
+   "#268 OPEN",
+   "#540 OPEN",
+   "#835 OPEN",
+   "#707 OPEN",
+   "#712 OPEN",
+   "#141 CLOSED (SL8 fail-direction + SL9 exact masked OPTR compare; closed while lockdown.rs:373-379 is still a partial mask; missing from the merged list)",
+   "#248 OPEN (TAMP/CSS/PVD supervisor; tangential for BOR)",
+   "#695 OPEN (EVT BOOT0 via SBU; context for the nSWBOOT0/nBOOT0 compare)"
+  ],
+  "untracked_delta": "Genuinely untracked:\n1. OEM1LOCK/OEM2LOCK constants on bits 26/27 instead of FLASH_NSSR 18/19, plus the stale lockdown.rs comment that SECBOOTADD0 is mutable at RDP-2.\n2. The production-silent SECBOOTADD0 verdict and a source-invariant test against log-only verdicts.\n3. Slot-tail 0xFF check in the FSBL (the secure-world mirror is optional).\n4. FSBL full-profile compare needs a ship/bench profile split; this is not in #270's text.\n5. User SWD checklist lines for NSSR 18/19, WRP1AR/WRP2AR, BOOT_LOCK, BOR_LEV, plus the candidate \"SWD dead under reset at RDP-2\" observable for OEM2 absence.\n6. The OEM2 (not only OEM1) positive-detection step, and the 64-bit two-register factory clear.\n\nNot untracked, contrary to the merge:\n- The exact OPTR masked compare is #141 (closed without implementation; reopen).\n- The BOR_LEV and nBOOT0/nSWBOOT0 pins are in #46.\n\nDropped as items: the reset-cause input to Phase A, the COMMIT tail check, and the secure-world every-boot re-check (optional P3 at most).",
+  "decision_conflicts": [
+   "None blocking after the merge's own drops. Wipe and the on-device OEM write were correctly removed under Draft 1.2 C1 and R2.1.",
+   "The new SECBOOTADD0 halt at main.rs:1280 would fire before ui::init and before Phase A. Pre-lock, that conflicts with R5.1/R2.6 (named E08xx fault screen, fail unlocked and diagnosable) and with #835 (silent halt sinks). Gate it on RDP==L2 or route it through Phase A's halt.",
+   "A full-profile FSBL compare, once the pin flags flip, halts every bench board (no WRP/BOOT_LOCK/BOR) and compares page 4 before the #540 cutover. This conflicts with the stated reason tz-1 uses the confirmed subset (fsbl/src/optbytes.rs:24-30) unless a ship/bench split is added.",
+   "Part E's reset-cause refusal can refuse a user who has just done the documented SWD connect-under-reset verification (PINRSTF-only \u2192 Unknown). That is friction against the invariant #10 verification flow; recommend dropping it.",
+   "Sacrificial-silicon work stays owner-deferred. Schedule it with #45/#268; the 18/19 bit fix and the checklist need no silicon."
+  ]
+ }
+}

@@ -1,0 +1,29 @@
+{
+ "id": "SE-09",
+ "title": "Measurement-bound SE release (DICE-style): the FSBL hands a DHUK-sealed digest of the verified active slot to the secure world, and the OPTIGA/SE050 PIN credentials are derived from PIN \u2016 that digest, so a modified secure image cannot obtain either half even after a full MCU compromise",
+ "threat": "Donjon's Safe 3 result: SE pairing-secret possession proves 'access to a secret, not the software running on the microcontroller'; a glitched RDP downgrade or any code execution on the die recomputes DHUK-derived pairing/SCP03 keys and uses the SEs as an unlock oracle (with the PIN). pq1's FSBL fingerprint is a human-checked indicator; nothing cryptographic stops a wrong image from talking to the SEs once it runs in the secure world.",
+ "proposal": "In the WRP-protected FSBL (before RDP-2 freezes it, i.e. part of the shipping image, not a runtime write): after verifying the active slot hash H, compute M = SAES-CMAC(DHUK, 'pqsigner/boot-measure-v1' \u2016 H) and leave M in a TAMP backup register pair that the FSBL then write-locks for the boot (or in a secure-SRAM mailbox the secure image consumes and zeroizes). The secure world folds M into the SE-02 credential KDFs: OPTIGA AuthRef secret = SAES-CMAC(DHUK, PIN \u2016 M), SE050 UserID = SAES-CMAC(DHUK, PIN \u2016 M). An image with a different H derives wrong credentials \u2192 both SEs refuse \u2192 attempts are consumed, nothing is released. A legitimate firmware update becomes a journaled credential migration run by the OLD image before reboot (re-provision F1D0 and re-key the UserID under the new H, Trezor-style idempotent/resumable), extending the existing page-127 journal and the authenticate-before-rotate proof object.",
+ "rationale": "This is Tillitis' CDI = H(UDS, app) binding and Trezor's 'bootloader decides which SE credentials the next stage may see' (vtrust/secret_prepare_fw), realised with pq1's existing primitives (FSBL measurement, SAES-DHUK, TAMP BKP latch already proven for BHK). It turns invariant #10's boot-time fingerprint from an indicator into a cryptographic gate enforced by the SEs themselves, which is the strongest available answer to 'malicious firmware/hardware on the MCU side' short of a certified SE running the wallet. It is the one item here that would put pq1 beyond both Ledger and Trezor on this surface.",
+ "repo_evidence": [
+  "fsbl/src/branch.rs:18-24 \u2014 the FSBL scrubs every register at handoff and passes no measurement to the secure image",
+  "secure/src/measured_boot.rs:32-40,154-156 \u2014 the secure world re-hashes independently; the FSBL row and the S-world row are compared by a human, not consumed by any KDF",
+  "secure/src/hw/secret_keys.rs:119-176 \u2014 DHUK SAES-CMAC KDF exists; no measurement input",
+  "secure/src/optiga/mod.rs:916-918 derive_pin_secret has no image binding; secure/src/se050/apdu.rs:800-814 raw PIN",
+  "secure/src/first_boot/journal.rs / state.rs \u2014 journaled, resumable rotation machinery reusable for the update-time migration",
+  "Invariant #10 open gates (#540 geometry cutover, F15 FI-hardened FSBL verify) \u2014 prerequisites"
+ ],
+ "vendor_precedent": "Tillitis TKey (CDI = blake2s(UDS, H(app), USS)); Trezor core/embed/projects/bootloader/fw_check.c:233-241 + core/embed/sec/secret/stm32u5/secret.c:598-651 (vtrust-gated secret slots before jump, HDP close); Trezor storage_salt.c:36-56 (fw_type mixed into the KEK salt).",
+ "novelty": "beyond",
+ "kind": "mixed",
+ "cost": "XL",
+ "priority": "P2",
+ "risks": "FSBL flash/stack budget is the known NO-GO class (A/B rollback review) \u2014 adds a SAES-CMAC and a BKP write to a 40 KiB frozen region that cannot be patched after RDP-2, so it must be right the first time and FI-hardened (F15); every firmware update now carries a credential migration that can brick on power cut (journal + authenticate-before-rotate + silicon receipts required, same gate set as #268/#76); the BKP handoff register must be unreadable/unwritable by later S-world code or NS (TAMP secure-zone config #50 is a prerequisite); does not help if the FSBL itself is glitched into accepting a bad hash (F15 remains the floor); explicitly NOT a runtime write to the FSBL range.",
+ "sources": [
+  "https://dev.tillitis.se/intro/",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/fw_check.c:233-241",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c:598-651",
+  "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+  "https://www.ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security"
+ ],
+ "surface": "se"
+}

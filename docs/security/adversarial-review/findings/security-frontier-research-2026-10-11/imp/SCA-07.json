@@ -1,0 +1,25 @@
+{
+ "id": "SCA-07",
+ "title": "Consumption mask: GPDMA-fed TRNG sample table, a real load on the mask pin, and a measured dilution figure (close #831/#646 on the way)",
+ "threat": "The production fence forces the mask on, yet neither board drives a load from the mask pin (pq1 PA6 is NC), the duty is stepped by the CPU once per SysTick from an xorshift32 whose reseed fails open and is biased away from signing windows (#831) \u2014 so the only CPA/DPA noise source the firmware claims is unmeasured and physically doubtful.",
+ "proposal": "(a) Hardware (EVT): populate a load on PA6 (series resistor to GND sized for a few mA, or tie the TIM3_CH1 output to the existing backlight/LED driver enable) so duty changes actually modulate die/rail current; (b) firmware: port Trezor's GPDMA circular linked-list (119 TRNG samples, secure+privileged channel, TIM3_UP request -> CCR1) so the mask pattern changes at ~10 kHz with zero CPU involvement and is uncorrelated with code; refill the table from the TRNG at sign start/end and per display refresh; make the reseed fail-closed with a counter (the #831 fix); (c) measure: capture a sign with the mask off vs on (Rigol, \u00a713.1) and report SNR/t-statistic reduction in evt-silicon-validation.md \u00a79 \u2014 convert 'satisfied-by-construction' into a number.",
+ "rationale": "Trezor's DMA design decouples the mask from firmware activity; pq1's SysTick-stepped design is correlated with the 1 ms cadence and gives ~1 kHz of entropy. More importantly nobody has measured either vendor's mask, so a measured figure is a differentiator. If the measurement shows no dilution, the honest outcome is to stop presenting the mask as a load-bearing CPA/DPA defence (README.md:233 vs nsc/mod.rs fence text disagree today).",
+ "repo_evidence": [
+  "secure/src/hw/consumption_mask.rs:13-20 ('A full DMA port is a follow-up'; CPU-driven randomize())",
+  "docs/hardware/evt-silicon-validation.md:757-764 (PA6 free/NC; mask only repointed), \u00a79 (dilution unmeasured)",
+  "secure/src/hw/consumption_mask.rs:44-60 (header: no load on either board)",
+  "issues #831 (reseed fail-open, OPEN), #646",
+  "docs/security/red-teaming.md:692-700 and README.md:88,261,417 (stale: 'seeded from rng_strong', 'TIM2 CH1 PA5' for pq1)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:26-37,82-142 (119-sample GPDMA linked list, rng_get() per sample, re-randomised after every display refresh; only on T2B1/T3B1 models) (per inventory B). Neither vendor documents the external load or a measured dilution.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "A load on PA6 is a BOM/EVT change and costs power; a PWM into a resistive load only modulates rail current, not core switching noise, so dilution may be small \u2014 the measurement may legitimately conclude the mask is cosmetic. GPDMA channel must be SEC|PRIV and its SRAM table in secure SRAM; TIM3 is already secured in sau.rs. The DMA table itself is a secret-independent trace feature an attacker can subtract if the TRNG refill cadence is too slow.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/consumption_mask/stm32u5/consumption_mask.c",
+  "docs/hardware/evt-silicon-validation.md \u00a79"
+ ],
+ "surface": "sca"
+}

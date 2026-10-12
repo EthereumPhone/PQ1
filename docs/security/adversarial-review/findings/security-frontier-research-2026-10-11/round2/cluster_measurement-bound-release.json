@@ -1,0 +1,200 @@
+{
+ "merge": {
+  "cluster": "measurement-bound-release",
+  "title": "Measurement-bound secret release: drop. HDP makes it constructible, but the gain is one extra FSBL fault at XL cost; fold the HDP hygiene into #39",
+  "threat": "A secure-world image other than the vendor-signed one runs on a provisioned die (glitched FSBL verify, RDP regression, signed-malicious update, pre-sale implant) and recomputes the DHUK/BHK-rooted SE tunnel credentials (OPTIGA PBS, SE050 SCP03/admin). Possession of the die proves nothing about the running code (the Donjon Safe 3 lesson). On pq1 this buys the attacker the tunnel keys, not the seed: both halves stay PIN-gated in SE silicon.",
+  "proposal": "Do NOT build measurement-bound release. One salvage item goes to an existing issue.\n\n1. The four CMAC_DHUK(public H) members are unsound and stay dead.\n- Any secure image can select KEYSEL=DHUK (secure/src/hw/secret_keys.rs:175-200) and compute the value for the genuine, public H.\n- SE-09 inherits the kill even though the FSBL computes M: the slot can compute the same M.\n- BOOT-03's \"old image re-wraps under the new manifest hash\" only works because the seal is forgeable.\n\n2. HDP makes a sound construction possible, but it is not worth building.\n- Shape: S_hdp lives in an HDP page. The FSBL computes seal = HMAC-SHA256(S_hdp, H_active), using the SHA core it already has, plus a directional transfer key xfer = HMAC(S_hdp, 'x' || H_from || H_to) over the two slots it already measures. It scrubs its stack, sets HDP1_ACCDIS, and branches.\n- Update: the old image encrypts the protected key K under xfer(old->new). The new image receives the same xfer and re-wraps under seal(new). The FSBL needs no flash write and no TRNG.\n- The FSBL must never hand forward seal(other slot) or act as a seal oracle. Either lets a malicious image obtain seal(genuine).\n- Where it helps: only against an attacker who (a) can write a secure slot on a provisioned RDP-2 die, (b) gets past the FSBL signature and hash gates, and (c) never has code execution inside the genuine image. Against that attacker it adds one more required fault (the ACCDIS store or the blank-page check).\n- Why that is thin: the FSBL image-hash gate is already double-evaluated with sentinels (fsbl/src/verify.rs:80-110), and its FI sweep is tracked in #591. An attacker who obtained the write primitive through a runtime exploit in the genuine image already holds K in SRAM and can write the xfer blob himself.\n- Cases it does not touch: a pre-sale implant (sealed as genuine at first boot), a vendor-signed malicious update the user confirms (migrated by design), and a debug-capable RDP-regressed die (halt before ACCDIS, read S_hdp).\n\n3. Cost of the sound version on pq1.\n- Geometry: HDP1 is contiguous from SECWM1_PSTRT (page 0). The secret page must therefore be page 5, which is Manifest A and runtime-written (geometry/src/lib.rs:124-125). #758 already shows no free page exists, so this is a frozen-registry change.\n- Code placement: if ACCDIS also denies instruction fetch, the FSBL at pages 0..4 inside HDP cannot execute the instruction after its own ACCDIS write. It needs an SRAM or out-of-HDP WRP'd trampoline, or the Trezor layout (secret pages 0..1, boot code at page 2, SECBOOTADD0 moved).\n- Provisioning: the FSBL has no TRNG (fsbl/src/fi.rs:26) and no flash-program path. S_hdp would have to be written by the first-boot secure image with HDP left open on a blank page (a single-fault target) or by the factory (contradicts \"no factory-held final secret\").\n- Irreversibility: everything freezes at RDP-2 and can never be patched.\n- Availability: every update gains a brick window on top of the open #712/#707 gates.\n\n4. Salvage: fold into #39/#43/#214 as comments, not a new item.\n- #39 asks for HDP1 \"covering the FSBL\", yet the FSBL holds no secret (only the public vendor key). Decide what #39 is hiding before spending the irreversible option byte.\n- Record the trampoline requirement and the page-5 collision on #39.\n- BOOT-08's \"hide pages 126/127\" cannot be done in place and buys almost nothing. After BHKLOCK any secure code can still use KEYSEL=BHK in-session, and the page-126 blob is DHUK-wrapped anyway.\n\n5. Doc correction. docs/security/vendor-signing-key-compromise.md:459-462 says \"There is no hardware measurement latch on STM32U585\". That is imprecise: HDP+ACCDIS is a deny-until-reset latch. The do-not-resurface verdict stands, but its stated reason should become \"HDP could provide it; declined on value/cost per this analysis\".",
+  "members": [
+   {
+    "id": "IMP-08",
+    "disposition": "dropped",
+    "note": "Round-1 refuted and re-confirmed. wrap_ctx = CMAC_DHUK(label || H_img || salt) is computable by any secure image for the public genuine H; the FSBL-to-slot mailbox is irrelevant. Also on the do-not-resurface list (vendor-signing-key-compromise.md:459) and against postmortem section 4. Its SE050-UserID variant fails the same way. No part kept."
+   },
+   {
+    "id": "FI-08",
+    "disposition": "dropped",
+    "note": "Round-1 refuted. The secure world measures itself and proves M to the SEs with a DHUK/BHK-derived key, so the image under attack supplies the expected M. Adds SE objects to the S-1/S-2/S-3 LcsO ceremony. Its side item, a companion-facing C10 MCU attestation, is a different idea and belongs under #249, not in this cluster."
+   },
+   {
+    "id": "BOOT-03",
+    "disposition": "dropped",
+    "note": "No round-1 file; verified here. Evidence is accurate: fsbl/src/branch.rs:38-98 hands off only MSP and reset vector, and secure_digest is used only by render_fingerprint (fsbl/src/main.rs:220,286). The construction SAES-CMAC(DHUK, 'pq1-seal-v1' || secure_digest) is the same forgeable form. Its repo_evidence misreads vendor-signing-key-compromise.md:459 as 'a current property, not a decision against it'; that line sits under the heading 'Additions to the do-not-resurface list'. The third XOR share would rewrite seed material on every update (invariant #1 adjacent). The P0 'decide before #540' urgency is void because there is nothing sound to reserve FSBL bytes for. Vendor claim checked: Trezor does not seal to a measurement."
+   },
+   {
+    "id": "SE-09",
+    "disposition": "dropped",
+    "note": "No round-1 file; verified here. M = SAES-CMAC(DHUK, label || H) computed in the FSBL is still recomputable by the slot (same DHUK, public H), so the TAMP-BKP or SRAM mailbox protects nothing. Folding M into the OPTIGA AuthRef / SE050 UserID credentials means re-provisioning F1D0 and the UserID on every firmware update, which is the irreversible S-1 LcsO class plus a PIN-credential brick window. derive_pin_secret (secure/src/optiga/mod.rs:916-918) and the raw-PIN VerifySessionUserID (secure/src/se050/apdu.rs:795-816) are as cited. Trezor precedent is misdescribed: storage_salt.c mixes vhdr.fw_type, a signature-class tag, not a measurement; fw_check.c:233-241 gates on vtrust bits."
+   },
+   {
+    "id": "BOOT-08",
+    "disposition": "modified",
+    "note": "No round-1 file; verified here. True: no HDP use in secure/ or fsbl/; page 126 stays readable after load_and_lock (secure/src/main.rs:1483-1540); pages 126/127 sit at the end of bank 1 (geometry/src/lib.rs:133-134). As written it is infeasible: HDP1 is contiguous from the SECWM1 start, the proposed 'pages 5..6 spare' are ManifestA/ManifestB, and HDP2 over bank-2 low pages collides with the bank-2 FSBL copy and NS slot A. Value is near nil on pq1: the blob is DHUK-wrapped and BHK stays usable through SAES by any secure code. Trezor precedent is real (option_bytes.c:66-95, secret.c:170-173, 598-651), but Trezor needs it because it runs unofficial firmware; pq1 does not. Kept only as comments on #39/#43/#214; not a P1."
+   }
+  ],
+  "dropped_parts": [
+   "CMAC_DHUK / SAES-CMAC(DHUK, H) seal in any form (IMP-08, BOOT-03, SE-09): forgeable by any secure image, since DHUK has no per-stage lock on U5 and H is public.",
+   "Secure-world self-measurement presented to the SEs (FI-08): the measured code is the prover.",
+   "FSBL-to-slot digest mailbox via typed SRAM block or TAMP BKP register (IMP-08, BOOT-03, SE-09): carries a public value and adds nothing without an FSBL-only secret.",
+   "Third XOR entropy share KDF(seal_key) (BOOT-03): rewrites seed-reconstruction material on every update; invariant #1 adjacent; brick equals forced 24-word restore.",
+   "PIN credential = CMAC(DHUK, PIN || M) with per-update F1D0/UserID re-provisioning (SE-09): lands in the irreversible OPTIGA S-1 LcsO class, deferred by design.",
+   "SE-side sealed M0 objects / SCP03 session keys derived from M (FI-08): adds objects and policies to the open S-1/S-2/S-3 ceremony for no soundness gain.",
+   "Old-image re-wrap under the new manifest's signed hash (IMP-08, BOOT-03): only possible because the seal is forgeable; under HDP the old image cannot compute seal(new).",
+   "HDP-hide pages 126/127 in place, or relocate them to 'spare' pages 5..6 or HDP2 bank-2 low pages (BOOT-08): no spare pages; HDP must start at page 0; ACCDIS would also block the updater's manifest writes.",
+   "The sound HDP redesign itself (S_hdp + seal + xfer key): not built. Marginal gain is one extra FSBL fault, against a registry change, irreversible option bytes, an S_hdp provisioning single-fault target, and a new update brick class.",
+   "BOOT-03's P0 'owner decision before #540 cutover': void, nothing sound to reserve."
+  ],
+  "tracked_issues": [
+   "#39 (OPEN, ship-blocker, priority:critical): HDP1EN + HDP1_PEND covering the FSBL, ACCDIS at boot-exit. Carries all of BOOT-08's parity content.",
+   "#43 (OPEN, ship-blocker): mirror HDP2 + SECWM2 over the bank-2 FSBL range.",
+   "#214 (OPEN): BOOT_LOCK + HDP1EN boot-verify, blocked on bench polarity confirmation (secure/src/hw/flash.rs:74-79).",
+   "#46 (OPEN): pin register-exact option-byte values in the read-back verifier.",
+   "#595 (OPEN): per-unit option-byte record in prodtest.",
+   "#141 (CLOSED): 'HDP-protected BHK' claimed as current while the ship profile has HDP1EN=0; doc drift fixed.",
+   "#486 (OPEN): vendor signing-key compromise note; hosts the 'no measurement-bound secrets' do-not-resurface entry.",
+   "#591 (OPEN): rainbow FI sweeps for fsbl::verify_images and cmd_fw_commit. This is the direct control for the glitched-verify threat.",
+   "#633 (OPEN): FI sweep over the fw-update staging window.",
+   "#401 (OPEN): RDP-2 offensive downgrade campaign.",
+   "#758 (OPEN) / #540 (OPEN) / #752 (OPEN): FSBL 5th-page cutover and frozen registry; no free page next to the FSBL.",
+   "#712 (OPEN) / #707 (OPEN): BHK first-boot stranding and mass-erase unrecoverability; any re-seal journal would aggravate both.",
+   "#249 (OPEN): supply-chain attestation manifest; home for FI-08's companion-facing C10 MCU attestation side item."
+  ],
+  "untracked_delta": "No new issue for measurement-bound release. Three small untracked items, all comments or doc edits.\n\n1. Comment on #39.\n- If HDP1 covers pages 0..4 and ACCDIS denies instruction fetch, the FSBL cannot run the instruction after its own ACCDIS write. An SRAM or out-of-HDP WRP'd trampoline is needed (ST TF-M's BL2 keeps its jump code outside HDP), or the Trezor layout: T3T1/T3W1 memory.h puts the secret sector at pages 0..1 and the boardloader at page 2, with a _Static_assert that SECRET_SECTOR_START == 0.\n- HDP1 cannot extend past page 4 without hiding and write-blocking Manifest A/B.\n- The FSBL holds no secret today, so #39 currently hides only public code. State what the option byte buys before burning it.\n\n2. Doc edit: amend vendor-signing-key-compromise.md:459-462 so the stated reason is accurate (HDP is a latch; the idea is declined on value and cost).\n\n3. Decision record: note on #39 or #752 that draft-v2.md:72 (\"HDP1EN=HDP2EN=0, chosen deliberately\") comes from a rejected v7 draft and contradicts #39.",
+  "decision_conflicts": [
+   "docs/security/vendor-signing-key-compromise.md:457-465 lists 'No measurement-bound secrets, in any form' as do-not-resurface. All five members collide with it; the four DHUK-seal members fail on its exact argument.",
+   "docs/secure-elements/optiga-brick-postmortem.md:192-210 (section 4) plus the memory instruction in project_optiga_brick.md: firmware_hash was deliberately removed from SE wrap keys ('security theatre that armed a reliability bomb').",
+   "secure/src/optiga/mod.rs:787-798: PBS made deliberately independent of measured_boot::firmware_hash.",
+   "Internal conflict to surface to the owner: flash-geometry-v7 draft-v2.md:72 says HDP1EN=HDP2EN=0 'chosen deliberately', but that draft is rejected (#752), while #39 is an open critical ship-blocker requiring HDP1. production-security.md:521-528 and threat-model.md:652 call HDP 'deferred'. No ratified HDP decision exists.",
+   "Frozen geometry registry (pqsigner-geometry, geometry/src/lib.rs:122-139, Draft 1.1 freeze): an HDP secret page next to the FSBL needs a registry change and an owner stage decision.",
+   "Invariant #10: a writable page inside HDP1 is not strictly an FSBL-range write (WRP covers only 0..4), but it would make the frozen FSBL depend on mutable state and would need FSBL logic that can never be patched.",
+   "A/B rollback review (FSBL size and boot budget is the NO-GO) and #758: FSBL headroom after cutover is 10,408 B and already earmarked for #591.",
+   "Shipping model ('no factory-held final pairing secret'; RDP-0 SWD verification against the reproducible image with defined padding): rules out factory-written S_hdp.",
+   "OPTIGA S-1/S-2/S-3 deferred by design (memory feedback_optiga_shipblockers_deferred): SE-09 and FI-08 add per-update SE re-provisioning to that ceremony.",
+   "Keep-BHK decision (feedback_keep_bhk_se050_axis): BOOT-03/IMP-08 would change the page-126 wrap context; #712 lifecycle comes first."
+  ],
+  "hardware_asks": [],
+  "prerequisites": [
+   "None for the drop.",
+   "For the #39 comments: bench confirmation of HDP1EN polarity and ACCDIS semantics on a sacrificial U585 (read, write, erase and instruction fetch after ACCDIS). #214 is already blocked on this.",
+   "If the owner ever reopens the sound variant, all of these must close before RDP-2 freeze: the #540/#758 geometry cutover; an owner-approved registry change for a secret page; #591 FSBL FI evidence; #712/#707; and explicit supersession of vendor-signing-key-compromise.md:459 and postmortem section 4."
+  ],
+  "precedent": "- Trezor (T3T1/T3W1, STM32U5) ships HDP over a secret sector at pages 0..1 with boot code outside it: core/embed/sec/option_bytes/stm32u5/option_bytes.c:66-95 and core/embed/models/T3T1/memory.h:27-41.\n- Trezor's bootloader closes HDP unconditionally before handoff: secret.c:170-173, 598-651; called from core/embed/projects/bootloader/main.c:430.\n- Trezor's gating is by signature class, not measurement: vtrust bits (fw_check.c:233-241) and vhdr.fw_type in the storage salt (core/embed/sec/storage/stm32u5/storage_salt.c:38-45).\n- Tillitis TKey ships a true measured CDI (UDS latched away from the app; no persistent storage; no update migration problem).\n- No vendor found (Trezor, Ledger) seals wallet secrets to a firmware measurement with persistent state and updates.",
+  "novelty": "beyond",
+  "kind": "mixed",
+  "cost": "XL",
+  "priority": "drop",
+  "rationale": "A seal the running image can re-derive is forgeable. A seal it cannot re-derive needs an FSBL-only secret (HDP) and an FSBL-mediated update handover.\n\nThe handover can be made sound with a directional transfer key. Even so, it covers only an attacker who can write a secure slot on a locked die, never executes inside the genuine image, and can fault the FSBL gates but not one more store. That attacker is already addressed more cheaply by the double-evaluated hash gate (fsbl/src/verify.rs) and #591.\n\nAgainst that sit a frozen-registry change, irreversible option bytes, unpatchable FSBL logic, a single-fault provisioning branch, and a new update brick class on top of #712/#707. Recorded decisions (postmortem section 4, the do-not-resurface list) point the same way, although their stated reason needs correcting.\n\nCost, kind and novelty describe the sound variant had it been built.\n\nNot checked: the claim that ACCDIS denies instruction fetch and erase is recalled from RM0456 and ST TF-M. It was not confirmed in this repo or on silicon; the repo itself calls HDP1 polarity doc-ambiguous (flash.rs:74-79, #214). The DHUK value across the RDP-1 to RDP-2 transition is also unmeasured (red-teaming.md row DHUK-RDP12).",
+  "live_defects": [
+   {
+    "what": "Doc claim is imprecise: 'There is no hardware measurement latch on STM32U585 \u2014 no PCR, no DICE CDI engine, no SAES measurement register' is used as the reason to foreclose measurement binding. HDP + HDPx_ACCDIS is a deny-until-reset latch that Trezor uses on the same MCU family.",
+    "evidence": "docs/security/vendor-signing-key-compromise.md:459-462 versus trezor-firmware core/embed/sec/secret/stm32u5/secret.c:170-173 and option_bytes.c:93-95",
+    "severity": "low (documentation reasoning; the conclusion stands)",
+    "reachable_in_production_config": "n/a (documentation)"
+   },
+   {
+    "what": "#39 as specified (HDP1 covering the FSBL, ACCDIS engaged at boot-exit, FSBL self-reads a verification value AFTER engaging HDP) is likely unimplementable as worded. The FSBL executes from pages 0..4 inside the area it would hide, and it has no secret to hide. The adjacent pages 5/6 are runtime-written manifests, so the extent cannot grow.",
+    "evidence": "gh issue #39 body; geometry/src/lib.rs:123-125; fsbl/src/branch.rs:38-98 (branch executes from FSBL flash); Trezor layout core/embed/models/T3T1/memory.h:27-41 with _Static_assert SECRET_SECTOR_START == 0 (option_bytes.c:66)",
+    "severity": "medium (design defect in an open critical ship-blocker; nothing shipped)",
+    "reachable_in_production_config": "Not in code: no HDP write exists in secure/ or fsbl/. It becomes live when #39 is implemented."
+   },
+   {
+    "what": "Contradictory HDP posture across records: a rejected v7 draft says HDP1EN=HDP2EN=0 'chosen deliberately'; #39 and #43 are open ship-blockers requiring HDP; production-security and threat-model say 'deferred'.",
+    "evidence": "docs/security/adversarial-review/findings/flash-geometry-v7-2026-09-24/draft-v2.md:72; gh #39, #43, #752; docs/security/production-security.md:521-528; docs/security/threat-model.md:652",
+    "severity": "low (process; must be resolved before the irreversible RDP-2 freeze)",
+    "reachable_in_production_config": "n/a (decision record)"
+   }
+  ],
+  "repo_evidence": [
+   "secure/src/hw/secret_keys.rs:145-200: derive_into / derive_into_saes_kdf use SAES-CMAC under KeySel::Dhuk, callable by any secure-world code, with no measurement input",
+   "fsbl/src/branch.rs:38-98: handoff carries only MSP and reset vector; GPRs are scrubbed, SRAM/stack is not",
+   "fsbl/src/main.rs:220,286,299: secure_digest is used only for render_fingerprint before into_slot",
+   "fsbl/src/verify.rs:80-110: F15 double-evaluated sentinel gate on the image-hash equality is already in code",
+   "fsbl/src/fi.rs:26-31: the FSBL has no TRNG; no flash program/erase path found in fsbl/src",
+   "geometry/src/lib.rs:122-139: FSBL pages 0..4, ManifestA page 5, ManifestB page 6, WrappedBhk 126, FirstBootJournal 127; bank-2 FSBL 0..4, NS slot A from page 5",
+   "secure/src/main.rs:256-276: measured_boot is compiled out under mode-production (owner decision 2026-09-28)",
+   "secure/src/main.rs:1483-1540: BHK load_and_lock; page 126 is not hidden afterwards",
+   "secure/src/hw/flash.rs:74-79: HDP1 polarity is doc-ambiguous, pending bench confirmation",
+   "secure/src/hw/saes.rs:346-347 and memory project_dhuk_per_die_validated: DHUK is an ST constant at RDP0 and per-die at RDP>=1",
+   "secure/src/optiga/mod.rs:916-918 and secure/src/se050/apdu.rs:795-816: PIN credential paths have no image binding (as SE-09 cited)",
+   "docs/security/vendor-signing-key-compromise.md:457-465; docs/secure-elements/optiga-brick-postmortem.md:192-210",
+   "docs/security/production-security.md:521-528; docs/security/adversarial-review/silicon-lockdown-adversarial-review.md:51 (SL7 iii)",
+   "trezor-firmware core/embed/sec/option_bytes/stm32u5/option_bytes.c:66-95; core/embed/sec/secret/stm32u5/secret.c:170-173,598-651; core/embed/models/T3T1/memory.h:27-41; core/embed/projects/bootloader/fw_check.c:233-241; core/embed/sec/storage/stm32u5/storage_salt.c:38-45"
+  ],
+  "residual_after": "Dropping this leaves the current residuals unchanged.\n\n- Any code executing in the secure world on a provisioned die at RDP>=1 can derive the PBS and SCP03/admin credentials (DHUK, plus BHK through SAES) and talk to both SEs. It still needs the PIN, bounded by SE-enforced counters, to obtain either half.\n- A glitch past the FSBL signature and hash gates runs an arbitrary slot image. This needs a prior flash-write primitive and roughly two faults per boot. #591 covers the evidence and #401 covers the RDP-2 downgrade campaign.\n- A vendor-signed malicious update confirmed under PIN is fully trusted (#486).\n- A pre-sale implant is caught only by the RDP-0 SWD check and the FSBL fingerprint window.\n- A die regressed to RDP0 loses the per-die DHUK (ST constant), so page 126 and the PBS stay protected by that alone.\n\nEven if the HDP variant were built, the attacker would still have:\n- one skip on the ACCDIS store or the blank-page branch exposing S_hdp;\n- S_hdp remanence on the FSBL stack unless SRAM is scrubbed;\n- debug-halt before ACCDIS on a debug-capable regressed die;\n- a genuine-image runtime exploit, which holds K and can author the transfer blob;\n- phishing the PIN on a fake screen.",
+  "sources": [
+   "file:///home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c",
+   "file:///home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+   "file:///home/nicola/repos/trezor-firmware/core/embed/models/T3T1/memory.h",
+   "file:///home/nicola/repos/trezor-firmware/core/embed/sec/storage/stm32u5/storage_salt.c",
+   "https://dev.tillitis.se/intro/",
+   "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+   "RM0456 (STM32U5 reference manual), FLASH SECWMxR2 / SECHDPCR HDP sections: cited from memory and repo notes (docs/archive/production-todo-retired-2026-07-19.md:704), not re-read in this run"
+  ]
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.8,
+  "reason": "The core recommendation survives: drop measurement-bound release and fold the HDP hygiene into #39/#43/#214. I re-read the cited code and docs, and none of the four attack axes breaks it.\n\n**Bypass.** The four DHUK-seal members are forgeable as stated.\n- `secure/src/hw/secret_keys.rs:176-200` runs SAES-CMAC under `KeySel::Dhuk` from ordinary secure-world code, with no measurement input.\n- `fsbl/src/branch.rs:39-98` hands the slot only MSP and the reset vector.\n- `fsbl/src/main.rs:220,286,299` uses `secure_digest` only for `render_fingerprint` before `into_slot`.\n- So any slot image can recompute CMAC_DHUK over the public genuine hash. This is the postmortem section 4 argument (`docs/secure-elements/optiga-brick-postmortem.md:206-208`).\n\n**The sound HDP variant.** It needs an FSBL-only secret, and the attacker class it addresses is thin.\n- `secure/src/nsc/cmd_fw_chunk.rs:39` requires `pin_verified` before any staging write. Writing a secure slot on a locked die without code execution in the genuine image therefore needs the PIN.\n- An attacker with the PIN and the device can already drain through the genuine image.\n- The real gain is narrow: a non-genuine image could not turn a known PIN into the two entropy halves (seed exfiltration rather than drain).\n- The recommendation's discount still holds, since an attacker able to fault the F15 hash gate (`fsbl/src/verify.rs:88-108`) can plausibly fault one more store.\n\n**Feasibility.** The geometry and FSBL facts check out, with one over-statement (see corrections).\n- `geometry/src/lib.rs:122-139`: FSBL pages 0..4, Manifest A page 5, Manifest B page 6, WrappedBhk 126, FirstBootJournal 127; bank 2 has FSBL 0..4 and NS slot A from page 5.\n- `fsbl/src/fi.rs:26-31`: `rng_byte()` returns a fixed 0x42; the FSBL has no TRNG.\n- `grep -i hdp` over `secure/src`, `fsbl/src` and `geometry/src` finds only the comment at `secure/src/hw/flash.rs:74-79`. No HDP write exists.\n\n**Tracked issues.** Every listed issue exists in the stated state; four relevant ones are missing (see corrections).\n\n**Decision conflicts.** All cited records read as described.\n- `docs/security/vendor-signing-key-compromise.md:457-465` is the do-not-resurface entry.\n- `secure/src/optiga/mod.rs:787-798` records the PBS being decoupled from `measured_boot::firmware_hash`.\n- `secure/src/main.rs:256-276` gates `measured_boot` out under `mode-production`.\n\n**Trezor precedent.** Verified in `/home/nicola/repos/trezor-firmware`.\n- `core/embed/models/T3T1/memory.h:28-41`: secret sector at pages 0..1, boardloader at pages 2..7, outside HDP.\n- `core/embed/sec/option_bytes/stm32u5/option_bytes.c:66-69,93-95`: the static assert and the HDP1 extent.\n- `core/embed/sec/secret/stm32u5/secret.c:170-173,598-651`: ACCDIS is set unconditionally, called from `core/embed/projects/bootloader/main.c:430`.\n- `fw_check.c:233-241` and `storage_salt.c:38-45`: gating is by vtrust bits and `fw_type`, not by a measurement.\n\nNot verified: silicon behaviour of ACCDIS and the DHUK value across the RDP-1 to RDP-2 transition. The codex MCP server failed to connect, so no independent-model cross-check was run.",
+  "corrections": "None of these flips the verdict.\n\n1. **\"The FSBL has no flash-program path\" is wrong as written.** `fsbl/src/marker.rs:51,256-276` programs flash through SECCR/PG under the `stage-marker` feature (`fsbl/Cargo.toml:72`, `fsbl/src/main.rs:95-96`). `Makefile:2317-2326` says it is not default precisely because invariant #10 forbids that path in a shipping image. Reword to \"none in the shipping FSBL; bench `stage-marker` has one\".\n\n2. **\"The secret page must therefore be page 5\" is over-stated.**\n   - After the #540 cutover the FSBL physical span is 30,552 B, so page 4 is essentially empty (#758). A secret page could be page 4, with WRP shrunk to 0..3.\n   - That still needs a frozen-registry change, gives back the headroom #758 earmarks for #591, and puts a mutable page in the WRP/SWD-verified range (invariant #10 and the shipping model).\n   - \"No free page exists\" is also loose: bank-2 page 127 is `ReservedErased` (`geometry/src/lib.rs:138`). It is unusable here because HDP2 must start at the SECWM2 start, which is the bank-2 FSBL copy per #43.\n   - The conclusion (registry change plus owner decision) is unchanged.\n\n3. **Live defect 2 is over-rated; restate it as an under-specification.**\n   - #39 is not unimplementable as worded. HDP over boot code with an exit stub outside HDP is ST's standard pattern.\n   - The \"self-read\" is a denial self-test, not a contradiction: `docs/provisioning/provisioning-reference.md:117` (M-6) says the FSBL reads back a verification value and halts if the read is not denied.\n   - The real gap is that neither #39 nor M-6 says where the code that runs after the ACCDIS write lives.\n   - The hazard is partly recorded already, but not on #39: `docs/security/adversarial-review/findings/flash-geometry-v7-2026-09-24/draft-v1.md:154` and `astra-round-1.md:136`.\n   - Severity is low to medium as a spec gap, and there is no executable defect.\n\n4. **ACCDIS semantics have in-repo support.** `astra-round-0-capacity-options.md:54` states that ACCDIS denies instruction fetches, reads, writes and erases until reset. That is an external-model statement, not silicon evidence. The prerequisite for a sacrificial-part confirmation stands.\n\n5. **Live defect 1: restate what is wrong.** The sentence at `vendor-signing-key-compromise.md:459-462` is literally true, since HDP is not a PCR, CDI or measurement register. What fails is \"in any form\". Its premise is that the binding is computed by the measured code, and an FSBL-computed binding over an HDP-hidden secret breaks that premise. The edit should add \"HDP+ACCDIS gives temporal isolation from which a software DICE could be built; declined on value and cost\", not call the existing sentence false.\n\n6. **`residual_after` over-credits the fingerprint window.** #705 (OPEN) says the pq1 FSBL cannot light the panel, so the boot fingerprint is invisible on a sealed unit. `secure/src/main.rs:256-276` also removes the secure-world row from production. A pre-sale implant is caught only by the RDP-0 SWD check until #705 closes.\n\n7. **`tracked_issues` is incomplete.** Add:\n   - #35: WRP over the FSBL range in both banks.\n   - #226: FSBL production-approval gates.\n   - #753: factory lockdown sequencing, which governs when an HDP option byte could be set.\n   - #705: FSBL cannot light the panel.\n   - #696: optional; CMD_FW_* is the only field-update path, relevant to the brick-window argument.\n\n8. **#591's body is stale.** It cites a bare `!=` at `verify.rs:41`, but the F15 double-evaluated sentinel gate is in the code at `fsbl/src/verify.rs:88-108`. #591 is still the right home for the sweep evidence; note the drift in the comment.\n\n9. **State the gain explicitly in the \"where it helps\" section.** A sealed variant would stop a non-genuine image from turning a known PIN into both halves. This is discounted because the PIN holder can drain through the genuine image anyway.\n\n10. **Make the cost fields unambiguous.** XL/mixed describes the declined variant. The work actually recommended is one doc edit plus comments on #39/#752, which is S/process. I set `corrected_cost` and `corrected_kind` to that.\n\n11. **#39's phrase \"FSBL code+secrets\" should be corrected in the comment.** I found no secret in `fsbl/src` (grep for secret, privkey and sk_seed returns only \"non-secret\" comments). HDP over pages 0..4 hides public, reproducible code.",
+  "corrected_priority": "drop",
+  "corrected_cost": "S",
+  "corrected_kind": "process",
+  "live_defect": {
+   "is_defect": true,
+   "severity": "low overall: documentation and spec only, with no executable defect in the shipping feature set",
+   "reachable_in_production_config": "No. Under PROD_SHIP_FEATURES (Makefile:2718) no code in secure/, fsbl/ or geometry/ writes SECWM1R2 or SECHDPCR; the only HDP mention is the comment at secure/src/hw/flash.rs:74-79. All three items are documentation or decision-record defects. Item 2 becomes live only when #39 is implemented.",
+   "evidence": "(1) CONFIRMED, restated. docs/security/vendor-signing-key-compromise.md:459-462 is literally true (no PCR, CDI or measurement register), but its 'in any form' conclusion rests on 'computed by the measured code itself', which an FSBL-only HDP secret would break. Trezor uses HDP+ACCDIS on the same MCU family (secret.c:170-173, option_bytes.c:93-95). Fix the reasoning; low severity. (2) PARTIALLY CONFIRMED, downgraded. #39 is under-specified, not unimplementable. The FSBL holds no secret (grep of fsbl/src), so #39's 'code+secrets' is wrong. The exit-stub location after ACCDIS is unspecified, while astra-round-0-capacity-options.md:54 says ACCDIS denies fetch. The 'self-read' is a legitimate denial self-test (provisioning-reference.md:117, M-6). The page 5/6 collision is real (geometry/src/lib.rs:124-125). The hazard is already noted in draft-v1.md:154, but not on #39. (3) CONFIRMED. draft-v2.md:72 says 'HDP1EN/HDP2EN 0, chosen deliberately' in a rejected draft (#752); #39 and #43 are open ship-blockers requiring HDP; production-security.md:523-531 and threat-model.md:652 say 'deferred'. No ratified HDP decision exists."
+  },
+  "evidence": [
+   "secure/src/hw/secret_keys.rs:176-200: SAES-CMAC under KeySel::Dhuk, callable by any secure code, no measurement input",
+   "fsbl/src/branch.rs:39-98: handoff carries only MSP and reset vector; GPRs scrubbed",
+   "fsbl/src/main.rs:220,286,299: secure_digest used only by render_fingerprint before into_slot",
+   "fsbl/src/verify.rs:88-108: F15 double-evaluated sentinel gate is present; #591's body citing a bare != at verify.rs:41 is stale",
+   "fsbl/src/fi.rs:26-31: rng_byte() returns fixed 0x42; no TRNG in the FSBL",
+   "fsbl/src/marker.rs:51,256-276, fsbl/Cargo.toml:72, Makefile:2317-2326: bench-only stage-marker feature gives the FSBL a flash-program path, contradicting 'no flash program path in fsbl/src'",
+   "geometry/src/lib.rs:122-139: registry rows as cited; bank-2 page 127 is ReservedErased",
+   "secure/src/main.rs:256-276: measured_boot compiled out under mode-production (owner decision 2026-09-28)",
+   "secure/src/nsc/cmd_fw_chunk.rs:39: staging writes require pin_verified",
+   "secure/src/hw/flash.rs:74-79: HDP1 polarity doc-ambiguous (#214)",
+   "secure/src/optiga/mod.rs:787-798: PBS deliberately decoupled from measured_boot::firmware_hash",
+   "docs/security/vendor-signing-key-compromise.md:457-465: do-not-resurface entry",
+   "docs/secure-elements/optiga-brick-postmortem.md:192-210: section 4, firmware_hash removed from wrap keys",
+   "docs/provisioning/provisioning-reference.md:117: M-6 HDP1_ACCDIS denial self-test",
+   "docs/security/adversarial-review/findings/flash-geometry-v7-2026-09-24/astra-round-0-capacity-options.md:54: ACCDIS denies fetch, read, write and erase",
+   "docs/security/adversarial-review/findings/flash-geometry-v7-2026-09-24/draft-v1.md:154 and astra-round-1.md:136: HDP would hide pages 0-4 and block manifest access",
+   "docs/security/adversarial-review/findings/flash-geometry-v7-2026-09-24/draft-v2.md:72: 'HDP1EN/HDP2EN 0, chosen deliberately'",
+   "docs/security/production-security.md:523-531 and docs/security/threat-model.md:652: HDP 'deferred'",
+   "trezor-firmware core/embed/models/T3T1/memory.h:28-41; core/embed/sec/option_bytes/stm32u5/option_bytes.c:66-69,93-95; core/embed/sec/secret/stm32u5/secret.c:170-173,598-651; core/embed/projects/bootloader/main.c:430; fw_check.c:233-241; storage_salt.c:38-45",
+   "gh issues verified: #39 OPEN, #43 OPEN, #214 OPEN, #141 CLOSED, #486 OPEN, #591 OPEN, #633 OPEN, #401 OPEN, #758 OPEN, #752 OPEN, #712 OPEN, #707 OPEN, #249 OPEN, #46 OPEN, #595 OPEN; additional relevant: #35, #226, #753, #705, #696 (all OPEN)",
+   "gh issue #540: matched as OPEN in a title search only, not opened"
+  ],
+  "tracked_issues": [
+   "#39 OPEN (ship-blocker, priority:critical): HDP1 over the FSBL, ACCDIS at boot-exit",
+   "#43 OPEN (ship-blocker): HDP2 + SECWM2 over the bank-2 FSBL range",
+   "#214 OPEN: BOOT_LOCK + HDP1EN boot-verify, blocked on bench polarity",
+   "#46 OPEN: register-exact option-byte values",
+   "#595 OPEN: per-unit option-byte record in prodtest",
+   "#141 CLOSED: 'HDP-protected BHK' doc drift",
+   "#486 OPEN: vendor signing-key compromise note",
+   "#591 OPEN: rainbow FI sweeps for fsbl verify_images and cmd_fw_commit (body stale about the bare !=)",
+   "#633 OPEN: FI sweep over the fw-update staging window",
+   "#401 OPEN: RDP-2 offensive downgrade campaign",
+   "#758 OPEN / #540 OPEN / #752 OPEN: FSBL fifth-page cutover and geometry",
+   "#712 OPEN / #707 OPEN: BHK first-boot stranding and mass-erase unrecoverability",
+   "#249 OPEN: supply-chain attestation manifest",
+   "ADD #35 OPEN: WRP over the FSBL range in both banks",
+   "ADD #226 OPEN: FSBL production-approval gates",
+   "ADD #753 OPEN: factory lockdown sequencing",
+   "ADD #705 OPEN: pq1 FSBL cannot light the panel, so the boot fingerprint is invisible on a sealed unit",
+   "ADD #696 OPEN: CMD_FW_* is the only field-update path at RDP-2"
+  ],
+  "untracked_delta": "No new issue is needed. Four comments or edits, total cost S.\n\n1. **Comment on #39.**\n   - The FSBL holds no secret, so \"code+secrets\" is wrong.\n   - Specify where the post-ACCDIS exit stub lives: SRAM, or a WRP'd page outside HDP.\n   - HDP1 cannot extend past page 4 without hiding Manifest A/B.\n   - Link draft-v1.md:154 and provisioning-reference.md M-6.\n   - State what hiding public code buys before the option byte is frozen.\n\n2. **Doc edit to vendor-signing-key-compromise.md:459-462.** Keep the literal sentence. Add that HDP+ACCDIS could support an FSBL-computed binding, and that it is declined on value and cost.\n\n3. **Decision-record note on #39 or #752.** draft-v2.md:72 (\"chosen deliberately\") conflicts with #39/#43 and with \"deferred\" in production-security.md and threat-model.md. The owner must ratify one HDP posture before the RDP-2 freeze.\n\n4. **Comment on #591.** Its \"bare `!=`\" description is stale; the F15 gate has landed.",
+  "decision_conflicts": [
+   "docs/security/vendor-signing-key-compromise.md:457-465: 'No measurement-bound secrets, in any form' is on the do-not-resurface list. The drop is consistent with it; the proposed doc edit must amend the reasoning without reopening the decision.",
+   "docs/secure-elements/optiga-brick-postmortem.md:192-210 and secure/src/optiga/mod.rs:787-798: firmware_hash was deliberately removed from SE wrap keys. Consistent with the drop.",
+   "Unratified HDP posture: draft-v2.md:72 (rejected draft, 'chosen deliberately 0') versus #39/#43 (open ship-blockers requiring HDP) versus production-security.md:523-531 and threat-model.md:652 ('deferred'). Needs an owner decision.",
+   "Frozen geometry registry (geometry/src/lib.rs:122-139) and #758: any HDP secret page, whether page 4 or page 5, needs a registry change and an owner stage decision.",
+   "Invariant #10 and the shipping model (RDP-0 SWD verification, no factory-held final secret): rule out a factory-written or FSBL-range-resident S_hdp.",
+   "Invariant #10's fingerprint anchor is currently not visible on pq1 (#705), and the secure-world row is gated out of production (secure/src/main.rs:256-276). The residual statement must not rely on it."
+  ]
+ }
+}

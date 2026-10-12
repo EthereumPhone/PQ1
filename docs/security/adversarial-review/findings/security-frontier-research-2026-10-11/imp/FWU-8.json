@@ -1,0 +1,26 @@
+{
+ "id": "FWU-8",
+ "title": "Execute the assurance that already exists and add a release-provenance gate (fix-commit-is-ancestor-of-tag, FSBL byte-diff, signature actually exercised)",
+ "threat": "Vacuous green: 156 pqsigner-rollback tests, 8 geometry tests, two fw-manifest fuzz targets and the nightly Kani census run in no workflow; the FSBL is never byte-diffed for reproducibility; fw-manifest's own tests skip verify_signature; and the LSB-024 pattern (a merged fix missing from the tagged build) has no gate in `make release`.",
+ "proposal": "CI: enrol `cargo test -p pqsigner-rollback -p pqsigner-geometry` and fsbl-tests geometry_consistency/qemu_integration; add fw-manifest/fuzz to .clusterfuzzlite/build.sh; fix the Kani nightly so the fw-manifest harnesses actually complete (#776); extend `make verify-repro` to the FSBL for BOTH boards and to the exact FEATURES of the release build. Add one fw-manifest host test that runs the full chain INCLUDING sphincs_c10::verify against a dev-signed fixture (the comment at lib.rs:918 says it is deliberately skipped). Release: `make release` asserts every commit referenced by the release's CHANGELOG/issue-close list is an ancestor of the tag, and `fwsign verify-release` output (authenticity + equivalence) is stored in release.json.",
+ "rationale": "The repo's own memory notes ('Green can mean NEVER RAN', 'Never-run tests gate') and the inventory agree that the rollback/geometry/fuzz assurance is unexecuted; invariant #10's text calls geometry 'CI-pinned' while #720 records it is not. Trezor's verify_signed_firmware.py does the two-sided check (equivalence AND authenticity) per release; Ledger's LSB-024 timeline shows a vendor shipping a tagged build without a merged fix.",
+ "repo_evidence": [
+  "GitHub #720 OPEN (rollback 156 + geometry 8 tests in no workflow), #635 OPEN (fw-manifest/fuzz not in ClusterFuzzLite), #776 OPEN (nightly Kani never completes), #189 OPEN (FSBL never byte-diffed)",
+  "fw-manifest/src/lib.rs:918 ('We do NOT exercise verify_signature because SPHINCS+C10 verify ...')",
+  "Makefile:2597-2620 per inventory (verify-repro diffs only secure+nonsecure for the invoked FEATURES)",
+  "CLAUDE.md invariant #10 text ('CI-pinned') vs #720"
+ ],
+ "vendor_precedent": "Trezor core/tools/trezor_core_tools/verify_signed_firmware.py (zero signature fields, compare, AND require valid production signature); docs/common/reproducible-build.md. Ledger LSB-024 (fix merged 2026-05-05, 1.22.2 tagged without it 2026-08-13).",
+ "novelty": "parity",
+ "kind": "process",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "Kani/fuzz CI time; the ui-px Kani hang (#776) is unrelated to this surface but blocks the shared nightly \u2014 split the fw-manifest harnesses into their own job rather than waiting. Ancestry gate needs a machine-readable fix list per release (issue labels or CHANGELOG convention) \u2014 a process the team must actually follow.",
+ "sources": [
+  "https://donjon.ledger.com/lsb/024/",
+  "/home/nicola/repos/trezor-firmware/core/tools/trezor_core_tools/verify_signed_firmware.py",
+  "https://github.com/EthereumPhone/PQ1/issues/720",
+  "https://github.com/EthereumPhone/PQ1/issues/635"
+ ],
+ "surface": "fwupdate"
+}

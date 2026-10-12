@@ -1,0 +1,383 @@
+{
+ "surface": "Firmware update and rollback (fwupdate)",
+ "vendor": "Trezor (trezor-firmware @ 6ab39e95cf45d4b25b3f677806012ac660ae7a51, 2026-10-07; T3W1 Safe 7 is the STM32U5 reference model)",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "Option-byte self-enforcement at every boot (RDP-2 + WRP on boardloader pages + TZEN + SECBOOTADD0 BOOT_LOCK + OEM-key reset), with secret erase on mismatch",
+   "evidence": [
+    "core/embed/projects/boardloader/main.c:304-322",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:30-36",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:62-98",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:138-182",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:200-250",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:253-266",
+    "legacy/memory.c:31-68"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "The boardloader (immutable first stage) compares FLASH->OPTR, SECBOOTADD0R (with BOOT_LOCK), WRP1AR/1BR/2AR/2BR, SECWM1R1/1R2/2R1/2R2 against compile-time expected values on every boot (`flash_check_option_bytes`). In PRODUCTION the expected profile is RDP level 2, WRP over exactly the boardloader pages, TZEN, nBOOT0, dual-bank, IWDG/WWDG software, BOR level by VDD. If any register differs it first makes user data unrecoverable (`secret_safety_erase` -> `secret_bhk_regenerate` replaces the BHK so storage ciphertext is dead), then loops `flash_set_option_bytes` until the check passes, and additionally writes OEM1/OEM2 keys to 0xFFFFFFFF and asserts OEMxLOCK is clear so an RDP regression key cannot exist. Treats an option-byte mismatch as 'first boot after manufacturing OR exploit attempt' and refuses to run user firmware in that state. pq1 (STM32U585, same register set) already has the tz-1 read-only option-byte tripwire in `fsbl/optbytes.rs` that halts; the applicable additions are (a) SECBOOTADD0R BOOT_LOCK as part of the frozen profile, (b) OEM-key-cleared assertion so RDP-2 cannot be regressed via OEM keys, (c) erase-secrets-before-halt semantics so a device whose protections were weakened cannot be used to extract anything. Note pq1's first-boot RDP-0 -> RDP-2 self-lock means the expected profile differs pre/post lock; the FSBL check must know which phase it is in.",
+   "notes": "Trezor's non-PRODUCTION build intentionally keeps RDP-0 and default WRP (option_bytes.c:35-36) so dev boards are not bricked; the same two-profile pattern fits pq1's bench/ship split."
+  },
+  {
+   "item": "Immutable write-protected first stage (boardloader) whose only job is verify-and-jump, with firmware-embedded bootloader self-healing",
+   "evidence": [
+    "docs/core/misc/boot.md:3-27",
+    "docs/core/embed-arch/embed-arch.md:128",
+    "core/embed/models/T3W1/memory.h:38-66",
+    "core/embed/projects/firmware/src/stm32/main.c:78-108",
+    "core/embed/projects/firmware/src/stm32/boot_image_embdata.c:23-45",
+    "core/embed/sec/image/stm32/boot_image.c:72-93"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Three-stage chain: boardloader (WRP, 96 kB at pages 2-13 on T3W1) -> bootloader (256 kB, upgradable) -> secmon + kernel/coreapp. The boardloader must include an update path for later stages precisely because it is immutable ('a corruption/erasure of later stage flash memory would leave the device unusable'). The *firmware* embeds a copy of the bootloader binary; on every PRODUCTION boot it compares the installed bootloader against the embedded one (`boot_image_check`, hash-based on F4, header-compare on UCB models) and reinstalls it if different, then reboots. This gives a self-healing second stage without widening the immutable stage. pq1's FSBL plays the boardloader role (invariant #10). The applicable lesson is scope discipline: keep the WRP-frozen stage to verify+measure+branch, and put recovery/update logic in a mutable stage that the immutable stage verifies. pq1 currently has no mutable second stage; the runtime secure image does updates. Trezor's design argues for keeping that runtime-update path (not FSBL) as the only writer, which pq1 already does.",
+   "notes": "Trezor explicitly does NOT allow-list known-good bootloader hashes in the firmware ('don't whitelist the valid bootloaders for now', boot_image.c:78-80)."
+  },
+  {
+   "item": "Post-quantum hybrid boot header (TRZQ): SLH-DSA sphincs-sha2-128s AND Ed25519, 2 signatures over \u22643 root keys, both must verify",
+   "evidence": [
+    "core/embed/sec/image/boot_header.c:33-109",
+    "core/embed/sec/image/inc/sec/boot_header.h:25-35",
+    "core/embed/sec/image/inc/sec/boot_header.h:127-144",
+    "core/embed/crypto/build.rs:317-320",
+    "core/embed/sec/image/inc/sec/root_keys.h:40-67",
+    "python/src/trezorlib/firmware/core.py:277-291"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "For the Safe 7 bootloader, Trezor replaced the CoSi Ed25519 header with a new TRZQ header carrying BOOT_HEADER_SIGNATURE_COUNT=2 signature pairs. Each pair is one SLH-DSA signature (7856 B, parameter set sphincs-sha2-128s from the reference implementation) over the Merkle root, plus one Ed25519 signature over SHA256(merkle_root || slh_signature). The EC signature is verified first (cheap) and then the PQ signature; a sigmask selects which of 3 root keys are used, and a FIH mirror (`sigmask_inv`) must equal the original mask so exactly the claimed keys were consumed. Dev keys are public and documented as giving 'no secure boot at all' (root_keys.h:40-48). For pq1: the PQ-signature-on-firmware requirement is already met (SPHINCS+C10, 4008 B). The 2-of-N multi-key threshold is applicable and cheap in flash (two C10 sigs = 8 kB in a header) and removes single-key-compromise risk for releases. The hybrid EC leg is NOT applicable: invariant #5 forbids any classical verifier in firmware or FSBL.",
+   "notes": "Trezor chose SLH-DSA 128s (small signature, slow sign) for the bootloader; ML-DSA-44 (`sec/mldsa44`) exists in-tree but is used only for app-arena root packets (core/embed/io/app_arena/root_packet.c:287-300), not for firmware."
+  },
+  {
+   "item": "Merkle-tree batch signing of boot headers (one signature ceremony covers many model/variant images; proof carried in unauthenticated part)",
+   "evidence": [
+    "core/embed/sec/image/boot_header.c:111-141",
+    "core/embed/sec/image/boot_header.c:226-261",
+    "core/embed/sec/image/inc/sec/boot_header.h:114-120",
+    "python/src/trezorlib/merkle_tree.py:23-36",
+    "python/src/trezorlib/firmware/core.py:325-352",
+    "core/tools/trezor_core_tools/headertool_pq.py:22-36"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "The signed value is not the header hash but a Merkle root: leaf = SHA256(0x00 || auth_header || SHA256(code)); internal = SHA256(0x01 || min(a,b) || max(a,b)) (order-independent). Each image ships its own proof path (\u2264256 nodes) in the unauthenticated section; the device recomputes the root and checks the signature against it (`boot_header_calc_merkle_root`). The signing ceremony therefore produces ONE SLH-DSA signature per root key that is valid for every image in the tree (all models, revisions, builds of a release). The proof is bounded and bounds-checked inside header_size before use. For pq1 this is directly applicable and valuable because C10 signing is expensive and slow and pq1 now ships two board targets (iota2/pq1) plus secure+NS images: one C10 ceremony could cover all per-board artifacts of a release, with each device verifying only its own leaf+path. It also keeps signature size independent of batch size (relevant to the 40 KiB FSBL budget: proof nodes are 32 B each).",
+   "notes": "The leaf construction binds the authenticated header bytes to the code hash, so a header cannot be re-paired with other code."
+  },
+  {
+   "item": "Header split into authenticated / Merkle-proof / unauthenticated parts with explicit auth_size, forward-compatible reserved fields, and refusal of headers whose authenticated part shrinks",
+   "evidence": [
+    "core/embed/sec/image/inc/sec/boot_header.h:54-103",
+    "core/embed/sec/image/boot_header.c:143-199",
+    "core/embed/sec/image/boot_header.c:201-224",
+    "core/embed/projects/bootloader/header_pq.c:33-73"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`boot_header_auth_get` validates magic, header_size aligned to the 8 kB flash page and <64 kB, auth_size < header_size, auth_size >= sizeof(boot_header_auth_t) ('prevents updating to an image whose authenticated part is smaller than the current structure'), code_size within NONBOARDLOADER bounds, hw_model/hw_revision match, and that the Merkle proof and unauth block fit inside header_size before any pointer is formed. The authenticated struct is append-only with padding maximised in a post-build step so future fields are covered by existing signatures; signatures and the mutable `firmware_type` byte live in the unauthenticated tail. pq1's Draft 1.1 manifest v6 (121-byte preimage) should adopt the same discipline: an explicit authenticated-length field that is itself authenticated, a minimum-authenticated-length floor pinned in the FSBL, and all bounds checks performed before dereference.",
+   "notes": "The sigmask in the linked image defaults to 0 so an unsigned build can never boot (header_pq.c:57-59)."
+  },
+  {
+   "item": "Monotonic anti-rollback counters stored as unary 16-byte cells in a WRP+HDP-protected flash page (not OTP) on STM32U5; separate counters for bootloader, firmware and secmon; enforced at boot AND at upload; write-then-read-back ensure",
+   "evidence": [
+    "core/embed/sec/monoctr/stm32u5/monoctr.c:30-69",
+    "core/embed/sec/monoctr/stm32u5/monoctr.c:79-135",
+    "core/embed/sec/monoctr/inc/sec/monoctr.h:28-36",
+    "core/embed/models/T3W1/secret_layout.h:33-37",
+    "core/embed/models/T3W1/secret_layout.h:50-51",
+    "core/embed/projects/bootloader/version_check.c:25-74",
+    "core/embed/projects/boardloader/main.c:263-268",
+    "core/embed/projects/bootloader/fw_check.c:95-96",
+    "core/embed/projects/bootloader/fw_check.c:177-178",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:189-194",
+    "core/embed/sec/monoctr/stm32f4/monoctr.c:52-78"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "On STM32U5 each counter is a 0x400-byte region of the SECRET flash sector (page 0, inside the WRP'd/HDP'd secure area): value N means the first N 16-byte quad-words have been programmed to zero and all later ones are still 0xFF. `monoctr_read` counts leading programmed cells and REJECTS a region with a gap (programmed cell after an erased one). `monoctr_write` refuses values below current and programs one fresh quad-word per increment. MONOCTR_MAX_VALUE is 63 (64 cells) and a `_Static_assert` in version_check.c fails the build if any image's monotonic version exceeds it, so a release can never be un-storeable. Every writer does write -> read -> `ensure(val == version)`. The boardloader enforces the bootloader counter and bumps it; the bootloader enforces firmware and secmon counters both at boot (`fw_check`) and before accepting an upload (`fw_on_headers`), and only bumps after full image verification. On F4 the same scheme uses OTP bits. This is the single most relevant finding for pq1: pq1's `secure/src/hw/otp.rs` models a 1024-bit unary OTP tally that is invalid on U585 (quad-word may be programmed once, later clears raise PROGERR) and is production-fenced. Trezor's answer on the SAME silicon family is to put the unary counter in an ordinary flash page protected by WRP (immutable stage range) and HDP (hidden after boot), using one 16-byte quad-word per increment, which U585 supports natively. An 8 kB page gives 512 increments; the FSBL can own that page under the same WRP range as itself. Also adopt: gap-detection on read, build-time cap assert, enforce-at-upload-and-boot, and separate counters per independently-signed component.",
+   "notes": "The secret sector is hidden via FLASH_SECHDPCR HDP1/HDP2_ACCDIS before jumping to firmware (secret.c:170-173), so firmware cannot read or forge the counters; the bootloader re-opens it only by reset."
+  },
+  {
+   "item": "Secure Monitor as a separately-signed, user-non-replaceable secure-world component with its own key set and monotonic counter",
+   "evidence": [
+    "core/embed/sec/image/image.c:63-76",
+    "core/embed/sec/image/image.c:194-273",
+    "core/embed/sec/image/inc/sec/image.h:134-145",
+    "core/embed/projects/bootloader/fw_check.c:102-140",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:195-230",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:354-385",
+    "docs/core/embed-arch/embed-arch.md:86",
+    "core/embed/models/T3W1/model.toml:3-19"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "On T3W1 the firmware image contains a TSEC header after the vendor+firmware headers. It is verified against SECMON_KEYS (production keys only, never vendor keys), has its own `monotonic` byte and its own SHA-256 code hash, and is hashed incrementally during upload with a separate SW SHA-256 context because the HASH peripheral cannot run two streams. Docs: 'Secmon is always verified against production keys and cannot be replaced by the user'. Kernel+coreapp are signed by vendor keys and can be user-replaced after bootloader unlock. For pq1 the structural idea is partially applicable: pq1 signs secure_hash and nonsecure_hash under ONE C10 signature and permits no user firmware, so a separate key set buys little. What does transfer is per-component hashing with independent verification so a torn write in the NS slot cannot be masked by a valid secure slot (pq1 already hashes both separately in the manifest) and, if pq1 ever allows NS-only community builds, the secure world must have an independent root of trust.",
+   "notes": "Trezor's split exists because they DO allow unofficial NS firmware; pq1's threat model (vendor-only) does not require it."
+  },
+  {
+   "item": "Per-chunk hash table in the image header (16 x 32 B), verified in RAM before each chunk is written to flash, and re-verified at every boot including the padding to the end of the flash area",
+   "evidence": [
+    "core/embed/sec/image/inc/sec/image.h:42-58",
+    "core/embed/models/T3W1/model_T3W1.h:51",
+    "core/embed/sec/image/image.c:428-435",
+    "core/embed/sec/image/image.c:437-523",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:343-352",
+    "core/embed/projects/bootloader/workflow/wf_image_upload.c:170-200",
+    "core/embed/sec/image/inc/sec/image_hash_conf.h:25-36"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The signed firmware header carries one SHA-256 (BLAKE2s on F4) per IMAGE_CHUNK_SIZE (256 kB on T3W1) chunk. During upload the bootloader receives a full chunk into a RAM staging buffer, checks it against `hdr->hashes[block_idx]` (`fw_on_chunk`) and only then erases/programs flash, retrying a bad chunk up to 2 times before failing. At boot, `check_image_contents` re-hashes every chunk AND then verifies that the remainder of the flash area is uniformly 0x00 or 0xFF (first byte decides), so no stale or planted bytes can survive in the slack after the code. Hashing uses the U5 HASH peripheral when available. pq1 verifies a running SHA-256 of the whole image only at COMMIT and the FSBL re-hashes at boot; the applicable additions are (a) pre-write chunk authentication so a hostile/buggy companion cannot even cause a flash write of unexpected bytes, and (b) verifying the unused tail of the slot is erased so a previous image's remnants cannot be referenced by a crafted new image. Whole-image hashing already covers the signed part, so this is defence-in-depth rather than a gap.",
+   "notes": "Trezor pads the firmware to the area end and treats 0x00-padded bootloaders and 0xFF-padded firmware as both valid, which is why the firmware embeds two bootloader hashes (hash_00/hash_FF)."
+  },
+  {
+   "item": "Bootloader update via Update Control Block (UCB): stage new image in a dedicated area, verify, write a UCB record bound by header hash, let the immutable stage apply it on next reset after re-verification, then erase the UCB",
+   "evidence": [
+    "core/embed/sec/image/inc/sec/boot_ucb.h:28-61",
+    "core/embed/sec/image/stm32/boot_ucb.c:56-113",
+    "core/embed/sec/image/stm32/boot_ucb.c:115-160",
+    "core/embed/sec/image/stm32/boot_ucb.c:162-171",
+    "core/embed/sec/image/stm32/boot_image.c:248-287",
+    "core/embed/projects/boardloader/main.c:148-250",
+    "core/embed/projects/bootloader/main.c:496-500",
+    "core/embed/models/T3W1/memory.h:47-50",
+    "core/embed/models/T3W1/memory.h:70-72",
+    "core/embed/projects/prodtest/cmd/prodtest_bootloader.c:113-145"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "The running firmware/prodtest writes the new bootloader into BOOTUPDATE (the last 384 kB of flash), calls `boot_image_replace`, which parses the header, checks monotonic >= installed, recomputes the Merkle root and verifies the SLH-DSA+Ed25519 signatures, and only then writes a 64-byte UCB (magic, header_address, code_address, SHA-256 of the staged header) into its own 8 kB page. On the next reset the boardloader (immutable) reads the UCB, re-validates magic, address ranges (source must lie above the destination so copy cannot overlap, double-checked in both files), re-hashes the staged header against the UCB hash (detects post-stage tampering), re-checks monotonic, recomputes the Merkle root and signatures again, skips if identical, then erases+copies page by page. The bootloader erases the UCB as its first act so the copy is never repeated. The old bootloader is only erased after the staged one is fully verified, so power loss before the copy leaves the old one intact, and power loss during the copy is recovered because the UCB is still present and the copy is idempotent. This is the exact shape pq1's Draft 1.1 needs (PENDING/ATTEMPTED/CONFIRMED): a small control record in its own page, hash-bound to the staged artifact, consumed by the immutable stage, idempotent apply, erased on success. pq1 already has A/B slots so the 'copy' step is replaced by 'select', but the control-record discipline transfers directly.",
+   "notes": "Lesson in model_T3W1.h:56-68: the ALREADY-SHIPPED boardloader has a UCB bug (code_address==0 sentinel mangled by the secure-alias adjustment), which is permanent in the field; the fix lives in the mutable bootloader as a workaround flag (BOARDLOADER_UCB_ZERO_ADDR_BUG). This is a concrete example of invariant #10's cost: every FSBL interface must be designed so the mutable side can route around immutable-stage bugs."
+  },
+  {
+   "item": "Glitch/FI hardening of the boot decision: secbool, volatile step flags, redundant backup copies compared three times, default-to-fail function pointer, next-stage address set only after all checks, random pre-check delays, inverse sigmask, and wipe-on-detected-glitch",
+   "evidence": [
+    "core/embed/projects/bootloader/main.c:105-107",
+    "core/embed/projects/bootloader/main.c:404",
+    "core/embed/projects/bootloader/main.c:559-561",
+    "core/embed/projects/bootloader/main.c:591-593",
+    "core/embed/projects/bootloader/main.c:632-644",
+    "core/embed/projects/bootloader/main.c:646-656",
+    "core/embed/projects/bootloader/fw_check.c:54-62",
+    "core/embed/projects/boardloader/main.c:98-117",
+    "core/embed/projects/boardloader/main.c:252-278",
+    "core/embed/projects/boardloader/main.c:335-347",
+    "core/embed/sec/image/boot_header.c:56-57",
+    "core/embed/sec/image/boot_header.c:97-106",
+    "core/embed/rtl/inc/rtl/error_handling.h:144-149",
+    "core/embed/sec/random_delays/stm32/random_delays.c:30-60"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The bootloader keeps `firmware_present` and `firmware_present_backup` and `ensure`s equality at three points separated by UI/time; the jump target is a volatile function pointer initialised to `failed_jump_to_firmware` ('(glitch)') and only overwritten on success; each verification step in `fw_check` is a separate volatile secbool so a skipped instruction leaves secfalse. The boardloader passes every critical condition through `fih_delay` (0-127 us TRNG-driven jitter) before `ensure`, starts with a random delay, and writes `next_stage_addr` only as the last statement of `ensure_signed_bootloader`. Signature loops track consumed keys in both a mask and its inverse and require both to agree. If the workflow state machine lands in an impossible state (WF_ERROR_FATAL, 'we saw flips randomly flip, most likely due to glitch') the bootloader regenerates the BHK and erases storage before halting. pq1 already has `fi::CfiCounter` and FSBL `fi.rs`; applicable additions are the random pre-check jitter from the TRNG (pq1 has `random_delays`-equivalent material via `rng`), the default-fail branch target pattern in `fsbl/branch.rs`, and most notably the escalation policy: on detected control-flow impossibility in the FSBL, trigger the SE admin wipe path rather than silently halting.",
+   "notes": "`random_delays` is a ChaCha DRBG reseeded from the TRNG every 1000 calls; the boot chain uses it only via fih_delay, the RDI interrupt-driven delays are for the firmware."
+  },
+  {
+   "item": "Pre-jump hygiene: clear all RAM except the new stack and bootargs, reset peripherals, disable/clear interrupts, switch to a fresh stack, then jump; hide the secret sector and lock the BHK register before handing over",
+   "evidence": [
+    "core/embed/sys/startup/stm32/bootutils.c:244-285",
+    "core/embed/sys/startup/stm32/bootutils.c:126-158",
+    "core/embed/sec/secret/stm32u5/secret.c:170-184",
+    "core/embed/sec/secret/stm32u5/secret.c:598-651",
+    "core/embed/projects/bootloader/main.c:418-422",
+    "core/embed/projects/bootloader/main.c:466-470",
+    "legacy/bootloader/bootloader.c:97-103"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`jump_to_next_stage` runs phase 2 on a new stack, calls `reset_peripherals_and_interrupts` (so no DMA is pending), clears the unused stack, fills every runtime RAM region except the stack and bootargs with zero, then jumps to the next vector table. Before that, `secret_prepare_fw` loads the BHK into TAMP backup registers, sets TAMP_SECCFGR BHKLOCK (software can no longer read it; SAES can still use it), decides which key slots to expose based on vendor-trust bits, and unconditionally sets FLASH_SECHDPCR HDP1/HDP2_ACCDIS so the secret pages become unreadable until reset. Reboot paths (`reboot_with_args_phase_2`) do the same RAM clear before NVIC_SystemReset. pq1's FSBL branches into the secure runtime of the same world, so the RAM-clear is less critical than Trezor's secure->non-secure hop, but it is cheap and closes the 'FSBL working buffers (manifest copies, hash state) linger in SRAM for the runtime' channel; HDP-hiding of an FSBL-owned page (rollback floor, vendor-key material) is directly applicable on U585 and would make the counter page unforgeable by the runtime even if the runtime secure world is compromised.",
+   "notes": "HDP must be a contiguous region at the start of bank 1 and is configured through SECWM1R2; it lines up with pq1's pages 0..4 FSBL range."
+  },
+  {
+   "item": "Flash driver: program only if bits can be cleared, skip when already identical, read back after program and after erase (erase verified as all-0xFF across the whole page)",
+   "evidence": [
+    "core/embed/sys/flash/stm32u5/flash.c:157-168",
+    "core/embed/sys/flash/stm32u5/flash.c:170-209",
+    "core/embed/sys/flash/stm32u5/flash.c:211-250"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`flash_write_quadword`/`flash_write_burst` refuse a write whose data would require setting a bit that is already 0 (`data[i] != (data[i] & *addr)`), short-circuit when the target already contains the data (idempotent re-apply after power loss), and compare every word after HAL_FLASH_Program; `flash_sector_erase` walks the entire page and fails unless every word is 0xFFFFFFFF. This is what makes the UCB copy loop and the unary counters safe to repeat. pq1's `hw/flash.rs` should do the same three things; the read-back-after-program is especially relevant to pq1's cached-ICACHE trap (fwutils.c:125-131 disables ICACHE before invalidating a header for the same reason pq1 invalidates ICACHE).",
+   "notes": "Trezor's write check uses direct memory reads, which only works because the writer side runs with ICACHE handled by the caller (see firmware_invalidate_header)."
+  },
+  {
+   "item": "Progressive erase-ahead during streaming upload, then erase of the whole unused remainder of the target area; header-first invalidation of the old firmware",
+   "evidence": [
+    "core/embed/projects/bootloader/workflow/wf_image_upload.c:80-113",
+    "core/embed/projects/bootloader/workflow/wf_image_upload.c:230-238",
+    "core/embed/projects/bootloader/workflow/wf_image_upload.c:266-277",
+    "core/embed/sec/fwutils/fwutils.c:125-143"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`write_image_data` tracks `erase_offset` and erases the next page only when the write pointer reaches it, so the device never has a half-erased, half-old image beyond the write frontier; after the last chunk it keeps erasing until `flash_area_erase_partial` returns 0 bytes so the whole slot tail is clean (which `check_image_contents` later insists on). `firmware_invalidate_header` zeroes the first 1 kB (the vendor-header magic) so a half-updated image can never pass `read_vendor_header` and the bootloader falls into the empty-device workflow instead of jumping. pq1's A/B design makes the first part moot (inactive slot is fully erased before streaming), but invalidate-by-zeroing-the-manifest-magic first is the cheapest way to make 'this slot is now dead' atomic on U585 (a single quad-word program) and should be the first write of any slot rewrite.",
+   "notes": "Size sanity before any write: image >= IMAGE_INIT_CHUNK_SIZE, multiple of FLASH_BLOCK_SIZE, <= area max (wf_image_upload.c:266-277)."
+  },
+  {
+   "item": "Hardware model + hardware revision + compatibility bit baked into every signed header and checked before signature verification; board_capabilities cross-check when replacing the bootloader",
+   "evidence": [
+    "core/embed/sec/image/image.c:140-166",
+    "core/embed/sec/image/image.c:375-387",
+    "core/embed/sec/image/boot_header.c:183-186",
+    "core/embed/sec/image/stm32/boot_image.c:135-152",
+    "core/embed/projects/boardloader/main.c:119-130",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:131-135",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:166-170"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`image_header.hw_model` (4-char tag such as 'T3W1') and `hw_revision` must equal the compiled-in HW_MODEL/HW_REVISION; the vendor header carries hw_model as well; the low bit of the otherwise-unused `expiry` field is abused as a 'post-model-check' flag so images for newer models are rejected by pre-check bootloaders. The boardloader exports a `board_capabilities` struct in flash (model name + version) that the firmware reads before replacing the bootloader so a model-T image cannot be pushed onto a different board. pq1 ships two boards (iota2 dev kit and pq1 production) with different pin maps where flashing the wrong image is physically dangerous (PA8 is a button on iota2 and the SE rail enable on pq1). pq1's manifest currently signs version + two hashes only (fw-manifest/src/lib.rs:28-31); adding a board/revision identifier to the signed preimage and checking it in both the runtime BEGIN handler and the FSBL is a direct, high-value port.",
+   "notes": "The 'expiry' field itself is NOT enforced: image.c:125-131 'TODO: expiry mechanism needs to be ironed out before production' because boardloader write protection would strand devices with expired bootloaders. Trezor consciously ships without image expiry."
+  },
+  {
+   "item": "Two-key-set delegation: SatoshiLabs bootloader keys sign a vendor header; vendor keys (m-of-n, up to 8) sign the firmware header; vendor header hash can be permanently locked into OTP",
+   "evidence": [
+    "core/embed/sec/image/image.c:280-373",
+    "core/embed/sec/image/image.c:389-426",
+    "core/embed/sec/image/image.c:526-574",
+    "core/embed/sec/image/inc/sec/image.h:60-131",
+    "core/embed/projects/bootloader/fw_check.c:34-50",
+    "docs/core/misc/memory.md:33-36",
+    "core/embed/sec/image/image.c:89-111"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The firmware image starts with a vendor header (magic TRZV) that lists vsig_n <= 8 vendor public keys, a threshold vsig_m, a vendor string, trust bits and a logo, and is itself signed by the bootloader root keys (CoSi 2-of-3). The firmware header is then signed by the vendor keys. `read_vendor_header` is a fully bounds-checked parser (hdrlen >= sig size, pubkey array + vstr_len byte inside body, vstr inside body, TOIF logo length subtract-not-add to avoid overflow, logo failure non-fatal because it is not hashed). `vendor_header_hash` (vstr || 'Trezor Vendor Header') can be burned into OTP block 2 so the device accepts only that vendor forever. pq1 has a single vendor and compiles the C10 public key into the FSBL, so key delegation is not needed. The applicable half is parser discipline (every length validated against the enclosing length before use, cosmetic data excluded from the hash) and the idea of an OTP-burned vendor fingerprint if pq1 ever makes the FSBL vendor key configurable.",
+   "notes": "CoSi aggregation lets 2 of 3 Ed25519 keys combine into one 64-byte signature; a PQ-only pq1 cannot aggregate and would carry k separate C10 signatures instead."
+  },
+  {
+   "item": "Install policy derived from the signed vendor header: downgrade below fix_version, vendor change, or invalid current firmware wipes storage and regenerates the BHK; only full-trust images may be installed silently",
+   "evidence": [
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:81-123",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:274-298",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:290-298",
+    "core/embed/sec/image/inc/sec/image.h:42-58",
+    "core/embed/sec/secret/stm32u5/secret.c:426-442"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`detect_installation` classifies the new image: `is_new` if the current image fails any check, `is_newvendor` if the vendor-header hash differs, `keep_seed` only if new version >= current `fix_version` (the version of the last critical bug fix carried in the signed header) and same vendor. Any case other than keep_seed triggers `secret_bhk_regenerate` (fresh TRNG BHK, making all storage ciphertext undecryptable) plus `erase_storage` BEFORE the first chunk is written. The UI confirm screen shows vendor string, version, fingerprint, and whether the seed is kept. For pq1 the seed lives in the two SEs, not MCU storage, and there is no vendor change path; but the concept 'a signed per-release floor below which a downgrade is allowed only with a secret wipe' is a softer complement to the hard monotonic counter: it lets a user roll back to a non-critical older release without bricking but refuses to keep secrets across a security-relevant downgrade. Mapping onto pq1 would mean: C10-signed `fix_version` in the manifest; downgrade below it forces the dual-SE admin wipe.",
+   "notes": "The monotonic counter (hard floor) and fix_version (soft floor with wipe) are deliberately separate knobs."
+  },
+  {
+   "item": "Interaction-less upgrade bound to a user-confirmed header hash carried through reset in a RAM bootargs area; bootloader recomputes and compares, requires same vendor, strictly newer version, full-trust image",
+   "evidence": [
+    "core/src/apps/management/reboot_to_bootloader.py:14-42",
+    "core/src/apps/management/reboot_to_bootloader.py:45-66",
+    "core/embed/sys/startup/stm32/bootutils.c:45-96",
+    "core/embed/sys/startup/stm32/bootutils.c:209-211",
+    "core/embed/sys/startup/inc/sys/bootutils.h:60-67",
+    "core/embed/projects/bootloader/main.c:536-549",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:231-262"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The firmware (with the user unlocked, in its trusted UI) parses the proposed firmware header, requires same vendor and higher version, shows version/vendor/fingerprint, and on approval stores SHA256(vendor_header || firmware_header) in a dedicated `.boot_args` RAM section with command INSTALL_UPGRADE, then resets. The bootloader copies and clears the command at init (one-shot), and when the upload arrives recomputes the hash over the received headers and refuses on mismatch ('Firmware mismatch'); it also re-checks is_upgrade && !is_newvendor && full-trust. Unofficial firmware is blocked from this path in Python and again by the full-trust check in C. pq1's flow already has consent inside the secure runtime (COMMIT with 8-word fingerprint) and never needs a separate bootloader UI, so the RAM mailbox is less necessary; what transfers is the double-check principle: whichever stage performs the write must itself recompute the fingerprint the user approved rather than trust a flag.",
+   "notes": "On U5 the boot command persists in a `.boot_command` section across NVIC_SystemReset; on F4 it is passed in r11 by a direct jump."
+  },
+  {
+   "item": "Fingerprint shown to the user before install and (legacy) before running unofficial firmware, with a two-step warning on T1",
+   "evidence": [
+    "core/embed/projects/bootloader/bootui.c:72-86",
+    "core/embed/sec/image/image.c:168-176",
+    "legacy/bootloader/bootloader.c:39-46",
+    "legacy/bootloader/bootloader.c:67-95",
+    "legacy/bootloader/bootloader.c:150-176"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`get_image_fingerprint` hashes the firmware header with the signature bytes zeroed, so the fingerprint is stable across signing and matches what `headertool` prints for the unsigned build. The bootloader install-confirm screen renders it as hex alongside vendor, version and keep-seed status; the Trezor One bootloader additionally shows a red 'Unofficial firmware' dialog requiring two explicit confirmations with the fingerprint in between before running an unsigned image. pq1 already renders the 8 BIP-39 measurement words both at install (COMMIT) and from the FSBL at boot, which is stronger (the immutable stage renders). The remaining applicable detail is computing the fingerprint over the signature-zeroed header so vendor and auditors can publish it before the signing ceremony.",
+   "notes": ""
+  },
+  {
+   "item": "Reproducible builds with a signed-vs-unsigned equivalence tool that zeroes exactly the signature fields and also re-validates the signature against production keys",
+   "evidence": [
+    "docs/common/reproducible-build.md:1-20",
+    "docs/common/reproducible-build.md:56-95",
+    "core/tools/trezor_core_tools/verify_signed_firmware.py:1-30",
+    "core/tools/trezor_core_tools/bootloader_hashes.py:36-50"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Nix + uv + Cargo pinned environment with a one-command Docker build; the documented verification is 'dd zero over the 65-byte signature at the model-specific offset, sha256sum both'. `verify_signed_firmware.py` automates this for all four image types (TRZV/TSEC/TRZB/TRZQ): parse both, zero every signature-carrying field (including the Merkle proof slots for TRZQ), rebuild and compare, AND require the signature to validate against production keys so a 'matching' but unsigned pair is not green. pq1 has reproducible builds and `fwsign verify`; adding the automated two-sided check (equivalence + authenticity) to `make release` is cheap and closes the 'vacuous green' class pq1 has hit elsewhere.",
+   "notes": ""
+  },
+  {
+   "item": "Combined factory image pads boot-chain-erased regions (UCB) with 0xFF so flash readback after first boot is byte-identical to the shipped image",
+   "evidence": [
+    "core/embed/xtask/src/combine.rs:21-36",
+    "core/embed/xtask/src/combine.rs:44-60",
+    "core/embed/sec/image/stm32/boot_ucb.c:162-171"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "The xtask that assembles boardloader+bootloader+firmware into one flashable binary overwrites the UCB page with 0xFF (the erased value) rather than 0x00 so that `boot_ucb_erase` on first boot is a no-op (it checks `flash_area_is_erased` first) and 'a factory line that verifies by reading flash back' still matches. pq1's entire post-sale trust story is 'verify flash + option bytes + OTP over SWD at RDP-0 before first power'; any region the first boot will erase or write (pages 123-127 journal, salt, boot-state page) must be shipped as 0xFF in the image and the published reference must describe exactly which pages the first boot mutates.",
+   "notes": ""
+  },
+  {
+   "item": "Lockable bootloader on U5: 'unlock' (accept non-official firmware) erases storage, regenerates BHK and erases SE pairing secret slots; a locked device refuses non-secret-allowed images; untrusted firmware never gets secret-sector access",
+   "evidence": [
+    "core/embed/projects/bootloader/workflow/wf_unlock_bootloader.c:34-51",
+    "core/embed/sec/secret/stm32u5/secret.c:514-540",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:265-272",
+    "core/embed/sec/secret/stm32u5/secret.c:613-650",
+    "core/embed/projects/bootloader/fw_check.c:226-236",
+    "core/embed/sec/image/inc/sec/image.h:76-81"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Trezor supports running third-party kernel/coreapp builds; the price is a user-confirmed unlock that destroys storage, the BHK and the Optiga/Tropic pairing keys so a custom build can never talk to the SEs with the official secrets, and the bootloader (secmon still official) withholds secrets from any firmware whose vendor header lacks VTRUST_SECRET_ALLOW. pq1 has a single vendor, no unofficial-firmware path and invariant #4/#5 forbid introducing one, so the unlock mechanism does not apply. The underlying property (only vendor-signed code can ever drive the SE tunnels) is already structural in pq1.",
+   "notes": "Documented decision: Trezor accepts user firmware but makes it secret-blind rather than refusing it outright."
+  },
+  {
+   "item": "Runtime limit for non-full-trust firmware: IWDG started for 1 hour unless the vendor header grants ALLOW_UNLIMITED_RUN; untrusted vendor gets red screen, countdown and click-to-continue",
+   "evidence": [
+    "core/embed/projects/bootloader/main.c:433-464",
+    "core/embed/projects/bootloader/fw_check.c:239-258",
+    "core/embed/sec/image/inc/sec/image.h:60-82"
+   ],
+   "applies_to_pq1": "no",
+   "why": "When jumping to a firmware whose vendor-trust bits are not full-trust, the bootloader shows the vendor screen (red background, configurable 1-15 s wait, mandatory click) and arms the independent watchdog with a 60-minute timeout so unofficial firmware cannot run indefinitely without a visible reboot through the warning. This exists only to make third-party firmware loud; pq1 has no such class of firmware.",
+   "notes": ""
+  },
+  {
+   "item": "Manufacturing/provisioning gate: only a firmware whose signed vendor header sets ALLOW_PROVISIONING, on a unit whose OTP unit-properties are not yet locked, may access the secret sector and skip tamper/touch checks",
+   "evidence": [
+    "core/embed/projects/bootloader/main.c:109-130",
+    "core/embed/projects/bootloader/fw_check.c:226-236",
+    "core/embed/sec/secret/stm32u5/secret.c:635-641"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The 'prodtest' firmware is a distinct signed image type (VENDOR_FW_TYPE_PRODTEST) with VTRUST_ALLOW_PROVISIONING; the bootloader only honours that bit while `unit_properties()->locked` is false (an OTP write at the end of the line), after which no image can enter provisioning mode. pq1's factory model (ship RDP-0, factory does SE transport-keyset provisioning, first field boot self-locks) likewise needs a factory-only image class; binding that class to a signed flag plus an OTP 'line complete' latch is applicable and would let the same FSBL accept both the prodtest and the shipping secure image without a bench-only build.",
+   "notes": ""
+  },
+  {
+   "item": "Challenge-keyed whole-firmware hash (GetFirmwareHash: BLAKE2s keyed with up to 32-byte host challenge over the full FIRMWARE_AREA) for host-side attestation of installed code",
+   "evidence": [
+    "core/embed/sec/fwutils/fwutils.c:44-96",
+    "common/protob/messages-management.proto:378-394",
+    "core/src/apps/misc/get_firmware_hash.py:7-20",
+    "legacy/memory.c:97-99"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The host sends a random challenge; the device streams the entire firmware flash area (padding included) through a keyed BLAKE2s in 128 kB steps with progress, and returns the digest, which the host compares against the published firmware padded to the area size under the same key. It is honest-but-curious attestation only (a malicious firmware can precompute from the genuine image) and Trezor presents it as a helper, not a root of trust. pq1's equivalent is the FSBL-rendered 8 words (stronger, since the immutable stage computes it) plus `fwmeasure`; a companion-side challenge hash would add a convenience channel but no security beyond what pq1 has. Low priority.",
+   "notes": ""
+  },
+  {
+   "item": "Syscall/smcall verifiers copy caller-supplied descriptors before use so privileged bootloader-replace cannot be TOCTOU'd by the unprivileged caller",
+   "evidence": [
+    "core/embed/sys/syscall/stm32/syscall_verifiers.c:251-283",
+    "core/embed/sys/smcall/stm32/smcall_verifiers.c:50-83"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`boot_image_replace__verified` probes read access to the `boot_image_t` struct, copies it to a kernel-side local, then probes the referenced image range using the COPIED pointer/size before calling the real implementation, so an app task cannot change the fields between check and use. This is the same primitive pq1 already enforces at the NSC gateway (`NsPtr<T>` + copy to S-stack); it applies to the FW_BEGIN/CHUNK/COMMIT handlers and is already in place.",
+   "notes": ""
+  },
+  {
+   "item": "Boardloader SD-card bootloader recovery (legacy F4) with 10-second abort window and monotonic preservation; explicitly abandoned on UCB models",
+   "evidence": [
+    "core/embed/projects/boardloader/sd_update.c:24-26",
+    "core/embed/projects/boardloader/sd_update.c:39-93",
+    "core/embed/projects/boardloader/sd_update.c:100-152",
+    "docs/core/misc/boot.md:12-32"
+   ],
+   "applies_to_pq1": "no",
+   "why": "On Model T the boardloader can read a raw bootloader image from an SD card, verify header/signature/hash/monotonic, print a 10-second 'unplug now to abort' countdown, erase the whole device (storage + firmware) and write the new bootloader. It is an out-of-band recovery path for a corrupted second stage. The code hard-errors if combined with USE_BOOT_UCB: Trezor chose the UCB staging path over SD recovery for U5 models. pq1 has no removable media and a 40 KiB FSBL budget; the applicable lesson is only that the immutable stage must still have SOME recovery for a corrupted mutable stage, which pq1's A/B slots provide.",
+   "notes": "Explicit decision: no SD recovery on UCB/U5 models (sd_update.c:24-26)."
+  },
+  {
+   "item": "Things Trezor explicitly decided NOT to do on this surface",
+   "evidence": [
+    "core/embed/sec/image/image.c:125-131",
+    "core/embed/sec/image/stm32/boot_image.c:78-80",
+    "core/embed/projects/boardloader/sd_update.c:24-26",
+    "core/embed/sec/image/boot_header.c:78-94",
+    "core/embed/models/T3W1/memory.h:58-72",
+    "core/embed/sec/monoctr/inc/sec/monoctr.h:28",
+    "core/embed/sec/image/inc/sec/boot_header.h:135-142"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "(1) No image expiry: the `expiry` field is parsed but must be 0/1; enforcement is deferred because the write-protected boardloader could never accept a later bootloader once its own expired. (2) No allow-list of known bootloader hashes in firmware: the embedded-bootloader comparison is 'does the installed one equal mine', not 'is it in a set'. (3) No A/B for firmware: there is one firmware area, updated in place; resilience comes from the bootloader re-entering the update workflow when the header is invalid, and from the firmware-embedded bootloader copy. Only the bootloader gets a staging area (BOOTUPDATE) plus UCB. (4) No PQ-only chain: the TRZQ header requires BOTH Ed25519 and SLH-DSA to pass, with EC checked first; vendor/firmware headers below it remain Ed25519 CoSi only, so firmware itself is not PQ-signed on T3W1 (only the bootloader is). (5) Monotonic counters are tiny (max 63) by design; semantic version and fix_version carry the rest. (6) The `firmware_type` byte in the unauthenticated boot header is reserved for storage-erase decisions but has no C consumer today. For pq1: (1) matches pq1's stance (no expiry); (3) is the opposite of pq1's A/B choice, which is fine because pq1's FSBL has no UI to run an update workflow; (4) is explicitly rejected by invariant #5; (5) suggests pq1's security-epoch floor can be small (tens of values) if ordinary releases do not consume it, which is already Draft 1.1's position.",
+   "notes": "Trezor firmware (kernel/coreapp/secmon) on U5 is still classical-signed; only the Safe 7 bootloader header is PQ-hybrid. pq1 is ahead on this axis."
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "id": "BOOT-09",
+ "title": "2-of-3 SPHINCS+C10 vendor-key quorum in the FSBL, OTP hash-lock of the vendor key set, and an FSBL measurement field in every release receipt",
+ "threat": "Single vendor-key compromise (one HSM, one insider) signs a malicious firmware that every FSBL accepts forever; a re-flashed FSBL at RDP-0 carrying a different vendor key is accepted by the signing tool's fingerprint check as long as the bundle matches; a release receipt that says 'bundle verified' proves nothing about which FSBL is on the part (demonstrated 2026-09-28, #742).",
+ "proposal": "(1) Embed three C10 vendor public keys in the FSBL's named section and require any 2 distinct signatures (sigmask with exact-consumption + complement discipline, Trezor boot_header.c) over the manifest digest; `fwsign sign` becomes a two-ceremony flow with separately held seeds (threshold is at the key-set level, no classical CoSi). (2) Burn SHA-256 of the three-key set into an OTP word at factory and have both the FSBL (read-only, pre-branch) and `pq1-verify` (BOOT-04) compare it (#220). (3) Every release receipt and the signed release descriptor carry the FSBL ELF/flash digest the bundle was verified against, so the 'bundle under a different FSBL' case is a receipt mismatch (#742). Keep one verifier algorithm (invariant #5); measured cost is 0.375 s per verify chain on pq1 at HSI16, so 2 signatures \u2248 +0.4 s boot.",
+ "rationale": "Every surveyed vendor with a reflashable second stage uses an m-of-n quorum (Trezor 2-of-3, Foundation 2-of-4); pq1's FSBL is the one component that can never be patched, so the key-management failure mode it accepts must be the smallest. OTP-locking the key set is the only way to make the verify-before-first-power diff detect a swapped-vendor FSBL without comparing the whole FSBL image.",
+ "repo_evidence": [
+  "fsbl/src/vendor_pubkey.rs:20-33 (exactly one 32-byte `PQSIGNER_FSBL_VENDOR_PUBKEY`)",
+  "fsbl/src/main.rs:336-346 (single `verify_vendor_fpr` + `verify_signature`)",
+  "fwsign/src/subcommands/sign.rs:60-77 (single-key flow; FSBL check is 'same vendor fingerprint', not 'this FSBL')",
+  "docs/security/threat-model.md:517 (\u00a79.8 'Vendor-pubkey OTP hash lock is not yet burned')",
+  "Issues #220, #742"
+ ],
+ "vendor_precedent": "Trezor boot_header.c:49-109 (2 signature slots from 3 root keys, sigmask fully consumed and == sigmask_inv), root_keys.h:647-692 (DEV set must never ship); Foundation Passport Prime 2-of-4 release signing.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "FSBL budget: +64 B keys + sigmask logic \u2248 200-300 B, and the manifest grows by one 4008-B signature (slot/manifest page layout under #540/#758). Doubles signing-ceremony operational burden. OTP word allocation must be reconciled with the typed rollback floor draft and BOOT-04's birth record. Threshold does not help if both signing seeds are derived from one root \u2014 the process must enforce independent generation.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/image/boot_header.c",
+  "https://docs.foundation.xyz/firmware-updates/passport-prime/",
+  "https://donjon.ledger.com/lsb/002/"
+ ],
+ "surface": "boot"
+}

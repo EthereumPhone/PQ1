@@ -1,0 +1,26 @@
+{
+ "id": "SE-03",
+ "title": "Authenticate wipe-bearing and attempt-bearing SE verdicts: a bare 2-byte SCP03 status word is 'inconclusive', never a wipe or a page-124 charge, until an R-MAC'd probe confirms it",
+ "threat": "An unauthenticated I2C interposer (or a glitched bus) forges `0x6986` on CreateSession/VERIFY \u2192 `AuthMethodBlocked` \u2192 `PinLocked` \u2192 one-shot dual-SE wipe with zero attempt budget consumed; or forges `0x6985` so a correct PIN burns a page-124 attempt. Because GP Amd D exempts bare error SWs from R-MAC, the firmware currently treats an unauthenticated byte pair as an authoritative security verdict.",
+ "proposal": "In `unwrap_response` tag the n==2 arm's result as `Unauthenticated(sw)`; in `classify_se050_unlock_error` and `authenticate_and_read`, on an unauthenticated 0x6986/0x6985/0x6983 run a confirmation probe that must return a full R-MAC'd response under the same session (e.g. ReadObjectAttributes on a public/admin-readable object, or a GetRandom) and only then promote to `AuthMethodBlocked`; if the probe itself fails bare, classify D1-inconclusive: tear the session down, hard-reset the SE, do not charge page-124, do not wipe, and surface 'SE transport fault' to the user with a bounded retry. Apply the same rule on the OPTIGA side to the globally-mapped statuses that feed wipe verdicts (#120). Count consecutive inconclusive outcomes and escalate to lock (not wipe) after N, so an interposer can only DoS, never destroy.",
+ "rationale": "Trezor's rule is 'retry only on errors that prove non-execution, never on ones that may have executed' and Ledger's LSB-016 fix was 'tear the channel down on the first MAC error'; pq1's S-5 P1=0x33 work closed the data path but left the verdict path unauthenticated. A wipe is the most irreversible action the device takes on SE input and is the only one an attacker with just bus access can trigger today. The funds are recoverable from the words, but the brick is permanent on the current SE050 (#168), which makes this a cheap, deniable sabotage primitive.",
+ "repo_evidence": [
+  "secure/src/se050/scp03.rs:614-634 unwrap_response: n==2 \u2192 copy SW, inc_counter, Ok(2) \u2014 no authentication",
+  "secure/src/se050/apdu.rs:741-768,826-845 create_session / verify_session map 0x6986 \u2192 AuthMethodBlocked",
+  "secure/src/se050/mod.rs:2865-2871 classify_se050_unlock_error \u2192 PinLocked",
+  "secure/src/nsc/cmd_request_unlock.rs:99-175,190-211 PinLocked from any leg \u2192 trigger_lockout_wipe",
+  "Issues #104 (SE17-1 HIGH), #105 (SE17-2), #120 (OP17-5), #106 (SE17-3) all OPEN"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/tropic/tropic.c:177-217,1404-1413 (retry taxonomy: never retry a possibly-executed command; alarm \u2192 reset+retry); Ledger LSB-016 (channel teardown on first MAC/padding error).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P0",
+ "risks": "The confirmation probe must not itself be able to consume an attempt (choose a non-counter-bound object); the SE050 production UserID policy denies attribute reads (0x6986) so the probe target must be an object readable in the unauthenticated-session state (validate on silicon); escalation-to-lock after N inconclusive results needs a durable counter to avoid a power-cycle reset; the D1 split for OptigaError::Shield (#385) is a prerequisite on the OPTIGA leg.",
+ "sources": [
+  "https://donjon.ledger.com/lsb/016/",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/tropic/tropic.c:177-217",
+  "https://arxiv.org/abs/2608.17082"
+ ],
+ "surface": "se"
+}

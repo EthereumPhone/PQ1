@@ -1,0 +1,258 @@
+{
+ "surface": "Display / seed-exfiltration side channels (key=display): seed-wizard word display + recovery entry, PIN row, legacy 16x4 glyph blitter, ui-px pixel presenter, NV3007 SPI1 bus (pq1 PA4/PA5/PA7, write-only, no MISO), backlight, consumption mask, framebuffer residue, display-bus implant detection, and backup flows. Gap analysis against HEAD c75b0d9c of feat/pq1-board-target, read-only; Trezor @ 6ab39e95cf re-read for precedents. Headline: the only confirmed in-the-wild hardware-wallet implant (Ledger Nano X, 2025-26) passively sniffed the already-SE-driven display SPI and template-matched glyphs \u2014 so 'SE-driven display' is not the lever; the levers are (a) make the secret glyph stream useless to a fixed-template tap and content-independent on the bus, (b) detect added bus load / added power draw before the wizard runs, (c) close the two remaining non-constant-time secret-glyph windows the repo still has, and (d) stop pixel-form residue outliving the wizard.",
+ "improvements": [
+  {
+   "id": "D-01",
+   "title": "Route the PIN active digit and the restore-wizard letter row through the constant-time secret glyph path on a forced frame, and pin it with a regression test",
+   "threat": "EM/power probe on the NV3007 SPI stream or on the MCU during PIN entry / seed restore. Each PIN commit screen paints exactly one secret digit at a known cell through the address-keyed public font (legacy) or the non-forced Item::Text run (px, strip-digest skip + 64-bit digest of secret pixels left in `static mut SHOWN`); eight screens = the PIN. The restore wizard letter row leaks every typed seed letter the same way (#784). This is the same channel F-24/F-27 closed for the word pages \u2014 TVLA on the legacy scan measured 650.90 leaky vs 0.00 CT.",
+   "proposal": "(1) Legacy: in `pin_entry::render_pin_screen` and `seed_wizard::render_letter_screen` build the secret row via `secret_text::secret_glyph_cols` and emit it with `flush_with_secret_rows` instead of `draw_line`+`flush`. (2) px: make `status_map::pin_row` / `letter_row` emit the active digit / typed letters as `Item::Secret` cells (placeholders in the record, bytes passed as `secret`) and call `screens::show_with(&row, &secret)` so `play_screen` sets `force = true` (present_frame_ex streams every strip, records no digest, invalidates SHOWN). Extend `Font::blit_secret_run`'s candidate range from a-z to a-z + 0-9 (or a second numeric run) for the digit. (3) Add the host test #784 recommends: every Screen produced by pin_row/letter_row/seed_page/candidate_list that carries a secret is presented with a non-empty `secret` (force=true) and never through `show()`. (4) Also re-randomise the start digit of the NEXT position after each accepted digit (Trezor caesar `set_page_counter(get_random_digit_position())`), not once per session.",
+   "rationale": "Cheapest, highest-certainty fix on the surface: the CT primitives, the forced-frame discipline and the host-test scaffolding already exist; only two call sites and one builder still bypass them. The PIN is the key to the device and the restore letters are the seed itself \u2014 both are strictly more valuable than the word pages that are already protected.",
+   "repo_evidence": [
+    "secure/src/ui/pin_entry.rs:177-210 (render_pin_screen: px `show(&row)` at 182-186; legacy `row1[col] = b'0' + d` at 200-201 then `d.draw_line(1, ...)` \u2192 public_glyph_cols)",
+    "secure/src/ui/px/status_map.rs:276-293 (pin_row: `glyphs[i] = b'0' + pin[i] % 10` into an Entry record, Item::Text)",
+    "secure/src/ui/px/status_map.rs:296-317 (letter_row: `glyphs[i] = buf[i]` for committed and active letters)",
+    "secure/src/ui/seed_wizard.rs:911-916 (render_letter_screen px branch calls `screens::show`, not `show_with`) and :918-935 (legacy branch draws letters via draw_line)",
+    "secure/src/ui/px/lcd.rs:663 (`let force = !secret.is_empty()`) and :304-322 (present_frame_ex: digest skip unless forced)",
+    "secure/src/ui/pin_entry.rs:55-60 (F-20 start digits drawn once at session start, never re-randomised per digit)",
+    "gh #784 OPEN priority:medium (letter row); PIN active digit is NOT tracked by any issue"
+   ],
+   "vendor_precedent": "Trezor core caesar PIN: fresh random digit position after every accepted digit (core/embed/rust/src/ui/layout_caesar/component/input_methods/pin.rs:320-328). Trezor crypto/bip39.c constant-time word lookup (commit 9b1c06205c). Ledger 1.6/2023 inverted-digit PIN UI (LSB-006, new-pin-screen).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P0",
+   "risks": "blit_secret_run currently scans 26 lowercase glyphs; adding digits widens the scan (~36 candidates per pixel) and the cost per forced PIN frame rises; must keep black_box barriers (secret_text.rs:44-50 documents the LLVM-fold regression). Per-digit re-randomisation changes the F-20 UX slightly (user re-dials from a new start each position) \u2014 already the case per position, so minimal. Must also verify with `make e2e-px` so the change is compiled IN (ui-px path), not only the legacy path.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/rust/src/ui/layout_caesar/component/input_methods/pin.rs",
+    "https://donjon.ledger.com/lsb/006/",
+    "https://www.ledger.com/blog/new-pin-screen/",
+    "tools/sca/README.md:1254-1263 (F-24 stage table, TVLA figures)"
+   ]
+  },
+  {
+   "id": "D-02",
+   "title": "Display-bus implant self-check: factory-enrolled electrical fingerprint of SPI1/DC lines (GPIO RC-decay timing), re-verified at boot and immediately before the seed wizard / PIN entry",
+   "threat": "Supply-chain / reseller-stage hardware implant tapping the NV3007 SPI (SCK/MOSI/CS/DC) to capture seed words and PIN glyphs \u2014 exactly the Ledger Nano X implant class (passive SPI sniff + glyph template match + LTE exfil). pq1 has no detection at all: the firmware is genuine, the board is not, and the only documented layer is photos + packaging (user-device-verification.md:163-168).",
+   "proposal": "Firmware self-test on the four trusted-display lines, run with the panel idle and CS deasserted: for each line, configure the pin as open-drain output with the internal pull-up (NOT analog mode \u2014 see the #705 IDR lesson), drive low, release, and count DWT cycles until IDR reads high; repeat N times with the mask PWM paused. The decay constant is pull-up R (~40 k) x total line capacitance (trace + panel input + any tap). An implant input pin plus its stub adds roughly 3-10 pF on a ~15-30 pF net, i.e. a 10-50% shift, resolvable at 160 MHz. Make it ratiometric (each line vs the others, which share process corner and temperature) and temperature-compensated via the internal temperature sensor ADC. Enrol the per-line baseline band at the factory (RDP-0 stage, written to a per-device page or OTP) and re-check at every boot and immediately before `show_mnemonic`, `enter_pin`, and the restore wizard; a miss refuses the wizard/sign with a loud trusted-UI screen and advises the verification ceremony. Treat this as the pq1 analogue of PACTOR's sub-pF capacitance sensing with the temperature-selected threshold their v2 needed.",
+   "rationale": "The one real implant sat on the display bus, the user's direct question is 'can the FSBL or similar detect malicious hardware', and no vendor ships anything. pq1 is unusually well placed: the secure image owns SPI1 and its GPIOs (GTZC-secured), the bus is short (PA4/PA5/PA7 under the same port), and the factory already does a per-device OTP/flash ceremony at RDP-0 where a baseline can be recorded, so a reseller-stage implant (the CryptoBilis pattern) is inserted AFTER enrolment and IS catchable. A self-enrolled first-field-boot baseline would not be (deep-research digest) \u2014 hence factory enrolment.",
+   "repo_evidence": [
+    "secure/src/board/pq1.rs:96-103 (SPI1 PA4/PA5/PA7, `LCD_MISO_PIN = None` \u2014 no readback path exists, so panel-ID attestation is impossible and a line-impedance test is the only in-band self-check)",
+    "secure/src/hw/lcd_nv3007.rs:277-291 (the retracted #705 IDR probe: PB15 in analog mode reads 0 \u2014 any new probe must configure digital input/OD and record the config first)",
+    "secure/src/hw/spi_hw.rs:116-122 (pins set AF push-pull, no pull; no measurement path)",
+    "docs/security/user-device-verification.md:163-168 ('a logger on the LCD SPI bus \u2026 remains the residual, as they are for every wallet vendor')",
+    "docs/security/threat-model.md:343 (defence stack is packaging + ceremony; no electrical self-check)",
+    "grep for IDR/capacit/rise-time/self-fingerprint in secure/src/hw/lcd_nv3007.rs, spi_hw.rs, lcd.rs: none"
+   ],
+   "vendor_precedent": "none shipped. Academic: PACTOR (Columbia/Intel, ISSCC 2024) sub-0.5 pF bus-probe capacitance sensing with temperature-selected threshold; Ledger's recorded implant response is photos + authorised resellers only (Grand slides, 'LEDGER RESPONSE').",
+   "novelty": "beyond",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "False positives from temperature, humidity, flex-connector ageing and pull-up tolerance (+/-30%) \u2014 must be validated on >=5 units across a thermal sweep before any refuse-path ships; a high-impedance FET-buffered tap (<1 pF) or an implant that also replaces the panel/flex to re-centre the capacitance evades it (detection floor, state it honestly). Baseline enrolment moves trust to the factory ceremony (already trusted for OTP transport keys, S-1/S-2 class). The SCK line is also the consumption-mask-adjacent PA5; the test must run with the mask paused and never during a frame. Needs a per-device page write at factory (not FSBL range).",
+   "sources": [
+    "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+    "https://spectrum.ieee.org/hardwired-to-self-destruct",
+    "https://www.ee.columbia.edu/news/self-destructing-circuits-and-more-security-schemes",
+    "https://www.coindesk.com/business/2026/10/09/ledger-investigates-potential-wallet-tampering-after-reports-of-usd86-million-in-crypto-stolen"
+   ]
+  },
+  {
+   "id": "D-03",
+   "title": "Power-budget attestation: VBUS/3V3 shunt + ADC current sense read at boot idle and during the seed wizard, against a design-derived band",
+   "threat": "Active implant (LTE/BLE modem + MCU) powered from the device. pq1 has no battery (owner decision), so an exfiltrating implant must either draw from USB VBUS/3V3 or carry its own cell inside an enclosure with no battery cavity. An LTE Cat.1 modem draws tens of mA idle and hundreds of mA on TX; a Cortex-M0+ sniffer draws single-digit mA \u2014 all far above the ~1 mW resolution the Piliposyan detector achieves, and the Ledger implant had to spoof battery telemetry precisely because it was power-visible.",
+   "proposal": "EVT board change: a low-side or high-side shunt (e.g. 50-100 mOhm) on the VBUS->3V3 regulator INPUT (upstream of every rail an implant could tap, including the SE rail switches LDO2_EN/SE1_EN and LCM_EN), read by a U585 ADC channel on one of the free bonded pins (PA10 or PA6 if the mask moves). Firmware: at boot with all peripherals in a known state (SEs off via rail switches, backlight at a fixed brightness, mask off) read the quiescent current; compare against a design-derived band from the BOM + factory-measured per-unit value (recorded at the RDP-0 ceremony); re-read during the seed wizard (radio TX bursts are the loudest moment). Out-of-band \u2192 refuse wizard/sign with a loud screen. Pair with D-02: capacitance catches passive taps, current catches active ones.",
+   "rationale": "No battery is a structural advantage over Ledger/Trezor T3W1: the implant's energy must come through one measurable choke point. The attacker's demonstrated counter (telemetry spoofing) is only possible when the sense element is downstream of or inside the tampered subassembly; a shunt at the USB input on the main PCB forces them to modify the main board itself, which the SWD/RDP-0 verification + photo ceremony already covers.",
+   "repo_evidence": [
+    "secure/src/board/pq1.rs:295-296 (`USB_VBUS_SENSE` PA9 is a digital presence line only; no ADC/shunt anywhere)",
+    "grep ADC/shunt/current-sense/INA in secure/src/board/pq1.rs, secure/src/hw/*.rs, docs/hardware/evt-silicon-validation.md: none",
+    "secure/src/board/pq1.rs:45 (free bonded pins PA6, PA10, PC13 \u2014 one is available for the ADC input)",
+    "docs/hardware/hardware_requirements.md:100-112 (tamper mesh / case switch / EMI can listed; no current sensing)"
+   ],
+   "vendor_precedent": "none shipped. Academic: Piliposyan & Khursheed, IEEE TC 2023 (INA219 + OC-SVM/LOF, F1>99.7% at 50 mW, ~0.88 at 5 mW; passive RC Trojans out of reach). Evidence attackers adapt: Ledger implant replaced NTC with 10k and bypassed the fuel-gauge sense resistor (Grand slides, 'FRONT-SIDE MODIFICATIONS').",
+   "novelty": "beyond",
+   "kind": "hardware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Hardware change (EVT spin). Band width must cover regulator/LED/SE variation (tens of mA quiescent on the SE rail) so a <2 mA sniffer-only implant is below the floor \u2014 state that the detector targets radios and MCUs, not passive loggers (D-02 covers those). A self-powered implant (coin cell) evades it; the enclosure must then make a cell cavity impossible (D-08). The sense reading must be taken by secure-world code with the ADC attributed SECURE in GTZC.",
+   "sources": [
+    "https://livrepository.liverpool.ac.uk/3166747/6/PCB_Hardware_Trojan_Run-Time_Detection_Through_Machine_Learning.pdf",
+    "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+    "https://news.bitcoin.com/security/ledger-confirms-hidden-hardware-implant-in-affected-users-wallet/"
+   ]
+  },
+  {
+   "id": "D-04",
+   "title": "Content-independent SPI payload for secret cells: equal-Hamming-weight / equal-transition RGB565 colour pair for secret glyphs (bus-level constant-weight encoding)",
+   "threat": "EM / crosstalk / supply leakage of the 20 MHz MOSI stream (and the panel source-driver current) during seed, candidate-list, letter-row and PIN frames. Today the glyph FETCH is constant-time but the PAYLOAD is maximal-contrast 0xFFFF/0x0000: every secret pixel toggles all 16 bits, so the per-pixel Hamming weight and transition count on the bus is exactly the glyph bitmap (Kuhn's FPD-link TEMPEST / Screen Gleaning class, averaged across the periodic refresh).",
+   "proposal": "For secret rows/cells only (legacy `blit_glyph` FG/BG and px `Item::Secret` via `blend_ct`), replace the colour pair with a pair (fg, bg) chosen by brute-force search over RGB565 such that: equal Hamming weight, equal intra-word transition count, equal first and last bit (so inter-pixel boundary transitions are also glyph-independent), and acceptable luminance contrast on the NV3007 (verify on glass). Quantise px anti-aliased coverage for secret cells to the two-colour pair (or to a small set of pairs that all satisfy the constraints) so no intermediate colour leaks. Optionally surround the secret cell band with a constant lit field (Trezor legacy inversion) so the panel's row current is dominated by a content-independent background. Keep this orthogonal to the glyph-fetch CT path and to the atlas pin (colour is applied in the compositor, not the atlas).",
+   "rationale": "This is the SPI-panel translation of Trezor's `oledSCA` constant-weight rows and Ledger's inverted PIN boxes: make the electrical signature per secret pixel independent of the bit. On a 3-wire SPI TFT the bus bits ARE the leak carrier, so weight/transition equalisation attacks the channel at its source with a two-constant change on the legacy path and a small compositor change on px. It does nothing against a logic-level tap (D-02/D-03/D-05 cover that) and that must be stated.",
+   "repo_evidence": [
+    "secure/src/ui/lcd.rs:47-48 (`FG: u16 = 0xFFFF`, `BG: u16 = 0x0000`) and :263-264 (branchless mask select of FG/BG \u2014 value, not weight, is masked)",
+    "pqsigner-ui-px/src/raster.rs:166-179 (blend_ct composites every pixel with a coverage-dependent colour; no weight constraint)",
+    "gh #260 OPEN priority:low (constant-pixel-count encoding 'reconsideration' \u2014 deferred on the unmeasured constant-current-backlight argument; this proposal is the bus-level variant, not the row-current one)",
+    "gh #237 OPEN priority:low (threat-model \u00a77.10 row still absent; issue body still frames the surface as SSD1306)"
+   ],
+   "vendor_precedent": "Trezor legacy `oledSCA` constant-weight row padding + `oledInvert` band (legacy/oled.c:451-473, legacy/firmware/layout2.c:832-838); Ledger 1.6 inverted-pixel PIN/recovery boxes (LSB-006). Trezor core deliberately dropped software padding in favour of the hardware mask on the OLED and has NO bus-level countermeasure on any model.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "Contrast/readability on the NV3007 must be verified on glass (pq1 bench has no LCD \u2014 iota2 module or EVT); mid-weight colour pairs are less legible than white-on-black. Residual: crosstalk and driver-IC EM still depend on pattern geometry, and a logic-level tap reads the pixels regardless. Needs a TVLA receipt (D-10 harness) rather than a structural claim \u2014 the 2019 Ledger lesson is that 'physical noise' claims failed on the next panel.",
+   "sources": [
+    "https://www.cl.cam.ac.uk/~mgk25/pet2004-fpd.pdf",
+    "https://ar5iv.labs.arxiv.org/html/2011.09877",
+    "https://github.com/trezor/trezor-firmware/blob/main/legacy/oled.c",
+    "https://donjon.ledger.com/lsb/006/"
+   ]
+  },
+  {
+   "id": "D-05",
+   "title": "Defeat fixed-template glyph taps and shrink the exposure window: per-session randomised glyph geometry/colour-LSB jitter, one-word-at-a-time reveal with random hold, dimmed wizard backlight, and the 'never put your backup anywhere digital' screen",
+   "threat": "A passive display-bus tap with an on-implant glyph template matcher (the Ledger implant stored a-z templates at 0x4D00-0x4E40 and matched the SPI stream), plus camera/EM averaging across a periodic refresh (Kuhn: a cached, pixel-identical glyph 'merely assists the eavesdropper'), plus the no-countermeasure photo/shoulder residual.",
+   "proposal": "(a) In the compositor (after atlas verification, so the SHA-256 pin is untouched), apply a per-session TRNG-chosen sub-cell x/y offset per secret cell, randomised low-order colour bits (within D-04's weight constraints), and if the atlas budget allows, K glyph variants per letter chosen per cell; this makes a byte-exact template matcher miss and forces the implant to carry an OCR, raising its size/power (which D-03 then sees). (b) Offer a one-word-per-page mode (24 frames, each word with its index) with a random 0-300 ms pre-display hold so no single leaked frame carries more than one word and frame boundaries are not USB/host-alignable; keep scroll-to-end. (c) pq1: program the AW99703 to a low brightness during the wizard (REG_LEDMSB/LSB are already written once at init) to cut backlight-rail and driver emission amplitude. (d) Add Trezor's pre-display warning page.",
+   "rationale": "The implant that actually existed was a fixed-template matcher; cheap per-session rendering diversity is the one software measure that targets it directly, and it is the countermeasure Kuhn identified as the only effective software one against FPD-link TEMPEST. Fewer words per frame and a dimmer, jittered reveal cut both electrical and optical exposure per frame at near-zero cost, and avoid the decoy-frame approach that failed on glass twice (#258).",
+   "repo_evidence": [
+    "secure/src/ui/seed_wizard.rs:64-82 + 370-380 (paging is 3 or 8 words per page; no one-word mode)",
+    "secure/src/ui/seed_wizard.rs:333 (the 'Write 24 words / L=cancel R=show' gate exists \u2014 do NOT re-propose; the 'never digital' warning does not: grep photo/digital/camera in seed_wizard.rs returns nothing)",
+    "secure/src/hw/aw99703.rs:66-69, 78, 114-115 (brightness is a compile-time constant 0x5FF written once; no wizard dim mode)",
+    "pqsigner-ui-px/src/font.rs:233-238 (fixed SECRET_ADV=14 px pitch, fixed cells \u2014 byte-identical glyph placement every session)",
+    "gh #258 OPEN priority:low (decoy frames failed at 20 MHz; still legacy-only, no px twin)",
+    "gh #237 OPEN (lists dim mode / one-word reveal / random pad pixels as candidates; none implemented)"
+   ],
+   "vendor_precedent": "Trezor One single word per frame (legacy/firmware/reset.c:206-231); Trezor core `reset__never_make_digital_copy` warning (core/translations/en.json:2248); Ledger 1.6 'randomized screen-update parameters' (contrast/supply/oscillator) \u2014 later found insufficient on the next panel (new-pin-screen 2023); Kuhn PET 2004 randomised glyph colour bits.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "Adaptive OCR implants defeat glyph jitter \u2014 it raises cost, not impossibility; say so. Jitter must stay inside the constant-weight constraints of D-04 and inside the CT blit (no value-dependent branch). One-word mode lengthens the backup ceremony (24 confirmations); make it the default only if UX testing on the EVT (no LCD on the bench board) accepts it. Dimming must not fall below legibility \u2014 the backlight current is content-independent either way, so the gain is amplitude only.",
+   "sources": [
+    "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+    "https://www.cl.cam.ac.uk/~mgk25/pet2004-fpd.pdf",
+    "https://www.ledger.com/blog/new-pin-screen/",
+    "https://github.com/trezor/trezor-firmware/blob/main/legacy/firmware/reset.c"
+   ]
+  },
+  {
+   "id": "D-06",
+   "title": "Consumption mask parity: re-randomise on every display flush, DMA-fed TRNG duty table on a secure GPDMA channel, and put an actual load on the mask pin",
+   "threat": "Trace alignment on frame transmission: the attacker aligns a power/EM trace on the SPI frame (the moment content-dependent current/EM appears). pq1's mask is re-randomised only from the secure tick, from a xorshift PRNG, and drives an NC pad, so it neither decorrelates per frame nor demonstrably dilutes anything.",
+   "proposal": "(1) Call `hw::consumption_mask::randomize()` at the top of `lcd::Display::flush` / `flush_with_secret_rows` and in `px::lcd::present_frame_ex` before the first strip goes out (Trezor's `display_refresh` hook), drawing that sample from rng_strong rather than the xorshift. (2) Port Trezor's DMA-fed table: a 119-entry duty table in S-SRAM refreshed from the TRNG, GPDMA1 channel in circular linked-list mode triggered by TIMx_UP writing CCR1 every 100 us, with the channel configured SEC|PRIV|SRC_SEC|DEST_SEC so NS cannot halt it (the module header already lists this as the follow-up). (3) EVT: route the mask pin (pq1 PA6, currently NC) to a small resistive load across the 3V3 near the die so the duty cycle actually modulates supply current; then measure dilution with the SCA bench (TVLA before/after) and close the 'unmeasured' caveat.",
+   "rationale": "Direct Trezor parity on the same MCU family; (1) is a two-line change, (3) is the only thing that makes the production-mandatory fence mean something. Without (3) the feature is satisfied-by-construction, as CLAUDE.md admits.",
+   "repo_evidence": [
+    "secure/src/main.rs:4337 (the ONLY `consumption_mask::randomize()` call \u2014 periodic tick); grep randomize in secure/src/ui/lcd.rs, secure/src/ui/px/lcd.rs, secure/src/hw/lcd_nv3007.rs: none",
+    "secure/src/hw/consumption_mask.rs:12-20 ('A full DMA port is a follow-up'), :41-51 (neither board drives a load; dilution unmeasured), :166-192 (randomize from xorshift32)",
+    "gh #831 OPEN priority:medium (reseed fails open, biased toward signing windows); gh #646 OPEN",
+    "docs/hardware/evt-silicon-validation.md \u00a79 (unloaded-pin bench item)"
+   ],
+   "vendor_precedent": "Trezor core/embed/io/display/vg-2864/display_driver.c:407-425 (`consumption_mask_randomize()` on every display_refresh); core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:73-142 (GPDMA1 linked-list, TIM2_UP trigger, SEC|PRIV channel attributes at :85-87,117-118).",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Trezor only enables the mask on OLED models and has no mask on TFT \u2014 its 'no mask on TFT' choice is not evidence that pq1's SPI TFT is safe (different channel: bus EM, not row current). A loaded pin costs a few mA continuously. The GPDMA channel must be verified blocked from NS on silicon (#53 still open). Per-frame randomisation adds a TRNG read per frame \u2014 bound it so it cannot stall the frame.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/io/display/vg-2864/display_driver.c",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/consumption_mask/stm32u5/consumption_mask.c",
+    "https://donjon.ledger.com/lsb/006/"
+   ]
+  },
+  {
+   "id": "D-07",
+   "title": "Zeroize pixel-form secret residue and clear the panel GRAM/backlight on every lock, wipe and idle-timeout",
+   "threat": "Post-lock SRAM dump, a later NS-reachable secure-world bug, or a powered-but-locked device whose TFT GRAM still holds the last wizard frame: the legacy `Display::cell` (720 B), the px `STRIP` static (13,696 B), `secret_rows_storage`/`wb` in the legacy mnemonic/candidate renderers, and the NV3007 GRAM all retain the last secret glyphs in pixel form after the wizard; `CMD_LOCK` only paints 'Locked'.",
+   "proposal": "(1) Zeroize `cell` after each secret glyph blit and `STRIP` at the end of every forced frame (and at `invalidate_shown`), and zeroize `secret_rows_storage`/`wb` in `render_mnemonic_page` / legacy `render_candidate_screen` (the px twins already do). (2) On `cmd_lock`, idle-timeout wipe, tamper wipe and wizard exit: `fill_screen(BG)` the whole GRAM (not just the 16x4 text window), then de-assert LCM_EN / set AW99703 brightness 0 on pq1 and, where drivable, pulse the panel reset so GRAM is cleared in hardware. (3) Add a host test that the row/cell/strip buffers are all-zero after a forced frame completes.",
+   "rationale": "Trezor clears both physical framebuffers on display init and gates FB access by MPU; pq1 keeps everything in S-SRAM (stronger) but never erases it. Residue in pixel form is a seed-recovery oracle for any future bug, and the GRAM case is a physical one (a locked device on a desk still holds the frame until overwritten).",
+   "repo_evidence": [
+    "grep zeroize/Zeroize in secure/src/ui/lcd.rs, secure/src/ui/px/lcd.rs, pqsigner-ui-px/src/raster.rs, pqsigner-ui-px/src/font.rs: none",
+    "secure/src/ui/lcd.rs:111 (`cell: [BG; CELL_N]` persistent scratch, never cleared after a secret blit)",
+    "secure/src/ui/px/lcd.rs:304-322, 695-697 (forced frame invalidates SHOWN but does not zero STRIP)",
+    "secure/src/nsc/cmd_lock.rs:13 (`show_status(\"Locked\", \"\")` \u2014 no fill_screen/backlight-off/GRAM reset)",
+    "secure/src/ui/seed_wizard.rs:414 (`show_status(\"Words shown\")` overwrites the text window only)",
+    "gh #124 OPEN (secret residue twins \u2014 SE driver buffers only; framebuffers untracked)"
+   ],
+   "vendor_precedent": "Trezor core/embed/io/display/st-7789/display_fb.c:118-124 (`display_fb_clear` memsets both physical FBs) and DISPLAY_RESET_CONTENT mode; MPU revocation of the FB at refresh (vg-2864 display_driver.c:420-424).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "Zeroize must use the same volatile/compiler-fence discipline as other secret types (`zeroize::ZeroizeOnDrop`); a plain store can be elided. Blanking the GRAM on lock costs one full-frame SPI write (~20 ms). On pq1 the backlight enable is also the AW99703 HWEN \u2014 re-enabling needs the I2C re-program sequence already in `lcd_nv3007::init`.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/io/display/st-7789/display_fb.c",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/io/display/vg-2864/display_driver.c"
+   ]
+  },
+  {
+   "id": "D-08",
+   "title": "Display-removal / enclosure tamper on PC13 (TAMP_IN1) plus a no-cavity, glued, tamper-evident enclosure around the panel flex",
+   "threat": "Physical interposition on the display flex (the Ledger implant was a concealed board behind the screen) and screen replacement with a fake panel (pq1's accepted post-boot fake-screen residual). pq1's TAMP driver handles internal tampers only; the external case-switch/mesh item is 'board not started'.",
+   "proposal": "EVT: wire a continuity loop through the panel flex and a case-open switch to PC13 (one of the three free bonded pins and the U585's TAMP_IN1 \u2014 confirm against the pin table) with the hardware pull + RC filter `hardware_requirements.md` already specifies; firmware: enable the external tamper in `TAMP_CR1`/`CR2` in confirmed mode so the BHK backup registers erase on open (as internal tampers already do) and the device wipes/refuses the wizard. Mechanically: potted/glued display stack with no void behind the panel, ultrasonically welded case, serialised tamper-evident seal recorded at the factory ceremony and checked in the box-opening ceremony. Document the Coldcard clear-case / visible-circuit alternative as the open-inspection option.",
+   "rationale": "Passport Prime ships 'factory reset on any attempt to remove the screen'; Coldcard ships a visible-circuit clear case; Ledger's only answer is photos. The implant needs physical volume and flex access; denying both is the one measure that scales to adaptive implants that D-02/D-03 cannot resolve.",
+   "repo_evidence": [
+    "secure/src/hw/tamp.rs:194-198, 288, 313 (ITAMP1/2/3/5/6 only \u2014 no TAMP_INx external tamper enable)",
+    "docs/hardware/hardware_requirements.md:107-108, 240 (case switch -> TAMP_INx 'board not started'; pin enable is the missing firmware piece)",
+    "secure/src/board/pq1.rs:45 (PC13 free and bonded)",
+    "docs/security/user-device-verification.md:163-168 (implant residual, layer = packaging + photos only)",
+    "README.md:459 (tamper-evident packaging is an unchecked production checklist item)"
+   ],
+   "vendor_precedent": "Foundation Passport Prime (screen-removal/PCB/chassis tamper -> irreversible factory reset); Coldcard Mk4 clear case + SE-driven genuine LED; Trezor TAMP all-internal-confirmed mode (core/embed/sec/tamper/stm32u5/tamper.c). Ledger: none (procedural only).",
+   "novelty": "parity",
+   "kind": "hardware",
+   "cost": "L",
+   "priority": "P2",
+   "risks": "External tamper on the backup domain must survive power-off (needs VBAT path \u2014 pq1 has no battery, so the 'open while unpowered' case only wipes on next power-up when the loop reads open; state that). Glued stacks hurt repairability (accepted for a signer). Mechanical no-cavity design is a product decision outside this repo; mis-wired TAMP_IN wipes units in the field \u2014 needs the TAMP_FLTCR filter and a bench receipt.",
+   "sources": [
+    "https://docs.foundation.xyz/glossary/home/",
+    "https://blog.coinkite.com/understanding-mk4-security-model/",
+    "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf"
+   ]
+  },
+  {
+   "id": "D-09",
+   "title": "SE-keyed anti-phishing words at PIN entry (Coldcard / Passport 'Security Words'): detect a swapped or cloned device before the full PIN is typed",
+   "threat": "Evil-maid / reseller swap: a look-alike device (or an implanted one with its own firmware) harvests the PIN as the user types it on the trusted UI; the boot fingerprint proves the firmware, not that this is the user's own unit, and a device with the same firmware shows the same 8 words.",
+   "proposal": "After the first 4 PIN digits, compute inside an SE (SE050 HMAC over the prefix with a per-device SE-resident secret, or OPTIGA CMAC via a protected object, rate-limited by SE policy to ~2 s per distinct prefix) and render two BIP-39 words via the CT secret path; the user learns them at setup (shown once, written next to the device) and aborts PIN entry if they differ. Opt-in (Passport default-off) or default-on with an explicit setup step. Keep PIN comparison itself in SE silicon (invariant #2 untouched; the prefix MAC is a separate keyed object, never the PIN object).",
+   "rationale": "Zero hardware cost, directly addresses the user's 'malicious hardware' question for the swap case (a clone cannot reproduce the SE-keyed words), and complements the FSBL fingerprint which only answers 'which firmware'.",
+   "repo_evidence": [
+    "secure/src/ui/pin_entry.rs:8-30 (F-20 only; no device-authenticity words); grep anti-phish/security words/prefix in pin_entry.rs, cmd_request_unlock.rs, threat-model.md, trezor-comparison.md: none",
+    "secure/src/ui/secret_text.rs:73-82 (CT secret row primitive available to render the words)"
+   ],
+   "vendor_precedent": "Coldcard Mk4 anti-phishing words (HMAC over hashed PIN prefix in SE1, 2 s rate limit); Foundation Passport Prime 'Security Words' (off by default).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "Exposes a rate-limited 4-digit-prefix oracle on the SE (10,000 prefixes; with 2 s/attempt ~5.5 h to enumerate, which reveals the PIN prefix only if the user's words are known \u2014 the words are secret to the user, so the oracle yields nothing to an attacker without them). The words themselves become a secret displayed every unlock \u2014 must go through the CT/forced path (D-01) and the constant-weight pair (D-04). Needs an SE050 object/policy design and an attempt-counter interaction review so it cannot consume page-124/E120 budget.",
+   "sources": [
+    "https://blog.coinkite.com/understanding-mk4-security-model/",
+    "https://coldcard.com/docs/pins/",
+    "https://docs.foundation.xyz/prime/prime-apps/settings/general/"
+   ]
+  },
+  {
+   "id": "D-10",
+   "title": "Evidence and drift closure for the display surface: ui-px SCA harness for blit_secret_run, forced-frame/CT regression tests, threat-model \u00a77.10 row, playbook rows, redact ui-capture, and fix the stale decoy/README/comment claims",
+   "threat": "Silent regression: the px secret run's black_box barriers have the same LLVM-fold failure mode the legacy scan documents, and nothing measures it; stale docs claim gates that do not exist (font.rs:270 defers to a harness that only covers the legacy FONT_5X8 scan), so a future reviewer banks a false 'covered'.",
+   "proposal": "(1) Add pqsigner-ui-px as a dependency of tools/sca/kdf_target and a `make -C tools/sca px-glyph-leak` TVLA (rainbow+lascar, mem_address + Hamming models) over `Font::blit_secret_run` with a leaky-baseline sentinel, run in CI like glyph-leak. (2) Kani/proptest over Item::Secret: pixel count and write pattern independent of the secret bytes. (3) Host tests: every secret-carrying Screen is presented forced (D-01) and scratch buffers are zero after a forced frame (D-07). (4) Redact seed rows in `semihosting::flush` before hashing (#186) instead of relying on the denylist. (5) Docs: add the \u00a77.10 display-emanation row and trusted-UI/sca-fi playbook rows (bus EM, SPI timing, framebuffer residue, implant tap); correct tools/sca/README.md:1339-1400 (deleted `render_secret_row`/oled.rs references; decoy 'path forward' vs the recorded 20 MHz failure), seed_wizard.rs:315-320/1089-1096 stale predictions, px/screens.rs:14-17 'secrets never enter a record' (PIN digit/letters do), and refresh #237/#260 bodies from SSD1306 to NV3007 (single-LED AW99703, 20 mA full scale).",
+   "rationale": "Every 'implemented' row on the px seed path is code-read evidence only; the project's own memory records that green runs with the path compiled out are not evidence. This item converts structural claims into measured ones and stops the documented drift from re-propagating.",
+   "repo_evidence": [
+    "grep ui-px/pqsigner-ui-px in tools/sca/kdf_target/Cargo.toml: none (rc=1); tools/sca/Makefile:231-237 glyph-leak targets FONT_5X8 only",
+    "pqsigner-ui-px/src/font.rs:270 ('The tools/sca F-24 harness, not this comment, is the gate') \u2014 no such harness for this path",
+    "secure/src/ui/semihosting.rs:92-114 (hashes raw grid incl. seed rows; gh #186 OPEN)",
+    "docs/security/threat-model.md:323-331 (\u00a77.10 has no display row; gh #237 OPEN)",
+    "tools/sca/README.md:1381-1400 (cites deleted render_secret_row / oled.rs); secure/src/ui/seed_wizard.rs:315-320 (stale 'should work on LCD' prediction vs #258)",
+    "secure/src/ui/px/screens.rs:14-17 vs status_map.rs:285, 303-309 (claim drift)"
+   ],
+   "vendor_precedent": "Trezor keeps screen-content tracing and seed read-out debug-only (`if __debug__` DebugLinkGetState, core/src/apps/debug/__init__.py:285-291) and ships a constant-time bip39 lookup with a CHANGELOG entry; no vendor publishes a TVLA gate for its glyph path \u2014 this is beyond-parity on evidence.",
+   "novelty": "beyond",
+   "kind": "process",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "rainbow models mem_address/HW, not the SPI line itself \u2014 the harness bounds the MCU-side leak only; bus EM still needs a bench receipt on the EVT (no LCD on the bench board). DROPPED: always-on RDI jitter for the display/wizard window (blocked on the 'No software PRNG' owner question, #805); Trezor-style entropy-check commit/reveal with the companion (C10 keygen cost; wallet-creation surface); user-contributed dice/keypress entropy phase (NGRAVE/Coldcard; wallet-creation surface); no-display backup via SE-sealed share to a second device/companion (conflicts with invariant #1 unless split, owner-undecided, XL); NSC dispatcher re-entrancy guard during confirm() (LSB-023 class; clearsign/usb surface); on-chain intent-commitment in sphincsDigest (clearsign surface); Krux-style whole-bank measurement incl. unused pages (boot surface); FSBL-window RDI/poisoned-jump-target FI hardening (boot surface); FSBL backlight (#705, already tracked).",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/src/apps/debug/__init__.py",
+    "https://github.com/trezor/trezor-firmware/blob/main/crypto/bip39.c",
+    "tools/sca/README.md:1254-1263, 1292-1304, 1339-1400"
+   ]
+  }
+ ]
+}

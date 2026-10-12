@@ -1,0 +1,27 @@
+{
+ "id": "FI-10",
+ "title": "Memory and counter integrity under faults: MSPLIM in both worlds, secrets in an ECC-NMI bank, an authentication tag over the page-123 live record set, and a non-trivial page-124 encoding",
+ "threat": "A fault-induced stack-pointer corruption or deep recursion silently overwrites page-123/124 buffers (no MSPLIM anywhere); an SRAM bit-flip in master_secret/SLOT_CACHE corrupts silently (ECC double-error NMI off), which SLasH-DSA shows is exploitable during hash-based signing; a glitch or flash manipulation that drops the newest page-123 tally record lowers local_offchain_count with no detector; page 124 is a unary count of zero quadwords where an erased page decodes to 0 attempts (the exact 0xFF read-as-zero shape Trezor was defeated by via USB voltage manipulation).",
+ "proposal": "(1) Program MSPLIM_S (and PSPLIM if used) 256 B above the stack base in the secure world's startup and in the FSBL; overflow \u21d2 UsageFault \u21d2 existing zeroize+reset path. (2) Place master_secret, SLOT_CACHE and the sign buffers in SRAM2 (or an ECC-enabled region per #48), enable RAMCFG ECC double-error NMI and route it to zeroize + handle_fault. (3) Page 123: maintain an HMAC-SHA256 (DHUK-rooted via saes_cmac) over the folded set of live per-slot counters written as the last quadword of each commit and verified on every read; mismatch \u21d2 refuse to sign + handle_fault (Trezor STORAGE_TAG). (4) Page 124: replace the plain zero-quadword with a Hamming-structured marker (e.g. 01/10-expanded attempt index + complement) so neither 0x00\u202600 nor 0xFF\u2026FF quadwords are well-formed, decode every copy and require agreement; keep the SE counters as primary. (5) Kani/rainbow fault-model tests for both decoders (the existing Kani work covers logic, not stuck-at reads).",
+ "rationale": "These are shipped Trezor properties (MSPLIM, storage auth tag, blockwise 01/10 PIN counter) and a ship-blocker (#48); page-124 is the user-facing 10-attempt bound and page-123 is the off-chain cap, both read by FI-critical gates. Trezor explicitly justifies a simplified counter encoding when SE counters exist \u2014 pq1 is in the same position \u2014 but not an unencoded one.",
+ "repo_evidence": [
+  "grep MSPLIM secure/src \u2192 empty; fsbl/src/main.rs:172, fsbl/src/manifest.rs:30 ('no MSPLIM')",
+  "docs/security/brownout-hardening.md:321-322 (ECC double-bit NMI off, RAMCFG untouched); gh #48 OPEN ship-blocker",
+  "grep -iE 'hmac|tag|cmac|auth' secure/src/offchain_state.rs \u2192 no authentication tag over the record set",
+  "secure/src/hw/flash.rs:824-834,837-895 (page-124 = count of all-zero quadwords; erased \u21d2 0 attempts; fwd/rev scan only)",
+  "gh #230 OPEN (crash-atomic page-123 compaction)"
+ ],
+ "vendor_precedent": "Trezor sysutils.c:91-95 (MSPLIM), storage.c:253-388 (auth tag over protected keys), storage/pinlogs_blockwise.h:8-87 (01/10 expansion + all-copies-agree), docs/storage/index.md:176-215 (0xFFFFFFFF counter defeated by USB voltage manipulation).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "Changing the page-124/123 layouts re-provisions every bench board and touches the Kani/Miri-proven decoders and the E2E pin-gate harnesses; the page-123 tag adds 16 B per commit against the 16 B/increment log budget (compaction cadence halves). DROPPED: consumption-mask GPDMA circular refresh (consumption_mask.rs:14-20, SCA not FI); sign_rate pre_sign FI wrapper (#139); SE alarm/reset counting \u21d2 escalate instead of silent retry (ifx_i2c.rs retry paths); production reset-cause gating (refuse unlock until PINRSTF|BORRSTF cold boot, reset_cause.rs:108); secure-world MPU windowing / SRAM XN (trezor-comparison.md:429); Hamming-distant phase words for fw_update/first-boot journals (folded into FI-05); per-sign HASH KAT (#367); ct_eq loop-completion wrapper over subtle; pixel-UI seen_last plain bool (HARDENING.md:114-118) and unvoted button timing (#185); TAMP\u00d7BHK ITAMP6/9 masking (#208, prerequisite for FI-02); seed entropy XOR of SE TRNGs \u2014 already implemented via rng_strong (dual_se.rs:86-108,565-590), not proposed.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/storage/pinlogs_blockwise.h",
+  "https://github.com/trezor/trezor-firmware/blob/main/docs/storage/index.md",
+  "https://github.com/trezor/trezor-firmware/blob/main/storage/storage.c",
+  "https://arxiv.org/abs/2509.13048"
+ ],
+ "surface": "fi"
+}

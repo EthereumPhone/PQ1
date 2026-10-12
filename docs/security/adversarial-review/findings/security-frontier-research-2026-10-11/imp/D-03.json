@@ -1,0 +1,25 @@
+{
+ "id": "D-03",
+ "title": "Power-budget attestation: VBUS/3V3 shunt + ADC current sense read at boot idle and during the seed wizard, against a design-derived band",
+ "threat": "Active implant (LTE/BLE modem + MCU) powered from the device. pq1 has no battery (owner decision), so an exfiltrating implant must either draw from USB VBUS/3V3 or carry its own cell inside an enclosure with no battery cavity. An LTE Cat.1 modem draws tens of mA idle and hundreds of mA on TX; a Cortex-M0+ sniffer draws single-digit mA \u2014 all far above the ~1 mW resolution the Piliposyan detector achieves, and the Ledger implant had to spoof battery telemetry precisely because it was power-visible.",
+ "proposal": "EVT board change: a low-side or high-side shunt (e.g. 50-100 mOhm) on the VBUS->3V3 regulator INPUT (upstream of every rail an implant could tap, including the SE rail switches LDO2_EN/SE1_EN and LCM_EN), read by a U585 ADC channel on one of the free bonded pins (PA10 or PA6 if the mask moves). Firmware: at boot with all peripherals in a known state (SEs off via rail switches, backlight at a fixed brightness, mask off) read the quiescent current; compare against a design-derived band from the BOM + factory-measured per-unit value (recorded at the RDP-0 ceremony); re-read during the seed wizard (radio TX bursts are the loudest moment). Out-of-band \u2192 refuse wizard/sign with a loud screen. Pair with D-02: capacitance catches passive taps, current catches active ones.",
+ "rationale": "No battery is a structural advantage over Ledger/Trezor T3W1: the implant's energy must come through one measurable choke point. The attacker's demonstrated counter (telemetry spoofing) is only possible when the sense element is downstream of or inside the tampered subassembly; a shunt at the USB input on the main PCB forces them to modify the main board itself, which the SWD/RDP-0 verification + photo ceremony already covers.",
+ "repo_evidence": [
+  "secure/src/board/pq1.rs:295-296 (`USB_VBUS_SENSE` PA9 is a digital presence line only; no ADC/shunt anywhere)",
+  "grep ADC/shunt/current-sense/INA in secure/src/board/pq1.rs, secure/src/hw/*.rs, docs/hardware/evt-silicon-validation.md: none",
+  "secure/src/board/pq1.rs:45 (free bonded pins PA6, PA10, PC13 \u2014 one is available for the ADC input)",
+  "docs/hardware/hardware_requirements.md:100-112 (tamper mesh / case switch / EMI can listed; no current sensing)"
+ ],
+ "vendor_precedent": "none shipped. Academic: Piliposyan & Khursheed, IEEE TC 2023 (INA219 + OC-SVM/LOF, F1>99.7% at 50 mW, ~0.88 at 5 mW; passive RC Trojans out of reach). Evidence attackers adapt: Ledger implant replaced NTC with 10k and bypassed the fuel-gauge sense resistor (Grand slides, 'FRONT-SIDE MODIFICATIONS').",
+ "novelty": "beyond",
+ "kind": "hardware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Hardware change (EVT spin). Band width must cover regulator/LED/SE variation (tens of mA quiescent on the SE rail) so a <2 mA sniffer-only implant is below the floor \u2014 state that the detector targets radios and MCUs, not passive loggers (D-02 covers those). A self-powered implant (coin cell) evades it; the enclosure must then make a cell cavity impossible (D-08). The sense reading must be taken by secure-world code with the ADC attributed SECURE in GTZC.",
+ "sources": [
+  "https://livrepository.liverpool.ac.uk/3166747/6/PCB_Hardware_Trojan_Run-Time_Detection_Through_Machine_Learning.pdf",
+  "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+  "https://news.bitcoin.com/security/ledger-confirms-hidden-hardware-implant-in-affected-users-wallet/"
+ ],
+ "surface": "display"
+}

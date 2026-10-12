@@ -1,0 +1,29 @@
+{
+ "id": "BOOT-01",
+ "title": "Pin the FULL option-byte profile (WRP both banks, OEM1/OEM2 lock, BOOT_LOCK, BOR_LEV, nBOOT0/nSWBOOT0, HDP) and escalate a persistent post-lock mismatch from halt to wipe",
+ "threat": "Option-byte tamper / RDP regression in the RDP-0\u2192RDP-2 transit window and after lock: a unit whose WRP was cleared before the RDP-2 burn, an OEM1/OEM2 RDP-regression password planted at the factory or in transit, a SWAP_BANK flip (NS-programmable without BOOT_LOCK), or a lowered BOR level (the \u03bc-Glitch L5 attack needed to defeat BoD) \u2014 none of which today's tz-1 tripwire or Phase A can see; and a halted (not wiped) device leaves secrets in place for a second physical attempt.",
+ "proposal": "(1) Run the deferred silicon pin on sacrificial U585 dies for WRP1AR/WRP2AR, NSSR.OEM1LOCK/OEM2LOCK, SECBOOTADD0R.BOOT_LOCK, OPTR.BOR_LEV/nBOOT0/nSWBOOT0/SWAP_BANK and SECWM1R2.HDP1 polarity, then flip `WRP1A_MASK_PINNED`, `OEM_LOCK_MASK_PINNED` and `require_boot_lock` to true in BOTH `SHIP_PROFILE_U585`/`LOCKED_PROFILE_U585` and widen `optr_matches_ship` to an exact OPTR mask (Trezor compares the whole OPTR constant). (2) FSBL tz-1 compares the full set every boot (\u2248 +100 B). (3) First-boot Phase A asserts OEMxLOCK clear and BOOT_LOCK set BEFORE the RDP=0xCC burn (OEM keys cannot be cleared after RDP-2) and the factory ship profile JSON lists OEM1KEYR/OEM2KEYR=0xFFFFFFFF + lock bits for the SWD verifier. (4) Secure world: once journal ALL_DONE, a 2-pass persistent mismatch on ANY pinned field drives `tzic::trigger_intrusion_wipe` (admin-wipe both SEs + page 126 erase) instead of `secure_log!`; FSBL keeps halt (no SE driver there).",
+ "rationale": "Invariant #10 rests on 'WRP set before RDP-2'; today no software can tell a unit where that ordering was violated from a good one, and OEM keys are the documented U5 path to make RDP-2 reversible. Trezor's shipped boardloader treats any divergence from the pinned profile as 'first boot OR hardware fault OR exploit attempt' and destroys the BHK; pq1's halt is strictly weaker for a stolen device. Pinning the layout is a one-time silicon receipt; the comparator code already exists host-tested in shared::lockdown.",
+ "repo_evidence": [
+  "fsbl/src/optbytes.rs:24-29 ('deliberately does NOT act on WRP1A or the OEM locks ... a unit whose WRP was cleared before RDP-2 passes this tripwire')",
+  "shared/src/lockdown.rs:338-356 (SHIP/LOCKED profiles with WRP1A_MASK_PINNED=false, OEM_LOCK_MASK_PINNED=false, require_boot_lock=false)",
+  "shared/src/lockdown.rs:373-397 (optr_matches_ship is a partial OPTR mask; SWAP_BANK/nSWBOOT0/nBOOT0/NRST_MODE not compared)",
+  "shared/src/lockdown.rs:517-522 (BOR level advisory only, 'not yet a hard gate', #36)",
+  "secure/src/hw/flash.rs:74-79 (BOOT_LOCK follow-up #214; HDP1 polarity still unconfirmed)",
+  "secure/src/main.rs:1240-1290 (RDP<L2 pre-ALL_DONE and SECBOOTADD0 checks are secure_log! warnings, silent without debug-log)",
+  "Issues #46, #387, #40, #38, #44, #753, #214, #192"
+ ],
+ "vendor_precedent": "Trezor Safe 7 boardloader: core/embed/sec/option_bytes/stm32u5/option_bytes.c:78-101 (full OPTR/SECBOOTADD0R|BOOT_LOCK/SECWM/WRP constants), :213-222 (OEM keys written 0xFFFFFFFF), :247-250 (ensure OEM1LOCK/OEM2LOCK clear, fatal), core/embed/projects/boardloader/main.c:325-340 (mismatch \u2192 secret_safety_erase()).",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "Pinning needs sacrificial silicon (owner has deferred irreversible chip work by design \u2014 this is the same bucket as #268, bundle them into one ceremony). A wrong pin bricks every genuine first boot at E0809/E080A (already the fail-closed behaviour today). Wipe-on-mismatch must stay 2-pass + reset-cause-gated (BOOT-06) so a transient read fault never wipes a good device; FSBL budget \u2248 +100-200 B must land before the #540 geometry freeze.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+  "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf (\u03bc-Glitch: BoD had to be defeated on STM32L5)",
+  "https://tches.iacr.org/index.php/TCHES/article/download/7390/6562/2561 (Shaping the Glitch: RDP2\u2192RDP1 at boot)",
+  "https://www.cypherock.com/keylabs.pdf (RDP2 glitch to RDP1 behaviour)"
+ ],
+ "surface": "boot"
+}

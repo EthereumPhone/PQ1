@@ -1,0 +1,265 @@
+{
+ "surface": "Secure-element usage (key=se): OPTIGA Trust M V3 + SE050 tunnels, transport\u2192final rotation, PIN-attempt lockstep, lifecycle lockdown, attestation/anti-substitution, wipe paths",
+ "improvements": [
+  {
+   "id": "SE-01",
+   "title": "Boot-time per-element SE identity pinning (OPTIGA E0C2 UID + E0E0 cert pubkey, SE050 UID/GetVersion OEF) sealed under DHUK at first boot, re-verified before any secret APDU",
+   "threat": "Swapped, counterfeit or substituted secure element (supply chain / evil maid / rework after RDP-2): an attacker replaces one SE with a look-alike that answers the tunnel handshake (transport keyset is public at RDP-0) or a re-flashed genuine part, and the firmware cannot tell. Today nothing on the boot path checks which silicon it is talking to.",
+   "proposal": "On the first field boot (Phase B, after RDP=0xCC and before the seed wizard) read OPTIGA coprocessor UID (0xE0C2) and the Infineon device-cert public key (0xE0E0, type 0x12 per observed 0xE0E3) over the shield, and SE050 UID + GetVersion/AppletConfig (expect OEF 0xA921 per board/pq1.rs, resolve #697 first); store a DHUK-SAES-CMAC of (UID_O \u2016 pk_O \u2016 UID_E \u2016 cfg_E) in the page-127 journal. On every boot, before `check_provisioned`/`unlock`, re-read both identities and compare per element with FI-double sentinel checks; mismatch on either element is a hard refusal (not a wipe \u2014 a fake SE must not be able to trigger the wipe of the real one). Bind each proof to its own element (Trezor's Aug-2026 bug: a combined key set let one proof satisfy all three). Optional second step: a C10-signed MCU attestation over a companion challenge, keyed from a DHUK-derived seed regenerated per use, so a remote verifier gets a one-primitive 'genuine PQ1' proof without any classical signer.",
+   "rationale": "Ledger (Genuine Check), Trezor (OPTIGA cert + TROPIC01 pinned pubkey + ML-DSA-44 MCU cert), BitBox02 Nova, Tangem and GridPlus all ship a device-identity check; pq1 ships none and its own docs already claim an 'SE attest' boot step (CLAUDE.md Lifecycle line; HARDENING.md:32, \u00a73.4) that does not exist. Pinning at first boot (when the MCU is already RDP-2 and the attacker has had no window) and checking per element every boot is the cheapest closure of the 'malicious hardware' question for the SE leg; it does not see an implant on the bus (Ledger's stated blind spot) but it does detect the only substitution an implant would need to make to read a half: replacing the chip that holds it. Invariant #5 is respected: OPTIGA/SE050 ECDSA cert chains are only compared as pinned bytes, never used as a signer; the optional MCU attestation is C10.",
+   "repo_evidence": [
+    "secure/src/optiga/apdu.rs \u2014 grep '0xE0C2|E0E0|device_cert' returns nothing: no UID/cert OID is defined",
+    "secure/src/se050/apdu.rs:944 get_version_ext \u2014 only callers are secure/src/se050_stress/ctx.rs:502-505 and tests/audit.rs:433 (none on the boot path)",
+    "secure/src/main.rs:1570-1801 boot path: SE init \u2192 reconcile_pin_attempts, no identity assertion",
+    "secure/src/first_boot/mod.rs:296-441 run_post_lock_provisioning: no identity capture step",
+    "docs/security/HARDENING.md:32,178-189 describes boot attestation 'on every boot' that is not implemented (drift)",
+    "Issues #210 (NOT STARTED), #27, #61, #206, #244, #245, #249, #272"
+   ],
+   "vendor_precedent": "Trezor: core/embed/sec/tropic/tropic.c:386-401 (pinned Tropic pubkey in secret slot 2, cert chain read only in non-production); core/embed/sec/mcu_attestation/mcu_attestation.c:67-95 (ML-DSA-44 MCU cert); trezor.io 'authenticity proofs not bounded to their secure element' (Aug 2026 fix). Ledger: donjon.ledger.com/threat-model/device-genuineness. BitBox02 Nova datasheet 'Device attestation to detect counterfeits'.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "Confirm on silicon that E0E0/E0C2 reads are permitted at the current LcsO and under the final Read AC (S-2 retype boundary); SE050 GetVersion has a known Case-2 Le bug (#444); a per-element mismatch must map to refuse-and-park, never to the lockout wipe path (otherwise a fake SE becomes a wipe oracle); first-boot capture must happen before any half is written so the pin cannot be back-filled by an attacker-supplied chip; adds ~100 ms boot (per #244 estimate).",
+   "sources": [
+    "https://donjon.ledger.com/threat-model/device-genuineness",
+    "https://trezor.io/vulnerability/authenticity-proofs-not-bounded-to-their-secure-element",
+    "https://trezor.io/learn/security-privacy/how-trezor-keeps-you-safe/trezor-safe-device-authentication-check",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/tropic/tropic.c:339-453",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/mcu_attestation/mcu_attestation.c:67-95",
+    "https://bitbox.swiss/bitbox02/nova/BitBox02_Nova_BTC_Datasheet.pdf"
+   ]
+  },
+  {
+   "id": "SE-02",
+   "title": "Die-bind the at-rest SE secrets: SAES(DHUK)-wrap each XOR half before it is stored, and derive both PIN credentials (OPTIGA F1D0 AuthRef secret, SE050 UserID value) through the DHUK KDF so extracting both SE NVMs without this die yields nothing",
+   "threat": "Lab extraction of both secure elements' NVM (Donjon's FDTC 2023 double-laser DS28C36 page dump; Tangem S3D232A single-pulse SetPin bypass; TROPIC01 LFI) on a stolen device: today half_O \u2016 half_E are stored raw and XOR directly to the BIP-39 entropy, the SE050 UserID *is* the 8-digit PIN, and the OPTIGA AuthRef secret is a public-domain KDF of the PIN \u2014 so two extracted chips (or one extracted chip plus a faulted PIN check on the other) reconstruct the seed with no dependence on the STM32 die. The MCU currently adds nothing to the at-rest secrecy floor.",
+   "proposal": "Pre-production, no migration needed: (a) in `DualSecureElement::provision` store `wrap_O = SAES_DHUK_CTR(label_O, half_O)` and `wrap_E = SAES_DHUK_CTR(label_E, half_E)` (or equivalently XOR each half with a SAES-CMAC(DHUK, 'pqsigner/half-mask-v1'\u2016side) keystream \u2014 no AEAD needed because the master_secret consistency check at unlock already authenticates the reconstruction) and unwrap in `unlock` after the halves return through the tunnels; (b) replace `derive_pin_secret = kdf(\"optiga-pin-auth-v1\", pin)` with `SAES-CMAC(DHUK, 'pqsigner/optiga-pin-v2' \u2016 pin)` and send `SAES-CMAC(DHUK, 'pqsigner/se050-userid-v2' \u2016 pin)` (16 B) as the SE050 UserID value instead of the raw PIN; (c) state the resulting floor in threat-model.md: seed recovery needs {OPTIGA NVM, SE050 NVM, this die's DHUK (RDP-2)} or the 24 words. Keep the 3-source TRNG draw and the XOR split unchanged (invariant #1 untouched: neither chip alone reveals any bit, and now neither pair of chips does either).",
+   "rationale": "This is the Trezor 'malicious or extracted SE cannot reduce security below the MCU-only design' floor (optiga.md:66, storage.c:633-639) and Coldcard's 'both SE1 and SE2 plus the main micro must be cracked' property, realised with the SAES/DHUK primitive pq1 already uses for PBS derivation \u2014 purely symmetric, so it does not re-open the descoped ML-KEM bus wrap (that wrap protected the I2C transit; this protects at rest). Side benefit: the PIN never crosses either I2C bus in any form that is useful off-device, so the accepted Grover-2^64 residual against a captured SCP03 session no longer yields the user's PIN. A fault in one SE's PIN compare (Tangem class) now releases only a DHUK-wrapped half, which is useless without also executing on this die.",
+   "repo_evidence": [
+    "secure/src/dual_se.rs:145-163 provision: half_o from generate_split_half, half_e = xor_32(entropy, half_o), written raw (only the fenced mlkem-inner-wrap path seals)",
+    "secure/src/dual_se.rs:356-420 unlock: full_entropy = xor_32(half_o, half_e) with no MCU-keyed step",
+    "secure/src/crypto.rs:461-472 provision_from_mnemonic passes raw entropy to provision",
+    "secure/src/optiga/mod.rs:70,916-918 derive_pin_secret = crate::crypto::kdf(b\"optiga-pin-auth-v1\", pin, 0) \u2014 public-domain, not die-bound",
+    "secure/src/se050/apdu.rs:798-814 verify_session: TAG_1(pin) = raw 8-byte PIN inside SCP03; secure/src/dual_se.rs:370-375 passes the same raw pin to both SEs",
+    "docs/security/threat-model.md:600 \u2014 states the split defeats single-chip extraction only; no two-chip floor stated",
+    "secure/src/hw/secret_keys.rs:119-176 derive_into_saes_kdf exists (DHUK SAES-CMAC ladder) and can be reused"
+   ],
+   "vendor_precedent": "Trezor docs/core/misc/optiga.md:38-111 and storage/storage.c:628-678 (MCU-side PBKDF2 + HMAC chain around every SE op so a malicious OPTIGA cannot lower security); Coldcard Mk4 security model (AES key = HMAC combination of MCU + SE1 + SE2 parts); Tillitis TKey CDI binding.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "DHUK is not per-die until RDP-2 (bench boards at RDP-0 share a fingerprint \u2014 acceptable since first boot locks before the wizard); any label change later is a silent data-corruption bug (bump -vN); the duress credential set (F1D8/E121, DURESS_* UserID) must get the identical treatment so the timing-twin property survives; SE050 UserID length/charset limits for a 16-byte binary value must be confirmed on silicon; this intentionally makes 'move these two SEs to another MCU' impossible \u2014 recovery is the 24 words, which is already the only supported restore path. Must not be described as re-raising the ML-KEM decision (do not re-raise).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md",
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:628-678",
+    "https://blog.coinkite.com/understanding-mk4-security-model/",
+    "https://fdtc.deib.polimi.it/FDTC23/slides/FDTC2023-slides-3-3.pdf",
+    "https://donjon.ledger.com/blog/bypassing-tangem-card-security-with-laser-attack/",
+    "https://dev.tillitis.se/intro/"
+   ]
+  },
+  {
+   "id": "SE-03",
+   "title": "Authenticate wipe-bearing and attempt-bearing SE verdicts: a bare 2-byte SCP03 status word is 'inconclusive', never a wipe or a page-124 charge, until an R-MAC'd probe confirms it",
+   "threat": "An unauthenticated I2C interposer (or a glitched bus) forges `0x6986` on CreateSession/VERIFY \u2192 `AuthMethodBlocked` \u2192 `PinLocked` \u2192 one-shot dual-SE wipe with zero attempt budget consumed; or forges `0x6985` so a correct PIN burns a page-124 attempt. Because GP Amd D exempts bare error SWs from R-MAC, the firmware currently treats an unauthenticated byte pair as an authoritative security verdict.",
+   "proposal": "In `unwrap_response` tag the n==2 arm's result as `Unauthenticated(sw)`; in `classify_se050_unlock_error` and `authenticate_and_read`, on an unauthenticated 0x6986/0x6985/0x6983 run a confirmation probe that must return a full R-MAC'd response under the same session (e.g. ReadObjectAttributes on a public/admin-readable object, or a GetRandom) and only then promote to `AuthMethodBlocked`; if the probe itself fails bare, classify D1-inconclusive: tear the session down, hard-reset the SE, do not charge page-124, do not wipe, and surface 'SE transport fault' to the user with a bounded retry. Apply the same rule on the OPTIGA side to the globally-mapped statuses that feed wipe verdicts (#120). Count consecutive inconclusive outcomes and escalate to lock (not wipe) after N, so an interposer can only DoS, never destroy.",
+   "rationale": "Trezor's rule is 'retry only on errors that prove non-execution, never on ones that may have executed' and Ledger's LSB-016 fix was 'tear the channel down on the first MAC error'; pq1's S-5 P1=0x33 work closed the data path but left the verdict path unauthenticated. A wipe is the most irreversible action the device takes on SE input and is the only one an attacker with just bus access can trigger today. The funds are recoverable from the words, but the brick is permanent on the current SE050 (#168), which makes this a cheap, deniable sabotage primitive.",
+   "repo_evidence": [
+    "secure/src/se050/scp03.rs:614-634 unwrap_response: n==2 \u2192 copy SW, inc_counter, Ok(2) \u2014 no authentication",
+    "secure/src/se050/apdu.rs:741-768,826-845 create_session / verify_session map 0x6986 \u2192 AuthMethodBlocked",
+    "secure/src/se050/mod.rs:2865-2871 classify_se050_unlock_error \u2192 PinLocked",
+    "secure/src/nsc/cmd_request_unlock.rs:99-175,190-211 PinLocked from any leg \u2192 trigger_lockout_wipe",
+    "Issues #104 (SE17-1 HIGH), #105 (SE17-2), #120 (OP17-5), #106 (SE17-3) all OPEN"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/tropic/tropic.c:177-217,1404-1413 (retry taxonomy: never retry a possibly-executed command; alarm \u2192 reset+retry); Ledger LSB-016 (channel teardown on first MAC/padding error).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P0",
+   "risks": "The confirmation probe must not itself be able to consume an attempt (choose a non-counter-bound object); the SE050 production UserID policy denies attribute reads (0x6986) so the probe target must be an object readable in the unauthenticated-session state (validate on silicon); escalation-to-lock after N inconclusive results needs a durable counter to avoid a power-cycle reset; the D1 split for OptigaError::Shield (#385) is a prerequisite on the OPTIGA leg.",
+   "sources": [
+    "https://donjon.ledger.com/lsb/016/",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/tropic/tropic.c:177-217",
+    "https://arxiv.org/abs/2608.17082"
+   ]
+  },
+  {
+   "id": "SE-04",
+   "title": "Runtime SE configuration attestation at every boot: compiled-in expected OPTIGA metadata per OID and SE050 object policy set, read back through the tunnels before any secret is touched, refuse if looser, with a CI-pinned expected table",
+   "threat": "A tampered, re-provisioned, factory-skipped or substituted SE whose access conditions are looser than the design (e.g. Read=Always on F1D1, E140 at LcsO<Op after the final rotation, UserID max_attempts raised, write-once policy missing) is silently accepted \u2014 the firmware only checks metadata inside the provisioning/lock paths, so a device whose lockdown never happened, or was rolled back on a swapped chip, boots and unlocks normally. This is also the detector for the OP17-1 weak Read AC: today nobody would notice it ratcheted.",
+   "proposal": "Add `optiga::audit_metadata()` that, after `ensure_shield`, issues `get_metadata` for F1D0, F1D1..F1D4, F1D8, F1E1, E120, E121, E140 and compares each (via the existing `metadata_matches_expected` / `is_metadata_operational` / `metadata_has_luc_execute` helpers) against a `const EXPECTED_METADATA` table versioned with the lifecycle profile; add `se050::audit_policy()` using ReadIDList + ReadObjectAttributes/CheckObjectExists on every object where the production policy permits the read, plus the GetVersion/AppletConfig assertion. Any 'looser than expected' result is a hard refusal before `check_provisioned`; 'tighter' is accepted. Generate `docs/secure-elements/optiga-expected-metadata.md` from the same table and make `make invariant-gates` diff it (Trezor's docs/core/misc/optiga.md pattern). Record a one-line receipt (expected-table version) in the page-127 journal so a profile upgrade is explicit and journaled.",
+   "rationale": "Trezor's `optiga-lock-check`, boot-time `optiga_pin_init_metadata` self-heal and `tropic_ensure_configuration` are the mechanism that turns the S-1/S-2/S-3 lifecycle ceremony from a one-time factory act into a property re-verified on every boot; pq1 fences those ceremonies at compile time only. It directly supports SE-01 (a substituted chip rarely reproduces the exact metadata) and gives S-3 its missing silicon-readable receipt format. Cost is a handful of GetDataObject-metadata reads per boot (tens of ms).",
+   "repo_evidence": [
+    "secure/src/optiga/mod.rs:1143,1224,1277,1319,1417,1465,1494,2005 \u2014 every get_metadata caller is a provision_* function; no boot-path audit",
+    "secure/src/optiga/apdu.rs:1544 metadata_matches_expected, :1522 is_metadata_operational, :1603 metadata_has_luc_execute exist but are not used on the boot path",
+    "secure/src/main.rs:1570-1801 boot path: no metadata/policy audit between SE init and unlock",
+    "secure/src/se050/mod.rs:1788-1797 check_provisioned: existence check only, no policy readback",
+    "Issues #207 (policy readback stress test), #63 (LockState assert), #116 (OP17-1), #14/#215 (S-3 profile not frozen)"
+   ],
+   "vendor_precedent": "Trezor core/embed/projects/prodtest/cmd/prodtest_optiga.c:252-304 (optiga-lock-check), core/embed/sec/optiga/optiga.c:311-353 (set metadata then read back and compare), core/embed/sec/tropic/tropic.c:825-1005 (tropic_ensure_configuration: refuse if looser, tighten if allowed, versioned marker).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Expected table must track the still-open S-1/S-2/S-3 profile (version it, do not freeze it prematurely); SE050 attribute reads are policy-denied on the user UserID (0x6986) so coverage of that object is existence-only; a refusal must park the device with a readable error code, not wipe; OPTIGA 'self-heal to expected' (Trezor sets metadata at boot) must NOT be ported \u2014 ordinary pairing must never ratchet E140 (owner decision).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/prodtest/cmd/prodtest_optiga.c:252-304",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga.c:311-353",
+    "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md:5-36",
+    "/home/nicola/repos/trezor-firmware/docs/core/misc/tropic_configs.md:8-57"
+   ]
+  },
+  {
+   "id": "SE-05",
+   "title": "Shielded-Connection liveness probe: after every PRL handshake, send host-TRNG data through the tunnel to a command whose response is a deterministic function of that data (CalcHash) and compare locally \u2014 a replayed session cannot answer",
+   "threat": "Whole-session replay of a captured OPTIGA unlock session (OP17-2): the Infineon PRL handshake carries only the chip's random_S, so an interposer that recorded one genuine session can replay the chip's frames to the MCU; the vendor-faithful ProVerif model proves inj-agreement false. Combined with a substituted/absent chip this lets a bus device impersonate the OPTIGA for the duration of a session.",
+   "proposal": "In `OptigaTrustM::ensure_shield`, immediately after `establish()` succeeds, draw 32 B from `rng_strong`, send OPTIGA `CalcHash(SHA-256, data)` (cmd 0x30, non-counter-bound, no AC) inside the shield, and compare the returned digest against a locally computed SHA-256 (HW HASH) with FI-double sentinel checks; mismatch \u2192 `ShieldError::Replay`, tear down, hard-reset, D1-inconclusive classification (no page-124 charge). Because the replayed transcript's CalcHash response was computed over the old data, the compare fails with certainty; the probe costs one APDU (~5 ms). Document the residual honestly: this closes session-level replay by a bus adversary but not an adversary holding the PBS (who can run a real handshake).",
+   "rationale": "Trezor has the identical gap (optiga_transport.c:771-780, no master random) and has not closed it; this is a one-APDU 'beyond' fix that needs no change to the chip's protocol, keeps every existing sequence-counter/nonce-wrap guard, and makes #117 falsifiable on the bench (record a session with the LA1010, replay it, assert the probe refuses). It also upgrades the `random()` path: a replayed session would otherwise return recorded TRNG bytes into the 3-source XOR.",
+   "repo_evidence": [
+    "secure/src/optiga/shield.rs:698-700 comment: 'Infineon PRL does NOT send a master random \u2014 the handshake uses only random_S from SlaveHello'",
+    "secure/src/optiga/shield.rs \u2014 grep 'freshness|liveness' hits only sequence-counter comments (:169,:646,:885); no post-handshake challenge",
+    "secure/src/optiga/mod.rs:532-600 ensure_shield: establish \u2192 active, no probe",
+    "contracts/verification/docs/THREAT_CLAIM_MAP.md:73 \u2014 vendor-faithful model proves replay possible; Issue #117 (OP17-2) OPEN; #396"
+   ],
+   "vendor_precedent": "none (Trezor core/embed/sec/optiga/optiga_transport.c:747-838 has the same handshake without a host nonce); analogous host-chosen-challenge pattern in Trezor's AUTOREF set_auto_state over an SE nonce (optiga_commands.c:561-619), inverted here.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "CalcHash availability/AC at the production LcsO must be confirmed on the V3 part (it is a standard Trust M command); the probe must run before any counter-bound command so a replay cannot burn E120; a transport failure in the probe must be inconclusive, not 'replay detected' (otherwise an interposer gains a lock/DoS lever); update the ProVerif model (optiga_shield_handshake_vendor.pv) with the probe to turn the do-not-cite row into a cited claim.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga_transport.c:747-838",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga_commands.c:561-619"
+   ]
+  },
+  {
+   "id": "SE-06",
+   "title": "Provisioning/first-boot ordering guards: handshake-first E140 write, no plaintext rewrite of a rotated PBS, and fail-SAFE dual is_provisioned with a third (MCU-journal) leg so a transport glitch can never enter the seed wizard on a used device",
+   "threat": "(a) `store_objects` step 1 unconditionally writes the current PBS to E140 in plaintext; after the salted-final rotation a wizard re-provision therefore puts the FINAL pairing secret on the I2C bus in clear (OP17-3). (b) SE050 `check_provisioned` fails open (init/transport error \u2192 'unprovisioned'), and dual-SE AND-combines it, so one SE050 glitch on a live device makes the firmware offer the seed wizard, which on confirm overwrites the real wallet's objects (F24). (c) The bench E140 brick (locked at LcsO=Op with an unknown PBS) came from writing E140 without first proving which PBS the chip holds.",
+   "proposal": "Port Trezor's sequence 1:1: before any E140 write, attempt a handshake with the expected current PBS; write only if that handshake fails authoritatively (D1 split), never when transport-inconclusive; after writing, prove it with a real handshake before proceeding; refuse the plaintext path entirely once the page-127 journal says `Rotated` (the salted-final PBS may only be installed through `rotate_pbs_to_salted` under the transport shield). Make `Se050::check_provisioned` return `Result<bool>` and map Err \u2192 provisioned (fail-safe, matching OPTIGA); add a page-127 'wallet-provisioned' sentinel written after a successful `provision` and require all three (OPTIGA F1E1 \u2227 SE050 \u2227 journal) to read 'unprovisioned' before the wizard is offered; any disagreement parks with 'SE state mismatch', never wizard. Every provisioning entry point first checks that no later irreversible step (RDP-2 done, rotation done, LcsO=Op) has happened, like Trezor `secrets-init`.",
+   "rationale": "These are the exact ordering mistakes Trezor's prodtest guards against (handshake-first E140, refuse secrets-init once locked/paired) and pq1 has already paid for one of them with a bricked bench part. The fail-safe provisioned check is the difference between 'the device parks' and 'the user's funds are overwritten by a wizard misfire'.",
+   "repo_evidence": [
+    "secure/src/optiga/mod.rs:2083-2114 store_objects step 1 unconditional plaintext E140 write; :603-642 pair_for_first_boot; :820-860 setup_pbs_no_handshake uses current_pbs() (salted when Rotated)",
+    "secure/src/se050/mod.rs:1788-1797 check_provisioned \u2192 unwrap_or(false) (fails open)",
+    "secure/src/optiga/mod.rs:945-1012 check_provisioned fails safe (asymmetry)",
+    "secure/src/dual_se.rs:141-143 is_provisioned = optiga && se050",
+    "Issues #118 (OP17-3), #111 (SE17-8), #169 (F24), #121, #126; docs/secure-elements/optiga-brick-postmortem.md"
+   ],
+   "vendor_precedent": "Trezor core/embed/projects/prodtest/cmd/prodtest_optiga.c:109-162 (pairing-secret write only on handshake failure, then re-handshake to prove), prodtest_secrets.c:90-182 (secrets-init refuses if sector/OPTIGA locked or pairing started), secret.c:544-588.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "A fail-safe provisioned check turns a genuinely blank-but-glitching SE050 into a parked device (needs a dev-only `wipe-for-wizard` path, which exists); the journal sentinel must be written AFTER both SEs confirm the write-once objects (else a power cut strands a half-provisioned device \u2014 the #445 strand class); handshake-first requires the D1 Shield/Transport split (#385) to be reliable.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/prodtest/cmd/prodtest_optiga.c:109-162",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/prodtest/cmd/prodtest_secrets.c:90-182"
+   ]
+  },
+  {
+   "id": "SE-07",
+   "title": "Wipe as a verified, redundant, BHK-first transaction: regenerate the page-126 BHK before touching the SEs, Hamming-distant double-checked wipe verdicts, and a boot-time 'wipe verified' assertion that keeps the armed flag until every region and both SEs are confirmed gone",
+   "threat": "A wipe (10 wrong PINs, tamper, admin) that is interrupted, glitched or partially executed leaves recoverable state: the SE050 half remains readable under still-valid SCP03 keys, the OPTIGA half survives a failed factory_reset, a single-bool verdict is coerced to 'wiped' (SE17-3), and the next boot has no obligation to finish. Today the page-125 flag covers only the SE050 admin object.",
+   "proposal": "(1) Make the first irreversible step of every wipe path the regeneration of the BHK page (fresh 3-source TRNG words into page 126 + TAMP BKP reload) \u2014 Trezor's `secret_safety_erase` \u2014 so the SE050 SCP03/admin credentials are dead instantly even if the SE delete never runs; then erase page-124/123/127 and run both SE factory resets. (2) Replace plain-bool wipe verdicts with `fi::CfiCounter`-style sentinels with FI-double reads, and treat 'unknown' as 'not wiped' (never coerce). (3) At boot, if the page-125 flag is armed, re-assert: pages 123\u2013127 blank (except flag), OPTIGA F1E1/F1D1 absent via check_exists through the shield, SE050 ENTROPY/USERID absent via CheckObjectExists \u2014 only then clear the flag; otherwise resume the wipe. (4) Include the duress object set (F1D8/E121, DURESS_*) in the wipe list so decoys do not survive. (5) Record one receipt line in the journal so a forensic read shows 'wiped at boot N'.",
+   "rationale": "Ledger's 1.4 fix made the user-zone wipe 'verified at startup'; Trezor's BHK regeneration gives a single atomic action that invalidates every BHK-wrapped secret regardless of what happens afterwards. pq1 already owns the BHK axis for SE050 (owner decision 2026-09-21) so the BHK-first step costs one page program and immediately strengthens the 10-wrong-PIN brick and the tamp-wipe path against power-cut and glitch interruption.",
+   "repo_evidence": [
+    "secure/src/hw/flash.rs:626-691 wipe flag: ADMIN_PAGE_ADDR+16, covers the SE050 admin object only",
+    "secure/src/se050/mod.rs:3168-3238 Se050::factory_reset_admin; secure/src/dual_se.rs:631-648 factory_reset_admin \u2014 no BHK regeneration step",
+    "secure/src/nsc/cmd_request_unlock.rs:190-211 trigger_lockout_wipe \u2014 sequential, no boot-time verification contract",
+    "secure/src/hw/bhk.rs:318-421 load_and_lock exists; no 'regenerate' wipe primitive",
+    "Issues #106 (SE17-3 verdict coercion), #123 (OP17-8 atomicity), #107 (duress objects survive wipes), #129, #168 (F23), #47"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/secret/stm32u5/secret.c:393-442,655-658 (secret_safety_erase regenerates BHK \u2192 all BHK-wrapped storage invalid); Ledger firmware 1.4 'wipe verified at startup' (LSB-003 fix); Trezor storage.c:1163-1303 (wipe when any counter says so, verified increments).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "BHK-first wipe interacts with the #712/#204 recoverability bug (a regenerated BHK is exactly the 'SE050 unreachable' state) \u2014 acceptable here because the goal IS unrecoverability, but the re-pair/OID-range-bump story for the next wallet (#168) must be designed alongside; boot-time resume must be idempotent under repeated power cuts; wipe decisions must still never be driven by an unauthenticated SW (SE-03).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c:393-442",
+    "https://donjon.ledger.com/lsb/003/",
+    "https://www.ledger.com/firmware-1-4-deep-dive-security-fixes"
+   ]
+  },
+  {
+   "id": "SE-08",
+   "title": "Lifetime, unresettable OPTIGA usage budget on the half_O read path (E122, Change=Never) plus Security-Event-Counter (E0C5) awareness so counter-reset bugs and throttling are bounded and visible",
+   "threat": "Any bug or fault that resets E120 / page-124 (the E120 reset already runs after every success and on admin wipe; F25 shows it also ratchets on successes) converts the OPTIGA into an unbounded PIN-guessing oracle; separately, repeated failed AUTOREF verifies raise the chip's SEC and the resulting throttling (>127 \u2192 up to 5 s/command) is currently indistinguishable from a transport wedge, which under OP17-4 burns page-124 toward self-wipe.",
+   "proposal": "(a) Provision E122 as a monotonic LUC with Change=Never after init (limit sized for the device lifetime, e.g. 200,000 \u2014 ~20 years at 25 unlocks/day) and add `&& LUC(E122)` to the Read AC of F1D1 (half_O) and F1D2 (master) so every release of the half consumes one unit of a budget no code path can reset; park the device with 'lifetime budget exhausted \u2014 restore from words' when it hits the limit. (b) Read E0C5 at boot and before unlock, size the PRL timeouts from it, log it in the journal, and classify 'SEC high' as inconclusive-throttled rather than tamper. (c) Expose E122 remaining and SEC via CMD_GET_REMAINING-adjacent read-only status (non-secret).",
+   "rationale": "Trezor's PIN_TOTAL_CTR (E121, 600,000, Change=Never) exists precisely to make 'attacker found a counter-reset bug' a bounded loss; pq1 has only E120 (resettable) and E121 (duress). E122/E123 are free on this chip and the command path (`provision_counter`/UPCTR metadata) already exists. SEC handling is a same-chip operational lesson that avoids misclassifying throttling as an attack.",
+   "repo_evidence": [
+    "secure/src/optiga/apdu.rs:231-246 only E120 (PIN ctr) and E121 (duress ctr) defined; grep 'E122|E123' hits comments only",
+    "secure/src/optiga/mod.rs:1621-1628 reset_hw_pin_counter after every success; :1668-1700 reset_e120_via_transient_auth on wipe (E120 is resettable by design)",
+    "secure/src/optiga/ \u2014 grep 'E0C5|security_event|sec_counter' returns nothing",
+    "secure/src/optiga/apdu.rs:1182-1199 build_metadata_protected (Read = Auto(F1D0) only \u2014 no LUC arm)",
+    "Issues #170 (F25), #119 (OP17-4), #116 (OP17-1)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/optiga/optiga.c:52-77,482-522 (PIN_TOTAL_CTR E121 limit 600000, Change=Never) and docs/core/misc/optiga.md:18-22; optiga_init.c:101-139 + optiga_commands.c:80-110 (SEC read, keep powered until SEC decays, throttling model).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P2",
+   "risks": "Irreversible once Change=Never is set \u2014 must be part of the frozen S-3 profile and validated on sacrificial silicon with the Read-AC AND expression (0xFD) before any customer part; budget sizing is a product decision; E122 must NOT be bound to the duress path's timing-twin unless mirrored on E123, or duress becomes distinguishable; SEC-based timeout sizing must not become a lever to delay the wipe indefinitely.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga.c:482-522",
+    "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md:18-22",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga_init.c:101-139"
+   ]
+  },
+  {
+   "id": "SE-09",
+   "title": "Measurement-bound SE release (DICE-style): the FSBL hands a DHUK-sealed digest of the verified active slot to the secure world, and the OPTIGA/SE050 PIN credentials are derived from PIN \u2016 that digest, so a modified secure image cannot obtain either half even after a full MCU compromise",
+   "threat": "Donjon's Safe 3 result: SE pairing-secret possession proves 'access to a secret, not the software running on the microcontroller'; a glitched RDP downgrade or any code execution on the die recomputes DHUK-derived pairing/SCP03 keys and uses the SEs as an unlock oracle (with the PIN). pq1's FSBL fingerprint is a human-checked indicator; nothing cryptographic stops a wrong image from talking to the SEs once it runs in the secure world.",
+   "proposal": "In the WRP-protected FSBL (before RDP-2 freezes it, i.e. part of the shipping image, not a runtime write): after verifying the active slot hash H, compute M = SAES-CMAC(DHUK, 'pqsigner/boot-measure-v1' \u2016 H) and leave M in a TAMP backup register pair that the FSBL then write-locks for the boot (or in a secure-SRAM mailbox the secure image consumes and zeroizes). The secure world folds M into the SE-02 credential KDFs: OPTIGA AuthRef secret = SAES-CMAC(DHUK, PIN \u2016 M), SE050 UserID = SAES-CMAC(DHUK, PIN \u2016 M). An image with a different H derives wrong credentials \u2192 both SEs refuse \u2192 attempts are consumed, nothing is released. A legitimate firmware update becomes a journaled credential migration run by the OLD image before reboot (re-provision F1D0 and re-key the UserID under the new H, Trezor-style idempotent/resumable), extending the existing page-127 journal and the authenticate-before-rotate proof object.",
+   "rationale": "This is Tillitis' CDI = H(UDS, app) binding and Trezor's 'bootloader decides which SE credentials the next stage may see' (vtrust/secret_prepare_fw), realised with pq1's existing primitives (FSBL measurement, SAES-DHUK, TAMP BKP latch already proven for BHK). It turns invariant #10's boot-time fingerprint from an indicator into a cryptographic gate enforced by the SEs themselves, which is the strongest available answer to 'malicious firmware/hardware on the MCU side' short of a certified SE running the wallet. It is the one item here that would put pq1 beyond both Ledger and Trezor on this surface.",
+   "repo_evidence": [
+    "fsbl/src/branch.rs:18-24 \u2014 the FSBL scrubs every register at handoff and passes no measurement to the secure image",
+    "secure/src/measured_boot.rs:32-40,154-156 \u2014 the secure world re-hashes independently; the FSBL row and the S-world row are compared by a human, not consumed by any KDF",
+    "secure/src/hw/secret_keys.rs:119-176 \u2014 DHUK SAES-CMAC KDF exists; no measurement input",
+    "secure/src/optiga/mod.rs:916-918 derive_pin_secret has no image binding; secure/src/se050/apdu.rs:800-814 raw PIN",
+    "secure/src/first_boot/journal.rs / state.rs \u2014 journaled, resumable rotation machinery reusable for the update-time migration",
+    "Invariant #10 open gates (#540 geometry cutover, F15 FI-hardened FSBL verify) \u2014 prerequisites"
+   ],
+   "vendor_precedent": "Tillitis TKey (CDI = blake2s(UDS, H(app), USS)); Trezor core/embed/projects/bootloader/fw_check.c:233-241 + core/embed/sec/secret/stm32u5/secret.c:598-651 (vtrust-gated secret slots before jump, HDP close); Trezor storage_salt.c:36-56 (fw_type mixed into the KEK salt).",
+   "novelty": "beyond",
+   "kind": "mixed",
+   "cost": "XL",
+   "priority": "P2",
+   "risks": "FSBL flash/stack budget is the known NO-GO class (A/B rollback review) \u2014 adds a SAES-CMAC and a BKP write to a 40 KiB frozen region that cannot be patched after RDP-2, so it must be right the first time and FI-hardened (F15); every firmware update now carries a credential migration that can brick on power cut (journal + authenticate-before-rotate + silicon receipts required, same gate set as #268/#76); the BKP handoff register must be unreadable/unwritable by later S-world code or NS (TAMP secure-zone config #50 is a prerequisite); does not help if the FSBL itself is glitched into accepting a bad hash (F15 remains the floor); explicitly NOT a runtime write to the FSBL range.",
+   "sources": [
+    "https://dev.tillitis.se/intro/",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/fw_check.c:233-241",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c:598-651",
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+    "https://www.ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security"
+   ]
+  },
+  {
+   "id": "SE-10",
+   "title": "User-contributed entropy phase in the seed wizard (dice/coin/key-press rolls) mixed into the 3-source TRNG draw, with an on-screen proof that the user's input changed the words",
+   "threat": "A backdoored or mis-configured entropy path at seed generation that every on-device check passes (Coldcard 2021\u20132026: PRNG fallback + 32-bit reseed survived its health checks; #704 shows pq1's TRNG runs RM0456 configuration C, not the certifiable A): all three XOR'd sources sit behind firmware the user cannot audit at runtime, and a factory/pre-power image that fixes the output is invisible to the SWD verify if it lives in a rotated slot.",
+   "proposal": "Insert a mandatory wizard step between PIN set and `rng_strong::fill`: the user enters \u226550 dice rolls (or 128 coin flips / 65 key presses, Coldcard's thresholds) on the two-button UI; firmware computes `entropy = rng_strong(32) XOR SHA-256('pqsigner/user-entropy-v1' \u2016 rolls)` and, before showing the 24 words, shows a 2-word 'entropy check' derived from `SHA-256(rolls)` that the user can recompute offline (documented procedure), proving the rolls were consumed. Keep the strict 3-source draw unchanged; the user term is an additional XOR share. Allow a documented 'skip' only in bench builds.",
+   "rationale": "After the Coldcard incident, user-manipulated entropy is the one defence that provably held when the device's own RNG failed; NGRAVE and Coldcard ship it. pq1 already does the vendor-side part (STM32 \u2295 OPTIGA \u2295 SE050, Cypherock/Trezor parity) so the delta is small and purely additive. It also partially answers 'what if the factory image was swapped before my SWD check' for the seed itself.",
+   "repo_evidence": [
+    "secure/src/main.rs:955-975 wizard draws entropy with a single rng_strong::fill and immediately builds the mnemonic; no user term",
+    "secure/src/ui/seed_wizard.rs \u2014 grep 'dice|coin' hits nothing; the only entropy calls are decoy generation (:430-456)",
+    "secure/src/rng_strong.rs:1-30 \u2014 3-source XOR already implemented (parity half done)",
+    "Issue #704 (TRNG configuration C, HW-ASSUME-TRNG-ENTROPY false as stated)"
+   ],
+   "vendor_precedent": "Coldcard Mk4 (\u226565 key presses / 50 dice rolls / 128 coin flips mixed with device entropy); NGRAVE ZERO (user shuffles key characters); Cypherock (XOR of two chip TRNGs at generation).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P2",
+   "risks": "Two-button UI makes 50 rolls tedious \u2014 UX cost is the real risk; rolls must be zeroized like the entropy; the on-screen check must not leak enough of the rolls to reduce entropy (2 words = 22 bits of a 32-byte hash is fine). DROPPED: SE-rail shunt/ADC current budget at boot (hardware, mW-class only); PRL self-heal on the unlock path (#119, already tracked); D1 split of OptigaError::Shield (#385, tracked); PUT KEY atomicity bench (#386/#398, tracked); SE050 LockState/transport-lock assertion (#63, folds into SE-04); E2-vs-C2 BOM confirmation (#697, process); CCM-8 tag-forgery bound 2^-64 statement in HARDENING.md (doc-only); OPTIGA transport retry taxonomy port (optiga_transport.c:225-307); 'delta-mode' duress signing (PIN surface); remote blind-oracle fourth XOR share (Jade VSE \u2014 systemic, needs network); C10 MCU attestation as a standalone item (folded into SE-01).",
+   "sources": [
+    "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware",
+    "https://coldcard.com/mk4",
+    "https://support.ngrave.io/hc/en-us/articles/4409561457041-Could-someone-pre-program-their-own-key-in-my-device-before-I-receive-it-Supply-chain-attacks",
+    "https://docs.cypherock.com/getting-started/how-cypherock-generates-your-24-word-seed-phrase"
+   ]
+  }
+ ]
+}

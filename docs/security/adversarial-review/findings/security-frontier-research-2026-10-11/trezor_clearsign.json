@@ -1,0 +1,270 @@
+{
+ "surface": "Blind-signing elimination / clear-signing coverage (key=clearsign)",
+ "vendor": "Trezor (trezor-firmware @ 6ab39e95cf45d4b25b3f677806012ac660ae7a51, dated 2026-10-07; /home/nicola/repos/trezor-firmware; read-only review, `git status --short` empty afterwards)",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "ERC-7730 on-device ABI calldata decoder with a single static/dynamic head rule, bounds + zero-padding checks, and hard parse failure on any malformed encoding",
+   "evidence": [
+    "core/src/apps/ethereum/README.md:1-60",
+    "core/src/apps/ethereum/clear_signing.py:116-183 (_check_padding_zero, DirtyAddress, make_uint_parser, make_fixed_bytes_parser right-padding check, make_int_parser range check doubles as sign-extension check)",
+    "core/src/apps/ethereum/clear_signing.py:667-820 (ABIValue.parse head rule; Tuple rejects zero fields at 764-766; Array heads bounds pre-check at 807-810)",
+    "core/src/apps/ethereum/clear_signing.py:75-77 and 699-713 (_MAX_ABI_NESTING=8, _MAX_NESTED_ARRAYS=2 enforced in from_proto)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already has an on-device ERC-7730 renderer and typed-call ABI parser. The transferable details are: (a) reject non-zero padding bytes in address/uintN/bytesN/bool/intN words (closes host packing a second value into padding that a truncating decoder would hide); (b) reject zero-field tuples so array_length*head_size can never be 0 and defeat the bounds pre-check; (c) explicit array-aliasing analysis (README 'Nesting limits': offsets need not be distinct, so decoded output grows N x M per array level) bounding array nesting to 2. pq1 is no-heap so the resource failure differs, but padding and aliasing checks transfer directly.",
+   "notes": "Mechanism: each ABI node implements parse_body only; ABIValue.parse applies the one-word-offset head rule for dynamic types, in-place for static; offsets are relative to block_start; DynamicLeaf length is bytes, Array length is elements; every read is bounds-checked against len(raw_data) before slicing."
+  },
+  {
+   "item": "Descriptor binding pinned to the request: selector + (chain_id, contract address) must match before any descriptor is used, for built-ins, host-supplied blobs and wire-fetched definitions",
+   "evidence": [
+    "core/src/apps/ethereum/clear_signing.py:949-959 (matches_context / matches_call)",
+    "core/src/apps/ethereum/clear_signing.py:1161-1190 (find_display_format: built-ins, then msg.definitions.encoded_display_format, then EthereumDefinitionRequest; each gated by matches_call)",
+    "core/src/apps/ethereum/clear_signing.py:1110-1129 (from_encoded builds BindingContext from the signed blob's own chain_id/address)",
+    "core/src/apps/ethereum/README.md:118-121 ('response to a definition request is pinned to the request')"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Same threat (companion substitutes a validly-signed descriptor for a different contract/function). pq1 binds (chain_id, contract, ds) in pqsigner-erc7730/src/binding.rs; worth confirming pq1 also pins the selector and that the binding tuple is taken from the authenticated bundle leaf, not from the companion's request, exactly as Trezor takes it from the signed proto.",
+   "notes": "Note that built-in approve/transfer formats have binding_context=None (apply to any contract) \u2014 Trezor accepts this because the token identity is then resolved by @.to and shown as 'unknown token' if unrecognised."
+  },
+  {
+   "item": "Signed external definitions: Merkle-proof + CoSi (ed25519 multi-sig) root verification with a firmware-baked minimum data-version (freshness floor) and type-domain separation",
+   "evidence": [
+    "core/embed/rust/src/definitions/blob.rs:34-89 (parse_and_verify: magic, version, expected_type byte, data_version >= min_data_version else Outdated, payload, Merkle proof, CoSi sigmask+sig, no trailing data, merkle_root over definition[..payload_end])",
+    "core/embed/rust/src/definitions/constants.rs:105-129 (V1 threshold 2-of-3, V2 threshold 1-of-3; MIN_DATA_VERSION per version)",
+    "core/embed/rust/src/definitions/generated.rs.mako:5-8 (min versions generated at build)",
+    "common/protob/messages-definitions.proto:19-30 (cross-parseability note: wire types varied so a blob of one type cannot parse as another)",
+    "docs/common/external-definitions.md:60-66 and 122-170 (one-month freshness policy; leaf = SHA256(0x00||entry), internal = SHA256(0x01||min||max))"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 uses firmware-pinned Merkle roots (ERC20_DB_ROOT, ERC7730_DESCRIPTORS_ROOT) with companion-supplied proofs, which is stricter (no out-of-band signing key, no fetch path) but gives no freshness/revocation without a firmware update. Two ideas transfer: (1) a type-domain byte in every leaf so a token leaf can never be parsed as a descriptor leaf (pq1 should verify its leaf encodings are not cross-parseable); (2) Trezor's Outdated check shows a model for refusing stale catalogue data. Note Trezor's V2 threshold dropped to 1-of-3 signers \u2014 pq1's pinned-root model avoids that key-management surface entirely. Also note Trezor's 'built-in overrides external' rule (definitions.py:38-40, 73-76) so a signed blob cannot shadow a baked-in token.",
+   "notes": "Trezor's PUBLIC_KEYS_DEVEL path exists only under the dev_keys feature (blob.rs:21-25)."
+  },
+  {
+   "item": "ERC-20 approve clear-signing with revoke detection, unlimited-allowance warning (threshold 2^255), known-spender naming, and surfacing of any native value sent alongside",
+   "evidence": [
+    "core/src/apps/ethereum/clear_signing_definitions.py:100-120 (threshold=0x8000...00)",
+    "core/src/apps/ethereum/clear_signing.py:1411-1482 (_handle_approve: native_amount surfaced, is_revoke = amount==0, lookup_known_address / vault name for spender)",
+    "core/src/trezor/ui/layouts/eckhart/__init__.py:1235-1239 (show_warning 'Approving unlimited amount of {token}')",
+    "core/translations/en.json:849-852"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 clear-signs ERC-20 transfers but the CLAUDE.md surface list does not mention approve/revoke semantics or an unlimited-allowance threshold warning. Approvals are the dominant drain primitive; a dedicated 'Token approval' / 'Token revocation' intent with an above-threshold banner, spender naming, and a loud 'unlimited' page is low-cost and high-value on the NV3007.",
+   "notes": "Trezor also renders token-contract address explicitly when the token is unknown (eckhart 1241-1249) and chain_id when the network is unknown (1251-1258)."
+  },
+  {
+   "item": "Non-payable call carrying native value is always surfaced (approve/transfer/generic UI), so ETH cannot ride unseen on a token transfer",
+   "evidence": [
+    "core/src/apps/ethereum/clear_signing.py:1424-1430 and 1497-1503 (native_amount for approve/transfer)",
+    "core/src/trezor/ui/layouts/eckhart/__init__.py:1097-1100 ('show it next to the token amount so it can't be signed unseen')",
+    "core/src/apps/ethereum/clear_signing.py:1575-1591 (_handle_generic_ui: value shown in summary unless a field already renders it)",
+    "core/src/apps/ethereum/staking.py:126-127,154-155 and yielding.py:322-325,364-365 (non-payable calls with value != 0 are refused outright)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Directly applicable to pq1's UserOp inner_tx {to,value,data}: an ERC-20 transfer page set must also show a non-zero `value`, and for known non-payable selectors a non-zero value should be a refusal rather than a page. Check pq1's erc20 display builder always includes the value field or refuses.",
+   "notes": ""
+  },
+  {
+   "item": "Nested calldata (router/multicall/execute wrappers) clear-signed with depth cap 1, @.to overridden to the callee, @.from/@.value rejected inside subcalls, and the subcall's descriptor pinned to (callee, inner selector)",
+   "evidence": [
+    "core/src/apps/ethereum/README.md:84-143",
+    "core/src/apps/ethereum/clear_signing.py:998-1027 (get_value_for_path container-path handling; nested raise for From/Value)",
+    "core/src/apps/ethereum/clear_signing.py:1193-1339 (_expand_calldata_field / _expand_one_subcall; bytes[] multicall supported with parallel callee arrays; selector-explicit args-only blobs)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 handles Safe multiSend and CoW-in-Safe natively with hard refusal; the general ERC-7730 `calldata` formatter (nested descriptor lookup with callee override) is a coverage lever pq1's renderer may lack. The reasoning that @.from is ambiguous under CALL vs DELEGATECALL (README 111-118) is exactly the reasoning pq1 already applies to multiSend operation=1; worth adopting as an explicit rule in the ERC-7730 nested path. pq1 should NOT adopt Trezor's degrade-to-raw-hex fallback for subcalls (see 'decided not to do' notes).",
+   "notes": "README says bytes[] arrays are 'not (yet) supported' but code at 1212-1238 handles list blobs \u2014 README stale."
+  },
+  {
+   "item": "Chunked raw-calldata review with ERC-8213 calldata digest: user pages through hex 81 bytes at a time, may 'Skip and view hash', and the keccak256(len||data) digest is then confirmed; missing bytes are a ProcessError",
+   "evidence": [
+    "core/src/apps/ethereum/helpers.py:231-322 (DataChunkConfirmer; hasher = keccak256(total_len.to_bytes(32)) at 262; confirm_digest raises 'Missing calldata' at 314-317)",
+    "core/src/apps/ethereum/sign_tx.py:308-325 (_confirm_data_chunks)",
+    "core/src/trezor/ui/layouts/eckhart/__init__.py:1011-1048 (confirm_blob_prefix 9x18 hex, confirm_calldata_digest 'ERC-8213 digest')",
+    "core/translations/en.json:863,905,965"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already has ERC-8213 fingerprint pages (secure/src/tx/display/erc8213.rs). Trezor's streaming design (hash-while-confirm with cancellation discarding the hash) is tied to its 6 KB buffer; pq1 caps data_len at 4096 and copies to S-stack so it is not needed. The 'Skip and view hash' choice is a UX measure pq1's refusal policy does not want for known shapes; for the loud blind tier it is equivalent to what pq1 does.",
+   "notes": "TODO at helpers.py:321: digest confirmation 'missing on Bolt & Caesar' models."
+  },
+  {
+   "item": "Clear-signing is attempted only when the whole calldata fits the on-device buffer (6144 B); larger calldata never clear-signs",
+   "evidence": [
+    "core/src/apps/ethereum/sign_tx.py:109-110,173-177",
+    "core/src/apps/ethereum/README.md:152-154"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 bounds data_len to 4096 in the wire format and parses from S-stack; the Trezor rationale (preserve blind fallback) is the opposite of pq1's refusal policy. Relevant only as a reminder that pq1 must document its own hard cap and that over-cap requests are refusals, not blind pages.",
+   "notes": ""
+  },
+  {
+   "item": "Unknown-contract / unknown-token danger screen that must be acknowledged before any blind or unknown-token path (show_danger with 'Continue only if you know what you are doing!')",
+   "evidence": [
+    "core/src/apps/ethereum/layout.py:132-142,415-418",
+    "core/src/trezor/ui/layouts/eckhart/__init__.py:1066-1080 (show_danger 'Unknown contract address', Solana 'Unknown token address')",
+    "core/translations/en.json:950-953,3458"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's equivalent is the '! BLIND RAW32' label and loud blind pages; a dedicated danger-styled interstitial screen (distinct colour/glyph in the ui-px pilot) before any loud-blind or unknown-token page is cheap and makes the tier visually unmistakable. Does not change pq1's policy of refusing known shapes.",
+   "notes": ""
+  },
+  {
+   "item": "EIP-712 typed data: structure fetched and hashed on-device field by field with type validation, domain shown as one combined screen, empty-domain warning ('dApp did not identify itself!'), optional host-asserted message hash cross-check, and final hold-to-confirm",
+   "evidence": [
+    "core/src/apps/ethereum/sign_typed_data.py:69-140 (_generate_typed_data_hash; show_message_hash mismatch -> DataError at 130-133; confirm_typed_data_final hold at 135)",
+    "core/src/apps/ethereum/sign_typed_data.py:293-296 (nested members in EIP712Domain rejected), 407-426 (combined domain props; empty-domain warning)",
+    "core/src/apps/ethereum/sign_typed_data.py:491-566 (_validate_value / validate_field_type: sizes, bool in {0,1}, address 20 B, UTF-8)",
+    "core/src/apps/ethereum/layout.py:458-467 (hold=True final)",
+    "core/translations/en.json:879,904"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 verifies specific typed-data shapes (SafeTx, GPv2Order, Permit2, UniswapX) in S-world and hard-refuses the rest; Trezor's generic walker shows every leaf and lets the user skip structs ('should_show_more'), which is a blind-ish path pq1 rejects by policy. Transferable: (a) the empty-domain warning as a refusal reason for pq1 (a typed-data request whose domain lacks verifyingContract/chainId should not be an accepted clear shape); (b) the explicit rule that EIP712Domain may not contain nested members; (c) hold-to-confirm on the final typed-data commit matches pq1's chord-after-last-page rule.",
+   "notes": "Trezor core does NOT implement EthereumSignTypedHash (blind typed-hash signing): only the legacy T1 firmware does (legacy/firmware/ethereum.c:1210-1228; no handler in core/src/apps). This is a documented absence of a blind path on core."
+  },
+  {
+   "item": "EIP-7702 delegation: allow-list only (unknown delegate -> DataError), no chain_id 0 ('all chains') delegation, no calldata/value/payment-request on the auth tx, nonce bound to tx.nonce+1, explicit danger warning + hold-to-confirm, and revocation rendered distinctly",
+   "evidence": [
+    "core/src/apps/ethereum/sign_tx_eip1559.py:205-277 (_handle_eip7702: all refusals; lookup_eip7702_address)",
+    "core/src/apps/ethereum/sc_constants.py.mako:104-161 (allow-list per chain; RuntimeError if chain 0 present at 148-149)",
+    "core/src/trezor/ui/layouts/eckhart/__init__.py:1640-1730 (danger warning 'Authorize your account to a third-party contract using EIP-7702?', hold=True properties, revoke flow)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 has no EOA and signs only SPHINCS+C10 UserOps for its own smart account, so EIP-7702 authorisations cannot exist. The pattern (allow-listed delegate targets, refuse cross-chain-wildcard, refuse side-channels like value/data on the same request) is however the right template for any future pq1 'install module / change owner' Safe-management shapes, which pq1 already clear-signs.",
+   "notes": ""
+  },
+  {
+   "item": "SLIP-24 signed payment requests: P-256-signed (recipient_name, memos, amount, outputs-hash) verified on-device, with refund/coin-purchase addresses authenticated by a device-keyed HMAC (address MAC) so the host cannot substitute a refund address",
+   "evidence": [
+    "core/src/apps/common/payment_request.py:57-225 (PaymentRequestVerifier: nonce from cache, SL\\x00\\x24 preimage, check_address_mac for refund/coin-purchase memos, nist256p1.verify)",
+    "core/src/apps/common/address_mac.py:14-44 (HMAC-SHA256 under SLIP-21 'Address MAC key')",
+    "core/src/apps/ethereum/get_address.py:37-38,54 (mac returned with every address)",
+    "core/src/apps/ethereum/clear_signing.py:1524-1543 and sign_tx.py:198-223 (ETH/ERC-20 transfer bound to the request; non-zero value with ERC-20 refused)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 renders CoW refund pages and Safe context; the address-MAC idea (device proves an address is its own derivation so the 'refund to self' page is authenticated rather than trusted from the companion) transfers directly: pq1 could tag its own CREATE2 address / Safe-owner address with a DHUK- or seed-derived MAC when returned via CMD_GET_WALLET_ADDRESS and demand it back for 'receiver == self' claims. The P-256 payment-request signature itself is a classical signer and is out of pq1's one-primitive policy (invariant #5).",
+   "notes": "Trezor's merchant-signed payment request is effectively a Trezor-vouched off-chain intent descriptor; pq1's analogue would be a C10-signed or Merkle-rooted intent, not ECDSA."
+  },
+  {
+   "item": "Hard-coded, selector+address-bound decoders for staking (Everstake), ERC-4626 vaults and Merkl claims that refuse malformed/non-canonical calldata instead of blind-signing, and hide receiver/owner when they equal the signer",
+   "evidence": [
+    "core/src/apps/ethereum/staking.py:23-73 (exact (chain,address) sets; stake/unstake/claim arg-count and non-payable checks raise DataError)",
+    "core/src/apps/ethereum/yielding.py:292-347 (_prepare_vault_tx: amount==0 or value!=0 -> DataError; calldata suffix beyond params shown as 'Calldata suffix'; receiver/owner shown only if != sender)",
+    "core/src/apps/ethereum/yielding.py:350-433 (Merkl: proofs array length cross-checked, all users must equal signer else returns None -> blind)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's model is the same (CoW, Safe, ERC-20 pinned decoders). Two details transfer: (1) show any calldata suffix beyond the decoded parameter block as an explicit 'Calldata suffix' page (or refuse) \u2014 trailing bytes a decoder ignores are a classic substitution channel; (2) 'receiver == self' elision reduces page count but must be tied to an authenticated self address (see address MAC).",
+   "notes": ""
+  },
+  {
+   "item": "Address display hardening: EIP-55 checksum rendering, RSKIP60 for chains 30/31, 'chunkify' 4-char grouping with the 0x prefix in its own chunk, and bare-hex (non-checksum) in signing-address confirmations",
+   "evidence": [
+    "core/src/apps/ethereum/helpers.py:25-58 (address_from_bytes)",
+    "core/src/apps/ethereum/layout.py:588-594 (addr_pad, issue #6601)",
+    "core/src/apps/ethereum/layout.py:421-440 (require_confirm_address shows raw 0x hex)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 renders addresses on a 142x428 panel; chunking and keeping 0x out of the first group reduce misread risk. EIP-55 mixed case is a cheap extra integrity signal the user can compare against the companion.",
+   "notes": ""
+  },
+  {
+   "item": "Derivation-path policy: per-network SLIP-44 schemas, cross-signing allowed only in enumerated directions, and an on-device warning when a path is outside the keychain",
+   "evidence": [
+    "core/src/apps/ethereum/keychain.py:115-181 (_schemas_from_network: unknown network allows only 60/1; non-mainnet allows own slip44 + 60)",
+    "core/src/apps/common/paths.py:335-349 (validate_path -> show_path_warning)",
+    "core/src/apps/ethereum/definitions.py:54-57 (network definition chain_id/slip44 mismatch -> DataError)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 has no BIP-32 path surface: slot keys are derived from (account_index, chain_id, slot_index) supplied per sign, and the address is chain-independent. The analogous check pq1 already performs is chain_id binding of slot keys; nothing further transfers.",
+   "notes": ""
+  },
+  {
+   "item": "Solana comparison: per-instruction program/instruction support table; any unsupported instruction flips a transaction-wide blind_signing flag that forces a warning, suppresses fee display, and disables predefined-template matching; unknown tokens get a danger screen",
+   "evidence": [
+    "core/src/apps/solana/transaction/__init__.py:203-217",
+    "core/src/apps/solana/sign_tx.py:51-70,109-115",
+    "core/src/apps/solana/layout.py:382-387",
+    "core/src/apps/solana/predefined_transaction.py:61-80"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The transaction-wide 'any unknown instruction poisons the whole confirmation' rule is the right semantic for pq1's batch sign (CMD 30) and multiSend records: one unparseable record should downgrade or refuse the whole batch, never leave the other records looking clear-signed. pq1's multiSend already refuses on any rule violation; confirm the batch handler does too.",
+   "notes": ""
+  },
+  {
+   "item": "Bitcoin comparison: structured approver tracks internal vs external inputs/outputs, change detection, foreign-address and unverified-external-input confirmations, fee-over-threshold and change-count thresholds, replacement/payjoin no-decrease rules",
+   "evidence": [
+    "core/src/apps/bitcoin/sign_tx/approvers.py:34-61,75-85,162-178,195-262,325-369",
+    "core/src/apps/bitcoin/sign_tx/helpers.py:267,344-368"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Not UTXO-relevant, but two patterns map onto AA: (1) 'transaction has changed during signing' (approvers.py:178) \u2014 pq1's Safe/CoW binding resolver should assert that the bytes rendered are the bytes hashed (pq1 does this via S-stack copy, keep it); (2) explicit max-fee / gas threshold warnings: pq1 shows gas fields but a 'fee unexpectedly large' hard bound (approvers.py:360) could be added for the five gas words in the sign input.",
+   "notes": ""
+  },
+  {
+   "item": "Separation of what is hashed from what is shown is avoided: the same buffer is both hashed into the RLP digest and rendered (initial_data), with cancellation discarding the partially computed digest",
+   "evidence": [
+    "core/src/apps/ethereum/sign_tx.py:84-101,113-131,299-305",
+    "core/src/apps/ethereum/sign_tx.py:320-321 (cancellation discards hash)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Same invariant pq1 relies on (NS buffer copied to S-stack, then both rendered and hashed). Worth an explicit test in pq1 that the rendered pages and the userOpHash preimage are derived from one S-side copy, not two reads of NS memory (TOCTOU).",
+   "notes": ""
+  },
+  {
+   "item": "Sign-message: non-UTF-8 messages are displayed as hex(...) rather than silently mangled; verify-message recovers the pubkey and cross-checks the claimed address",
+   "evidence": [
+    "core/src/apps/common/signverify.py:31-35",
+    "core/src/apps/ethereum/sign_message.py:15-21,44-46",
+    "core/src/apps/ethereum/verify_message.py:73-93"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's PERSONAL_SIGN kind should render undecodable bytes as explicit hex with a label, never a best-effort string; pq1 already has ascii_str materialisation, so this is a check that non-ASCII input is refused or hex-labelled.",
+   "notes": ""
+  },
+  {
+   "item": "Built-in token/network definitions compiled per model, with built-ins taking precedence over any supplied definition (cannot be shadowed), unknown token rendered as 'Wei UNKN' with decimals 0 and unknown network as chain-id only",
+   "evidence": [
+    "core/src/apps/ethereum/tokens.py.mako:34-53",
+    "core/src/apps/ethereum/networks.py.mako:26-57",
+    "core/src/apps/ethereum/definitions.py:38-81",
+    "tests/device_tests/ethereum/test_definitions.py:123,526 (definition does not override builtin)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's ERC20_DB_ROOT path should have the same property: a Merkle leaf for a token can only come from the pinned root, and an unknown token must render raw integer amounts with an explicit UNKNOWN label rather than applying companion-supplied decimals/symbol. Confirm pq1 never accepts decimals/symbol from the companion outside a proven leaf.",
+   "notes": ""
+  },
+  {
+   "item": "Decided NOT to do (documented): clear-sign failure falls back to blind signing rather than refusal; subcall failures degrade to raw hex; calldata over the buffer silently blind-signs",
+   "evidence": [
+    "core/src/apps/ethereum/README.md:146-154 ('falls back to blind signing - the transaction can still be signed')",
+    "core/src/apps/ethereum/sign_tx.py:173-190",
+    "core/src/apps/ethereum/clear_signing.py:1304-1321 (subcall degrades to raw_rows)",
+    "tests/device_tests/ethereum/test_definitions.py:576-609 (mismatched definition -> blind path asserted)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "This is the central policy divergence. Trezor explicitly chooses availability (never brick signing) over refusal; pq1's contract is 'a tuple in the accepted clear set either clear-signs or fatal-refuses'. pq1 should keep its policy and treat Trezor's fallback as a known weaker point to advertise against, while noting Trezor's honest rationale (the signature-only fixtures cannot distinguish clear vs blind paths - README 150-151) as a testing trap pq1's `make e2e-px` already guards against.",
+   "notes": "Also deliberately unsupported: @.from/@.value in subcalls (README 111-118); EIP-712 arrays of arrays (sign_typed_data.py:354 TODO); native_currency_address pulled from registry marked dead code (clear_signing.py:380); ERC-8213 digest on Bolt/Caesar (helpers.py:321)."
+  },
+  {
+   "item": "Payment-request and clear-sign mutual-exclusion rules: payment requests only with ERC-20 transfer or plain value send, never with staking/yielding/other descriptors, never with EIP-7702",
+   "evidence": [
+    "core/src/apps/ethereum/sign_tx.py:158-169,198-223",
+    "core/src/apps/ethereum/clear_signing.py:1368-1372",
+    "core/src/apps/ethereum/sign_tx_eip1559.py:234-235"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The principle \u2014 a request may carry exactly one semantic frame, and combinations are refused rather than merged \u2014 maps to pq1's flags (INCLUDE_INIT_CODE xor REGISTER_SLOT) and to Safe-wrapped CoW (which pq1 handles as one combined, code-identical binding). Keep the 'exactly one frame' rule explicit in pq1's dispatcher tests.",
+   "notes": ""
+  },
+  {
+   "item": "Enum/date/duration/unit formatters validate type before rendering and refuse unknown enum keys instead of printing the raw integer",
+   "evidence": [
+    "core/src/apps/ethereum/clear_signing.py:559-583 (EnumFormatter: missing key -> InvalidFormatDefinition)",
+    "core/src/apps/ethereum/clear_signing.py:494-540 (Date/Duration: negative duration refused)",
+    "core/src/apps/ethereum/clear_signing.py:186-196 (_word_bytes: byte-slicing a signed value refused)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's enum formatter (0x08) is live; verify an out-of-range enum key is a refusal, not a raw fallback, and that byte-slice paths on signed ints are rejected. These are exactly the fail-open classes found in pq1's 2026-07 ERC-7730 review ($ref fails-open, Raw array-elem clamp).",
+   "notes": ""
+  }
+ ]
+}

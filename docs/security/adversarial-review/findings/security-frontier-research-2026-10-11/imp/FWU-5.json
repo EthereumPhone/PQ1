@@ -1,0 +1,26 @@
+{
+ "id": "FWU-5",
+ "title": "Verify the unused tail of each slot is erased (0xFF) at COMMIT and at every FSBL boot, and sign the image lengths",
+ "threat": "Stale bytes from a previous image, or bytes planted by a hostile companion/implant in the slack after `len`, survive in the inactive slot and can be referenced by a crafted (but validly signed) image or by a later torn update; combined with unsigned lengths in V1 this is the 'firmware must not be compressible / spare flash must be unusable' assumption Donjon used to bypass Trezor's Suite hash check.",
+ "proposal": "COMMIT: after verify_images, walk `[slot_base + received_len, slot_base + capacity)` for both halves and require every word == 0xFFFF_FFFF, inside the same aggregate sentinel gate (fail -> drop ctx). FSBL: same word-walk (no hashing; ~570 KB of word reads, tens of ms at HSI16) after verify_images, gated by check_true_into_sentinel. Sign the lengths: V6 already carries secure/nonsecure lengths in the preimage \u2014 keep them and add the FSBL rule 'len must be a multiple of 16 and >= IMAGE_LEN_MIN', so the tail boundary is itself authenticated.",
+ "rationale": "Trezor's check_image_contents re-hashes every chunk AND then verifies the rest of the flash area is uniformly 0xFF/0x00 at every boot; wf_image_upload keeps erasing until the whole target area is clean. pq1 erases the inactive slot in BEGIN, but nothing ever re-checks that the region beyond `len` is still blank at COMMIT or at boot, and in V1 the lengths are unsigned so an attacker with a signed manifest and a flipped `secure_len` controls where 'the tail' starts (the BEGIN capacity bound only stops overruns, not under-declared lengths).",
+ "repo_evidence": [
+  "fsbl/src/verify.rs:62-63 (hash_flash_region over [0, len) only; no tail check)",
+  "secure/src/fw_update/verify.rs:50-57 (fresh re-hash over received_* only)",
+  "fw-manifest/src/lib.rs:70-72 (secure_len/nonsecure_len 'no' in the signed column)",
+  "secure/src/nsc/cmd_fw_begin.rs:122-136 (capacity bound is 'the SOLE bound' on the unsigned len fields)",
+  "docs/security/usb-fw-update-hardening.md:329 (per-chunk hash retry declined; tail verification never discussed)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/image/image.c:437-523 (check_image_contents: chunk hashes + padding-to-area-end check), core/embed/projects/bootloader/workflow/wf_image_upload.c:230-238 (erase remainder after last chunk). Ledger Donjon's Safe 3 bypass of the Suite firmware hash relied on usable spare flash.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "FSBL budget (~100-200 B) and boot time (~tens of ms, must be measured with stage-marker). On the legacy geometry the bank-2 FSBL mirror pages 0..4 lie INSIDE NS slot A (flash_policy.rs:70-73), so a tail check over the NS slot would fail on the mirror bytes until #540 cutover \u2014 scope the NS walk to the registry's NS slot range. Signed lengths are a V6 change (owner-gated).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/workflow/wf_image_upload.c",
+  "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation"
+ ],
+ "surface": "fwupdate"
+}

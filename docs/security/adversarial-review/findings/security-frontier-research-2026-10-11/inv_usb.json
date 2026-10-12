@@ -1,0 +1,520 @@
+{
+ "surface": "USB / companion attack surface and TrustZone NS isolation (key=usb). Threat model: malicious host drives NS world; NS pointer games across NSC; USB stack bugs; protocol parsing; companion substitutes data; DoS/wedge. Inventory built by reading nonsecure/src/usb/*, nonsecure/src/{main,nsc_api}.rs, shared/src/{apdu_framing,ns_ptr_validate}.rs, secure/src/nsc/{mod,ptr_validate,ns_ptr,state,cmd_*}.rs, secure/src/{sau,timeout}.rs, secure/src/hw/{iwdg,tzic,usb_hw}.rs, secure/src/main.rs exception handlers, fuzz/, CI/Makefile, docs/companion/usb-protocol-v2.md, docs/security/{threat-model,production-security,HARDENING,usb-fw-update-hardening}.md, the two adversarial-review playbooks (usb-companion, trustzone-gateway), and ~40 open GitHub issues. Baseline posture: NS world is untrusted by design (holds no secret); the only load-bearing boundary is the NSC gateway + SAU/GTZC; NS-side bugs are DoS-class.",
+ "has": [
+  {
+   "item": "HID frame reassembly state machine lives in the dependency-free shared crate (production == fuzz harness): 3/5/7-byte prefix checks, MAX_APDU_RX=4096 cap, zero-length/oversize reject, channel-ID isolation (foreign seq=0 and foreign continuation frames are dropped without scrubbing the owner), same-channel desync aborts + scrubs partial bytes, checked_add bounds before every copy",
+   "evidence": [
+    "shared/src/apdu_framing.rs:283",
+    "shared/src/apdu_framing.rs:349-498",
+    "nonsecure/src/usb/transport.rs:450-487"
+   ],
+   "status": "implemented",
+   "notes": "PingEcho (tag 0x02) echoes the attacker frame verbatim back to host (transport.rs:461-464) \u2014 harmless."
+  },
+  {
+   "item": "APDU header parser with Lc overrun check (checked_add) and CLA/INS routing; GET_RESPONSE (0xC0) is deliberately CLA-agnostic",
+   "evidence": [
+    "shared/src/apdu_framing.rs:64-82",
+    "shared/src/apdu_framing.rs:108-116",
+    "nonsecure/src/usb/commands.rs:247-273"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Chained-APDU state machine: INS-swap mid-chain resets, overflow-safe cursor vs caller capacity, per-CMD accumulation bound (per_cmd_chain_bound) so a bogus INS cannot burn the ~8 KB global CHAIN_BUF; chained-INS allowlist is checked BEFORE chain.step accepts any bytes",
+   "evidence": [
+    "shared/src/apdu_framing.rs:209-243",
+    "nonsecure/src/usb/commands.rs:99-112",
+    "nonsecure/src/usb/commands.rs:347-383"
+   ],
+   "status": "implemented",
+   "notes": "usb-fw-update-hardening.md \u00a75 finding #4 still lists the per-CMD bound as open LOW while \u00a79 says it is already had \u2014 doc is internally inconsistent; code has it."
+  },
+  {
+   "item": "Chained-command TOTAL lifetime bound (30 s, not idle-reset) with router-lease release on expiry (X17-UC1 / F2)",
+   "evidence": [
+    "shared/src/apdu_framing.rs:148",
+    "shared/src/apdu_framing.rs:187-198",
+    "nonsecure/src/usb/commands.rs:925-934",
+    "nonsecure/src/main.rs:250-253"
+   ],
+   "status": "implemented",
+   "notes": "Issue #136 (X17-UC1) is still OPEN although the fix landed in 22c5d614 ('absolute chain-lifetime + drain caps on the router lease (#147)'). Clock is host-driven FNSOF (see gap #428)."
+  },
+  {
+   "item": "GET_RESPONSE drain protections: 30 s inter-chunk idle timeout, 120 s absolute drain deadline not reset by keepalives, scrub of pending cursor on any non-GET_RESPONSE command, FI-clamped chunk length",
+   "evidence": [
+    "nonsecure/src/usb/commands.rs:138-168",
+    "nonsecure/src/usb/commands.rs:266-270",
+    "nonsecure/src/usb/commands.rs:784-830",
+    "nonsecure/src/usb/commands.rs:866-917"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Transport RX reassembly timeout (5 s on the OTG_DSTS.FNSOF frame clock) scrubs a half-assembled APDU; deadline only cleared when the owner's stream actually died (GPT-5.6 wave finding)",
+   "evidence": [
+    "nonsecure/src/usb/transport.rs:415-418",
+    "nonsecure/src/usb/transport.rs:474-513",
+    "nonsecure/src/usb/mod.rs:149-173",
+    "nonsecure/src/main.rs:243-244"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Single-session router lease (F11): a foreign HID channel is refused with SW 0x6985 while another channel owns a live chain or drain, without disturbing the owner's state; lease re-derived after every dispatch",
+   "evidence": [
+    "nonsecure/src/usb/commands.rs:129-136",
+    "nonsecure/src/usb/commands.rs:226-242",
+    "shared/src/apdu_framing.rs:500-520"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "FI-hardened length clamp `fi_min` (black_box barrier + opposite-branch recompute) at every host-influenced copy: HID first/continuation frame, TX queue, GET_RESPONSE chunk; IR regression gate `make check-fi-ir` exists",
+   "evidence": [
+    "pqsigner-fi/src/lib.rs:246-258",
+    "shared/src/apdu_framing.rs:425-436",
+    "nonsecure/src/usb/transport.rs:529",
+    "nonsecure/src/usb/commands.rs:803",
+    "Makefile:4431-4433"
+   ],
+   "status": "partial",
+   "notes": "check-fi-ir is NOT invoked from .github/workflows/*.yml (grep empty) \u2014 the gate exists but is not CI-executed. Issue #130 still OPEN although the black_box fix is in the tree."
+  },
+  {
+   "item": "OTG hardening in NS: FDMOD=1 (device-only, no role switch), SOF interrupt masked (timing side-channel), VBUS sensing overridden for USB-C",
+   "evidence": [
+    "nonsecure/src/usb/mod.rs:81-93",
+    "nonsecure/src/usb/mod.rs:121-147",
+    "nonsecure/src/usb/mod.rs:207-215"
+   ],
+   "status": "implemented",
+   "notes": "usb-companion playbook Part B item 3 cites secure/src/hw/usb_hw.rs for FDMOD/SOF; it actually lives in the NS crate (playbook UC5 row already corrects this)."
+  },
+  {
+   "item": "USB OTG FS deliberately left NS in GTZC (SECCFGR3 bit 10) and the NS USB stack owns DWC2; OTG_FS has no DMA so every USB byte is CPU-mediated and subject to SAU/GTZC; only the USB pads are handed to NS (pq1: PA11/PA12 only \u2014 PA15/PB5/PB15 stay secure; board const asserts)",
+   "evidence": [
+    "secure/src/sau.rs:372-383",
+    "secure/src/sau.rs:455-466",
+    "secure/src/hw/usb_hw.rs:156-174",
+    "docs/security/threat-model.md:379"
+   ],
+   "status": "implemented",
+   "notes": "pq1 enumeration confirmed with GPIOA_SECCFGR=0xe7ff (usb_hw.rs:18-19)."
+  },
+  {
+   "item": "GTZC1 TZSC default-secure allowlist (I2C1/I2C2 [+I2C4 on pq1], IWDG when selected, UCPD1, TIM2/TIM3, SPI1 under ui-lcd, AES/HASH/RNG/PKA/SAES) with exact-equality compile-time image pins for all four IWDG\u00d7board combos and fail-closed post-write `verify_or_halt` readback",
+   "evidence": [
+    "secure/src/sau.rs:257-399",
+    "secure/src/sau.rs:503-590",
+    "secure/src/sau.rs:415-421",
+    "CLAUDE.md (TZSC caveat: silicon-validated 2026-05-20, 7/7 RAZ-fault)"
+   ],
+   "status": "implemented",
+   "notes": "GTZC2 (TAMP/BKPSRAM) is NOT configured or locked \u2014 the one acknowledged follow-up."
+  },
+  {
+   "item": "MPCBB block-based SRAM attribution: SRAM1 (192 KB) all secure, SRAM2 (64 KB) all NS; SAU regions 0-3 (NS flash, NSC veneers from linker symbols, NS SRAM, NS peripherals); proto NS pointer windows compile-time asserted to be subsets of the SAU NS regions in both the secure crate and the Kani-harness crate",
+   "evidence": [
+    "secure/src/sau.rs:428-441",
+    "secure/src/sau.rs:748-797",
+    "secure/src/sau.rs:40-66",
+    "shared/src/ns_ptr_validate.rs:53-76",
+    "proto/src/lib.rs:59-66"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "tz-2 security-config freeze after programming: SYSCFG CSLCKR LOCKSAU|LOCKSVTAIRCR, GTZC1 TZSC_CR.LCK, AIRCR PRIS=1 (secure IRQs outprioritize NS), BFHFNMINS=0 (faults taken secure), SYSRESETREQS under mode-production; AIRCR low-half-word config bits AND lock bits read back via verify_or_halt",
+   "evidence": [
+    "secure/src/sau.rs:631-745",
+    "secure/src/sau.rs:712-726",
+    "secure/src/sau.rs:742-743"
+   ],
+   "status": "implemented",
+   "notes": "Silicon receipt of boot+gtzc-enforcement AFTER the lock is still owed (playbook TZ9 residual). trustzone-gateway playbook TZ10 still says the AIRCR verify is missing \u2014 stale."
+  },
+  {
+   "item": "TZIC illegal-access IRQ (NVIC 8) armed with the same masks as TZSC; counts violations, snapshots SR; under `tzic-wipe` (forced ON for shipping dual-SE images by the nsc/mod.rs MEDIUM-1 fence) a single NS\u2192S illegal access triggers zeroize + page-125 wipe-arm + USB soft-disconnect + reset",
+   "evidence": [
+    "secure/src/hw/tzic.rs:124-202",
+    "secure/src/hw/tzic.rs:228-276",
+    "secure/src/nsc/mod.rs (MEDIUM-1 compile_error fence: tamp+tamp-wipe+tzic-wipe)",
+    "secure/src/main.rs:4392-4420"
+   ],
+   "status": "implemented",
+   "notes": "TZIC IER4=0: AHB3/memory-group probes (FLASH, GPDMA1, TZSC/TZIC, MPCBB) are hardware-blocked but uncounted \u2014 accepted instrumentation gap (sau.rs:610-629)."
+  },
+  {
+   "item": "NS pointer range validation: pure window arithmetic (null, usize\u2192u32 truncation, u32 wrap, NS-SRAM-or-flash containment, mailbox disjointness) is host-shared, Kani-proven unbounded with non-vacuity controls, Miri-tree-borrows-checked; firmware ANDs in the ARMv8-M TT/SAU re-classification per 32-byte stride",
+   "evidence": [
+    "shared/src/ns_ptr_validate.rs:109-164",
+    "shared/src/ns_ptr_validate.rs:227-404",
+    "secure/src/nsc/ptr_validate.rs:60-175",
+    "Makefile:4551 (cargo kani -p sphincs-tz-shared)",
+    "Makefile:4624-4631 (miri)",
+    ".github/workflows/ci.yml:506-524 (miri job)",
+    ".github/workflows/nightly.yml:45-88 (kani job)"
+   ],
+   "status": "implemented",
+   "notes": "TT is a deliberate `true` stub off-target (ptr_validate.rs:123-140); TT semantics are only exercised on silicon."
+  },
+  {
+   "item": "`NsPtr<T>` \u2192 `ReadPtr`/`WritePtr` typestate with F-8 double-sentinel validation",
+   "evidence": [
+    "secure/src/nsc/ns_ptr.rs:48-249",
+    "secure/src/nsc/mod.rs (nsc_register_heartbeat uses NsPtr::<u8>::new(addr).validate_read(4))"
+   ],
+   "status": "partial",
+   "notes": "Adopted by exactly one veneer (nsc_register_heartbeat); all production cmd_* handlers use the legacy free functions (grep: only ns_ptr.rs and mod.rs reference NsPtr). threat-model.md:263 and red-teaming.md \u00a78.1 describe the typestate as THE mechanism."
+  },
+  {
+   "item": "Every production handler that takes NS pointers gates them through `fi::check_true_into_sentinel(|| validate_ns_*_ptr)` (FI FAIL-IN shape), and the three sign handlers re-validate the output write extent at the deref site (finding F5) so a single branch-skip cannot reach an OOB write",
+   "evidence": [
+    "secure/src/nsc/cmd_sign_userop.rs:118-158",
+    "secure/src/nsc/cmd_sign_userop.rs:2659",
+    "secure/src/nsc/cmd_sign_userop_batch.rs:168-177",
+    "secure/src/nsc/cmd_sign_userop_batch.rs:2745-2747",
+    "secure/src/nsc/cmd_sign_offchain.rs:107-122",
+    "secure/src/nsc/cmd_fw_begin.rs:57-61",
+    "secure/src/nsc/cmd_fw_chunk.rs:49-52",
+    "secure/src/nsc/cmd_fw_status.rs:40-43",
+    "secure/src/nsc/cmd_get_init_code.rs:96-104",
+    "secure/src/nsc/cmd_offchain_status.rs:47-56",
+    "secure/src/nsc/cmd_get_wallet_address.rs:349-352",
+    "secure/src/nsc/cmd_offchain_sync.rs:70-75"
+   ],
+   "status": "implemented",
+   "notes": "Exceptions: cmd_pin_attempt_log.rs:23 uses a bare `if !validate_ns_write_ptr` (no sentinel, no HandlerGuard, reachable without PIN); prodtest.rs has 15 bare gates (#140 says 12)."
+  },
+  {
+   "item": "TOCTOU snapshot discipline: per-byte `read_volatile` copy of the NS payload into the secure-SRAM `SIGN_SNAP_BUF` (shared by the three sign handlers, wiped before fill, const-asserted \u2264 buffer), parse only the copy; manifest likewise snapshotted onto the S-stack",
+   "evidence": [
+    "secure/src/nsc/cmd_sign_userop.rs:160-189",
+    "secure/src/nsc/mod.rs (SIGN_SNAP_BUF / SIGN_SNAP_BUF_LEN doc + static)",
+    "secure/src/nsc/cmd_fw_begin.rs:63-75",
+    "shared/src/ns_ptr_validate.rs:186-207"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Companion-supplied fields treated as assertions, not authority: entry_point compared twice to ENTRY_POINT_V06 through independent sentinel gates before any parse; wire `sender` must equal the independently derived CREATE2 address for account_index (sender binding, CFI-stepped); slot key derived from (entropy, chain_id, slot_index) so a slot/chain lie yields a different key, never reuse",
+   "evidence": [
+    "secure/src/nsc/cmd_sign_userop.rs:190-226",
+    "secure/src/nsc/cmd_get_wallet_address.rs:52-57",
+    "secure/src/nsc/cmd_get_wallet_address.rs:109-124",
+    "docs/companion/usb-protocol-v2.md:167",
+    "docs/companion/usb-protocol-v2.md:183-188"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "PIN gate on every secret-touching gateway command via FihBool complement-storage read through a Hamming-distant sentinel; `HandlerGuard`/HANDLER_DEPTH (AtomicU32) enforces non-reentrancy and blocks the SysTick idle-wipe while a handler holds stack copies of secrets",
+   "evidence": [
+    "secure/src/nsc/state.rs:240-266",
+    "secure/src/nsc/mod.rs (HANDLER_DEPTH, HandlerGuard, handler_is_busy)",
+    "secure/src/nsc/cmd_sign_userop.rs:111-116",
+    "secure/src/main.rs:4343-4361"
+   ],
+   "status": "implemented",
+   "notes": "Handlers without a guard: cmd_lock, cmd_is_unlocked, cmd_get_remaining, cmd_pin_attempt_log (short, no secret copies)."
+  },
+  {
+   "item": "NS boot handover clears all GP registers, sets MSP_NS/PSP_NS/CONTROL_NS=0 and BXNS; CMSE `cmse-nonsecure-entry` veneers are thin wrappers that build GatewayArgs and delegate to the same cmd_*::run used by the QEMU mailbox path (QEMU args are snapshotted before dispatch)",
+   "evidence": [
+    "secure/src/boot_ns.rs:19-77",
+    "secure/src/nsc/mod.rs (CMSE veneers section; poll_gateway/dispatch)"
+   ],
+   "status": "implemented",
+   "notes": "FPU register clear omitted because FPU not enabled (boot_ns.rs:54-57) \u2014 must be revisited if FPU is ever turned on."
+  },
+  {
+   "item": "S-only inactivity timer (120 s): NS gateway pings do not reset it; `confirm` does not reset on entry (HIGH-13); REQUEST_UNLOCK arms the window only when the device is LOCKED with no secret loaded (#713)",
+   "evidence": [
+    "secure/src/timeout.rs:27",
+    "secure/src/timeout.rs:315-327",
+    "secure/src/ui/confirm.rs:160",
+    "secure/src/nsc/cmd_request_unlock.rs:33-49"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "REQUEST_UNLOCK is idempotent when already unlocked (F3) so a hostile host cannot re-pop PIN prompts on an unlocked device",
+   "evidence": [
+    "secure/src/nsc/cmd_request_unlock.rs:20-30"
+   ],
+   "status": "partial",
+   "notes": "When the device is LOCKED each INS 0x10 still pops the trusted PIN dialog; nothing bounds how often a host may do that (see gaps)."
+  },
+  {
+   "item": "Secure-owned IWDG (Secure alias 0x5000_3000, SECCFGR1 bit 7) fed from SysTick only while a verified tick pair + CFI word are present; progress = NS heartbeat advanced OR busy handler (capped at 30 s, rr-2) OR trusted-UI wait AND !idle; 4 s stall limit; forced ON for stm32u585+mode-production; heartbeat address validated through the FI-doubled NsPtr typestate",
+   "evidence": [
+    "secure/src/hw/iwdg.rs:1-66",
+    "secure/src/hw/iwdg.rs:126-137",
+    "secure/src/hw/iwdg.rs:240-330",
+    "secure/src/nsc/mod.rs (production liveness fence + nsc_register_heartbeat)",
+    "nonsecure/src/main.rs:214-238",
+    "Makefile:4357-4403 (fwup-transport-hw-iwdg idle-survival e2e)"
+   ],
+   "status": "implemented",
+   "notes": "Silicon denial receipts for NS CPU/GPDMA reload attempts are still owed (#79). IWDG detects a STALLED loop, not a FLOODED one (threat-model.md:374)."
+  },
+  {
+   "item": "Fault/abnormal-path secret hygiene: HardFault (incl. NS faults, since BFHFNMINS=0) and unexpected IRQs zeroize SRAM secret caches then sys_reset (not the destructive SE wipe); panic handler zeroizes, paints a fatal screen, and parks in WFI; NS USB builds use panic_halt so an NS panic becomes an IWDG reset",
+   "evidence": [
+    "secure/src/main.rs:4682-4692",
+    "secure/src/main.rs:4392-4420",
+    "secure/src/main.rs:4711-4739",
+    "nonsecure/src/main.rs:55-58"
+   ],
+   "status": "implemented",
+   "notes": "HARDENING.md:376 says the panic handler 'wipes secrets and resets' \u2014 it halts (WFI), it does not reset."
+  },
+  {
+   "item": "OFFCHAIN_SYNC (companion-chosen durable floor) hardened against page-123 exhaustion and value-inflation bricks: clamp to OFFCHAIN_COUNT_CEILING, trusted-display consent for new slot or floor raise, MAX_DISTINCT_SLOTS=128 structural cap at the flash write chokepoint, display\u2194commit binding re-checked through a sentinel",
+   "evidence": [
+    "secure/src/nsc/cmd_offchain_sync.rs:93-213",
+    "secure/src/offchain_state.rs:64-76"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "GET_WALLET_ADDRESS optional `show` flag (#472) paints the EIP-55 address behind a physical confirm before any NS write; show>1 rejected; account_index bounded to 0..=255",
+   "evidence": [
+    "nonsecure/src/usb/commands.rs:496-525",
+    "secure/src/nsc/cmd_get_wallet_address.rs:28-38"
+   ],
+   "status": "implemented",
+   "notes": "show=0 (default) lets an unlocked host enumerate all 256 account addresses with no on-device round-trip \u2014 a documented privacy trade-off, not a fund risk."
+  },
+  {
+   "item": "F-17 signing rate limiter (\u22651 s between signs, 250 signs per unlock session, SRAM-only, reset on unlock) gates every C10 sign so a USB-driven burst cannot harvest SCA traces quickly",
+   "evidence": [
+    "secure/src/sign_rate.rs:18-52",
+    "secure/src/crypto.rs:94-96",
+    "secure/src/nsc/state.rs:388"
+   ],
+   "status": "implemented",
+   "notes": "Power-cycle + re-PIN resets the session cap; a flash-persistent daily quota was deferred (sign_rate.rs:36-39)."
+  },
+  {
+   "item": "Fuzzing/proof coverage of the host-reachable parsers: libFuzzer targets `hid_frame_assembler`, `apdu_parse_header` (+11 others), always-on proptest `fuzz_props` in shared, 4 Kani harnesses over process_frame/ChainState/parse_apdu_header with NO kani::assume on assembler state, mutation-gated; ClusterFuzzLite PR (300 s) + batch (1800 s) ASan; CI runs the fuzz workspace's deterministic suites",
+   "evidence": [
+    "fuzz/Cargo.toml",
+    "fuzz/fuzz_targets/hid_frame_assembler.rs",
+    "fuzz/fuzz_targets/apdu_parse_header.rs",
+    "shared/src/apdu_framing.rs:538-1274",
+    ".clusterfuzzlite/project.yaml",
+    ".github/workflows/cflite-pr.yml:43-48",
+    ".github/workflows/cflite-batch.yml:42-47",
+    ".github/workflows/ci.yml:327-348"
+   ],
+   "status": "implemented",
+   "notes": "Coverage stops at the shared crate: the NS router (commands.rs, 1274 LOC) is host-uncompilable and unfuzzed (#313a, #588). docs/STATUS.md:103 records CI as red for long stretches, so CI-executed fuzz evidence is partially suspended."
+  },
+  {
+   "item": "GTZC enforcement validation driver: NS probes every NS-alias of a TZSC-secured peripheral (11 on pq1 incl. I2C4/TIM2/TIM3/UCPD1) and asserts delta == PROBES.len() via the e2e-only `nsc_tzic_status` veneer; `make gtzc-enforcement-hw`",
+   "evidence": [
+    "nonsecure/src/gtzc_test.rs:67-102",
+    "nonsecure/src/gtzc_test.rs:105-199",
+    "Makefile:950",
+    "nonsecure/src/main.rs:38-49 (board must be named for gtzc-test)"
+   ],
+   "status": "partial",
+   "notes": "Runs on `mock-se,ui-semihosting,debug-log,e2e-test` \u2014 not the shipping combo; SPI1 (SECCFGR2) and IWDG bits are untested by it (#390). TZIC_STATUS veneer compiled out of production."
+  },
+  {
+   "item": "Gateway-ABI join check (`tools/check-gateway-abi.sh`) that detects an NS image linked against a previous secure build's veneer addresses (the 2026-09-18 +0x700 incident)",
+   "evidence": [
+    "tools/check-gateway-abi.sh:1-30"
+   ],
+   "status": "partial",
+   "notes": "Not referenced from the Makefile or any workflow (grep empty); relink-guard gaps in `all/nonsecure` and `bootproof-build` recipes tracked in #690."
+  },
+  {
+   "item": "Non-production gateway surface fenced out: prodtest INS/veneers behind `prodtest` (incompatible with mode-production, bhk, tamp-wipe, tzic-wipe, real OTP roots); CMD_TEST_PIN_LOCKOUT and CMD_TZIC_STATUS behind `e2e-test` (mutually exclusive with mode-production); `make prod-feature-check` denylist",
+   "evidence": [
+    "secure/src/nsc/mod.rs (PRODTEST_PERSISTENT_ACTION_FORBIDDEN fence; MED-2 e2e-test fence)",
+    "nonsecure/src/usb/commands.rs:312-342",
+    "nonsecure/src/nsc_api.rs:187-223",
+    "Makefile:2662-2777"
+   ],
+   "status": "fenced-off",
+   "notes": "#735: the denylist covers only 1 of 3 firmware crates and misses the #705 OVP experiment features."
+  },
+  {
+   "item": "CMD_GET_PIN_ATTEMPT_LOG (INS 0x03): read-only RAM-resident reason ring, deliberately readable WITHOUT PIN on a locked device so a shipped unit's lockout can be explained (#715)",
+   "evidence": [
+    "secure/src/nsc/cmd_pin_attempt_log.rs:20-35",
+    "secure/src/pin_attempt_log.rs:28-50",
+    "nonsecure/src/usb/commands.rs:285",
+    "secure/src/nsc/mod.rs (nsc_get_pin_attempt_log veneer, un-cfg'd)"
+   ],
+   "status": "implemented",
+   "notes": "Owner decision on shipping it unauthenticated is OPEN (#719). Uses a bare `if !validate_ns_write_ptr` and no HandlerGuard \u2014 the only production handler not sentinel-gated. Missing from the INS table in usb-protocol-v2.md."
+  },
+  {
+   "item": "Intrusion-wipe path does a USB soft-disconnect before reset so the host sees a clean detach/re-attach; GET_STATUS no longer carries the constant-1 `provisioned` byte (X17-UC2)",
+   "evidence": [
+    "secure/src/hw/tzic.rs:258-275",
+    "nonsecure/src/usb/commands.rs:436-453",
+    "docs/companion/usb-protocol-v2.md:257-269"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "On-silicon USB transport e2e: `fwup-transport-hw` (BEGIN+CHUNK+COMMIT round-trip over real HID), `fwup-transport-hw-iwdg` (idle survival with IWDG live), host scripts hid_sign*.py / hid_smoke.py / fwup-transport-test.py; USB signing proven on pq1 silicon",
+   "evidence": [
+    "Makefile:4297-4403",
+    "tools/fwup-transport-test.py",
+    "tools/hid_sign.py",
+    "tools/hid_smoke.py",
+    "docs/companion/usb-protocol-v2.md:69-122 (hard bounds documented for companions)"
+   ],
+   "status": "implemented",
+   "notes": "These are happy-path/robustness receipts, not adversarial USB testing (see gap: #590)."
+  },
+  {
+   "item": "NS-side trailer-skeleton normalisation: NS pads missing u16 trailer prefixes with [0,0] so a short companion payload degrades to unknown-token/blind-sign rather than misaligning the secure parser; NS never looks up metadata (DBs are host-side, device holds only Merkle roots)",
+   "evidence": [
+    "nonsecure/src/usb/commands.rs:605-625",
+    "nonsecure/src/usb/commands.rs:752-838"
+   ],
+   "status": "implemented",
+   "notes": "NS mutates the payload it forwards (writes zero prefixes into CHAIN_BUF) \u2014 benign because the secure parser re-validates every trailer against pinned roots, but it is an NS-authored byte range crossing the gateway."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "The NS APDU router (`nonsecure/src/usb/commands.rs`, 1274 LOC: per-command dispatch, GET_RESPONSE chunker, trailer-skeleton padding, SW mapping) is host-uncompilable: no unit tests, no proptest, no libFuzzer, no Kani. Fuzz/proof coverage stops at the shared framing crate. The NS crate has no [lib] target and no tests/ directory.",
+   "tracked_in": "#313 (35-P7 remaining half a), #588 (composed APDU/HID router fuzz target), #476 (host-driven device-test harness)",
+   "notes": "usb-companion playbook UC4 already admits 'no host-side timeout tests exist (nonsecure isn't host-compilable)'."
+  },
+  {
+   "gap": "No adversarial USB-face testing of the live stack (descriptor/SETUP/wLength abuse, enumeration/reset storms, suspend/resume, ZLP edge cases, DWC2 ES0499 errata paths). red-teaming.md \u00a78.2 writes pass/fail criteria for a 'USB fuzzer' that does not exist.",
+   "tracked_in": "#590 (Cynthion/Facedancer rig); #589 (Fuzzware feasibility)",
+   "notes": "The only USB bus-level code we own is nonsecure/src/usb/{mod,hid}.rs (~360 LOC); everything else is synopsys-usb-otg 0.4.0 + usb-device 0.3.2 upstream."
+  },
+  {
+   "gap": "DWC2 ES0499 errata mitigations (single-packet transfers DIEPTSIZ.XFRSIZ=MPSIZ, no CSR interleaving, SNAK/CNAK/EPENA sequencing) are NOT implemented in our code and not referenced anywhere in nonsecure/ (grep for RXFFLSH/XFRSIZ/errata/ES0499 empty). Only the upstream crate's FIFO flush on init/reset exists (synopsys-usb-otg-0.4.0/src/bus.rs:89,610; endpoint.rs:106 has 'TODO: flushing FIFO').",
+   "tracked_in": "#590 scope mentions ES0499 2.26.x; otherwise only production-security.md \u00a72.4 (research synthesis) \u2014 no implementation issue",
+   "notes": "threat-model.md:373 presents these as the mitigation ('Driver enforces single-packet transfers ... flushes all FIFOs') \u2014 claim-vs-code drift."
+  },
+  {
+   "gap": "Absolute chain/drain lifetime bounds and the RX reassembly timeout are driven by the host-controlled OTG_DSTS.FNSOF clock, which freezes during USB suspend; the F11 lease and partial state survive arbitrary wall time while suspended. IWDG cannot help (the NS loop keeps running).",
+   "tracked_in": "#428",
+   "notes": "Design note, not a keepalive vector (host cannot send frames while suspended)."
+  },
+  {
+   "gap": "GTZC enforcement is silicon-validated only on a non-shipping feature combo (`mock-se,ui-semihosting,debug-log,e2e-test`): SPI1 (trusted display bus, SECCFGR2) and IWDG (SECCFGR1 bit 7) secure bits have no RAZ-fault receipt; no receipt after `lock_security_config` lands; RCC/PWR clock security (RCC_SECCFGR) not programmed; GPDMA-vs-MPCBB and trusted-path GPIO security unverified on silicon.",
+   "tracked_in": "#390 (C3), #79 (IWDG silicon), #80 (RCC/PWR), #53 (GPDMA/GPIO), #269 (tz-3), #95 (bind SAU config to validator constants)",
+   "notes": "#239 (18b) is stale \u2014 it still asks for the 2026-05-20 silicon validation that CLAUDE.md records as done."
+  },
+  {
+   "gap": "GTZC2 (RTC-domain: TAMP, BKPSRAM) is neither configured nor locked; TAMP escalation and backup-register secure/privilege attribution are open ship-blockers.",
+   "tracked_in": "#50, #47, #75, #81, #248, #256; CLAUDE.md TZSC caveat ('Only TAMP (in GTZC2) remains')",
+   "notes": "sau.rs:672-676 deliberately does not lock GTZC2 because it is unconfigured."
+  },
+  {
+   "gap": "No privilege separation inside either world: NS runs as privileged thread (CONTROL_NS=0, boot_ns.rs:36-40) with no MPU; no NS MPU or secure MPU configuration exists anywhere (grep MPU in secure/src, nonsecure/src empty); attacker-data parsers (ERC-7730 walker, typed-call ABI, EIP-712 decoders) run fully privileged in the secure world.",
+   "tracked_in": "#277 (C-1 intra-secure MPU-lite design entry, priority:low)",
+   "notes": "HARDENING.md:212 and threat-model.md:242 claim 'MPU regions enforced in both worlds' \u2014 drift. secmon-style NS-trusting split declined on principle (owner decision)."
+  },
+  {
+   "gap": "FI-hardening uniformity at the gateway: `NsPtr<T>` typestate adopted by one veneer only; `cmd_pin_attempt_log.rs:23` is a production, PIN-less handler with a bare `if !validate_ns_write_ptr` (no sentinel, no HandlerGuard) \u2014 the exact FAIL-OUT shape the 2026-06-11 HIGH-1 pass removed elsewhere; prodtest.rs now has 15 bare gates (issue says 12).",
+   "tracked_in": "#140 covers prodtest only; cmd_pin_attempt_log's bare gate is UNTRACKED (not in TZ5 row or any issue); #719 covers the disclosure decision, not the FI shape",
+   "notes": "Impact bounded: 23-byte non-secret write into NS SRAM; a single skip of the reject branch would allow an OOB write of the log into secure SRAM."
+  },
+  {
+   "gap": "IWDG liveness gaps: boot-grace kicks forever until NS registers a heartbeat; heartbeat registration veneer is re-callable from NS; no watchdog before post-unlock init; and a USB flood (live loop) is not a stall so IWDG never fires \u2014 the HID OUT token bucket that would have bounded floods was descoped.",
+   "tracked_in": "#176 (F31/RUN-3); flood case documented as accepted in threat-model.md:374",
+   "notes": "Re-open a rate bucket only with profiling evidence that RX-FIFO NAK backpressure does not absorb the flood (owner rationale 2026-05-28)."
+  },
+  {
+   "gap": "Two security gates exist as scripts but are not executed by CI/Makefile: `make check-fi-ir` (IR gate for fi_min, issue #130) is absent from every workflow; `tools/check-gateway-abi.sh` (stale-veneer ABI join) has no Makefile/CI caller; two hardware recipes still miss the relink guard.",
+   "tracked_in": "#690 (relink guard), #130 (still OPEN though fix landed), #701 (ABI gate promotion)",
+   "notes": "A stale-veneer NS image booted and enumerated normally on 2026-09-18 and then faulted the secure world on the first APDU."
+  },
+  {
+   "gap": "Prompt-fatigue DoS on a LOCKED device: INS 0x10 UNLOCK pops the trusted PIN dialog every time and nothing rate-limits a host that keeps issuing it (F3 idempotency only covers the UNLOCKED state); each pop also arms a fresh 120 s input window (cmd_request_unlock.rs:46). No attempt is burned unless the user types, so this is UX/DoS, but it trains the user to see unsolicited PIN prompts.",
+   "tracked_in": "UNTRACKED \u2014 nearest is #600 (signing-ceremony anomaly layer, sign path only)",
+   "notes": "Also: the PendSV re-unlock loop blocks NS/USB for up to 120 s per pass while the PIN prompt is up (#700/#692)."
+  },
+  {
+   "gap": "PendSV idle re-unlock loop: runaway guard (12 passes / 3 verdictless) never exercised on silicon; on e2e images a persistent SE fault still burns the 10-attempt budget; NS/USB starved while the loop blocks in enter_pin.",
+   "tracked_in": "#692, #700, #715",
+   "notes": "Root cause of the 2026-09-21 'PIN locked after a correct PIN' incident is still unidentified."
+  },
+  {
+   "gap": "After 120 s idle the SysTick ISR performs a full FI-hardened TRNG draw every 1 ms to evaluate `timeout::is_idle() && nsc::is_unlocked()` (always false when locked), degrading UI render cost by +55% and consuming entropy \u2014 a self-inflicted resource drain reachable by simply leaving the device plugged in.",
+   "tracked_in": "#802",
+   "notes": "secure/src/main.rs:4343-4361."
+  },
+  {
+   "gap": "No host\u2194device transport authentication or encryption (no Noise/THP pairing): any process with WebHID/hidapi access to the device is a full peer; the device is origin-blind. Accepted by design because PIN/seed/keys never cross USB and every signable artifact is clear-signed on-device.",
+   "tracked_in": "No issue found (gh search for Noise/THP/pairing/'transport encryption' returns only unrelated SE issues); rationale lives in docs/architecture/trezor-comparison.md:722-732 and memory note 'Noise_XX encryption deferred'",
+   "notes": "Residual is observability of user behaviour + unsolicited prompts, not fund extraction."
+  },
+  {
+   "gap": "Device identity over USB is placeholder: FW_VERSION is a fixed 3.0.0 (commands.rs:178-182), device_uid is 16 zero bytes (commands.rs:420-421), USB serial is the constant '0001' (usb/mod.rs:200); there is no USB-reachable device attestation so a companion cannot distinguish a genuine unit from a clone over the wire.",
+   "tracked_in": "#249/#22 (supply-chain + provisioning attestation, triple-UID binding), partially #353 (wire-v2 bump)",
+   "notes": "usb-protocol-v2.md:280-282 honestly warns companions not to key on fw_version; companion-app-integration.md:243 says 'STM32 UID96; zeros on dev builds' though production code also writes zeros."
+  },
+  {
+   "gap": "Firmware-root \u2194 companion-catalogue pairing (ERC-7730/ERC-20 descriptor sets the companion supplies) is unauthenticated on the wire; a companion with the wrong catalogue degrades to blind-sign/refusal rather than a wrong render, but the pairing itself is not asserted.",
+   "tracked_in": "#379 (surface:usb), #377, #345",
+   "notes": "Device verifies every bundle against pinned Merkle roots, so this is a UX/availability gap, not a WYSIWYS break."
+  },
+  {
+   "gap": "Error-mimicry / repeat-ceremony attack: a hostile companion can manufacture repeated 'failed, sign again' occasions and mutate the payload between retries; no on-device repeat-prompt detector or retry-mutation flag exists.",
+   "tracked_in": "#600; threat-model.md:282 ('NONE TODAY')"
+  },
+  {
+   "gap": "Tracker drift: issues #70 and #239 describe the TZSC all-NS regression as current (fixed in sau.rs and silicon-validated 2026-05-20); #136 describes the missing chain idle timeout (implemented, commit 22c5d614); #130 describes fi_min compiled away (black_box fix landed, IR gate exists). Readers of `label:ship-blocker` see #70 as a critical open ship-blocker.",
+   "tracked_in": "#70, #239, #136, #130 themselves (need closing comments with evidence)",
+   "notes": "Per CLAUDE.md work-tracking rule, these should be closed with commit/test/receipt evidence."
+  },
+  {
+   "gap": "Fuzz evidence hygiene: ClusterFuzzLite corpus not committed (#359); fuzz workspace outside cargo-vet/cargo-deny (#451); fw-manifest/fuzz not enrolled in cflite (#635); EIP-712 decode legs have no fuzz target (#680); CI was dark/red for long windows (STATUS.md:103) so 'CI-gated' fuzz claims are evidence-suspended for those windows.",
+   "tracked_in": "#359, #451, #635, #680, #711, #456"
+  },
+  {
+   "gap": "MAX_OFFCHAIN_GAP (100 unbacked EIP-1271 sigs) is companion-resettable at zero on-chain cost via OFFCHAIN_SYNC floor raises (now behind a confirm, but a consenting user can be walked through it).",
+   "tracked_in": "#179 (F34/OFFCHAIN-1)",
+   "notes": "Consent gate added in cmd_offchain_sync.rs:128-204 narrows but does not close it."
+  }
+ ],
+ "drift": [
+  "docs/security/threat-model.md:242, :244 and \u00a79.3 (:498-503) state the GTZC TZSC allowlist is 'currently regressed' / cleared to 0 with I2C1/AES/HASH/PKA/SAES/RNG reachable from NS. Code: secure/src/sau.rs:423-590 writes the default-secure allowlist with exact-equality const asserts and verify_or_halt readback; CLAUDE.md records silicon validation 2026-05-20. Issues #70/#239 repeat the stale claim.",
+  "docs/security/threat-model.md:263 and docs/security/red-teaming.md \u00a78.1 describe `NsPtr<T>` typestate as the mechanism that validates every gateway pointer. Code: only `nsc_register_heartbeat` uses NsPtr (grep NsPtr \u2192 ns_ptr.rs, mod.rs); all cmd_* handlers use the legacy `validate_ns_{read,write}_ptr` free functions (sentinel-gated, but discipline-enforced, not type-enforced). ns_ptr.rs:27-34 itself says adoption is pending.",
+  "docs/security/threat-model.md:267 claims `#![deny(clippy::indexing_slicing)]` guards NS-crafted-input panics. No such lint exists anywhere in the repo (grep indexing_slicing over *.rs/*.toml empty).",
+  "docs/security/HARDENING.md:376 ('panic handler that wipes secrets and resets') vs secure/src/main.rs:4711-4739: the panic handler zeroizes and parks in a WFI loop; it does not reset. (HardFault/unexpected-IRQ handlers do reset: main.rs:4682-4692, 4406-4420.)",
+  "docs/security/HARDENING.md:212 and docs/security/threat-model.md:242 claim 'MPU regions enforced in both S and NS worlds'. No MPU configuration exists in secure/src/sau.rs, secure/src/main.rs or nonsecure/src (grep MPU empty); NS runs privileged with CONTROL_NS=0 (boot_ns.rs:36-40).",
+  "docs/security/threat-model.md:373 states the driver enforces single-packet transfers, no ISR interleaving, and flushes all FIFOs on USB reset as the ES0499 mitigation. Our code contains none of this (grep RXFFLSH/XFRSIZ/errata/ES0499 in nonsecure/ and secure/src/hw/usb_hw.rs empty); only the upstream synopsys-usb-otg 0.4.0 flush-on-init/reset exists (bus.rs:89,610) and endpoint.rs:106 carries 'TODO: flushing FIFO'. Status should read claimed-not-verified.",
+  "docs/security/production-security.md \u00a72.4 (:306-323) lists as hardening patterns a 'HID OUT rate limiter: token bucket ~200 reports/sec', 'IWDG 2 s timeout, kicked per USB transaction', and an 'anomaly counter' on seq=0-mid-reassembly. Reality: the rate limiter was DESCOPED-WITH-RATIONALE 2026-05-28 (threat-model.md:374), IWDG is kicked from the secure SysTick on NS-heartbeat delta (iwdg.rs:240-330) not per USB transaction, and no anomaly counter exists (apdu_framing.rs:380-410 just drops/scrubs). production-security.md:325-326 says `cmse_check_address_range` on every NS pointer; the implementation is a hand-rolled TT stride (ptr_validate.rs:88-121) \u2014 equivalent intent, different mechanism.",
+  "docs/security/adversarial-review/trustzone-gateway-adversarial-review.md TZ10 row still marks the AIRCR security-config write as unverified (CANDIDATE). Code: secure/src/sau.rs:712-726 now masks and verify_or_halt's PRIS/BFHFNMINS(/SYSRESETREQS) before the lock. Playbook is stale.",
+  "docs/security/adversarial-review/trustzone-gateway-adversarial-review.md TZ5 (and issue #140) count '12 bare `if !validate_ns_*_ptr` gates' in prodtest.rs; current count is 15 (grep -c). Neither mentions cmd_pin_attempt_log.rs:23, a PRODUCTION handler with the same bare shape added 2026-09 (#715).",
+  "docs/companion/usb-protocol-v2.md INS table (:132-149) omits INS 0x03 GET_PIN_ATTEMPT_LOG and INS 0x64 OFFCHAIN_SYNC, both dispatched by nonsecure/src/usb/commands.rs:285,294 (proto/src/lib.rs:1026,1066). The doc's 'source of truth is proto' caveat covers it, but the companion guide is incomplete.",
+  "docs/security/usb-fw-update-hardening.md \u00a75 finding #4 lists the per-CMD chain bound as an open LOW while \u00a79 ('Patterns we already had') says per_cmd_chain_bound exists; code has it (commands.rs:99-112). Internally inconsistent doc.",
+  "docs/security/adversarial-review/usb-companion-adversarial-review.md UC5 cites `fwup-transport-hw-iwdg` as 'wipe-trigger + warm-reset validation'; Makefile:4357-4403 validates idle-survival + a BEGIN/CHUNK/COMMIT round-trip with IWDG on \u2014 no wipe trigger or warm reset. Part B item 3 also places FDMOD/SOF hardening in secure/src/hw/usb_hw.rs; it is in nonsecure/src/usb/mod.rs:121.",
+  "GitHub issues #70 (ship-blocker, critical), #239, #136 and #130 remain OPEN although the code they describe is fixed in-tree (sau.rs allowlist + 2026-05-20 silicon receipt; apdu_framing.rs:148-198 chain timeout via 22c5d614; pqsigner-fi/src/lib.rs:250 black_box + Makefile:4432 check-fi-ir). Anyone triaging `label:ship-blocker` is misled.",
+  "docs/companion/companion-app-integration.md:243 says GET_DEVICE_INFO device_uid is 'STM32 UID96; zeros on dev builds'. nonsecure/src/usb/commands.rs:420-421 writes 16 zero bytes unconditionally ('device_uid placeholder'), so production also returns zeros.",
+  "Memory note project_usb_hid.md states 'GTZC TZSC marks USB OTG FS + GPIOA + GPIOB + UCPD1 as non-secure'. Code: UCPD1 is SECURE on both boards (sau.rs:289-314), GPIO attribution is per-pin via GPIOx_SECCFGR not TZSC (usb_hw.rs:156-174), and only PA11/PA12 are NS on pq1."
+ ],
+ "owner_decisions": [
+  "USB OTG FS stays in the NS world and NS-attributed in GTZC (sau.rs:375-383); the device deliberately uses OTG_FS (no DMA) and migration to OTG_HS is an architectural ban requiring a redone threat analysis (threat-model.md:379, production-security.md:332-335). Do not propose moving USB into the secure world or onto HS.",
+  "HID OUT token-bucket rate limiter DESCOPED-WITH-RATIONALE 2026-05-28: a ~200 reports/s cap false-trips legitimate chained transfers (8 KB FW_BEGIN \u2248 33 frames in ~165 ms). Re-open only if profiling shows a USB-level DoS that DWC2 RX-FIFO NAK backpressure does not absorb (threat-model.md:374).",
+  "NS does not control the inactivity timer (CLAUDE.md 'What NOT to do'; timeout.rs:18-21). The single sanctioned carve-out is #713: REQUEST_UNLOCK arms the input window only when the device is LOCKED with no secret loaded (cmd_request_unlock.rs:33-49).",
+  "Firmware is stateless w.r.t. slot selection (invariant #8): `(chain_id, slot_index, flags, account_index)` are companion-supplied on every sign by design; defense is derivation binding + sender binding, not refusing companion input. Do not propose on-device slot state.",
+  "GET_STATUS `provisioned` byte was deleted (X17-UC2) rather than adding a provisioning-state veneer (rejected as too heavy and too much new NS-callable surface); companions detect the blank state from the on-device wizard (commands.rs:436-453, usb-protocol-v2.md:264-269).",
+  "CMD_GET_PIN_ATTEMPT_LOG ships in production and is readable WITHOUT the PIN on a locked device, deliberately; the exposure is an owner decision tracked in #719 \u2014 'do not gate or ungate it here without that decision' (pin_attempt_log.rs:32-37).",
+  "EIP-1271 RAW32 stays an intentionally opaque, loudly-labelled blind tier; companions MUST NOT downgrade typed data to RAW32; disabling RAW32 in production is the preferred policy unless an explicit compatibility decision accepts the residual (CLAUDE.md; #381 ship-blocker decision open).",
+  "A Trezor `secmon`-style secure/NS split is declined on principle (secmon trusts NS for what-you-sign = the blind-digest oracle PQSigner forbids); only an intra-secure MPU-lite privilege split of attacker-data parsers is a candidate, ranked DESIGN L\u2013XL, low priority (#277; trezor-comparison critical-port C-1).",
+  "Host\u2194device transport encryption/authentication (Noise/THP pairing) is deferred by design: PIN, seed, and keys never cross USB; the device is origin-blind and relies entirely on on-device clear-signing + physical confirm (trezor-comparison.md:722-732; usb-companion playbook \u00a7A2 posture).",
+  "Debug instrumentation may ship in this bring-up branch (CLAUDE.md pre-production caveat): NS pre-USB register dumps are DHCSR-gated (nonsecure/src/main.rs:180-208); CI must gate production on debug-log/e2e-test/mock-se/otp-hardcoded-master-key/ui-capture OFF; `make prod-check` is expected to stop at the rollback quarantine (Makefile:2769-2777).",
+  "Shipping dual-SE images force `tamp` + `tamp-wipe` + `tzic-wipe` (MEDIUM-1 fence) so a single NS\u2192S illegal access is a tamper-class event that wipes; HardFault/unexpected-IRQ deliberately do NOT arm the destructive SE wipe (a glitch must not become an unrecoverable brick) \u2014 main.rs HardFault doc comment.",
+  "ML-KEM-1024 inner wrap for the SE tunnels was DESCOPED 2026-07-07 (owner decision, do not re-raise \u2014 CLAUDE.md invariant #3); not a USB item but constrains any 'add PQ KEM to the host transport' proposal: the accepted model is symmetric-rooted tunnels and no Shor material on any bus.",
+  "TROPIC01 removed 2026-07-14 (dual-SE only); SPI2 'stays NS on the non-LCD Tropic bench build' comments in sau.rs are historical \u2014 do not resurrect a third SE bus into the GTZC allowlist."
+ ]
+}

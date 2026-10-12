@@ -1,0 +1,24 @@
+{
+ "id": "USB-10",
+ "title": "Execute the dormant security gates in CI and close the tracker/doc drift that misleads ship-blocker triage",
+ "threat": "Two regression gates exist as scripts but nothing runs them: `make check-fi-ir` (would catch `fi_min`'s FI recompute being optimised away again \u2014 the exact #130 bug) and `tools/check-gateway-abi.sh` (would catch an NS image linked against stale veneer addresses \u2014 the 2026-09-18 incident where a stale NS enumerated normally and faulted the secure world on the first APDU). Meanwhile #70 (critical ship-blocker), #239, #136, #130 remain OPEN though fixed in-tree, and six docs assert mechanisms that do not exist (MPU in both worlds, indexing_slicing lint, ES0499 driver mitigations, HID token bucket, panic handler resets, NsPtr everywhere). A reader of `label:ship-blocker` or of threat-model.md gets a false picture of the gateway's hardening \u2014 and a real regression would ship green.",
+ "proposal": "(1) Add `check-fi-ir` to ci.yml next to `prod-feature-check`; call `tools/check-gateway-abi.sh` from the `all`, `nonsecure` and `bootproof-build` recipes and from `make e2e-hw` (#690/#701). (2) Close #70/#239/#136/#130 with commit + receipt evidence per the CLAUDE.md work-tracking rule; open the two untracked items from this analysis (cmd_pin_attempt_log bare gate; locked PIN-prompt storm). (3) One doc PR: threat-model.md:242/244/\u00a79.3 (TZSC not regressed), :263 (NsPtr adoption pending), :267 (no indexing_slicing lint), :373 (ES0499 claimed-not-verified); HARDENING.md:212 (no MPU), :376 (panic halts); production-security.md \u00a72.4 (no token bucket, IWDG from SysTick, no anomaly counter); playbooks TZ10/TZ5/UC5; usb-protocol-v2.md INS table (+0x03, +0x64); companion-app-integration.md:243 (uid zeros in production).",
+ "rationale": "Trezor's architecture doc is explicit about what it does NOT do (coreapp raw-secret access, PKA unused, MPCBB no-exception); pq1's docs currently over-claim on this surface. Gates that nobody runs are the 'green can mean never ran' failure class already recorded in this repo's memory.",
+ "repo_evidence": [
+  "Makefile:4431-4433 (check-fi-ir defined); grep check-fi-ir|check-gateway-abi .github/workflows -> none",
+  "tools/check-gateway-abi.sh:1-30 (no Makefile/CI caller)",
+  "GitHub #70 OPEN ship-blocker/critical vs secure/src/sau.rs:257-399 + CLAUDE.md 2026-05-20 silicon receipt; #136 OPEN vs shared/src/apdu_framing.rs:148-198 (22c5d614); #130 OPEN vs pqsigner-fi/src/lib.rs:246-258",
+  "docs/security/threat-model.md:242,263,267,373; docs/security/HARDENING.md:212,376; docs/security/production-security.md:306-326"
+ ],
+ "vendor_precedent": "Trezor docs/core/embed-arch/embed-arch.md:24,92,106,325-326,360-362,383 (explicit 'not done / residual' statements).",
+ "novelty": "parity",
+ "kind": "process",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "check-fi-ir needs the firmware target toolchain in the CI runner (RUSTFLAGS leak trap \u2014 use `env -u RUSTFLAGS` for host steps); closing #70 must point at the 2026-05-20 receipt and note GTZC2/TAMP stays open in #50. DROPPED: hide page 126/127 with HDP after first-boot load (boot surface); OEM1/OEM2LOCK NSSR check on every boot, not only Phase A (boot surface, OEM_LOCK_MASK_PINNED=false); 2-of-4 threshold C10 release signing for fwsign (fwupdate surface); intra-secure MPU-lite for attacker-data parsers (#277, already tracked, L-XL); FPCCR.CLRONRET + NSACR if the FPU is ever enabled (boot_ns.rs:54-57 note); run the NS USB parser unprivileged under an NS MPU (defence-in-depth only, NS is untrusted anyway); Noise/CPace host pairing (owner-deferred by design); HID OUT token bucket (owner-descoped 2026-05-28); GTZC2/TAMP lock (#50/#47 tracked); drain-then-refuse on oversize APDU (not needed \u2014 reassembly is self-healing, apdu_framing.rs:376-412).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:24,92,106,325-326,360-362,383",
+  "https://github.com/EthereumPhone/PQ1/issues?q=label%3Aship-blocker"
+ ],
+ "surface": "usb"
+}

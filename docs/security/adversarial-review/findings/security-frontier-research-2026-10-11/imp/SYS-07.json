@@ -1,0 +1,26 @@
+{
+ "id": "SYS-07",
+ "title": "Never-ship binary marker gate in CI (Trezor check-insecure-prng pattern) plus promotion of the local-only soundness gates (never-run-tests oracle, prod-symbol-audit, check-fi-ir, verify-mmio-addresses) to per-PR",
+ "threat": "A dev feature (mock-se, e2e-test, otp-hardcoded-master-key, host_rng, ui-capture, dev-testkey) or a software PRNG leaking into a shipped image through a feature-graph or build-config mistake \u2014 the Coldcard 2021-2026 incident was exactly a `#ifndef`-vs-value build bug that every test passed; plus suites that never execute (pqsigner-rollback 156 tests, pqsigner-geometry 8, fsbl geometry guards) while invariant #10 calls geometry 'CI-pinned'.",
+ "proposal": "(a) Put a fixed ASCII marker string (e.g. `<PQ1-DEV-mock-se>`, `<PQ1-DEV-e2e>`, `<PQ1-DEV-hostrng>`, `<PQ1-DEV-otp-fixed>`) in every dev-only code path, kept alive by a volatile load like `.pqsigner.rng_backend` already is, and run `prod_symbol_audit.sh --absent` on every release-shaped ELF and `--present` on the e2e image in CI, so the control is feature-flag-independent and two-sided; (b) wire `scripts/check_tests_actually_run.py` into `make` and the per-PR workflow (#725) and burn down #720-#724 so the declared suites execute; (c) move `check-fi-ir` (IR gate that the fi_min guard survives -O) and a disassembly-level check that `FihBool` double-reads / ct_eq sequences survive LTO into per-PR; (d) vendor or hash-pin the ST CMSIS header so `verify-mmio-addresses` can run in CI; (e) add a positive link-time assertion that the seed-wizard entropy path resolves to `rng_strong::fill_with_store` -> `hw_rng` (no host_rng symbol in the ELF).",
+ "rationale": "pq1's cfg fences are compile-time; Trezor adds a binary-level marker scan that catches a flag leaking regardless of how the build was configured, and duplicates each guard on purpose. The repo's own memory records 242 never-run tests and multiple 'green but never executed' incidents; G1 makes the local-only tier honest but ~30 of 68 gates still run nowhere. These are the cheapest hard levers on the surface and directly address the 'drift between claims and code' threat.",
+ "repo_evidence": [
+  "Makefile:4420-4429 prod-symbol-audit, :4432-4436 check-fi-ir \u2014 local targets; grep over .github/workflows: no invocation (only ci.yml:130 comment declaring mmio local)",
+  "grep check_tests_actually_run Makefile .github/: zero hits; issue #725 OPEN ('runs in no workflow'); #720-#724 never-run suites",
+  "secure/src/rng.rs:11-76 \u2014 marker strings exist for the RNG backend only; no markers for mock-se/e2e-test/otp-hardcoded/ui-capture paths",
+  "scripts/gate_enforcement.json \u2014 ~30 gates in local_documented tier (inventory)",
+  "CLAUDE.md invariant #10 'CI-pinned' vs memory project_tests_never_run_gate"
+ ],
+ "vendor_precedent": "Trezor tools/check-insecure-prng.py:60-80 (--present/--absent marker scan), core/embed/sys/rng/unix/rng_mock.c:26-44 (four duplicated guards), .github/workflows/core.yml:180; Trezor core.yml:122 prints the 50 largest Rust frames per PR.",
+ "novelty": "parity",
+ "kind": "process",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "A true PROD_SHIP_FEATURES ELF cannot be built while OPTIGA_S2_PRODUCTION_BLOCKED stands, so the --absent leg must run on the closest buildable release shape and be re-run when S-2 closes; marker strings cost a few bytes in dev images only; burning down the never-run allowlist may surface red tests that have been silently failing (the point); the CMSIS header is ST-licensed \u2014 hash-pin rather than vendor if redistribution is unclear.",
+ "sources": [
+  "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware",
+  "https://github.com/trezor/trezor-firmware/blob/main/tools/check-insecure-prng.py",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/rng/unix/rng_mock.c"
+ ],
+ "surface": "systemic"
+}

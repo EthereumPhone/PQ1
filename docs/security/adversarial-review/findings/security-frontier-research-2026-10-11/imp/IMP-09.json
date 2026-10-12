@@ -1,0 +1,25 @@
+{
+ "id": "IMP-09",
+ "title": "Anti-klepto for the SPHINCS+C10 randomizer: companion-committed OptRand (OptRand = H(host_commitment || device_nonce || M)) with a verifiable transcript so malicious firmware or an implant cannot leak key bits through R or the target-sum grind",
+ "threat": "A compromised secure image (malicious update, RDP-regressed die, hostile insider) or any implant with influence over the TRNG path can encode slot/bootstrap secret-key bits into the per-signature randomizer R (Dark-Skippy class) and, for C10, into the target-sum grinding choice; signatures are public on-chain, so exfiltration needs no radio. Today OptRand is drawn from the 3-source TRNG with no host commitment and no transcript (#238 OPEN).",
+ "proposal": "Extend CMD_SIGN_USEROP/BATCH/OFFCHAIN input with a 32-byte host commitment `c = H(host_secret)`; device sets `opt_rand = H('pq1-ak-v1' || c || n_dev || M)` where n_dev is a fresh device nonce it returns alongside the signature; after signing the host reveals host_secret and the companion (or any auditor) recomputes R = PRF(sk_prf, opt_rand, M)?? \u2014 R itself is secret-keyed, so instead the device returns `(n_dev, opt_rand)` and the verifier checks `opt_rand == H(c || n_dev || M)` and that the signature's embedded R matches `grind_r(.., opt_rand, ..)` structure where observable; at minimum the device commits to n_dev before learning host_secret (two-round: host sends c, device returns H(n_dev), host reveals, device signs) so the device cannot grind n_dev to bias opt_rand. Keep the draw-once rule so the double-compute FI byte-equality gate still holds. Document residual: the target-sum grind consumes additional freedom; bound it by fixing the grind nonce schedule from opt_rand.",
+ "rationale": "Jade and BitBox02 ship anti-klepto for ECDSA/Schnorr; no PQ wallet does, and SPHINCS+'s R is an explicit randomizer the signer controls, so the covert channel is real (upstream SPHINCS- analysis already flags it, #238). It is a pure-firmware, protocol-level defence against the one exfiltration path that survives a perfect enclosure, a perfect mesh and a verified image \u2014 and it is cheap compared with everything above it.",
+ "repo_evidence": [
+  "secure/src/crypto.rs:206-237 (OptRand drawn from rng_strong::fill, no host commitment; drawn once for the FI byte-equality gate)",
+  "gh #238 OPEN ('anti-klepto covert channel exists in the SLH-DSA randomizer R')",
+  "CLAUDE.md wire format: unified sign input has no commitment field (offsets 0..330)",
+  "grep -rn 'anti.klepto|host_commit|commitment' secure/src/nsc -> none"
+ ],
+ "vendor_precedent": "Blockstream Jade anti-exfil (firmware 0.1.24, 2021), BitBox02 anti-klepto; none for a PQ signer.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "Wire-format change to a frozen input (append-only field with a flag bit keeps v1 clients working); the verifier can only check what is observable in the signature \u2014 for SPHINCS+ the host can verify opt_rand derivation but R = PRF(sk_prf, opt_rand, M) is only checkable by the device, so the achievable guarantee is 'device cannot choose opt_rand freely', not full nonce verifiability; the C10 grind still leaves bounded freedom (state it). Must not weaken the F-9 TVLA property (per-call freshness comes from n_dev, fine). Two-round protocol adds a USB round trip per sign.",
+ "sources": [
+  "https://blog.blockstream.com/blockstream-jade-tech-overview-part-1/",
+  "https://bitbox.swiss/bitbox02/compare-hardware-wallets/",
+  "https://github.com/EthereumPhone/PQ1/issues/238"
+ ],
+ "surface": "implant"
+}

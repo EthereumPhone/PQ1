@@ -1,0 +1,25 @@
+{
+ "id": "SCA-05",
+ "title": "Always-on secure-timer random-delay interrupt (RDI) with a TRNG-reseeded DRBG and per-NSC-entry session refresh \u2014 after resolving #835",
+ "threat": "C10 signing is ~7 s of highly repetitive secret-dependent SHA-256 that aligns trivially across traces; wait_random() only perturbs annotated sites (PIN gate, sign gates), so the 70k PRF calls inside a sign run on a deterministic timeline relative to the sca-trigger/USB event. Trace alignment is the enabling step for every horizontal and vertical attack in SCA-01.",
+ "proposal": "Port Trezor's RDI as a 1 ms ISR on the already-secured TIM2 (sau.rs secures TIM2/TIM3 so NS cannot stop it): wait(fresh U[0,255] + session U[0,255]) with the exact-cycle asm loop, session term refreshed on every NSC dispatch entry/exit (the pq1 analogue of smcall/USB events). Feed it from a SP 800-90A-shaped ChaCha-DRBG seeded from the platform TRNG (register read only, never rng_strong \u2014 the sca-1 owner rule), reseeded every N calls, consumed bytes zeroized, with the #832 pre-drawn pool replacing the #833/#834 halt sink that #835 found net-negative. The ISR must never touch SE I2C and must be masked around the T=1'/IFX-I2C guard-time-critical windows.",
+ "rationale": "Issue #805 already makes the case and the earlier 'category error' rejection (2026-06-30) is superseded by its new measurements; Trezor runs it everywhere for ~0.2% CPU. It is the cheapest broad-spectrum desync available and the only one that covers the FORS/WOTS inner loops without touching sphincs-c10. The FI delay source has had three defects in a month (#643/#832/#835) \u2014 building the RDI on the same pool forces that source to be fixed properly first.",
+ "repo_evidence": [
+  "secure/src/nsc/mod.rs:1400-1414 (wait_random only at the PIN gate entry; comment concedes it does not defeat profile-then-attack)",
+  "grep -rin 'rdi|periodic jitter' secure/src -> no periodic jitter source",
+  "pqsigner-fi/src/lib.rs:112-155 (wait_random_loop, one-shot)",
+  "issue #805 (OPEN, medium), #835 (OPEN, critical: halt sink net-negative), #643, #832"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/random_delays/stm32/random_delays.c:139-144,168-181 (systimer 1 ms, floating-mean wait; verified :168-181 this session), refresh at usb.c:728,748 and smcall_dispatch.c:161-167 (per inventory B); 'sec/rdi' in default features for every kernel/secmon build.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Delays raise trace count, they do not remove leakage; a DRBG whose state is recovered from a trace can be subtracted (same argument as #831), so reseed cadence matters. ISR jitter interacts with the SE drivers' timing-sensitive polling and with the SysTick consumption-mask step; measured sign latency (6.4-7.2 s cached Type-2) grows by a few percent. #835's failure modes (zero-length-delay race, PIN-budget burn) must be closed first or the RDI inherits them.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:105-134,168-181",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/inc/sec/random_delays.h:24-39 (Clavier/Coron/Dabbous; Tunstall/Benoit) (per inventory B)",
+  "NIST SP 800-90A (CTR_DRBG shape)"
+ ],
+ "surface": "sca"
+}

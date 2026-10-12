@@ -1,0 +1,381 @@
+{
+ "surface": "Side-channel analysis on signing, KDF, PIN, SE tunnels (key=sca) \u2014 SPHINCS+C10 sign (WOTS/FORS/hypertree), PBKDF2/HMAC KDF, BIP-39 lookups, PIN handling, SCP03 / OPTIGA Shielded-Connection session keys, SAES/DHUK key use, consumption mask, rate limiting, emulation + silicon SCA tooling. Repo /home/nicola/repos/PQSigner_OS, branch feat/pq1-board-target; NOTE the working tree has UNCOMMITTED diffs in secure/src/hw/consumption_mask.rs (116 lines) and pqsigner-fi/src/lib.rs (11 lines) \u2014 entries below say which version they describe.",
+ "has": [
+  {
+   "item": "F-16 per-signature Fisher-Yates shuffle of WOTS chain order (l=43) and FORS tree order (k=13); output byte-identical for any seed (DPA trace-misalignment defence)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/sphincs-c10/src/shuffle.rs:97-200 (fisher_yates)",
+    "/home/nicola/repos/PQSigner_OS/sphincs-c10/src/wots.rs:148-170 (sign_with_shuffle iterates chain_order)",
+    "/home/nicola/repos/PQSigner_OS/sphincs-c10/src/hypertree.rs:49-70 (sign_with_shuffle entry)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/crypto.rs:238-310 (two INDEPENDENT seeds shuffle_a/shuffle_b per double-compute pass, sca-3)"
+   ],
+   "status": "implemented",
+   "notes": "What it does NOT cover (per README F-16 \u00a7'What F-16 does NOT close'): auth-path subtree Merkle builds still run in natural order; the sk_seed absorption sits at the SAME intra-call offset in every one of the ~70k PRF calls, so horizontal (single-trace) averaging ignores the order (archive \u00a718 note). Byte-equality pinned by sphincs-c10/tests/shuffle_byte_equality.rs."
+  },
+  {
+   "item": "CT-1: shuffle's bounded reduction uses Lemire multiply-shift instead of `%` (Cortex-M33 UDIV has operand-dependent latency); machine-checked by cargo-checkct disasm (no UDIV)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/sphincs-c10/src/shuffle.rs:165-185",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/DONJON-RUST-TOOLING.md (\u00a71 'Verified result \u2014 fisher_yates': 0x206da/0x206e4 = inherent buf[j] swap address leak, 0x20376 = zero-seed fast path; INSECURE verdict is BY DESIGN)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Hedged, secret-keyed R-grind: R = sha256(sk_seed || \"R_grind\" || opt_rand || message || nonce); opt_rand randomises the msg-dependent iteration count that F-9 TVLA detected (max|t| 40.71 \u2192 4.93)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/sphincs-c10/src/fors.rs:64-123 (grind_r)",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:574-800 (F-9 re-test, scared convergence curve 20..600 traces, deeper 100 M-event sweep max|t|=5.66 in grind_r tail, secret region clean)"
+   ],
+   "status": "implemented",
+   "notes": "Emulated mem_address channel only. See drift entry: README F-9 text still says grind_r 'NEVER reads sk_seed' \u2014 false since the 2026-06-13 hardening."
+  },
+  {
+   "item": "Fresh 3-source OptRand per sign (STM32 TRNG \u2295 OPTIGA \u2295 SE050 via rng_strong::fill), all-zero gate, drawn once and shared by both double-compute passes",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/crypto.rs:182-237",
+    "/home/nicola/repos/PQSigner_OS/secure/src/rng_strong.rs:1-140 (strict fail-closed fold, fail-initialized receipts)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "F-13 double-compute \u2192 subtle ct_eq (4008 B) \u2192 verify-before-release \u2192 F-18 7-step CfiCounter; confirmed-fault sites relock (zeroize_sensitive_state); wait_random() before verify",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/crypto.rs:312-402",
+    "/home/nicola/repos/PQSigner_OS/secure/src/crypto.rs:34-45 (CFI step magics)"
+   ],
+   "status": "implemented",
+   "notes": "FI primitive, included here because the ct_eq is explicitly a timing-side-channel control (crypto.rs:312-316) and the two passes' SCA alignment is the sca-3 rationale."
+  },
+  {
+   "item": "F-17 signing rate limiter: \u22651 s between signs (SysTick busy-wait) + 250 signs per unlock session; counters SRAM-only, reset on unlock/lock",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/sign_rate.rs:42-48 (MIN_SIGN_INTERVAL_MS=1000, MAX_SIGNS_PER_SESSION=250)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/sign_rate.rs:233-260 (pre_sign; wait skipped on e2e-test / non-stm32u585)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/crypto.rs:76-90 (+1 postcondition read-back, X17-FI2)"
+   ],
+   "status": "implemented",
+   "notes": "Documented residual: power-cycle bypass of the session cap (README F-17 'Residual attack surface'); the promised flash-persistent 500/day quota is NOT implemented (sign_rate.rs:35-39 says 'deferred')."
+  },
+  {
+   "item": "Consumption mask: randomised-duty PWM (TIM2_CH1/PA5 on iota2, TIM3_CH1/PA6 on pq1), xorshift32 seeded fail-closed from platform TRNG at boot, re-randomised every SysTick tick, reseeded every 1024 ticks (sca-1, fail-OPEN), selftest_pin_toggles IDR check; FORCED ON for shipping hardware builds by compile_error fence",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/hw/consumption_mask.rs:69-110 (init), :149-180 (randomize, working tree calls consumption_mask_prng::advance)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/consumption_mask_prng.rs:48-98 (Xorshift32 + RESEED_PERIOD_TICKS=1024)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/nsc/mod.rs:695-725 (fence)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/main.rs:4329-4337 (SysTick call)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/sau.rs (TIM2/TIM3 secured per CLAUDE.md so NS cannot clear CEN)"
+   ],
+   "status": "partial",
+   "notes": "Effectiveness UNMEASURED on both boards: neither pin drives a load (module header lines 44-60; docs/hardware/evt-silicon-validation.md \u00a79). HEAD still has the inline duplicate `static mut PRNG_STATE` (git show HEAD:...:138-203); the working-tree diff is the refactor that makes the driver call consumption_mask_prng. Open issues #831 (reseed silently fail-open, biased toward signing windows), #646."
+  },
+  {
+   "item": "sca-trigger GPIO instrumentation (board::SCA_TRIGGER; PD2 iota2 / PB3 pq1) wrapping c10_sign_verified_with_progress, cmac_dhuk, gated_unlock; production-fenced out",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/hw/sca_trigger.rs:1-183",
+    "/home/nicola/repos/PQSigner_OS/secure/src/nsc/mod.rs:134-142 (production-fence allowlist)",
+    "/home/nicola/repos/PQSigner_OS/secure/Cargo.toml:644-652"
+   ],
+   "status": "implemented",
+   "notes": "Instrumentation only; no on-silicon trace campaign has ever been run with it (issues #228, #236, #301)."
+  },
+  {
+   "item": "Tier-1 KDF: SAES-CMAC(DHUK, label||counter) \u2014 DHUK bytes never enter CPU registers; KEYR0..7 wiped on every exit; BHK path needs TAMP_BKP0R..7R latch reads",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/hw/saes_cmac.rs:38-46",
+    "/home/nicola/repos/PQSigner_OS/secure/src/hw/secret_keys.rs:145-200 (derive_into / derive_into_saes_kdf)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/hw/saes.rs:428-560 (wipe_key_regs, BHK latch)"
+   ],
+   "status": "implemented",
+   "notes": "saes.rs:194 notes SAES has an internal RNG seed for side-channel randomisation (hardware claim, not measured here). The KDF OUTPUTS (SCP03 static keys, PBS) land in CPU memory and are then used by software crypto \u2014 see gaps."
+  },
+  {
+   "item": "cargo-checkct (binsec relational symbolic execution, thumbv8m, shipped opt-level=\"s\"+overflow-checks profile) proves 5 drivers SECURE for all secret values: pqsigner_domain::kdf, fors_secret, th, cmac_generic framing (incl. double_l branchless), ct_eq; fisher_yates is the by-design INSECURE control",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/tools/sca/checkct/Cargo.toml:1-16",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/DONJON-RUST-TOOLING.md \u00a71 'Machine-checked CT proofs \u2014 SECURE' table",
+    "/home/nicola/repos/PQSigner_OS/Makefile:4926-4930 (make checkct, needs ~/checkct_env.sh)"
+   ],
+   "status": "implemented",
+   "notes": "Host-local only. nightly.yml:147-223 checkct job is `workflow_dispatch`-only + `continue-on-error: true` \u2192 NOT a regression gate (issue #312). Scope: branches + addresses, not variable-latency instructions; single-crate drivers so cross-crate LTO axis not exercised."
+  },
+  {
+   "item": "rainbow/lascar TVLA (mem_address channel) over AES-256, AES-GCM entropy wrap, HMAC-SHA512 master KDF, C10 keygen: all flat; leaky-SBOX positive control recovers 16/16 key bytes",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:456-512 (table)",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/leakage_kdf.py",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/Makefile:143 (make kdf)"
+   ],
+   "status": "implemented",
+   "notes": "Emulation only: Hamming weight of ADDRESSES, never register VALUES; the SAES/HASH coprocessors are invisible to Unicorn."
+  },
+  {
+   "item": "SAES-DHUK KDF wrapper leakage (cmac_generic + kdf_cmac_counter_generic under software-AES stand-in): 4 TVLA modes flat",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:801-857",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/saes_kdf_target/ (#[path]-includes secure/src/cmac.rs)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "dual-SE XOR reconstruction (xor_32) branchless/fixed-stride; TVLA flat",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/dual_se.rs:26-32",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:858-885"
+   ],
+   "status": "implemented",
+   "notes": "Residual explicitly documented: single-trace value-channel (HW of each entropy byte in a register during ^) is boot-once and RDI is NOT the countermeasure for it."
+  },
+  {
+   "item": "SCP03 response leg: R-ENC AES-128-CBC decrypt + R-MAC CMAC TVLA flat (4 modes); R-MAC verify via subtle ct_eq_8 + fail-initialized receipt from two full recomputations (F-28 rework); card-cryptogram verify also CT+FI (keycard-shell port)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/se050/scp03.rs:529-541 (ct_eq_8), :600-760 (unwrap_response)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/se050/scp03.rs:295-330 (card cryptogram check_true_into_sentinel + ct_eq_8)",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:886-999"
+   ],
+   "status": "implemented",
+   "notes": "All SCP03 AES/CMAC is the SOFTWARE bitsliced `aes`/`cmac` crates (secure/src/scp03_logic.rs:24-27,124-175,390) \u2014 address-channel clean, value-channel never measured."
+  },
+  {
+   "item": "OPTIGA Shielded Connection: TLS-PRF(HMAC-SHA256) session-key derivation from 64-B PBS + AES-128-CCM-8 (manual CTR+CBC-MAC) with double out-of-line tag recompute; session keys zeroized on lock/idle/panic",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/optiga/shield.rs:381-410 (derive_session_keys), :983-1030 (tls_prf_sha256/hmac_sha256), :1040-1100 (aes128_ccm_encrypt, ccm_tag_matches)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/optiga/shield.rs:336-342, :964-970 (zeroize)"
+   ],
+   "status": "implemented",
+   "notes": "Software `aes`/`hmac`/`sha2` crates on the CPU with the long-term PBS as HMAC key; no masking, no SCA harness covers shield.rs at all (only SCP03 has leakage_scp03.py)."
+  },
+  {
+   "item": "F-22 BIP-39 to_seed: constant-time 2048-entry mask-OR wordlist scan (ct_load_word, black_box barriers) + constant-time password assembly; byte-identical to Trezor vectors",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/bip39/src/full.rs:108-130 (ct_load_word), :301-380 (to_seed three CT phases)",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:1084-1243 (baseline max|t|=17.88 \u2192 0.00)"
+   ],
+   "status": "implemented",
+   "notes": "Documented residual F-23: PBKDF2/SHA-512 padding encodes password length (121 possible lengths, ~7 bits) \u2014 accepted, unfixable without breaking BIP-39 compatibility."
+  },
+  {
+   "item": "F-25 / F-27 recovery-path CT lookups: lookup_prefix, is_exact_wordlist_entry, word_bytes_at (CT scans replacing binary search); seed_wizard candidate-pick uses CT load + flush_with_secret_rows",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/bip39/src/full.rs:489-530 (lookup_word_exact CT), :543-545, :568-600, :632-690",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:1416-1627 (max|t| 45.43 \u2192 0.000; 42.9 \u2192 0.000)"
+   ],
+   "status": "implemented",
+   "notes": "README F-27 'what this does not close' says lookup_word_exact still binary-searches \u2014 code now shows a CT scan at full.rs:489-530 (README stale in the safe direction). `Mnemonic::word()`/`words()` (full.rs:243-274) remain address-leaky by design and are documented as not-for-secret use."
+  },
+  {
+   "item": "word_prefix_at: CT 2048-entry scan for the FSBL/measured-boot 5-char prefix table (public data; keeps the leaky shape out of the codebase)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/bip39/src/lib.rs:99-140"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "F-24 stages A-D: secret glyph rendering via 96-entry CT scan (ct_glyph_col) + branchless blit; stage E (panel/bus emanation) accepted as hardware territory; decoy-frames feature exists (default OFF, bench-validated NOT to work on OLED, LCD re-test never done)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/ui/secret_text.rs:35-80",
+    "/home/nicola/repos/PQSigner_OS/secure/Cargo.toml:541 (decoy-frames = [])",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:1245-1405"
+   ],
+   "status": "partial",
+   "notes": "README F-24 references secure/src/ui/oled.rs and SSD1306 \u2014 the OLED backend was removed 2026-06-30; the LCD path is lcd.rs + ui/px. Issue #784: restore-wizard letter row renders typed seed letters on a NON-forced px frame, bypassing the CT blitter (open bug). Issue #237 (display emanation) still open."
+  },
+  {
+   "item": "F-20 PIN entry: per-position random starting digit from rng_strong (mod-10, \u00b10.4% bias), PIN buffers zeroized; PIN confirm compare is XOR-OR fold (no early exit)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/ui/pin_entry.rs:10-30, :55-90, :235-268"
+   ],
+   "status": "implemented",
+   "notes": "No software PIN compare against a stored value anywhere (invariant #2); the only CPU-side PIN transform is OPTIGA derive_pin_secret = kdf(PIN_AUTH_DOMAIN, pin) (secure/src/optiga/mod.rs:916-918) \u2014 one SHA-256 over an 8-digit (low-entropy) input per attempt, SCA-uncharacterised."
+  },
+  {
+   "item": "PIN-verify path FI/SCA hygiene: wait_random before gated_unlock, double page-124 reads, sentinel-gated lockout (F-15)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/nsc/cmd_request_unlock.rs:82-150"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "fi::wait_random = Trezor random_delays port (i+j==wait invariant, halt_on_glitch); TRNG-backed length byte; #832 pre-drawn pool / #834 refuse-on-TRNG-fail landed per issue text; `fi_min` black_box fix (#130) in working tree",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/pqsigner-fi/src/lib.rs:112-155 (wait_random_loop)",
+    "/home/nicola/repos/PQSigner_OS/secure/src/fi.rs:86-95",
+    "git diff pqsigner-fi/src/lib.rs (uncommitted +11 lines: black_box in fi_min)"
+   ],
+   "status": "partial",
+   "notes": "Issue #835 (priority:critical, 2026-10-09): the #833/#834 halt sink is net-negative \u2014 recovery path sits behind a delay that cannot obtain randomness; spurious halts inside SysTick within ~1 s of idle; durable PIN-budget burn. #643: nested DriverGuard conflict made delay stream predictable (31/32 identical, measured on silicon per #832)."
+  },
+  {
+   "item": "STM32 TRNG driver: NIST CR value, HTCR, CONDRST recovery, SEIS/SECS/CEIS/CECS gating, software CRNGT (rng_health::word_is_acceptable) with FI receipts",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/secure/src/hw/rng.rs:63-121, :401-470, :493-575"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Hash-call census instrumentation (`hash-counters` feature): one sign = 44,118 wots_secret + 26,636 fors_secret = 70,754 sk_seed-absorbing PRF calls of 539,616 hashes; test asserts \u226560,000",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/sphincs-c10/src/hash.rs:22-100",
+    "/home/nicola/repos/PQSigner_OS/sphincs-c10/tests/hash_counts.rs:32-76",
+    "/home/nicola/repos/PQSigner_OS/docs/archive/work-todo-retired-2026-07-19.md:1919"
+   ],
+   "status": "implemented",
+   "notes": "grind_r's per-iteration sk_seed hash (fors.rs:110-123, ~2048 iterations avg) is NOT bumped into any bucket \u2014 the 70,754 figure predates and excludes it."
+  },
+  {
+   "item": "HW SHA-256 (STM32U585 HASH) feeds data by CPU writes to DIN with a static 4-byte merge buffer; wedged engine \u2192 zeroize + sys_reset (H-1); boot KAT",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/hw/src/hash.rs:134-380",
+    "/home/nicola/repos/PQSigner_OS/secure/src/hw/hash.rs:15-50 (pqsigner_hash_fault)"
+   ],
+   "status": "implemented",
+   "notes": "The HASH peripheral has no DPA resistance (README F-16 citing ST UM3370; red-teaming.md \u00a74.4 'timing accelerator, not a DPA barrier'). All 70k secret PRF calls run through it."
+  },
+  {
+   "item": "Muscat (Rust) TVLA+CPA harness reproduces lascar's F-9 max|t|=4.931 on the same 600\u00d710M trace set; synthetic self-test",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/tools/sca/muscat/pqsigner_tvla_cpa.rs",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/DONJON-RUST-TOOLING.md \u00a72"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Bench host tooling: Scaffold (Ledger Donjon) + Rigol MHO934 connectivity probes validated live 2026-07-27; capture recipe red-teaming.md \u00a713.1; glitch-campaign engine NOT built",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/tools/bench/README.md",
+    "/home/nicola/repos/PQSigner_OS/docs/security/red-teaming.md:935-963",
+    "/home/nicola/repos/PQSigner_OS/docs/hardware/evt-silicon-validation.md:908-925 (\u00a79)"
+   ],
+   "status": "partial",
+   "notes": "No ChipWhisperer/ChipSHOUTER on the bench (docs/tooling-and-systems.md:95); LA1010 is digital-only; crowbar hardware and Scaffold\u2194U585 coupling unresolved (memory project_bench_harness_tooling)."
+  },
+  {
+   "item": "FI/SCA regression harnesses kept in tree: f9_retest.py (fails if F-16 or opt_rand removed), f9_deeper.py, f9_scared_convergence.py, leakage_bip39/recovery/seedwizard_exact/seed_derivation/glyph/wait_random.py, fault_sweep_* (14)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/tools/sca/Makefile:200-300",
+    "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:141-210 (layout)"
+   ],
+   "status": "implemented",
+   "notes": "None of these run in CI (grep ci.yml/nightly.yml: only the dispatch-only checkct job references tools/sca). leakage_wait_random.py and leakage_glyph.py have Makefile targets but no recorded result in README (README:299 still lists the wait_random pass under 'Roadmap \u2014 not yet wired')."
+  },
+  {
+   "item": "Secret zeroization + compiler fences across sign/KDF/tunnel paths (zeroize-audit 2026-07 validated wipes survive -O1/-O2 DSE; 8 transient derivation-stack leaks fixed)",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/domain/src/lib.rs:319,338,367,419,478,487,598-600,713,737",
+    "/home/nicola/repos/PQSigner_OS/secure/src/crypto.rs:300-306"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "On-silicon masked-SHA2 benchmark + SHAKE decision (stay on plain SHA-2); v2 PRF restructure (pad sk_seed to full first block) recorded as the only SHA-2-preserving escape hatch",
+   "evidence": [
+    "/home/nicola/repos/PQSigner_OS/docs/archive/work-todo-retired-2026-07-19.md:1910-1919, :5362-5372",
+    "issue #229"
+   ],
+   "status": "fenced-off",
+   "notes": "Owner decision \u2014 do not re-raise (see owner_decisions)."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "ZERO on-silicon power/EM SCA evidence for any secret path (C10 sign PRF, KDF, PIN, SCP03, shield, SAES). Every leakage claim in the repo is Unicorn mem_address Hamming weight; register-value and coprocessor leakage are unmeasured. The sca-trigger hooks exist but have never been used for a capture.",
+   "tracked_in": "#228, #236, #299, #301; docs/hardware/evt-silicon-validation.md \u00a79.2-9.3; docs/STATUS.md:427-429",
+   "notes": "Blocked on bench hardware (ChipWhisperer-Husky/ChipSHOUTER absent, tooling-and-systems.md:95). Rigol MHO934 + Scaffold are on the bench and the \u00a713.1 capture recipe exists, so a first TVLA on the sk_seed-absorption window is keyboard+bench-doable without buying anything."
+  },
+  {
+   "gap": "SE-tunnel long-term keys exercised in SOFTWARE crypto on the CPU, pre-PIN, at every boot: SE050 SCP03 static S-ENC/S-MAC feed the software AES-128-CMAC `kdf` (scp03_logic.rs:390; aes/cmac crates) inside Se050::init \u2192 scp03::establish (se050/mod.rs:244), and the 64-B OPTIGA PBS keys software HMAC-SHA256 TLS-PRF (shield.rs:983-1030) in load_pbs/ensure_shield (main.rs:1778). An attacker without the PIN gets unlimited power-cycle traces for CPA on an unmasked bitsliced AES / HMAC with a fixed key \u2014 recovering S-ENC lets them decrypt half_E off the I2C bus on the next legitimate unlock (and symmetrically PBS \u2192 half_O). No masking, no SAES offload (SAES with KeySel::Software exists in saes.rs but is unused by the tunnels), no harness covers shield.rs at all.",
+   "tracked_in": "NOT tracked as a dedicated issue; #236 ('on-silicon SCA confirmation of scp03/rng_strong/optiga') is the nearest generic item; rainbow README:973-999 explicitly scopes out value-channel",
+   "notes": "Invariant #3's accepted residual (Grover-2^64 key search on physically-tapped sessions) assumes the tunnel keys are not extractable by SCA; this gap is the SCA version of that premise. Candidate levers: route the SCP03/shield AES through SAES (hardware with ST's side-channel randomisation, saes.rs:194), keep SAES-derived keys in KEYR only, or at minimum add shield.rs to the leakage harness set."
+  },
+  {
+   "gap": "Consumption-mask efficacy is unmeasured and physically doubtful: neither board drives a load from the mask pin (iota2 PA5 unclaimed, pq1 PA6 = NC), so duty randomisation does not modulate die current; the production fence forces the feature on, making the property 'satisfied-by-construction, not demonstrated'.",
+   "tracked_in": "docs/hardware/evt-silicon-validation.md \u00a79; consumption_mask.rs:44-60; red-teaming.md \u00a76.7; #646, #831",
+   "notes": "Trezor's U5 implementation (trezor-firmware core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:31-80) refills a PWM buffer from rng_get() via GPDMA linked list; ours is a SysTick-stepped xorshift32. Owner-relevant question: whether a loaded mask pin (resistor across the die rail) is in the pq1 BOM at all."
+  },
+  {
+   "gap": "sca-1 periodic reseed of the mask PRNG is fail-open and silent, and the DriverGuard loser is always the preempting SysTick, so reseed skips are biased toward signing windows; HEAD still has the inline duplicate PRNG and the pure module's own STATUS comment says it has 'NO production caller' (the working-tree diff fixes the call, uncommitted).",
+   "tracked_in": "#831 (medium), #646; consumption_mask_prng.rs:22-42 STATUS comment",
+   "notes": "Also CLAUDE.md's countermeasure-timing carve-out condition (d) cited in #831."
+  },
+  {
+   "gap": "No global timing jitter: Trezor runs an always-on 1 ms RDI (random_delays.c, ChaCha DRBG) for ~0.2% CPU; PQSigner randomises only at annotated fi::wait_random() call sites. The FI-delay byte source has had three defects in a month (#643 predictable reuse under nested RNG lock, #832 31/32 identical delays measured on silicon, #835 the #833/#834 halt sink is net-negative, priority:critical).",
+   "tracked_in": "#805, #643, #832 (closed), #834, #835 (critical, open)",
+   "notes": "The delay pool (#832) was judged a real improvement by two blind reviewers; the halt sink is what both rejected."
+  },
+  {
+   "gap": "Horizontal single-trace residual on the SHA-256 PRF: 70,754 sk_seed-absorbing compressions per sign (plus ~2048 uncounted grind_r iterations) each absorb sk_seed at the same intra-call offset through a non-DPA-hardened HASH peripheral; F-16 reorders calls but cannot change the per-call shape. Masking is DEAD (60 s/sign). Only the v2 PRF restructure (pad sk_seed to a full 64-byte block \u2192 1 secret compression per sign) addresses it and it violates invariant #6 (re-bases every address).",
+   "tracked_in": "#228 (measure first), #229 (v2 candidate); archive \u00a718 step (a)/(b)",
+   "notes": "Disposition rule already written in #228: measure on silicon; if no exploitable leak, close \u00a718."
+  },
+  {
+   "gap": "Rate limiter's flash-persistent daily quota (500/day) promised in README F-17 and sign_rate.rs:35-39 is not implemented; power-cycle \u2192 unlock \u2192 250 signs \u2192 repeat yields ~25-50 sigs/s sustained for an attacker who has the PIN.",
+   "tracked_in": "README F-17 'Mitigation owed'; referenced archive \u00a718 \u2014 no open GitHub issue found by keyword search ('rate limit' returned nothing relevant)",
+   "notes": "Design tension: 'No new per-signature flash state beyond page 123' (CLAUDE.md What NOT to do) \u2014 a daily quota needs a flash write cadence decision."
+  },
+  {
+   "gap": "cargo-checkct is not a CI gate (nightly job workflow_dispatch-only + continue-on-error because opam binsec builds ARM decoder XOR checkct plugin); ct_analyzer not wired; dudect absent. CT regressions after opt-level=s codegen changes are caught only by a human running make checkct.",
+   "tracked_in": "#312, #297; nightly.yml:147-170; docs/tooling-and-systems.md:95",
+   "notes": "Recipe is fully diagnosed in DONJON-RUST-TOOLING.md \u00a71 'CI recipe'; it is execution, not research."
+  },
+  {
+   "gap": "None of the rainbow/lascar/scared leakage or FI harnesses run in CI; the 14 FI sweeps have only been smoke-run (full ~40 h campaign outstanding); rng_strong_target no longer compiles (27 errors) so the three-source RNG fold has no live SCA/FI harness.",
+   "tracked_in": "#232, #235, #644, #592 (correlated-fault class not modelled), #296, #241; evt-silicon-validation.md \u00a79.1; STATUS.md:421",
+   "notes": "#592 notes the C10-sign FI target uses sk.sign twice with NO independent shuffle seeds, so the production F-16 misalignment defence is not what the sweep tests."
+  },
+  {
+   "gap": "OPTIGA shield.rs has no emulation leakage/FI harness at all (SCP03 has fault_sweep_scp03.py + leakage_scp03.py; nothing equivalent for AES-CCM tag verify, TLS-PRF, or the sequence-window logic).",
+   "tracked_in": "Not tracked (search 'shield session keys' returned only OP17-2/OP17-9 which are replay/residue issues)",
+   "notes": "Same harness pattern as scp03_target would apply."
+  },
+  {
+   "gap": "Trusted-display secret rendering: restore-wizard letter row renders typed seed letters on a non-forced pixel frame, bypassing the CT blitter and the F-24 force path; the digest-skip logic makes which strips go to the SPI wire depend on the letters.",
+   "tracked_in": "#784 (bug, medium), #237 (display emanation, low)",
+   "notes": "F-24's decoy-frames mitigation was never re-tested on the NV3007 LCD (README:1330-1345 'Path forward'); the OLED it was validated against no longer exists."
+  },
+  {
+   "gap": "PIN-derived secret is hashed on the CPU (derive_pin_secret = kdf(PIN_AUTH_DOMAIN, pin) \u2192 SHA-256 over an 8-digit input) once per OPTIGA attempt, and the 8-byte PIN is sent inside SCP03 to the SE050; neither CPU transform is SCA-characterised. Low-entropy input makes a template/SPA attack on a single SHA-256 the relevant model, not DPA.",
+   "tracked_in": "Not tracked; red-teaming.md \u00a75.3 covers lockstep, not leakage",
+   "notes": "Bounded by the 10-attempt lockout only if the attacker needs a correct PIN; a template attack on a wrong-PIN trace still learns the typed digits."
+  },
+  {
+   "gap": "F-23 (PBKDF2/SHA-512 padding leaks ~7 bits of BIP-39 password length) is an accepted residual with no issue; single-trace, provisioning-time.",
+   "tracked_in": "tools/sca/README.md:1205-1225 only",
+   "notes": "Unfixable without breaking BIP-39 byte compatibility; worth a threat-model row."
+  },
+  {
+   "gap": "Anti-klepto / covert-channel in the SLH-DSA randomizer R: the device chooses R via a secret-keyed grind; a malicious firmware could bias R to exfiltrate key bits (Dark Skippy class) and the docs still say 'no nonce, irrelevant'.",
+   "tracked_in": "#238",
+   "notes": "Mitigation pattern (companion-supplied entropy commitment mixed into opt_rand) would touch the frozen sign wire format."
+  },
+  {
+   "gap": "SHAFI-style ADRS/address-space masking for SPHINCS+ never evaluated against the correlated-fault/SCA residual (citation unverified).",
+   "tracked_in": "#593 (low)",
+   "notes": "Research-time item; requires primary-source verification before any design."
+  }
+ ],
+ "drift": [
+  "tools/sca/README.md F-9 re-test section (:600-640) states grind_r 'only touches public inputs \u2026 It NEVER reads sk_seed' \u2014 false since the 2026-06-13 hardening: sphincs-c10/src/fors.rs:110 hashes sk_seed in every grind iteration. The 'transparent leak' conclusion now rests on opt_rand randomisation, not on the absence of secrets.",
+  "The 70,754 secret-touching PRF count (archive \u00a718, #228, #229, memory) excludes grind_r: fors.rs:110-123 uses Sha256::new() directly with no bump!, so ~2048 extra sk_seed-absorbing compressions per sign are uncounted (hash_counts.rs lower bound \u226560,000 would not catch it).",
+  "docs/security/red-teaming.md \u00a76.7 (:692-700) says the consumption mask is 'seeded from rng_strong' \u2014 code seeds from crate::rng::fill (platform TRNG only; consumption_mask.rs:121-135 explicitly says NOT rng_strong) and the board pin is TIM3/PA6 on pq1, not 'TIM2 CH1 PWM on PA5'.",
+  "README.md:88,261,417 and CLAUDE.md feature-flag line describe the mask as 'TIM2 CH1 PWM on PA5' unconditionally; pq1 (the production board) runs it on TIM3_CH1/PA6 (consumption_mask.rs:28-33, nsc/mod.rs:717-719).",
+  "secure/src/consumption_mask_prng.rs:22-42 STATUS comment says the module 'has NO production caller' and HEAD's consumption_mask.rs:138-203 carries the inline duplicate PRNG_STATE; the working-tree (uncommitted) consumption_mask.rs calls consumption_mask_prng::seed/advance. Tests in the pure module cover the shipped PRNG only once that diff lands.",
+  "docs/security/red-teaming.md \u00a74.4 (:309-311) says 'masking is the only SCA mitigation today' \u2014 the shipped sign path has F-16 shuffle, hedged R, independent per-pass seeds, F-17 rate limit and the mask; and no algorithmic masking exists at all (masked-SHA2 was rejected). The sentence misstates both directions.",
+  "tools/sca/README.md:299 lists 'leakage pass over the FI guards (wait_random loop count)' under 'Roadmap \u2014 targets not yet wired', but tools/sca/leakage_wait_random.py + `make wait-random-leak` exist (Makefile:204-207); no result is recorded anywhere, and #241 is still open as if unstarted. Same for leakage_glyph.py (no README result).",
+  "tools/sca/README.md F-27 'What this does not close' (:1600-1615) says bip39::lookup_word_exact 'still uses a leaky WORDLIST.binary_search_by' \u2014 bip39/src/full.rs:489-530 is now a CT mask-OR scan with black_box barriers (stale in the safe direction).",
+  "tools/sca/README.md F-24 (:1245-1405) cites secure/src/ui/oled.rs::flush_with_secret_rows and SSD1306 bench results; the OLED backend was removed 2026-06-30, the shipping panel is the NV3007 LCD (lcd.rs / ui/px), and the decoy-frames LCD re-test it promises was never run.",
+  "docs/STATUS.md:408 says `make checkct` EXISTS at 'Makefile:4367' \u2014 it is at Makefile:4926; STATUS.md:366-367/427-429 and evt-silicon-validation.md \u00a79 still describe the dudect/CPA silicon items as open, which is accurate, but README.md:233 lists 'side-channel / fault attacks on U585 silicon' as explicitly out of the defended threat model while the nsc/mod.rs:695-725 fence text and CLAUDE.md present the mask as a load-bearing CPA/DPA defence \u2014 the two framings disagree on whether on-silicon SCA is a claimed property.",
+  "sign_rate.rs:35-39 and README F-17 'Mitigation owed' promise a flash-persistent 500/day quota 'tracked in work-todo \u00a718b'; the archive migration to GitHub issues did not produce an issue for it (keyword search found none).",
+  "CLAUDE.md 'Timings on hardware' (first sign 14-17 s, cached Type-2 6.4-7.2 s, #699) vs README F-17's trace-rate arithmetic (~1 sig/s, 3600/h) and sign_rate.rs header ('~1 s/sign with HW SHA'): the rate-limiter threat numbers are built on a sign latency ~7x faster than measured silicon, so the stated attacker trace budgets are overstated (in the defender's favour) and MIN_SIGN_INTERVAL_MS=1000 is currently a no-op relative to natural sign latency."
+ ],
+ "owner_decisions": [
+  "SHAKE-vs-SHA2 and masked-SHA2 are DECIDED (2026-05-20, user-confirmed three times): stay on plain SHA-2; masked-SHA2 measured 278-2800x the HASH peripheral, 70k secret PRF calls/sign \u2192 ~60 s/sign; STM32U5 HASH has no SHA-3/SHAKE; a parameter switch breaks invariant #6. Do NOT re-raise or propose benchmarking. Only the v2 PRF restructure (#229) stays open, and only if #228 silicon measurement shows an exploitable leak.",
+  "ML-KEM-1024 inner wrap for the SE tunnels DESCOPED 2026-07-07 (work-todo #9): both tunnels are symmetric-rooted; accepted residual is Grover-2^64 against physically-tapped sessions; per-device final rotation is load-bearing. Do not re-raise. (Note: this decision is about Shor/Grover, not SCA \u2014 the software-AES CPA gap above is orthogonal and not covered by it.)",
+  "consumption-mask is production-forced by the nsc/mod.rs ship-blocker fence (audit secret-lifecycle 20260611 MEDIUM-3); e2e-test/dev-testkey images may opt out, shipping images may not. The fence text itself concedes effectiveness is unmeasured.",
+  "sca-1 reseed MUST come from the platform TRNG only (register read), never rng_strong, because it runs in the SysTick ISR and SE I2C traffic would race a signing op (consumption_mask.rs:121-135; archive sca-1 entry). Per-tick fresh RNG was explicitly rejected (1 kHz SE round-trips).",
+  "Owner decision 2026-10-09 (#834): 'if the RNG fails, we shouldn't fallback. It should error out.' \u2014 FI delay length must never reuse a last-good value; but #835 (critical) shows the implemented halt sink is net-negative, so the mechanism (not the principle) is contested.",
+  "Invariant #6 (bootstrap keys immutable, CREATE2 salt fixed) and the frozen wire formats constrain every SCA fix that would change PRF input layout, R derivation output, or the sign input/output framing (v2 PRF, anti-klepto R commitments, parameter changes).",
+  "Invariant #5 (one primitive, no classical signer) and 'No software PRNG / No heap' constrain countermeasure design: DRBG-style delay generators must still be TRNG-rooted; no Vec-backed trace buffers in firmware.",
+  "'No new per-signature flash state beyond the page-123 EIP-1271 counter' (CLAUDE.md What NOT to do) directly constrains the F-17 flash-persistent daily quota; adding it needs an owner call on flash wear vs the power-cycle bypass.",
+  "Trezor secmon-style intra-secure privilege split was DECLINED ON PRINCIPLE (2026-06-30 critical-port pass) and fi-1 'RDI port' was rejected then as a category error \u2014 but #805 (2026-10-09) re-opens the always-on-RDI question with new measurements; the earlier rejection should not be cited as final.",
+  "OPTIGA S-1/S-2/S-3 ship-blockers are deferred BY DESIGN (chips cost money, LcsO irreversible); SCA bench campaigns on the OPTIGA/SE050 silicon (#236, \u00a79) are gated behind the same sacrificial-board plan (evt-silicon-validation.md 'Sacrificial-unit plan')."
+ ]
+}

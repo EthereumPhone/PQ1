@@ -1,0 +1,26 @@
+{
+ "id": "D-04",
+ "title": "Content-independent SPI payload for secret cells: equal-Hamming-weight / equal-transition RGB565 colour pair for secret glyphs (bus-level constant-weight encoding)",
+ "threat": "EM / crosstalk / supply leakage of the 20 MHz MOSI stream (and the panel source-driver current) during seed, candidate-list, letter-row and PIN frames. Today the glyph FETCH is constant-time but the PAYLOAD is maximal-contrast 0xFFFF/0x0000: every secret pixel toggles all 16 bits, so the per-pixel Hamming weight and transition count on the bus is exactly the glyph bitmap (Kuhn's FPD-link TEMPEST / Screen Gleaning class, averaged across the periodic refresh).",
+ "proposal": "For secret rows/cells only (legacy `blit_glyph` FG/BG and px `Item::Secret` via `blend_ct`), replace the colour pair with a pair (fg, bg) chosen by brute-force search over RGB565 such that: equal Hamming weight, equal intra-word transition count, equal first and last bit (so inter-pixel boundary transitions are also glyph-independent), and acceptable luminance contrast on the NV3007 (verify on glass). Quantise px anti-aliased coverage for secret cells to the two-colour pair (or to a small set of pairs that all satisfy the constraints) so no intermediate colour leaks. Optionally surround the secret cell band with a constant lit field (Trezor legacy inversion) so the panel's row current is dominated by a content-independent background. Keep this orthogonal to the glyph-fetch CT path and to the atlas pin (colour is applied in the compositor, not the atlas).",
+ "rationale": "This is the SPI-panel translation of Trezor's `oledSCA` constant-weight rows and Ledger's inverted PIN boxes: make the electrical signature per secret pixel independent of the bit. On a 3-wire SPI TFT the bus bits ARE the leak carrier, so weight/transition equalisation attacks the channel at its source with a two-constant change on the legacy path and a small compositor change on px. It does nothing against a logic-level tap (D-02/D-03/D-05 cover that) and that must be stated.",
+ "repo_evidence": [
+  "secure/src/ui/lcd.rs:47-48 (`FG: u16 = 0xFFFF`, `BG: u16 = 0x0000`) and :263-264 (branchless mask select of FG/BG \u2014 value, not weight, is masked)",
+  "pqsigner-ui-px/src/raster.rs:166-179 (blend_ct composites every pixel with a coverage-dependent colour; no weight constraint)",
+  "gh #260 OPEN priority:low (constant-pixel-count encoding 'reconsideration' \u2014 deferred on the unmeasured constant-current-backlight argument; this proposal is the bus-level variant, not the row-current one)",
+  "gh #237 OPEN priority:low (threat-model \u00a77.10 row still absent; issue body still frames the surface as SSD1306)"
+ ],
+ "vendor_precedent": "Trezor legacy `oledSCA` constant-weight row padding + `oledInvert` band (legacy/oled.c:451-473, legacy/firmware/layout2.c:832-838); Ledger 1.6 inverted-pixel PIN/recovery boxes (LSB-006). Trezor core deliberately dropped software padding in favour of the hardware mask on the OLED and has NO bus-level countermeasure on any model.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "Contrast/readability on the NV3007 must be verified on glass (pq1 bench has no LCD \u2014 iota2 module or EVT); mid-weight colour pairs are less legible than white-on-black. Residual: crosstalk and driver-IC EM still depend on pattern geometry, and a logic-level tap reads the pixels regardless. Needs a TVLA receipt (D-10 harness) rather than a structural claim \u2014 the 2019 Ledger lesson is that 'physical noise' claims failed on the next panel.",
+ "sources": [
+  "https://www.cl.cam.ac.uk/~mgk25/pet2004-fpd.pdf",
+  "https://ar5iv.labs.arxiv.org/html/2011.09877",
+  "https://github.com/trezor/trezor-firmware/blob/main/legacy/oled.c",
+  "https://donjon.ledger.com/lsb/006/"
+ ],
+ "surface": "display"
+}

@@ -1,0 +1,24 @@
+{
+ "id": "SE-05",
+ "title": "Shielded-Connection liveness probe: after every PRL handshake, send host-TRNG data through the tunnel to a command whose response is a deterministic function of that data (CalcHash) and compare locally \u2014 a replayed session cannot answer",
+ "threat": "Whole-session replay of a captured OPTIGA unlock session (OP17-2): the Infineon PRL handshake carries only the chip's random_S, so an interposer that recorded one genuine session can replay the chip's frames to the MCU; the vendor-faithful ProVerif model proves inj-agreement false. Combined with a substituted/absent chip this lets a bus device impersonate the OPTIGA for the duration of a session.",
+ "proposal": "In `OptigaTrustM::ensure_shield`, immediately after `establish()` succeeds, draw 32 B from `rng_strong`, send OPTIGA `CalcHash(SHA-256, data)` (cmd 0x30, non-counter-bound, no AC) inside the shield, and compare the returned digest against a locally computed SHA-256 (HW HASH) with FI-double sentinel checks; mismatch \u2192 `ShieldError::Replay`, tear down, hard-reset, D1-inconclusive classification (no page-124 charge). Because the replayed transcript's CalcHash response was computed over the old data, the compare fails with certainty; the probe costs one APDU (~5 ms). Document the residual honestly: this closes session-level replay by a bus adversary but not an adversary holding the PBS (who can run a real handshake).",
+ "rationale": "Trezor has the identical gap (optiga_transport.c:771-780, no master random) and has not closed it; this is a one-APDU 'beyond' fix that needs no change to the chip's protocol, keeps every existing sequence-counter/nonce-wrap guard, and makes #117 falsifiable on the bench (record a session with the LA1010, replay it, assert the probe refuses). It also upgrades the `random()` path: a replayed session would otherwise return recorded TRNG bytes into the 3-source XOR.",
+ "repo_evidence": [
+  "secure/src/optiga/shield.rs:698-700 comment: 'Infineon PRL does NOT send a master random \u2014 the handshake uses only random_S from SlaveHello'",
+  "secure/src/optiga/shield.rs \u2014 grep 'freshness|liveness' hits only sequence-counter comments (:169,:646,:885); no post-handshake challenge",
+  "secure/src/optiga/mod.rs:532-600 ensure_shield: establish \u2192 active, no probe",
+  "contracts/verification/docs/THREAT_CLAIM_MAP.md:73 \u2014 vendor-faithful model proves replay possible; Issue #117 (OP17-2) OPEN; #396"
+ ],
+ "vendor_precedent": "none (Trezor core/embed/sec/optiga/optiga_transport.c:747-838 has the same handshake without a host nonce); analogous host-chosen-challenge pattern in Trezor's AUTOREF set_auto_state over an SE nonce (optiga_commands.c:561-619), inverted here.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "CalcHash availability/AC at the production LcsO must be confirmed on the V3 part (it is a standard Trust M command); the probe must run before any counter-bound command so a replay cannot burn E120; a transport failure in the probe must be inconclusive, not 'replay detected' (otherwise an interposer gains a lock/DoS lever); update the ProVerif model (optiga_shield_handshake_vendor.pv) with the probe to turn the do-not-cite row into a cited claim.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga_transport.c:747-838",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga_commands.c:561-619"
+ ],
+ "surface": "se"
+}

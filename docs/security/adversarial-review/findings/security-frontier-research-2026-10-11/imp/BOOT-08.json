@@ -1,0 +1,26 @@
+{
+ "id": "BOOT-08",
+ "title": "HDP hide-protection over the per-device secret pages after the BHK/salt are latched, with the FSBL/first-boot stage as the only reader",
+ "threat": "A runtime secure-world bug (NSC parser, SE driver, ERC-7730 renderer) or a mid-session glitch reading page 126 (DHUK-wrapped SE050 BHK) / page 127 (journal + OPTIGA PBS salt) and leaking or replaying them; today those pages stay readable by the entire secure runtime for the whole power cycle.",
+ "proposal": "Relocate the read-once-per-boot pages (126 BHK wrap, 127 journal/salt; NOT 123/124 which are written at runtime) into an HDP-capable region \u2014 HDP1 covers a contiguous range from the SECWM1 start, so either pages immediately after the FSBL (pages 5..6 of bank 1, inside the frozen registry's spare) or HDP2 over the low pages of bank 2 \u2014 and set `SECHDPCR.HDP1_ACCDIS`/`HDP2_ACCDIS` in early secure boot right after the BHK is loaded into TAMP BKP0R-7R + BHKLOCK and the PBS salt is consumed, making them invisible to all code (even secure) until the next reset. First-boot Phase B writes the journal BEFORE disabling access; the secure-world RDP/SECBOOTADD0 checks (BOOT-06) also confirm HDP is set. Pin the HDP1 polarity (flash.rs:79) in the BOOT-01 silicon ceremony.",
+ "rationale": "Trezor's secret sector (BHK, master-key slots, counters, device cert) is exactly this shape and is HDP-hidden before every stage hand-off; pq1 has zero HDP/SECHDPCR usage. pq1 already does the hard half (BHK into TAMP registers + BHKLOCK), so hiding the source pages is the natural completion and removes page 126/127 from the reach of every later secure-world bug.",
+ "repo_evidence": [
+  "grep HDP|SECHDPCR -r secure/src fsbl/src shared/src: only comments at secure/src/hw/flash.rs:74-79 ('HDP1 polarity IS still unconfirmed') \u2014 no runtime use",
+  "secure/src/main.rs:1487-1534 (BHK latched + BHKLOCK, but page 126 remains readable afterwards)",
+  "secure/src/flash_policy.rs:32-49,129-168 (page 127 excluded from generic WRITERS only; reads are unrestricted and pages 0..126 fully writable)",
+  "geometry/src/lib.rs:121-138 (registry pins 126/127 at the END of bank 1, outside any HDP1 window)",
+  "Issues #39, #43, #214"
+ ],
+ "vendor_precedent": "Trezor option_bytes.c:66-69,89-95 (SECWM1 + HDP1 end = secret sector), secret.c:170-173 (secret_disable_access \u2192 SECHDPCR HDP1_ACCDIS|HDP2_ACCDIS), secret.c:598-651 (secret_prepare_fw: cache, lock BHK, disable access unconditionally), mpu.c:500-501 (MPU_MODE_SECRET window).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "L",
+ "priority": "P1",
+ "risks": "Geometry cascade: moving pages 126/127 is a registry change (v7 drafts were REJECTED #752; this is a narrower proposal but still needs an owner stage decision and re-pins `Phase A blank-check pages 123..127`). HDP covers reads for the rest of the boot only (resets re-expose), so it complements, not replaces, the wrap. The first-boot RDP burn itself is unaffected (OPTR is not in flash pages). If HDP1 start is forced to the SECWM start (page 0), the FSBL range would also become hidden after the FSBL stage \u2014 acceptable (it is already executed) but the secure-world advisory measured_boot re-hash of the FSBL range would stop working; it is compiled out of production anyway.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/secret/stm32u5/secret.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+  "https://docs.trezor.io/trezor-firmware/core/embed-arch/embed-arch.html"
+ ],
+ "surface": "boot"
+}

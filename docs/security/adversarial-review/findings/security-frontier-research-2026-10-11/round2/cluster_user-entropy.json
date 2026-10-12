@@ -1,0 +1,150 @@
+{
+ "merge": {
+  "cluster": "user-entropy",
+  "title": "User-supplied entropy (button coin-flips / dice) hashed into the new-wallet seed draw, honestly scoped as an RNG-failure defence; closes the #371 adopt-vs-decline decision",
+  "threat": "Honest firmware whose seed-generation randomness is weak, stuck, mis-configured or rigged in silicon. All three inputs to the wallet seed (STM32 TRNG, OPTIGA, SE050) are chosen by the device and none is user-auditable; #704 records that the STM32 TRNG runs RM0456 configuration C, not the certifiable A. The proposals cite a Coldcard incident (PRNG fallback + 32-bit reseed passing its own health checks) as the motivating case; I did not independently verify that source. NOT in scope: malicious or implanted firmware, which can ignore the user input or leak the seed through signature free bytes.",
+  "proposal": "One firmware item on the NewWallet path only (secure/src/main.rs:952-975); Restore, the duress/decoy path (#370) and e2e-test are untouched.\n\n1. Add a wizard step between choose_setup_mode() and Mnemonic::from_entropy where the user enters physical randomness on the two buttons. Natural encoding is left/right = 1 bit: 128 coin flips, matching C10's n=16 B level. Dice as 50 rolls of 1..6 (about 129 bits) is the alternative. Presses must count as S-world activity so the 120 s idle wipe does not fire mid-entry.\n\n2. Mix by hash, not XOR: entropy = SHA-256(\"pqsigner/user-entropy-v1\" || rng_strong_32 || len || user_bytes). This follows Trezor's sha256(int || ext) (core/src/apps/management/reset_device/__init__.py:543-551). The strict three-source rng_strong::fill stays unchanged and mandatory, so the output is at least as strong as the better of the two inputs.\n\n3. Put the mix function in a workspace crate (pqsigner-domain or bip39) with a KAT and a \"one input bit flipped changes the output\" differential test. run_first_boot_wizard lives in secure/src modules that are excluded from host tests, so a test written there would never run.\n\n4. Zeroize the roll buffer with the entropy. Treat the roll-entry screen as secret-equivalent display content (same class as #237 / F-24).\n\n5. State in HARDENING.md and the wizard copy that this defends RNG failure, not malicious firmware. Do not show \"entropy check\" words or a \"first word changes\" demo as proof.\n\n6. Optional, owner decision: an offline-auditable mode, either dice-only (seed = SHA-256(rolls)) or an on-device cut-and-choose analogue of Trezor's entropy_check (device shows a commitment to its share, user enters rolls, device shows words, user may choose \"audit and discard\" which reveals the device share for offline recomputation, then restarts). This is the only variant that gives any evidence against a cheating image, and that evidence is bounded by the signature exfiltration channel.\n\n7. Record the outcome on #371 as the adopt/decline decision.\n\nOn the lead's question: this does not conflict with \"No software PRNG\". The user bytes are an added, hashed input; no TRNG source is replaced and no PRNG is introduced.",
+  "members": [
+   {
+    "id": "SE-10",
+    "disposition": "modified",
+    "note": "Kept: mandatory user-entropy step on the new-wallet path, strict 3-source draw unchanged, zeroization, bench-only skip. Its \"we lack this\" claim is confirmed (main.rs:964-974 is a single rng_strong::fill straight into Mnemonic::from_entropy; word-bounded grep for dice/coin/user_entropy/keypress over seed_wizard.rs and main.rs finds nothing). Changed: XOR of SHA-256(rolls) replaced by a hash-mix. Dropped: the 2-word \"entropy check\" as proof of consumption (it only proves the firmware saw the rolls). Its \"65 key presses\" threshold assumes a numeric keypad; on two buttons a press is 1 bit. Its claim that this helps against a pre-power image swap is refuted: a swapped image ignores the rolls."
+   },
+   {
+    "id": "SYS-10",
+    "disposition": "modified",
+    "note": "Kept: (a) the hashed user-entropy phase with \"hash, never XOR\", and the cut of (b) down to a KAT/differential on the mix function. Dropped: the \"first word changes\" demo, the two-run divergence and >=32-distinct-bytes tests, and the host-commitment OptRand mode. The docs-only fallback of (c) is already #238. Its repo evidence is confirmed (dual_se.rs:95-108 is rng_strong::fill_with_store only; crypto.rs:206-248 draws OptRand from rng_strong::fill with no host nonce). Novelty corrected from \"beyond\" to parity."
+   }
+  ],
+  "dropped_parts": [
+   "SE-10 2-word on-screen entropy check: SHA-256(rolls) words prove only that the firmware received the rolls, not that they entered the seed. A rigged image shows correct check words and emits a chosen seed. Shipping it would create a false proof.",
+   "SYS-10 \"first word changes when one input changes\" demo: same flaw; a cheating image can fake it. It also adds extra candidate-seed renders on the display-emanation surface (#237).",
+   "SYS-10(c) host-commitment OptRand (opt_rand = SHA-256(tag || h || d)): conflicts with a recorded finding. docs/security/vendor-signing-key-compromise.md:666-676 says about 3,100 B of each 4008 B signature are free-form with a floor of 208 B per signature, that canonicalising R removes about 0.6% of the channel, and \"do not fund one as mitigation\". It also needs a new field in the frozen unified-sign input and keeps d device-chosen and grindable.",
+   "SYS-10(c) docs fallback (state the R / grind channel as an accepted residual): not dropped on merit; already tracked by #238 (open, docs-only). Zero untracked delta.",
+   "SYS-10(b) \">= 32 distinct bytes in rng_strong output\": for a 32-byte draw this means all bytes distinct, probability about e^(-32*31/512) = 0.14, so it fails about 86% of honest draws.",
+   "SYS-10(b) QEMU two-run divergence test: under mock-se the SE sources are absent (rng_strong.rs:27-29) and the platform source is semihosting /dev/urandom, so it tests the host OS, not the device.",
+   "SYS-10(b) startup repetition test on first SE responses: already #641 (open); the statistical assessment is #594 (open).",
+   "Trezor-style host-supplied external entropy with commitment and host entropy_check: infeasible as-is. The wizard runs at main.rs:4001, before boot_ns::boot at main.rs:4280 and before USB init at main.rs:4231-4233, so no host channel exists during seed generation. Only a human-as-host analogue survives (optional step 6).",
+   "SE-10 claim that user entropy partially answers a factory-image swap before the SWD check: refuted; a swapped image controls the mix.",
+   "SE-10 XOR mixing: replaced by hash-mix. XOR is not unsound when the RNG is independent of the rolls, but the hash matches Trezor and SYS-10's own risk note about low-entropy input.",
+   "Both members' unrelated DROPPED lists (SE-rail shunt, PRL self-heal #119, #385, #386/#398, #63, #697, consumption-mask load #831/#646, DICE binding, active tamper, etc.): out of this cluster's scope; belong to other clusters or existing issues."
+  ],
+  "tracked_issues": [
+   "#371 (open): rng-3, decide adopt vs decline on external-entropy verifiability at seed creation. This item is the concrete answer to that decision.",
+   "#238 (open): docs-only reframing of the anti-klepto channel in the SLH-DSA randomizer R plus a threat-model row. Covers all that is sound in SYS-10(c).",
+   "#704 (open): TRNG runs RM0456 configuration C, HW-ASSUME-TRNG-ENTROPY false as stated. Motivation, not the fix.",
+   "#641 (open): startup repetition test for the first accepted OPTIGA and SE050 responses. Covers SYS-10(b)'s startup part.",
+   "#594 (open): extend the SP 800-90B assessment to the dual-SE combined pool and restart tests.",
+   "#370 (open): provision_duress_wallet silent SE fall-through. Adjacent; the decoy path is deliberately excluded here.",
+   "#369 (open): per-word TRNG sanity check in rng.rs::fill. Adjacent.",
+   "#700 (open): trusted-UI flows including the seed wizard never exercised on pq1 silicon. Prerequisite for validating any new wizard step.",
+   "#237 (open): display-emanation side channel, seed-wizard scope. The new roll-entry screen joins this surface."
+  ],
+  "untracked_delta": "#371 only says \"decide\". Nothing tracks the concrete design: (1) a user-entropy step on the NewWallet path with a two-button 128-flip or 50-dice encoding; (2) the hash-mix function in a workspace crate with a KAT and bit-flip differential; (3) the honest scope statement (RNG failure only, no proof-of-consumption screen); (4) the optional offline-auditable dice-only or commit/reveal/discard mode as an owner decision; (5) the infeasibility of Trezor's host-side entropy_check on pq1 because the wizard runs before the NS world and USB exist. Suggested handling: amend #371 with this design rather than opening a new issue.",
+  "decision_conflicts": [
+   "vendor-signing-key-compromise.md:666-676 (UPDATE 2026-08-05): subliminal-channel closure is \"dead on arrival; do not fund one as mitigation\". Kills SYS-10(c) host-commitment OptRand.",
+   "CLAUDE.md frozen wire formats (unified sign input): SYS-10(c) would add a host nonce field. Dropped.",
+   "CLAUDE.md \"No software PRNG\": no conflict. User bytes are hashed in as an extra input; rng_strong stays mandatory.",
+   "Invariant #6 and the KDF tags: no conflict. Derivation after the 24 words is unchanged (#371 says the same). The new tag \"pqsigner/user-entropy-v1\" sits before BIP-39 and is not a derivation tag.",
+   "Invariant #1 (dual-chip split): no conflict. generate_split_half (dual_se.rs:95-108) is unchanged; user entropy only feeds the 32-byte entropy before the split.",
+   "ui-px gesture decisions (2026-09-22/24): the chord click is the sign gesture and hold-left declines. The entry screen must use plain left/right clicks and must not overload chord or hold-left.",
+   "Secure-slot budget: ui-px is 76,949 B over the 466,944 B slot. The non-px image has 34,071 B headroom; this item is about 1-3 KB there, but any ui-px native screen for it waits on the flash-lever owner decision."
+  ],
+  "hardware_asks": [],
+  "prerequisites": [
+   "Owner decision on #371: adopt; mandatory vs opt-in; coin flips vs dice; whether to build the optional auditable mode.",
+   "#700: the seed wizard has never run on pq1 silicon and the pq1 bench board has no LCD, so the new step can only be validated on iota2 with the panel or an enclosed EVT unit.",
+   "Flash-lever decision before a ui-px native screen can be added; the legacy 16x4 wizard path fits today.",
+   "A host-test home for the mix function in a workspace crate, since secure/src wizard code is excluded from host tests.",
+   "If the auditable mode is chosen: a published offline recompute tool and procedure."
+  ],
+  "precedent": "Coldcard Mk4 ships user dice / coin flips / key presses mixed with device entropy plus a dice-only mode; NGRAVE ZERO has user shuffling. Both are as cited by the proposals; I did not re-verify them. Trezor, verified in the tree: host external entropy hashed with internal entropy (core/src/apps/management/reset_device/__init__.py:543-551), an HMAC commitment to the internal entropy (:100-102), and an entropy_check loop that reveals prev_int_entropy for discarded rounds (:91-127, :168-196; common/protob/messages-management.proto:512,543-562). Trezor has no dice input; its mechanism needs a host, which pq1 lacks at wizard time. BitBox02 and Jade anti-klepto are ECDSA-only and do not port to SLH-DSA (#238 text).",
+  "novelty": "parity",
+  "kind": "firmware",
+  "cost": "S",
+  "priority": "P2",
+  "live_defects": [],
+  "residual_after": "1. Malicious, implanted or swapped firmware is unaffected. It can ignore the rolls, substitute a chosen seed, or leak the real seed through signature free bytes (floor 208 B per signature, vendor-signing-key-compromise.md:666-676). The only defences remain the FSBL boot fingerprint, reproducible builds and the RDP-0 SWD check, and invariant #10's gates are still open.\n2. The mixed mode is not user-verifiable. Without the optional auditable mode the user has no evidence the rolls were consumed; with it, the evidence is probabilistic (cut-and-choose) and still bounded by point 1.\n3. User input may be low-entropy (patterned presses, biased dice). The output is then only as strong as rng_strong, i.e. no worse than today.\n4. An observer of the roll entry (shoulder-surf, camera, display emanation) learns the user share. That only matters if the device RNG is also broken.\n5. Only seed generation is covered. Per-signature OptRand, the split mask, decoy entropy and the duress path still rely on rng_strong alone (#370, #641, #594, #704 stay open).\n6. The R covert channel stays an accepted, to-be-documented residual (#238).",
+  "rationale": "Both members propose the same core and neither had a round-1 verdict, so I verified them myself. The gap is real: the wallet seed comes from one rng_strong::fill call with no user or host input, and #371 has held the adopt/decline question open since 2026-07. The additive mix is cheap, touches no invariant and no wire format, and addresses an RNG-failure class that the three-source XOR does not cover when the failure is common-mode. Everything in the proposals that claimed to prove consumption or to bound malicious firmware is unsound or already ruled out by a recorded finding, so the merged item is deliberately narrower than either member. P2 because nothing ships before the S-1/S-2/S-3 blockers anyway and the residual against a broken RNG is today mitigated by three independent sources. No defect in executing code was asserted by either member and I found none.",
+  "repo_evidence": [
+   "secure/src/main.rs:952-975: NewWallet draws 32 B with a single rng_strong::fill and goes straight to Mnemonic::from_entropy; no user term.",
+   "secure/src/main.rs:4001 (run_first_boot_wizard) precedes main.rs:4231-4233 (usb_hw::init) and main.rs:4280 (boot_ns::boot): no host channel during the wizard.",
+   "secure/src/ui/seed_wizard.rs: public surface is choose_setup_mode / collect_duress_pin / show_mnemonic / verify_mnemonic / enter_mnemonic (:129-747); no entropy-entry dialog. rng_strong is used only for decoys (:430-436).",
+   "Word-bounded grep for dice|coin|coinflip|user_entropy|keypress over seed_wizard.rs and main.rs: zero hits (the earlier substring hit was \"indices\").",
+   "secure/src/rng_strong.rs:1-44: strict three-source XOR with no silent fall-through; mock-se omits the SE sources.",
+   "secure/src/dual_se.rs:95-108: generate_split_half uses rng_strong::fill_with_store only.",
+   "secure/src/crypto.rs:206-262: OptRand drawn from rng_strong::fill, all-zero gate, no host nonce.",
+   "sphincs-c10/src/fors.rs:98-131: R = trunc(SHA-256(sk_seed || \"R_grind\" || opt_rand || message || nonce)); the verifier never recomputes R (:94-97).",
+   "docs/security/vendor-signing-key-compromise.md:666-676: signature free-byte channel, \"do not fund\" closure designs.",
+   "docs/archive/work-todo-retired-2026-07-19.md:4539-4544: rng-3 design item, the source of #371.",
+   "secure/src/rng_health.rs:14-34 and rng_strong_fold.rs: only zero and continuous-repetition checks exist."
+  ],
+  "sources": [
+   "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware (cited by both members; not verified by me)",
+   "https://coldcard.com/mk4 (cited by SE-10; not verified by me)",
+   "https://support.ngrave.io/hc/en-us/articles/4409561457041-Could-someone-pre-program-their-own-key-in-my-device-before-I-receive-it-Supply-chain-attacks (cited by SE-10; not verified by me)",
+   "https://docs.cypherock.com/getting-started/how-cypherock-generates-your-24-word-seed-phrase (cited by both; not verified by me)",
+   "/home/nicola/repos/trezor-firmware/core/src/apps/management/reset_device/__init__.py:91-127,168-196,543-551",
+   "/home/nicola/repos/trezor-firmware/common/protob/messages-management.proto:512,543-562",
+   "/home/nicola/repos/PQSigner_OS/docs/security/vendor-signing-key-compromise.md:666-676",
+   "GitHub EthereumPhone/PQ1 issues #371, #238, #641, #370, #704"
+  ]
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.8,
+  "reason": "The core survives: a hashed, additive user-entropy step on the NewWallet path is sound, feasible on pq1, breaks no invariant or wire format, and the gap is real. secure/src/main.rs:964-974 is a single rng_strong::fill into Mnemonic::from_entropy with no user or host term. The wizard at main.rs:4001 runs before usb_hw::init (:4233) and boot_ns::boot (:4280), so a Trezor-style host entropy_check is infeasible as stated. The Trezor citations (reset_device/__init__.py:91-127, 543-551) and vendor-signing-key-compromise.md:666-676 (\"dead on arrival; do not fund\") check out.\n\nThe recommendation is over-sold in four ways, all fixable in corrections:\n1. Its motivating Coldcard case is already fenced in this repo by a CI gate the merge never mentions.\n2. \"Closes #371\" is wrong: #371 asks about verifiability, and the mandatory part gives none.\n3. Optional step 6 contradicts the item's own \"rng_strong stays mandatory\", under-sizes the dice count for a 256-bit seed, and duplicates the existing Restore path.\n4. The two-button \"1 press = 1 bit\" encoding ignores the actual button event model.\n\nWith the Coldcard class already gated and the fold already host-tested, the marginal security value is low, so P3 rather than P2.",
+  "corrections": "1. Threat framing and existing coverage (missing from the item).\n- I fetched the Block write-up. The Coldcard bug was a firmware integration error: `ngu.random` silently used MicroPython's deterministic Yasmarang fallback, seeded from UID and timers. It was not a hardware TRNG failure.\n- pq1 already fences that class. scripts/rng_consumer_audit.py:17-20 bans software PRNGs including `yasmarang` by name; :81-82 requires the literal `rng_strong::fill(&mut entropy)` in secure/src/main.rs; the PRODUCTION_ENTROPY_BACKENDS_REQUIRED fence is checked at :131-137. The gate is wired into `make prod-feature-check` (Makefile:2734-2737).\n- secure/src/rng_strong_fold.rs carries about 25 host tests from :1232 on (e.g. fold_se_blocks_rejects_zero_contribution_without_xor at :1774), also compiled into secure-miri-tests.\n- What user entropy adds is therefore narrow: a semantic bug in rng_strong or the wizard call path that the snippet gate cannot see, or a simultaneous failure of three chips from three vendors. Restate the threat that way and list rng-consumer-audit as existing coverage.\n- \"Rigged in silicon\" across ST, Infineon and NXP at once is implausible. #704 concerns the STM32 leg only; XOR with the two SEs already covers it.\n\n2. \"Closes #371\" is overstated.\n- #371 is about external-entropy verifiability against a rigged RNG. Steps 1-5 give zero verifiability, as the item's own residual 2 says.\n- Record two decisions on #371: (a) adopt or decline the additive mix as an RNG-failure defence; (b) adopt or decline verifiability, which hinges only on step 6.\n\n3. Step 6 needs rework or should be dropped.\n- Dice-only (seed = SHA-256(rolls)) removes rng_strong from the seed. That contradicts step 2, and it would also turn the rng-consumer-audit REQUIRED_THREE_SOURCE check red.\n- The entropy is 32 B (24 words). 50 dice give about 129 bits; a dice-only 24-word seed needs 99 rolls or 256 flips. On two buttons a 1..6 value costs several presses, so this is several hundred presses.\n- Already available: Restore (seed_wizard.rs:747-785, checksum-validated via Mnemonic::from_indices) lets a user enter a mnemonic generated offline from dice. That is a fully user-auditable path with no new firmware; it only needs a documented procedure. Name it as the zero-code alternative to dice-only.\n- Commit/reveal/discard on the legacy 16x4 display means hand-transcribing a 32-byte commitment and a 32-byte revealed share. It also yields no evidence against an image that derives honestly and exfiltrates through signatures. Mark it low value and likely decline.\n\n4. Step 1 encoding against the real button model.\n- wait_event (secure/src/hw/buttons.rs:300-) emits only (Left|Right, Short|Long). Two presses within COMBO_WINDOW_MS = 80 ms (:189) are synthesised as (Right, Long), which is the confirm event across the wizard (seed_wizard.rs:160-168). Long is 500 ms (:183).\n- The entry dialog must count only Short-L and Short-R as bits, ignore or refuse Long-Right and chord until N bits are in (otherwise thumb skew ends entry early), provide undo, and keep Long-Left as cancel.\n- Tapping buttons from the head is not 1 bit per press. The wizard copy must tell the user to flip a real coin.\n- Each wait_event return already calls timeout::reset_activity in every wizard dialog, so the idle-wipe concern is met by following that pattern.\n- The wizard loop `continue`s on a cancelled show_mnemonic or failed verify_mnemonic (main.rs:977-990). Decide whether rolls are kept across retries (with a fresh rng_strong draw each time) or re-entered. Re-entering 128 flips per retry is a usability failure.\n\n5. Implementation must update the gate in the same change. Keep the literal `rng_strong::fill(&mut entropy)` in main.rs or update REQUIRED_THREE_SOURCE; otherwise prod-feature-check fails.\n\n6. Step 3 placement is confirmed. main.rs and ui/seed_wizard.rs are not host-testable, so the mix belongs in pqsigner-domain or bip39. The tag should be length-framed or fixed-length. \"At least as strong as the better input\" holds only under a random-oracle-style assumption for SHA-256 and with roll buffers independent of the RNG output; say so.\n\n7. Tracked issues to add.\n- #784 (open): restore-wizard typed letters render on a non-forced frame, bypassing the constant-time blitter and the F-24 path. A roll-entry screen is the same class and a closer match than #237.\n- #783 (open): wizard chooser freezes and play_screen drops taps. This directly threatens a 128-tap screen under ui-px.\n- #779 (open): the interactive pixel presenter has no automated coverage.\n- #470 (open): seed_wizard seen_last is a bare bool.\n- #778 (open): first-run wizard busy film freezes.\n- #636 (open): duress-pin is absent from PROD_SHIP_FEATURES.\n- #400 (open): parent of #594.\n- The nine listed issues are all open and correctly described. No issue exists for dice, coin or user entropy, so the untracked delta stands.\n\n8. Budget and cost.\n- The wizard already has ui-px branches (px_choice at seed_wizard.rs:52, 138). Under ui-px a new step needs a native screen, not only the legacy 16x4 path.\n- The 34,071 B headroom was measured without mode-production and rdp2-self-lock (per CLAUDE.md), so \"fits today\" is not evidenced for the PROD_SHIP_FEATURES image (Makefile:2718).\n- Cost S holds only for legacy coin-flip step + mix crate + KAT + gate update + docs. With a ui-px screen or any step-6 variant it is M.\n\n9. Validation prerequisite stands. #700 is correct, and the pq1 bench board has no LCD.\n\n10. Live defects: none asserted and none found. NewWallet seed generation under PROD_SHIP_FEATURES goes through the strict three-source rng_strong::fill and aborts on failure (main.rs:965-971).\n\n11. Precedent: the Coldcard incident source is now checked. Its paper-wallet \"Use Dice\" path bypassed the bad RNG; the post does not say dice mixing would have protected new seeds. Do not cite it as proof that the mix would have helped.",
+  "corrected_priority": "P3",
+  "corrected_cost": "M",
+  "corrected_kind": "firmware",
+  "live_defect": {
+   "is_defect": false,
+   "evidence": "secure/src/main.rs:964-974: rng_strong::fill(&mut entropy) is strict, with a failure -> retry branch and zeroize; rng_strong.rs:20-29 has no silent fall-through; scripts/rng_consumer_audit.py:81-82 pins the call. No defect was asserted by either member and none was found.",
+   "reachable_in_production_config": "n/a - no defect; the NewWallet path is live under PROD_SHIP_FEATURES (Makefile:2718) and behaves as designed",
+   "severity": "none"
+  },
+  "evidence": [
+   "secure/src/main.rs:950-975: NewWallet is a single rng_strong::fill into Mnemonic::from_entropy; no user term",
+   "secure/src/main.rs:4001 (wizard) precedes :4233 (usb_hw::init) and :4280 (boot_ns::boot): no host channel during seed generation",
+   "secure/src/hw/buttons.rs:183,189,297-325: LONG_PRESS_MS=500, COMBO_WINDOW_MS=80, chord synthesised as (Right, Long); events are only Left/Right x Short/Long",
+   "secure/src/ui/seed_wizard.rs:129-170: choose_setup_mode uses Right-Long as confirm, Left-Long as cancel, reset_activity per event; :52,138 ui-px branch already in the wizard",
+   "secure/src/ui/seed_wizard.rs:747-785: enter_mnemonic with checksum validation, so an offline dice-generated mnemonic is already enterable via Restore",
+   "scripts/rng_consumer_audit.py:17-20 (bans software PRNGs incl. yasmarang), :81-82 (requires 'rng_strong::fill(&mut entropy)' in main.rs), :131-137 (PRODUCTION_ENTROPY_BACKENDS_REQUIRED); Makefile:2734-2737 wires it into prod-feature-check",
+   "secure/src/rng_strong_fold.rs:1232-1921: about 25 host tests on the fold, incl. :1774 fold_se_blocks_rejects_zero_contribution_without_xor; also compiled via secure-miri-tests/src/lib.rs:251",
+   "docs/security/vendor-signing-key-compromise.md:666-676: about 3,100 free bytes, 208 B floor per signature, 'dead on arrival; do not fund one as mitigation' (confirmed)",
+   "/home/nicola/repos/trezor-firmware/core/src/apps/management/reset_device/__init__.py:91-127,543-551: sha256(int || ext), HMAC commitment, prev_int_entropy reveal (confirmed)",
+   "docs/archive/work-todo-retired-2026-07-19.md:4539-4544: rng-3 is a DESIGN item about verifiability, 'record as deliberate design decision'",
+   "GitHub #371 body: scope is 'external-entropy verifiability ... attacker-rigged RNG is unauditable'",
+   "GitHub #784, #783, #779, #470, #778, #636 are open wizard/UI issues not listed by the merge",
+   "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware (fetched): root cause is a software Yasmarang fallback from a config-macro check, not a TRNG hardware failure",
+   "Makefile:2718 PROD_SHIP_FEATURES includes mode-production and rdp2-self-lock, which the 34,071 B headroom measurement excludes (CLAUDE.md ui-px budget paragraph)"
+  ],
+  "tracked_issues": [
+   "#371 (open): rng-3 adopt/decline on external-entropy VERIFIABILITY; the core item answers only an adjacent question",
+   "#238 (open): R covert-channel docs reframing",
+   "#704 (open): STM32 TRNG runs configuration C (STM32 leg only)",
+   "#641 (open): startup repetition test on first SE responses",
+   "#594 (open) and parent #400 (open): SP 800-90B assessment",
+   "#370 (open): duress wallet silent SE fall-through",
+   "#369 (open): per-word TRNG sanity check",
+   "#700 (open): trusted-UI flows never run on pq1 silicon",
+   "#237 (open): display emanation, seed-wizard scope",
+   "#784 (open, ADD): restore-wizard letters bypass the constant-time blitter / F-24 force path; same class as a roll-entry screen",
+   "#783 (open, ADD): wizard chooser freeze, play_screen drops taps",
+   "#779 (open, ADD): interactive pixel presenter has no automated coverage",
+   "#470 (open, ADD): seed_wizard seen_last is a bare bool",
+   "#778 (open, ADD): first-run wizard busy film freezes",
+   "#636 (open, ADD): duress-pin absent from PROD_SHIP_FEATURES",
+   "Existing gate, not an issue: make rng-consumer-audit (scripts/rng_consumer_audit.py) already fences the Coldcard software-fallback class"
+  ],
+  "untracked_delta": "Still untracked: (1) the concrete additive hash-mix step on NewWallet, with a button encoding that respects the Short/Long/chord event model; (2) the mix function plus KAT in a workspace crate, and the matching rng_consumer_audit.py update; (3) the scope statement (RNG-failure defence only, no proof-of-consumption screen); (4) a documented \"generate your mnemonic offline from dice and use Restore\" procedure as the zero-code auditable path, which the merge missed; (5) the note that a host-side entropy_check is infeasible because the wizard precedes NS and USB. Amend #371 with two separate decisions (mix: adopt/decline; verifiability: adopt/decline) rather than calling it closed.",
+  "decision_conflicts": [
+   "Step 6 dice-only (seed = SHA-256(rolls)) conflicts with the item's own 'rng_strong stays mandatory', with the CLAUDE.md hardware-TRNG rule in spirit, and with the REQUIRED_THREE_SOURCE check in scripts/rng_consumer_audit.py:81-82",
+   "ui-px gesture model: the chord is confirm/sign (buttons.rs:297-299; owner decisions 2026-09-22/24); a bit-entry screen must not treat a chord or Long press as data and must not finish early on one",
+   "vendor-signing-key-compromise.md:666-676: any claim that step 6 gives meaningful evidence against malicious firmware must stay bounded by the 'do not fund subliminal-channel closure' finding; the merge respects this",
+   "Secure-slot budget: ui-px is 76,949 B over the slot, and the non-px 34,071 B headroom excludes mode-production and rdp2-self-lock; a ui-px native screen waits on the flash-lever decision",
+   "No conflict confirmed with invariants #1 and #6, the KDF tags, the frozen wire formats, or 'No software PRNG' for the additive mix (steps 1-5)"
+  ]
+ }
+}

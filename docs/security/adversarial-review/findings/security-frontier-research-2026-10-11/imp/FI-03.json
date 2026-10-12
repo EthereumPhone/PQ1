@@ -1,0 +1,30 @@
+{
+ "id": "FI-03",
+ "title": "FSBL verify-chain FI bundle before the range freezes: TRNG-driven delays, default-poisoned jump target set only after the full chain, volatile secbool staircase across slot admission, tail-padding check, and checksum-redundant C10 verify",
+ "threat": "The FSBL becomes physically immutable after RDP-2 (invariant #10), so any FI weakness in it is permanent. Today: wait_random uses the constant 0x42 (an attacker's second fault needs no new timing, so check_true's double-eval collapses to one setup); the branch target is a plain `Slot` enum flowing through `Option` (niche-encoded, one bit from `None` to `Some(Slot::A)`) with no final re-check before into_slot; verify_images hashes only secure_len/ns_len bytes and never checks the slot tail, so attacker-written gadgets after the signed image survive; the C10 verifier is one code path, and Wagner et al. 2023 / BSI-AISEC 2025 show a faulted WOTS checksum during VERIFICATION accepts forged signatures.",
+ "proposal": "(1) Bring up the RNG peripheral in the FSBL (RCC clock + TRNG, same driver as hw/rng.rs) so fsbl::fi::wait_random draws TRNG lengths; fail = halt. (2) Trezor next_stage_addr pattern: a `volatile u32 next_stage = 0` written with the slot's secure address only as the last statement after filter_valid + verify_images + tz-1 + render all return OK_SENTINEL; into_slot takes that address, so a skipped check branches to 0 (reset vector/fault), never into a slot. (3) Replace the Option/enum flow with volatile Hamming-distant verdict words per stage (manifest_ok, images_ok, optbytes_ok, render_ok) folded with an AND over sentinels, and a triple redundant compare immediately before the branch (Trezor firmware_present/backup). (4) verify_images: after hashing, scan secure_len..SLOT_SECURE_CAPACITY and ns_len..SLOT_NS_CAPACITY and require a uniform 0xFF/0x00 fill (Trezor check_image_contents). (5) Make the signature verify redundant with independent inputs: verify once, wait_random, verify again with the WOTS target-sum/checksum recomputed from a separately-copied message digest, and compare the two root outputs under ct_eq before the sentinel; add a Hamming-distant `sigmask/sigmask_inv`-style step mask that must equal the expected set at exit. (6) Set MSPLIM in the FSBL (fsbl/src/main.rs:172 note). Land a rainbow sweep for fsbl::verify_images (#591) as the regression test.",
+ "rationale": "This is the EF-swarm F15 'FI-hardened FSBL image verify' gate plus the Trezor boardloader patterns, bundled because they all touch the frozen range and must land before the WRP/RDP-2 ceremony. Each closes a distinct single-fault class (retiming, jump-target, data-flow, hidden tail, verifier checksum) that the current sentinel-only gating does not.",
+ "repo_evidence": [
+  "fsbl/src/fi.rs:5-33 (fixed delay byte 0x42; 'Future: swap for TRNG'; no issue tracks it)",
+  "fsbl/src/main.rs:220-222 (`let Some((slot, secure_digest)) = pick_slot(...) else { halt() }`), :297 (`branch::into_slot(slot)`), :367-381 (pick_slot returns Option<(Slot, digest)>)",
+  "fsbl/src/branch.rs:36-50 (into_slot takes `Slot` enum, derives address, no default-fail target)",
+  "fsbl/src/verify.rs:38-108 (hashes secure_len/ns_len only; no tail scan)",
+  "fsbl/src/main.rs:321-354 (filter_valid: single verify_signature path inside check_true_into_sentinel)",
+  "fsbl/src/main.rs:172 and fsbl/src/manifest.rs:30 ('16 KB stack, no MSPLIM')",
+  "gh #591 OPEN high (no sweep for fsbl::verify_images)"
+ ],
+ "vendor_precedent": "Trezor boardloader main.c:111-129 fih_delay/fih_ensure, :250-279/:356-369 volatile next_stage_addr; bootloader main.c:118-121,593-595,630-632,693-701 default-fail jump fn + triple compare; fw_check.c:59-66,111-153 volatile secbool staircase; image.c:428-523 chunk hashes + padding scan; boot_header.c:49-109 sigmask/sigmask_inv.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "FSBL flash budget (40,960 B registry, 28,704 B LOAD span today) and 16 KiB stack bound (10,372 B used) \u2014 a second verify pass must reuse the same stack frame; TRNG init adds boot time to the measured 2.9 s. Must not add any option-byte write path (Draft 1.2 C1). Changes the measured FSBL bytes, so the reproducible-build receipts and geometry gate (#540) re-pin.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/boardloader/main.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/bootloader/fw_check.c",
+  "https://eprint.iacr.org/2023/1572",
+  "https://eprint.iacr.org/2025/2096",
+  "https://donjon.ledger.com/blog/tropic01-laser-fault-injection/"
+ ],
+ "surface": "fi"
+}

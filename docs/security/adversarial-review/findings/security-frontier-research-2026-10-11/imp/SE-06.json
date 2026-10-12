@@ -1,0 +1,25 @@
+{
+ "id": "SE-06",
+ "title": "Provisioning/first-boot ordering guards: handshake-first E140 write, no plaintext rewrite of a rotated PBS, and fail-SAFE dual is_provisioned with a third (MCU-journal) leg so a transport glitch can never enter the seed wizard on a used device",
+ "threat": "(a) `store_objects` step 1 unconditionally writes the current PBS to E140 in plaintext; after the salted-final rotation a wizard re-provision therefore puts the FINAL pairing secret on the I2C bus in clear (OP17-3). (b) SE050 `check_provisioned` fails open (init/transport error \u2192 'unprovisioned'), and dual-SE AND-combines it, so one SE050 glitch on a live device makes the firmware offer the seed wizard, which on confirm overwrites the real wallet's objects (F24). (c) The bench E140 brick (locked at LcsO=Op with an unknown PBS) came from writing E140 without first proving which PBS the chip holds.",
+ "proposal": "Port Trezor's sequence 1:1: before any E140 write, attempt a handshake with the expected current PBS; write only if that handshake fails authoritatively (D1 split), never when transport-inconclusive; after writing, prove it with a real handshake before proceeding; refuse the plaintext path entirely once the page-127 journal says `Rotated` (the salted-final PBS may only be installed through `rotate_pbs_to_salted` under the transport shield). Make `Se050::check_provisioned` return `Result<bool>` and map Err \u2192 provisioned (fail-safe, matching OPTIGA); add a page-127 'wallet-provisioned' sentinel written after a successful `provision` and require all three (OPTIGA F1E1 \u2227 SE050 \u2227 journal) to read 'unprovisioned' before the wizard is offered; any disagreement parks with 'SE state mismatch', never wizard. Every provisioning entry point first checks that no later irreversible step (RDP-2 done, rotation done, LcsO=Op) has happened, like Trezor `secrets-init`.",
+ "rationale": "These are the exact ordering mistakes Trezor's prodtest guards against (handshake-first E140, refuse secrets-init once locked/paired) and pq1 has already paid for one of them with a bricked bench part. The fail-safe provisioned check is the difference between 'the device parks' and 'the user's funds are overwritten by a wizard misfire'.",
+ "repo_evidence": [
+  "secure/src/optiga/mod.rs:2083-2114 store_objects step 1 unconditional plaintext E140 write; :603-642 pair_for_first_boot; :820-860 setup_pbs_no_handshake uses current_pbs() (salted when Rotated)",
+  "secure/src/se050/mod.rs:1788-1797 check_provisioned \u2192 unwrap_or(false) (fails open)",
+  "secure/src/optiga/mod.rs:945-1012 check_provisioned fails safe (asymmetry)",
+  "secure/src/dual_se.rs:141-143 is_provisioned = optiga && se050",
+  "Issues #118 (OP17-3), #111 (SE17-8), #169 (F24), #121, #126; docs/secure-elements/optiga-brick-postmortem.md"
+ ],
+ "vendor_precedent": "Trezor core/embed/projects/prodtest/cmd/prodtest_optiga.c:109-162 (pairing-secret write only on handshake failure, then re-handshake to prove), prodtest_secrets.c:90-182 (secrets-init refuses if sector/OPTIGA locked or pairing started), secret.c:544-588.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "A fail-safe provisioned check turns a genuinely blank-but-glitching SE050 into a parked device (needs a dev-only `wipe-for-wizard` path, which exists); the journal sentinel must be written AFTER both SEs confirm the write-once objects (else a power cut strands a half-provisioned device \u2014 the #445 strand class); handshake-first requires the D1 Shield/Transport split (#385) to be reliable.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/prodtest/cmd/prodtest_optiga.c:109-162",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/prodtest/cmd/prodtest_secrets.c:90-182"
+ ],
+ "surface": "se"
+}

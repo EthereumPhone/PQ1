@@ -1,0 +1,24 @@
+{
+ "id": "pin-05",
+ "title": "One lockout response for all three unlock entry arms (boot-interactive, PendSV re-unlock, USB)",
+ "threat": "Attempt-counter bypass / inconsistent wipe: only the USB arm calls `trigger_lockout_wipe`. The boot-interactive and PendSV arms print 'PIN locked / power cycle' and rely on the next boot's `page124 >= 10` check. An SE-originated PinLocked (SE050 AuthMethodBlocked, E120 exhaustion, or a forged bare 0x6986 status word) with page 124 < 10 therefore leaves a locked-but-unwiped device whose halves are intact on both SEs, and the next boot does not wipe either.",
+ "proposal": "Route every `UnlockError::PinLocked` through the same FI-shaped `trigger_lockout_wipe` (moved out of cmd_request_unlock into nsc/mod.rs so all arms share it), with the Trezor rule 'if ctr+1 >= PIN_MAX_TRIES then wipe' evaluated identically regardless of trigger. Keep the #715 honesty fix: the AlreadyAtMax short-circuit (counter at MAX, nothing wiped) must display 'PIN locked' and arm the page-125 flag so the next boot's resume path wipes, while a fresh verdict-class PinLocked wipes immediately and prints WIPING/WALLET WIPED. Add the case 'SE says locked while page 124 < MAX' to the boot `attempts_exhausted` check (treat as wipe_armed).",
+ "rationale": "`main.rs:4197-4206` and `main.rs:4587-4597` break on PinLocked with no wipe; `main.rs:1935-1951` only wipes on `wipe_armed || pin_attempts_read() >= MAX_ATTEMPTS`; `cmd_request_unlock.rs:159-164` is the only caller of `trigger_lockout_wipe`. Trezor's unlock() wipes at the counter check regardless of how it was invoked. Not tracked as its own issue (adjacent #104/#125/#715).",
+ "repo_evidence": [
+  "secure/src/main.rs:4197-4206 (boot-unlock PinLocked arm: no wipe)",
+  "secure/src/main.rs:4587-4597 (PendSV PinLocked arm: no wipe)",
+  "secure/src/main.rs:1935-1951 (boot check keyed only on page 124)",
+  "secure/src/nsc/cmd_request_unlock.rs:159-164 (sole wipe caller)"
+ ],
+ "vendor_precedent": "Trezor storage.c:1224-1240 (wrong PIN: wipe if ctr+1 >= PIN_MAX_TRIES, single code path for every caller).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "Making SE-originated PinLocked wipe immediately strengthens the #104/#105 forged-status-word concern (an unauthenticated bare 0x6986 becomes a one-APDU wipe trigger from a bus tap); gate the immediate wipe on an R-MAC-authenticated status, and on an unauthenticated one only arm the flag and require a second confirmation at next boot. Inherits pin-01 until the brick is fixed.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:1180-1240",
+  "https://github.com/EthereumPhone/PQ1/issues/715"
+ ],
+ "surface": "pin"
+}

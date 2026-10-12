@@ -1,0 +1,27 @@
+{
+ "id": "USB-04",
+ "title": "Deny NS the clock and voltage levers: secure RCC/PWR/SYSCFG attribution, secure PVD (2.8 V) with zeroize-and-reset, silicon receipts",
+ "threat": "RCC, PWR and SYSCFG are not attributed secure, so a hostile NS can (a) retune PLL/VOS to glitch secure crypto (clock-glitch lever without touching the board), (b) enter STOP/low-power from NS, which stops TIM2/TIM3 and therefore freezes the S-only 120 s inactivity timer and the consumption mask \u2014 a software bypass of 'NS does not control the inactivity timer', (c) disable HSI48/CRS or the OTG clock to wedge the device. Separately, a hostile USB host (or a glitch rig) can brown the rail; without a PVD the secure world keeps executing through the dip.",
+ "proposal": "(1) In `sau.rs` after the GTZC allowlist: write RCC_SECCFGR (all oscillators/PLLs/PRESC/BOOST secure), PWR_SECCFGR (WUP, LPM, VDM, VB, APC secure) and SYSCFG_SECCFGR (SYSCFGSEC, CLASSBSEC, FPUSEC); add them to the exact-equality const-asserts and `verify_or_halt`, and extend `gtzc_test.rs` with RCC/PWR/SYSCFG NS-alias probes. Move every clock/power action NS performs today into the secure init (the synopsys-usb-otg `UsbPeripheral::enable()` at nonsecure/src/usb/mod.rs:41 touches RCC from NS \u2014 it must become a no-op with the secure side pre-enabling OTG+HSI48+CRS, which usb_hw.rs already partially does). (2) Arm PVD level 5 (~2.8 V) rising+falling as a SECURE IRQ at highest priority whose handler zeroizes SRAM secret caches and resets (not the SE wipe), mirroring the HardFault policy; keep BOR_LEV in the ship option-byte profile as the hardware backstop. (3) Record the silicon receipt (#80) after `lock_security_config`.",
+ "rationale": "Trezor secures RCC clock sources (all but PLL3), every PWR low-power/voltage bit, SYSCFG, IWDG/WWDG and the cache registers, and arms a PVD that terminates execution on a dip. pq1's allowlist covers crypto, SE buses, UCPD1, TIM2/3, SPI1 and IWDG \u2014 but not the peripherals that control the clock and the voltage those blocks run from. #80 is already priority:high; PVD is untracked (the #21 reference is the TAMP CSS/PVD backup-domain item, not a core PVD).",
+ "repo_evidence": [
+  "grep RCC_SECCFGR|PWR_SECCFGR|pwr_seccfgr secure/src -> no hits",
+  "secure/src/sau.rs:257-399 (GTZC1 TZSC allowlist only; no RCC/PWR/SYSCFG SECCFGR writes)",
+  "grep -i pvd secure/src/hw secure/src/main.rs -> only main.rs:4643 cross-reference to '#21-tamp-css_pvd'; secure/src/hw/tamp.rs:33 (ITAMP1 is backup-domain voltage, not core PVD)",
+  "nonsecure/src/usb/mod.rs:41 (NS `fn enable()` touches RCC today)",
+  "secure/src/timeout.rs:27 (S-only TIM inactivity timer would stop in NS-entered STOP)",
+  "GitHub #80 OPEN 'F3 \u2014 RCC/PWR clock security (silicon)' priority:high"
+ ],
+ "vendor_precedent": "Trezor tz_init.c:249-298 (RCC/PWR/SYSCFG/IWDG/WWDG/RAMCFG/cache secure+privileged), pvd.c:28-52 (PVD level 5, IRQ_PRI_HIGHEST -> error_shutdown), option_bytes.c BOR level 4.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Securing RCC breaks USB enumeration unless the NS driver's clock writes are removed first \u2014 each stray NS write becomes a TZIC illegal access and, under `tzic-wipe`, a device wipe; needs the pq1 silicon run before enabling in dual-SE images. PVD false trips on USB-C attach transients (Trezor's 'ready recently' workaround shows this is real) \u2014 validate thresholds on pq1 with the LDO2 SE rail switching.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:249-298",
+  "/home/nicola/repos/trezor-firmware/core/embed/sys/pvd/stm32/pvd.c:28-52",
+  "STM32U5 RM0456 \u2014 RCC_SECCFGR, PWR_SECCFGR, SYSCFG_SECCFGR, PWR PVD"
+ ],
+ "surface": "usb"
+}

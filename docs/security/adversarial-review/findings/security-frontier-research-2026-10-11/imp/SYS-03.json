@@ -1,0 +1,27 @@
+{
+ "id": "SYS-03",
+ "title": "Memory-fault resilience: MSPLIM/PSPLIM in all three images, SRAM2/SRAM3 ECC with double-error NMI, flash ECCD NMI, and secret caches relocated to an ECC-on bank",
+ "threat": "Silent stack overflow (C10 verify frames are ~10 KB) corrupting .data/secrets with no fault; laser/EM/Rowhammer-class bit flips in SRAM or flash reads (SLasH-DSA shows a memory fault during signing yields universal forgery; the ct-compare only catches faults that differ between passes) going undetected; the existing NMI handler has no source and the existing HardFault policy never triggers on a flipped bit.",
+ "proposal": "(a) Set MSPLIM (and PSPLIM where PSP is used) in `pre_init` of secure, NS and FSBL so overflow raises UsageFault.STKOF -> escalated HardFault -> existing zeroize+reset; (b) enable SRAM2_ECC / SRAM3_ECC option bytes in the ship profile and RAMCFG ECC with ECC double-error -> NMI, single-error counters readable for telemetry; (c) place `SecureState` secret caches (master_secret, slot_master_entropy, SLOT_CACHE, OptRand/shuffle seeds, signing scratch) in the ECC-on bank via a dedicated linker section; (d) arm FLASH ECCD interrupt/NMI with the Trezor region-scoping rule (fatal always in the secure world; in the FSBL fatal only if the address is inside the FSBL's own range so a damaged slot does not brick the verifier); (e) close #374 with cargo-call-stack on the final production feature combination and make the FSBL frame-sum bound a CI gate.",
+ "rationale": "Every one of these is a documented requirement (#48/#94/#542/#543/#374) with zero code since 2026-05. Trezor sets MSPLIM at reset, pins SRAM3 ECC in OPTR, decodes ECCD in the NMI handler, and clears unused stack at every stage. MSPLIM is a one-line, zero-cost detector that matters more for pq1 than a stack canary because the signing frames are large and Rust has no SSP by default. ECC turns the 'no software redundancy can see a flipped bit' class into a hardware fault that reuses the already-correct NMI/HardFault zeroize path.",
+ "repo_evidence": [
+  "grep MSPLIM|PSPLIM|RAMCFG|SRAM2_ECC|ECCIE|ECCD over secure/src fsbl/src nonsecure/src: zero code hits (only comments fsbl/src/manifest.rs:30, fsbl/src/main.rs:172)",
+  "secure/memory.x:28 and nonsecure/memory.x:13 \u2014 `_stack_start` only, no limit register",
+  "secure/src/main.rs:4643-4656 \u2014 NMI handler exists, 'today NO NMI source is armed'",
+  "secure/src/hw/flash.rs \u2014 no ECCR/ECCD handling (grep)",
+  "issues #48 (ECC-on bank, OPEN), #374 (worst-case stack ship-blocker, OPEN), #542, #543, #94"
+ ],
+ "vendor_precedent": "Trezor: core/embed/sys/startup/stm32u5/startup_init.c:336 (MSPLIM = stack_start+128), :349 (clear_unused_stack); core/embed/sys/task/stm32/systask.c:777-790,823-840 (STKOF-aware UsageFault/HardFault re-base MSP), :877-900 (ECCD in NMI, region-scoped in loaders); core/embed/sec/option_bytes/stm32u5/option_bytes.c:79-80 (SRAM3_ECC in OPTR).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "ECC-on SRAM banks on U585 reduce usable SRAM and add wait states; the secure image's 76,949 B overshoot with ui-px makes any linker re-layout contentious; option-byte additions must be folded into the single Phase A ship profile (SYS-01 b) and into the RDP-0 verifier so the pre-power SWD check still matches; MSPLIM in NS is NS-owned and can be cleared by NS code (keep the secure-world MSPLIM as the load-bearing one); ECC double-error NMI during a flash write of pages 123-127 must not corrupt the journal (TLA+ crash-atomicity model should be extended).",
+ "sources": [
+  "https://arxiv.org/abs/2509.13048",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/startup/stm32u5/startup_init.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/task/stm32/systask.c",
+  "https://eprint.iacr.org/2023/042"
+ ],
+ "surface": "systemic"
+}

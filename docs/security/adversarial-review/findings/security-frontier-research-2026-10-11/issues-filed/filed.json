@@ -1,0 +1,226 @@
+{
+ "01": {
+  "number": 846,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/846",
+  "title": "NSC gateway is re-entrant: a nested veneer call can replace the signed calldata after the confirm screen in the single-sign handler (SIGN_SNAP_BUF is re-read post-confirm)",
+  "file": "01-nsc-gateway-reentrant.md",
+  "pending": false
+ },
+ "02": {
+  "number": 847,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/847",
+  "title": "FSBL: the signature gate admits on one skipped branch, and the boot slot is one unencoded stack word (close before the WRP + RDP-2 freeze)",
+  "file": "02-fsbl-gate-single-skip-and-slot-word.md",
+  "pending": false
+ },
+ "04": {
+  "number": 848,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/848",
+  "title": "Ship option-byte profile has no field for SRAM_RST (or SRAM2_RST / SRAM2_ECC / SRAM3_ECC): the first-boot self-lock would freeze the factory default, which never erases secure RAM on reset",
+  "file": "04-sram-rst-missing-from-ship-profile.md",
+  "pending": false
+ },
+ "05": {
+  "number": 849,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/849",
+  "title": "RDP-2 burn routine is inert: OPTSTRT / OBL_LAUNCH / OPTLOCK are written to FLASH_SECCR, where they do not exist, and the routine returns Ok (split out of #268)",
+  "file": "05-rdp2-burn-inert.md",
+  "pending": false
+ },
+ "06": {
+  "number": 850,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/850",
+  "title": "The verify-before-first-power check that invariant 10(a) depends on cannot be run by a buyer: tools/verify_ship_state.py hashes zero bytes of flash, has only a bench profile, and no sealed unit exposes SWD",
+  "file": "06-verify-before-first-power-tool.md",
+  "pending": false
+ },
+ "08": {
+  "number": 851,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/851",
+  "title": "halt_on_glitch parks in a bare wfe loop without zeroizing on a genuinely detected glitch (the part of #835 H4 that survives removing the TRNG-failure sink)",
+  "file": "08-halt-on-glitch-no-zeroize.md",
+  "pending": false
+ },
+ "10": {
+  "number": 852,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/852",
+  "title": "PIN entry does not hold TrustedUiWaitGuard while iwdg is in the ship set: by source read, an ordinary slow PIN entry ends in a watchdog reset",
+  "file": "10-iwdg-reset-during-pin-entry.md",
+  "pending": false
+ },
+ "11": {
+  "number": 853,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/853",
+  "title": "Lockout response differs by unlock arm: only the USB arm wipes on PinLocked, and a lockout raised by a secure element at the boot or idle prompt has no wipe trigger at all",
+  "file": "11-lockout-response-differs-by-arm.md",
+  "pending": false
+ },
+ "13": {
+  "number": 854,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/854",
+  "title": "No stack limit register (MSPLIM) is set in any image, and the FSBL has no NMI or ECC handler; the FSBL half can never be added after the freeze",
+  "file": "13-msplim-and-fsbl-nmi-handler.md",
+  "pending": false
+ },
+ "14": {
+  "number": 855,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/855",
+  "title": "PIN credentials are not die-bound or salted (SE050 UserID is the raw PIN, OPTIGA F1D0 is one SHA-256 of it), while the threat model says single-chip extraction is defeated",
+  "file": "14-pin-credentials-not-die-bound.md",
+  "pending": false
+ },
+ "15": {
+  "number": 856,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/856",
+  "title": "The secure-world SECBOOTADD0 check does nothing in production: its mismatch branch contains only secure_log!, which compiles to nothing without debug-log",
+  "file": "15-secbootadd0-verdict-log-only.md",
+  "pending": false
+ },
+ "16": {
+  "number": 857,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/857",
+  "title": "approve(addr, 0) on a contract with no token metadata renders \"Revoke approval\"; on an ERC-721 contract the same call grants token 0",
+  "file": "16-revoke-label-on-unknown-token-approve.md",
+  "pending": false
+ },
+ "17": {
+  "number": 858,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/858",
+  "title": "Seed letters and the live PIN digit are drawn through the public (address-keyed) font path on the shipping 16x4 UI, and the letter dial always starts at \"a\"",
+  "file": "17-seed-letters-and-pin-digit-public-glyph-path.md",
+  "pending": false
+ },
+ "18": {
+  "number": 859,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/859",
+  "title": "cmd_pin_attempt_log guards its write to a non-secure pointer with one bare branch (no FI sentinel), unlike its sibling handlers",
+  "file": "18-pin-attempt-log-bare-pointer-check.md",
+  "pending": false
+ },
+ "19": {
+  "number": 860,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/860",
+  "title": "A locked device paints the trusted PIN dialog on every host unlock request with no rate bound, and the PIN start-digit scrambler falls back to all zeros when the RNG fails",
+  "file": "19-pin-prompt-on-demand-and-scrambler-fallback.md",
+  "pending": false
+ },
+ "20": {
+  "number": 861,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/861",
+  "title": "Low-severity hardening items from the 2026-10 frontier research: no jitter before the first sentinel check, cycle counter exposed to non-secure code, single-read lockout, dead internal tampers, no blank check after erase, placeholder device info",
+  "file": "20-low-severity-hardening-items.md",
+  "pending": false
+ },
+ "21": {
+  "number": 862,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/862",
+  "title": "First-boot journal: ALL_DONE is committed without requiring the earlier step bits, and all_done() tests that one bit, so a step skipped by one fault is never re-run",
+  "file": "21-first-boot-done-gates.md",
+  "pending": false
+ },
+ "21b": {
+  "number": 863,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/863",
+  "title": "duress-pin: page-123 counters have no wallet discriminator, so OFFCHAIN_STATUS after a decoy unlock shows the real wallet's counts",
+  "file": "21b-duress-page123-discriminator.md",
+  "pending": false
+ },
+ "22": {
+  "number": 864,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/864",
+  "title": "FSBL freeze items with no issue: every FI delay is the constant 0x42, the slot tail beyond the declared lengths is never measured or checked blank, and the boot fingerprint covers the secure image only",
+  "file": "22-fsbl-freeze-items.md",
+  "pending": false
+ },
+ "23": {
+  "number": 865,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/865",
+  "title": "FI and wipe assurance does not test what the docs say: fi_target does not build, the C10 verify sweep never reaches the WOTS or root compares, delay-source fixes are stranded on a branch, and the wipe-recovery e2e cannot pass since S-6",
+  "file": "23-fi-and-wipe-assurance-gaps.md",
+  "pending": false
+ },
+ "25": {
+  "number": 866,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/866",
+  "title": "Docs and comments that describe controls or states the code does not have (ten items, 2026-10 frontier research)",
+  "file": "25-docs-claims-without-controls.md",
+  "pending": false
+ },
+ "c-046": {
+  "comment_on": 46,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/46#issuecomment-6122767646",
+  "file": "c-046-oem-lock-bits.md"
+ },
+ "c-070": {
+  "comment_on": 70,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/70#issuecomment-6122768802",
+  "file": "c-070-looks-fixed.md"
+ },
+ "c-075": {
+  "comment_on": 75,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/75#issuecomment-6122770109",
+  "file": "c-075-tamp-scr-cleared-before-read.md"
+ },
+ "c-080": {
+  "comment_on": 80,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/80#issuecomment-6122771268",
+  "file": "c-080-wrong-address-and-flash-acr.md"
+ },
+ "c-106": {
+  "comment_on": 106,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/106#issuecomment-6122772481",
+  "file": "c-106-wipe-verdict-additions.md"
+ },
+ "c-130": {
+  "comment_on": 130,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/130#issuecomment-6122773505",
+  "file": "c-130-recompute-is-merged.md"
+ },
+ "c-136": {
+  "comment_on": 136,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/136#issuecomment-6122774647",
+  "file": "c-136-looks-fixed.md"
+ },
+ "c-168": {
+  "comment_on": 168,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/168#issuecomment-6122775776",
+  "file": "c-168-post-wipe-recovery-mechanisms.md"
+ },
+ "c-239": {
+  "comment_on": 239,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/239#issuecomment-6122777117",
+  "file": "c-239-looks-fixed.md"
+ },
+ "c-249": {
+  "comment_on": 249,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/249#issuecomment-6122778334",
+  "file": "c-249-uid-address.md"
+ },
+ "c-370": {
+  "comment_on": 370,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/370#issuecomment-6122779543",
+  "file": "c-370-looks-fixed.md"
+ },
+ "c-418": {
+  "comment_on": 418,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/418#issuecomment-6122780693",
+  "file": "c-418-looks-fixed.md"
+ },
+ "c-777": {
+  "comment_on": 777,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/777#issuecomment-6122781862",
+  "file": "c-777-recompute-is-merged.md"
+ },
+ "c-784": {
+  "comment_on": 784,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/784#issuecomment-6122782985",
+  "file": "c-784-live-pin-digit.md"
+ },
+ "26": {
+  "number": 867,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/867",
+  "title": "Owner decision before the first user wallet: take #131 (per-key budget reset) and an optional guard hook in PQSmartWallet as one contract decision; a separate vault contract is the candidate for protecting savings",
+  "file": "26-wallet-contract-decision-before-launch.md",
+  "pending": false
+ }
+}

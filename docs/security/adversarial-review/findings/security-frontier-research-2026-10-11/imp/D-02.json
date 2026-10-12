@@ -1,0 +1,28 @@
+{
+ "id": "D-02",
+ "title": "Display-bus implant self-check: factory-enrolled electrical fingerprint of SPI1/DC lines (GPIO RC-decay timing), re-verified at boot and immediately before the seed wizard / PIN entry",
+ "threat": "Supply-chain / reseller-stage hardware implant tapping the NV3007 SPI (SCK/MOSI/CS/DC) to capture seed words and PIN glyphs \u2014 exactly the Ledger Nano X implant class (passive SPI sniff + glyph template match + LTE exfil). pq1 has no detection at all: the firmware is genuine, the board is not, and the only documented layer is photos + packaging (user-device-verification.md:163-168).",
+ "proposal": "Firmware self-test on the four trusted-display lines, run with the panel idle and CS deasserted: for each line, configure the pin as open-drain output with the internal pull-up (NOT analog mode \u2014 see the #705 IDR lesson), drive low, release, and count DWT cycles until IDR reads high; repeat N times with the mask PWM paused. The decay constant is pull-up R (~40 k) x total line capacitance (trace + panel input + any tap). An implant input pin plus its stub adds roughly 3-10 pF on a ~15-30 pF net, i.e. a 10-50% shift, resolvable at 160 MHz. Make it ratiometric (each line vs the others, which share process corner and temperature) and temperature-compensated via the internal temperature sensor ADC. Enrol the per-line baseline band at the factory (RDP-0 stage, written to a per-device page or OTP) and re-check at every boot and immediately before `show_mnemonic`, `enter_pin`, and the restore wizard; a miss refuses the wizard/sign with a loud trusted-UI screen and advises the verification ceremony. Treat this as the pq1 analogue of PACTOR's sub-pF capacitance sensing with the temperature-selected threshold their v2 needed.",
+ "rationale": "The one real implant sat on the display bus, the user's direct question is 'can the FSBL or similar detect malicious hardware', and no vendor ships anything. pq1 is unusually well placed: the secure image owns SPI1 and its GPIOs (GTZC-secured), the bus is short (PA4/PA5/PA7 under the same port), and the factory already does a per-device OTP/flash ceremony at RDP-0 where a baseline can be recorded, so a reseller-stage implant (the CryptoBilis pattern) is inserted AFTER enrolment and IS catchable. A self-enrolled first-field-boot baseline would not be (deep-research digest) \u2014 hence factory enrolment.",
+ "repo_evidence": [
+  "secure/src/board/pq1.rs:96-103 (SPI1 PA4/PA5/PA7, `LCD_MISO_PIN = None` \u2014 no readback path exists, so panel-ID attestation is impossible and a line-impedance test is the only in-band self-check)",
+  "secure/src/hw/lcd_nv3007.rs:277-291 (the retracted #705 IDR probe: PB15 in analog mode reads 0 \u2014 any new probe must configure digital input/OD and record the config first)",
+  "secure/src/hw/spi_hw.rs:116-122 (pins set AF push-pull, no pull; no measurement path)",
+  "docs/security/user-device-verification.md:163-168 ('a logger on the LCD SPI bus \u2026 remains the residual, as they are for every wallet vendor')",
+  "docs/security/threat-model.md:343 (defence stack is packaging + ceremony; no electrical self-check)",
+  "grep for IDR/capacit/rise-time/self-fingerprint in secure/src/hw/lcd_nv3007.rs, spi_hw.rs, lcd.rs: none"
+ ],
+ "vendor_precedent": "none shipped. Academic: PACTOR (Columbia/Intel, ISSCC 2024) sub-0.5 pF bus-probe capacitance sensing with temperature-selected threshold; Ledger's recorded implant response is photos + authorised resellers only (Grand slides, 'LEDGER RESPONSE').",
+ "novelty": "beyond",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "False positives from temperature, humidity, flex-connector ageing and pull-up tolerance (+/-30%) \u2014 must be validated on >=5 units across a thermal sweep before any refuse-path ships; a high-impedance FET-buffered tap (<1 pF) or an implant that also replaces the panel/flex to re-centre the capacitance evades it (detection floor, state it honestly). Baseline enrolment moves trust to the factory ceremony (already trusted for OTP transport keys, S-1/S-2 class). The SCK line is also the consumption-mask-adjacent PA5; the test must run with the mask paused and never during a frame. Needs a per-device page write at factory (not FSBL range).",
+ "sources": [
+  "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+  "https://spectrum.ieee.org/hardwired-to-self-destruct",
+  "https://www.ee.columbia.edu/news/self-destructing-circuits-and-more-security-schemes",
+  "https://www.coindesk.com/business/2026/10/09/ledger-investigates-potential-wallet-tampering-after-reports-of-usd86-million-in-crypto-stolen"
+ ],
+ "surface": "display"
+}

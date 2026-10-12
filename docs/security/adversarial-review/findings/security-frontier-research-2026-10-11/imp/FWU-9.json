@@ -1,0 +1,27 @@
+{
+ "id": "FWU-9",
+ "title": "Take the now-or-never WRP-freeze decisions as one package: Option B dual-key FSBL, immutable FSBL_MIN_ACCEPTED_FW_VERSION, vendor-pubkey OTP hash lock, and a sealed 'no secure-world update' cold-vault profile",
+ "threat": "Vendor signing-key theft/coercion signs firmware that passes both verification stages on every device ever shipped, with no fleet remediation except recall; and a re-flashed FSBL today could substitute a different vendor key without refusal. Each of these levers ceases to exist the moment the FSBL freezes under WRP+RDP-2.",
+ "proposal": "Schedule the freeze review now and record outcomes (even 'declined') in vendor-signing-key-compromise.md: (1) Option B \u2014 primary + recovery C10 pubkey in the FSBL (~40 B rodata + one extra verify only when the primary fails), with the recovery key's seed split-custodied offline; (2) an immutable `FSBL_MIN_ACCEPTED_FW_VERSION`/epoch constant so even a leaked primary cannot install below it; (3) #220 \u2014 burn SHA-256(vendor pubkey) into an OTP block and have the FSBL verify its embedded key against it at boot (no-op cost, closes threat-model \u00a79.8); (4) a `mode-sealed` production profile that compiles out CMD_FW_BEGIN..ABORT dispatch (NS image remains updatable only if/when decoders move out of S-world) for a cold-vault SKU, the only option that literally refuses an extraction-enabling update. Pair with #225: per-key C10 signature cap enforced in fwsign's ledger.",
+ "rationale": "The repo's own key-compromise design note identifies these as expiring decisions and recommends taking them together; the task's owner-decision list declined only cosi-style m-of-n committees, not a two-key primary/recovery FSBL. Trezor keeps 3 root keys with sigmask rotation and locks the vendor-header hash into OTP; Tangem removes the update surface entirely; pq1 currently has one baked key, no OTP lock and no floor the vendor cannot lower.",
+ "repo_evidence": [
+  "docs/security/vendor-signing-key-compromise.md:52-94 (Option B pending), :388-401 (Option B + FSBL_MIN floor as ONE decision at the WRP freeze), :415-445 (post-personalization update freeze: 'cost it at the same freeze review')",
+  "docs/security/threat-model.md:517-519 (\u00a79.8 vendor-pubkey OTP hash lock not burned)",
+  "config/production-firmware-vendor-key.sha256 + inventory (policy UNPROVISIONED; no HSM ceremony)",
+  "GitHub #486 OPEN, #220 OPEN, #69 OPEN (ship-blocker), #225 OPEN"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/image/inc/sec/root_keys.h:40-67 (3 root keys, sigmask), image.c:526-574 + docs/core/misc/memory.md:33-36 (vendor-header hash locked into OTP block 2); Foundation Passport Prime 2-of-4 release keys; Tangem non-updatable firmware.",
+ "novelty": "parity",
+ "kind": "process",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Option B costs one extra C10 verify at boot only on primary failure but ~40 B of FSBL rodata against the 52 B draft warning margin (fw-rollback-fsbl-resource-map-2026-07.md:153-164 per VSKC); a recovery key is a second thing to lose or leak. The sealed profile converts every parser fix into RMA/wipe-restore \u2014 must be a separate SKU, not the default. OTP hash lock interacts with the OTP region map already used for the device master (bytes 128..160) \u2014 reserve a block in the frozen map before burning tooling exists.",
+ "sources": [
+  "docs/security/vendor-signing-key-compromise.md",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/image/inc/sec/root_keys.h",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c",
+  "https://docs.foundation.xyz/firmware-updates/passport-prime/",
+  "https://tangem.com/en/learning-hub/post/is-tangem-safe/"
+ ],
+ "surface": "fwupdate"
+}

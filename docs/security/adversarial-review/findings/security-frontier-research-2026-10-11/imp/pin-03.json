@@ -1,0 +1,25 @@
+{
+ "id": "pin-03",
+ "title": "FI-hardened page-124 / page-123 record codec: expanded-bit encoding, replicated halfwords, and 'blank page is ill-formed'",
+ "threat": "Attempt-counter bypass by fault: page 124 encodes 'erased = 0 attempts' (`[0xFF;16]` blank, `[0x00;16]` consumed, any non-0xFF byte counts). A glitch on the flash read path that returns 0xFF (the exact Trezor 2019 voltage-glitch outcome, 'read the PIN entry counter as 0xFFFFFFFF') decodes as a fresh counter; the forward/reverse double scan narrows but does not remove this because both scans share the same 'is it 0xFF' predicate.",
+ "proposal": "Port Trezor's blockwise (U5 ECC-flash) scheme to the page-124 QW record and to page-123 16-B increments: encode the per-record value bit-wise (1->01, 0->10) into a 16-bit word replicated across all eight halfwords of the quad-word; decode every halfword, require the `(c ^ (c<<1)) & 0xAAAA == 0xAAAA` well-formedness on each, and require all eight to agree, else route to the fault handler. Make the erased state ill-formed: `pin_attempts_reset` erases AND writes `expand(0)` as record 0, so an all-0xFF page is a fault, not 'zero attempts' (Trezor `pin_logs_init` verifies compress(expand(fails))==fails before writing). Keep the bump as 'program the next blank QW' so the one-program-per-attempt wear property is preserved. Implement the codec in a pure workspace crate (next to `pqsigner-fi`) and add Kani harnesses for encode/decode round-trip, ill-formed detection, and scan monotonicity (#397).",
+ "rationale": "`flash.rs:764-792` documents the layout ('Programmed sentinel [0x00;16]. Blank sentinel [0xFF;16]'; 'any non-blank pattern marks consumed'); `flash.rs:824-836` double-scan returns 32 on disagreement but both scans agree on a uniformly-faulted 0xFF read. No Kani harness touches page 124 (grep over kani::proof files). Trezor explicitly chose this simplified codec for U5 because an SE counter is primary and flash is ECC \u2014 pq1 is in the same position, so the full guard-key scheme is not needed.",
+ "repo_evidence": [
+  "secure/src/hw/flash.rs:764-792 (erased-equals-zero-attempts layout)",
+  "secure/src/hw/flash.rs:824-836 (fwd+rev scan, same predicate)",
+  "secure/src/hw/flash.rs:916-949 (bump programs [0u8;16])",
+  "grep kani::proof -> no harness over pin_attempts_*",
+  "GitHub #397 (Kani page-124 scan/bump monotonicity, open)"
+ ],
+ "vendor_precedent": "Trezor storage/pinlogs_blockwise.h:8-26 (expand/compress with ill-formed check), :27-73 (all halfwords must agree; init verifies round-trip); docs/storage/index.md 'PIN entry counter protection'.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Changes a flash layout that the first-boot blank-check (first_boot/mod.rs:200-204) and reconcile read; must keep 'blank page after RDP-2 self-lock' as a distinct, expected state (write expand(0) during Phase B). Page 123 records are also parsed by host tooling; version the codec. A fault that hits the reset-write of expand(0) must fail closed (treat as locked), which the halt-sink review (#835) warns can burn budget if done carelessly.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/storage/pinlogs_blockwise.h:8-73",
+  "/home/nicola/repos/trezor-firmware/docs/storage/index.md:172-380"
+ ],
+ "surface": "pin"
+}

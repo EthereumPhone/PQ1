@@ -1,0 +1,25 @@
+{
+ "id": "CS-04",
+ "title": "Render paymaster semantics: carry raw paymasterAndData, show sponsor identity and fee-token pull",
+ "threat": "The device signs keccak/sha256(paymasterAndData) but never sees the bytes: it cannot show WHO sponsors gas or that an ERC-20 fee-token paymaster will debit USDC up to a max cost. A compromised companion can route through a hostile paymaster; the user sees only '! PAYMASTER SET / may debit tokens'.",
+ "proposal": "Pre-launch wire change (input format only; on-chain output unchanged): replace the 32-byte `paymaster_and_data_hash` input with `[pm_len(2)][paymasterAndData \u2264 256 B]`, compute the hash in S-world, and render: paymaster address with NAMES_DB-verified name ('+' sentinel), mode decode for pinned providers (Pimlico ERC20PaymasterV06: fee token + exchange-rate/max-cost words \u2192 'Gas paid in USDC, max 1.23'), 'Sponsored (no debit)' for verifying-paymaster shapes, and a loud '! UNKNOWN PAYMASTER' danger page otherwise. Cross-check: an inner `approve(spender==paymaster)` in the same UserOp renders the spender as 'PAYMASTER' with the amount, refusing unlimited unless the policy (CS-03) allows.",
+ "rationale": "No shipping hardware wallet decodes 4337 UserOps at all, so this is pure 'beyond'; but today pq1's own guarantee has a hole the docs do not state. v0.6 folds keccak(paymasterAndData) into userOpHash, so what the device renders is exactly what the C10 signature authorises \u2014 the device becomes the source of truth on who pays. The roadmap already identifies this and the unlimited-approve(paymaster) hazard.",
+ "repo_evidence": [
+  "aa/src/userop.rs:56,678,717,827 (only a 32-byte hash of paymasterAndData enters the sphincs digest; firmware never sees bytes)",
+  "secure/src/tx/display/value_page.rs:544-551 (page text '! PAYMASTER SET / Gas sponsored / may debit tokens' \u2014 no address, no token)",
+  "CLAUDE.md wire format offset 244: paymaster_and_data_hash (sha256)",
+  "docs/feature-roadmap-research-2026-06.md:168-172 (proposal, 'LOUD-flag any unlimited/oversized approve(paymaster)')",
+  "gh issue search 'paymaster' returns only #328 (CFI parity of the existing page), no decoding issue"
+ ],
+ "vendor_precedent": "none (Ledger/Trezor have no UserOp path; Ethereum Magicians eth_signUserOperation thread confirms no standard)",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "CLAUDE.md labels the sign input 'frozen'; the freeze rationale (on-chain verifier) applies to the OUTPUT, so this needs an explicit owner decision + companion + e2e fixture update. Paymaster mode decoding is provider-specific and churns (Alchemy v0.6 sunset) \u2014 pin by (chain, address, codehash-era) in dbgen like ERC-7730, refuse unknown.",
+ "sources": [
+  "https://ethereum-magicians.org/t/eip-idea-eth-signuseroperation-rpc/16184",
+  "docs/feature-roadmap-research-2026-06.md:168-172"
+ ],
+ "surface": "clearsign"
+}

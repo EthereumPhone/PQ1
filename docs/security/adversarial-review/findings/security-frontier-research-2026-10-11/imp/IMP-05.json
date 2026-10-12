@@ -1,0 +1,28 @@
+{
+ "id": "IMP-05",
+ "title": "Per-boot SE identity pin and configuration attestation: pin OPTIGA 0xE0C2 UID + 0xE0E0 cert hash and SE050 UID/applet version at first boot, then read back every security-relevant OID/object metadata and policy against a firmware-pinned table on every boot; mismatch = refuse (+ wipe)",
+ "threat": "Swapped-but-genuine SE (clone board with transplanted chips, SE050 E2 vs C2 variant substitution already hit on the bench), an SE re-provisioned with looser metadata in transit (S-1/S-2/S-3 remain open so the factory ratchets are not yet irreversible), or a replayed/forged OPTIGA session. Firmware today trusts both SEs unconditionally on boot.",
+ "proposal": "Secure world, after rail-up and before unlock: (1) first boot (inside the confirm-gated Phase A/B journal) records OPTIGA 0xE0C2 coprocessor UID, sha256(0xE0E0 device cert), SE050 UID + GetVersion/applet version into a page-127 record; (2) every boot re-reads them and refuses on any difference ('SE IDENTITY CHANGED', with wipe under tamp-wipe policy); (3) every boot does the tropic_ensure_configuration analogue: GetDataObject(metadata) for E120/E140/F1D0-F1D4/E0E0-E0E3/the type-0x11 pool and SE050 ReadObject attributes/policy for the UserID, admin and half_E objects, compared bit-exact to a firmware-pinned expected table (change=NEVER, read=NEVER, execute gated on E140, LcsO=OP once S-1 closes) \u2014 refuse on looser-than-expected, never auto-tighten in the field; (4) while on it, remove the silent plaintext fallback in optiga::apdu::send_command (shield.active==false \u2192 transceive in clear) for every security-bearing command, and add a host nonce to the Shielded handshake if the Trust M V3 PRL allows it (SE5). Device-side verification of the vendor ECDSA cert chain stays OFF (invariant #5); chain verification happens in the host verifier (IMP-02) with per-element root binding (Trezor Aug-2026 bug).",
+ "rationale": "Trezor ships exactly this for TROPIC01 (batch-ID allowlist, I/R-config bit-exact compare with crash-safe slots, silicon-revision gate) and for Optiga (lock-check compares metadata). It turns S-1/S-2/S-3 closure from a factory promise into a per-boot invariant, costs a few hundred ms, and converts 'generic I2C/auth error' into a deliberate identity decision. It does not see a display implant (the Ledger case passed Genuine Check), but it closes chip-swap/clone-board and the re-provisioning window cheaply.",
+ "repo_evidence": [
+  "grep -rln attest secure/src/se050 secure/src/optiga -> only secure/src/optiga/apdu.rs mentions; secure/src/factory_provisioning.rs:304 comment only",
+  "secure/src/optiga/apdu.rs:523-533 (send_command: if !shield.active \u2192 plaintext transceive)",
+  "docs/security/adversarial-review/secure-element-adversarial-review.md SE5/SE10 (no host nonce; forged SW 0x6986 \u2192 wipe)",
+  "gh #210 (SE genuine check NOT STARTED), #206 (AppletConfig pin), #27 (E0E0+E0C2), #63 (LockState), #697 (E2 vs C2 unconfirmed), #244/#245",
+  "README.md:184 ('SE chip attestation \u2026 Proof-of-presence only'); docs/security/threat-model.md:339-345, :505-506"
+ ],
+ "vendor_precedent": "Trezor tropic.c:574-676 / :784-799 / :1007-1023 (config ensure, batch allowlist, silicon rev), prodtest_optiga.c:173-285 (lock-check metadata compare), tropic.c:383-404 (pinned peer pubkey, chip-presented fallback compiled out in PRODUCTION); trezorlib authentication.py per-element root binding fix (Aug 2026).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Pinned tables must track the OPTIGA S-1/S-2/S-3 end state, which is not yet decided \u2014 ship the comparison as 'refuse on looser' with the current candidate metadata and update the table with the lockdown decision. A wipe-on-mismatch policy plus an unauthenticated OPTIGA error path (SE10) is a DoS lever for an I2C interposer; gate the wipe on the shielded channel being up and the mismatch being persistent across two reads. Reading E0E0 (~500 B) and all metadata adds boot time. Must not become a device-side classical verifier.",
+ "sources": [
+  "file:///home/nicola/repos/trezor-firmware/core/embed/sec/tropic/tropic.c",
+  "file:///home/nicola/repos/trezor-firmware/core/embed/projects/prodtest/cmd/prodtest_optiga.c",
+  "https://trezor.io/vulnerability/authenticity-proofs-not-bounded-to-their-secure-element",
+  "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+  "https://arxiv.org/abs/2608.17082"
+ ],
+ "surface": "implant"
+}

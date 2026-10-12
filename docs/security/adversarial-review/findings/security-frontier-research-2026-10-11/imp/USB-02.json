@@ -1,0 +1,25 @@
+{
+ "id": "USB-02",
+ "title": "Time-domain FI/SCA jitter at the NSC boundary: glitch-detecting wait_random at veneer entry/exit plus a per-NSC-call 'session delay' re-sample (Trezor RDI)",
+ "threat": "The NSC call is the one host-visible phase marker: a host that times its own HID frame can align a glitch (clock/voltage/EM) or power/EM trace on the secure handler's first instructions \u2014 the PIN-verified sentinel read, pointer validation, entry_point compare, sender binding \u2014 with cycle-stable offsets. pq1 has double-compute/CFI on signing and a power-domain consumption mask (dilution unmeasured), but nothing in the time domain between NS->S entry and the first sentinel check.",
+ "proposal": "(1) Call `fi::wait_random()` (the existing pqsigner-fi double-counter loop that halts on `i+j != wait`) as the first statement of every veneer after the USB-01 try-enter and immediately before each veneer's return. (2) Add a Trezor-style RDI: the S-only 1 ms tick (TIM2 or SysTick) busy-waits `drbg_byte() + session_delay` cycles; `session_delay` is re-sampled on every NSC entry and on every trusted-UI button event (the two host-visible phase markers). Source bytes from `rng_strong` with a budget so the #802 SysTick-entropy drain is not worsened (use a ChaCha DRBG reseeded from TRNG, as Trezor does, and make lock-contention a hard error rather than a constant). (3) Measure the added latency with `make test-key-speed` and pin the new baselines.",
+ "rationale": "The primitive already exists and is proven glitch-detecting (pqsigner-fi/src/lib.rs:129-155) but is wired only around the crypto verify; threat-model.md:321 lists the sentinel as 'Planned'. Random per-call jitter forces a glitcher to search a window instead of hitting an offset, and the session term defeats averaging across calls. Cheap, orthogonal to the consumption mask, and lands on the exact boundary that the host controls.",
+ "repo_evidence": [
+  "secure/src/fi.rs:7-9 (wait_random re-exported; grep shows callers only in crypto.rs:352,407 and fih.rs:114 \u2014 none at NSC entry)",
+  "secure/src/nsc/mod.rs:1923-1960 (veneers: secure_log then straight into cmd::run)",
+  "docs/security/threat-model.md:321 ('Random-delay glitch sentinel ... Planned')",
+  "secure/src/main.rs:4343-4361 (#802: SysTick already draws TRNG per ms when idle \u2014 budget interaction)"
+ ],
+ "vendor_precedent": "Trezor random_delays.c:139-162 (1 ms RDI timer, session delay refreshed on USB in/out) and :189-202 (wait_random with i+j invariant -> error_shutdown('(glitch)')); usb.c inserts wait_random before each control-request branch and usb_class_hid.c:337 on every OUT packet.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Adds ~hundreds of cycles per NSC call and a 1 ms handler (Trezor's cost is accepted); must not touch the consumption mask's TIM; entropy budget vs #802; test-key-speed baselines change; the RDI must be disabled during the SE I2C timing-critical windows (OPTIGA 50 us guard time) or run at a priority that cannot stretch them.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:139-162,189-202",
+  "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb_class_hid.c:333-347",
+  "Clavier/Coron/Dabbous 'Differential power analysis in the presence of hardware countermeasures' (CHES 2000) \u2014 floating-mean random delays"
+ ],
+ "surface": "usb"
+}

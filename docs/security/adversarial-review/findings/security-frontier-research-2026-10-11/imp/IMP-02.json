@@ -1,0 +1,29 @@
+{
+ "id": "IMP-02",
+ "title": "Consumer-grade verify-before-first-power pack: pq1-verify reads flash + option bytes + OTP + UID + OEM-lock status, plus a per-unit PDN-impedance signature and a signed interior-photo/glitter baseline taken by the verifier, not the factory",
+ "threat": "Reseller/transit interdiction before first power: reflash at RDP-0, planted OEM regression key, planted page-123..127 state, swapped MCU/board with transplanted genuine SEs, and implants on the PDN. Today the 'verify before first power' story that invariant #10 rests on is an operator script against a bench profile that reads no OTP, no UID and no OEM-lock bits, so a non-expert user has no check at all and an expert's check misses the write-only OEM keys.",
+ "proposal": "(a) Replace tools/verify_ship_state.py's bench profile with the ship profile and extend the read set to: full bank-1/bank-2 dump diff vs the reproducible release, FLASH_OPTR/SECBOOTADD0/SECWM/WRP1A/B, FLASH_NSSR OEM1LOCK/OEM2LOCK (must be clear), full OTP area, 96-bit UID at 0x0BFA_0590, DBGMCU_IDCODE, TAMP backup registers (expected erased) \u2014 all read-only, connect-under-reset, refusing on any write verb; (b) ship it as a single-binary `pq1-verify` + WebUSB page with a quickstart card and a published expected-digest file per release; (c) add an optional 'bench tier' that records a 2-port shunt-through PDN impedance profile (PDNPulse: 300 kHz\u20133 GHz, Fr\u00e9chet distance vs a per-BATCH golden set published by the project) and a signed photo of the opened unit + glitter-varnish pattern (Purism anti-interdiction model), delivered out-of-band encrypted to the buyer; (d) rule: the baseline is recorded by the independent verifier or buyer, never by the factory, so it is unconditional on factory honesty (UF taxonomy: calibration trust is the whole game).",
+ "rationale": "This is the one defence the repo claims is unconditional on factory honesty, and it is currently an expert-only, bench-profile, OTP-less script. Trezor and Ledger offer no pre-power verification at all, so a tooled, published version is a genuine differentiator; the OEM-key gap is specifically what makes RDP-2 'irreversible' only nominally (Trezor writes 0xFFFFFFFF and checks NSSR lock bits for exactly this reason). PDN impedance is the only published per-unit method that detects added board-level components without firmware cooperation (100% TPR / 0% FPR on four boards with multi-port probing, sub-ohm sensitivity).",
+ "repo_evidence": [
+  "tools/verify_ship_state.py:5 (only mention of OTP is the docstring; no OTP/UID/NSSR read exists), :112-114 (bench profile default), :147-153 (flash sha256 compare only)",
+  "tools/ship-profiles/ship-option-b.template.json (template, not a ship profile)",
+  "shared/src/lockdown.rs:264-290 (OEM lock predicate exists but OEM_LOCK_MASK_PINNED=false \u2192 cannot pass; bench pin #46/#270 outstanding)",
+  "docs/security/user-device-verification.md: 'Status: DESIGN. Nothing here is implemented'; work items 1,2,6,7,8 have no issues",
+  "docs/security/HARDENING.md:410 (factory receipt is a completion flag, not attestation)",
+  "gh #249 (triple-UID binding NOT STARTED), #68/#67 (transparency log / SLH-DSA manifest ship-blockers), #595 (per-unit option-byte read-back)"
+ ],
+ "vendor_precedent": "Trezor option_bytes.c:210-222 (OEM keys written 0xFFFFFFFF; NSSR OEMxLOCK checked every boot); Purism Anti-Interdiction (glitter + signed interior photos); Star Labs pre-dispatch verification pack; Coldcard numbered tamper bag shown on first boot; PDNPulse (IEEE TIFS 2023) as the bench method. No wallet vendor ships a user-run pre-power flash verifier.",
+ "novelty": "beyond",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P0",
+ "risks": "OEM-lock bit positions and WRP1A mask must first be pinned on a sacrificial RDP-0 board (lockdown.rs:281-290) or the check is vacuous; the full-flash dump needs physical SWD access on a sealed unit, which IMP-01 removes unless an SBU<->SWD route (not on V10) or a documented pad access is chosen \u2014 three docs currently disagree (user-device-verification vs evt-debug-pins vs hardware_requirements). PDN baselines produce false positives across batches (per-batch golden sets required) and cannot see a battery-powered passive logger that is not on the PDN. Photo/glitter baselines are per-unit labour. VBAT supercap (if populated) means backup registers survive a power-cycle, so 'expected erased' must be qualified.",
+ "sources": [
+  "https://arxiv.org/abs/2204.02482",
+  "https://puri.sm/posts/anti-interdiction-services/",
+  "https://starlabs.systems/blogs/news/anti-interdiction-service",
+  "https://cyan.engineering.osu.edu/media/document/2023-01-09/vlsi.pdf",
+  "https://trezor.io/support/troubleshooting/device-issues/is-my-device-safe-to-use"
+ ],
+ "surface": "implant"
+}

@@ -1,0 +1,364 @@
+{
+ "surface": "Secure-element usage (key=se)",
+ "vendor": "Trezor (trezor-firmware @ 6ab39e95, 2026-10-07; models T2B1/T3B1/T3T1 = OPTIGA Trust M only, T3W1 = OPTIGA + TROPIC01, T3T2 = OPTIGA with privileged/unprivileged master keys)",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "OPTIGA Shielded Connection (platform binding) with per-session TLS-PRF key schedule, AES-128-CCM-8, sequence-number binding and forced rekey on counter wrap",
+   "evidence": [
+    "core/embed/sec/optiga/optiga_transport.c:747-838",
+    "core/embed/sec/optiga/optiga_transport.c:673-745",
+    "core/embed/sec/optiga/optiga_transport.c:658-671",
+    "core/embed/sec/optiga/optiga_transport.c:208-223"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already runs an equivalent Shielded Connection (TLS-PRF + AES-128-CCM-8) per invariant #3; the Trezor code is a byte-level reference for the same protocol on the same chip.",
+   "notes": "Mechanism: Handshake Hello (sctr 0x00, pver 1) returns rnd[32]+sseq[4]; the MCU runs tls_prf_sha256(pairing_secret, \"Platform Binding\", rnd) -> 40 B = enc key, dec key, two 4-byte nonce prefixes (lines 771-780). Handshake Finished is AES-CCM-8 over rnd||sseq with associated data (sctr, seq, protocol, len) and the response is decrypted and compared against rnd and mseq (815-832). Every subsequent APDU is AES-CCM with an 8-byte nonce = prefix||4-byte seq (689-705); the response must carry SCTR_PROTECTED and the exact expected sseq (717-722) or is rejected. increment_seq tears the channel down on 32-bit wrap (658-671) so a nonce is never reused. optiga_transport_close_channel memzeros contexts, nonces and the static ciphertext buffer (208-223). No PQ element: the channel is symmetric-rooted only, same residual pq1 accepted (Grover-2^64)."
+  },
+  {
+   "item": "Graceful degradation instead of brick when the shielded-connection handshake fails: soft-reset the OPTIGA and continue unpaired",
+   "evidence": [
+    "core/embed/sec/optiga/optiga_init.c:47-64"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Trezor deliberately continues without the tunnel (only Conf(KEY_PAIRING)-gated attestation keys become unusable, PIN stretching still works because those objects are not Conf-gated). pq1 invariant #3 forbids any plaintext-secret traffic and pq1's seed half lives on the OPTIGA, so a failed tunnel must be a hard refusal, not a degraded mode. Listed as an explicit Trezor design choice NOT to adopt.",
+   "notes": "optiga_init_and_configure(): derives the pairing secret, attempts optiga_sec_chan_handshake, on failure calls optiga_soft_reset() and still ensure()s optiga_open_application. Comment at 54-56 documents the trade-off: 'device and FIDO attestation will not work'."
+  },
+  {
+   "item": "Pairing secret is never stored raw: derived from a per-device 32-byte master key kept in a dedicated flash 'secret' sector, sealed with SAES under the DHUK (secure-privileged key select), cached into TAMP backup registers by the bootloader, after which flash access to the sector is permanently disabled for that boot via FLASH_SECHDPCR HDP1/HDP2_ACCDIS",
+   "evidence": [
+    "core/embed/sec/secret/stm32u5/secret.c:170-173",
+    "core/embed/sec/secret/stm32u5/secret.c:287-310",
+    "core/embed/sec/secret/stm32u5/secret.c:312-371",
+    "core/embed/sec/secret/stm32u5/secret.c:598-651",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:47-52",
+    "core/embed/sec/secret_keys/secret_keys_common.c:37-96",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes.c:48-71",
+    "core/embed/models/T3W1/secret_layout.h:22-63"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 derives transport credentials from a factory-burned OTP master and final credentials from DHUK/BHK (CLAUDE.md secret_keys.rs), so the derivation side is already covered. What transfers is (a) the HDP hide-protect pattern: the earliest stage reads the sealed secret into BKPxR and then closes the flash window so later code (incl. a compromised NS/app) cannot re-read it, and (b) HMAC-SHA256 diversification with (index, subindex, block, rotation_index) so each SE credential is an independent key (secret_keys_common.c:37-66). pq1 already latches BHK via TAMP_BKP0R..7R so the register-cache step is proven on this silicon.",
+   "notes": "secret_key_set encrypts with secure_aes_ecb_encrypt_hw(..., SECURE_AES_KEY_DHUK_SP) before writing (secret.c:324-328); secret_key_get reads the ciphertext back from TAMP->BKPxR and decrypts with DHUK (338-371). secret_prepare_fw: load+lock BHK, uncache all keys, then decide which slots to re-cache (all for trusted firmware with secrets present, only public slots otherwise), then secret_disable_access() unconditionally (619-650). Layout: slot 0 privileged master, slot 1 unprivileged master (public), slot 2 Tropic pubkey (public), lock record at 0x1FF0, BHK on its own page."
+  },
+  {
+   "item": "Bootloader decides, per signed vendor header, whether the firmware image gets the pairing secret at all (VTRUST_SECRET_ALLOW / disable bits); unofficial firmware only receives 'public' key slots",
+   "evidence": [
+    "core/embed/projects/bootloader/fw_check.c:233-241",
+    "core/embed/projects/bootloader/main.c:423-431",
+    "core/embed/sec/secret/stm32u5/secret.c:613-650",
+    "docs/core/misc/boot.md:133-148"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 has a single measured image and no multi-vendor trust model, so the vtrust bitmap itself does not apply. The transferable control is 'the trust root decides what SE credentials the next stage can see before jumping': on pq1 the FSBL (WRP-protected, invariant #10) could gate DHUK-sealed SE credentials so that an image whose measurement is not the shipped one never obtains the pairing key / SCP03 keyset, closing the 'malicious firmware uses the SE as oracle' path.",
+   "notes": "secret_run_access = (vtrust & VTRUST_SECRET_MASK) == VTRUST_SECRET_ALLOW; provisioning_access only for prodtest-class images. On a locked bootloader running untrusted firmware a restricted screen is shown (secret.c:613-617)."
+  },
+  {
+   "item": "Three-tier TROPIC01 pairing-key model: factory slot 0 invalidated at provisioning, unprivileged slot 1 (HSM / unofficial FW), privileged slot 2 (official FW), slot 3 verified empty; firmware tries privileged, then unprivileged; the chip's static X25519 pubkey is read from its certificate chain once and pinned in MCU secret flash so later sessions never trust a pubkey re-read from the bus",
+   "evidence": [
+    "core/embed/sec/tropic/inc/sec/tropic.h:55-64",
+    "core/embed/sec/tropic/tropic.c:339-453",
+    "core/embed/sec/tropic/tropic.c:240-308",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:362-446",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:448-594",
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:123-150",
+    "docs/core/misc/tropic_configs.md:59-84"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "No TROPIC01 on pq1 (owner decision 2026-07-14). The transferable parts: (1) pin the SE's identity (OPTIGA Infineon device cert E0E0 pubkey, SE050 attestation/identity) in MCU-sealed flash at first provisioning and check it on every session so a swapped/malicious SE is detected (directly answers the 'detect malicious hardware' question); (2) credential tiers with the factory/transport credential invalidated and its invalidation re-verified (prodtest_tropic.c:419-440) - the exact 'authenticate-before-rotate / verify old credential dead' contract pq1's rdp2-self-lock still lacks; (3) idempotent, self-recovering, irreversible provisioning commands (comments at 458-463).",
+   "notes": "tropic_custom_session_start loads trezor_private per tier, computes trezor_public, loads the pinned tropic_public via secret_key_tropic_public (secret slot 2) and only in non-production falls back to reading the cert chain (386-401). pq1 memo: libtropic internals (X25519/HKDF handshake, L3 AES-GCM, cert-chain verification) could NOT be read: vendor/libtropic is an un-checked-out submodule (empty dir; `git submodule status` shows '-0aa7e887')."
+  },
+  {
+   "item": "Device/FIDO attestation keys live in the SE with execute access gated on the shielded connection (Conf(KEY_PAIRING)), and AuthenticateDevice signs a domain-separated challenge with the OPTIGA device key, the Tropic device key and (T3W1) an MCU ML-DSA-44 key, each with its own certificate chain to vendor roots",
+   "evidence": [
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:164-250",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:353-385",
+    "core/src/apps/management/authenticate_device.py:9-79",
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:184-270",
+    "core/embed/projects/prodtest/cmd/hsm_keys.h:98-103",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:39-45"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 invariant #5 forbids a classical signer in the device, so OPTIGA/SE050 P-256 attestation is out unless the owner scopes it as non-wallet authority. The applicable analogue is Trezor's MCU attestation: an ML-DSA-44 keypair derived from the privileged master key (KEY_INDEX_MCU_DEVICE_AUTH) with a certificate written to secret flash. pq1 could do the same with SPHINCS+C10 (one primitive) and tie the cert to the FSBL-measured image, giving a remote 'is this a genuine PQ1' proof without ECDSA.",
+   "notes": "optiga-lock sets KEY_DEV/KEY_FIDO execute=Conf(E140), read/change=Never, LcsO=Operational, so even the paired MCU can only sign through the encrypted channel. Challenge is compact-size-prefixed 'AuthenticateDevice:' || challenge (authenticate_device.py:33-38). AuthenticateDevice refuses on an unlocked bootloader (21-22)."
+  },
+  {
+   "item": "Factory provisioning runs behind an HSM-authenticated Noise_KK1 channel: prodtest holds a per-build X25519 key and pinned HSM public keys; per-device secrets (unprivileged Tropic pairing private key, FIDO masking key, MCU attestation pubkey) leave the device only encrypted to the HSM, and the FIDO private key enters the OPTIGA encrypted to the device key (ECDH + SHA-256 + AES-256-CBC) then installed with a signed SetObjectProtected manifest under a trust anchor that is deleted at lock time",
+   "evidence": [
+    "core/embed/projects/prodtest/cmd/secure_channel.c:40-97",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:596-666",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:502-643",
+    "core/embed/sec/optiga/optiga_commands.c:944-1084",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:184-191"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's open ship-blocker is precisely the authenticated per-unit factory handoff/receipt (work-todo #36, S-1/S-2). Trezor's structure - HSM pubkeys pinned in the factory image, every exported secret AEAD-bound to the HSM, every injected key wrapped to a chip-resident key, trust anchor removed before lock - is the template. Primitive choice differs: Noise_KK1 is X25519; pq1 could use ML-KEM for the factory channel since it is factory-only and never touches the wallet trust chain.",
+   "notes": "optiga_set_priv_key builds a COSE_Sign1 manifest signed with a throwaway TA key (TA_PRIV_KEY = {1}) so the OPTIGA's Protected Update path can be used as a write channel; the TA cert at E0E8 is overwritten with a single zero byte in optiga-lock (prodtest_optiga.c:184-191). This is the 'type 0x11 Protected-Update pool' pq1's S-2 fence refers to."
+  },
+  {
+   "item": "OPTIGA metadata lockdown with read-back verification: every metadata write is re-read and compared; in PRODUCTION builds every touched object is additionally set to LcsO=Operational; optiga-lock-check audits that all five provisioning objects are locked; secrets-init refuses to run if the OPTIGA is already locked",
+   "evidence": [
+    "core/embed/sec/optiga/optiga.c:311-353",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:62-107",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:173-250",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:252-304",
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:106-121",
+    "docs/core/misc/optiga.md:5-36"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "This is the S-1/S-2 lifecycle ceremony pq1 has not closed. The pattern (write metadata, read back, compare; lock LcsO only in production; an idempotent 'lock-check' that reads every OID's metadata and compares against the expected locked shape; refuse re-provisioning once locked) gives pq1 a silicon receipt procedure for F1D0/E120/E140 and a CI-able expected-metadata table like docs/core/misc/optiga.md.",
+   "notes": "optiga_set_metadata is called at every boot from optiga_pin_init_metadata (optiga.c:392-525) so a factory-skipped lock is self-healed on first production boot; optiga_is_configured is only a timing heuristic (369-390)."
+  },
+  {
+   "item": "Pairing secret object E140 configured Read=Never, Change=Never, Execute=Always, type PTFBIND, lifecycle Operational; written once by prodtest only if a handshake with the MCU-held secret fails, then re-verified by a real handshake",
+   "evidence": [
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:109-162",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:238-247",
+    "docs/core/misc/optiga.md:21"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Same chip, same object. pq1's bench postmortem (E140 locked at LcsO=Op with unknown PBS) is exactly the failure Trezor's 'handshake first, write only on failure, handshake again to prove' sequence avoids.",
+   "notes": "Trezor's rotation story is simpler than pq1's: the pairing secret is derived once from the master key and never rotated; pq1's transport-to-final PBS rotation adds an authenticate-before-rotate requirement Trezor does not have."
+  },
+  {
+   "item": "PIN protection as a chain of SE-bound stretching steps (CMAC key E200, ECDH key E0F3 via hash-to-curve, HMAC key F1D8, counter-protected PIN_SECRET F1D0) each wrapped as digest = HMAC(stretched_pin, \"\"); out = SE_op(digest); stretched_pin = HMAC(stretched_pin, out), on top of MCU PBKDF2 with hardware+storage salt, so a fully compromised or malicious OPTIGA (or tapped bus) cannot lower security below the MCU-only design",
+   "evidence": [
+    "core/embed/sec/optiga/optiga.c:39-109",
+    "core/embed/sec/optiga/optiga.c:576-707",
+    "core/embed/sec/optiga/optiga.c:759-863",
+    "core/embed/sec/optiga/optiga.c:1016-1131",
+    "docs/core/misc/optiga.md:38-111",
+    "storage/storage.c:628-678",
+    "storage/storage.c:702-773",
+    "storage/storage.c:810-855"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's PIN is compared in SE050 silicon and the seed halves are on the chips, so the SE is not an optional stretching helper but a secret holder; Trezor's 'SE as max-of-layers KDF' cannot replace that. It does apply to the wrap key of the halves: layering an MCU-side PBKDF2/DHUK step plus an SE-bound HMAC/CMAC step with the one-way-before-bus pattern would make a malicious SE050 or OPTIGA unable to reduce security below the DHUK KDF alone. Caveat: the P-256 ECDH step (hash-to-curve + calc_ssec) is classical crypto; it is not a signer but the owner must rule on invariant #5 scope. A CMAC-only variant is PQ-clean.",
+   "notes": "PIN_STRETCH_ITERATIONS=2 when a single stretched-PIN slot is used (optiga.c:66-71). The 'malicious hardware' rationale is stated verbatim in optiga.md:66 and storage.c:633-639."
+  },
+  {
+   "item": "Nothing PIN-equivalent ever crosses the I2C bus: only HMAC(stretched_pin, \"\") digests are sent, and AUTOREF authorization (set_auto_state) proves knowledge of a stored secret via HMAC-SHA256 over an SE-generated 16-byte nonce, with the auto-state registered before execution and always cleared on exit",
+   "evidence": [
+    "core/embed/sec/optiga/optiga.c:686-699",
+    "core/embed/sec/optiga/optiga.c:976-979",
+    "core/embed/sec/optiga/optiga.c:1032-1041",
+    "core/embed/sec/optiga/optiga_commands.c:561-619",
+    "core/embed/sec/optiga/optiga_commands.c:605-611",
+    "core/embed/sec/optiga/optiga_commands.c:1086-1095"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 uses an F1D0 AuthRef object and E120 LUC bound to it (optiga-hw-counter). Trezor's implementation of the same GetRandom(nonce)->EncryptSym(HMAC, verification value) sequence, plus the bookkeeping rule 'register the auto-state before sending so a dropped response can still be cleared' and 'clear_all_auto_states on every cleanup path', is directly reusable and closes a session-state leak class.",
+   "notes": "The nonce is bound to OPTIGA_OID_SESSION_CTX (0xE100) and the HMAC is over the 16-byte nonce only (optiga_commands.c:602)."
+  },
+  {
+   "item": "Two independent OPTIGA attempt counters (STRETCHED_PIN_CTR E120 and PIN_HMAC_CTR E122, both limit 16) plus an MCU-side counter: the MCU counter is incremented BEFORE the PIN check and the increment is verified; wipe when MCU ctr >= PIN_MAX_TRIES or OPTIGA reports CTR_LIMIT; storage_get_pin_rem reconciles MCU vs OPTIGA in both directions (bump MCU to match OPTIGA, decrement OPTIGA to match MCU) and optiga_pin_get_rem syncs the two OPTIGA counters to the lower value",
+   "evidence": [
+    "storage/storage.c:1163-1303",
+    "storage/storage.c:1653-1698",
+    "core/embed/sec/optiga/optiga.c:1201-1262",
+    "core/embed/sec/optiga/optiga.c:759-863",
+    "storage/storage.h:70-79"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 has the same three-way structure (page 124, E120, SE050 UserID) but a narrower, directional boot reconciliation (invariant #2: wipe when E120_used > page124_used). Trezor's rule is 'the lowest remaining count is the truth and every other counter is pulled down to it', applied both at boot and at every GetFeatures. For pq1 the OPTIGA<->page-124 leg can adopt this; the SE050 leg cannot because the production UserID policy denies attempt-attribute reads (SW 0x6986).",
+   "notes": "Order in unlock(): wipe-code check -> read ctr -> wait_random -> wipe if ctr>=max -> exponential backoff 2^ctr-1 s -> increment -> verify increment -> decrypt_dek -> on failure wipe if ctr+1>=max. Success path resets OPTIGA PIN_HMAC_CTR with a stored reset key (1258-1274) and finally MCU pin_fails_reset."
+  },
+  {
+   "item": "'PIN-only attack' mitigation: the counter that limits PIN_HMAC use can only be reset by proving knowledge of STRETCHED_PIN, so an attacker who resets counters must first overwrite the very object that lets them test PIN guesses; PIN_SECRET is the only write authority for STRETCHED_PIN and STRETCHED_PIN_CTR",
+   "evidence": [
+    "docs/core/misc/optiga.md:46-56",
+    "docs/core/misc/optiga.md:105-111",
+    "core/embed/sec/optiga/optiga.c:454-480",
+    "core/embed/sec/optiga/optiga.c:1063-1077",
+    "core/embed/sec/optiga/optiga.c:1156-1181"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's E120 LUC is bound to F1D0 and reset after a successful unlock. The transferable invariant is 'any authority able to reset an attempt counter must be one whose use destroys the attacker's ability to test guesses', and the two-device-same-PIN threat it addresses (optiga.md:107) is relevant because pq1 users may own several devices.",
+   "notes": "Also documents a conscious redundancy: STRETCHED_PIN_CTR 'is actually not necessary' but is kept against a hypothetical PRESSEC-read vulnerability (optiga.md:109)."
+  },
+  {
+   "item": "Lifetime cap on PIN-stretching operations: PIN_TOTAL_CTR (E121) initialised to 600000 with Change=Never gates execute on PIN_CMAC and PIN_ECDH, bounding total brute-force work over the device lifetime independent of attempt-counter resets",
+   "evidence": [
+    "core/embed/sec/optiga/optiga.c:52-77",
+    "core/embed/sec/optiga/optiga.c:482-522",
+    "docs/core/misc/optiga.md:18-22"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 has only the 32-lifetime E120 backstop. A large, unresettable LUC on the SE-side key operations used in unlock (OPTIGA has 4 counters; E121/E123 are free on pq1) turns 'attacker found a counter-reset bug' into a bounded loss. Same chip, same command (optiga_reset_counter writes an 8-byte UPCTR limit).",
+   "notes": "Initialised only if the counter's change access is still Always (write_metadata succeeds), then metadata is set to Change=Never (484-502)."
+  },
+  {
+   "item": "Tropic MAC-and-Destroy PIN verification: PIN_MAX_TRIES one-shot slots, one consumed per attempt index, a random reset_key (stored encrypted in storage) restores the correct output after success; KEK stored as XOR masks (one per attempt) in Tropic R-memory; slot index wear-levelled by a monotonic change-PIN counter times a coprime shift; the same per-attempt chain is mirrored on the OPTIGA (STRETCHED_PIN_COUNT = PIN_MAX_TRIES AUTOREF objects each authorising the next)",
+   "evidence": [
+    "core/embed/sec/tropic/tropic.c:88-104",
+    "core/embed/sec/tropic/tropic.c:1593-1603",
+    "core/embed/sec/tropic/tropic.c:1704-1749",
+    "core/embed/sec/tropic/tropic.c:1824-1879",
+    "core/embed/sec/tropic/tropic.c:1894-1982",
+    "core/embed/sec/optiga/optiga.c:79-91",
+    "core/embed/sec/optiga/optiga.c:405-452",
+    "storage/storage.c:723-759",
+    "core/CHANGELOG.md:159"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "No TROPIC01 on pq1. The OPTIGA-side mirror is directly applicable: pre-provision N chained AUTOREF objects (F1D1..F1DB are 140-B data objects pq1 mostly leaves unused) so that each attempt index authorises a distinct object and the chain cannot be replayed after a counter manipulation. The M&D retry note (tropic.c:1730-1734) is an explicit accepted risk: on an uncertain transport error they retry and may burn an attempt rather than risk a desync.",
+   "notes": "Masks: masks[i] = kek ^ stretched_pins[i], written with erase+write to a 444-B slot (TROPIC_SLOT_MAX_SIZE_V1), read back and length-checked on unlock. Privileged and unprivileged sessions use disjoint slot ranges (0-63 vs 64-127; masks 128 vs 256) enforced by the UAP matrix."
+  },
+  {
+   "item": "Boot-time enforcement of the SE's own hardware security configuration: expected irreversible (I) and reversible (R) TROPIC01 configs are compiled in, chosen by chip batch ID and a 'distribution version' stored in R-mem slot 6 (backup in slot 7, crash-safe write order); I-config may only be tightened (bit flips 1->0), R-config is rewritten if looser than the minimum; config v1 arms every on-chip sensor (voltage/glitch/laser/EM-pulse/temperature/shield/oscillator/bit-flip detectors) to ENTER_ALARM_MODE and the post-update R-config forbids maintenance mode; the UAP matrix restricts every command class to pairing-key tiers",
+   "evidence": [
+    "core/embed/sec/tropic/tropic.c:574-676",
+    "core/embed/sec/tropic/tropic.c:770-799",
+    "core/embed/sec/tropic/tropic.c:825-1005",
+    "core/embed/sec/tropic/config/tropic_configs.json:1-110",
+    "docs/core/misc/tropic_configs.md:8-57",
+    "docs/core/misc/tropic_configs.md:242-262",
+    "docs/core/misc/tropic_configs.md:59-240",
+    "core/embed/projects/secmon/main.c:130-141",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:1002-1180"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "OPTIGA Trust M and SE050 do not expose a sensor-configuration surface like Tropic's, but the control pattern transfers 1:1 to OPTIGA metadata and SE050 object policies: compile in the expected per-OID metadata / per-object policy, read all of it at every boot, refuse to run if looser, tighten if the chip permits, and version the expected set with a crash-safe marker. pq1 currently only fences at compile time (OPTIGA_S2_PRODUCTION_BLOCKED); a runtime 'configuration attestation' of both SEs would detect a tampered or substituted chip before any secret is used.",
+   "notes": "Documented Trezor decision: early batches (irreversible v0) have all sensors 'no_action' and that cannot be changed on those parts; batches listed in TROPIC_BATCHES_V1 (tropic.c:106-114) get v1 with alarm mode. tropic_ensure_configuration runs only when the bootloader is locked on T3W1 (secmon/main.c:132-137)."
+  },
+  {
+   "item": "Host-managed TROPIC01 firmware update with safety interlocks: maintenance mode may only be enabled after PIN unlock, silicon revision must match the bundled images, an interrupted update is detected and finished at next boot without enabling maintenance, and a FW-version record in R-mem is cross-checked at lock-check",
+   "evidence": [
+    "core/embed/sec/tropic/tropic.c:1176-1368",
+    "core/embed/sec/tropic/tropic.c:1007-1035",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:330-357",
+    "core/embed/sys/syscall/stm32/syscall_verifiers.c:1548-1550"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Neither OPTIGA Trust M nor SE050 has a host-driven firmware update path, so there is nothing to port. The resumable-journal discipline is already present in pq1's page-127 first-boot journal.",
+   "notes": "Kept for completeness; ignore unless an SE with field-updatable firmware is ever adopted."
+  },
+  {
+   "item": "Transport robustness: bounded I2C retries, ensure_ready() flushes stale OPTIGA responses and resynchronises frame counters, soft reset / resync control frames; Tropic commands retried up to 10 times with a full chip power-cycle and session re-establishment on ALARM/CRC/HAL errors, but never for errors that indicate a possibly-executed command",
+   "evidence": [
+    "core/embed/sec/optiga/optiga_transport.c:225-307",
+    "core/embed/sec/optiga/optiga_transport.c:341-414",
+    "core/embed/sec/optiga/optiga_transport.c:67-82",
+    "core/embed/sec/tropic/tropic.c:177-217",
+    "core/embed/sec/tropic/tropic.c:325-336",
+    "core/embed/sec/tropic/tropic.c:1404-1413",
+    "core/CHANGELOG.md:158"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's OPTIGA driver already hit the sleep-wake and ReSynch quirks (memory: optiga_bringup). Trezor's MAX_RETRY_READ_MS=6000 sizing derived from the SEC throttling maximum (72-75) and the 'flush previous response then resync FRNR/ACKNR' logic are directly reusable for the same chip; the retry taxonomy (retry only on errors that prove non-execution) is the right rule for pq1's counter-consuming commands.",
+   "notes": "Retry decisions are security-relevant on counter-bound objects: a retried DecryptSym/SetAutoState can burn an attempt; Trezor accepts that (tropic.c:1730-1734)."
+  },
+  {
+   "item": "OPTIGA Security Event Counter (SEC, OID E0C5) management: read at suspend and keep the chip powered via an RTC-scheduled power-down until SEC decays below 20, model throttling (>127 adds up to 5 s per command) in unlock-time estimates, expose SEC in the Features message, debug-only set_sec_max for testing",
+   "evidence": [
+    "core/embed/sec/optiga/optiga_init.c:101-139",
+    "core/embed/sec/optiga/inc/sec/optiga_init.h:139-141",
+    "core/embed/sec/optiga/optiga_commands.c:80-110",
+    "core/embed/sec/optiga/optiga.c:238-257",
+    "core/src/apps/base.py:189",
+    "core/src/apps/debug/__init__.py:442"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Same chip. Every failed AUTOREF verification bumps SEC, so pq1's three-way PIN consumption and the PIN-lockout e2e will push the OPTIGA into throttling; reading E0C5 and sizing timeouts from it avoids spurious transport failures being misclassified as tamper/wipe events.",
+   "notes": "optiga_set_sec_max deliberately feeds an invalid point to calc_ssec to max the SEC (optiga.c:245-257); useful as a bench control for throttling behaviour."
+  },
+  {
+   "item": "Secure elements as additional entropy sources mixed into seed generation and tracked via rng_use_flag (OPTIGA GetRandom 8..256 B chunks, Tropic lt_random_value_get)",
+   "evidence": [
+    "core/embed/sec/optiga/optiga.c:259-280",
+    "core/embed/sec/tropic/tropic.c:1556-1579",
+    "core/embed/upymod/modtrezorcrypto/modtrezorcrypto-random.h:96-115",
+    "core/CHANGELOG.md:546"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already XORs multi-source randomness for signing (3-source OptRand); applying the same to BIP-39 entropy generation in the seed wizard (STM32 TRNG xor OPTIGA GetRandom xor SE050 RNG) removes single-TRNG failure as a seed-quality risk at no PQ cost.",
+   "notes": "rng_use_flag_set records which sources contributed so a failed source is auditable."
+  },
+  {
+   "item": "SE-resident classical keys are masked with an MCU-derived scalar (SECRET_KEY_MASKING): the FIDO private key written into the SE is key*mask, signatures are unmasked on the MCU, so the SE alone cannot produce a valid signature and key extraction from the SE yields nothing without the MCU secret",
+   "evidence": [
+    "core/embed/sec/optiga/optiga.c:127-194",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:54-57",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:622-631",
+    "core/embed/projects/prodtest/cmd/prodtest_optiga.c:474-498",
+    "core/embed/projects/prodtest/cmd/prodtest_tropic.c:1469-1476"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Relies on ECDSA scalar multiplicativity; SPHINCS+C10 has no such structure and pq1 forbids classical signers. The underlying principle (no single chip holds a complete secret) is already realised on pq1 by the XOR seed split (invariant #1).",
+   "notes": "Listed because it is Trezor's answer to 'what if the SE is malicious or extracted' for the one key class that must live in the SE."
+  },
+  {
+   "item": "BHK lifecycle as a wipe primitive: BHK loaded from secret flash into TAMP->BKPxR, then TAMP_SECCFGR.BHKLOCK set so software can never read it while SAES can; secret_safety_erase regenerates the BHK page with fresh TRNG words, instantly invalidating all BHK-wrapped storage",
+   "evidence": [
+    "core/embed/sec/secret/stm32u5/secret.c:175-185",
+    "core/embed/sec/secret/stm32u5/secret.c:393-442",
+    "core/embed/sec/secret/stm32u5/secret.c:655-658",
+    "core/embed/sec/secret/inc/sec/secret.h:119-129"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already keeps the SE050 SCP03/admin credentials on the BHK axis (page 126 = DHUK-wrapped BHK). Treating BHK regeneration as the atomic wipe step (rather than, or in addition to, erasing pages) gives the 10-wrong-PIN brick and tamper-wipe paths a single irreversible action that also kills SCP03 access to the SE050 half.",
+   "notes": "secret_bhk_load reboots if the lock is already set (397-399), guaranteeing the register is only ever written once per power cycle."
+  },
+  {
+   "item": "Fault-injection-hardened MCU-side PIN counter: counter stored as expanded 16-bit words with interleaved guard bits (compress_counter faults on ill-formed patterns), replicated across a whole flash block and majority-checked, wait_random() before every read, and handle_fault() uses the PIN counter as a fault counter (increment, verify, halt; nested fault -> wipe)",
+   "evidence": [
+    "storage/pinlogs_blockwise.h:6-75",
+    "storage/storage.c:1815-1844",
+    "storage/storage.c:1209-1221",
+    "storage/README.md:150-330",
+    "core/embed/sec/random_delays/inc/sec/random_delays.h:24-70"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's page-124 attempt counter is the MCU leg of invariant #2 and currently a plain tally; adopting redundant encoding with guard bits, cross-word consistency checks, random delays around the read, and 'any detected fault consumes an attempt' semantics hardens the leg that FI can reach without touching the SEs.",
+   "notes": "RDI (random delay interrupts) are started in secmon before the SE drivers initialise (secmon/main.c:117-120), so SE command timing is jittered as a side-channel countermeasure."
+  },
+  {
+   "item": "MCU controls OPTIGA power/reset: hard reset pulse on every init (10 ms low, 20 ms startup wait), power pin driven open-drain where present, pins set to analog on deinit; OPTIGA suspended/resumed from the kernel around low-power states",
+   "evidence": [
+    "core/embed/sec/optiga/stm32/optiga_hal.c:28-84",
+    "core/embed/io/suspend/stm32u5/suspend_io.c:56-63",
+    "core/embed/io/suspend/stm32u5/suspend_io.c:126-131"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already owns SE_RST (PA15) and the SE rail (LDO2_EN PA8, SE1_EN PB5). The reset-on-every-init and tristate-on-deinit discipline matches; nothing new beyond confirming pq1 performs a hard reset before each session so a half-open shielded connection from a prior crash cannot be replayed.",
+   "notes": "Trezor T3W1 also hard power-cycles the Tropic on retry (tropic.c:325-336)."
+  },
+  {
+   "item": "Storage salt derived from the unprivileged master key keyed by firmware type (fw_type from the vendor header), replacing the legacy CPUID+OTP salt, so the PIN KEK is bound to a device secret that non-official firmware cannot obtain",
+   "evidence": [
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:161-166",
+    "core/embed/sec/storage/stm32u5/storage_salt.c:36-56",
+    "storage/storage.c:628-660"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 keys its KDF on the DHUK (Tier-1 SAES-CMAC) which already binds secrets to the die. The additional idea - mixing a firmware-class identifier into the salt so a different trust class derives different keys - maps onto pq1's measured-boot world as 'bind the wrap key to the FSBL measurement', not to a vendor-type byte.",
+   "notes": "Production builds ensure() the salt derivation; non-production tolerates failure (storage_salt.c:47-53)."
+  },
+  {
+   "item": "Secret-sector lock record plus OTP manufacturing lock: prodtest 'secrets-lock' writes a lock slot and disables HDP access; 'manufacturing-lock-write' burns an OTP block (dry-run by default outside PRODUCTION) to leave manufacturing mode; secrets-init refuses when either the sector or the OPTIGA is already locked or Tropic pairing has started",
+   "evidence": [
+    "core/embed/sec/secret/stm32u5/secret.c:544-588",
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:90-182",
+    "core/embed/projects/prodtest/cmd/prodtest_manufacturing_lock.c:48-110"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's ship model is RDP-0 + first-field-boot self-lock, so the factory-side OTP marker is replaced by the page-127 journal. The reusable element is the ordering guard: every provisioning command first checks that no later, irreversible step has already happened (locked sector, locked OPTIGA, pairing started) before it writes, which is what prevents the 'overwrite pairing secret after lock' brick pq1 saw on the bench.",
+   "notes": "secret_is_locked treats an all-zero header (HDP engaged) as locked (secret.c:558-574)."
+  },
+  {
+   "item": "Documented non-adoptions / explicit trade-offs: (a) no SE-only PIN verification - MCU PBKDF2 + salts retained so a malicious SE cannot reduce security below the pre-SE models; (b) continue without the shielded connection rather than brick; (c) AES-XTS rejected for storage in favour of ChaCha20-Poly1305 (padding/implementation trade-off); (d) early Tropic batches shipped with sensors 'no_action' irreversibly; (e) STRETCHED_PIN_CTR kept although 'not necessary'; (f) M&D retried on uncertain errors at the cost of an attempt; (g) no PQ component in either SE channel (shielded connection is TLS-PRF/AES-CCM; Tropic handshake is X25519 per libtropic, not readable here)",
+   "evidence": [
+    "storage/storage.c:633-639",
+    "docs/core/misc/optiga.md:66",
+    "core/embed/sec/optiga/optiga_init.c:53-60",
+    "storage/README.md:120-140",
+    "docs/core/misc/tropic_configs.md:19-40",
+    "docs/core/misc/optiga.md:109",
+    "core/embed/sec/tropic/tropic.c:1730-1734",
+    "core/embed/sec/optiga/optiga_transport.c:771-780"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "(a) and (g) are the ones that matter for pq1: Trezor treats the SE as untrusted-by-default and keeps an MCU-only floor, whereas pq1 trusts SE silicon for the PIN compare and seed halves; pq1 should at least state the floor it keeps if one SE is malicious (DHUK KDF + the other half). (b) is rejected for pq1 (invariant #3). (c)-(f) are informational.",
+   "notes": "No Trezor doc in this checkout discusses PQ for SE channels; absence is from grep over core/embed/sec and docs/core/misc, not from the libtropic submodule, which is not checked out."
+  }
+ ]
+}

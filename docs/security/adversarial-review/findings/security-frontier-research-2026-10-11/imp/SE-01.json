@@ -1,0 +1,30 @@
+{
+ "id": "SE-01",
+ "title": "Boot-time per-element SE identity pinning (OPTIGA E0C2 UID + E0E0 cert pubkey, SE050 UID/GetVersion OEF) sealed under DHUK at first boot, re-verified before any secret APDU",
+ "threat": "Swapped, counterfeit or substituted secure element (supply chain / evil maid / rework after RDP-2): an attacker replaces one SE with a look-alike that answers the tunnel handshake (transport keyset is public at RDP-0) or a re-flashed genuine part, and the firmware cannot tell. Today nothing on the boot path checks which silicon it is talking to.",
+ "proposal": "On the first field boot (Phase B, after RDP=0xCC and before the seed wizard) read OPTIGA coprocessor UID (0xE0C2) and the Infineon device-cert public key (0xE0E0, type 0x12 per observed 0xE0E3) over the shield, and SE050 UID + GetVersion/AppletConfig (expect OEF 0xA921 per board/pq1.rs, resolve #697 first); store a DHUK-SAES-CMAC of (UID_O \u2016 pk_O \u2016 UID_E \u2016 cfg_E) in the page-127 journal. On every boot, before `check_provisioned`/`unlock`, re-read both identities and compare per element with FI-double sentinel checks; mismatch on either element is a hard refusal (not a wipe \u2014 a fake SE must not be able to trigger the wipe of the real one). Bind each proof to its own element (Trezor's Aug-2026 bug: a combined key set let one proof satisfy all three). Optional second step: a C10-signed MCU attestation over a companion challenge, keyed from a DHUK-derived seed regenerated per use, so a remote verifier gets a one-primitive 'genuine PQ1' proof without any classical signer.",
+ "rationale": "Ledger (Genuine Check), Trezor (OPTIGA cert + TROPIC01 pinned pubkey + ML-DSA-44 MCU cert), BitBox02 Nova, Tangem and GridPlus all ship a device-identity check; pq1 ships none and its own docs already claim an 'SE attest' boot step (CLAUDE.md Lifecycle line; HARDENING.md:32, \u00a73.4) that does not exist. Pinning at first boot (when the MCU is already RDP-2 and the attacker has had no window) and checking per element every boot is the cheapest closure of the 'malicious hardware' question for the SE leg; it does not see an implant on the bus (Ledger's stated blind spot) but it does detect the only substitution an implant would need to make to read a half: replacing the chip that holds it. Invariant #5 is respected: OPTIGA/SE050 ECDSA cert chains are only compared as pinned bytes, never used as a signer; the optional MCU attestation is C10.",
+ "repo_evidence": [
+  "secure/src/optiga/apdu.rs \u2014 grep '0xE0C2|E0E0|device_cert' returns nothing: no UID/cert OID is defined",
+  "secure/src/se050/apdu.rs:944 get_version_ext \u2014 only callers are secure/src/se050_stress/ctx.rs:502-505 and tests/audit.rs:433 (none on the boot path)",
+  "secure/src/main.rs:1570-1801 boot path: SE init \u2192 reconcile_pin_attempts, no identity assertion",
+  "secure/src/first_boot/mod.rs:296-441 run_post_lock_provisioning: no identity capture step",
+  "docs/security/HARDENING.md:32,178-189 describes boot attestation 'on every boot' that is not implemented (drift)",
+  "Issues #210 (NOT STARTED), #27, #61, #206, #244, #245, #249, #272"
+ ],
+ "vendor_precedent": "Trezor: core/embed/sec/tropic/tropic.c:386-401 (pinned Tropic pubkey in secret slot 2, cert chain read only in non-production); core/embed/sec/mcu_attestation/mcu_attestation.c:67-95 (ML-DSA-44 MCU cert); trezor.io 'authenticity proofs not bounded to their secure element' (Aug 2026 fix). Ledger: donjon.ledger.com/threat-model/device-genuineness. BitBox02 Nova datasheet 'Device attestation to detect counterfeits'.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "Confirm on silicon that E0E0/E0C2 reads are permitted at the current LcsO and under the final Read AC (S-2 retype boundary); SE050 GetVersion has a known Case-2 Le bug (#444); a per-element mismatch must map to refuse-and-park, never to the lockout wipe path (otherwise a fake SE becomes a wipe oracle); first-boot capture must happen before any half is written so the pin cannot be back-filled by an attacker-supplied chip; adds ~100 ms boot (per #244 estimate).",
+ "sources": [
+  "https://donjon.ledger.com/threat-model/device-genuineness",
+  "https://trezor.io/vulnerability/authenticity-proofs-not-bounded-to-their-secure-element",
+  "https://trezor.io/learn/security-privacy/how-trezor-keeps-you-safe/trezor-safe-device-authentication-check",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/tropic/tropic.c:339-453",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/mcu_attestation/mcu_attestation.c:67-95",
+  "https://bitbox.swiss/bitbox02/nova/BitBox02_Nova_BTC_Datasheet.pdf"
+ ],
+ "surface": "se"
+}

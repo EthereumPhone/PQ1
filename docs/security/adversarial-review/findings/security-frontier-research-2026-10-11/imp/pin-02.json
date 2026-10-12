@@ -1,0 +1,27 @@
+{
+ "id": "pin-02",
+ "title": "Verified wipe: destroy-fastest-first ordering, post-wipe readback, boot-time 'wipe verified' assertion, and sweep the duress objects",
+ "threat": "Wipe atomicity: `trigger_lockout_wipe` discards every result (`let _ =`) and always prints WALLET WIPED; the SE050 sweep does not include the duress OIDs, so after a lockout the decoy half_E stays readable with the (unlimited-attempt) duress PIN; a power cut or SE transport fault mid-wipe leaves a device that claims to be wiped but is not.",
+ "proposal": "(1) Order the wipe by destruction speed/reliability: SE050 UserID-gated objects first (one SCP03 session), then OPTIGA, then page 124/125/127; arm the page-125 flag before step 1 (already done). (2) Make the verdict honest: after each SE wipe, read back that every target OID is absent/blank (SE050 ReadObject on each DATA_AND_CANARY + DURESS id must return 'no such object'; OPTIGA GetDataObject on F1D1/F1D2/F1D8-F1DA must fail) and only then clear the page-125 flag and show WALLET WIPED; otherwise show 'WIPE INCOMPLETE \u2014 reboot to resume' and leave the flag armed. (3) At every boot, when the flag is clear AND page 124 is blank AND the wizard is about to run, re-assert the readback (Ledger's 'wipe verified at startup'); any surviving object re-arms the wipe. (4) Add DURESS_USERID/ENTROPY/VK/BOOTSTRAP_VK (0x7B10_0010..13) to the SE050 sweep lists. (5) Restore and track the untracked 19-test lockout-wipe FI matrix so the WipeFault hooks in MockSecureElement are exercised in CI.",
+ "rationale": "`cmd_request_unlock.rs:196-209` `let _ = se.factory_reset_admin(); let _ = pin_attempts_reset();` then unconditional WALLET WIPED; `se050/mod.rs:2266-2300` DATA_AND_CANARY_OBJS / AUTH_OBJS_BEST_EFFORT contain no DURESS entries while `se050/mod.rs:66-71` claims the sweep reclaims them; `main.rs:1935-1951` boot resume also `let _`s both calls. Ledger's LSB-003 fix history shows exactly this bug class (3-wrong-PIN wipe cleared OS data but not app data) and the fix shape (wipe verified at startup). Trezor erases the active sector first and re-inits so a torn wipe is never half-observable.",
+ "repo_evidence": [
+  "secure/src/nsc/cmd_request_unlock.rs:190-211 (let _ = on every wipe result; unconditional WALLET WIPED)",
+  "secure/src/main.rs:1935-1951 (boot resume ignores results)",
+  "secure/src/se050/mod.rs:2266-2300 (sweep lists lack DURESS_* OIDs) vs secure/src/se050/mod.rs:66-71 (claims they are reclaimed)",
+  "secure/src/secure_element.rs:429-450 (WipeFault hooks only used by the untracked suite); git status `?? secure/src/secure_lockout_wipe_fi_pure_tests.rs`",
+  "GitHub #106 (wipe verdict coercion), #107 (duress objects survive wipe), #123, #129"
+ ],
+ "vendor_precedent": "Ledger LSB-003 / firmware 1.4: user-zone wipe 'verified at startup'. Trezor storage/norcow.c:284-299 + storage.c:1805-1813 (active sector first, immediate re-init with fresh keys).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "Readback costs extra APDUs on a path where the SE may already be flaky; must be bounded and must not be able to block the page-125 flag from ever clearing (resume loop). The 'WIPE INCOMPLETE' screen is itself an oracle that one SE survived; acceptable because the secret is already XOR-split and the flag re-arms the wipe.",
+ "sources": [
+  "https://donjon.ledger.com/lsb/003/",
+  "https://www.ledger.com/firmware-1-4-deep-dive-security-fixes",
+  "/home/nicola/repos/trezor-firmware/storage/norcow.c:284-299",
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:1805-1813"
+ ],
+ "surface": "pin"
+}

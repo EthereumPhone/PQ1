@@ -1,0 +1,26 @@
+{
+ "id": "pin-10",
+ "title": "Fault-handler policy for the PIN gate: verdict-class FI trips charge one attempt and a second trip wipes; RNG-availability failures never do; the halt sink zeroizes",
+ "threat": "Repeated glitch characterisation on a stolen device: today an FI detection in gated_unlock either refuses (InternalError, no durable cost) or over-reacts (CounterUnstable -> PinLocked -> full wipe on the USB arm), and `halt_on_glitch` parks in `wfe` with `master_secret` still in S-SRAM (#835 H4). Also the PIN-entry scrambler silently degrades to start-at-0 on an RNG error, contrary to the owner's 2026-10-09 'if the RNG fails, error out' decision.",
+ "proposal": "Adopt Trezor's `__handle_fault` ladder for the PIN gate only: (a) a verdict-class detection (sentinel mismatch on `allowed`/`bumped`/`is_ok`, counter fwd/rev disagreement, unexpected SE status) increments page 124 by exactly one with readback, zeroizes SRAM, then halts; (b) a second detection while the first is being handled (volatile re-entrancy flag) arms the page-125 wipe flag and resets; (c) RNG/TRNG availability failures (SECS/CECS, pool contention) refuse the operation and zeroize but never touch page 124 \u2014 explicitly excluding the #835 C3 shape; (d) `halt_on_glitch` must call `nsc::zeroize_sensitive_state()` and mask interrupts before `wfe`. Separately, make `pin_entry::enter_pin` refuse (return Cancelled with an 'RNG error' screen) when `rng_strong::fill` fails instead of using zero starts.",
+ "rationale": "`nsc/mod.rs:1429-1495` returns PinLocked/InternalError on FI trips without a graded response; `cmd_request_unlock.rs:117-125` wipes on a single unstable read; #835 verified that `halt_on_glitch` retains secrets and that a halt inside `pin_attempts_bump` after the flash program burns an attempt. `pin_entry.rs:73-78` `let _ = rng_strong::fill(...)` with a documented fallback to zero starts, which #834's owner quote forbids. Trezor's storage.c:1815-1848 is the precedent for 'fault counter == PIN fail counter' with wipe on re-entry.",
+ "repo_evidence": [
+  "secure/src/nsc/mod.rs:1429-1495 (FI trips -> PinLocked/InternalError, no graded ladder)",
+  "secure/src/nsc/cmd_request_unlock.rs:117-125 (single unstable read -> wipe)",
+  "secure/src/ui/pin_entry.rs:73-78 (RNG failure silently degrades scrambling)",
+  "GitHub #835 (halt sink retains secrets; durable PIN-budget burn), #834 (owner: RNG failure must error out)"
+ ],
+ "vendor_precedent": "Trezor storage.c:181-182, 1815-1848 (handle_fault: PIN fail counter doubles as fault counter, verify the burn, wipe on re-entry); bootloader/main.c:676-688 (fatal error attributed to glitching -> BHK regenerate + erase).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "Charging attempts on detections converts spurious trips (SE transport flake, the #715 unexplained ten-attempt burn, #692 PendSV retries) into real lockouts; the classification between verdict-class and availability-class must be reviewed per call site and the rule must be proven on the FI sweep (rainbow) before shipping. DROPPED: lifetime total-operation counter on E122 (#485, fold into the S-1 ceremony); symmetric page124->E120 reconcile (charge E120 when MCU leads; SE050 leg impossible under production policy, #200); PIN-derived KEK over SE credentials (rejected: a wrong PIN would then fail the SCP03 handshake before the SE050 UserID verify and break three-way consumption, and it edges toward a software PIN compare); BHK erase/regenerate as a tamper-time cryptographic erase (rejected: the SE050 admin-wipe root derives from BHK, so erasing it forfeits the SE wipe and re-provisioning, #707); Coldcard Delta-mode / covert countdown-to-brick Trick PINs; persisting the attempt ring at lockout (#719 owner decision pending); S-world MPU window over pages 123-127; TAMP x BHK ITAMP6 masking (#208); restoring the untracked 19-test lockout-wipe FI suite (folded into pin-02); trusted-UI PIN/duress flows on pq1 silicon (#700).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:1815-1848",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/main.c:676-690",
+  "https://github.com/EthereumPhone/PQ1/issues/835",
+  "https://github.com/EthereumPhone/PQ1/issues/834"
+ ],
+ "surface": "pin"
+}

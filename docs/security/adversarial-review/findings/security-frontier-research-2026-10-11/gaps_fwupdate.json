@@ -1,0 +1,272 @@
+{
+ "surface": "Firmware update and rollback (key=fwupdate)",
+ "improvements": [
+  {
+   "id": "FWU-1",
+   "title": "Select the anti-rollback backend: HDP1-hidden unary flash-page counter owned by the pre-PIN stage (Trezor monoctr shape on the same silicon) instead of the stalled OTP codec",
+   "threat": "Validly-signed downgrade to a vulnerable release. Today the floor can never move past its factory value: otp::bump_to has zero call sites, COMMIT refuses unconditionally, and the only selected physical backend (OTP quad-words) is invalid on STM32U585 ECC OTP, leaving every release the vendor ever signed installable forever (#31 ship-blocker).",
+   "proposal": "Take an owner decision to route OPEN-OTP-1..3 to a non-OTP backend: one 8 KB bank-1 flash page per counter (security_epoch; optionally a second for release_version), encoded exactly as Trezor monoctr: value N == first N 16-byte quad-words programmed to 0x00, read rejects any programmed-after-erased gap, write refuses values below current and programs one fresh QW per increment with write->read->ensure, MONOCTR_MAX static-asserted against the largest epoch any release may carry. Place the page(s) at the start of the bank-1 secure area so HDP1 (SECWM1R2.HDP1EN + HDP1_PEND) covers FSBL pages 0..4 plus the counter page(s); the pre-PIN stage reads/bumps them, then sets FLASH_SECHDPCR.HDP1_ACCDIS before branching, so the mutable secure runtime can neither read nor forge the floor. Keep the counter page OUTSIDE the WRP range (WRP prevents the increment; Trezor's secret sector is pages 0-1 while WRP covers 2-13). Close #212 (OPTIGA E1E0 layer) as 'not needed' once this lands, and fold #39 (HDP1) into it.",
+   "rationale": "This is the single most relevant vendor finding: Trezor solved the identical problem on the identical flash controller by moving the unary tally from OTP (F4) to an HDP-hidden ordinary page (U5), which U585 supports natively (one-shot QW programming, page erase only pre-lock, HDP temporal hiding until reset). It dissolves OPEN-OTP-1..3's 'one-program-only, interrupted program not retry-safe' blocker because a torn QW simply reads as programmed, and an 8 KB page gives 512 increments versus 64 QWs of OTP. It also gives invariant #10's FSBL an actual enforcement lever for the floor the runtime cannot lower even when fully compromised.",
+   "repo_evidence": [
+    "secure/src/hw/otp.rs:1-73 (rejected unary OTP tally, production-fenced)",
+    "secure/src/nsc/cmd_fw_commit.rs:332-375 (FA-1.5 unconditional refusal, no floor write)",
+    "docs/security/a-b-firmware-rollback-architecture.md:1088-1130 (OPEN-OTP-1 assumes an OTP physical record format; no flash-page/HDP alternative anywhere in the doc \u2014 grep for 'HDP-hidden'/'non-OTP' returns nothing)",
+    "geometry/src/lib.rs:121-137 (frozen registry has no counter page row and no HDP row)",
+    "docs/security/production-security.md:525-532 (HDP deferred; nothing in secure/src writes SECWM1R2/SECHDPCR; #39)",
+    "fsbl/Cargo.toml stage-marker comment + fsbl/src/marker.rs:36-41 ('invariant #10 forbids an FSBL write path in a shipping image' \u2014 the rule this proposal must get an explicit exception for, scoped to one non-WRP page)",
+    "GitHub #31 OPEN, #543 OPEN, #546 OPEN, #39 OPEN, #212 OPEN"
+   ],
+   "vendor_precedent": "Trezor Safe 7 / T3W1: core/embed/sec/monoctr/stm32u5/monoctr.c:30-135 (unary 16-B cells, gap rejection, write-then-read ensure), core/embed/models/T3W1/secret_layout.h:33-51 (three 0x400-byte counters in the secret page), core/embed/models/T3W1/memory.h:30-41 (secret sector 0-1 NOT in the WRP'd boardloader range 2-13), core/embed/sec/option_bytes/stm32u5/option_bytes.c:66-69 (HDP1_PEND = SECRET_SECTOR_END), core/embed/sec/secret/stm32u5/secret.c:170-173 (HDP1/2_ACCDIS before jump), core/embed/projects/bootloader/version_check.c (static assert cap). BitBox02 Nova ships bootloader anti-downgrade in hardware.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P0",
+   "risks": "Conflicts with the current strict reading that the FSBL has NO flash write path at all (marker.rs/invariant #10 consequence text) \u2014 needs an explicit owner exception limited to the counter page, or the bump must be done by the secure runtime BEFORE HDP engages (not possible: HDP is engaged by the FSBL before the runtime exists). HDP1 must be contiguous from page 0, so the counter page displaces Manifest A (page 5) in the frozen registry \u2014 a geometry change gated by #540/#758 and the Draft 1.1 digest. OPEN-ECC-1 does not vanish: a power-cut mid-program can leave an ECC-invalid QW that raises NMI on read; the reader must treat ECCD on a counter QW as 'programmed' deterministically and that needs sacrificial-silicon evidence. FSBL budget: a minimal program-QW path (~1-2 KB) against 38,912 B registry budget (28,704 B used) but only ~2 KB free on the bench 32 KiB linker. HDP also hides the FSBL's own vendor pubkey from the runtime \u2014 the runtime verifier must keep its own copy (it already does: secure/src/fw_update/vendor_pubkey.rs).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/monoctr/stm32u5/monoctr.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/secret_layout.h",
+    "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/memory.h",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c",
+    "https://bitbox.swiss/bitbox02/nova/BitBox02_Nova_BTC_Datasheet.pdf",
+    "RM0456 \u00a77.5 (HDP), \u00a77.9 (SECWM1R2/SECHDPCR)"
+   ]
+  },
+  {
+   "id": "FWU-2",
+   "title": "FI-harden the FSBL's SPHINCS+C10 VERIFIER against the WOTS checksum/target-sum fault class, give the FSBL a real TRNG for wait_random, and make the branch target default-to-fail",
+   "threat": "A single laser/voltage fault during boot-time or BEGIN-time signature verification accepts a forged firmware signature (Wagner et al. PQCrypto 2023; BSI/AISEC LFI 2025 on an ordinary MCU). In WOTS+C the 'checksum' is the target-sum check, and it is a single bare compare on the verify path; the FSBL verifies once, its retiming jitter is a constant, and the final branch reads the reset vector of whichever slot enum value survives.",
+   "proposal": "(a) Inside sphincs_c10 verify: recompute the digit sum from a second extraction of the digest, route `sum == TARGET_SUM` and the forced-zero FORS constraint through a Hamming-distant sentinel (pqsigner_fi::check_true_into_sentinel) with black_box, and gate chain-length derivation on the sentinel; (b) in the FSBL, verify the manifest signature twice with an independent recomputed root compared constant-time (redundant-recomputation, the same discipline c10_sign_verified already applies to signing), or at minimum re-verify the chosen candidate once more immediately before `into_slot`; (c) initialise the STM32U585 TRNG in the FSBL (RCC AHB2 RNG clock + GTZC RNG secure bit, the same pattern fsbl/src/hash.rs uses for HASH) so wait_random is attacker-unpredictable; (d) in fsbl/src/branch.rs keep the branch address in a sentinel-encoded register initialised to a halt stub and overwritten only after the chosen slot's `img_ok_*` is re-confirmed, so a fault that flips the `Slot` enum cannot land in the unverified slot; (e) run the rainbow instruction-skip/stuck-at sweeps for fsbl::filter_valid, fsbl::verify_images and the CHUNK->COMMIT window (#591, #633).",
+   "rationale": "The signer is covered by double-compute, but a national-agency-backed practical LFI result targets VERIFICATION of hash-based signatures, and pq1's FSBL verifier is the one component that can never be patched after RDP-2. The outer sentinel wraps only the boolean result of a single verify; a fault inside wots.rs:178 makes the verify return the attacker's chosen root, which the outer gate then happily accepts. Trezor's boardloader uses TRNG-seeded fih_delay before every ensure and a default-fail jump pointer; pq1's FSBL has neither.",
+   "repo_evidence": [
+    "sphincs-c10/src/wots.rs:171-180 (single bare `if sum != TARGET_SUM { return [0u8; N] }` on the verify path)",
+    "sphincs-c10/src/hypertree.rs:378-381 (bare `if fors_indices[K-1] != 0 { return false }`)",
+    "fsbl/src/main.rs:343-347 (one verify_signature call per candidate; sentinel wraps only its bool)",
+    "fsbl/src/fi.rs:31-33 (`fn rng_byte() -> u8 { 0x42 }` \u2014 no TRNG, retiming defence absent by the module's own admission)",
+    "fsbl/src/branch.rs:38-45 (reads MSP/reset from `slot_secure_addr(slot)` with no re-check; VTOR written unconditionally)",
+    "fsbl/src/main.rs:219-221 (pick_slot result carried as a plain enum to the branch)",
+    "GitHub #591 OPEN, #633 OPEN (no FI sweep covers fsbl::verify_images / cmd_fw_commit / staging window)"
+   ],
+   "vendor_precedent": "Trezor boardloader core/embed/projects/boardloader/main.c:109-117 (fih_delay 0-127 us TRNG jitter before every ensure), bootloader main.c:632-644 (firmware_present/backup compared under dont_optimize_out_true), bootloader main.c:404/559-593 per inventory (volatile jump pointer initialised to failed_jump_to_firmware), boot_header.c:97-106 (sigmask + inverse mask). No vendor hardens the SLH-DSA verifier internals themselves \u2014 that part is beyond parity.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "Boot time: a second full C10 verify costs ~0.375 s per candidate at HSI16 (fsbl/src/verify.rs header) \u2014 acceptable against the 4 s fingerprint hold but must be re-measured. FSBL flash budget for TRNG init + extra sentinels (~300-600 B) against ~2 KB free on the bench linker. The sphincs-c10 crate is Aeneas/Lean-modelled (wots.rs comment 'Indexed form ... Aeneas model'); changing verify's control flow moves extraction hashes and may break the Lean pipeline pins \u2014 coordinate with the FV track. Hardening the shared crate also changes the on-chain-equivalent verifier semantics only in fail-closed direction, but the differential tests vs SPHINCsC10Asm.sol must be re-run. Countermeasure cost in eprint 2025/2096 is not quantified in the abstract \u2014 read the PDF before estimating.",
+   "sources": [
+    "https://eprint.iacr.org/2023/1572",
+    "https://eprint.iacr.org/2025/2096",
+    "https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/Studies/LFI_Attack_XMSS/LFI_Attack_XMMS.html",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/main.c",
+    "RFC 9814 \u00a7A.2 / Gen\u00eat TCHES 2023 (redundant recomputation, already cited in CLAUDE.md for the signer)"
+   ]
+  },
+  {
+   "id": "FWU-3",
+   "title": "Bind the board model and hardware revision into the signed manifest preimage and check it at BEGIN and in the FSBL (the #487 trigger has fired: two boards exist)",
+   "threat": "A validly-signed iota2 image installed on pq1 silicon (or vice-versa) via the companion or a swapped .pqfw. On pq1, PA8 is LDO2_EN \u2014 the rail enable for BOTH secure elements \u2014 while on iota2 it is the RIGHT button; the wrong pin map is physically dangerous and the signature does not prevent it because nothing in the preimage says which board the image is for.",
+   "proposal": "Add `hw_model` (4-byte tag, e.g. b\"PQ1A\" / b\"IOTA\") and `hw_revision` (u16) to the Draft 1.1 V6 signed preimage (owner spec amendment: 121 -> 127 bytes, new digest), bake the expected pair into both the FSBL and the secure image (same allocated-section pattern as `.pqsigner.vendor_pubkey`), and reject on mismatch BEFORE the expensive C10 verify in both `fw_update::verify_manifest` and `fsbl::filter_valid`. fwsign refuses to sign without `--hw-model`, and the release gate cross-checks the model tag against the ELF's `board-*` feature. Until V6 lands, add the same check as an unsigned fast-reject on V1 plus a `make release` refusal, documented as non-authoritative.",
+   "rationale": "Trezor signs hw_model and hw_revision in every header and refuses before signature verification; the boardloader additionally exports board_capabilities so firmware will not stage a bootloader for a different board. pq1 made board selection MANDATORY at build time precisely because a silent wrong pin map put iota2 pins on pq1 silicon once already (CLAUDE.md, 2026-08-31 retraction) \u2014 the update path has no equivalent guard, and the V6 draft, which is the only place a new signed field can go, was frozen without one.",
+   "repo_evidence": [
+    "fw-manifest/src/lib.rs:64-80 (V1 wire layout: no board field; only version + two hashes signed)",
+    "fw-manifest/src/v6.rs:54-76 (121-byte PQFW_V6 preimage: tag, schema, slot, release_version, security_epoch, two lengths, two hashes, vendor_fpr \u2014 no hw_model/hw_revision)",
+    "grep -rn hw_model|hw_revision|board_id over fw-manifest/src fsbl/src secure/src/fw_update secure/src/nsc/cmd_fw_*.rs fwsign/src returns nothing",
+    "secure/src/nsc/cmd_fw_begin.rs:174-178 (slot byte informational; no board check anywhere in BEGIN)",
+    "GitHub #487 OPEN: 'No hw-model/revision binding in the firmware signed preimage (add when a second board exists)' \u2014 BOARD=iota2|pq1 both exist (CLAUDE.md Board targets)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/image/image.c:140-166 (hw_model/hw_revision must equal compiled-in HW_MODEL/HW_REVISION), boot_header.c:183-186, boardloader main.c:119-130 (board_capabilities), wf_firmware_update.c:131-135,166-170. Ledger: model-bound firmware via SE-side checks.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "Any change to the V6 preimage requires the exact approved spec digest + dual review + owner stage decision (CLAUDE.md 'Rollback manifest work is not implementation-approved'); do not land the field without that. Adding it to V1 is not possible without re-provisioning every bench image. Model tag must be chosen so a future board revision that is pin-compatible can be accepted by a range rule rather than exact match, or every ECO forces a new release set (Trezor hit this with its 'expiry' field and shipped without enforcing it).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/image/boot_header.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+    "https://github.com/EthereumPhone/PQ1/issues/487"
+   ]
+  },
+  {
+   "id": "FWU-4",
+   "title": "Make the boot-time and install-time 8-word fingerprint cover the whole signed preimage (version + secure + NS hashes) and publish the expected words per release",
+   "threat": "A supply-chain or hostile-companion install whose NS image (USB router, APDU parser \u2014 the pre-setup hostile-host surface BitBox just patched) differs from the published build displays IDENTICAL boot words to the genuine release, and even for the secure image nobody publishes a value to compare against, so detection probability is zero by construction.",
+   "proposal": "Change the rendered digest from `secure_hash` to `manifest_digest = SHA-256(signed_preimage)` (already computed by verify_digest and already covering version, secure_hash, nonsecure_hash) in all three places: fsbl::verify_images return value / render_fingerprint, secure measured_boot::run, and fw_update::confirm_install; keep the vendor-key words page. Pin the three to one function in sphincs_tz_bip39 and extend fsbl-tests/tests/paired_constants.rs. Process half: `make release` writes the 8 expected words (+ key words) into release.json and the public release notes, and the companion shows them next to the install prompt so the user compares device-rendered vs published words.",
+   "rationale": "The vendor-signing-key-compromise review already verified this gap and ranked 'publish expected fingerprints' as one of six achievable wins: two builds differing only in the NS image display identical words today. Trezor's fingerprint is the hash of the header with signature bytes zeroed \u2014 it covers everything signed \u2014 and headertool prints it before the ceremony so auditors can compare. The on-device render in pq1 is stronger (immutable stage renders) but is currently less complete than what it verifies.",
+   "repo_evidence": [
+    "fsbl/src/verify.rs:109 (`Some(actual_secure)` \u2014 NS hash verified but not returned)",
+    "fsbl/src/main.rs:286 (`render_fingerprint(&secure_digest)`)",
+    "secure/src/fw_update/mod.rs:135 (`hash_to_word_indices(manifest.secure_hash())` at install confirm)",
+    "docs/security/vendor-signing-key-compromise.md:371-381 (verified finding + recommendation; 'detection probability is 0 today by construction')",
+    "fsbl-tests/tests/source_invariants.rs:103-134 (render-before-branch pin exists; extend, do not bypass)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/image/image.c:168-176 (get_image_fingerprint over signature-zeroed header), bootloader/bootui.c:72-86 (fingerprint on install screen), headertool prints pre-ceremony fingerprint; Trezor Suite shows version/fingerprint before install. Ledger publishes firmware hashes per release.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "Changes the word set users have seen on bench devices (none shipped, so acceptable now, impossible later). The FSBL and secure measured_boot MUST change together or honest-row divergence (a documented tamper signal) becomes a permanent false alarm \u2014 bind with the paired-constants test. The words still change only when bytes/key change: under a stolen legitimate key they match a genuinely published malicious release (the VSKC note's explicit caveat); state this in the release notes rather than overclaiming.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/bootui.c",
+    "docs/security/vendor-signing-key-compromise.md"
+   ]
+  },
+  {
+   "id": "FWU-5",
+   "title": "Verify the unused tail of each slot is erased (0xFF) at COMMIT and at every FSBL boot, and sign the image lengths",
+   "threat": "Stale bytes from a previous image, or bytes planted by a hostile companion/implant in the slack after `len`, survive in the inactive slot and can be referenced by a crafted (but validly signed) image or by a later torn update; combined with unsigned lengths in V1 this is the 'firmware must not be compressible / spare flash must be unusable' assumption Donjon used to bypass Trezor's Suite hash check.",
+   "proposal": "COMMIT: after verify_images, walk `[slot_base + received_len, slot_base + capacity)` for both halves and require every word == 0xFFFF_FFFF, inside the same aggregate sentinel gate (fail -> drop ctx). FSBL: same word-walk (no hashing; ~570 KB of word reads, tens of ms at HSI16) after verify_images, gated by check_true_into_sentinel. Sign the lengths: V6 already carries secure/nonsecure lengths in the preimage \u2014 keep them and add the FSBL rule 'len must be a multiple of 16 and >= IMAGE_LEN_MIN', so the tail boundary is itself authenticated.",
+   "rationale": "Trezor's check_image_contents re-hashes every chunk AND then verifies the rest of the flash area is uniformly 0xFF/0x00 at every boot; wf_image_upload keeps erasing until the whole target area is clean. pq1 erases the inactive slot in BEGIN, but nothing ever re-checks that the region beyond `len` is still blank at COMMIT or at boot, and in V1 the lengths are unsigned so an attacker with a signed manifest and a flipped `secure_len` controls where 'the tail' starts (the BEGIN capacity bound only stops overruns, not under-declared lengths).",
+   "repo_evidence": [
+    "fsbl/src/verify.rs:62-63 (hash_flash_region over [0, len) only; no tail check)",
+    "secure/src/fw_update/verify.rs:50-57 (fresh re-hash over received_* only)",
+    "fw-manifest/src/lib.rs:70-72 (secure_len/nonsecure_len 'no' in the signed column)",
+    "secure/src/nsc/cmd_fw_begin.rs:122-136 (capacity bound is 'the SOLE bound' on the unsigned len fields)",
+    "docs/security/usb-fw-update-hardening.md:329 (per-chunk hash retry declined; tail verification never discussed)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/image/image.c:437-523 (check_image_contents: chunk hashes + padding-to-area-end check), core/embed/projects/bootloader/workflow/wf_image_upload.c:230-238 (erase remainder after last chunk). Ledger Donjon's Safe 3 bypass of the Suite firmware hash relied on usable spare flash.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "FSBL budget (~100-200 B) and boot time (~tens of ms, must be measured with stage-marker). On the legacy geometry the bank-2 FSBL mirror pages 0..4 lie INSIDE NS slot A (flash_policy.rs:70-73), so a tail check over the NS slot would fail on the mirror bytes until #540 cutover \u2014 scope the NS walk to the registry's NS slot range. Signed lengths are a V6 change (owner-gated).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/workflow/wf_image_upload.c",
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation"
+   ]
+  },
+  {
+   "id": "FWU-6",
+   "title": "Complete option-byte self-enforcement: pin the WRP1A/WRP2A/OEM-lock layouts, assert OEM keys cleared and BOOT_LOCK in the FSBL tripwire, and re-verify the full ship profile on EVERY post-lock boot with wipe escalation",
+   "threat": "A unit whose WRP was cleared (or an OEM RDP-regression key planted) before the RDP-2 self-lock passes the tz-1 tripwire today and freezes forever with a writable FSBL \u2014 permanently forfeiting invariant #10 for that die; after lock, no code re-checks the option bytes, so an OEM-key RDP regression or SWAP_BANK flip is never noticed.",
+   "proposal": "(1) Close #46: pin WRP1AR/WRP2AR/NSSR.OEMxLOCK bit layouts from RM0456 + the on-box SVD with a bench read-back receipt, flip WRP1A_MASK_PINNED/OEM_LOCK_MASK_PINNED to true so both the FSBL tripwire and first-boot Phase A fail closed on them. (2) FSBL tz-1: add `OEM1LOCK == 0 && OEM2LOCK == 0` and `SECBOOTADD0R.BOOT_LOCK == 1` (post-lock profile) to confirmed_fields_match. (3) Secure world: on every boot where RDP == L2, run verify_ship_profile (post-lock variant) before SE unlock; on mismatch trigger tzic::trigger_intrusion_wipe (dual-SE admin wipe, BHK regeneration) and halt, Trezor's secret_safety_erase semantics \u2014 a device whose protections were weakened must be useless, not merely stopped. (4) Phase A: before the RDP-2 burn, write OEM1/OEM2 key registers to 0xFFFFFFFF and assert OEMxLOCK clear so no RDP-regression key can exist post-lock (today Phase A only READS the lock status).",
+   "rationale": "Trezor's boardloader compares OPTR, SECBOOTADD0R (with BOOT_LOCK), all four WRP registers and both SECWM registers against the compiled profile on every boot, erases secrets on mismatch, and additionally resets OEM keys and asserts OEMxLOCK clear. pq1 has the two-profile pattern and the read-only tripwire but deliberately skips the two registers that decide whether the FSBL is actually immutable, and first_boot returns early at RDP-2 so the post-lock state is never re-verified.",
+   "repo_evidence": [
+    "fsbl/src/optbytes.rs:24-29 ('deliberately does NOT act on WRP1A or the OEM locks ... a unit whose WRP was cleared before RDP-2 passes this tripwire')",
+    "shared/src/lockdown.rs:290 (OEM_LOCK_MASK_PINNED = false), :445 (WRP1A_MASK_PINNED = false)",
+    "secure/src/first_boot/mod.rs:174-176 (`if rdp_level() == L2 { return; }` \u2014 no post-lock re-verification), :178-194 (Phase A verifies WRP/OEM only pre-lock, 'verify, don't set')",
+    "secure/src/first_boot/state.rs:78-80 (ObOemLockPresentOrUnpinned fails closed while unpinned)",
+    "docs/security/vendor-signing-key-compromise.md:11-13 + inventory (WRP never programmed anywhere in the tree)",
+    "GitHub #46 OPEN, #35 OPEN, #42 OPEN, #43 OPEN"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/option_bytes/stm32u5/option_bytes.c:138-182 (flash_check_option_bytes every boot), :218-228 (OEM1/OEM2 keys written 0xFFFFFFFF), :253-266 (option_bytes_check_oem_keys ensures OEMxLOCK clear), boardloader main.c:304-322 (secret_safety_erase then re-set loop); legacy/memory.c:31-68.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Pinning wrong bit layouts bricks genuine boards at Phase A or halts every FSBL boot \u2014 the pin MUST come with a silicon read-back receipt on both boards before the masks flip (the 0x0C00_007C vs 0x0018_0000 SECBOOTADD0 confusion in firmware-update.md:465-473 is the cautionary precedent). Wipe-on-mismatch is irreversible for the user's SE halves (recoverable from the 24 words) and needs an owner decision on the halt-vs-wipe policy; a transient read fault must not wipe (keep the two-pass 'persistent' rule). Writing OEM key registers is an option-byte write, which Draft 1.2 C1 permits only in the confirm-gated first-boot ceremony \u2014 this fits there but must be added to the ceremony spec, not improvised.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+    "https://github.com/EthereumPhone/PQ1/issues/46",
+    "RM0456 \u00a77.6.2 (RDP-2 freeze exceptions: SWAP_BANK, SECBOOTADD0 unless BOOT_LOCK), \u00a77.9.19/\u00a77.9.23 (WRP1AR/WRP2AR)"
+   ]
+  },
+  {
+   "id": "FWU-7",
+   "title": "Adopt Trezor's Update-Control-Block invariants as explicit review rows for the Route-1 journal, and version every FSBL-consumed record so the mutable side can route around immutable-stage bugs",
+   "threat": "The A/B activation path that will replace today's fail-closed COMMIT refusal re-creates the legacy try-once defects (no confirm-alive writer, both-copies-torn coerced to 'try the unproven winner', single-candidate fast path skipping arbitration), and once the FSBL is WRP+RDP-2 frozen any bug in how it consumes the journal is permanent in the field (Trezor shipped exactly such a bug: BOARDLOADER_UCB_ZERO_ADDR_BUG).",
+   "proposal": "Before FA-2/#546 implementation starts, amend the Draft 1.1 Route-1 journal spec with a checklist copied from boot_ucb.c/boardloader main.c: (a) the control record is bound to the staged artifact by its SHA-256 (re-hashed by the FSBL, not trusted); (b) apply is idempotent and the record is erased as the FIRST act of the activated image; (c) the FSBL re-runs structural/CRC/digest/signature/floor on the staged candidate even though the runtime already did; (d) record validation checks magic, every address range, and non-overlap before any pointer is formed, double-checked in both producer and consumer; (e) the record carries a schema/flags byte reserved so a later mutable image can disable or reinterpret a field the frozen FSBL mis-handles; (f) confirm-alive (TRIED->COMMITTED) is written by the booted image only after a defined health milestone, never by the FSBL. Add these as named rows in the Draft 1.1 acceptance table and as fsbl-tests source_invariants pins once implemented.",
+   "rationale": "pq1 already has A/B slots so 'copy' becomes 'select', but the control-record discipline transfers directly and the existing legacy arbitration violates (b), (f) and the torn-state rule. Trezor's model_T3W1.h bug is a concrete, shipped example of invariant #10's cost: the fix lives in the mutable bootloader as a workaround flag because the boardloader can never change.",
+   "repo_evidence": [
+    "fsbl/src/main.rs:384-411 (legacy TRIED/COMMITTING arbitration; 'not the reviewed A/B rollback contract'; both-copies-unreadable -> try the winner)",
+    "secure/src/hw/boot_state.rs:129-141 + inventory (only writer is the refusing COMMIT; no TRIED->COMMITTED confirm-alive writer)",
+    "geometry/src/lib.rs:124-127,195 (Route-1 journal pages 64/122 reserved; no consumer yet)",
+    "fw-manifest/src/v6.rs:77-100 (journal QW layout: PENDING/CONFIRMED/INSTALL_ID \u2014 no schema/flags QW for route-around)",
+    "GitHub #271 OPEN, #138 OPEN, #758 OPEN, #696 OPEN"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/image/stm32/boot_ucb.c:56-171 (UCB write/validate/erase), boardloader main.c:148-250 (re-verify, non-overlap, idempotent copy), bootloader main.c:496-500 (erase UCB first), core/embed/models/T3W1/model_T3W1.h:56-68 (BOARDLOADER_UCB_ZERO_ADDR_BUG workaround in the mutable stage).",
+   "novelty": "parity",
+   "kind": "process",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "Any amendment to Draft 1.1 reopens the frozen digest (dual review + owner re-ratification). Rows (e) and (f) interact with the 2026-07-26 errata (no RecoverySameEpoch/FloorBoundAccepted paths) \u2014 the route-around flag must not become a hidden availability path; constrain it to disabling features, never to lowering a floor.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/image/stm32/boot_ucb.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+    "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/model_T3W1.h",
+    "https://github.com/EthereumPhone/PQ1/issues/271"
+   ]
+  },
+  {
+   "id": "FWU-8",
+   "title": "Execute the assurance that already exists and add a release-provenance gate (fix-commit-is-ancestor-of-tag, FSBL byte-diff, signature actually exercised)",
+   "threat": "Vacuous green: 156 pqsigner-rollback tests, 8 geometry tests, two fw-manifest fuzz targets and the nightly Kani census run in no workflow; the FSBL is never byte-diffed for reproducibility; fw-manifest's own tests skip verify_signature; and the LSB-024 pattern (a merged fix missing from the tagged build) has no gate in `make release`.",
+   "proposal": "CI: enrol `cargo test -p pqsigner-rollback -p pqsigner-geometry` and fsbl-tests geometry_consistency/qemu_integration; add fw-manifest/fuzz to .clusterfuzzlite/build.sh; fix the Kani nightly so the fw-manifest harnesses actually complete (#776); extend `make verify-repro` to the FSBL for BOTH boards and to the exact FEATURES of the release build. Add one fw-manifest host test that runs the full chain INCLUDING sphincs_c10::verify against a dev-signed fixture (the comment at lib.rs:918 says it is deliberately skipped). Release: `make release` asserts every commit referenced by the release's CHANGELOG/issue-close list is an ancestor of the tag, and `fwsign verify-release` output (authenticity + equivalence) is stored in release.json.",
+   "rationale": "The repo's own memory notes ('Green can mean NEVER RAN', 'Never-run tests gate') and the inventory agree that the rollback/geometry/fuzz assurance is unexecuted; invariant #10's text calls geometry 'CI-pinned' while #720 records it is not. Trezor's verify_signed_firmware.py does the two-sided check (equivalence AND authenticity) per release; Ledger's LSB-024 timeline shows a vendor shipping a tagged build without a merged fix.",
+   "repo_evidence": [
+    "GitHub #720 OPEN (rollback 156 + geometry 8 tests in no workflow), #635 OPEN (fw-manifest/fuzz not in ClusterFuzzLite), #776 OPEN (nightly Kani never completes), #189 OPEN (FSBL never byte-diffed)",
+    "fw-manifest/src/lib.rs:918 ('We do NOT exercise verify_signature because SPHINCS+C10 verify ...')",
+    "Makefile:2597-2620 per inventory (verify-repro diffs only secure+nonsecure for the invoked FEATURES)",
+    "CLAUDE.md invariant #10 text ('CI-pinned') vs #720"
+   ],
+   "vendor_precedent": "Trezor core/tools/trezor_core_tools/verify_signed_firmware.py (zero signature fields, compare, AND require valid production signature); docs/common/reproducible-build.md. Ledger LSB-024 (fix merged 2026-05-05, 1.22.2 tagged without it 2026-08-13).",
+   "novelty": "parity",
+   "kind": "process",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "Kani/fuzz CI time; the ui-px Kani hang (#776) is unrelated to this surface but blocks the shared nightly \u2014 split the fw-manifest harnesses into their own job rather than waiting. Ancestry gate needs a machine-readable fix list per release (issue labels or CHANGELOG convention) \u2014 a process the team must actually follow.",
+   "sources": [
+    "https://donjon.ledger.com/lsb/024/",
+    "/home/nicola/repos/trezor-firmware/core/tools/trezor_core_tools/verify_signed_firmware.py",
+    "https://github.com/EthereumPhone/PQ1/issues/720",
+    "https://github.com/EthereumPhone/PQ1/issues/635"
+   ]
+  },
+  {
+   "id": "FWU-9",
+   "title": "Take the now-or-never WRP-freeze decisions as one package: Option B dual-key FSBL, immutable FSBL_MIN_ACCEPTED_FW_VERSION, vendor-pubkey OTP hash lock, and a sealed 'no secure-world update' cold-vault profile",
+   "threat": "Vendor signing-key theft/coercion signs firmware that passes both verification stages on every device ever shipped, with no fleet remediation except recall; and a re-flashed FSBL today could substitute a different vendor key without refusal. Each of these levers ceases to exist the moment the FSBL freezes under WRP+RDP-2.",
+   "proposal": "Schedule the freeze review now and record outcomes (even 'declined') in vendor-signing-key-compromise.md: (1) Option B \u2014 primary + recovery C10 pubkey in the FSBL (~40 B rodata + one extra verify only when the primary fails), with the recovery key's seed split-custodied offline; (2) an immutable `FSBL_MIN_ACCEPTED_FW_VERSION`/epoch constant so even a leaked primary cannot install below it; (3) #220 \u2014 burn SHA-256(vendor pubkey) into an OTP block and have the FSBL verify its embedded key against it at boot (no-op cost, closes threat-model \u00a79.8); (4) a `mode-sealed` production profile that compiles out CMD_FW_BEGIN..ABORT dispatch (NS image remains updatable only if/when decoders move out of S-world) for a cold-vault SKU, the only option that literally refuses an extraction-enabling update. Pair with #225: per-key C10 signature cap enforced in fwsign's ledger.",
+   "rationale": "The repo's own key-compromise design note identifies these as expiring decisions and recommends taking them together; the task's owner-decision list declined only cosi-style m-of-n committees, not a two-key primary/recovery FSBL. Trezor keeps 3 root keys with sigmask rotation and locks the vendor-header hash into OTP; Tangem removes the update surface entirely; pq1 currently has one baked key, no OTP lock and no floor the vendor cannot lower.",
+   "repo_evidence": [
+    "docs/security/vendor-signing-key-compromise.md:52-94 (Option B pending), :388-401 (Option B + FSBL_MIN floor as ONE decision at the WRP freeze), :415-445 (post-personalization update freeze: 'cost it at the same freeze review')",
+    "docs/security/threat-model.md:517-519 (\u00a79.8 vendor-pubkey OTP hash lock not burned)",
+    "config/production-firmware-vendor-key.sha256 + inventory (policy UNPROVISIONED; no HSM ceremony)",
+    "GitHub #486 OPEN, #220 OPEN, #69 OPEN (ship-blocker), #225 OPEN"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/image/inc/sec/root_keys.h:40-67 (3 root keys, sigmask), image.c:526-574 + docs/core/misc/memory.md:33-36 (vendor-header hash locked into OTP block 2); Foundation Passport Prime 2-of-4 release keys; Tangem non-updatable firmware.",
+   "novelty": "parity",
+   "kind": "process",
+   "cost": "S",
+   "priority": "P2",
+   "risks": "Option B costs one extra C10 verify at boot only on primary failure but ~40 B of FSBL rodata against the 52 B draft warning margin (fw-rollback-fsbl-resource-map-2026-07.md:153-164 per VSKC); a recovery key is a second thing to lose or leak. The sealed profile converts every parser fix into RMA/wipe-restore \u2014 must be a separate SKU, not the default. OTP hash lock interacts with the OTP region map already used for the device master (bytes 128..160) \u2014 reserve a block in the frozen map before burning tooling exists.",
+   "sources": [
+    "docs/security/vendor-signing-key-compromise.md",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/image/inc/sec/root_keys.h",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c",
+    "https://docs.foundation.xyz/firmware-updates/passport-prime/",
+    "https://tangem.com/en/learning-hub/post/is-tangem-safe/"
+   ]
+  },
+  {
+   "id": "FWU-10",
+   "title": "Merkle-batched release signing: one C10 ceremony per release covering every (board, secure, NS) artifact, with a bounded per-image proof in the unsigned manifest region",
+   "threat": "Each additional signed artifact (now two boards, later revisions, plus a future PQDESC_V1 descriptor root) consumes one signature of the vendor key's finite C10 budget (OPEN-C10-1) and one HSM ceremony; today's format signs one 75/121-byte preimage per image, so the signature count scales with the artifact count and the insider/ceremony surface grows with it.",
+   "proposal": "In the V6 amendment (with FWU-3): the signed value becomes a Merkle root over leaves `SHA-256(0x00 || preimage_i)` with order-independent internal nodes `SHA-256(0x01 || min || max)`; each manifest carries its own leaf preimage plus a proof path (<= 8 nodes, 32 B each) in the unsigned region; the device recomputes the root and verifies ONE C10 signature. fwsign gains a `sign-release-set` that builds the tree over all artifacts of a release set (both boards, optional descriptor-root leaf) and emits per-artifact manifests. Bound the proof length and check it fits inside the manifest page before any pointer is formed.",
+   "rationale": "Trezor moved its PQ bootloader signing to exactly this structure so one slow SLH-DSA ceremony covers all models/revisions/builds, with proof size independent of batch size \u2014 directly relevant to pq1 where C10 signing is expensive, the key budget is capped, and the release set just doubled with the second board. It also gives the OPEN-REL-1 'release-set authority' a cryptographic object (the root) rather than a convention.",
+   "repo_evidence": [
+    "fw-manifest/src/lib.rs:17-31 (signature covers one preimage per image; no batch structure)",
+    "fwsign/src/subcommands/sign.rs:1-60 per inventory (single-artifact sign; grep merkle|batch in fwsign/src hits only erc7730_release_metadata.rs)",
+    "GitHub #225 OPEN (OPEN-REL-1 release-set authority + OPEN-C10-1 per-key signature cap)",
+    "docs/erc7730-root-rotation-and-update-policy.md:107-120 (roadmapped PQDESC_V1 signed by the SAME key \u2014 a natural extra leaf)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/image/boot_header.c:111-141,226-261 (boot_header_calc_merkle_root), python/src/trezorlib/merkle_tree.py:23-36, core/tools/trezor_core_tools/headertool_pq.py:22-36; docs/common/external-definitions.md (same tree shape for signed definitions).",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "V6 schema change (owner-gated, see FWU-3). The FSBL must parse a proof path \u2014 new bounds-checked parser in the frozen stage (fuzz + Kani before freeze; BitBox's AI-found bootloader flaw is the warning). Order-independent node hashing must be modelled in the ProVerif fw_update_authenticity.pv (domain separation of 0x00/0x01 prefixes vs PQFW tags). DROPPED: per-chunk pre-write hash authentication (usb-fw-update-hardening.md:329 judged no security gain over whole-image COMMIT re-hash); fix_version soft floor with forced SE wipe on security-relevant downgrade (overlaps the 2026-07-26 errata's declined availability paths); first-boot 0xFF image padding + published page-mutation map for the SWD verify story (Trezor combine.rs \u2014 not verified against pq1's release packaging in this pass); FSBL pre-jump SRAM/peripheral reset (only public data in FSBL SRAM today); signed-flag prodtest image class + OTP line-complete latch (Trezor ALLOW_PROVISIONING); companion GetFirmwareHash (explicitly NOT recommended \u2014 known-bypassable); OptRand anti-klepto and measurement-bound key wrap (both on the do-not-resurface list in vendor-signing-key-compromise.md:457-466,666-676).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/image/boot_header.c",
+    "/home/nicola/repos/trezor-firmware/python/src/trezorlib/merkle_tree.py",
+    "/home/nicola/repos/trezor-firmware/core/tools/trezor_core_tools/headertool_pq.py",
+    "https://github.com/EthereumPhone/PQ1/issues/225",
+    "https://decrypt.co/375886/bitcoin-wallet-bitbox-ai-severe-flaws-firmware"
+   ]
+  }
+ ]
+}

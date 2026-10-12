@@ -1,0 +1,31 @@
+{
+ "id": "IMP-01",
+ "title": "No-cavity, destructive-open enclosure with the display module and its SPI/DC/TE/button nets physically unreachable (EVT board + mechanical spec)",
+ "threat": "CryptoBilis shape exactly: an implant MCU + LTE module parked in the padding behind the screen, soldered to the display SPI bus (pq1: PA4 CS / PA5 SCK / PA7 MOSI, PB0 DC, PB2 TE) or to the button nets (PA0/PA1), installed between factory and first power. Firmware cannot see this (write-only panel, no MISO), so the only deterministic counter is to leave no space and no reachable copper.",
+ "proposal": "Write and adopt a mechanical/PCB security spec for the MP revision of AL_A66_MB: (1) zero void behind the panel \u2014 panel bonded to a rigid backer that fills the cavity, display FPC captured under the EMI can with the connector potted; (2) SPI1/DC/TE/button traces routed on inner layers with no vias to the outer layers in the display region, and NO test pads on SPI1, I2C1, I2C4, PA0/PA1 at MP (EVT currently brings out PB8/PB9 and the 10-pin SWD pads); (3) ultrasonic-welded or otherwise destructive-open shell (Ledger Gen5 / Cypherock model) so any opening is irreversible and visible; (4) verify the ODM's BOOT0-strap-at-MP claim on silicon so the sealed unit's ROM-DFU via the SBU bridge (A8<->VBUS) is physically gone; (5) publish Gerbers, pinned BOM (exact passives), and reference photos / X-ray / weight of a sealed known-good unit so the design is golden-free comparable (Parasitic Circus). Keep the SWD pads reachable ONLY through the deliberately-documented verification route (see IMP-02).",
+ "rationale": "Ledger's own threat model concedes Genuine Check cannot see an implant around an intact SE; its only remedy was photos and a casing that cannot be opened without damage. pq1 has nothing on this axis yet (no enclosure spec, no BOM, cross-check never done) and its EVT units are reflashable over USB-C with a modified cable. Removing the cavity and the copper access is the one measure that does not depend on detection thresholds or on who calibrated a baseline.",
+ "repo_evidence": [
+  "secure/src/hw/lcd_nv3007.rs:104 ('The panel is write-only so MISO is free')",
+  "fsbl/src/render.rs:62-72 (verdict cannot prove panel received a byte; PA6 NC)",
+  "secure/src/ui/seed_wizard.rs:89-96 (px_mnemonic_page renders the 24 words as pixels over SPI1)",
+  "docs/hardware/evt-debug-pins.md: SWD J210 'DNP / remove for MP, the pads stay'; BOOT0 via USB-C SBU LDO; I2C1 pads PB8/PB9 brought out",
+  "docs/hardware/schematics/README.md: 'There is no BOM in this repo'; 'The cross-check itself has not been done'",
+  "docs/hardware/pcb/README.md: no tamper/side-channel review implied",
+  "gh #695 (sealed EVT flashable over SBU bridge; BOOT0 strap is an ODM statement)",
+  "grep -rl 'enclosure|no-cavity|potting' docs/ -> only checklist mentions in README \u00a7A / hardware_requirements.md"
+ ],
+ "vendor_precedent": "Ledger Nano Gen5 casing 'cannot be opened without visible and irreversible damage' (support article 4404382029329); Cypherock ultrasonic-welded shell + Keylabs audit flagging exposed test points as a supply-chain jig vector; Foundation Passport Prime screen-removal tamper; Coldcard clear case with exposed circuit for visual implant check.",
+ "novelty": "parity",
+ "kind": "hardware",
+ "cost": "L",
+ "priority": "P0",
+ "risks": "Destructive-open kills user-side 'open and compare' inspection (Ledger's 2018 stance) \u2014 pq1 must choose evidence-of-opening over inspectability deliberately and document it. Potting/welding complicates RMA and the SWD verification route (IMP-02). Does nothing against a factory-inserted implant that ships inside the sealed shell \u2014 that is IMP-02/IMP-03's job. Thermal/ESD rework of the display module needs ODM sign-off; EVT-003B-class units are already sealed and cannot be retrofitted.",
+ "sources": [
+  "https://donjon.ledger.com/threat-model/device-genuineness",
+  "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+  "https://www.cypherock.com/keylabs.pdf",
+  "https://docs.foundation.xyz/glossary/home/",
+  "https://arxiv.org/abs/2403.12252"
+ ],
+ "surface": "implant"
+}

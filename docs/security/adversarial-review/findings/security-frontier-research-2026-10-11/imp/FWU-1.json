@@ -1,0 +1,32 @@
+{
+ "id": "FWU-1",
+ "title": "Select the anti-rollback backend: HDP1-hidden unary flash-page counter owned by the pre-PIN stage (Trezor monoctr shape on the same silicon) instead of the stalled OTP codec",
+ "threat": "Validly-signed downgrade to a vulnerable release. Today the floor can never move past its factory value: otp::bump_to has zero call sites, COMMIT refuses unconditionally, and the only selected physical backend (OTP quad-words) is invalid on STM32U585 ECC OTP, leaving every release the vendor ever signed installable forever (#31 ship-blocker).",
+ "proposal": "Take an owner decision to route OPEN-OTP-1..3 to a non-OTP backend: one 8 KB bank-1 flash page per counter (security_epoch; optionally a second for release_version), encoded exactly as Trezor monoctr: value N == first N 16-byte quad-words programmed to 0x00, read rejects any programmed-after-erased gap, write refuses values below current and programs one fresh QW per increment with write->read->ensure, MONOCTR_MAX static-asserted against the largest epoch any release may carry. Place the page(s) at the start of the bank-1 secure area so HDP1 (SECWM1R2.HDP1EN + HDP1_PEND) covers FSBL pages 0..4 plus the counter page(s); the pre-PIN stage reads/bumps them, then sets FLASH_SECHDPCR.HDP1_ACCDIS before branching, so the mutable secure runtime can neither read nor forge the floor. Keep the counter page OUTSIDE the WRP range (WRP prevents the increment; Trezor's secret sector is pages 0-1 while WRP covers 2-13). Close #212 (OPTIGA E1E0 layer) as 'not needed' once this lands, and fold #39 (HDP1) into it.",
+ "rationale": "This is the single most relevant vendor finding: Trezor solved the identical problem on the identical flash controller by moving the unary tally from OTP (F4) to an HDP-hidden ordinary page (U5), which U585 supports natively (one-shot QW programming, page erase only pre-lock, HDP temporal hiding until reset). It dissolves OPEN-OTP-1..3's 'one-program-only, interrupted program not retry-safe' blocker because a torn QW simply reads as programmed, and an 8 KB page gives 512 increments versus 64 QWs of OTP. It also gives invariant #10's FSBL an actual enforcement lever for the floor the runtime cannot lower even when fully compromised.",
+ "repo_evidence": [
+  "secure/src/hw/otp.rs:1-73 (rejected unary OTP tally, production-fenced)",
+  "secure/src/nsc/cmd_fw_commit.rs:332-375 (FA-1.5 unconditional refusal, no floor write)",
+  "docs/security/a-b-firmware-rollback-architecture.md:1088-1130 (OPEN-OTP-1 assumes an OTP physical record format; no flash-page/HDP alternative anywhere in the doc \u2014 grep for 'HDP-hidden'/'non-OTP' returns nothing)",
+  "geometry/src/lib.rs:121-137 (frozen registry has no counter page row and no HDP row)",
+  "docs/security/production-security.md:525-532 (HDP deferred; nothing in secure/src writes SECWM1R2/SECHDPCR; #39)",
+  "fsbl/Cargo.toml stage-marker comment + fsbl/src/marker.rs:36-41 ('invariant #10 forbids an FSBL write path in a shipping image' \u2014 the rule this proposal must get an explicit exception for, scoped to one non-WRP page)",
+  "GitHub #31 OPEN, #543 OPEN, #546 OPEN, #39 OPEN, #212 OPEN"
+ ],
+ "vendor_precedent": "Trezor Safe 7 / T3W1: core/embed/sec/monoctr/stm32u5/monoctr.c:30-135 (unary 16-B cells, gap rejection, write-then-read ensure), core/embed/models/T3W1/secret_layout.h:33-51 (three 0x400-byte counters in the secret page), core/embed/models/T3W1/memory.h:30-41 (secret sector 0-1 NOT in the WRP'd boardloader range 2-13), core/embed/sec/option_bytes/stm32u5/option_bytes.c:66-69 (HDP1_PEND = SECRET_SECTOR_END), core/embed/sec/secret/stm32u5/secret.c:170-173 (HDP1/2_ACCDIS before jump), core/embed/projects/bootloader/version_check.c (static assert cap). BitBox02 Nova ships bootloader anti-downgrade in hardware.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P0",
+ "risks": "Conflicts with the current strict reading that the FSBL has NO flash write path at all (marker.rs/invariant #10 consequence text) \u2014 needs an explicit owner exception limited to the counter page, or the bump must be done by the secure runtime BEFORE HDP engages (not possible: HDP is engaged by the FSBL before the runtime exists). HDP1 must be contiguous from page 0, so the counter page displaces Manifest A (page 5) in the frozen registry \u2014 a geometry change gated by #540/#758 and the Draft 1.1 digest. OPEN-ECC-1 does not vanish: a power-cut mid-program can leave an ECC-invalid QW that raises NMI on read; the reader must treat ECCD on a counter QW as 'programmed' deterministically and that needs sacrificial-silicon evidence. FSBL budget: a minimal program-QW path (~1-2 KB) against 38,912 B registry budget (28,704 B used) but only ~2 KB free on the bench 32 KiB linker. HDP also hides the FSBL's own vendor pubkey from the runtime \u2014 the runtime verifier must keep its own copy (it already does: secure/src/fw_update/vendor_pubkey.rs).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/monoctr/stm32u5/monoctr.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/secret_layout.h",
+  "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/memory.h",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c",
+  "https://bitbox.swiss/bitbox02/nova/BitBox02_Nova_BTC_Datasheet.pdf",
+  "RM0456 \u00a77.5 (HDP), \u00a77.9 (SECWM1R2/SECHDPCR)"
+ ],
+ "surface": "fwupdate"
+}

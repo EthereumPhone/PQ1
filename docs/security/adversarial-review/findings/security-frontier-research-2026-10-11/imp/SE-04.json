@@ -1,0 +1,27 @@
+{
+ "id": "SE-04",
+ "title": "Runtime SE configuration attestation at every boot: compiled-in expected OPTIGA metadata per OID and SE050 object policy set, read back through the tunnels before any secret is touched, refuse if looser, with a CI-pinned expected table",
+ "threat": "A tampered, re-provisioned, factory-skipped or substituted SE whose access conditions are looser than the design (e.g. Read=Always on F1D1, E140 at LcsO<Op after the final rotation, UserID max_attempts raised, write-once policy missing) is silently accepted \u2014 the firmware only checks metadata inside the provisioning/lock paths, so a device whose lockdown never happened, or was rolled back on a swapped chip, boots and unlocks normally. This is also the detector for the OP17-1 weak Read AC: today nobody would notice it ratcheted.",
+ "proposal": "Add `optiga::audit_metadata()` that, after `ensure_shield`, issues `get_metadata` for F1D0, F1D1..F1D4, F1D8, F1E1, E120, E121, E140 and compares each (via the existing `metadata_matches_expected` / `is_metadata_operational` / `metadata_has_luc_execute` helpers) against a `const EXPECTED_METADATA` table versioned with the lifecycle profile; add `se050::audit_policy()` using ReadIDList + ReadObjectAttributes/CheckObjectExists on every object where the production policy permits the read, plus the GetVersion/AppletConfig assertion. Any 'looser than expected' result is a hard refusal before `check_provisioned`; 'tighter' is accepted. Generate `docs/secure-elements/optiga-expected-metadata.md` from the same table and make `make invariant-gates` diff it (Trezor's docs/core/misc/optiga.md pattern). Record a one-line receipt (expected-table version) in the page-127 journal so a profile upgrade is explicit and journaled.",
+ "rationale": "Trezor's `optiga-lock-check`, boot-time `optiga_pin_init_metadata` self-heal and `tropic_ensure_configuration` are the mechanism that turns the S-1/S-2/S-3 lifecycle ceremony from a one-time factory act into a property re-verified on every boot; pq1 fences those ceremonies at compile time only. It directly supports SE-01 (a substituted chip rarely reproduces the exact metadata) and gives S-3 its missing silicon-readable receipt format. Cost is a handful of GetDataObject-metadata reads per boot (tens of ms).",
+ "repo_evidence": [
+  "secure/src/optiga/mod.rs:1143,1224,1277,1319,1417,1465,1494,2005 \u2014 every get_metadata caller is a provision_* function; no boot-path audit",
+  "secure/src/optiga/apdu.rs:1544 metadata_matches_expected, :1522 is_metadata_operational, :1603 metadata_has_luc_execute exist but are not used on the boot path",
+  "secure/src/main.rs:1570-1801 boot path: no metadata/policy audit between SE init and unlock",
+  "secure/src/se050/mod.rs:1788-1797 check_provisioned: existence check only, no policy readback",
+  "Issues #207 (policy readback stress test), #63 (LockState assert), #116 (OP17-1), #14/#215 (S-3 profile not frozen)"
+ ],
+ "vendor_precedent": "Trezor core/embed/projects/prodtest/cmd/prodtest_optiga.c:252-304 (optiga-lock-check), core/embed/sec/optiga/optiga.c:311-353 (set metadata then read back and compare), core/embed/sec/tropic/tropic.c:825-1005 (tropic_ensure_configuration: refuse if looser, tighten if allowed, versioned marker).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Expected table must track the still-open S-1/S-2/S-3 profile (version it, do not freeze it prematurely); SE050 attribute reads are policy-denied on the user UserID (0x6986) so coverage of that object is existence-only; a refusal must park the device with a readable error code, not wipe; OPTIGA 'self-heal to expected' (Trezor sets metadata at boot) must NOT be ported \u2014 ordinary pairing must never ratchet E140 (owner decision).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/prodtest/cmd/prodtest_optiga.c:252-304",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga.c:311-353",
+  "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md:5-36",
+  "/home/nicola/repos/trezor-firmware/docs/core/misc/tropic_configs.md:8-57"
+ ],
+ "surface": "se"
+}

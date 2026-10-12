@@ -1,0 +1,27 @@
+{
+ "id": "USB-09",
+ "title": "Make the NS APDU router host-compilable and fuzz the composed HID->APDU->chain->GET_RESPONSE path; stand up the USB-face rig; implement-or-retract the ES0499 claims",
+ "threat": "The 1274-LOC NS router (per-command dispatch, drain chunker, trailer-skeleton padding that WRITES into the forwarded payload, SW mapping, router lease) is the largest host-reachable parser in the device and has zero host tests, proptest, libFuzzer or Kani; fuzz/proof coverage stops at `shared/src/apdu_framing.rs`. The live USB stack (descriptor/SETUP/wLength abuse, reset storms, suspend, ZLP) has never been adversarially driven, and threat-model.md:373 claims DWC2 ES0499 mitigations (single-packet transfers, no CSR interleaving, FIFO flush) that do not exist in our code. NS bugs are DoS-class by design, but a pre-setup device talking to a hostile host (BitBox 2026) and a wedge that survives power-cycle are real product failures.",
+ "proposal": "(1) Extract `nonsecure/src/usb/commands.rs` (+ transport state) into a `pqsigner-ns-router` workspace crate behind a small trait for the NSC calls and the HID endpoint; keep the firmware a thin shim like the secure-world re-export pattern. (2) Add a libFuzzer target that feeds random 64-B HID frames through assembler -> router -> GET_RESPONSE with a mock NSC that returns arbitrary statuses/lengths; assert no panic, lease invariants, no out-of-bounds write into CHAIN_BUF, and that the trailer-padding never grows past the per-CMD bound; enrol in ClusterFuzzLite; mutation-gate it. (3) Build the Cynthion/Facedancer rig (#590) with a scripted corpus: malformed SETUP, wLength > descriptor, interface index abuse, reset/suspend storms, ZLP on every endpoint; pass criterion = device still enumerates and signs afterwards. (4) Either implement the ES0499 single-packet/flush discipline in `usb/hid.rs`/`transport.rs` (XFRSIZ = MPSIZ, RXFFLSH on reset) or rewrite threat-model.md:373 to 'claimed-not-verified'.",
+ "rationale": "Trezor's protobuf decoder and THP channel code are host-compiled Rust with bounds proofs; its HID class enforces exact-size reports, read-gated re-arming and EP0 stall on unknown requests. pq1's equivalent code is only exercised on silicon by happy-path scripts. The composed-router fuzz is the single largest coverage hole on this surface and is already filed (#588/#313/#476).",
+ "repo_evidence": [
+  "nonsecure/src/usb/commands.rs (1274 LOC; no [lib] target, no tests/ dir; grep shows no proptest/fuzz/Kani references)",
+  "nonsecure/src/usb/commands.rs:605-625 (NS writes zero trailer prefixes into the forwarded CHAIN_BUF)",
+  "fuzz/Cargo.toml + fuzz/fuzz_targets/ (targets cover shared apdu_framing only)",
+  "docs/security/threat-model.md:373 (ES0499 mitigations claimed; grep RXFFLSH|XFRSIZ|ES0499 nonsecure/ -> none)",
+  "GitHub #588 OPEN priority:high, #590 OPEN, #313 OPEN, #476"
+ ],
+ "vendor_precedent": "Trezor core/embed/rust/src/protobuf/decode.rs (bounded, host-tested decoder), usb_class_hid.c:333-347 (no re-arm until consumed), usbd_ctlreq.c (EP0 stall, wLength clamp); Ledger threat model treats transport MCU as untrusted and fuzzes it.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P2",
+ "risks": "Extracting the router changes the NS image layout (re-run the gateway-ABI join check and the FSBL NS-slot measurement); mock NSC must not drift from the real veneer contract (bind via proto constants); the rig needs hardware (~USD 300) and bench time; ES0499 changes touch the synopsys-usb-otg upstream crate or need a fork.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/rust/src/protobuf/decode.rs:14-278",
+  "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb_class_hid.c:333-347",
+  "https://blog.bitbox.swiss/en/bitbox-08-2026-dixence-update/",
+  "ST ES0499 STM32U575/585 errata (DWC2 OTG_FS section)"
+ ],
+ "surface": "usb"
+}

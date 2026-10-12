@@ -1,0 +1,27 @@
+{
+ "id": "SYS-06",
+ "title": "Fault and tamper forensics with lockout-time persistence: capture CFSR/SFSR/SFAR/PC, TAMP SR, TZIC SR, reset cause and the PIN-attempt reason ring into a wipe-surviving public record and render the reason after the FSBL fingerprint",
+ "threat": "A unit returned from the field (or #715 on the bench) cannot explain a lockout, a tamper trip or a cluster of resets; FI attempts are indistinguishable from flaky hardware; every diagnostic today is SRAM-only and destroyed by the very reset that the security response performs.",
+ "proposal": "(1) On HardFault/NMI/TAMP/TZIC/PVD before `sys_reset`, snapshot the fault registers (CFSR, HFSR, SFSR, SFAR, BFAR, MMFAR, faulting PC, NS/S state), the TAMP/TZIC status words and the reset cause into non-secret TAMP backup registers that are NOT in the CR3-erased set (or a fixed secure-SRAM mailbox checked for a magic+CRC on next boot). (2) At the next boot, the secure world folds that snapshot plus monotonic counters (tamper events by source, fault resets, FI-sentinel trips, SE link resets, ECC single-error count) into a PUBLIC record class on page 127 written only on exceptional events (lockout, tamper, fault cluster) \u2014 the one-time flash write pin_attempt_log.rs already names as its follow-up \u2014 and persists the PIN-attempt reason ring at lockout. (3) The record survives the admin wipe (public class, Trezor backup_ram PUBLIC vs PROTECTED split) and is readable without PIN via a read-only CMD / shown as a short reason line after the FSBL fingerprint ('TAMPER: VOLTAGE' / 'PIN locked: 10 wrong' / 'FAULT x3').",
+ "rationale": "Trezor records a first-fault postmortem (never overwritten), names the tamper source on RSOD, and persists monotonic min/max temperature + sticky error bits as a wipe-surviving public item; pq1 discards everything. Exceptional-event-only writes respect the 'no new per-signature flash state' rule. Field evidence is also what turns the SYS-04 ladder from a policy into something auditable.",
+ "repo_evidence": [
+  "secure/src/main.rs:4650-4656,4680-4692 \u2014 NMI/HardFault zeroize + sys_reset with no capture of fault registers (grep CFSR|SFSR|SFAR|postmortem in secure/src: only comments/tests)",
+  "secure/src/pin_attempt_log.rs:19-27 \u2014 'RAM-resident ... does NOT survive a reset ... Persisting the ring at lockout ... is the follow-up; it needs a page decision'",
+  "secure/src/hw/tzic.rs \u2014 violation counter and LAST_SR SRAM-only (inventory)",
+  "secure/src/hw/tamp_reason.rs / tamp.rs:364-396 \u2014 reason decoded but not persisted",
+  "grep -rli telemetry docs/: only companion-privacy-disclosure.md and a review log \u2014 no telemetry design",
+  "issues #715 (field lockout with no evidence), #595, #487"
+ ],
+ "vendor_precedent": "Trezor core/embed/sys/task/stm32/systask.c:96-102,509-560 (postmortem record, first fault wins); core/embed/sec/tamper/stm32u5/tamper.c:209-248 (reason names on RSOD); core/embed/sec/telemetry/stm32u5/telemetry.c:27-105 (monotonic min/max + sticky bits, PUBLIC backup-RAM item surviving wipe); core/embed/sec/backup_ram/stm32u5/backup_ram.c:153-265 (guard-NOK -> payload -> CRC -> guard-OK journaling).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "A PIN-less readable record is an information-disclosure decision (owner issue #719 already covers the RAM ring; extend it); the snapshot must contain no secret-derived value (fault PC inside the signing path is fine, register contents are not); page-127 is currently exclusively the first-boot journal + salt (`flash_policy::GenericSecureQwAddr` exclusivity) so a public-record class needs a flash-policy and Verus/TLA+ model update; backup registers survive only while VDD is present (no battery) so the boot-time fold is mandatory; rendering a reason line after the fingerprint must not shorten the 4 s fingerprint window.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/task/stm32/systask.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/telemetry/stm32u5/telemetry.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/backup_ram/stm32u5/backup_ram.c"
+ ],
+ "surface": "systemic"
+}

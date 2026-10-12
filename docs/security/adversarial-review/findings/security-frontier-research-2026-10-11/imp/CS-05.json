@@ -1,0 +1,24 @@
+{
+ "id": "CS-05",
+ "title": "Generic EIP-712 field walker gated by a registry-known-domain omission filter (Bloom twin) and empty-domain refusal",
+ "threat": "Any typed-data request for a dapp without a curated ERC-7730 EIP-712 descriptor is signable only as RAW32 (blind); users are pushed to the worst tier precisely for long-tail dapps, and a hostile companion can strip the descriptor from a registry-known domain only if there is a generic path \u2014 so the two must land together.",
+ "proposal": "(1) Build a 16 KiB Bloom of every registry-declared (chain_id, verifyingContract, primaryType-hash) tuple (same dbgen pipeline and 25% occupancy cap as known_calls); a kind-2/3 request whose domain is Bloom-positive but carries no bound descriptor hard-refuses ('7730 eip712 proof needed'), exactly mirroring the contract-call filter. (2) For Bloom-negative domains, add a structural walker: render EVERY leaf (no 'show more' skipping), label by field name from the companion-supplied type string whose hash the device recomputes into the EIP-712 typeHash (so names are bound to the signed hash), refuse arrays-of-arrays, nested EIP712Domain members, missing chainId/verifyingContract, non-UTF-8 strings; banner '! NO INTENT / structure only'; final Eip712Final ERC-8213 page; chord/hold after last page. (3) Keep RAW32 (CS-01) off.",
+ "rationale": "Trezor and Ledger both render arbitrary EIP-712 generically; pq1 refuses, which is sound but drives long-tail dapps to RAW32. The walker is NOT semantic clear-signing (no intent claim) but is strictly better than a 32-byte hash, and the Bloom twin preserves the 'registry-known shape either clear-signs or refuses' contract for typed data, which today holds only for contract calls.",
+ "repo_evidence": [
+  "secure/src/nsc/cmd_sign_offchain.rs:479-487 ('7730 bundle fail' \u2014 kinds 2/3 require a descriptor)",
+  "pqsigner-erc7730/src/known_calls.rs (contract-call Bloom only; grep -i eip712|typed \u2192 empty)",
+  "proto/src/lib.rs:1271 MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN=512 (bound already exists for a walker)",
+  "gap listed as untracked in inventory (adjacent #381, #534)"
+ ],
+ "vendor_precedent": "Trezor core/src/apps/ethereum/sign_typed_data.py:69-140 (field-by-field hashing with type validation), 293-296 (nested EIP712Domain rejected), 407-426 (empty-domain warning), 491-566 (_validate_value); Ledger EIP-712 filtering.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Owner decision: curated-only stance vs structural display. Field names come from the companion's type string \u2014 bound to the hash but still attacker-chosen vocabulary (e.g. a field named 'refund' that is actually 'spender'); the '! NO INTENT' banner and danger chrome (CS-02) must make that explicit. Page budget (31) caps struct size \u2014 refuse, never truncate.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/sign_typed_data.py",
+  "https://eips.ethereum.org/EIPS/eip-7730"
+ ],
+ "surface": "clearsign"
+}

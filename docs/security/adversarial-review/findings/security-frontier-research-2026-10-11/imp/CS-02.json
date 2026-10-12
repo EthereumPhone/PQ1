@@ -1,0 +1,27 @@
+{
+ "id": "CS-02",
+ "title": "Custody-change 'danger class' with mandatory interstitial, plus same-(Safe,nonce) re-sign detection",
+ "threat": "Radiant/Bybit pattern: owner/threshold/module/guard/fallback changes, unlimited approvals and setApprovalForAll look like ordinary management pages; attackers harvest extra signatures by prompting 'retry after gas failure' for the same Safe nonce. The user's familiarity with the page shape is what gets exploited.",
+ "proposal": "(a) Classify SafeTx mgmt ops (add/remove/swap owner, changeThreshold, enable/disableModule, setGuard, setFallbackHandler), ERC-20 unlimited approve, setApprovalForAll(true), Permit2 max-amount and every blind tier as `Danger`; in ui-px give them a distinct State/Icon (red glyph + inverted hero) and in 16x4 a mandatory first page '! CUSTODY CHANGE / press to continue' that cannot be skipped (scroll-to-end already arms only after last page). (b) Keep an SRAM ring of the last N (safe_address, safe_nonce, safeTxHash) tuples released this unlock session; a second request for the same (safe, nonce) renders '! RE-SIGN nonce N' (and '! DIFFERENT TX same nonce' if the hash differs) as a danger page. (c) Add the same for repeated UserOp (sender, nonce) within a session.",
+ "rationale": "Trezor renders a `show_danger` interstitial before unknown-contract/unknown-token paths and a separate 'Approving unlimited amount' warning; pq1's only custody banner today is '! MULTISIG OFF' when threshold==1, and blind screens use the same `Look::plain` chrome as benign ones. Radiant's post-mortem identifies the resubmission trick as the harvesting mechanism; a device is the only place that can see 'you already signed this nonce'. The arXiv 2601.16751 user study shows risk cues, not more hex, raise detection accuracy.",
+ "repo_evidence": [
+  "secure/src/tx/display/safe_mgmt.rs:53-91 (plain 'Add Safe owner' / 'Remove Safe ownr' pages; only '! MULTISIG OFF' when threshold==1)",
+  "secure/src/tx/display/blind_sign_screens.rs:38-39 (Icon::Blind with Look::plain \u2014 no danger state)",
+  "secure/src/ui/px/status_map.rs:206-241 (State::Warning exists only for WIPING/WORKING status screens, never for sign dialogs)",
+  "secure/src/tx/display/safe_display.rs:2181 (nonce row rendered; no re-sign detection anywhere: grep resubmi|same nonce|SAFE_NONCE \u2192 empty)",
+  "secure/src/nsc/cmd_sign_userop.rs (no per-session (sender,nonce) memory)"
+ ],
+ "vendor_precedent": "Trezor core/src/apps/ethereum/layout.py:132-142,415-418 show_danger; core/src/trezor/ui/layouts/eckhart/__init__.py:1066-1080,1235-1239. No vendor ships nonce re-sign detection (beyond).",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "Legitimate re-signs after a real gas failure now show a scary page (acceptable: that is exactly the moment to look). SRAM ring is per-unlock only; power-cycle clears it (document). Danger chrome must stay inside the transcript proofs (#762 chrome-mask gap) or it becomes an unproven row.",
+ "sources": [
+  "https://hacken.io/insights/radiant-hack-review/",
+  "https://www.nccgroup.com/research/in-depth-technical-analysis-of-the-bybit-hack/",
+  "https://arxiv.org/abs/2601.16751",
+  "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/layout.py"
+ ],
+ "surface": "clearsign"
+}

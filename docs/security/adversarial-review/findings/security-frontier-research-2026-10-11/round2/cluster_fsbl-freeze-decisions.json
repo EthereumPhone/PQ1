@@ -1,0 +1,211 @@
+{
+ "merge": {
+  "cluster": "fsbl-freeze-decisions",
+  "title": "One FSBL freeze-review package: decide vendor-key policy (Option B either-key, not 2-of-3), FSBL minimum-epoch constant, Merkle-leaf signing, sealed profile, and an HDP-hidden flash counter as a Draft 1.1 review input, before WRP+RDP-2 makes each impossible",
+  "threat": "The FSBL is the one component that can never be patched after WRP + RDP-2 (invariant #10). Today it embeds exactly one 32-byte C10 vendor key (fsbl/src/vendor_pubkey.rs:20-23) and runs one fpr + one signature check per manifest (fsbl/src/main.rs:335-346). A stolen or coerced vendor key therefore signs firmware every shipped device accepts forever, with RMA as the only fleet remedy. Separately, the anti-rollback floor cannot move: the FSBL reads the rejected unary OTP tally (fsbl/src/otp.rs:1-41), `otp::bump_to` has no production caller, and CMD_FW_COMMIT refuses unconditionally (secure/src/nsc/cmd_fw_commit.rs:332-375), so every release ever signed under the production key stays installable. Finally, a 'bundle verified' receipt says nothing about which FSBL is on the part (#742).",
+  "proposal": "Hold ONE recorded FSBL freeze review and write every outcome, including 'declined', into docs/security/vendor-signing-key-compromise.md (its 'B accepted or declined at FSBL WRP freeze review' box at :84-97 is still unticked). No item below is implementation-approved; items D and F are inputs to the Draft 1.1/1.2 rollback review only.\n\nA. Vendor-key policy: decide Option B (primary + recovery C10 key, accept EITHER, one signature per manifest) versus A (single key). Do not adopt the 2-of-3 quorum (see dropped parts). Option B costs 32 B of rodata plus a second fpr compare and a second verify only when the primary fails, with zero manifest growth. Record its residual: the FSBL accepts a leaked primary forever.\n\nB. Immutable FSBL minimum-epoch constant (v6 `security_epoch` floor compiled into the FSBL), taken together with A as the doc already recommends (:388-401). Honest scope: it only excludes images signed under the production key before the freeze; it is not a movable floor.\n\nC. Merkle-leaf signing: decide before freeze whether the FSBL verifies `sig(root)` with a bounded proof path (0 nodes = today's behaviour). The v6 manifest has 3,916 B of trailing reserved (fw-manifest/src/v6.rs:90-91), so an 8-node proof fits. The secure-world FW_BEGIN verifier must mirror it. Default to 'declined with record' unless FSBL budget is found: the C10-budget argument is weak (a handful of signatures per release against a 65,536 cap); the real gain is one ceremony per release-set and a cryptographic object for OPEN-REL-1.\n\nD. Rollback backend input to the Draft 1.1 review (FWU-1): put the Trezor U5 shape on the table for OPEN-OTP-1..3 (#543) as an explicit alternative \u2014 unary 16-byte cells in a flash page inside HDP1, read and bumped by the pre-PIN stage, hidden via `SECHDPCR.HDP1_ACCDIS` before branch. This directly contradicts a frozen Draft 1.1 MUST and cannot proceed without an owner reopen (see decision_conflicts).\n\nE. Process and tooling with no FSBL cost: (i) #742 \u2014 put the FSBL flash digest in every release receipt and the signed release descriptor; (ii) #220 \u2014 re-scope the vendor-key OTP hash to a check made by the external SWD verify tool, not by the FSBL on itself; (iii) #225 \u2014 freeze the per-vendor-key signature cap in the fwsign ledger before any production signing.\n\nF. Sealed cold-vault profile (no secure-world update after personalization): cost it at the same review as the doc requires (:415-445) and record the outcome. Not a default; today it is a re-architecture, because decoders live in the secure image.\n\nBudget rule for the review: every FSBL byte in A\u2013D competes with the rollback TCB. The Draft candidate links at 38,860 B against a 38,912 B warning limit, i.e. 52 B of margin (fw-rollback-fsbl-resource-map-2026-07.md:153-164). Decide A\u2013D jointly against one measured link, not one at a time.",
+  "members": [
+   {
+    "id": "BOOT-09",
+    "disposition": "modified",
+    "note": "No round-1 verdict; verified by me. Single key and single verify confirmed (fsbl/src/vendor_pubkey.rs:20-23, fsbl/src/main.rs:335-346). Trezor 2-of-3 SLH-DSA precedent confirmed (boot_header.c:49-109, BOOT_HEADER_SIGNATURE_COUNT=2 at boot_header.h:29). The 2-of-3 quorum is dropped: a second 4008-B signature does not fit the one-page manifest (legacy reserved 3,995 B at fw-manifest/src/lib.rs offsets 4193..8188; v6 trailing reserved 3,916 B at v6.rs:90-91), and m-of-n was already declined (#486, vendor-signing-key-compromise.md:44-50). Its '+0.4 s' is understated: filter_valid runs on both slots (main.rs:197-198), so worst case is about +0.75 s. Kept: #742 receipt FSBL digest; #220 OTP hash re-scoped."
+   },
+   {
+    "id": "FWU-9",
+    "disposition": "kept",
+    "note": "No round-1 verdict; verified by me. It is the backbone of the merged item: the doc itself asks for Option B + immutable floor as one decision at the freeze review (vendor-signing-key-compromise.md:52-97, :388-401) and for the sealed profile to be costed there (:415-445). No `mode-sealed` feature exists (grep of secure/Cargo.toml and nsc/mod.rs). Modified only in that the OTP-hash item is re-scoped and the '~40 B' figure is the doc's estimate, not a measurement."
+   },
+   {
+    "id": "FWU-1",
+    "disposition": "modified",
+    "note": "No round-1 verdict; verified by me. Defect evidence holds: rejected unary OTP reader in the FSBL (fsbl/src/otp.rs:1-41), COMMIT fail-closed with no floor write (cmd_fw_commit.rs:332-375), `bump_to` only in hw/otp.rs and tests, no HDP writes anywhere in secure/src or fsbl/src (grep SECWM1R2/SECHDPCR; production-security.md:525-531). Trezor precedent holds (monoctr.c:61-135, T3W1 secret_layout.h:33-51, memory.h secret sectors 0-1 vs boardloader 2-13, option_bytes.c:66-69, secret.c:170-173). Downgraded from 'P0 select this backend' to 'review input': Draft 1.1 says authoritative records MUST remain in OTP. Its claimed invariant-#10 conflict is weaker than stated: Draft 1.1 already gives the FSBL floor establishment and an FSBL-owned erasable journal pair (a-b-...architecture.md:237-238, :1647-1649); the 'no FSBL write path' fence is on the bench stage-marker (fsbl/src/marker.rs:36-41)."
+   },
+   {
+    "id": "FWU-10",
+    "disposition": "modified",
+    "note": "No round-1 verdict; verified by me. One preimage per signature confirmed (fw-manifest/src/lib.rs:17-31; v6.rs:55 121-byte preimage). Trezor Merkle precedent confirmed (boot_header.c:226-261, order-independent 0x01 nodes, 0x00 leaf prefix; MAXLEN 256 at boot_header.h:35). Kept as a freeze-review decision only, priority lowered: it adds a parser to the frozen stage and FSBL bytes against a 52 B margin, and the signature-budget motive is weak. Its own DROPPED list is honoured."
+   }
+  ],
+  "dropped_parts": [
+   "BOOT-09 2-of-3 C10 quorum in the FSBL: a second 4008-B signature does not fit the 8 KiB manifest page in either layout (3,995 B / 3,916 B free), so it needs a second manifest page per slot and a change to the frozen geometry registry (geometry/src/lib.rs:121-137, already blocked at #758); it doubles signature verifies on both slots (about +0.75 s worst case on a 2.93 s boot); and the m-of-n committee is a recorded decline (#486, vendor-signing-key-compromise.md:44-50, parity sweep :55).",
+   "FSBL self-check of its own embedded key against an OTP hash (BOOT-09 part 2, FWU-9 part 3, as written): a re-flashed FSBL simply omits the check, so it does not close threat-model \u00a79.8 as claimed. Trezor's OTP vendor lock is checked by an immutable stage against a mutable vendor header, which is the opposite trust direction. Only the external-verifier comparison survives, and that tool already diffs the whole FSBL image.",
+   "FWU-1 'close #212 as not needed' and 'fold #39 into it': premature; both depend on a backend decision that has not been reopened.",
+   "FWU-1 P0 / 'select the backend' framing: rollback work is not implementation-approved (CLAUDE.md) and the backend choice is owner-gated under #543.",
+   "FWU-1 claim that an 8 KiB page gives 512 increments as a selling point over OTP: Draft 1.1 makes same-epoch releases cost zero floor writes, so capacity is not the binding constraint; the binding ones are ECC/interrupted-program behaviour and erasability.",
+   "FWU-9 `mode-sealed` as a build profile to implement now: the doc says cost it and record, and notes the NS-updatable variant is a substantial re-architecture, not a flag.",
+   "FWU-10 optional descriptor-root leaf (PQDESC_V1) in the same tree: roadmap item, no approved format; out of scope for the freeze decision.",
+   "FWU-10's own dropped list stands (per-chunk pre-write hash, fix_version soft floor with SE wipe, companion GetFirmwareHash, OptRand anti-klepto, measurement-bound key wrap). The last matches established fact (d) and the doc's do-not-resurface list (:457-466)."
+  ],
+  "tracked_issues": [
+   "#486 (open): vendor-key compromise recovery; declines m-of-n, asks for the design note \u2014 covers the Option B decision record",
+   "#69 (open, ship-blocker): vendor signing key established and baked into FSBL \u2014 prerequisite for A/B",
+   "#220 (open, priority low): vendor-pubkey OTP hash lock incl. FSBL boot verify \u2014 covers E(ii) but with the self-check scope this cluster refutes",
+   "#742 (open): signed bundle does not bind the FSBL \u2014 covers E(i)",
+   "#225 (open): OPEN-REL-1 release-set authority + OPEN-C10-1 per-key signature cap \u2014 covers E(iii) and the motive for C",
+   "#31 (open, ship-blocker): replace the invalid OTP rollback tally \u2014 the defect behind D",
+   "#543 (open, owner-gated): resolve OPEN-ECC-1 + OPEN-OTP-1..3 into a reviewed spec digest \u2014 the venue for D",
+   "#546 (open, owner-gated): physical backend implementation batch \u2014 downstream of D",
+   "#39 (open, ship-blocker): HDP1 covering the FSBL with HDP1_ACCDIS at boot exit \u2014 prerequisite for D",
+   "#212 (open): decide OPTIGA E1E0 counter layer vs OTP-only \u2014 adjacent to D",
+   "#540 (open) / #758 (open): geometry cutover to 40 KiB and its blocked page cascade \u2014 gates any FSBL growth or page reassignment",
+   "#226 (open): FSBL production-approval gates (geometry, rollback backend, resource envelope, factory locking) \u2014 umbrella",
+   "#545 (open): Foundation A campaign tracker",
+   "#696 (open): CMD_FW_* is the only field-update path at RDP-2 \u2014 bears on the sealed profile F"
+  ],
+  "untracked_delta": "1. No issue schedules the freeze review as a single gated event with a joint FSBL byte budget; #486 only asks for a note. 2. The immutable FSBL minimum-epoch constant has no issue. 3. Merkle-leaf signing in the FSBL verify format has no issue (the parity sweep declined only Merkle chunked image verification, a different thing). 4. The HDP-hidden flash-page counter is not on record as a candidate anywhere: the parity sweep declined 'OTP monoctr (illegal QW reprogram)' (:55), which mis-describes Trezor's U5 implementation \u2014 it is a flash page, as trezor-comparison.md:402 itself notes. 5. The sealed-profile costing has no issue. 6. #220's scope needs correcting (FSBL self-check is not a defence against a replaced FSBL). 7. The one-page manifest cannot hold two C10 signatures \u2014 not recorded anywhere as the concrete reason against a quorum.",
+  "decision_conflicts": [
+   "FWU-1 vs Draft 1.1 \u00a712.1: 'authoritative rollback records MUST remain in OTP. An erasable main-flash mirror may be a cache or journal only and may never replace the OTP root' (a-b-firmware-rollback-architecture.md:3896-3897; also :239-240). Draft 1.1 is frozen at digest abc058b1 (fw-rollback-draft12-candidate-2026-07-21.md:8-9); changing the backend needs an owner reopen, exact-digest dual review and a stage decision. The memory note records OTP-first as correct because the FSBL runs pre-PIN; that reasoning rules out PIN-gated SE counters, not an HDP-hidden page, which Draft 1.1 never analyses (grep for HDP finds only factory-receipt mentions).",
+   "FWU-1 vs parity sweep 2026-07-20 line 55: 'OTP monoctr (illegal QW reprogram; Draft 1.1 owns rollback)' is a recorded decline. The decline's stated reason does not apply to the flash-page form, but the 'Draft 1.1 owns rollback' half does.",
+   "BOOT-09 quorum vs #486 and vendor-signing-key-compromise.md:44-50: m-of-n declined. Note the recorded reason ('SPHINCS+ has no aggregation; N slots means N verifications') is weaker than it reads \u2014 Trezor ships exactly 2 SLH-DSA verifies in its boardloader \u2014 but the manifest-page fit and geometry freeze are independent blockers, so the decline stands.",
+   "Any FSBL growth (A, B, C, D) vs the FSBL budget NO-GO: 52 B to the warning limit on the Draft candidate; the bench linker is still 32 KiB with 2,048 B free and the 40 KiB cutover is parked (#758).",
+   "D's counter page vs the frozen geometry registry: HDP1 must be contiguous from the secure watermark start, so the page would sit at bank-1 page 5, which is Manifest A (geometry/src/lib.rs:123). This collides with #758/#752.",
+   "F (sealed profile) vs the A/B rollback programme and the ERC-7730 coverage priority: an unpatchable secure world removes the reason for both. The doc says weigh it, not adopt it.",
+   "Invariant #5 is respected by every kept part: one verifier algorithm, no classical co-signature (Trezor's Ed25519 pairing is not ported)."
+  ],
+  "hardware_asks": [
+   "None for the board or enclosure. All kept parts are firmware, option-byte or process.",
+   "For D only, if the owner reopens the backend: sacrificial STM32U585CIU6 parts for interrupted-program/ECC evidence on a flash quad-word and for HDP1EN/HDP1_PEND/ACCDIS behaviour at RDP-2 (extends the #544 campaign)."
+  ],
+  "prerequisites": [
+   "#69 vendor key ceremony defined (a recovery key needs its own independently generated, colder custody; deriving both from one root voids Option B).",
+   "A measured production-profile FSBL link with real key(s) so A\u2013D are decided against bytes, not estimates; needs the #540/#758 geometry decision first.",
+   "Owner decision to reopen (or reaffirm) the Draft 1.1 OTP MUST before D gets any engineering time; venue #543.",
+   "#39 HDP1 design and option-byte ceremony (WRP set, then RDP-2) before D is even testable.",
+   "Manifest-v6 approval for B and C (they are fields/semantics of the v6 format, which is not implementation-approved).",
+   "Fuzz + Kani on any new FSBL parser (C) before freeze; ProVerif model update for 0x00/0x01 domain separation."
+  ],
+  "precedent": "Trezor (verified in /home/nicola/repos/trezor-firmware): 2 SLH-DSA signatures from up to 3 root keys with sigmask complement check, each paired with Ed25519 (core/embed/sec/image/boot_header.c:49-109; boot_header.h:29); Merkle root with 0x00 leaf prefix and order-independent 0x01 nodes, proof in the unauthenticated header (boot_header.c:226-261); unary 16-byte-cell monotonic counter in a secret flash page, max 63 (core/embed/sec/monoctr/stm32u5/monoctr.c:61-135; monoctr.h:28); secret sectors 0-1 outside the boardloader range 2-13 (models/T3W1/memory.h); HDP end = secret sector end (option_bytes.c:66-69); HDP1/2_ACCDIS before jump (secret.c:170-173); OTP block 2 'vendor keys lock' (docs/core/misc/memory.md, otp_layout.h:6). Foundation Passport Prime 2-of-4 release keys and Tangem non-updatable firmware are cited by members from vendor docs; not re-verified here.",
+  "novelty": "parity",
+  "kind": "mixed",
+  "cost": "M",
+  "priority": "P1",
+  "rationale": "P1 because the decisions expire at the WRP + RDP-2 freeze and the repo's own design note asks for them as one recorded review; the review itself is small, and the M cost is the measured FSBL link plus whichever of A\u2013C is accepted. D alone would be L and is not approved work. Parity: Trezor ships multi-key roots, Merkle-leaf signing and the HDP flash counter on the same MCU family.",
+  "live_defects": [
+   {
+    "what": "The rollback floor can never rise: FSBL reads the rejected unary OTP tally and no code path writes a floor, so every image ever signed under the vendor key remains installable.",
+    "evidence": "fsbl/src/otp.rs:1-41 (legacy reader, 'not a valid STM32U585 OTP backend'); fsbl/src/main.rs:190,351; secure/src/nsc/cmd_fw_commit.rs:332-375 (fail-closed refusal, no floor write); `bump_to` referenced only in secure/src/hw/otp.rs and tests.",
+    "reachable_in_production_config": "Not shippable today: production is compile-blocked on this (#31 ship-blocker; CLAUDE.md). Known and tracked, not a new finding.",
+    "severity": "ship-blocker (already tracked)"
+   },
+   {
+    "what": "Single baked vendor key with no recovery path and no OTP/HDP binding; HDP is disabled in the ship profile.",
+    "evidence": "fsbl/src/vendor_pubkey.rs:20-23; fsbl/src/main.rs:335-346; docs/security/production-security.md:525-531; docs/security/threat-model.md:517-518.",
+    "reachable_in_production_config": "Yes by design if shipped as is; tracked by #486, #220, #39.",
+    "severity": "design residual, permanent after freeze"
+   },
+   {
+    "what": "#220's planned FSBL self-check (embedded key vs OTP hash) would not detect a replaced FSBL, yet threat-model \u00a79.8 presents it as the defence.",
+    "evidence": "docs/security/threat-model.md:517-518; issue #220 body ('FSBL-side boot verify ... halt on mismatch').",
+    "reachable_in_production_config": "Documentation/claim drift only; nothing implemented.",
+    "severity": "low (claim accuracy)"
+   }
+  ],
+  "repo_evidence": [
+   "/home/nicola/repos/PQSigner_OS/fsbl/src/vendor_pubkey.rs:20-23",
+   "/home/nicola/repos/PQSigner_OS/fsbl/src/main.rs:190-198,321-354",
+   "/home/nicola/repos/PQSigner_OS/fsbl/src/otp.rs:1-41",
+   "/home/nicola/repos/PQSigner_OS/fsbl/src/marker.rs:36-41",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/cmd_fw_commit.rs:332-375",
+   "/home/nicola/repos/PQSigner_OS/fw-manifest/src/lib.rs:17-31,60-80,168",
+   "/home/nicola/repos/PQSigner_OS/fw-manifest/src/v6.rs:55,79-91",
+   "/home/nicola/repos/PQSigner_OS/geometry/src/lib.rs:121-137",
+   "/home/nicola/repos/PQSigner_OS/docs/security/vendor-signing-key-compromise.md:44-97,388-401,415-466",
+   "/home/nicola/repos/PQSigner_OS/docs/security/a-b-firmware-rollback-architecture.md:237-254,1647-1649,1683-1685,3896-3897,5503-5505",
+   "/home/nicola/repos/PQSigner_OS/docs/security/fw-rollback-fsbl-resource-map-2026-07.md:153-164",
+   "/home/nicola/repos/PQSigner_OS/docs/security/measured-boot.md:286-296",
+   "/home/nicola/repos/PQSigner_OS/docs/security/adversarial-review/findings/trezor-parity-sweep-2026-07-20.md:38,55",
+   "/home/nicola/repos/PQSigner_OS/docs/architecture/trezor-comparison.md:291-298,402",
+   "/home/nicola/repos/PQSigner_OS/docs/security/production-security.md:525-531",
+   "/home/nicola/repos/PQSigner_OS/docs/security/threat-model.md:517-518"
+  ],
+  "sources": [
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/image/boot_header.c",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/image/inc/sec/boot_header.h",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/monoctr/stm32u5/monoctr.c",
+   "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/secret_layout.h",
+   "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/memory.h",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c",
+   "/home/nicola/repos/trezor-firmware/docs/core/misc/memory.md",
+   "https://github.com/EthereumPhone/PQ1/issues/486",
+   "https://github.com/EthereumPhone/PQ1/issues/543",
+   "https://github.com/EthereumPhone/PQ1/issues/742"
+  ],
+  "residual_after": "With Option B accepted: a thief of the primary key can still sign firmware every FSBL accepts forever; recovery only protects devices that install the recovery-signed image first, and a thief of either key wins. With A (single key): unchanged, RMA only. The minimum-epoch constant does not move, so every post-freeze release stays installable until a real rollback backend lands (#31 remains a ship-blocker regardless of this cluster). A valid vendor signature remains authentic, not benign: no item here stops a correctly signed malicious image, and the signature itself remains an exfiltration channel. Merkle signing reduces ceremonies, not key exposure, and adds a parser to the unpatchable stage. If the HDP flash counter were ever adopted, a fault that skips the HDP1_ACCDIS write lets a compromised runtime erase the page and reset the floor, which OTP cannot suffer; before first-boot RDP-2 the page is erasable over SWD (moot, since the whole image is replaceable then). The receipt FSBL digest is evidence about the build, not about a given unit; only the pre-first-power SWD check binds a unit. The sealed profile, if chosen, trades all of the above for RMA or wipe-restore on every parser fix."
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.8,
+  "reason": "The core survives: one recorded FSBL freeze review that settles the unticked boxes in docs/security/vendor-signing-key-compromise.md (:84-97, :134-135, :388-401, :415-445) is what the repo's own design note asks for, and dropping the 2-of-3 quorum, the FSBL OTP self-check and the 'select backend now' framing is right. The three defect facts check out against code. Not refuted, but several sub-claims are wrong or incomplete: Option B as described cannot work in the field without secure-world and release-gate changes the recommendation never mentions; the budget numbers are a Draft 0.9 proxy and one is stale; items B and C also touch the frozen Draft 1.1; the issue list omits the issue that already owns the measured link (#541); and untracked_delta item 4 is false as written.",
+  "corrections": "1. Option B is not a 32-byte FSBL change (biggest gap). The secure image holds its own copy of the key (secure/src/fw_update/vendor_pubkey.rs:30-32, 'both binaries must produce byte-identical constants' :5-7). fwsign enforces FSBL == secure == policy (fwsign/src/artifact_key.rs:596-598) and refuses mixed-root artifacts (fwsign/src/subcommands/sign.rs:63). At RDP-2, CMD_FW_* is the only install path (#696), so a shipped secure world that knows only the primary rejects a recovery-signed image at FW_BEGIN. B therefore needs the recovery key in every shipped secure image, an either-key BEGIN verifier, and a reworked artifact gate and policy hash file.\n\n2. The doc's recovery flow (:58-63) is incoherent and the recommendation inherits it. The FSBL re-verifies the manifest signature on every boot against its immutable keys (fsbl/src/main.rs:197-198, :335-346). A 'new primary' that is not in the FSBL can never sign a bootable manifest. After recovery the recovery key becomes the only usable signing key, is no longer cold, and has no successor. State this, or cost a third embedded key.\n\n3. Option B's verify cost is overstated. verify_vendor_fpr runs before verify_signature (main.rs:335-346) and the manifest carries the fingerprint, so the fingerprint selects the key. There is never a second C10 verify; the cost is 32 B plus one more FI-gated fingerprint compare, which is more code than '32 B of rodata'.\n\n4. Missing residual: pick_slot takes the highest fw_version (main.rs:377-382). A leaked-primary holder can sign at the top of the version space, so on any device that takes the attacker's image first, no recovery image can outrank it. The doc's 'recovery key provides a path above it' (:397) fails for those devices.\n\n5. Budget figures. The 38,860 B / 52 B number is a Draft 0.9 proxy (fw-rollback-fsbl-resource-map-2026-07.md:7-19, :153-164); #541 names it as precedent and rules a straddling result non-passing. Option B plus the floor constant (the doc's unmeasured ~40 B) leaves about 12 B on that proxy, i.e. non-passing by #541's rule. '32 KiB with 2,048 B free' is stale: that was before the hw-sha256 swap (fsbl/Cargo.toml:13-15); CLAUDE.md gives a 28,700 B span today, about 4 KiB free.\n\n6. Boot-time figure: filter_valid measured 0.375 s (measured-boot.md:286-296), apparently with only slot A valid, since manifest B was the erased marker page in that run (fsbl/Cargo.toml stage-marker comment). So about 0.375 s per extra C10 verify, and '+0.75 s' for the dropped quorum is a plausible upper bound, not a measurement.\n\n7. Deadline is earlier than the WRP freeze for item A. #541 (FA-G1) freezes a measurement profile with 'a real-size 32-byte vendor key' and blocks #543/#546/#544. The one-key-versus-two decision must be made before that profile freezes, or the warning build measures the wrong FSBL.\n\n8. Item B (minimum-epoch constant) also conflicts with the frozen Draft 1.1, not only D. Draft 1.1 says 'Admission is exactly E > F. F is not a minimum-allowed epoch' (a-b-firmware-rollback-architecture.md:160-161) and already provides factory genesis with E > 1, which establishes the floor in OTP (:2859-2866). A compiled constant is a second floor source and needs the same reopen. Its value is also conditional: the production key does not exist yet (#69), so the constant excludes nothing unless production-signed releases predate a given FSBL build (later batches only). The doc names it FSBL_MIN_ACCEPTED_FW_VERSION (:134, :390), a fw_version in the legacy format; the v6 security_epoch framing and 'needs v6 approval' prerequisite are the merger's addition.\n\n9. Item C (Merkle) changes the exact 121-byte PQFW_V6 signed preimage (fw-manifest/src/v6.rs:55; CLAUDE.md rollback-manifest rule) and uses reserved v6 bytes. That is a Draft 1.1 schema change needing digest review and an owner stage decision, not merely a freeze-review tick. 'Declined with record' is the right default.\n\n10. untracked_delta item 4 is false. docs/architecture/trezor-comparison.md \u00a72.8 (:400-417) records Trezor's SECRET-region flash monoctr with the verdict 'RE-EVALUATE AFTER DRAFT-1.1 CANDIDATE GATES ... a possible supporting durable-stage mechanism, not a substitute authority'. Only the HDP1_ACCDIS-hidden framing is new, and \u00a72.8 is a second recorded position against D. The parity-sweep wording 'OTP monoctr' (:55) is still loose.\n\n11. Item D feasibility: the manifest pages are rewritten at runtime by the updater, so the counter page cannot share or replace Manifest A at page 5. D needs a full registry shift (geometry v7, #752) and the bank-2 HDP2 mirror (#43). The stated residual (skipped ACCDIS write lets runtime erase the page) is correct. Keep D strictly as a note into #543.\n\n12. Item E(ii) is hollow as kept. The recommendation concedes the SWD verifier already diffs the whole FSBL image, so an OTP hash adds nothing. Better action: decline or close #220 with that reason and fix threat-model.md \u00a79.8 (:517-518) to cite invariant #10's SWD check as the defence.\n\n13. Custody prerequisite is understated. Per the #486 triage comment, the firmware vendor key today is a passphrase-encrypted blob (fwsign/src/keystore.rs), with no HSM mandate; #67's HSM key is a different (factory manifest) key. 'Colder custody' for a recovery key is undefined until #69 defines any custody.\n\n14. Priority and cost: split them. Item A is P1 because of the #541 ordering. B, C, E, F are P2; D is P3 review input. The review record itself is S; accepting Option B is M once the secure-world and fwsign changes are counted.",
+  "corrected_priority": "P2",
+  "corrected_cost": "M",
+  "corrected_kind": "mixed",
+  "tracked_issues": [
+   "#486 (open): vendor-key compromise recovery; B-vs-A deferred to the freeze review",
+   "#69 (open, ship-blocker): vendor signing key established",
+   "#266 (open): vendor key hierarchy re-evaluation \u2014 MISSING from the merged list, directly covers item A",
+   "#541 (open): FA-G1 early combined FLASH+RAM warning build with a real 32-byte vendor key \u2014 MISSING; it is the measured-link prerequisite and blocks #543/#546/#544",
+   "#67 (open, ship-blocker): factory HSM manifest key \u2014 custody context, a different key from the firmware vendor key",
+   "#220 (open): vendor-pubkey OTP hash lock incl. FSBL self-verify \u2014 scope should be declined or corrected",
+   "#742 (open): signed bundle does not bind the FSBL",
+   "#225 (open): OPEN-REL-1 + per-vendor-key signature cap",
+   "#31 (open, ship-blocker): replace the invalid OTP rollback tally",
+   "#543 (open, owner-gated): OPEN-ECC-1 + OPEN-OTP-1..3 spec digest \u2014 venue for D",
+   "#546 (open, owner-gated): physical backend implementation",
+   "#544 (open): sacrificial-silicon campaign \u2014 named in hardware_asks but not in the tracked list",
+   "#39 (open, ship-blocker): HDP1 over the FSBL with ACCDIS at boot exit",
+   "#43 (open): HDP2 + SECWM2 mirror over the bank-2 FSBL range \u2014 MISSING, needed for D",
+   "#35 (open): WRP over the final FSBL range in both banks",
+   "#753 (open): factory lockdown sequencing",
+   "#212 (open): OPTIGA E1E0 counter layer vs OTP-only",
+   "#540 / #758 / #752 (open): geometry cutover, its blocked page cascade, geometry v7",
+   "#226 (open): FSBL production-approval gates umbrella",
+   "#545 (open): Foundation A tracker",
+   "#696 (open): CMD_FW_* is the only field-update path at RDP-2"
+  ],
+  "untracked_delta": "Still untracked after checking issues: (1) Option B's secure-world and release-tooling consequences (either-key FW_BEGIN, recovery key in the secure image, fwsign FSBL==secure gate) and the incoherent 'new primary' recovery flow in the design note. (2) The ordering constraint that the key-count decision precedes #541's frozen measurement profile. (3) The max-version pre-emption residual for Option B. (4) An immutable FSBL minimum-version constant has no issue, and its conflict with Draft 1.1's 'F is not a minimum-allowed epoch' is unrecorded. (5) Merkle-leaf signing of the manifest has no issue (the parity sweep declined only chunked image verification). (6) Sealed-profile costing has no issue. (7) #220's self-check scope and threat-model \u00a79.8 need correcting. (8) The one-page manifest cannot hold two C10 signatures (legacy reserved 4193..8188 = 3,995 B; v6 4272..8188 = 3,916 B) is not recorded as a reason against a quorum. Not new: the Trezor SECRET-flash monoctr is already recorded in trezor-comparison.md \u00a72.8; only the HDP-hidden variant as a candidate authority is new. The joint byte budget is largely #541's job, not an untracked gap.",
+  "decision_conflicts": [
+   "D vs Draft 1.1 \u00a712.1: 'authoritative rollback records MUST remain in OTP ... may never replace the OTP root' (a-b-firmware-rollback-architecture.md:3896-3897, also :239-240). Confirmed; needs an owner reopen via #543.",
+   "D vs trezor-comparison.md \u00a72.8 (:412-417): erasable SECRET-region journal is 'a possible supporting durable-stage mechanism, not a substitute authority'. A second recorded position the merged item missed.",
+   "D vs parity sweep :55 ('OTP monoctr ... Draft 1.1 owns rollback') \u2014 recorded decline.",
+   "B (minimum-epoch constant) vs Draft 1.1 :160-161 ('F is not a minimum-allowed epoch') and the factory-genesis E>1 mechanism (:2859-2866). Not flagged by the merged item.",
+   "C (Merkle) vs the frozen 121-byte PQFW_V6 preimage (fw-manifest/src/v6.rs:55) and CLAUDE.md's rule that any schema change needs an approved digest, dual review and owner stage decision. Not flagged.",
+   "A (Option B) vs the current single-root release contract: fwsign/src/artifact_key.rs:596 and secure/src/fw_update/vendor_pubkey.rs:5-7 require byte-identical FSBL and secure keys; #541's profile specifies one 32-byte key.",
+   "Quorum vs #486 and vendor-signing-key-compromise.md:44-50: m-of-n declined. Confirmed; the drop is correct.",
+   "Any FSBL growth vs the budget NO-GO: 52 B on the Draft 0.9 proxy, and #541 treats a straddle as non-passing.",
+   "D's page vs the frozen geometry registry (geometry/src/lib.rs:121-137): page 5 is Manifest A, which is runtime-written, so D needs a whole-registry shift (#752/#758).",
+   "F (sealed profile) vs #696, the A/B rollback programme and the ERC-7730 coverage priority.",
+   "Invariant #5 is respected by all kept parts; invariant #10 (no runtime write to the FSBL range) is respected, though D adds an FSBL flash-write path next to it."
+  ],
+  "evidence": [
+   "/home/nicola/repos/PQSigner_OS/fsbl/src/vendor_pubkey.rs:20-23 \u2014 single 32-byte key",
+   "/home/nicola/repos/PQSigner_OS/fsbl/src/main.rs:335-346 \u2014 fpr check precedes the single signature check; :197-198 both slots; :377-382 highest fw_version wins; :67-70 mode-production compile_error",
+   "/home/nicola/repos/PQSigner_OS/fsbl/src/otp.rs:1-41 \u2014 legacy unary reader, 'not a valid STM32U585 OTP backend'",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/cmd_fw_commit.rs:332-375 \u2014 unconditional fail-closed refusal, no floor write",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/cmd_fw_begin.rs:112 \u2014 BEGIN reads the same legacy floor",
+   "/home/nicola/repos/PQSigner_OS/secure/src/fw_update/vendor_pubkey.rs:5-7,30-32 \u2014 secure-world copy must be byte-identical to the FSBL key",
+   "/home/nicola/repos/PQSigner_OS/fwsign/src/artifact_key.rs:596-598 and fwsign/src/subcommands/sign.rs:63 \u2014 FSBL==secure trust-root gate",
+   "/home/nicola/repos/PQSigner_OS/fw-manifest/src/v6.rs:55,79-91 and fw-manifest/src/lib.rs:234-238 \u2014 121-byte preimage; reserved 3,916 B / 3,995 B",
+   "/home/nicola/repos/PQSigner_OS/geometry/src/lib.rs:121-137 \u2014 page 5 = Manifest A; FSBL_MAX_LOAD_SPAN 38,912 at :49",
+   "/home/nicola/repos/PQSigner_OS/fsbl/memory-stm32u585.x:33 \u2014 linker still 32K",
+   "/home/nicola/repos/PQSigner_OS/Makefile:2508-2509 \u2014 fsbl-release hard-errors; :2718 PROD_SHIP_FEATURES",
+   "/home/nicola/repos/PQSigner_OS/docs/security/vendor-signing-key-compromise.md:44-97,134-135,388-401,415-445",
+   "/home/nicola/repos/PQSigner_OS/docs/security/a-b-firmware-rollback-architecture.md:160-161,236-240,2859-2866,3896-3897",
+   "/home/nicola/repos/PQSigner_OS/docs/security/fw-rollback-fsbl-resource-map-2026-07.md:7-19,153-164 \u2014 Draft 0.9 proxy",
+   "/home/nicola/repos/PQSigner_OS/docs/security/measured-boot.md:282-296 \u2014 filter_valid 0.375 s, work 2.930 s",
+   "/home/nicola/repos/PQSigner_OS/docs/architecture/trezor-comparison.md:400-417 \u2014 \u00a72.8 monoctr already recorded with verdict",
+   "/home/nicola/repos/PQSigner_OS/docs/security/adversarial-review/findings/trezor-parity-sweep-2026-07-20.md:55",
+   "/home/nicola/repos/PQSigner_OS/docs/security/production-security.md:525-531 and docs/security/threat-model.md:517-518",
+   "grep of secure/src and fsbl/src for SECHDPCR|SECWM1R2|ACCDIS returned nothing \u2014 no HDP code",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/image/boot_header.c:49-109; inc/sec/boot_header.h:29,35; sec/monoctr/stm32u5/monoctr.c:59-92; sec/option_bytes/stm32u5/option_bytes.c:66-69; sec/secret/stm32u5/secret.c:170-173; models/T3W1/memory.h:27-41 \u2014 Trezor precedent confirmed",
+   "GitHub issues #541, #266, #226, #220, #742, #486 read; all 16 listed issues confirmed open"
+  ],
+  "live_defect": {
+   "is_defect": true,
+   "severity": "ship-blocker, already tracked (#31); not a new finding",
+   "reachable_in_production_config": "No. FSBL mode-production is a compile_error (fsbl/src/main.rs:67-70), `make fsbl-release` hard-errors (Makefile:2508-2509), and CLAUDE.md records the S-2 fence blocking mode-production secure builds.",
+   "evidence": "Entry 1 (floor can never rise): CONFIRMED. fsbl/src/otp.rs:1-41 reads the rejected unary tally; cmd_fw_commit.rs:332-375 refuses with no floor write; bump_to appears only in secure/src/hw/otp.rs and tests; cmd_fw_begin.rs:112 reads the same floor. Nuance: because COMMIT always refuses, no update activates through the handler at all, and pick_slot's highest-version rule (main.rs:377-382) gives incidental downgrade resistance while a newer valid slot exists. Entry 2 (single key, no recovery): facts CONFIRMED (vendor_pubkey.rs:20-23, main.rs:335-346), but it is a design residual, not a defect \u2014 Option A is the documented default. Its 'no OTP/HDP binding' wording is misleading: this cluster itself shows the OTP self-check is useless, and HDP protects secrets, not a public key. HDP absence itself is confirmed (no SECHDPCR/SECWM1R2 code; production-security.md:525-531). Entry 3 (#220 claim drift): CONFIRMED, low. threat-model.md:517-518 presents the OTP hash as the defence against a re-flashed FSBL, and #220's body includes the FSBL self-verify; nothing is implemented."
+  }
+ }
+}

@@ -1,0 +1,28 @@
+{
+ "id": "D-05",
+ "title": "Defeat fixed-template glyph taps and shrink the exposure window: per-session randomised glyph geometry/colour-LSB jitter, one-word-at-a-time reveal with random hold, dimmed wizard backlight, and the 'never put your backup anywhere digital' screen",
+ "threat": "A passive display-bus tap with an on-implant glyph template matcher (the Ledger implant stored a-z templates at 0x4D00-0x4E40 and matched the SPI stream), plus camera/EM averaging across a periodic refresh (Kuhn: a cached, pixel-identical glyph 'merely assists the eavesdropper'), plus the no-countermeasure photo/shoulder residual.",
+ "proposal": "(a) In the compositor (after atlas verification, so the SHA-256 pin is untouched), apply a per-session TRNG-chosen sub-cell x/y offset per secret cell, randomised low-order colour bits (within D-04's weight constraints), and if the atlas budget allows, K glyph variants per letter chosen per cell; this makes a byte-exact template matcher miss and forces the implant to carry an OCR, raising its size/power (which D-03 then sees). (b) Offer a one-word-per-page mode (24 frames, each word with its index) with a random 0-300 ms pre-display hold so no single leaked frame carries more than one word and frame boundaries are not USB/host-alignable; keep scroll-to-end. (c) pq1: program the AW99703 to a low brightness during the wizard (REG_LEDMSB/LSB are already written once at init) to cut backlight-rail and driver emission amplitude. (d) Add Trezor's pre-display warning page.",
+ "rationale": "The implant that actually existed was a fixed-template matcher; cheap per-session rendering diversity is the one software measure that targets it directly, and it is the countermeasure Kuhn identified as the only effective software one against FPD-link TEMPEST. Fewer words per frame and a dimmer, jittered reveal cut both electrical and optical exposure per frame at near-zero cost, and avoid the decoy-frame approach that failed on glass twice (#258).",
+ "repo_evidence": [
+  "secure/src/ui/seed_wizard.rs:64-82 + 370-380 (paging is 3 or 8 words per page; no one-word mode)",
+  "secure/src/ui/seed_wizard.rs:333 (the 'Write 24 words / L=cancel R=show' gate exists \u2014 do NOT re-propose; the 'never digital' warning does not: grep photo/digital/camera in seed_wizard.rs returns nothing)",
+  "secure/src/hw/aw99703.rs:66-69, 78, 114-115 (brightness is a compile-time constant 0x5FF written once; no wizard dim mode)",
+  "pqsigner-ui-px/src/font.rs:233-238 (fixed SECRET_ADV=14 px pitch, fixed cells \u2014 byte-identical glyph placement every session)",
+  "gh #258 OPEN priority:low (decoy frames failed at 20 MHz; still legacy-only, no px twin)",
+  "gh #237 OPEN (lists dim mode / one-word reveal / random pad pixels as candidates; none implemented)"
+ ],
+ "vendor_precedent": "Trezor One single word per frame (legacy/firmware/reset.c:206-231); Trezor core `reset__never_make_digital_copy` warning (core/translations/en.json:2248); Ledger 1.6 'randomized screen-update parameters' (contrast/supply/oscillator) \u2014 later found insufficient on the next panel (new-pin-screen 2023); Kuhn PET 2004 randomised glyph colour bits.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "Adaptive OCR implants defeat glyph jitter \u2014 it raises cost, not impossibility; say so. Jitter must stay inside the constant-weight constraints of D-04 and inside the CT blit (no value-dependent branch). One-word mode lengthens the backup ceremony (24 confirmations); make it the default only if UX testing on the EVT (no LCD on the bench board) accepts it. Dimming must not fall below legibility \u2014 the backlight current is content-independent either way, so the gain is amplitude only.",
+ "sources": [
+  "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+  "https://www.cl.cam.ac.uk/~mgk25/pet2004-fpd.pdf",
+  "https://www.ledger.com/blog/new-pin-screen/",
+  "https://github.com/trezor/trezor-firmware/blob/main/legacy/firmware/reset.c"
+ ],
+ "surface": "display"
+}

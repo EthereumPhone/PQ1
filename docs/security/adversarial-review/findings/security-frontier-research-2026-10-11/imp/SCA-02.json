@@ -1,0 +1,28 @@
+{
+ "id": "SCA-02",
+ "title": "Move SE-tunnel AES (SCP03 S-ENC/S-MAC KDF + session CMAC/CBC, Shielded AES-CCM) off software AES onto SAES; add shield.rs to the leakage harness",
+ "threat": "The long-term SCP03 static keys and the Shielded session keys are exercised by the bitsliced software `aes`/`cmac` crates on the CPU at EVERY boot, before any PIN, with a fixed key and attacker-known/chosen inputs \u2014 unlimited power-cycle CPA traces. Recovering S-ENC lets a bus tap decrypt half_E on the next legitimate unlock (symmetrically PBS -> half_O), defeating invariant #1 without touching either SE. Invariant #3's accepted Grover-2^64 residual silently assumes the tunnel keys are not SCA-extractable.",
+ "proposal": "(a) Extend hw/saes.rs with KEYSIZE=128 (bit 18 is hard-coded to 256 at :487) and keep ECB as the only hardware mode; (b) implement CBC/CTR/CMAC for SCP03 and CCM-CTR/CBC-MAC for the Shielded Connection as software XOR/chaining over SAES ECB blocks with KeySel::Software (cmac_generic is already parameterised over a block function, cmac.rs:61), so no AES round ever runs on the CPU; (c) load the SAES-CMAC(DHUK)/BHK-derived static keys into SAES_KEYR and wipe KEYR on exit as the Tier-1 KDF already does, so the static S-ENC/S-MAC bytes have the shortest possible CPU residency; (d) the 64-B PBS TLS-PRF (HMAC-SHA256) has no SAES analogue \u2014 mitigate by running it once per power-on (not per shield re-establish), zeroizing immediately, and adding a rainbow/lascar `shield_target` (TLS-PRF, CCM tag verify, sequence window) mirroring scp03_target; (e) measure before/after with SCA-01(c).",
+ "rationale": "ST documents SAES as having internal side-channel countermeasures (RNG-driven randomisation, noted at saes.rs:194 as an unmeasured hardware claim); the Tier-1 KDF already trusts it for DHUK. The SCP03 KDF and all session crypto are AES-only, so the whole SE050 tunnel can run on SAES with a small driver delta. This is the SCA counterpart of Trezor's 'hardware-keyed SAES for all PIN-derived material' and of the Jade boot-time CPA lesson. The SHSI clock and force-reset Trezor pattern is already present (saes.rs:225-244), so only the mode/keysize delta is missing.",
+ "repo_evidence": [
+  "secure/src/scp03_logic.rs:24-27,125,137,155,175 (Aes128/Cmac software crates for KDF, ENC, MAC)",
+  "secure/src/optiga/shield.rs:16-17,1047,1116 (software Aes128 for CCM), :984-1021 (software HMAC-SHA256 TLS-PRF keyed by PBS)",
+  "secure/src/hw/saes.rs:122-123 (CHMOD ECB only), :487 (CR_KEYSIZE_256 hard-coded), :23 (CMAC mode explicitly not implemented)",
+  "grep 'KeySel::Software' outside saes.rs: only bhk.rs:397 KAT \u2014 no tunnel user",
+  "tools/sca/README.md:973-999 (SCP03 harness explicitly scopes out value-channel); no shield harness exists (tools/sca has no shield_target)",
+  "issue #236 (nearest tracker; generic)"
+ ],
+ "vendor_precedent": "Trezor routes every PIN-derived key through SAES (secure_aes.c:48-57, storage.c:665-671) but, like pq1, runs its Optiga Shielded AES in software (optiga_transport.c:776 aes_encrypt_key128, per inventory B) \u2014 so SAES-backed SE tunnels would be beyond Trezor. Ledger: SE-internal, not applicable.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "SAES ECB-per-block throughput is fine for APDU sizes but adds ~1 register round-trip per 16 B; first-boot rotation code (rdp2-self-lock) also derives these keys and must use the same path; CCM tag compare must stay the double out-of-line recompute. SAES's DPA claim is a vendor statement \u2014 SCA-01(d) is the only way to know. Does not help the HMAC-SHA256 PBS path (no hardware HMAC on U5; HASH peripheral is not DPA-hardened).",
+ "sources": [
+  "RM0456 \u00a7SAES (KEYSIZE bit, KEYSEL, internal countermeasures)",
+  "https://www.ledger.com/blog/firmware-extraction-evil-maid-attacks-on-blockstream-jade-hardware-wallet",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/secure_aes/stm32u5/secure_aes.c:48-57 (per inventory B)",
+  "https://tches.iacr.org/index.php/TCHES/article/view/10955"
+ ],
+ "surface": "sca"
+}

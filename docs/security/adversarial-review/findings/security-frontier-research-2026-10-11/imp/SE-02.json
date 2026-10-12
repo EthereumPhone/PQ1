@@ -1,0 +1,31 @@
+{
+ "id": "SE-02",
+ "title": "Die-bind the at-rest SE secrets: SAES(DHUK)-wrap each XOR half before it is stored, and derive both PIN credentials (OPTIGA F1D0 AuthRef secret, SE050 UserID value) through the DHUK KDF so extracting both SE NVMs without this die yields nothing",
+ "threat": "Lab extraction of both secure elements' NVM (Donjon's FDTC 2023 double-laser DS28C36 page dump; Tangem S3D232A single-pulse SetPin bypass; TROPIC01 LFI) on a stolen device: today half_O \u2016 half_E are stored raw and XOR directly to the BIP-39 entropy, the SE050 UserID *is* the 8-digit PIN, and the OPTIGA AuthRef secret is a public-domain KDF of the PIN \u2014 so two extracted chips (or one extracted chip plus a faulted PIN check on the other) reconstruct the seed with no dependence on the STM32 die. The MCU currently adds nothing to the at-rest secrecy floor.",
+ "proposal": "Pre-production, no migration needed: (a) in `DualSecureElement::provision` store `wrap_O = SAES_DHUK_CTR(label_O, half_O)` and `wrap_E = SAES_DHUK_CTR(label_E, half_E)` (or equivalently XOR each half with a SAES-CMAC(DHUK, 'pqsigner/half-mask-v1'\u2016side) keystream \u2014 no AEAD needed because the master_secret consistency check at unlock already authenticates the reconstruction) and unwrap in `unlock` after the halves return through the tunnels; (b) replace `derive_pin_secret = kdf(\"optiga-pin-auth-v1\", pin)` with `SAES-CMAC(DHUK, 'pqsigner/optiga-pin-v2' \u2016 pin)` and send `SAES-CMAC(DHUK, 'pqsigner/se050-userid-v2' \u2016 pin)` (16 B) as the SE050 UserID value instead of the raw PIN; (c) state the resulting floor in threat-model.md: seed recovery needs {OPTIGA NVM, SE050 NVM, this die's DHUK (RDP-2)} or the 24 words. Keep the 3-source TRNG draw and the XOR split unchanged (invariant #1 untouched: neither chip alone reveals any bit, and now neither pair of chips does either).",
+ "rationale": "This is the Trezor 'malicious or extracted SE cannot reduce security below the MCU-only design' floor (optiga.md:66, storage.c:633-639) and Coldcard's 'both SE1 and SE2 plus the main micro must be cracked' property, realised with the SAES/DHUK primitive pq1 already uses for PBS derivation \u2014 purely symmetric, so it does not re-open the descoped ML-KEM bus wrap (that wrap protected the I2C transit; this protects at rest). Side benefit: the PIN never crosses either I2C bus in any form that is useful off-device, so the accepted Grover-2^64 residual against a captured SCP03 session no longer yields the user's PIN. A fault in one SE's PIN compare (Tangem class) now releases only a DHUK-wrapped half, which is useless without also executing on this die.",
+ "repo_evidence": [
+  "secure/src/dual_se.rs:145-163 provision: half_o from generate_split_half, half_e = xor_32(entropy, half_o), written raw (only the fenced mlkem-inner-wrap path seals)",
+  "secure/src/dual_se.rs:356-420 unlock: full_entropy = xor_32(half_o, half_e) with no MCU-keyed step",
+  "secure/src/crypto.rs:461-472 provision_from_mnemonic passes raw entropy to provision",
+  "secure/src/optiga/mod.rs:70,916-918 derive_pin_secret = crate::crypto::kdf(b\"optiga-pin-auth-v1\", pin, 0) \u2014 public-domain, not die-bound",
+  "secure/src/se050/apdu.rs:798-814 verify_session: TAG_1(pin) = raw 8-byte PIN inside SCP03; secure/src/dual_se.rs:370-375 passes the same raw pin to both SEs",
+  "docs/security/threat-model.md:600 \u2014 states the split defeats single-chip extraction only; no two-chip floor stated",
+  "secure/src/hw/secret_keys.rs:119-176 derive_into_saes_kdf exists (DHUK SAES-CMAC ladder) and can be reused"
+ ],
+ "vendor_precedent": "Trezor docs/core/misc/optiga.md:38-111 and storage/storage.c:628-678 (MCU-side PBKDF2 + HMAC chain around every SE op so a malicious OPTIGA cannot lower security); Coldcard Mk4 security model (AES key = HMAC combination of MCU + SE1 + SE2 parts); Tillitis TKey CDI binding.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "DHUK is not per-die until RDP-2 (bench boards at RDP-0 share a fingerprint \u2014 acceptable since first boot locks before the wizard); any label change later is a silent data-corruption bug (bump -vN); the duress credential set (F1D8/E121, DURESS_* UserID) must get the identical treatment so the timing-twin property survives; SE050 UserID length/charset limits for a 16-byte binary value must be confirmed on silicon; this intentionally makes 'move these two SEs to another MCU' impossible \u2014 recovery is the 24 words, which is already the only supported restore path. Must not be described as re-raising the ML-KEM decision (do not re-raise).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md",
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:628-678",
+  "https://blog.coinkite.com/understanding-mk4-security-model/",
+  "https://fdtc.deib.polimi.it/FDTC23/slides/FDTC2023-slides-3-3.pdf",
+  "https://donjon.ledger.com/blog/bypassing-tangem-card-security-with-laser-attack/",
+  "https://dev.tillitis.se/intro/"
+ ],
+ "surface": "se"
+}

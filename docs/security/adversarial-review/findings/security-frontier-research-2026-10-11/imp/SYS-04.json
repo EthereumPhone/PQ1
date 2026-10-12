@@ -1,0 +1,28 @@
+{
+ "id": "SYS-04",
+ "title": "Detected-fault escalation policy: an FI sentinel trip charges a PIN attempt, repeated trips lock and zeroize, SE alarm/reset retries are counted, and a persistent option-byte mismatch arms the wipe",
+ "threat": "An attacker with the device characterises glitch parameters at zero cost: every ct_eq mismatch, CfiCounter desync, FihBool disagreement or SE link error today is a free retry (refusal only), and SE driver retries (up to 1000 reads / 500 WTX) silently mask repeated fault attempts; Trezor's bootloader treats a flipped secbool as 'most likely glitch' and erases storage.",
+ "proposal": "Define and implement one escalation ladder in S-world: (1) any FI gate trip inside `c10_sign_verified*`, `gated_unlock`, `confirm()`/chord arming, `fw_update` verify, or `FihBool::is_true_fi` disagreement charges ONE page-124 attempt through the existing three-way precharge path (no new flash state) and records a reason code in `pin_attempt_log`; (2) a session glitch tally in SRAM: N trips (e.g. 3) -> lock + zeroize + reset; (3) SE drivers count resync/alarm/retry-exhaustion events per session and route >K to the same ladder instead of best-effort retry; (4) a persistent tz-1 mismatch (SYS-02 e) or ITAMP6 confirmed event arms the page-125 wipe flag, i.e. the existing `trigger_intrusion_wipe` policy extended to option-byte evidence; (5) keep HardFault/NMI as reset-only (owner rationale: single glitch must not brick) but count them via SYS-06 so a cluster of resets also feeds the tally. Bench builds keep the ladder log-only.",
+ "rationale": "Hardware FI campaigns (Gen\u00eat ChipWhisperer 1024 queries at 1/3 fault rate; Donjon DS28C36 t-test-guided double fault) succeed by repetition. Charging the existing attempt counter is the cheapest way to make each attempt cost the attacker, uses only state the firmware already has, and respects 'no new per-signature flash state'. Trezor's shipped policy (secbool flip -> BHK regenerate + storage erase; option-byte mismatch -> secret_safety_erase) shows a vendor already treats detected faults as evidence, not noise.",
+ "repo_evidence": [
+  "secure/src/crypto.rs:361-362 \u2014 ct_eq of the two 4008-B signatures; mismatch path returns Err (refusal only), grep charge|wipe|intrusion in crypto.rs hits only the rate-limiter receipt (lines 49-185)",
+  "secure/src/main.rs:4674-4680 \u2014 HardFault 'deliberately do NOT arm trigger_intrusion_wipe' (reset only, no counting)",
+  "secure/src/se050/t1oi2c.rs:46-53,233,299-307 \u2014 MAX_WTX_RETRIES=500, MAX_READ_RETRIES=1000 silent retry loops",
+  "fsbl/src/main.rs:250-252 \u2014 tripwire mismatch -> halt only",
+  "secure/src/pin_attempt_log.rs:19-27 \u2014 reason ring exists (RAM) but no FI-trip reason or escalation consumer",
+  "secure/src/fih.rs (FihBool) and secure/src/fi.rs CfiCounter \u2014 trip => return/halt, never charge (inventory + grep)"
+ ],
+ "vendor_precedent": "Trezor bootloader main.c:555-565,676-690 (WF_ERROR_FATAL -> secret_bhk_regenerate + storage erase, 'we saw flags randomly flip, most likely due to glitch'); boardloader main.c:320-340 (option-byte mismatch -> secret_safety_erase); Coldcard 'after 13 failed PIN attempts always bricks'; Trezor TROPIC01 'reset and retry on alarm' (#6104) is the anti-pattern this avoids.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "DoS: a glitch-rich environment (noisy USB supply, flaky SE I2C on EVT) could lock a genuine user \u2014 the ladder must distinguish verdictless SE errors (PendSV guard #692/#46a30658 already does) from FI-sentinel trips, and only sentinel trips should charge; bench safety requires the same fence pattern as tamp-wipe; charging page-124 from inside the signing path touches a path currently exercised by pin-gate e2e tests, so those tests and the TLA+/Kani counter models must be extended; owner decision needed on whether a confirmed tz-1 downgrade destroys SE shares (irreversible for the user).",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/bootloader/main.c",
+  "https://eprint.iacr.org/2023/042",
+  "https://fdtc.deib.polimi.it/FDTC23/slides/FDTC2023-slides-3-3.pdf",
+  "https://donjon.ledger.com/blog/tropic01-laser-fault-injection/"
+ ],
+ "surface": "systemic"
+}

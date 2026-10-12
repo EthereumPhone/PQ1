@@ -1,0 +1,254 @@
+{
+ "surface": "systemic",
+ "items_written_here": [
+  {
+   "id": "M19",
+   "type": "cluster",
+   "key": "assurance-gates-in-ci",
+   "home": "systemic",
+   "members": [
+    "FI-07",
+    "SYS-07",
+    "USB-10",
+    "FWU-8",
+    "CS-08",
+    "D-10"
+   ],
+   "title": "Make the existing assurance execute and block: land the phantom fi_min gate, enrol the local-only gates and never-run suites per-PR, restore the nightly, then add emulation-FI and glyph-leak regression nets",
+   "priority": "P1",
+   "merger_priority": "P1",
+   "cost": "L",
+   "kind": "process",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#10",
+    "#70",
+    "#81",
+    "#130",
+    "#136",
+    "#186",
+    "#189",
+    "#211",
+    "#232",
+    "#237",
+    "#239",
+    "#258",
+    "#260",
+    "#296",
+    "#312",
+    "#335",
+    "#389",
+    "#450",
+    "#451",
+    "#456",
+    "#558",
+    "#591",
+    "#592",
+    "#593",
+    "#604",
+    "#633",
+    "#635",
+    "#664",
+    "#680",
+    "#690",
+    "#701",
+    "#720",
+    "#721",
+    "#722",
+    "#723",
+    "#724",
+    "#725",
+    "#735",
+    "#771",
+    "#776",
+    "#777",
+    "#784"
+   ],
+   "live_defects": 6,
+   "hardware_asks": 0,
+   "file": "data/round2/cluster_assurance-gates-in-ci.json"
+  },
+  {
+   "id": "M20",
+   "type": "cluster",
+   "key": "glitch-environment-sensing",
+   "home": "systemic",
+   "members": [
+    "FI-02",
+    "pin-09",
+    "SCA-04",
+    "SYS-01",
+    "USB-04"
+   ],
+   "title": "Close the NS clock/power/tamper levers (RCC/PWR/SYSCFG/TAMP secure attribution), then add PVD-5 over BOR-3 with an SRAM-only zeroize, pin BOR_LEV in the ship profile, and run ADC4 analog watchdogs as a log-only slow supply/temperature tamper",
+   "priority": "P0",
+   "merger_priority": "P0",
+   "cost": "L",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#47",
+    "#48",
+    "#49",
+    "#50",
+    "#70",
+    "#75",
+    "#79",
+    "#80",
+    "#81",
+    "#82",
+    "#150",
+    "#208",
+    "#227",
+    "#248",
+    "#256",
+    "#269",
+    "#366",
+    "#391"
+   ],
+   "live_defects": 7,
+   "hardware_asks": 4,
+   "file": "data/round2/cluster_glitch-environment-sensing.json"
+  },
+  {
+   "id": "M21",
+   "type": "cluster",
+   "key": "memory-fault-resilience",
+   "home": "systemic",
+   "members": [
+    "FI-10",
+    "SYS-03",
+    "USB-03",
+    "SYS-09"
+   ],
+   "title": "Fail-stop memory integrity: MSPLIM with a re-basing fault trampoline, a decoded and region-scoped ECC NMI, secrets in an ECC-on secure bank, and the SRAM option bits pinned into the ship profile before RDP-2 freezes them",
+   "priority": "P1",
+   "merger_priority": "P1",
+   "cost": "L",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#21",
+    "#46",
+    "#48",
+    "#82",
+    "#92",
+    "#93",
+    "#94",
+    "#124",
+    "#150",
+    "#178",
+    "#230",
+    "#248",
+    "#268",
+    "#366",
+    "#374",
+    "#397",
+    "#484",
+    "#540",
+    "#542",
+    "#543",
+    "#544",
+    "#545",
+    "#705"
+   ],
+   "live_defects": 5,
+   "hardware_asks": 3,
+   "file": "data/round2/cluster_memory-fault-resilience.json"
+  },
+  {
+   "id": "SYS-06",
+   "type": "single",
+   "home": "systemic",
+   "title": "Fault and tamper forensics with lockout-time persistence: capture CFSR/SFSR/SFAR/PC, TAMP SR, TZIC SR, reset cause and the PIN-attempt reason ring into a wipe-surviving public record and render the reason after the FSBL fingerprint",
+   "priority": "P2",
+   "orig_priority": "P1",
+   "cost": "L",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#47",
+    "#50",
+    "#75",
+    "#208",
+    "#248",
+    "#366",
+    "#484",
+    "#540",
+    "#634",
+    "#705",
+    "#715",
+    "#719",
+    "#723",
+    "#758"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SYS-06.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M04",
+   "key": "fault-escalation-policy",
+   "home": "fi",
+   "title": "Fault response without attempt-charging: zeroize-then-reset in the glitch-halt sink, a written verdict-vs-availability rule, sparse phase words, PIN-scrambler RNG fail-closed, and diagnostics-only SE fault counting",
+   "priority": "P2",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SYS-04"
+   ]
+  },
+  {
+   "id": "M05",
+   "key": "fsbl-fi-bundle",
+   "home": "fi",
+   "title": "FSBL pre-freeze FI bundle: fail-closed gate polarity + default-poisoned, redundantly-encoded branch target; minimal TRNG for wait_random; 0xFF tail scan; MSPLIM; #591 sweep as acceptance test (C10 target-sum internals staged behind the sweep)",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SYS-02"
+   ]
+  },
+  {
+   "id": "M06",
+   "key": "random-delay-desync",
+   "home": "fi",
+   "title": "Land the fixed FI-delay source on master, add dispatcher-entry jitter, then a measurement-gated always-on RDI on the existing secure SysTick (no timing canary)",
+   "priority": "P2",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SYS-05"
+   ]
+  },
+  {
+   "id": "M08",
+   "key": "whole-slot-measurement",
+   "home": "fwupdate",
+   "title": "Erased-tail check on the selected slot (FSBL boot + CMD_FW_COMMIT), Trezor check_image_contents shape; optionally widen the 8-word fingerprint to the signed manifest digest",
+   "priority": "P3",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SYS-08"
+   ]
+  },
+  {
+   "id": "M18",
+   "key": "user-entropy",
+   "home": "se",
+   "title": "User-supplied entropy (button coin-flips / dice) hashed into the new-wallet seed draw, honestly scoped as an RNG-failure defence; closes the #371 adopt-vs-decline decision",
+   "priority": "P3",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SYS-10"
+   ]
+  }
+ ]
+}

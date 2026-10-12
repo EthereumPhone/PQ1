@@ -1,0 +1,28 @@
+{
+ "id": "FI-06",
+ "title": "Option-byte posture after RDP-2: persistent mismatch \u21d2 wipe (not halt), silicon-pin the OEM1/OEM2 lock check and BOOT_LOCK, engage HDP1 over the FSBL at boot-exit, and assert BHKLOCK before the first SE/sign operation",
+ "threat": "A regressed/altered option-byte set (RDP, TZEN, WRP, BOR, SECBOOTADD0, OEM keys) is the enabling state for every MCU-side attack. Today the FSBL tripwire halts with secrets intact (a halted device with intact secrets is a better glitch target than a wiped one); the OEM-lock gate fails closed only because it is unpinned, so an OEM2 password planted in transit is caught by a halt, not a verified detector; HDP1 is 0 so the FSBL pages remain readable all session; nothing asserts BHKLOCK is set before the SAES/BHK consumers run.",
+ "proposal": "(1) Post-RDP-2 (TZEN+RDP=0xCC observed in the ship profile), route a persistent tz-1 mismatch in the secure world's own re-check (not the FSBL, which must stay write-free) to the intrusion wipe (BHK BKERASE + dual-SE admin wipe), keeping the FSBL halt as the pre-secret stage. (2) Close #46/#387: pin FLASH_NSSR OEM1LOCK/OEM2LOCK (register + bits) on a sacrificial RDP-0 board with a provisioned OEM1 key, flip OEM_LOCK_MASK_PINNED, and in Phase A write OEM1KEYR/OEM2KEYR = 0xFFFFFFFF before OPTSTRT as belt-and-braces; add BOOT_LOCK to the confirmed field set. (3) #39: HDP1EN + HDP1_PEND over pages 0..4 in the ship profile and HDP1_ACCDIS engaged by the secure world right after measured_boot (never by the FSBL). (4) bhk.rs: before the first SAES/BHK use and before every sign, read TAMP_SECCFGR and require BHKLOCK set through check_true_into_sentinel; unlocked \u21d2 handle_fault. (5) Include BOR_LEV (FI-02) in the same confirmed set.",
+ "rationale": "Trezor's shipped posture is 'option bytes exactly right or the device erases its BHK and repairs them' plus OEM-key clearing and HDP over the secret sector; pq1 cannot repair (invariant #10, read-only FSBL) but can wipe. RP2350's lesson: 'a software-write lock is not a fault-resistant lock' \u2014 detection must be followed by secret destruction, and every security-relevant latch (OEM, BOOT_LOCK, BHKLOCK) must be checked, not assumed.",
+ "repo_evidence": [
+  "fsbl/src/optbytes.rs:24-40 (does NOT act on WRP1A/OEM; halt only on persistent mismatch; single-fault suppression accepted)",
+  "shared/src/lockdown.rs:264-290 (OEM_LOCK_MASK_PINNED = false; fails closed; gh #46/#387 OPEN)",
+  "secure/src/first_boot/mod.rs:185-196 (Phase A verifies oem_lock_status_raw but never writes OEMxKEYR)",
+  "docs/security/threat-model.md:652 ('ship profile sets HDP1EN = HDP2EN = 0 and nothing in secure/src engages HDP'); gh #39 OPEN critical ship-blocker",
+  "secure/src/hw/bhk.rs:390 (already_locked read only at load; no pre-sign BHKLOCK assertion)",
+  "grep SECHDPCR secure/src \u2192 empty"
+ ],
+ "vendor_precedent": "Trezor option_bytes.c:124-170,188-264 (exact-equality check, force-rewrite loop, secret_safety_erase on mismatch), :213-222/:247-261 (OEM keys 0xFFFFFFFF + OEMxLOCK ensure), :86-87/:196 (SECBOOTADD0 BOOT_LOCK); secret.c:170-185,393-424,598-651 (BHKLOCK, secret_disable_access HDP).",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "HDP1 range is a prefix of the secure watermark, so it cannot also hide pages 123-127 (page 123/124 are written at runtime; 126/127 would need relocation) \u2014 scope HDP1 to the FSBL only. A wipe-on-mismatch policy plus the accepted single-fault suppression in optbytes means a transient read fault could brick a genuine device: require the secure-world re-check to be voted (read_volatile_voted) and persistent across a reset before wiping. OEM-key semantics must be confirmed against RM0456 before relying on the 0xFFFFFFFF idiom.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/secret/stm32u5/secret.c",
+  "https://donjon.ledger.com/blog/rp2350-secure-debug-laser-fault-injection/",
+  "https://www.cypherock.com/keylabs.pdf"
+ ],
+ "surface": "fi"
+}

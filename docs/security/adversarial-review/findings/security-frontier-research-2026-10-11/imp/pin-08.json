@@ -1,0 +1,25 @@
+{
+ "id": "pin-08",
+ "title": "Anti-swap 'security words' computed inside a secure element from the PIN prefix, needing no new flash page",
+ "threat": "Lookalike-device swap / implant PIN phishing: before the user types all 8 digits nothing proves the device in hand is theirs; the boot fingerprint is identical on every unit running the same image (#601), so a swapped or implanted unit harvests the PIN. #601 is blocked on storage geometry for a persistent user artifact.",
+ "proposal": "After the first 4 PIN digits are committed in the S-world PIN dialog, compute two BIP-39 words = `CMAC_k(prefix)` where k is a per-device secret generated at wizard time and stored only inside an SE object (OPTIGA PRESSEC data object gated by its own LUC, or an SE050 object under a dedicated UserID), rate-limited by that SE counter; render the words on the trusted UI with a distinctive frame and continue PIN entry. The user learns the words at setup (shown once, no persistent MCU state). The object is in the wipe sweep so no words exist after a wipe or under duress (the decoy must have its own key so the prefix words differ, or share the key so they match \u2014 owner decision; sharing is the deniable choice). Because k lives in the SE, nothing needs page 123-127 and #601's geometry blocker is sidestepped.",
+ "rationale": "grep for personaliz/anti-phishing/greeting in secure/src returns nothing (#601 triage); measured_boot.rs renders only image-derived words. Coldcard (SE1-computed HMAC over the hashed prefix, 2 s rate limit) and Passport Prime ('Security Words') ship this; pq1 has two SEs with counters and a trusted UI, so the port is small. Note it does NOT defeat a passive display-bus tap (Grand's Nano X implant) \u2014 it defeats the swap/phish class only.",
+ "repo_evidence": [
+  "secure/src/measured_boot.rs:161-227 (fingerprint is image-derived, not device-personal)",
+  "GitHub #601 (OPEN, blocked on storage geometry)",
+  "secure/src/ui/pin_entry.rs:54-146 (dialog has no mid-entry hook today)"
+ ],
+ "vendor_precedent": "Coldcard Mk4 anti-phishing words (SE1 HMAC over PIN prefix, rate-limited); Foundation Passport Prime 'Security Words'.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "Introduces an SE operation on a partial PIN: the prefix must be hashed/one-way'd before leaving the MCU and the SE op must be counter-gated so it is not a prefix oracle (Coldcard's rate limit exists for this). Adds one SE round-trip (~ms) and a page to the PIN flow; the words are a shoulder-surfable signal of 'this is the owner's device'. Needs #700 (trusted UI on pq1 silicon) to validate.",
+ "sources": [
+  "https://blog.coinkite.com/understanding-mk4-security-model/",
+  "https://coldcard.com/docs/pins/",
+  "https://docs.foundation.xyz/prime/prime-apps/settings/general/",
+  "https://github.com/EthereumPhone/PQ1/issues/601"
+ ],
+ "surface": "pin"
+}

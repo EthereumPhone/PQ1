@@ -1,0 +1,313 @@
+{
+ "surface": "Side-channel analysis on signing, KDF, PIN, SE tunnels (key=sca)",
+ "vendor": "Trezor (trezor-firmware @ 6ab39e95cf45d4b25b3f677806012ac660ae7a51, 2026-10-07)",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "Random Delay Interrupts (RDI): 1 ms secure-world systimer handler inserting floating-mean random CPU stalls",
+   "evidence": [
+    "core/embed/sec/random_delays/stm32/random_delays.c:139-144 (random_delays_init: systimer_create + systimer_set_periodic(timer, 1))",
+    "core/embed/sec/random_delays/stm32/random_delays.c:168-181 (rdi_handler: session_delay refreshed from drbg_random8, then wait(drbg_random8() + session_delay); FI check 'Fault detected' when rdi_disabled corrupted)",
+    "core/embed/sec/random_delays/stm32/random_delays.c:105-134 (wait(): hand-written asm 3-tick loop + tbb jump-table so the stall is exact in cycles, not compiler-dependent)",
+    "core/embed/sec/random_delays/inc/sec/random_delays.h:24-39 (design note: floating-mean distribution = fresh U[0,255] + session U[0,255] refreshed on every leaking I/O event; cites Clavier/Coron/Dabbous and Tunstall/Benoit)",
+    "core/embed/io/usb/stm32/usb.c:728,748 (random_delays_refresh_rdi() on every USB DataIn/DataOut)",
+    "core/embed/sys/smcall/stm32/smcall_dispatch.c:161-167 and smcall_stubs.c:160-164 (NS kernel reaches the S-world RDI only via smcall; RDI itself runs under SECURE_MODE)",
+    "core/embed/projects/kernel/main.c:145-147 and core/embed/projects/secmon/main.c:117-119 (started at boot); core/embed/projects/kernel/Cargo.toml:102 and secmon/Cargo.toml:81 ('sec/rdi' is in default features = on for every kernel/secmon build)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Timing-desync of power/EM traces is the classic cheap DPA countermeasure against trace alignment, and pq1's C10 signing (WOTS chains, FORS, hypertree, ~7 s of SHA-256) is a long, highly repetitive secret-dependent computation that is easy to align. pq1 has only the one-shot wait_random (FI gate) in secure/src/fi.rs:86, no periodic jitter source. Mechanism is MCU-generic: a secure-only timer (pq1 already secures TIM2/TIM3 in sau.rs) with an ISR that stalls a random number of cycles; refresh of the 'session' term on every NSC entry/exit and USB packet (the NS->S gateway is pq1's analogue of the smcall). Cost is a few percent of throughput. Caveat: delays do not remove leakage, they only raise the trace count needed; and the ISR must not touch the SE I2C bus.",
+   "notes": "Trezor runs this from the secure monitor so untrusted/non-secure code cannot stop it. The floating-mean design (two summed uniforms) is chosen so the delay distribution is non-uniform and harder to resynchronise. drbg_random8 returns the constant 128 if its critical section is locked (random_delays.c:73-84), a documented degradation."
+  },
+  {
+   "item": "wait_random(): one-shot random CPU stall with built-in glitch detection (dual counters i+j==wait, post-loop i/j check)",
+   "evidence": [
+    "core/embed/sec/random_delays/stm32/random_delays.c:186-204 (volatile i/j loop; error_shutdown(\"(glitch)\") on inconsistency)",
+    "legacy/random_delays.c:26-40 (same construction on Trezor One)",
+    "storage/storage.c:453,457,467 (around wipe-code HMAC compute/recompute/compare), storage/storage.c:1139 (before PVC compare), storage/storage.c:1190,1227 (before fail-counter decisions)",
+    "storage/pinlogs_bitwise.h:143-190 (between every guard-bit/counter word read in pin_fails_increase), storage/pinlogs_bitwise.h:195-265 (pin_get_fails)",
+    "core/embed/io/usb/stm32/usb.c:617-716, core/embed/io/usb/stm32/usb_class_hid.c:250,326,337 (before every USB control-request reply/error so host-observable timing is decorrelated from internal state)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Already ported: secure/src/fi.rs:76-86 is explicitly a port of Trezor's wait_random and is used in crypto.rs:352,407 and dual_se.rs:305-310. What pq1 does not yet mirror is the placement discipline: Trezor calls it before/after every secret compare, every PIN-counter read/write and every host-visible USB reply. pq1's NS USB stack cannot call S-world wait_random; Trezor solves that with an smcall stub, pq1 would need an NSC entry.",
+   "notes": "Fault-injection rather than pure SCA, but shares the RNG and desync role; listed because the task surface includes PIN handling."
+  },
+  {
+   "item": "ChaCha-DRBG for delay randomness (TRNG-seeded, reseed every 1000 generate calls, consumed bytes zeroed, lock-guarded for ISR/main reentrancy)",
+   "evidence": [
+    "core/embed/sec/random_delays/stm32/random_delays.c:33-37 (DRBG_RESEED_INTERVAL_CALLS 1000, 50-byte TRNG entropy per reseed)",
+    "core/embed/sec/random_delays/stm32/random_delays.c:43-70 (drbg_init/reseed from rng_fill_buffer; chacha_drbg_*)",
+    "core/embed/sec/random_delays/stm32/random_delays.c:73-103 (drbg_random8: atomic_flag lock, 64-byte buffer, memzero of each consumed byte)",
+    "crypto/chacha_drbg.h:31-34 (CTR_DRBG per SP 800-90A with ChaCha as the block function, SHA-256 derivation function)",
+    "core/CHANGELOG.md:814 (switched from HMAC-DRBG to ChaCha-DRBG, #1554 - speed)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already avoids per-call TRNG reads in hot paths (consumption_mask_prng.rs xorshift reseeded every ~1024 ticks; fi.rs:35-52 notes wait_random runs thousands of times). A SP 800-90A-shaped DRBG with explicit TRNG reseed interval and consumed-byte zeroisation is a stronger, auditable design than an ad-hoc xorshift for the delay/shuffle source; pq1 has ChaCha20 available (chacha20poly1305 in the entropy blob). Not security-critical for signatures (OptRand is separately TRNG-fed), so partial.",
+   "notes": "Trezor's DRBG state lives in secure-mode RAM only; returning a constant when locked is an accepted degradation."
+  },
+  {
+   "item": "Consumption mask: TIM2 CH1 PWM on PA5 with 119 random duty cycles streamed by a secure/privileged GPDMA circular linked list, re-randomised after every display refresh",
+   "evidence": [
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:26-27 (SAMPLES 119, TIMER_PERIOD 16000 = ~10 kHz at 160 MHz)",
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:34-37 (consumption_mask_randomize: pwm_data[i] = rng_get() % TIMER_PERIOD, TRNG per sample)",
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:48-49,82,86,94,115,142 (GPIO_AF1_TIM2/PIN_5; DMA_LINKEDLIST_CIRCULAR; DMA_CHANNEL_PRIV|SEC|SRC_SEC|DEST_SEC; GPDMA1_REQUEST_TIM2_UP; DstAddress=&TIM2->CCR1; List_Start)",
+    "core/embed/io/display/vg-2864/display_driver.c:415-417 ('intentional randomization of the consumption masking algorithm after every change on the display')",
+    "core/embed/models/T2B1/model.toml:5 and T3B1/model.toml:5 (feature only on the mono-display Safe 3 models; absent from T3T1/T3W1/T3T2)",
+    "core/embed/projects/bootloader/main.c:336 and kernel/main.c:162 (started in bootloader and kernel)",
+    "core/embed/sec/consumption_mask/stm32f4/consumption_mask.c:24-33 (F4 variant: TIM8 PC6, 110 samples, section .buf)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Already ported (secure/src/hw/consumption_mask.rs; pq1 uses TIM3_CH1/PA6 because TIM2_CH1 pins are taken; sau.rs secures TIM2+TIM3). Differences worth closing: Trezor refreshes all 119 samples from the TRNG and lets DMA cycle through them with zero CPU involvement, so the mask pattern changes 10k times/s independent of firmware activity; pq1 writes one CCR1 value per SysTick from a PRNG (main.rs:4337; consumption_mask.rs:14-20 says the DMA port is a follow-up). A CPU-driven, 1 kHz, single-value mask is correlated with the SysTick cadence and gives far less entropy per second. Both vendors leave the actual dilution unmeasured on a load; pq1's PA6 is NC per evt-silicon-validation.md.",
+   "notes": "Trezor did NOT enable it on the colour-display models (T3T1 Safe 5, T3W1 Safe 7) - no rationale is documented in the tree; model.toml simply omits it. Neither Trezor nor pq1 documents the external load the PWM drives."
+  },
+  {
+   "item": "Hardware-keyed SAES (DHUK / BHK / DHUK^BHK) for all PIN-derived key material; keys never exist in software-readable form",
+   "evidence": [
+    "core/embed/sec/secure_aes/stm32u5/secure_aes.c:48-57 (keysel map: DHUK_SP->CRYP_KEYSEL_HW, BHK->CRYP_KEYSEL_SW(BHK regs), XORK->CRYP_KEYSEL_HSW = DHUK xor BHK)",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes.c:37-46,114-115 (secure_aes_load_bhk: 8 dummy reads of TAMP->BKP0R..7R latch BHK into SAES before use)",
+    "storage/storage.c:665-671 (mcu_pin_stretch: PBKDF2 output is AES-ECB'd under XORK_SP/XORK_SN, so the stretched PIN is bound to the die AND to the BHK)",
+    "storage/storage.c:605-610 (legacy derive_kek_v4 same post-whitening)",
+    "core/embed/sec/secret/stm32u5/secret.c:177-179,396-423,619-620 (BHK loaded from HDP-protected flash into backup regs then TAMP_SECCFGR_BHKLOCK so software can never read it again; only SAES can)",
+    "core/embed/sec/secret/stm32u5/secret.c:326,367 (per-device secret slots are stored AES-encrypted under DHUK_SP)",
+    "core/embed/sec/secret/stm32u5/secret.c:170-173,650 (HDP access to the secret area disabled before firmware runs)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already has the SAES driver with KEYSEL in {Software, DHUK, BHK, DHUK^BHK} (hw/saes.rs), the Tier-1 SAES-CMAC(DHUK) KDF, BHK for SE050 SCP03 (invariant #3) and the 8-dummy-read BHK latch (memory: per-die DHUK validated). The remaining Trezor pattern not evidenced in pq1: post-whitening a software-derived secret (e.g. crypto::kdf(b\"sphincs-master\", entropy) in se050/mod.rs:3052) through the hardware-keyed AES so that any software-visible intermediate is not the final key, and locking BHK (BHKLOCK) before leaving boot so a later code-exec cannot read the backup registers. Verify pq1 sets TAMP_SECCFGR.BHKLOCK.",
+   "notes": "SAES is a side-channel-hardened AES core (ST markets it as DPA-resistant); routing key use through it moves the DPA target from software AES/HMAC to the hardened block. Trezor's own PBKDF2-HMAC-SHA256 remains software and unmasked."
+  },
+  {
+   "item": "SAES clocked from the secure internal oscillator (SHSI) and force-reset around use; key selection reset to NORMAL and peripheral reset to purge key registers after each unprivileged use",
+   "evidence": [
+    "core/embed/sec/secure_aes/stm32u5/secure_aes.c:222-240 (secure_aes_init: __HAL_RCC_SHSI_ENABLE, wait SHSIRDY, SAES force/release reset)",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes.c:246-262 (deinit: clock off, force reset, SHSI off)",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes_unpriv.c:47,99 (MODIFY_REG KEYSEL->NORMAL before and after the applet's AES run)",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes_unpriv.c:157-172 (SAES clock-disable + force reset immediately before and after the unprivileged callback)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "SHSI is the dedicated AES clock on U5 that is independent of the system PLL, which removes one clock-glitch/timing coupling avenue and is required for SAES countermeasure modes per RM0456. pq1's hw/saes.rs should be checked for SHSI enable and for a force-reset after each DHUK/BHK operation so no key schedule survives in the peripheral.",
+   "notes": "Cheap, register-level; no documented measurement."
+  },
+  {
+   "item": "Unprivileged SAES applet: BHK-keyed AES for the app runs in a dedicated MPU mode with SAES+TAMP temporarily made unprivileged, so the kernel never handles the app's key material",
+   "evidence": [
+    "core/embed/sec/secure_aes/stm32u5/secure_aes_unpriv.c:45-103 (saes_unpriv_callback, no_stack_protector, drives SAES registers directly with KEYSEL_HSW and the BHK latch)",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes_unpriv.c:135-182 (secure_aes_unpriv_encrypt: tz_set_saes_unpriv(true), tz_set_tamper_unpriv(true), mpu_mode=MPU_MODE_APP_SAES, systask_invoke_callback, restore)",
+    "core/embed/sys/mpu/stm32u5/mpu.c:575-579 (MPU_MODE_APP_SAES: 'special unprivileged task that needs access to secure SAES and TAMPER peripherals')",
+    "core/embed/sys/trustzone/stm32u5/trustzone.c:278-288 (GTZC per-peripheral PRIV/NPRIV toggles)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "This is a privilege-separation design for Trezor's kernel/applet split (unprivileged MicroPython app). pq1 has a single privileged secure world with no applet layer; the equivalent isolation is the TrustZone S/NS boundary, which pq1 already enforces for SAES (invariant #4, gtzc-enforcement-hw).",
+   "notes": "Listed for completeness; transferable sub-idea (key-purge via peripheral reset) is covered above."
+  },
+  {
+   "item": "Internal hardware tampers armed for voltage, temperature, LSE clock, crypto-peripheral fault (SAES/AES/PKA/TRNG), SWD access, ADC watchdogs, in 'confirmed' mode so backup registers (BHK) are erased on any event",
+   "evidence": [
+    "core/embed/sec/tamper/stm32u5/tamper.c:128 (PWR_BDCR1_MONEN: battery/power monitoring enabled)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:140-151 (ITAMP1 backup-domain voltage, ITAMP2 temperature, ITAMP3 LSE CSS, ITAMP6 JTAG/SWD when RDP>0, ITAMP7/12/13 ADC4 analog watchdogs, ITAMP9 crypto peripherals fault)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:153-155 ('confirmed' mode = all secrets deleted on tamper)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:169-170 (TAMP_IRQn at IRQ_PRI_HIGHEST)",
+    "core/embed/sec/tamper/stm32u5/tamper.c:200-235 (reason strings incl. 'VOLTAGE','TEMPERATURE','CRYPTO ERROR')"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already ports the TAMP driver (hw/tamp.rs, tamp/tamp-wipe). The SCA-relevant subset is ITAMP9 (crypto peripheral fault - the SAES/TRNG internal countermeasure sensors raise this on detected glitches/DPA-style disturbance) and ITAMP1/2 (voltage/temperature, the knobs an attacker turns to raise leakage). Verify pq1's tamp.rs enables ITAMP9 and the ADC watchdogs; pq1 has no battery so backup-domain voltage monitoring semantics differ (VBAT = VDD), but the SAES fault flag is still the only on-die signal that the hardened AES saw an attack.",
+   "notes": "Trezor's external tamper input is disabled in secmon (secmon/main.c:112) and enabled only in PRODUCTION kernel (kernel/main.c:141)."
+  },
+  {
+   "item": "rng_fill_buffer_strong: XOR of MCU TRNG with Optiga (and Tropic) TRNG, with use-flag bookkeeping that halts the device if any source did not actually contribute",
+   "evidence": [
+    "core/embed/sec/rng/rng_strong.c:39-41 (rng_use_flags_clear then MCU fill)",
+    "core/embed/sec/rng/rng_strong.c:50-58 (ensure optiga_random_buffer; XOR into dst; memzero block)",
+    "core/embed/sec/rng/rng_strong.c:75-80 (ensure_true rng_use_flag_is_set for MCU/OPTIGA/TROPIC - fatal if a source was skipped)",
+    "core/embed/sys/rng/stm32/rng_use_flags.c:25-31; core/embed/sys/rng/inc/sys/rng_use_flags.h:48-50 (flag setter intentionally unavailable in emulator so PRNG code cannot fake it)",
+    "storage/storage.c:752 (KEK itself generated with rng_fill_buffer_strong)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 has a 3-source rng_strong (crypto.rs:237 for OptRand). The transferable detail is the use-flag assertion: a side-channel/FI attacker who can skip one source's I2C call would otherwise reduce the XOR to a single source silently. Check pq1's rng_strong for an equivalent 'every source actually ran' post-condition rather than relying on Result propagation alone.",
+   "notes": "Trezor makes a failed SE entropy source fatal (ensure), not fail-open."
+  },
+  {
+   "item": "MCU TRNG driver: hardware error flags (SECS/CECS) checked on every read, FIPS 140-2 continuous test (reject value equal to previous), stack-protector disabled in the file",
+   "evidence": [
+    "core/embed/sys/rng/stm32/rng.c:20-21 (#pragma GCC optimize no-stack-protector - avoids the canary read/compare in the entropy path)",
+    "core/embed/sys/rng/stm32/rng.c:44-49 (wait for DRDY with SECS|CECS clear; loop while temp == previous, RM0090 24.3.1)",
+    "core/embed/sys/rng/stm32/rng.c:55-62 (history kept across calls)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's hw/rng.rs should be checked for SECS/CECS error handling and the repeat-value continuous test; a seeded-but-stuck TRNG is a classic SCA/FI enabler (OptRand, shuffle seeds, mask duty cycles all degrade). Memory 'Probe resets bias its own ratio' shows pq1 has looked at TRNG health, but the per-read error-flag gate is cheap and should be confirmed.",
+   "notes": ""
+  },
+  {
+   "item": "Constant-time BIP-39 word lookup (linear consteq scan with mask-select) and masked mnemonic-to-bits conversion; shipped as a security fix in 2.10.0",
+   "evidence": [
+    "crypto/bip39.c:245-264 (mnemonic_find_word: full 2048-entry linear scan, consteq per word, result selected via match_mask arithmetic)",
+    "crypto/bip39.c:113-116 (space->NUL replacement with arithmetic mask, no branch on content)",
+    "crypto/bip39.c:150-154 (each index bit ORed into result via -secret_bit mask, no data-dependent branch)",
+    "crypto/consteq.c:29-46 (OR-accumulate compare with volatile loop counter and tc_fault_handler loop-completion check)",
+    "core/CHANGELOG.md:155,172 (2.10.0, 21 Jan 2026: 'Fixed side-channel vulnerability in BIP-39 mnemonic processing')"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Already done in pq1: bip39/src/full.rs:480-568 (lookup_word_exact, is_exact_wordlist_entry explicitly replace WORDLIST.binary_search_by because 'visited midpoint addresses leak') and bip39/src/lib.rs:109-117 (word_prefix_at constant-time table read). pq1 is ahead of Trezor here (fixed before Trezor's 2026-01 advisory). Keep the regression tests pinned.",
+   "notes": "Trezor's seed derivation (bip39.c:201-241) additionally keeps a plaintext mnemonic/passphrase/seed cache in RAM (USE_BIP39_CACHE) - a design pq1 deliberately does not copy (entropy blob is AES-wrapped under master_secret)."
+  },
+  {
+   "item": "Randomly masked 32-bit secret compare (secequal32) for the PIN verification code: diff |= (*p1 + mask - *p2) ^ mask with a fresh random32() mask per word, plus loop-completion FI check",
+   "evidence": [
+    "storage/storage.c:220-243 (secequal32)",
+    "storage/storage.c:1139-1140 (wait_random then secequal32(tag, pvc) - the actual PIN accept/reject decision)",
+    "storage/storage.c:201-217 (byte-wise secequal with loop-completion check used for HMAC tags)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's PIN accept decision is in SE silicon (invariant #2), so the MCU never compares a PIN-derived value; but pq1 does compare 32-byte secrets on the MCU (dual_se.rs:305-310,464-470 derived_master vs stored_master via subtle::ct_eq, twice with wait_random). subtle gives constant time but not value-masking: the Hamming weight of (derived XOR stored) still modulates power during the compare. Trezor's additive random mask hides the operand Hamming weights. Low cost to add to pq1's fih.rs double-compare helper.",
+   "notes": ""
+  },
+  {
+   "item": "MCU PIN stretching before any SE involvement: PBKDF2-HMAC-SHA256 x20000 with hardware salt (CPUID+OTP or master-key-derived) + storage salt + optional external salt, then whitened by hardware-keyed SAES",
+   "evidence": [
+    "storage/storage.c:114 (PIN_ITER_COUNT 20000)",
+    "storage/storage.c:628-677 (mcu_pin_stretch; comment 633-638: salt binding protects low-entropy PIN if MCU-Optiga link is compromised; PBKDF2 keeps security no worse than pre-Optiga models if Optiga is fully compromised)",
+    "storage/storage.c:174,970 (hardware_salt = SHA-256 over device-unique data)",
+    "core/embed/sec/storage/stm32u5/storage_salt.c:35-50 (new devices: salt derived from the per-device privileged master key), :60-85 (legacy: CPUID words + OTP randomness block)",
+    "docs/storage/index.md:112-121 (design rationale for PBKDF2: thwart brute force when the attempt counter is bypassed by FI)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 sends the raw 8-byte PIN to the SEs inside SCP03/Shielded sessions (se050/mod.rs:3025-3029, optiga/mod.rs:3182-3183 take pin: &[u8;8]) and the SE compares; there is no MCU-side stretch. Invariant #3 accepts a Grover-2^64 residual against a physically tapped bus; under that residual the plaintext the attacker recovers is the PIN itself. Trezor's layering means a tapped bus yields only HMAC(stretched_pin,'') where stretched_pin is PBKDF2+device-salt+SAES-whitened - useless without the die. A pq1 analogue: send CMAC_DHUK(PIN||salt) (Tier-1 KDF already exists) rather than the raw PIN to both SEs. This changes the provisioned UserID/AuthRef values, so it is a pre-launch decision; CLAUDE.md allows renaming/re-provisioning pre-launch.",
+   "notes": "Trezor does NOT do the PIN compare purely in software: the Optiga set_auto_state on STRETCHED_PIN (optiga.c:1038-1041,925) is an SE-side comparison with a LUC counter, and the MCU PVC compare is a second gate."
+  },
+  {
+   "item": "Digest-before-send SE stretching pattern: digest = HMAC(stretched_pin,''); out = SE_op(digest); stretched_pin = HMAC(stretched_pin, out) - SE and bus never see the stretched PIN, and a malicious/compromised SE cannot reduce security below 'no SE'",
+   "evidence": [
+    "docs/core/misc/optiga.md:58-66 (pattern and rationale: compromised link or malicious Optiga 'will not reduce the security ... any more than if the Optiga was not integrated')",
+    "core/embed/sec/optiga/optiga.c:662-706 (optiga_pin_stretch_cmac_ecdh: per iteration HMAC digest, CMAC under E200 + hash_to_curve + ECDH under E0F3, folded back via HMAC)",
+    "core/embed/sec/optiga/optiga.c:576-629 (optiga_pin_stretch_common: CMAC + ECDH on the digest only)",
+    "core/embed/sec/optiga/optiga.c:976-979,1109-1110 (optiga_pin_verify: digest sent for set_auto_state; counter-protected PIN_SECRET folded in via HMAC)",
+    "core/embed/sec/optiga/optiga.c:70-77 (PIN_STRETCH_ITERATIONS 2; lifetime PIN_TOTAL_CTR_LIMIT 600000 so the SE can only be used ~150k-300k times - caps the number of traces an attacker can ever collect from the SE)",
+    "core/embed/sec/tropic/tropic.c:1704-1750 (same digest-in/HMAC-fold-out pattern with Tropic mac-and-destroy)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's dual-SE XOR split already embodies the 'one honest chip suffices' philosophy for the SEED (invariant #1), but not for the PIN path: the PIN is presented as-is to SE050 UserID and OPTIGA AuthRef. Adopting the HMAC-wrap for the value presented to each SE (so each SE sees a different, device-bound digest) is additive, costs two HMACs, and limits what a tapped tunnel or a leaky SE reveals. The lifetime stretching counter (E121) is also a direct SCA mitigation on the SE: it bounds total trace acquisition against the SE's own keys; pq1 has E120 (LUC) for attempts but no lifetime bound on SE PIN operations.",
+   "notes": "Trezor uses ECDH via hash_to_curve to force P-256 scalar multiplication inside the SE as one stretching step; pq1 must not import an ECC dependency for signing authority (invariant #5) - this would be PIN-stretch only, not signing, but it would still drag a classical primitive into the firmware image, so prefer the CMAC/HMAC steps only."
+  },
+  {
+   "item": "Tropic mac-and-destroy PIN slots and XOR-masked KEK per attempt (KEK ^ stretched_pin[i] stored in SE; unmasked only with the correct stretch)",
+   "evidence": [
+    "core/embed/sec/tropic/tropic.c:1704-1750 (tropic_pin_stretch: one-shot slot per attempt index)",
+    "core/embed/sec/tropic/tropic.c:1894-1935 (tropic_pin_set_kek_masks: masks[i] = kek ^ stretched_pins[i], written to SE user memory)",
+    "core/embed/sec/tropic/tropic.c:1941-1980 (tropic_pin_unmask_kek)",
+    "docs/core/misc/tropic_configs.md:20-33 vs :255-270 (Tropic sensor config: glitch/voltage/temp/laser/EM-pulse/shield detectors NO_ACTION in dev config, ENTER_ALARM_MODE in production)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "TROPIC01 was removed from pq1 (owner decision 2026-07-14); SE050 UserID and OPTIGA E120 provide the attempt-bounded gate. The sensor-config note is the one transferable lesson: Trezor explicitly disables the SE's physical-attack sensors in dev configs and arms them in production; pq1's OPTIGA/SE050 sensors are not firmware-configurable, so nothing to port.",
+   "notes": "Documented 'not done by default in dev' decision for Tropic sensors."
+  },
+  {
+   "item": "PIN attempt counter hardened against FI/read-glitch: guard-key-coded log words, duplicated bits, two independent decoding methods, counter incremented BEFORE the check and re-read to confirm the increment, wait_random between every step",
+   "evidence": [
+    "storage/pinlogs_bitwise.h:48,80-90 (random guard key per log; words carry guard bits)",
+    "storage/pinlogs_bitwise.h:143-190 (pin_fails_increase: guard-bit check per word, bit-shift decrement, wait_random between reads)",
+    "storage/pinlogs_bitwise.h:195-265 (pin_get_fails: format checks, volatile loop counters, Hamming-weight decode)",
+    "storage/storage.c:1209-1220 (increase then verify ctr+1 == ctr_ck, handle_fault otherwise)",
+    "docs/storage/index.md:172-186 (design goals: avoid 0xFFFFFFFF-like values, use two different checking methods, minimise branching)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already precharges page 124 before the SE call (gated_unlock) and has E120 as backstop; what Trezor adds is the encoding of the flash counter itself so a voltage/EM glitch during the read cannot plausibly produce a 'fresh' value, plus the read-back-after-write confirmation. pq1's page-124 format should be reviewed against these goals (guard bits, non-trivial encodings, read-back). FI-adjacent rather than SCA, but it is the PIN surface's primary hardware-attack mitigation.",
+   "notes": ""
+  },
+  {
+   "item": "Exponential back-off before PIN verification (2^fails - 1 seconds), enforced on-device, cancellable via UI, before the counter is consumed",
+   "evidence": [
+    "storage/storage.c:1158-1161 (get_backoff_time_ms)",
+    "storage/storage.c:1199-1207 (sleep loop with ui_progress cancel)",
+    "storage/storage.c:1186-1197 (wipe when ctr >= PIN_MAX_TRIES before any work)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Rate-limits trace acquisition on the PIN path (each wrong attempt costs more wall-clock time) and makes automated FI/SCA campaigns against the unlock sequence slower. pq1 has a 10-attempt wipe but no documented back-off; it is UI-only logic in S-world and cheap. Must be S-only timed (NS cannot shorten it) - pq1 already has an S-only TIM for the inactivity timeout.",
+   "notes": ""
+  },
+  {
+   "item": "HASH hardware accelerator used only for firmware image hashing (secure DMA channel), never for PBKDF2/HMAC/seed derivation; all secret-dependent SHA-2 remains software (sha2.c) with context zeroisation",
+   "evidence": [
+    "core/embed/sec/hash_processor/stm32u5/hash_processor.c:60,83,95 (secure+privileged GPDMA channel, HASH DMA start, calc entry)",
+    "core/embed/sec/image/inc/sec/image_hash_conf.h:31-36 (only consumer: IMAGE_HASH_* macros)",
+    "storage/storage.c:656-666 and crypto/bip39.c:217-230 (PBKDF2 via software pbkdf2_hmac_sha256/512)",
+    "crypto/sha2.c:959,977 (SHA256_CTX memzero on Final)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 does the opposite: all C10 hashing (sk_seed-dependent WOTS/FORS chains) runs through the HASH peripheral (sphincs-c10/src/hash.rs:106-115 hw-sha256; hw/hash.rs). That is a deliberate performance choice (14-17 s first sign even with HW) and the peripheral has no documented SCA hardening (unlike SAES). Trezor's usage does not constitute a documented decision to avoid HW HASH for secrets (no rationale in tree), but it is the observed posture. For pq1 the point is: the DPA target is the HASH peripheral's bus writes of secret-dependent 32-bit words (DINR) and the AHB traffic; software SHA-256 with F-16 shuffle has different leakage. Worth a TVLA comparison of HW vs SW SHA-256 on the WOTS chain before trusting either; pq1's shuffle only reorders chain computation, it does not mask values.",
+   "notes": "Trezor has no masking or shuffling anywhere in its hash/HMAC/PBKDF2 code; the only hash-path countermeasures are RDI and the consumption mask."
+  },
+  {
+   "item": "ECDSA scalar-multiplication SCA countermeasures: randomised projective (Jacobian) Z coordinate, fixed-pattern signed-window ladder (Okeya-Takagi), constant-time bn_cmov / constant-time modular inverse, and multiplicative blinding of k during s computation",
+   "evidence": [
+    "crypto/ecdsa.c:175-184 (generate_k_random: 'random K for signing/side-channel noise')",
+    "crypto/ecdsa.c:188-195 (curve_to_jacobian: randomize z coordinate)",
+    "crypto/ecdsa.c:409-520 (point_multiply: Okeya-Takagi width-w method 'Secure against Side Channel Attacks'; comment at 506 that the only branch depends on iteration number)",
+    "crypto/ecdsa.c:740-746 (s = (k*rand)^-1 (R.x*priv + z) * rand - inverse computed on blinded k)",
+    "crypto/bignum.c:305-330 (bn_cmov with volatile cond and bitwise OR), crypto/bignum.c:1129,1242 (Bos constant-time Montgomery inverse)",
+    "crypto/ed25519-donna/README.md:10, crypto/shamir.c:35-36 (constant-time claims for ed25519 and Shamir)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 has no classical signer (invariant #5) and no secret-dependent big-integer arithmetic; C10 is hash-only. The only transferable principle is 'randomise representation of the secret before the leaky operation', which for SPHINCS+ has no direct analogue (hash inputs cannot be blinded without a masked SHA-256, which memory 'SHAKE-vs-SHA2 is DECIDED' records as rejected for cost).",
+   "notes": "Listed because the task asked for every measure; ecdsa.c is the bulk of Trezor's explicit SCA engineering."
+  },
+  {
+   "item": "Masked delegation of ECDSA to the Optiga: the SE holds priv*k_mask and signs a mask-adjusted digest; MCU unmasks s with k_mask^-1, so neither the SE nor a bus tap sees the real key/signature relation",
+   "evidence": [
+    "core/embed/sec/optiga/optiga.c:117-140 (optiga_sign: SECRET_KEY_MASKING, ecdsa_mask_scalar on the digest for the FIDO key)",
+    "core/embed/sec/optiga/optiga.c:174-184 (ecdsa_unmask_scalar on s after DER decode)",
+    "crypto/ecdsa.c:1408-1451 (mask/unmask scalar = multiply/divide mod n)",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:54-57 (masking key derived from the privileged per-device master key)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Requires an SE-held ECC signing key and a classical curve; pq1 signs only with SPHINCS+C10 on the MCU and the SEs hold seed halves, not signing keys. The split-trust intent is already realised by the XOR seed split.",
+   "notes": ""
+  },
+  {
+   "item": "Optiga Shielded Connection: TLS-PRF-SHA256('Platform Binding') session keys from the pairing secret, AES-128-CCM with 8-byte tag, 4-byte sequence counters in both directions, handshake nonce echo verified, all session state memzeroed on reset",
+   "evidence": [
+    "core/embed/sec/optiga/optiga_transport.c:747-840 (optiga_sec_chan_handshake; tls_prf at 773; aes_encrypt_key128 at 776; nonce/seq echo check at 828)",
+    "core/embed/sec/optiga/optiga_transport.c:128,687-699 (SEC_CHAN_TAG_SIZE 8; per-command seq increment; CCM encrypt)",
+    "core/embed/sec/optiga/optiga_transport.c:216-222,666-671 (memzero of contexts and nonces)",
+    "core/embed/sec/secret_keys/secret_keys_common.c:37-66 (pairing secret = HMAC(master_key, diversifier) - derived on demand, never stored raw)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Already implemented byte-for-byte in pq1 (secure/src/optiga/shield.rs; invariant #3). The one Trezor detail to confirm in pq1: the session contexts and nonces are memzeroed on every transport reset/error path (optiga_transport.c:216-222) and the pairing secret is derived on demand from a hardware-protected master rather than cached.",
+   "notes": "Trezor also uses only 8-byte CCM tags, same as pq1 (CCM-8)."
+  },
+  {
+   "item": "Random delays before every host-observable USB control reply and RDI session refresh on every USB data event; same wait_random on Trezor One USB paths",
+   "evidence": [
+    "core/embed/io/usb/stm32/usb.c:617,622,648,653,691,696,705,716 (wait_random before USBD_CtlSendData/USBD_CtlError)",
+    "core/embed/io/usb/stm32/usb_class_hid.c:250,326,337; usb_class_webusb.c:209-252",
+    "core/embed/io/usb/stm32/usb.c:728,748 (random_delays_refresh_rdi on DataIn/DataOut)",
+    "legacy/usb_standard.c:161, legacy/webusb.c:56, legacy/winusb.c:83,106"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Decorrelates the host-visible timing of the device's USB responses (a remote timing side channel and a trigger for trace alignment) from internal secret work. pq1's USB stack is NS-world (OTG stays NS) and cannot call S-world wait_random; the useful port is at the NSC gateway: on every NSC entry/exit call wait_random and refresh the RDI session term, which is where NS-observable timing meets S-world secrets.",
+   "notes": ""
+  },
+  {
+   "item": "Secure zeroisation and fault-tolerant booleans: memzero via explicit_bzero/volatile loop with MSan annotation; sectrue=0xAAAAAAAA / secfalse=0 Hamming-distant secbool; CONFIDENTIAL/LOCAL_CONFIDENTIAL markers",
+   "evidence": [
+    "crypto/memzero.c:49-80",
+    "core/embed/rtl/inc/rtl/secbool.h:25-26",
+    "crypto/options.h:106-112 (CONFIDENTIAL macros - defined EMPTY; no linker section found in core/embed/sys/linker for them, so they are annotations only)",
+    "storage/storage.c:174 (hardware_salt marked CONFIDENTIAL)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already has zeroize::ZeroizeOnDrop + compiler fences, fi.rs F-2 Hamming-distant sentinels and a zeroize audit (docs/security/zeroize-audit-2026-07.md). Nothing new to port; note that Trezor's CONFIDENTIAL markers are no-ops in the current tree, i.e. no secret-section placement that could be targeted for RAM-erase-on-tamper beyond the backup registers.",
+   "notes": ""
+  },
+  {
+   "item": "Things Trezor observably does NOT do on this surface (no documented rationale in tree unless stated)",
+   "evidence": [
+    "crypto/sha2.c, crypto/hmac.c, crypto/pbkdf2.c, crypto/chacha20poly1305/ (no masking, no shuffling, no secret-share representation anywhere in hash/MAC/KDF code)",
+    "core/embed/models/T3T1/model.toml and T3W1/model.toml (no consumption_mask on colour-display models)",
+    "core/CHANGELOG.md:814 (HMAC-DRBG -> ChaCha-DRBG was a speed decision, #1554)",
+    "grep over repo: no TVLA/ChipWhisperer/leakage-assessment tooling or results checked in (only vendor dirs match)",
+    "docs/core/misc/tropic_configs.md:20-33 (SE physical sensors NO_ACTION in dev configs - explicit dev/prod split)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 is already beyond Trezor on several SCA items: F-16 computation-order shuffle in C10 signing (crypto.rs:272-279), double-compute + verify-before-release, 3-source OptRand, constant-time BIP-39 lookups shipped before Trezor's fix, bench SCA tooling (tools/bench, scared/lascar/rainbow skills). Trezor's edge is the always-on periodic RDI, the DMA-driven consumption mask, hardware-keyed whitening of every PIN-derived value, and the digest-before-send SE pattern. Neither vendor publishes leakage measurements; pq1 can differentiate by actually publishing TVLA on the WOTS chain (HW vs SW SHA-256) and on the SCP03/Shielded AES.",
+   "notes": "Memory 'SHAKE-vs-SHA2 is DECIDED' and 'ML-KEM inner wrap DESCOPED' are existing pq1 owner decisions that bound what can be proposed from this list: no masked SHA-2, no asymmetric tunnel wrap."
+  }
+ ]
+}

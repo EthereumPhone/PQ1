@@ -1,0 +1,31 @@
+{
+ "id": "IMP-06",
+ "title": "Option-byte self-enforcement delta: pin WRP1A/OEM-lock masks on silicon, write OEM keys to 0xFFFFFFFF in Phase A, measure the WHOLE slot window (declared length + 0xFF tail) in FSBL and secure world, and escalate a persistent tz-1 mismatch or an OBLRSTF boot to wipe instead of halt",
+ "threat": "Transit attacker at RDP-0 plants an OEM1/OEM2 regression password (write-only, invisible to the SWD dump) so the later RDP-2 is reversible; parks a payload in the unmeasured tail of a slot (FSBL hashes only manifest-declared secure_len/ns_len); or glitches/reloads option bytes at boot \u2014 today the tripwire halts with secrets intact and ignores WRP1A/OEM by design.",
+ "proposal": "(1) Close #46/#270: pin OEM1LOCK/OEM2LOCK and WRP1A bit positions on a sacrificial RDP-0 board with a positive detection (provision an OEM1 key, confirm the predicate trips), flip OEM_LOCK_MASK_PINNED/WRP1A_MASK_PINNED; Phase A writes OEM1KEYR1/2 and OEM2KEYR1/2 = 0xFFFFFFFF before programming RDP=0xCC and asserts NSSR OEMxLOCK clear afterwards; (2) FSBL verify_images hashes [secure_base, SLOT_SECURE_CAPACITY) and [ns_base, SLOT_NS_CAPACITY) with the tail required to be 0xFF (or random-filled at first boot and pinned, Krux model), and measured_boot::firmware_hash covers the same windows; fw_update COMMIT verifies the tail is erased; (3) FSBL reads RCC_CSR before the secure world and refuses to branch on OBLRSTF/IWDG/WWDG (secure world already classifies these \u2014 reset_cause.rs \u2014 but only after the FSBL has already measured and branched); (4) tz-1 persistent mismatch and Phase-A profile mismatch after RDP-2 arm the page-125 wipe flag before halting (Trezor secret_safety_erase); pre-RDP-2 mismatch keeps the current halt-unlocked-returnable policy.",
+ "rationale": "Trezor's boardloader treats any option-byte difference as an attack and wipes; it explicitly zeroes the write-only OEM keys because the lock bits are the only observable. pq1 already has the predicates but they are unpinned and fail closed, so the production profile cannot pass; and the compressible-firmware assumption Donjon used to bypass Trezor's hash check applies to pq1's unmeasured slot tails. All firmware, mostly small, and it hardens the one anchor invariant #10 rests on.",
+ "repo_evidence": [
+  "shared/src/lockdown.rs:264-290 (OEM lock bits 26/27, OEM_LOCK_MASK_PINNED=false \u2192 oem_locks_absent fails closed), :513-514",
+  "secure/src/first_boot/mod.rs:179-191 (Phase A reads oem_lock_status_raw but no OEM key write exists; grep 'OEM1KEYR' -> none)",
+  "fsbl/src/optbytes.rs:24-30 ('deliberately does NOT act on WRP1A or the OEM locks'; halt only)",
+  "fsbl/src/verify.rs:40-65 (hash_flash_region(secure_base, secure_len) / (ns_base, ns_len) \u2014 manifest lengths, tail unmeasured)",
+  "secure/src/measured_boot.rs:102-120 (hash over [__vector_table, __veneer_limit) only)",
+  "secure/src/reset_cause.rs:1-38, :170 (OBLRSTF classified in secure world only; fsbl/src has no RCC_CSR flag read)",
+  "secure/src/fw_update/staging.rs:44-90 (0xFF padding within declared length; no tail check at COMMIT)",
+  "gh #46, #270, #82 (SRAM_RST), #753 (BOOT_LOCK order)"
+ ],
+ "vendor_precedent": "Trezor option_bytes.c:210-222 (OEM keys 0xFFFFFFFF) + :247-250 (OEM lock check) + boardloader main.c:325-340 (mismatch \u2192 secret_safety_erase); reset_flags.c (written, uncalled); Krux TC Flash Hash fills empty flash and hashes the whole region.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Wipe-on-mismatch after RDP-2 is a brick lever for an FI attacker who can fake a mismatch \u2014 require a persistent two-pass mismatch (the existing F-2 sentinel pattern) and keep it off bench builds. OEM key write requires the silicon-pin evidence first; done blind it could itself set a lock. Whole-slot hashing adds ~2x FSBL verify time on pq1 (2.9 s measured today) \u2014 stays under the 4 s window only if the HASH peripheral is used in the FSBL. OBLRSTF is also set by a legitimate first-boot RDP-2 launch, so the FSBL rule must whitelist the journaled Phase-A path.",
+ "sources": [
+  "file:///home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+  "file:///home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+  "https://selfcustody.github.io/krux/getting-started/features/tamper-detection/",
+  "https://www.ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security",
+  "https://tches.iacr.org/index.php/TCHES/article/download/7390/6562/2561"
+ ],
+ "surface": "implant"
+}

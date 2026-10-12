@@ -1,0 +1,27 @@
+{
+ "id": "BOOT-10",
+ "title": "Feasibility study: in-field electrical self-fingerprint of the board (TSC capacitance of display/SE nets, PDN response via ADC+TIM stimulus, panel-rail current) enrolled at the RDP-0 verification and re-checked before unlock",
+ "threat": "Hardware implants and probes the firmware cannot see: a passive tap on the LCD SPI (the Grand/Nano X implant class \u2014 the display is a plaintext sink even though the device is otherwise all-internal-flash), an EM/laser FI probe parked over the package, a swapped PCB or added IC \u2014 all invisible to measured boot, option-byte checks and SE attestation.",
+ "proposal": "Run a bench study on pq1 silicon (not an EVT change first): (1) STM32U585 TSC charge-transfer counts on candidate nets that can be sampled without a dedicated electrode (LCD SCK/MOSI/CS PA5/PA7/PA4 between frames, SE I2C lines during bus idle, the NC pins PA6/PC13), temperature-compensated with the internal temp sensor; (2) ADC1/ADC4 sampling of VDD/VDDA ripple while the consumption-mask TIM drives a known stimulus \u2014 a cheap on-chip proxy for ImpedanceVerif's PDN response; (3) if the EVT allows, a sense resistor on the LCM_EN/backlight rail read by ADC (panel-rail current signature vs. an added load). Enrol the baseline during the first-boot ceremony (after the user's SWD verification and before RDP-2), seal it in page 127/SE, and compare at boot and before each sign with a Wasserstein/Fr\u00e9chet distance; a large distance refuses to unlock (never wipes \u2014 FPR is unknown). Deliverable is a go/no-go with measured intra-unit drift vs. probe-clip/implant deltas.",
+ "rationale": "This is the only mechanism in the literature by which a device can notice an implant or a probe from the inside, and no vendor ships it; the user explicitly asked for it. The U585 already has the peripherals (TSC, ADC, COMP, OPAMP, TIM) and pq1 already owns a secure TIM stimulus source (consumption mask). Honest limit stated up front: a self-enrolled baseline cannot catch an implant inserted BEFORE enrolment \u2014 which is exactly why enrolment must sit after the RDP-0 verify-before-first-power step and why BOOT-04 (per-unit factory PDN/Z-profile with a VNA, offline) is the complementary supply-chain half.",
+ "repo_evidence": [
+  "grep TSC|ADC4|ADC1|COMP1|OPAMP -r secure/src fsbl/src: no hits (no sensing peripheral is used anywhere)",
+  "secure/src/hw/consumption_mask.rs (TIM stimulus exists; dilution unmeasured, evt-silicon-validation.md \u00a79)",
+  "docs/security/threat-model.md:100 (transit capability list has no in-field implant detection row)",
+  "CLAUDE.md pre-production caveats: pq1 bench board has NO LCD fitted (memory note) \u2014 the LCD-net study needs the EVT unit"
+ ],
+ "vendor_precedent": "none shipped. Academic: ImpedanceVerif (TCHES 2023, on-chip PDN impedance tamper detection), PDNPulse (IEEE TIFS 2023, offline VNA golden profiles, 100% TPR/0% FPR on PoC boards, per-batch FPR caveat), NAIST IEICE HWS2021-50 (on-IC capacitance sensors re-identify individual PCBs). Coldcard's SE-enforced genuine LED and GridPlus LDS mesh are the only shipped physical-integrity signals and neither detects a passive bus tap.",
+ "novelty": "beyond",
+ "kind": "mixed",
+ "cost": "XL",
+ "priority": "P3",
+ "risks": "Unvalidated as a security self-test; temperature/aging drift will dominate unless compensated; a sophisticated implant can be tuned below the detection floor (PDNPulse needed a bench VNA for fF sensitivity); refusing to unlock on a false positive is a usability failure (never wipe on this signal). Needs EVT pins for any rail sensing (PA6/PC13 are the only candidates). DROPPED (lower value or out of scope for this surface): typed FSBL\u2192S handoff block + full RAM/BKP scrub at stage transitions + FSBL capabilities TLV with geometry refusal (Trezor startup_args/boardcaps; S-M, P2); SE-driven genuine LED (Coldcard; hardware); CI enrolment holes for pqsigner-geometry tests, fsbl-tests geometry_consistency/qemu_integration, check_fsbl_geometry.py and `make verify-repro` (#720/#721; S, P2 process); user-keyed fingerprint words (Krux TC Code) / visually distinctive FSBL window (#601); U585 RDP-2/TZ-M bench glitch campaign with the Scaffold rig before the ceremony is approved (#401/#633); transparency-log append (#68/#67, folded into BOOT-04); stale-comment cleanup (fsbl 'software sha2' comments, first-boot-provisioning.md:48 WRP pages 0-3 vs 0..4, reproducible-builds.md:241 CI claim).",
+ "sources": [
+  "https://eprint.iacr.org/2022/946",
+  "https://arxiv.org/abs/2204.02482",
+  "https://ken.ieice.org/ken/paper/202110198C57/eng/",
+  "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+  "https://www.st.com/resource/en/application_note/an5105-getting-started-with-touch-sensing-control-on-stm32-mcus-stmicroelectronics.pdf"
+ ],
+ "surface": "boot"
+}

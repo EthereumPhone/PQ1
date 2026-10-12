@@ -1,0 +1,26 @@
+{
+ "id": "D-08",
+ "title": "Display-removal / enclosure tamper on PC13 (TAMP_IN1) plus a no-cavity, glued, tamper-evident enclosure around the panel flex",
+ "threat": "Physical interposition on the display flex (the Ledger implant was a concealed board behind the screen) and screen replacement with a fake panel (pq1's accepted post-boot fake-screen residual). pq1's TAMP driver handles internal tampers only; the external case-switch/mesh item is 'board not started'.",
+ "proposal": "EVT: wire a continuity loop through the panel flex and a case-open switch to PC13 (one of the three free bonded pins and the U585's TAMP_IN1 \u2014 confirm against the pin table) with the hardware pull + RC filter `hardware_requirements.md` already specifies; firmware: enable the external tamper in `TAMP_CR1`/`CR2` in confirmed mode so the BHK backup registers erase on open (as internal tampers already do) and the device wipes/refuses the wizard. Mechanically: potted/glued display stack with no void behind the panel, ultrasonically welded case, serialised tamper-evident seal recorded at the factory ceremony and checked in the box-opening ceremony. Document the Coldcard clear-case / visible-circuit alternative as the open-inspection option.",
+ "rationale": "Passport Prime ships 'factory reset on any attempt to remove the screen'; Coldcard ships a visible-circuit clear case; Ledger's only answer is photos. The implant needs physical volume and flex access; denying both is the one measure that scales to adaptive implants that D-02/D-03 cannot resolve.",
+ "repo_evidence": [
+  "secure/src/hw/tamp.rs:194-198, 288, 313 (ITAMP1/2/3/5/6 only \u2014 no TAMP_INx external tamper enable)",
+  "docs/hardware/hardware_requirements.md:107-108, 240 (case switch -> TAMP_INx 'board not started'; pin enable is the missing firmware piece)",
+  "secure/src/board/pq1.rs:45 (PC13 free and bonded)",
+  "docs/security/user-device-verification.md:163-168 (implant residual, layer = packaging + photos only)",
+  "README.md:459 (tamper-evident packaging is an unchecked production checklist item)"
+ ],
+ "vendor_precedent": "Foundation Passport Prime (screen-removal/PCB/chassis tamper -> irreversible factory reset); Coldcard Mk4 clear case + SE-driven genuine LED; Trezor TAMP all-internal-confirmed mode (core/embed/sec/tamper/stm32u5/tamper.c). Ledger: none (procedural only).",
+ "novelty": "parity",
+ "kind": "hardware",
+ "cost": "L",
+ "priority": "P2",
+ "risks": "External tamper on the backup domain must survive power-off (needs VBAT path \u2014 pq1 has no battery, so the 'open while unpowered' case only wipes on next power-up when the loop reads open; state that). Glued stacks hurt repairability (accepted for a signer). Mechanical no-cavity design is a product decision outside this repo; mis-wired TAMP_IN wipes units in the field \u2014 needs the TAMP_FLTCR filter and a bench receipt.",
+ "sources": [
+  "https://docs.foundation.xyz/glossary/home/",
+  "https://blog.coinkite.com/understanding-mk4-security-model/",
+  "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf"
+ ],
+ "surface": "display"
+}

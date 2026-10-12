@@ -1,0 +1,28 @@
+{
+ "id": "SCA-10",
+ "title": "Secret-frame emanation hardening on the NV3007 SPI path: per-render pixel/backlight randomisation after atlas verification, LCD decoy re-test, and the #784 bypass fix",
+ "threat": "The LCD MOSI line carries plaintext pixel data on a periodic TE-synced refresh and ui-px renders from a fixed SHA-256-pinned glyph atlas \u2014 the cached-glyph anti-pattern Kuhn showed 'merely assists the eavesdropper' (readable text at 3-10 m from an FPD link by frame averaging). Backlight/panel current also correlates with lit pixels (CVE-2019-14354 class, recurred on Ledger's non-SSD1306 panel in 2023). F-24's decoy-frames mitigation was validated only on the removed OLED; the restore wizard renders seed letters on a non-forced frame (#784).",
+ "proposal": "(a) Fix #784 so every secret glyph goes through the CT blitter/force path; (b) in the compositor, AFTER the atlas hash check, randomise the low-order colour bits of every pixel of a secret frame and the row/strip write order per render (fresh TRNG per frame, so frame averaging no longer converges), keeping the rendered intent identical; (c) randomise backlight PWM phase/duty within a visually invisible band during secret frames (Ledger's 'randomized screen-update parameters' analogue); (d) re-run the F-24 decoy/TVLA experiment on the real NV3007 panel with the \u00a713.1 rig and record the result in tools/sca/README.md (replacing the stale SSD1306 section); (e) keep secret frames on screen for the minimum time and prefer never-display backup flows where the UX allows.",
+ "rationale": "This is the one SCA window where the secret is the seed itself (wizard) or the PIN, and the one with a real-world implant precedent (Grand's Nano X SPI tap). Randomisation must sit after atlas verification so the WYSIWYS pin stays intact. The repo already has the CT blitter (lcd.rs:196) \u2014 the missing delta is per-render entropy, the LCD re-test, and closing the bypass.",
+ "repo_evidence": [
+  "secure/src/ui/lcd.rs:196 (secret pass exists: CT glyph fetch, branchless blit \u2014 but deterministic pixels per render)",
+  "secure/src/ui/px/assets.rs (atlas SHA-256 re-hash; no per-render randomisation)",
+  "secure/Cargo.toml:541 (decoy-frames = [] default OFF; validated only on removed OLED)",
+  "tools/sca/README.md:1245-1405 (F-24 cites oled.rs/SSD1306; LCD re-test never run)",
+  "issue #784 (OPEN bug: letter row on non-forced frame), #237 (display emanation, OPEN)"
+ ],
+ "vendor_precedent": "Ledger firmware 1.6 (2019): randomised contrast/supply/oscillator parameters + inverted-box rendering; Ledger 2023: UI-level fix after conceding 'no amount of physical noise could hide the dependency'; Trezor decoy pixels (2019). No vendor documents SPI-link TEMPEST mitigation.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "The pq1 bench board has NO LCD \u2014 validation needs the LCD-equipped EVT unit and a scope/EM probe near the flex; low-order-bit randomisation must be proven invisible on the NV3007 (65k colour) and must not alter the ui-capture frame-hash tests (which would need a seeded/deterministic test mode). Does not stop a passive SPI tap that template-matches glyph shapes (Grand implant) \u2014 only emanation averaging; a tap needs the display-bus implant detection items on the implant surface. DROPPED (lower value / tracked elsewhere / needs owner call): CI-gate cargo-checkct + rainbow leakage harnesses (#312, #232 \u2014 execution only); flash-persistent daily sign quota (F-17 'owed' \u2014 with 7 s/sign silicon latency and the 65,536 per-slot cap the marginal trace-rate gain is small and conflicts with the no-new-flash-state rule; owner call); within-FORS-tree leaf-order shuffle (needs ~32 KB leaf buffer per tree; marginal over F-16); anti-klepto commitment for R (#238 \u2014 needs a host nonce in the frozen sign wire format; docs-only now); PDN-impedance / TSC-capacitance EM-probe proximity self-fingerprint (research spike, on-chip runtime variant unestablished per the deep-research digest, cannot see pre-first-boot implants); SHAFI ADRS masking (#593 citation unverified); grind_r hash-counter bucket folded into SCA-01.",
+ "sources": [
+  "https://www.cl.cam.ac.uk/~mgk25/pet2004-fpd.pdf",
+  "https://donjon.ledger.com/lsb/006/",
+  "https://www.ledger.com/blog/new-pin-screen/",
+  "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+  "https://blog.inhq.net/posts/oled-side-channel-status-summary/"
+ ],
+ "surface": "sca"
+}

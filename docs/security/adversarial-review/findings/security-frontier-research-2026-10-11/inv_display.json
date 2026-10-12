@@ -1,0 +1,389 @@
+{
+ "surface": "Display / seed-exfiltration side channels (key=display): seed-wizard word display + recovery entry, PIN row, legacy 16x4 LCD glyph blitter, ui-px pixel presenter, NV3007 SPI bus, backlight, consumption mask, ui-capture, and the display-related GTZC/bus-tap posture. Read-only inventory against HEAD of feat/pq1-board-target (c75b0d9c); no files modified.",
+ "has": [
+  {
+   "item": "F-24 stage A-C: constant-time BIP-39 word fetch for the seed display (no load addressed by the secret word index)",
+   "evidence": [
+    "secure/src/ui/seed_wizard.rs:576-592 (render_mnemonic_page uses m.word_bytes)",
+    "secure/src/ui/seed_wizard.rs:89-92 (px_mnemonic_page uses m.word_bytes into fixed 8-byte cells)",
+    "secure/src/ui/seed_wizard.rs:38-41 (imports word_bytes_at / is_exact_wordlist_entry from sphincs_tz_bip39)",
+    "tools/sca/README.md:1254-1263 (stage table)"
+   ],
+   "status": "implemented",
+   "notes": "bip39::Mnemonic::word_bytes is the F-22 ct_load_word scan; validated by `make -C tools/sca bip39-leak` per README."
+  },
+  {
+   "item": "F-24 stage D (legacy 16x4 path): constant-time glyph lookup for secret rows \u2014 96-entry mask-OR scan with black_box barriers",
+   "evidence": [
+    "secure/src/ui/secret_text.rs:51-64 (ct_glyph_col)",
+    "secure/src/ui/secret_text.rs:73-82 (secret_glyph_cols)",
+    "secure/src/ui/secret_text.rs:44-50 (black_box is load-bearing; TVLA 650.90 leaky vs 0.00 CT, 2026-06-09)",
+    "secure/src/ui/secret_text.rs:96-121 (host unit test ct_glyph_col_recovers_known_glyphs)",
+    "secure/src/main.rs:337 (ui_secret_text_under_test mount so the test actually runs host-side)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Branchless RGB565 glyph expansion writes every pixel of a fixed 360-px cell unconditionally (secret path and public path share blit_glyph; only pixel VALUE depends on the secret)",
+   "evidence": [
+    "secure/src/ui/lcd.rs:237-278 (blit_glyph: mask select, fixed CELL_N writes, fixed set_window + write_pixels)",
+    "secure/src/ui/lcd.rs:180-210 (flush_with_secret_rows iterates ALL DISPLAY_COLS, out-of-range ch=0 still runs the full scan)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Secret rows never route through the address-keyed public font path on the legacy LCD backend; the public pass skips secret rows and the secret pass overwrites them (no OR-accumulate, no stale-content leak)",
+   "evidence": [
+    "secure/src/ui/lcd.rs:184-195 (public pass skips is_secret rows)",
+    "secure/src/ui/lcd.rs:196-209 (secret pass via secret_glyph_cols)",
+    "secure/src/ui/secret_text.rs:84-94 (public_glyph_cols documented NEVER for secret rows)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "F-27: recovery candidate-list screen renders candidates via CT word_bytes_at + CT glyph blit (legacy) and via Item::Secret + show_with(secret) (px)",
+   "evidence": [
+    "secure/src/ui/seed_wizard.rs:992-1043 (render_candidate_screen: px branch 996-1012 uses show_with(candidate_list, &secret); legacy branch 1026-1042 uses word_bytes_at + flush_with_secret_rows)",
+    "secure/src/ui/seed_wizard.rs:903-909 (prefix_is_exact_word -> is_exact_wordlist_entry)",
+    "tools/sca/README.md:1526-1579 (F-27 result: binary search max|t|=42.9 LEAK vs CT 0.000)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "F-25: recovery prefix lookup (lookup_prefix) is a constant-time scan over all 2048 entries",
+   "evidence": [
+    "secure/src/ui/seed_wizard.rs:859 (enter_single_word calls lookup_prefix)",
+    "tools/sca/README.md:1416-1489 (F-25 fix + TVLA table 45.43 LEAK vs 0.000 CLEAN)"
+   ],
+   "status": "implemented",
+   "notes": "Implementation lives in bip39/src/lib.rs (not re-read here); evidence is the README result table and the call site."
+  },
+  {
+   "item": "ui-px F-24 twin: Font::blit_secret_run scans ALL 26 lowercase glyphs per pixel with ct_eq_u8+black_box masks, draws a fixed SECRET_CELLS=8 cells on a fixed SECRET_ADV=14 px pitch, composites every pixel via blend_ct (no zero/full-coverage early-out)",
+   "evidence": [
+    "pqsigner-ui-px/src/font.rs:233-238 (SECRET_FIRST/LAST, SECRET_CELLS=8, SECRET_ADV=14)",
+    "pqsigner-ui-px/src/font.rs:244-249 (ct_eq_u8 twin)",
+    "pqsigner-ui-px/src/font.rs:272-321 (blit_secret_run)",
+    "pqsigner-ui-px/src/raster.rs:166-179 (blend_ct, #[inline(never)], black_box on coverage)",
+    "pqsigner-ui-px/src/raster.rs:404 (Item::Secret dispatch)",
+    "pqsigner-ui-px/src/rows.rs:195-208 (push_secret_word is the ONLY Item::Secret producer)",
+    "pqsigner-ui-px/src/rows.rs:232-241 (host test secret_run_draws_the_word_and_nothing_for_padding)"
+   ],
+   "status": "implemented",
+   "notes": "The per-candidate `continue` at font.rs:306-310 (slot None / out-of-glyph-box) branches on PUBLIC values only (candidate glyph geometry, pixel coords); the mask selection itself is branchless. Glyph bitmaps are read from the NS-resident atlas at candidate-indexed (public) addresses."
+  },
+  {
+   "item": "ui-px seed pages: the Screen record never holds the words (placeholders only); words are passed separately as `secret` cells and painted by the CT run on every animation frame; the record is what gets logged/hashed",
+   "evidence": [
+    "secure/src/ui/px/status_map.rs:359-368 (seed_page builds SECRET_PLACEHOLDER cells)",
+    "secure/src/ui/px/status_map.rs:373-388 (candidate_list placeholders + SECRET_CURSOR)",
+    "secure/src/ui/px/status_map.rs:882-891 (test secret_records_never_hold_the_words)",
+    "secure/src/ui/px/screens.rs:14-17 (contract statement)",
+    "secure/src/ui/px/screens.rs:108-124 (show_with: verify_atlas then play_screen(s, atlas, secret))",
+    "secure/src/ui/px/lcd.rs:658-698 (play_screen: push_secret_word per frame, force = !secret.is_empty())"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "ui-px stage-E 'force' discipline: a frame carrying secret cells streams EVERY strip (no dirty-strip skip based on a digest of secret pixels), records no digest, and invalidates SHOWN on exit",
+   "evidence": [
+    "secure/src/ui/px/lcd.rs:300-343 (present_frame_ex: force => digest 0, blit every strip, slot=None)",
+    "secure/src/ui/px/lcd.rs:663 (force = !secret.is_empty())",
+    "secure/src/ui/px/lcd.rs:695-697 (invalidate_shown() on exit when forced)",
+    "secure/src/ui/px/lcd.rs:60-66 (SHOWN per-strip 64-bit digest rationale)"
+   ],
+   "status": "implemented",
+   "notes": "Correct for seed_page and candidate_list; NOT applied to letter_row (#784) nor pin_row (untracked, see gaps)."
+  },
+  {
+   "item": "ui-px log/fingerprint redaction: Kind::Entry records (PIN row, letter row) have non-mask glyphs replaced by '#' before [UI-PXS]/[UI-PXSR]/ui-capture emission",
+   "evidence": [
+    "secure/src/ui/px/screens.rs:42-56 (redacted)",
+    "secure/src/ui/px/screens.rs:60-96 (record uses redacted copy for debug-log and ui-capture)"
+   ],
+   "status": "implemented",
+   "notes": "Covers the px non-dialog screens only; the legacy semihosting flush path still hashes raw rows (see #186 gap)."
+  },
+  {
+   "item": "Legacy px seed/candidate storage zeroized after paint (cells.zeroize)",
+   "evidence": [
+    "secure/src/ui/seed_wizard.rs:97-99 (px_mnemonic_page zeroizes cells)",
+    "secure/src/ui/seed_wizard.rs:1006-1008 (render_candidate_screen px branch zeroizes cells)",
+    "secure/src/ui/seed_wizard.rs:775-784 (enter_mnemonic zeroizes indices)"
+   ],
+   "status": "partial",
+   "notes": "Legacy render_mnemonic_page (seed_wizard.rs:584-614) does NOT zeroize secret_rows_storage or wb; legacy render_candidate_screen (1027-1042) likewise. Pixel scratch buffers (lcd.rs `cell`, px/lcd.rs `STRIP`) are never zeroized \u2014 see gaps."
+  },
+  {
+   "item": "Decoy frames (F-24 stage E sub-channel 4, bus-EM): code landed behind `decoy-frames` (default OFF); N=4 decoys from rng_strong, same CT render path, Drop-zeroized; 5 source-text regression sentinels",
+   "evidence": [
+    "secure/src/ui/seed_wizard.rs:297-325 (N_DECOYS=4, REAL_FRAME_HOLD_MS=200, DECOY_FRAME_HOLD_MS=40)",
+    "secure/src/ui/seed_wizard.rs:359-367 (feature split)",
+    "secure/src/ui/seed_wizard.rs:427-560 (show_mnemonic_with_decoys / show_mnemonic_page_with_decoys)",
+    "secure/Cargo.toml:541 (decoy-frames = [])",
+    "secure/src/ui_under_test/pure_tests.rs:1168-1180 (sentinels)",
+    "tools/sca/README.md:1305-1354 (design + OLED bench failure 2026-05-19)"
+   ],
+   "status": "fenced-off",
+   "notes": "Bench-FAILED on OLED (2026-05-19) and FAILED on the NV3007 at 20 MHz (2026-06-09, #258 + docs/archive/work-todo-retired-2026-07-19.md:2482): decoys visible at every hold incl. 0 ms because the ~20 ms repaint exceeds flicker fusion. The decoy path is also legacy-16x4 only (TOTAL_PAGES/render_mnemonic_page) \u2014 it has NO ui-px equivalent. Remains OFF; not in PROD_SHIP_FEATURES."
+  },
+  {
+   "item": "Decoy-flicker bench harness (`decoy-flicker-test` feature, `make decoy-flicker-hw`) sweeping DECOY_HOLD 40/25/15/8/3/0 ms",
+   "evidence": [
+    "secure/src/ui/seed_wizard.rs:1064-1117 (decoy_flicker_test_loop)",
+    "secure/Cargo.toml:529 (decoy-flicker-test = [])",
+    "Makefile:3907-3921 (decoy-flicker-hw target)"
+   ],
+   "status": "implemented",
+   "notes": "Dev-only. Code comments at seed_wizard.rs:315-320 and 1089-1094 still say the LCD 'SHOULD' make decoys subliminal \u2014 contradicted by the 2026-06-09 result recorded in #258."
+  },
+  {
+   "item": "Constant-current LED backlight (content-independent backlight draw) \u2014 iota2 module hard-wired 3V3; pq1 AW99703 LED1 at 20 mA full scale, brightness 0x5FF programmed once over bit-banged I2C2",
+   "evidence": [
+    "secure/src/hw/lcd_nv3007.rs:12-13 (iota2 BLK hard-wired)",
+    "secure/src/hw/aw99703.rs:1-9, 86-115 (LEDCUR_CH1_20MA, BRIGHTNESS 0x5FF)",
+    "secure/src/hw/lcd_nv3007.rs:770-806 (init: configure() then enable())",
+    "secure/src/board/pq1.rs:118-124, 243-248 (LCM_EN PB15, I2C2 PB13/PB14, addr 0x36)",
+    "secure/src/ui/lcd.rs:23 ('White-on-black (constant backlight current \u2014 helps F-24 \u00a7E)')"
+   ],
+   "status": "implemented",
+   "notes": "Structural argument only (#260): backlight current is content-independent, but the NV3007 source/gate driver current still varies with pixel content and this has never been measured. No low-brightness or dimmed 'seed wizard mode' exists; brightness is a compile-time constant."
+  },
+  {
+   "item": "SPI1 (trusted-display bus) attributed SECURE in GTZC TZSC SECCFGR2 under ui-lcd (finding F1); silicon-validated 2026-05-20 as part of the 7/7 RAZ-fault test",
+   "evidence": [
+    "secure/src/sau.rs:354-370 (SECCFGR2_SPI1_BIT, F1 rationale)",
+    "secure/src/sau.rs:457-467, 487-491",
+    "secure/src/hw/spi_hw.rs:28-30 ('SPI peripheral stays secure')",
+    "docs/security/threat-model.md:280 (NS races/spoofs LCD -> S-owned via GTZC)"
+   ],
+   "status": "implemented",
+   "notes": "sau.rs:365-368 itself records the residual: panel GPIO pins (iota2 PE7/12/13/14/15) stay NS and the SPI1 RCC clock-enable is RCC-governed (#83, #53)."
+  },
+  {
+   "item": "I2C2 (pq1 backlight/RGB aux bus) and TIM2/TIM3 (consumption mask) attributed SECURE; UCPD1 secured as a second handle on PA15/PB15 (LCM_EN)",
+   "evidence": [
+    "secure/src/sau.rs:257-283 (SECCFGR1 I2C1/I2C2/I2C4)",
+    "secure/src/sau.rs:301-314 (UCPD1 rationale incl. display backlight)",
+    "secure/src/sau.rs:342-352 (TIM2/TIM3)",
+    "secure/src/board/pq1.rs:281 (SE_RST/SE1_EN/LCM_EN never handed to NS)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Consumption mask: randomised-duty PWM (TIM2_CH1/PA5 on iota2, TIM3_CH1/PA6 on pq1), TRNG-seeded xorshift32, fail-closed boot seed, periodic reseed, selftest_pin_toggles, FORCED ON for shipping dual-SE images",
+   "evidence": [
+    "secure/src/hw/consumption_mask.rs:70-117 (init, fail-closed seed, selftest)",
+    "secure/src/hw/consumption_mask.rs:166-192 (randomize + reseed)",
+    "secure/src/hw/consumption_mask.rs:299-320 (selftest_pin_toggles)",
+    "secure/src/nsc/mod.rs:695-718 (ship-blocker fence requiring consumption-mask)",
+    "Makefile:2718 (PROD_SHIP_FEATURES includes consumption-mask)"
+   ],
+   "status": "partial",
+   "notes": "Masks crypto work, NOT the panel draw (#237 states this). The pin drives NO load on either board (iota2 PA5 unclaimed, pq1 PA6 = NC), so actual dilution is unmeasured (consumption_mask.rs:41-51; docs/hardware/evt-silicon-validation.md:175). Reseed fails open/silent and biased toward signing windows (#831, #646)."
+  },
+  {
+   "item": "Anti-homoglyph clip on every legacy row: bytes outside 0x20..=0x7e become '?'",
+   "evidence": [
+    "secure/src/ui/lcd.rs:128-146 (draw_line)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Seed display scroll-to-end: long-Right confirms only after the last page was shown; 'Words shown' status wipes the words from the glass before returning",
+   "evidence": [
+    "secure/src/ui/seed_wizard.rs:389-391, 411-421 (seen_last gate, show_status('Words shown'))",
+    "secure/src/ui/seed_wizard.rs:64-82 (paging decided ONCE per walk; a mid-walk px decline cancels rather than mixing pagings so no word is skipped)"
+   ],
+   "status": "partial",
+   "notes": "seen_last is a bare bool (not FihBool) \u2014 #470 open."
+  },
+  {
+   "item": "Backup verification: 3 random-word spot check via the same CT entry widget (never re-displays the seed)",
+   "evidence": [
+    "secure/src/ui/seed_wizard.rs:624-701 (verify_mnemonic)",
+    "secure/src/ui/seed_wizard.rs:703-722 (pick_three_distinct from rng::byte_nonsecret)"
+   ],
+   "status": "implemented",
+   "notes": "debug-log arms at 628-633/639-653/659-676 print the expected and typed words to the secure log \u2014 debug-log is PROD_FORBIDDEN (Makefile:2672)."
+  },
+  {
+   "item": "PIN entry: entered digits masked as '*' on both legacy and px; per-position random starting digit (F-20) against press-count observation",
+   "evidence": [
+    "secure/src/ui/pin_entry.rs:10-27, 56-69 (F-20)",
+    "secure/src/ui/pin_entry.rs:177-221 (render_pin_screen)",
+    "secure/src/ui/px/status_map.rs:274-293 (pin_row masks i<pos with '*')",
+    "secure/src/ui/px/status_map.rs:675 (test pin_row_masks_entered_digits_like_the_page)"
+   ],
+   "status": "implemented",
+   "notes": "The ACTIVE digit is rendered through the NON-constant-time glyph path on both backends (legacy draw_line -> public_glyph_cols direct index, lcd.rs:166; px Item::Text -> font.blit_run via rows.rs:76-89) on a non-forced frame. See gaps."
+  },
+  {
+   "item": "ui-capture (per-frame SHA-256 fingerprints) is debug-only and denylisted from production",
+   "evidence": [
+    "secure/Cargo.toml:377 (ui-capture = ['debug-log'])",
+    "Makefile:2672-2673 (PROD_FORBIDDEN includes ui-capture, debug-log)",
+    "secure/src/nsc/mod.rs:125 (compile fence)"
+   ],
+   "status": "fenced-off",
+   "notes": "On the semihosting backend flush_with_secret_rows delegates to flush, which hashes the raw grid INCLUDING seed rows (secure/src/ui/semihosting.rs:92-114) \u2014 the #186 oracle; mitigated only by the denylist."
+  },
+  {
+   "item": "SCA regression harness for the legacy glyph path: `make -C tools/sca glyph-leak` (rainbow+lascar TVLA, leaky-baseline sentinel vs CT scan)",
+   "evidence": [
+    "tools/sca/Makefile:231-237",
+    "tools/sca/leakage_glyph.py:1-50",
+    "tools/sca/README.md:1254-1263 (stage table marks A-D FIXED)"
+   ],
+   "status": "implemented",
+   "notes": "Models the mem_address channel only (value-blind). Covers the FONT_5X8 96-entry scan; it does NOT exercise pqsigner-ui-px's blit_secret_run (no ui-px dependency in tools/sca/kdf_target \u2014 grep shows none), despite font.rs:270 pointing at 'the tools/sca F-24 harness' as the gate."
+  },
+  {
+   "item": "Trusted-UI and SCA-FI adversarial-review playbooks name the backend contract: ui-lcd = constant-time secret blit, dev backends denylisted",
+   "evidence": [
+    "docs/security/adversarial-review/trusted-ui-adversarial-review.md:29 (UI8 row)",
+    "docs/security/adversarial-review/trusted-ui-adversarial-review.md:41"
+   ],
+   "status": "implemented",
+   "notes": "The playbook has no row for display emanation / SPI-timing / framebuffer residue; the sca-fi playbook grep for display/glyph/F-24 returned nothing."
+  },
+  {
+   "item": "Threat model records the display as a trusted output (\u00a77.6) and a privacy asset (S7) with the NV3007 as 'transient' exposure",
+   "evidence": [
+    "docs/security/threat-model.md:38 (S7 row)",
+    "docs/security/threat-model.md:52 (B-UI boundary)",
+    "docs/security/threat-model.md:270-282 (\u00a77.6)",
+    "docs/security/threat-model.md:323-331 (\u00a77.10 SCA \u2014 no display row)"
+   ],
+   "status": "implemented",
+   "notes": "The \u00a77.10 display-emanation row that #237 asks for is absent."
+  },
+  {
+   "item": "NV3007 TE line configured (0x35 = V-blank only) and wired on pq1 (PB2); tearing fixed per #780 (closed) in the pq1-uiconform worktree",
+   "evidence": [
+    "secure/src/hw/lcd_nv3007.rs:612-613",
+    "secure/src/board/pq1.rs:115-116"
+   ],
+   "status": "claimed-not-verified",
+   "notes": "No TE wait exists in THIS tree (grep for te_wait/wait_te in lcd_nv3007.rs and px/lcd.rs returns only the init write); memory note says GPDMA/TE/opt-z work lives in the pq1-uiconform worktree, not PQSigner_OS. Relevant only insofar as frame timing is an observable."
+  },
+  {
+   "item": "Pixel-UI atlas integrity: NS-resident glyph atlas is SHA-256-pinned and re-verified before every pixel dialog; a mismatch makes the pixel path refuse and the device falls back to the secure-resident glyph blitter",
+   "evidence": [
+    "secure/src/ui/px/assets.rs:10-14, 101, 109, 158-162",
+    "secure/src/ui/px/lcd.rs:418-431 (paint_legacy re-verifies every call)",
+    "secure/src/ui/seed_wizard.rs:73-82 (mnemonic_paging checks verify_atlas)"
+   ],
+   "status": "implemented",
+   "notes": "WYSIWYS-adjacent, not an emanation defence; included because the secret run reads bitmaps from that NS window."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "Restore-wizard letter row renders typed seed-word letters through the non-CT text path on a non-forced frame: per-letter glyph address pattern, letter-dependent SPI strip skipping, and a 64-bit digest of seed-derived pixels persisting in `static mut SHOWN` across the gap",
+   "tracked_in": "#784 (OPEN, priority:medium)",
+   "notes": "Re-verified at HEAD: secure/src/ui/px/status_map.rs:296-317 (glyphs[i]=buf[i]); secure/src/ui/seed_wizard.rs:914-916 (show, not show_with); secure/src/ui/px/screens.rs:127-129 (show = show_with(s, &[])); secure/src/ui/px/lcd.rs:663 (force=false). Issue line numbers are stale (853/396/429 -> 663/319/330) but the chain holds. The legacy fallback (seed_wizard.rs:918-949) also draws the letters via draw_line -> public_glyph_cols (direct index) \u2014 the same address leak F-27 fixed for the candidate list was never applied to the letter row on either backend."
+  },
+  {
+   "gap": "PIN active digit rendered via the non-constant-time glyph path on BOTH backends and on a non-forced px frame: legacy pin_entry.rs:200-210 puts b'0'+d into a draw_line row (lcd.rs:166 public_glyph_cols direct index); px pin_row (status_map.rs:277-293) puts the digit into an Item::Text run (rows.rs:76-89 -> font.blit_run) with force=false, so the digit-dependent strip digest lands in SHOWN. Each commit screen exposes exactly one secret glyph at a known position; eight screens = the PIN",
+   "tracked_in": "NOT TRACKED \u2014 gh searches for 'PIN digit', 'pin_row', 'glyph' return only #784 (seed letters) and #637 (progressive delay)",
+   "notes": "Same defect class as #784 but for the unlock secret. Lower value than the seed (SE-gated, 10 attempts) but it is the key to the device for an attacker with EM access. Recommend filing alongside #784 (route the active digit through Item::Secret / secret_glyph_cols and pass a non-empty secret or explicit force)."
+  },
+  {
+   "gap": "Pixel-form secret residue in SRAM is never zeroized: legacy `Display::cell` (720 B, last secret glyph, lcd.rs:103-104) and the px `STRIP` static (13,696 B, last strip of the last forced frame, px/lcd.rs:55) keep seed-word pixels after the wizard; legacy render_mnemonic_page/render_candidate_screen never zeroize `secret_rows_storage`/`wb` (seed_wizard.rs:584-614, 1027-1042). grep for zeroize in ui/lcd.rs, ui/px/lcd.rs, pqsigner-ui-px/src/raster.rs returns nothing",
+   "tracked_in": "NOT TRACKED for the framebuffers (#124 'Secret residue twins' covers SE driver buffers only; #784 mentions only the SHOWN digest)",
+   "notes": "A post-lock SRAM dump (or a later NS-reachable bug) recovers rendered words in pixel form. Cheap fix: zeroize cell/STRIP and the row storage after any forced/secret paint."
+  },
+  {
+   "gap": "No SCA harness covers the ui-px secret run (`Font::blit_secret_run`, 26-glyph scan on the proportional Aileron face, NS-atlas bitmap reads): `make -C tools/sca glyph-leak` targets only the legacy FONT_5X8 96-entry scan; tools/sca/kdf_target has no ui-px dependency. The px path is what the pq1 seed wizard actually uses (8 words/page) when the atlas verifies",
+   "tracked_in": "NOT TRACKED \u2014 font.rs:270 defers to 'the tools/sca F-24 harness' which does not exist for this path; #779 (presenter has zero automated coverage) is adjacent but about functional coverage",
+   "notes": "The black_box barriers in blit_secret_run have the same LLVM-fold regression mode the legacy scan documents (secret_text.rs:44-50). Without a harness, a silent fold is undetectable. Also no Kani/Miri proof over Item::Secret (pqsigner-ui-px has no proofs dir; grep for blit_secret_run in contracts/verification returns nothing)."
+  },
+  {
+   "gap": "Decoy frames (stage-E sub-channel 4) are NOT viable on the shipping display: failed on OLED (2026-05-19) and on NV3007 at 20 MHz (2026-06-09). 40 MHz re-test on EVT still open; if it fails the Phase 1 defence is dropped. The decoy code is also legacy-16x4 only (no px twin), so even a pass would not cover the pq1 wizard path",
+   "tracked_in": "#258 (OPEN, priority:low)",
+   "notes": "Code comments in seed_wizard.rs:315-320 and 1089-1096 still predict success on the LCD \u2014 stale vs the recorded failure. ui-px-spi40 exists (spi_hw.rs:216-217) but PX_SHIP_FEATURES omits it (#781)."
+  },
+  {
+   "gap": "Constant-pixel-count / constant-weight encoding (stage-E sub-channel 3, power-rail) is NOT implemented; deferred on the structural 'constant-current backlight' argument which is unmeasured (NV3007 source-driver current still content-dependent)",
+   "tracked_in": "#260 (OPEN, priority:low)",
+   "notes": "Owner-level priority decision; see #237's cheap->strong mitigation list (low-brightness wizard mode, random pad pixels, one-word-at-a-time reveal with random delay, scrambled-position reveal) \u2014 none implemented. Brightness IS programmable on pq1 (aw99703.rs:111-115, REG_LEDMSB/LSB) so a dimmed wizard mode is cheap."
+  },
+  {
+   "gap": "Display-emanation threat-model row (\u00a77.10 SCA) is missing; the OLED/LCD is modelled only as a trusted output (\u00a77.6) and privacy asset (S7). No adversarial-review playbook row covers emanation, SPI timing, or framebuffer residue",
+   "tracked_in": "#237 (OPEN, priority:low) asks for the \u00a77.10 row; playbook gap untracked",
+   "notes": "docs/security/threat-model.md:323-331 has no display row; docs/security/adversarial-review/trusted-ui-adversarial-review.md UI1-UI9 have none; sca-fi playbook grep for display/glyph/F-24 is empty."
+  },
+  {
+   "gap": "Driver-IC EM (TEMPEST on the NV3007 gate/source drivers) and bus-trace EM: accepted as hardware-only residuals; no PCB shielding/ferrite/ground-plane requirement is tracked as a hardware item and README's production checklist only says 'no test pads on LCD bus'",
+   "tracked_in": "Partially: tools/sca/README.md:1282-1304 documents the residual; README.md:433,448 (Phase-3 'EMI can', 'no probe points'); no GitHub issue found for display shielding",
+   "notes": "F-24 README says 'Tracked separately as a hardware-design item' \u2014 no such issue exists (searches: 'shield', 'TEMPEST', 'emanation' return only #237 and OPTIGA shield items)."
+  },
+  {
+   "gap": "Trusted-display GPIO pins (iota2 PE7/12/13/14/15; pq1 PA4/PA5/PA7 + PB0/PB1/PB2/PB15) stay NS-attributable and the SPI1 clock-enable is RCC-governed, so 'NS cannot touch the trusted display' is only peripheral-level; in-line bus tap by a compromised NS via GPIO bit-bang is the residual",
+   "tracked_in": "#83 (OPEN, priority:medium) and #53 (OPEN, GPDMA/GPIO silicon verification)",
+   "notes": "sau.rs:365-368 states the residual in-line. The 2026-05-20 silicon receipt covered peripheral RAZ faults, not GPIO or GPDMA denial (main_sau_pure_tests.rs:921, nsc/mod.rs:285)."
+  },
+  {
+   "gap": "Consumption mask drives no load on either board (iota2 PA5 unclaimed; pq1 PA6 = NC) so its dilution of the die signature is unmeasured; the sca-1 reseed fails open, silent, and biased toward signing windows",
+   "tracked_in": "#831 (OPEN), #646 (OPEN); unloaded-pin item recorded in docs/hardware/evt-silicon-validation.md:175 \u00a79 and consumption_mask.rs:41-51 (no dedicated issue)",
+   "notes": "Production forces the feature on (nsc/mod.rs:711-718) so the fence is satisfied-by-construction while the property is unevidenced."
+  },
+  {
+   "gap": "ui-capture on the semihosting backend hashes the raw grid INCLUDING seed rows ([UI-FP] seed-recovery oracle) \u2014 mitigated only by the PROD_FORBIDDEN denylist, not by redaction",
+   "tracked_in": "#186 (OPEN, low)",
+   "notes": "secure/src/ui/semihosting.rs:92-114; the px `record()` path redacts Entry rows but the seed grid is placeholder-only so it is safe there."
+  },
+  {
+   "gap": "No global timing jitter (Trezor-style always-on RDI) on the display/wizard paths; randomised delays exist only at annotated fi::wait_random call sites, none in seed_wizard.rs, ui/lcd.rs, px/lcd.rs, secret_text.rs or font.rs (grep empty)",
+   "tracked_in": "#805 (OPEN) \u2014 blocked on the CLAUDE.md 'No software PRNG' contract question",
+   "notes": "Relevant to trace alignment for the glyph-render window; owner decision needed before any DRBG-backed RDI."
+  },
+  {
+   "gap": "Seed wizard, PIN entry and confirm pages have never been exercised on pq1 silicon with a panel (all pq1 results came from e2e-test images on a panel-less board), and the interactive px presenter has zero automated coverage",
+   "tracked_in": "#700 (OPEN, high), #779 (OPEN, medium), #783/#778 (wizard freezes)",
+   "notes": "Every 'implemented' row above for the px seed path is host-test and code-read evidence, not silicon evidence."
+  },
+  {
+   "gap": "Backup flows that avoid showing the seed (SLIP-39/Shamir k-of-n, PQ-sealed encrypted backup, on-device 'check backup' against session entropy) are research/roadmap only; the only backup is the 24-word display",
+   "tracked_in": "#250 (OPEN: on-device backup verification P1 back-burner); docs/feature-roadmap-research-2026-06.md:104-105,126,246 (Shamir/SLIP-39, PQ encrypted backup) \u2014 no implementation issue",
+   "notes": "trezor-comparison.md:472 records the deliberate stance that the dual-SE XOR split is stronger than host-visible Shamir; ML-KEM-1024 SE inner-wrap was DESCOPED 2026-07-07 (do not re-raise as the SE bus wrap \u2014 a PQ-sealed BACKUP is a separate, un-decided item). Trezor One reveals words one at a time (legacy/firmware/reset.c:189-230 layoutResetWord) \u2014 the one-at-a-time reveal #237 lists is the closest cheap analog."
+  },
+  {
+   "gap": "seed_wizard seen_last is a bare bool (not FihBool) \u2014 a stuck-at fault can dismiss the backup pages early",
+   "tracked_in": "#470 (OPEN, low)"
+  },
+  {
+   "gap": "FSBL cannot light the pq1 panel (no I2C stage for the AW99703), so the boot fingerprint is dark on a cold boot of a sealed unit; and the display GPIO/clock residuals apply to the FSBL window too",
+   "tracked_in": "#705 (OPEN, high)",
+   "notes": "Out of the seed-exfiltration threat model (fingerprint is public) but it is the display surface's other open invariant-level item."
+  },
+  {
+   "gap": "No regression test pins 'every wizard screen carrying seed-derived glyphs is presented with force=true' (the test #784 recommends); grep for play_screen/show_with/force in secure/src/ui_under_test and pqsigner-ui-px/tests returns nothing",
+   "tracked_in": "#784 fix direction (not a separate issue)"
+  }
+ ],
+ "drift": [
+  "tools/sca/README.md:1381-1400 'Implementation references' cite `secure/src/ui/secret_text.rs::render_secret_row` and `secure/src/ui/oled.rs::Display::flush_with_secret_rows` and the test `render_secret_row_writes_expected_columns` \u2014 all three were deleted 2026-09-23 with the OLED backend (secret_text.rs:23-28 records the removal; grep for render_secret_row_writes_expected_columns finds nothing). The CT guarantee survives in ct_glyph_col + lcd.rs::blit_glyph, but the README's verification list is stale.",
+  "tools/sca/README.md:1339-1354 (F-24 stage-E sub-channel 4 'Path forward') still presents the NV3007 decoy re-test as pending/expected-to-work; the LCD re-test FAILED at 20 MHz on 2026-06-09 (recorded only in #258 and docs/archive/work-todo-retired-2026-07-19.md:2482). secure/src/ui/seed_wizard.rs:315-320 and 1089-1096 carry the same stale 'should work on slow LCD' prediction.",
+  "pqsigner-ui-px/src/font.rs:270 says 'The tools/sca F-24 harness, not this comment, is the gate before the path is trusted' \u2014 no harness exists for blit_secret_run; tools/sca/Makefile:231-237 and leakage_glyph.py exercise only the legacy 96-entry FONT_5X8 scan (kdf_target has no pqsigner-ui-px dependency).",
+  "secure/src/ui/px/screens.rs:14-17 claims 'Secrets never enter a record: the PIN row carries the masked entry the page showed, the seed pages carry placeholders' \u2014 true for the record bytes, but the PIN row's ACTIVE digit and the letter row's typed letters DO enter the record (status_map.rs:285, 303-309) and are painted by the non-CT text path on non-forced frames; only the log/hash copy is redacted.",
+  "secure/src/ui/px/lcd.rs:302-303 / #786 quote the F-24 stage-E rule 'on a secret frame the SPI timing must not reveal which strips changed' as a property of the presenter \u2014 it holds for seed_page/candidate_list only; letter_row (#784) and pin_row (untracked) violate it.",
+  "tools/sca/README.md:1292-1296 says the OLED driver-IC EM residual is 'Tracked separately as a hardware-design item' \u2014 no GitHub issue exists for display shielding (searches for shield/TEMPEST/emanation return only #237 and OPTIGA items).",
+  "#237 (and the archived work-todo 18b text) still frames the surface as the SSD1306 OLED; the OLED was removed 2026-06-30 and the shipping panel is the NV3007 TFT with a constant-current backlight, which changes the sub-channel-3 analysis (#260) \u2014 the issue body was never refreshed.",
+  "docs/ui/pixel-ui-pilot.md:102-103 and :135-137 describe per-strip digest skipping and GPDMA for the SPI stream as the next lever; the digest skip is in this tree (px/lcd.rs:60-66) but GPDMA/TE-wait are NOT (grep for GPDMA/txbuf/transpose_into in secure/src returns only sau/tzic/iwdg comments) \u2014 that work lives in the pq1-uiconform worktree per memory. Any emanation reasoning about DMA-driven SPI timing does not apply to this tree yet.",
+  "#260/#258 and tools/sca/README.md describe the backlight as '3 white LEDs in parallel, ~60 mA' \u2014 that is the iota2 ER-TFTM1.65-2 module; pq1 drives a single LED string (LED1 only) at a 20 mA full-scale via the AW99703 (aw99703.rs:86-96). The constant-current argument still holds but the numbers are board-specific.",
+  "#784's cited line numbers (lcd.rs:853/396/399-401/403/429/850/885-887) no longer match HEAD (now 663/319/300-303/327/330/660/695-697); the defect itself is unchanged."
+ ],
+ "owner_decisions": [
+  "ML-KEM-1024 SE inner wrap DESCOPED 2026-07-07 (CLAUDE.md invariant #3, work-todo #9) \u2014 do not re-raise; a PQ-sealed *backup* artifact is a separate roadmap item (docs/feature-roadmap-research-2026-06.md:126) but must not be argued as the bus wrap.",
+  "SSD1306 OLED backend removed 2026-06-30; NV3007 LCD is the only shipping display (CLAUDE.md feature flags). Do not reintroduce OLED or propose OLED-specific mitigations.",
+  "Pixel trusted-UI pilot `ui-px` is an owner decision (2026-09-22) and scroll-to-end `PX_COMMIT_REQUIRES_SEEN_LAST = true` (2026-09-24) \u2014 'do not re-litigate without new evidence'. Any seed-display change must keep the px path as the primary pq1 wizard path.",
+  "Atlas lives in the NS slot (owner decision 2026-09-23); the secret run therefore reads glyph bitmaps from NS flash by design \u2014 proposals must not move the atlas into the secure image on emanation grounds alone (the secure slot is already 76,949 B over budget with ui-px).",
+  "Consumption mask is production-mandatory (nsc/mod.rs ship-blocker fence) and its unloaded-pin status is an accepted 'satisfied-by-construction' caveat per CLAUDE.md; port of a Trezor GPDMA-driven mask is a listed follow-up, not a decision.",
+  "'No software PRNG' (CLAUDE.md What NOT to do) blocks a Trezor-style always-on RDI jitter (#805) until the owner resolves the PRNG-scope question; do not implement a DRBG-backed display jitter without that decision.",
+  "OPTIGA S-1/S-2/S-3 ship-blockers and the first-boot/RDP-2 ceremony are deferred by design (CLAUDE.md pre-production caveats); display-surface findings must not be framed as ship-blockers of that class.",
+  "Owner priority for #237/#258/#260 is 'priority:low' on the tracker; the remaining stage-E mitigations (low-brightness wizard mode, one-word-at-a-time reveal, constant-weight encoding, shielding) are listed as candidates with no decision recorded \u2014 the downstream agent should present them as options, not as agreed work.",
+  "Dual-SE XOR split is deliberately preferred over host-visible Shamir/SLIP-39 (docs/architecture/trezor-comparison.md:472); any no-seed-display backup proposal must preserve invariant #1 (never reassemble both halves outside the secure world) and the cross-chain address stability of invariant #6."
+ ]
+}

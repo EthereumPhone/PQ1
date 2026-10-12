@@ -1,0 +1,28 @@
+{
+ "id": "IMP-07",
+ "title": "Device birth certificate with per-element binding and user-anchored enrolment: factory SLH-DSA manifest binds MCU UID + OPTIGA UID + SE050 UID + salted OTP hash + ship-profile id + release hash into a transparency log; at the confirm-gated first boot the device derives a per-die C10 attestation key (DHUK-rooted, regenerated per use, never stored) whose pubkey the user's verifier appends to the log; later genuine checks require every proof to bind to its own element",
+ "threat": "Counterfeit board with an SWD-emulating fake MCU and transplanted genuine SEs; genuine chips moved to a Frankenstein PCB; a factory escape that re-uses UIDs; and the Trezor Aug-2026 bug class where one element's proof satisfies all slots. pq1 has no per-die attestation and the factory receipt is a completion-flag JSON.",
+ "proposal": "Process + firmware: (1) factory emits per unit `manifest = {mcu_uid, dbgmcu_idcode, optiga_e0c2_uid, sha256(e0e0 cert), se050_uid, sha256(otp_area||salt), ship_profile_id, fsbl_hash, release_hash, bag/seal serial}` signed by an HSM-held SLH-DSA key and appended to a public transparency log (#67/#68); the bag/seal serial is burned in OTP and shown by the FSBL on first boot (Coldcard model); (2) pq1-verify (IMP-02) checks the dumped UIDs/OTP against the log entry before first power; (3) at first field boot, after RDP-2 and BHK, the device derives `att_sk = KDF(DHUK, 'pq1-attest-v1')` on demand (C10, single-primitive; invariant #5 \u2014 the key signs only `AuthenticateDevice:`-prefixed challenges, never wallet/FW material) and shows its pubkey fingerprint; the user's verifier appends `(manifest_hash, att_pk)` to the log so subsequent companion genuine checks are challenge-response against a key whose enrolment the owner witnessed, not the factory; (4) the companion verifier binds each proof (OPTIGA cert chain, SE050 attestation, MCU C10) to its own root set and requires identical UID tuple across all three.",
+ "rationale": "Trezor Safe 7 ships three-chain attestation with a PQ MCU leg on the same silicon family, so a PQ MCU attestation is table stakes; pq1 can do strictly better by making the MCU key per-die (DHUK, which does not exist until the device self-locks) and owner-enrolled instead of factory-certified \u2014 removing the factory-held-secret problem the owner already excluded. Donjon's Safe 3 result shows an attestation keyed from an MCU-held secret is only as good as glitch resistance, so the design keeps the FSBL fingerprint + pre-power verification as the anchor and uses attestation for chip-swap/clone detection only.",
+ "repo_evidence": [
+  "gh #249 (ship-blocker, NOT STARTED: triple-UID binding), #68 (transparency log), #67 (SLH-DSA factory manifest), #601 (user-personalised boot artifact, design-first)",
+  "secure/src/hw/dbgmcu.rs:1-60 (report-only IDCODE); secure/src/die_id.rs",
+  "docs/security/production-security.md:344-360 \u00a72.5 (planned); docs/security/HARDENING.md:410 (receipt is not attestation)",
+  "docs/hardware/prodtest-receipt-example-pq1.json (no UID/SE binding)",
+  "grep -rn 'AuthenticateDevice|attestation key|att_sk' secure/src -> none"
+ ],
+ "vendor_precedent": "Trezor mcu_attestation.c:45-79 (ML-DSA-44 key from secret_key_mcu_device_auth, regenerated per sign) + authentication.py:609-700 (same root/serial/CN across chains) + the Aug-2026 per-element binding fix; Ledger Genuine Check (SE-held key + HSM); Coldcard bag number burned at factory and shown on first boot; Tillitis UDS-derived per-device identity.",
+ "novelty": "beyond",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P1",
+ "risks": "Adds a second C10 key purpose in the secure world \u2014 must be fenced so it can never sign a userOpHash/replaySafeHash/FW manifest (domain-prefix + separate KDF label + Lean/Kani check). Owner-enrolled keys mean a lost verifier record = no genuine check (fall back to log lookup by UID). The factory HSM key is a classical-free SLH-DSA but the OPTIGA/SE050 vendor chains are ECDSA \u2014 verification lives host-side only. Transparency-log operation is an ongoing process cost. None of this sees a display-bus implant.",
+ "sources": [
+  "https://trezor.io/learn/security-privacy/how-trezor-keeps-you-safe/trezor-safe-device-authentication-check",
+  "https://trezor.io/vulnerability/authenticity-proofs-not-bounded-to-their-secure-element",
+  "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+  "https://donjon.ledger.com/threat-model/device-genuineness",
+  "https://dev.tillitis.se/intro/"
+ ],
+ "surface": "implant"
+}
