@@ -4130,6 +4130,22 @@ se-lcd-diag = []
 # NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
 dev-dfu = []
 
+# #846/#896 negative control: compiles the one-at-a-time gateway gate OUT
+# of the `gateway_enter!` macro body (the veneer path), so a second
+# gateway call made from a non-secure exception handler while one is in
+# flight is admitted instead of refused. Its only use is the nested-gate
+# test fixture: the positive build keeps the gate and the nested call must
+# be refused; this build removes it and the nested call must be admitted,
+# which proves the fixture actually reaches a nested call rather than
+# silently never firing. NEVER SHIP — in `nsc/mod.rs`'s production fence
+# and the Makefile's PROD_FORBIDDEN. Requires `e2e-test` (no human can
+# drive the dialogs otherwise); incompatible with `mode-production`.
+# Deliberately unsound: with the gate gone, a nested entry can read
+# `nsc::state` through `peek_state` while the outer handler holds a `&mut`
+# to it, which is exactly the aliasing #846 is about. The fixture's nested
+# call only reads one boolean, but this build is evidence, never a product.
+gateway-gate-off = []
+
 # `ui-oled-bench` (bench-only SSD1306 over bit-banged I2C) was REMOVED
 # 2026-09-23: real NV3007 panels exist now, so the stand-in is not needed.
 # It was the last consumer of `embedded-graphics` outside `ui-lcd`.

@@ -1891,6 +1891,47 @@ fn the_gate_macro_refuses_and_the_emulator_dispatcher_uses_it() {
 }
 
 #[test]
+fn gateway_gate_off_negative_control_is_fenced_and_macro_scoped() {
+    // #896: `gateway-gate-off` removes the gate for the negative control.
+    // It must (1) gate the try_enter line INSIDE the macro, not the call
+    // sites, so every `gateway_enter!(...)` stays the first statement;
+    // (2) sit in the mode-production destructive-harness fence; and
+    // (3) require `e2e-test`, so it can never attach to a real signing
+    // image. If any of these three drifts, a shipping build could carry
+    // the re-entrancy #846 fixed.
+    let macro_at = NSC_MOD_SRC.find("macro_rules! gateway_enter {").expect("macro exists");
+    let macro_body = &NSC_MOD_SRC[macro_at..macro_at + 400];
+    assert!(
+        macro_body.contains("#[cfg(not(feature = \"gateway-gate-off\"))]"),
+        "gateway-gate-off must gate the try_enter line inside the macro body"
+    );
+    // Look only inside the production fence: from its `cfg(all(mode-production,
+    // any(` opener to its own compile_error message. The e2e-test guard and
+    // the `cfg_attr` on GATEWAY_REFUSED also contain the feature name, so a
+    // whole-file search would stay green with the fence entry deleted.
+    let fence_end = NSC_MOD_SRC
+        .find("\"PRODUCTION_DESTRUCTIVE_HARNESS_FORBIDDEN: mode-production")
+        .expect("production fence message exists");
+    let fence_start = NSC_MOD_SRC[..fence_end]
+        .rfind("#[cfg(all(\n    feature = \"mode-production\",\n    any(\n")
+        .expect("production fence cfg opener exists");
+    let fence = &NSC_MOD_SRC[fence_start..fence_end];
+    assert!(
+        fence.contains("feature = \"dev-dfu\","),
+        "fence slice is the destructive-harness fence (it names dev-dfu)"
+    );
+    assert!(
+        fence.contains("feature = \"gateway-gate-off\","),
+        "gateway-gate-off must be listed in the PRODUCTION_DESTRUCTIVE_HARNESS_FORBIDDEN fence"
+    );
+    assert!(
+        NSC_MOD_SRC
+            .contains("#[cfg(all(feature = \"gateway-gate-off\", not(feature = \"e2e-test\")))]"),
+        "gateway-gate-off must require e2e-test (its compile_error guard)"
+    );
+}
+
+#[test]
 fn idle_reunlock_dialog_holds_the_gate() {
     const MAIN_SRC: &str = include_str!("main.rs");
     let pendsv = MAIN_SRC.find("fn PendSV() {").expect("PendSV handler exists");

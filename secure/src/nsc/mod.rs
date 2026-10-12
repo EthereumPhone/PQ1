@@ -404,6 +404,10 @@ compile_error!(
         // Frame-time overlay: prints render/blit timings over the trusted
         // display. Not destructive, but it paints over consent screens.
         feature = "ui-px-frametime",
+        // #846 negative control: removes the one-at-a-time gateway gate
+        // from the veneer path. Never ship — a shipping image with this on
+        // reinstates the re-entrancy #846 fixed.
+        feature = "gateway-gate-off",
     )
 ))]
 compile_error!(
@@ -411,6 +415,21 @@ compile_error!(
      any reset, wipe, persistent provisioning, stress, counter-mutation, or \
      stateful E2E harness. Use each feature only through its named bench target \
      and never on a unit intended to ship."
+);
+
+// Dedicated guard: `gateway-gate-off` (#896 negative control) removes the
+// one-at-a-time gateway gate. It is only meaningful paired with a
+// non-secure test image that makes a nested gateway call, and that image
+// needs `e2e-test` on the secure side (nothing else can drive a sign
+// without a human at the PIN/confirm dialogs). Requiring `e2e-test` here
+// also means `gateway-gate-off` can never attach to a real signing image
+// (`dual-se` without `e2e-test`): such a build fails to compile.
+#[cfg(all(feature = "gateway-gate-off", not(feature = "e2e-test")))]
+compile_error!(
+    "gateway-gate-off is the #896 negative control and requires e2e-test. \
+     It removes the nested-entry gate and must never attach to anything but \
+     the nested-gate test fixture; mode-production rejects it via the \
+     PRODUCTION_DESTRUCTIVE_HARNESS_FORBIDDEN fence above."
 );
 
 // Dedicated guard: `fw-rollback-e2e` is a dev/test image that embeds the dev
@@ -1345,14 +1364,28 @@ pub(crate) static GATEWAY_GATE: crate::gateway_gate::GatewayGate =
 /// Deliberately the existing catch-all and not a new wire code: only a
 /// non-secure image that installs its own exception handlers can ever
 /// reach a refusal, and the stock image installs none.
+//
+// `gateway-gate-off` is the #896 negative control: it compiles the
+// `try_enter` out of the macro body (not out of the call sites), so the
+// const is then unreferenced on the veneer path. Allow it rather than
+// cfg the const out, so the macro's expansion stays simple.
+#[cfg_attr(feature = "gateway-gate-off", allow(dead_code))]
 const GATEWAY_REFUSED: u32 = sphincs_tz_shared::NscStatus::InternalError as u32;
 
 /// Take [`GATEWAY_GATE`] or return `$refused` from the enclosing function.
 /// The token is bound in the caller's scope, so it is released on every
 /// return path. MUST be the first statement of every gateway entry
 /// (pinned by `nsc_small_cmds_pure_tests::every_gateway_entry_takes_the_gate_first`).
+///
+/// `gateway-gate-off` (never-ship, #896) expands this to nothing so the
+/// one-at-a-time property is removed from the veneer path. It is the
+/// negative control that proves the test fixture actually reaches a
+/// nested call: with the gate present the nested call is refused, with it
+/// gone the nested call is admitted. Forbidden in production by the fence
+/// in this file and by the Makefile `PROD_FORBIDDEN` list.
 macro_rules! gateway_enter {
     ($refused:expr) => {
+        #[cfg(not(feature = "gateway-gate-off"))]
         let _gateway_token = match GATEWAY_GATE.try_enter() {
             Some(token) => token,
             None => return $refused,

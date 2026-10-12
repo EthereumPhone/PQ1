@@ -56,6 +56,19 @@ gtzc-test = ["e2e-test", "stm32u585"]
 # `SURVIVED` marker if the wipe path did not fire — its absence is
 # the pass criterion. Hardware only. Use `make tzic-wipe-hw`.
 tzic-wipe-test = ["stm32u585"]
+# #896 nested-gateway test runner. Replaces the interactive main() with a
+# driver that installs a non-secure SysTick handler and makes a second
+# gateway call from it while an outer sign is in flight, to exercise the
+# #846 one-at-a-time gate on real silicon (the QEMU mailbox cannot nest).
+# Pairs with the secure crate's `e2e-test` (auto-provision + pre-unlock,
+# no human at the dialogs) and `stm32u585` (DWT + real veneers). Reports
+# over semihosting, so it needs a debug probe: SWD bench board only, not
+# the enclosed DFU unit. Use `make nested-gate-test-hw`.
+nested-gate-test = ["stm32u585"]
+# Flips the runner's PASS condition for the negative-control build (paired
+# with the secure crate's `gateway-gate-off`): the nested call must be
+# ADMITTED, not refused. Use `make nested-gate-test-nctl-hw`.
+nested-gate-expect-admit = ["nested-gate-test"]
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
 # NS half of the IWDG USB-path hang watchdog. Mirrors the secure-side

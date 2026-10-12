@@ -201,7 +201,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-hw e2e e2e-hw e2e-erc7730-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-formal-verification verify-theft-free test-key-speed test-update-hw measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
+.PHONY: all clean secure nonsecure run play play-hw-display run-hw e2e e2e-hw e2e-erc7730-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-formal-verification verify-theft-free test-key-speed test-update-hw measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins nested-gate-test-hw nested-gate-test-nctl-hw _nested-gate-run
 
 # Supply-chain audit. Hard-fails if any dependency is not cryptographically
 # pinned (Cargo.lock checksums, git rev= pins, foundry.lock matching
@@ -676,6 +676,94 @@ test-key-speed: ## DWT-timed signing bench on HW
 		echo "==> test-key-speed: FAIL (missing PASS marker)"; \
 		exit 1; \
 	fi
+
+# #896: exercise the #846 one-at-a-time gateway gate on real silicon. The NS
+# runner (`nonsecure/src/nested_gate_test.rs`) installs a non-secure SysTick
+# handler that makes a second gateway call while an outer sign is in flight.
+# SWD bench board only (results come out over semihosting); no panel needed
+# (e2e-test auto-unlocks); the enclosed DFU unit cannot host it. Two builds:
+#   nested-gate-test-hw       secure gate PRESENT     -> nested call must be REFUSED
+#   nested-gate-test-nctl-hw  secure gateway-gate-off -> nested call must be ADMITTED
+# A positive PASS means "refused because of the gate" only when the negative
+# control on the same board PASSes too. Before flashing, each recipe checks
+# the secure ELF really does (or does not) carry the gate in the body of
+# `__acle_se_nsc_is_unlocked` (scripts/check_gateway_gate_in_elf.py), so a
+# mis-wired cfg cannot produce a meaningless run. After a PASS the outer
+# response printed by the runner is checked offline with tools/verify-c10-sig.
+# Exit status: 0 PASS, 1 FAIL, 2 INCONCLUSIVE (nesting not proven on this
+# silicon; not a pass for either build).
+nested-gate-test-hw: dev-pubkey-fixture ## #896: nested gateway call refused on HW (gate present, SWD board)
+	@echo "==> Building secure (e2e-test, gate PRESENT) + NS (nested-gate-test)"
+	@# Force the secure LINK: cargo treats a previously built feature set as fresh
+	@# and skips the linker, which leaves target/veneers.o (--out-implib) holding
+	@# whichever secure variant linked last. The NS would then call stale veneer
+	@# addresses. tools/check-gateway-abi.sh below would catch that, but only by
+	@# refusing to continue, so alternating the two recipes would always stop there.
+	@rm -f $(SECURE_ELF) target/secure/$(TARGET)/release/deps/sphincs_tz_secure-*
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256,$(BOARD_FEATURE)
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features nested-gate-test,stm32u585,$(BOARD_FEATURE)
+	@tools/check-gateway-abi.sh $(SECURE_ELF) $(NONSECURE_ELF)
+	@echo "==> Checking the gate IS compiled into the veneer body"
+	@python3 scripts/check_gateway_gate_in_elf.py $(SECURE_ELF) present
+	@$(MAKE) --no-print-directory _nested-gate-run NGT_LABEL=nested-gate-test NGT_EXPECT="REFUSED (gate present)"
+
+nested-gate-test-nctl-hw: dev-pubkey-fixture ## #896 negative control: nested call ADMITTED with gateway-gate-off (SWD board)
+	@echo "==> Building secure (e2e-test + gateway-gate-off) + NS (nested-gate-test, expect-admit)"
+	@# Force the secure LINK: cargo treats a previously built feature set as fresh
+	@# and skips the linker, which leaves target/veneers.o (--out-implib) holding
+	@# whichever secure variant linked last. The NS would then call stale veneer
+	@# addresses. tools/check-gateway-abi.sh below would catch that, but only by
+	@# refusing to continue, so alternating the two recipes would always stop there.
+	@rm -f $(SECURE_ELF) target/secure/$(TARGET)/release/deps/sphincs_tz_secure-*
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-semihosting,e2e-test,gateway-gate-off,stm32u585,hw-sha256,$(BOARD_FEATURE)
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features nested-gate-expect-admit,stm32u585,$(BOARD_FEATURE)
+	@tools/check-gateway-abi.sh $(SECURE_ELF) $(NONSECURE_ELF)
+	@echo "==> Checking the gate is NOT compiled into the veneer body"
+	@python3 scripts/check_gateway_gate_in_elf.py $(SECURE_ELF) absent
+	@$(MAKE) --no-print-directory _nested-gate-run NGT_LABEL=nested-gate-test-nctl NGT_EXPECT="ADMITTED (gate off)"
+
+# Shared flash + run + verdict for the two recipes above. Not for direct use:
+# it flashes whatever ELFs were built last.
+_nested-gate-run:
+	@echo "==> Flashing..."
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running $(NGT_LABEL): the nested call must be $(NGT_EXPECT)"
+	@log=$$(mktemp -t nested-gate.XXXXXX.log); rc_file=$$(mktemp -t nested-gate-rc.XXXXXX); \
+	resp=$$(mktemp -t nested-gate-resp.XXXXXX.bin); \
+	trap 'rm -f "$$log" "$$rc_file" "$$resp"' EXIT; \
+	{ timeout 900 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
+	rc=$$(cat "$$rc_file"); \
+	echo "===================================="; \
+	if [ "$$rc" = "124" ]; then echo "==> $(NGT_LABEL): FAIL (no verdict within 900 s)"; exit 1; fi; \
+	if grep -q "\[NS\]\[ngt\] INCONCLUSIVE" "$$log"; then \
+		echo "==> $(NGT_LABEL): INCONCLUSIVE (reason above; not a pass for either build)"; exit 2; fi; \
+	if ! grep -q "\[NS\]\[ngt\] PASS" "$$log"; then echo "==> $(NGT_LABEL): FAIL (probe-rs exited $$rc)"; exit 1; fi; \
+	if [ "$$rc" != "0" ] && [ "$$rc" != "130" ]; then echo "==> $(NGT_LABEL): FAIL (PASS printed but probe-rs exited $$rc)"; exit 1; fi; \
+	echo "==> Checking the outer signature offline (tools/verify-c10-sig)"; \
+	python3 scripts/extract_semihosting_hex_block.py "$$log" "$$resp"; xrc=$$?; \
+	if [ "$$xrc" = "3" ]; then \
+		echo "==> $(NGT_LABEL): PASS (nested call $(NGT_EXPECT)); outer-signature check SKIPPED: off-chain count is not 0 and the verifier assumes 0"; exit 0; fi; \
+	if [ "$$xrc" != "0" ]; then echo "==> $(NGT_LABEL): FAIL (could not extract the outer response)"; exit 1; fi; \
+	if env -u RUSTFLAGS cargo run --quiet --locked --release --manifest-path tools/verify-c10-sig/Cargo.toml -- "$$resp"; then \
+		echo "==> $(NGT_LABEL): PASS (nested call $(NGT_EXPECT); the outer signature verifies over the calldata it was given)"; exit 0; \
+	else echo "==> $(NGT_LABEL): FAIL (outer signature did not verify)"; exit 1; fi
 
 # Automated, non-destructive test of the firmware-update (CMD_FW_*)
 # logic on real STM32U585 hardware.  NS side runs `fwup_hw_test.rs`,
@@ -2681,7 +2769,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e duress-provision-e2e \
                  pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime \
-                 ui-px-bench ui-px-te-probe
+                 ui-px-bench ui-px-te-probe gateway-gate-off
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required
