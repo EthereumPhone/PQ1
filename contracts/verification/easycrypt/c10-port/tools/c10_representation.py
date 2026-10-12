@@ -131,6 +131,27 @@ r_preimage = define("r_preimage",(secret,random,message,nonce),
     cat(secret,items(INT,*(literal(x,INT) for x in [82,95,103,114,105,110,100])),
         random,message,repeat(literal(28),literal(0,INT)),u32_bytes(nonce)))
 
+
+# Full-width address fields and private derivation inputs share the same bytes.
+u64_bytes = define("u64_bytes",(nonce,),reverse(seq(literal(8),i,
+    binary("mod",binary("div",nonce,binary("pow",literal(2,INT),mul(literal(8),i))),literal(256,INT)))))
+layer, tree, kind, kp, ci, cp, ha, ht, leaf = (
+    var(x,INT) for x in ("layer","tree","kind","kp","ci","cp","ha","ht","leaf"))
+address_words = define("address_words",(layer,tree,kind,kp,ci,cp,ha),
+    cat(u32_bytes(layer),u64_bytes(tree),u32_bytes(kind),u32_bytes(kp),
+        u32_bytes(ci),u32_bytes(cp),u32_bytes(ha)))
+chain_index_words = define("chain_index_words",(address,ci),
+    cat(take(20,address),u32_bytes(ci),drop(24,address)))
+chain_position_words = define("chain_position_words",(address,cp),
+    cat(take(24,address),u32_bytes(cp),drop(28,address)))
+wots_private_preimage = define("wots_private_preimage",(secret,layer,tree,kp,ci),
+    cat(secret,items(INT,*(literal(x,INT) for x in [119,111,116,115])),
+        u32_bytes(layer),repeat(literal(24),literal(0,INT)),u64_bytes(tree),
+        u32_bytes(kp),u32_bytes(ci)))
+fors_private_preimage = define("fors_private_preimage",(secret,ht,tree,leaf),
+    cat(secret,items(INT,*(literal(x,INT) for x in [102,111,114,115])),
+        u32_bytes(ht),u32_bytes(tree),u32_bytes(leaf)))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"

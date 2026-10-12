@@ -2503,3 +2503,9 @@ cdrafts-split/C10Representation.ec	defined-op:3e59828f0cf3	pair_preimage	# line 
 cdrafts-split/C10Representation.ec	defined-op:e96a0fb69401	multi_preimage	# line 47
 cdrafts-split/C10Representation.ec	defined-op:2f10a09fa70e	wots_preimage	# line 50
 cdrafts-split/C10Representation.ec	defined-op:c9cb28afd800	r_preimage	# line 53
+cdrafts-split/C10Representation.ec	defined-op:05b74b8444d4	chain_position_words	# line 65
+cdrafts-split/C10Representation.ec	defined-op:123c07b4c7b4	u64_bytes	# line 56
+cdrafts-split/C10Representation.ec	defined-op:27a8461460c0	wots_private_preimage	# line 68
+cdrafts-split/C10Representation.ec	defined-op:6a11e2410ca8	fors_private_preimage	# line 71
+cdrafts-split/C10Representation.ec	defined-op:9519ff6ccd25	chain_index_words	# line 62
+cdrafts-split/C10Representation.ec	defined-op:a36253b27d83	address_words	# line 59

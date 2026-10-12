@@ -55,4 +55,22 @@ def wots_preimage (seed : (List Int)) (address : (List Int)) (message : (List In
 def r_preimage (secret : (List Int)) (random : (List Int)) (message : (List Int)) (nonce : Int) : (List Int)  :=
   (secret ++ [82, 95, 103, 114, 105, 110, 100] ++ random ++ message ++ (List.replicate 28 0) ++ (u32_bytes nonce))
 
+def u64_bytes (nonce : Int) : (List Int)  :=
+  (List.reverse ((List.range 8).map (fun i => ((nonce / (2 ^ (8 * i))) % 256))))
+
+def address_words (layer : Int) (tree : Int) (kind : Int) (kp : Int) (ci : Int) (cp : Int) (ha : Int) : (List Int)  :=
+  ((u32_bytes layer) ++ (u64_bytes tree) ++ (u32_bytes kind) ++ (u32_bytes kp) ++ (u32_bytes ci) ++ (u32_bytes cp) ++ (u32_bytes ha))
+
+def chain_index_words (address : (List Int)) (ci : Int) : (List Int)  :=
+  ((List.take 20 address) ++ (u32_bytes ci) ++ (List.drop 24 address))
+
+def chain_position_words (address : (List Int)) (cp : Int) : (List Int)  :=
+  ((List.take 24 address) ++ (u32_bytes cp) ++ (List.drop 28 address))
+
+def wots_private_preimage (secret : (List Int)) (layer : Int) (tree : Int) (kp : Int) (ci : Int) : (List Int)  :=
+  (secret ++ [119, 111, 116, 115] ++ (u32_bytes layer) ++ (List.replicate 24 0) ++ (u64_bytes tree) ++ (u32_bytes kp) ++ (u32_bytes ci))
+
+def fors_private_preimage (secret : (List Int)) (ht : Int) (tree : Int) (leaf : Int) : (List Int)  :=
+  (secret ++ [102, 111, 114, 115] ++ (u32_bytes ht) ++ (u32_bytes tree) ++ (u32_bytes leaf))
+
 end C10Representation
