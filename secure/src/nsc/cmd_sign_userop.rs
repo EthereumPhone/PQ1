@@ -61,6 +61,44 @@ use zeroize::{Zeroize, Zeroizing};
 /// MUST match `PQSmartWalletFactory.FACTORY_ADD_SLOT_DOMAIN`.
 const FACTORY_ADD_SLOT_DOMAIN: &[u8] = b"pqwallet-factory-add-slot";
 
+/// #846 backstop, the reference commitment over the inner calldata.
+///
+/// `#[inline(never)]` on purpose, here and on [`calldata_bind_sentinel`]:
+/// the Keccak state and the decoder locals must live in short frames of
+/// their own. Inlined into `run` they extend ITS frame, which stays live
+/// under slot keygen and both C10 signing passes, and that was enough to
+/// run the stack into static data on the 128 KB QEMU map with `ui-px`
+/// (the first Type-2 signature then failed its own verify). Same rule as
+/// `batch_call_digest::checked_digest`: the frame ends before signing.
+#[inline(never)]
+fn calldata_commitment(data: &[u8]) -> [u8; 32] {
+    pqsigner_tx_core::erc8213::calldata_digest(data)
+}
+
+/// #846 backstop, the verdict: `OK_SENTINEL` only when the private encoded
+/// copy decodes back to exactly these head fields and to a `data` whose
+/// commitment equals `reference`. Reads the copy, never the shared snapshot.
+#[inline(never)]
+fn calldata_bind_sentinel(
+    encoded: &[u8],
+    owner_index: u64,
+    offchain_count: u64,
+    target: &[u8; 20],
+    value: &[u8; 32],
+    reference: &[u8; 32],
+) -> u32 {
+    let bound = crate::aa::execute_bind::execute_calldata_binds(
+        encoded,
+        owner_index,
+        offchain_count,
+        target,
+        value,
+        reference,
+    );
+    crate::fi::scrub_sentinel_register();
+    crate::fi::check_true_into_sentinel(|| core::hint::black_box(bound))
+}
+
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
@@ -399,7 +437,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // tail of the shared buffer and is NOT covered here: with the gate
     // skipped, a nested call could replace the screens and leave the
     // calldata alone. Only the gate protects that.
-    let calldata_ref_digest = pqsigner_tx_core::erc8213::calldata_digest(inner_data);
+    let calldata_ref_digest = calldata_commitment(inner_data);
 
     // ── 5. Parse optional trailers ─────────────────────────────────
     //
@@ -2190,7 +2228,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     {
-        let bound = crate::aa::execute_bind::execute_calldata_binds(
+        let verdict = calldata_bind_sentinel(
             t2_exec.as_slice(),
             t2_owner_index,
             new_offchain_count,
@@ -2198,8 +2236,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             &tx_for_display.value.0,
             &calldata_ref_digest,
         );
-        crate::fi::scrub_sentinel_register();
-        let verdict = crate::fi::check_true_into_sentinel(|| core::hint::black_box(bound));
         // SAFETY: unique live local, published only after the comparison.
         unsafe {
             core::ptr::write_volatile(&mut calldata_bind_verdict, verdict);

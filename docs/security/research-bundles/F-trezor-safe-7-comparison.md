@@ -5321,11 +5321,16 @@ pub fn is_definitely_locked() -> bool {
 /// Shared TOCTOU snapshot buffer for the three mutually-exclusive sign
 /// handlers (`cmd_sign_userop`, `cmd_sign_userop_batch`,
 /// `cmd_sign_offchain`). Each used to own a private `static mut SNAP_BUF`
-/// sized to its own protocol maximum (≈25 KB / ≈41 KB / ≈5.7 KB). Because
-/// the dispatcher is single-threaded and non-reentrant (see
-/// [`HandlerGuard`] / [`handler_is_busy`]) exactly one of these handlers
-/// can be live at a time, so the three buffers were never simultaneously
+/// sized to its own protocol maximum (≈25 KB / ≈41 KB / ≈5.7 KB). At most
+/// one gateway call is in flight at a time, so exactly one of these
+/// handlers can be live and the three buffers were never simultaneously
 /// in use — they only ever cost permanent BSS.
+///
+/// #846: that "one at a time" is ENFORCED by [`GATEWAY_GATE`], taken as the
+/// first statement of every gateway entry. It used to be asserted here on
+/// the strength of [`HandlerGuard`], which only counts depth and refuses
+/// nothing: a non-secure exception handler could call a second entry while
+/// the first was parked in a dialog, and that call refilled this buffer.
 ///
 /// Reserving all three independently pushed `.bss` up against the top of
 /// the 128 KB secure SRAM, leaving the deep `cmd_sign_userop` register-slot
@@ -5345,8 +5350,8 @@ pub(super) const SIGN_SNAP_BUF_LEN: usize =
     sphincs_tz_shared::SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN;
 
 /// The shared snapshot storage itself. Only ever borrowed (filled, parsed,
-/// then wiped) inside a single handler invocation, under the non-reentrant
-/// dispatcher — never aliased across handlers.
+/// then wiped) inside a single handler invocation, under [`GATEWAY_GATE`]
+/// (#846) — never aliased across handlers.
 pub(super) static mut SIGN_SNAP_BUF: [u8; SIGN_SNAP_BUF_LEN] = [0u8; SIGN_SNAP_BUF_LEN];
 
 /// The pixel-UI screen transcript (`ui-px`) is NOT a static of its own: it
@@ -5631,6 +5636,36 @@ impl Drop for HandlerGuard {
 /// Read the current handler-busy depth from a SysTick handler.
 pub fn handler_is_busy() -> bool {
     HANDLER_DEPTH.load(core::sync::atomic::Ordering::SeqCst) > 0
+}
+
+/// #846: the one-at-a-time gate for the NS→S gateway. Every
+/// `cmse-nonsecure-entry` function takes it as its FIRST statement through
+/// [`gateway_enter!`] (the QEMU mailbox takes it in `poll_gateway`, around
+/// the `dispatch` call), so a second
+/// gateway call made from a non-secure exception handler while a handler
+/// is in flight is refused before it reads an argument or touches the
+/// shared `static mut` state. Separate from [`HANDLER_DEPTH`] on purpose:
+/// see `crate::gateway_gate` for why the idle-wipe guard is not widened.
+pub(crate) static GATEWAY_GATE: crate::gateway_gate::GatewayGate =
+    crate::gateway_gate::GatewayGate::new();
+
+/// What a status-returning gateway entry reports when the gate refuses it.
+/// Deliberately the existing catch-all and not a new wire code: only a
+/// non-secure image that installs its own exception handlers can ever
+/// reach a refusal, and the stock image installs none.
+const GATEWAY_REFUSED: u32 = sphincs_tz_shared::NscStatus::InternalError as u32;
+
+/// Take [`GATEWAY_GATE`] or return `$refused` from the enclosing function.
+/// The token is bound in the caller's scope, so it is released on every
+/// return path. MUST be the first statement of every gateway entry
+/// (pinned by `nsc_small_cmds_pure_tests::every_gateway_entry_takes_the_gate_first`).
+macro_rules! gateway_enter {
+    ($refused:expr) => {
+        let _gateway_token = match GATEWAY_GATE.try_enter() {
+            Some(token) => token,
+            None => return $refused,
+        };
+    };
 }
 
 /// Test-only helper: stamp the secure-side master secret and mark the
@@ -6117,7 +6152,23 @@ pub fn poll_gateway() {
             arg2: core::ptr::read_volatile(SHARED_ARG2),
         };
 
-        let result = dispatch(cmd, &args);
+        // Same gate as the hardware veneers (#846). The mailbox cannot nest,
+        // so this never refuses on QEMU; it is here so `make e2e` proves the
+        // token is released on every handler return path (a leak fails the
+        // next command).
+        //
+        // Taken HERE and not inside `dispatch`, deliberately. A token held
+        // across `dispatch`'s `match` turns its handler calls from tail
+        // calls into ordinary calls; the optimiser then merged several of
+        // the large sign handlers into `dispatch`, their frames added up,
+        // and the `ui-px` QEMU build ran its stack 1.7 KB into static data
+        // (measured under gdb: the sign-rate counter was overwritten and
+        // the first signature failed). With the token in this caller,
+        // `dispatch` is byte-for-byte what it was.
+        let result = match GATEWAY_GATE.try_enter() {
+            Some(_token) => dispatch(cmd, &args),
+            None => GATEWAY_REFUSED,
+        };
 
         core::ptr::write_volatile(SHARED_RESULT, result);
         // Order matters: write RESULT before DONE so NS can't see DONE=1
@@ -6241,15 +6292,18 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
 //    `unsafe fn` because of its `static mut` driver access (`SE`,
 //    `SLOT_CACHE`, `SNAP_BUF`, `FW_UPDATE`) and NS pointer derefs.
 //    The CMSE veneer is the unique caller in production; the
-//    single-threaded non-reentrant dispatcher invariant (no two
-//    veneers in flight at once) makes the `unsafe` block sound — see
-//    each handler's own `# Safety` doc-comment for the per-handler
+//    "no two veneers in flight at once" invariant makes the `unsafe`
+//    block sound. That invariant is enforced, not assumed: every veneer
+//    below opens with `gateway_enter!`, which refuses a nested entry
+//    made from a non-secure exception handler (#846). See each
+//    handler's own `# Safety` doc-comment for the per-handler
 //    precondition list.
 
 /// CMD_GET_REMAINING — returns the remaining PIN attempts.
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_get_remaining_attempts() -> u32 {
+    gateway_enter!(0);
     secure_log!("[NSC] get_remaining_attempts");
     let r = unsafe { cmd_get_remaining::run() };
     secure_log!("[NSC] get_remaining_attempts -> {}", r);
@@ -6260,6 +6314,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_remaining_attempts() -> u32 {
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_request_unlock() -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] request_unlock");
     let r = unsafe { cmd_request_unlock::run() };
     secure_log!("[NSC] request_unlock -> {}", r);
@@ -6274,6 +6329,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop(
     sig_out_ptr: u32,
     total_len: u32,
 ) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] sign_userop (len={})", total_len);
     let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
     let r = unsafe { cmd_sign_userop::run(&args) };
@@ -6292,6 +6348,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop_batch(
     sig_out_ptr: u32,
     total_len: u32,
 ) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] sign_userop_batch (len={})", total_len);
     let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
     let r = unsafe { cmd_sign_userop_batch::run(&args) };
@@ -6303,6 +6360,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop_batch(
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_is_unlocked() -> u32 {
+    gateway_enter!(0);
     secure_log!("[NSC] is_unlocked");
     let r = unsafe { cmd_is_unlocked::run() };
     secure_log!("[NSC] is_unlocked -> {}", r);
@@ -6313,6 +6371,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_is_unlocked() -> u32 {
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_lock() -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] lock");
     let r = unsafe { cmd_lock::run() };
     secure_log!("[NSC] lock -> {}", r);
@@ -6328,6 +6387,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_lock() -> u32 {
 #[cfg(all(feature = "stm32u585", feature = "iwdg"))]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_register_heartbeat(addr: u32) -> u32 {
+    gateway_enter!(1);
     secure_log!("[NSC] register_heartbeat(0x{:08x})", addr);
     // TZ4 / work-todo #12b: validate the NS-supplied 4-byte heartbeat address
     // through the SAME FI-doubled NS-pointer typestate every other veneer uses
@@ -6353,6 +6413,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_register_heartbeat(addr: u32) -> u32 {
 #[cfg(all(feature = "stm32u585", feature = "e2e-test"))]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_test_pin_lockout() -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] test_pin_lockout");
     let r = unsafe { cmd_test_pin_lockout::run() };
     secure_log!("[NSC] test_pin_lockout -> {}", r);
@@ -6368,6 +6429,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_test_pin_lockout() -> u32 {
 #[cfg(all(feature = "stm32u585", feature = "e2e-test"))]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let r = unsafe { cmd_tzic_status::run() };
     secure_log!("[NSC] tzic_status -> {}", r);
     r
@@ -6380,6 +6442,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
 /// CMD_GET_PIN_ATTEMPT_LOG (4) — why each PIN attempt was consumed (#715).
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: 0,
         arg1: out_ptr,
@@ -6394,6 +6457,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_pin_attempt_log(out_ptr: u32) -> u3
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_get_id(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: 0,
         arg1: out_ptr,
@@ -6408,6 +6472,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_get_id(out_ptr: u32) -> u32 {
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_display_pattern(in_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: in_ptr,
         arg1: 0,
@@ -6422,6 +6487,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_display_pattern(in_ptr: u32) -
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_saes_selftest(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: 0,
         arg1: out_ptr,
@@ -6436,6 +6502,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_saes_selftest(out_ptr: u32) ->
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_bhk_selftest(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: 0,
         arg1: out_ptr,
@@ -6450,6 +6517,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_bhk_selftest(out_ptr: u32) -> 
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_flash_rw(in_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: in_ptr,
         arg1: 0,
@@ -6464,6 +6532,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_flash_rw(in_ptr: u32) -> u32 {
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_trng_sample(in_ptr: u32, out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: in_ptr,
         arg1: out_ptr,
@@ -6478,6 +6547,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_trng_sample(in_ptr: u32, out_p
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_optiga_handshake(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: 0,
         arg1: out_ptr,
@@ -6492,6 +6562,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_optiga_handshake(out_ptr: u32)
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_se050_handshake(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: 0,
         arg1: out_ptr,
@@ -6510,6 +6581,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_usb_loopback(
     out_ptr: u32,
     n: u32,
 ) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: in_ptr,
         arg1: out_ptr,
@@ -6524,6 +6596,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_usb_loopback(
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_button_test(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: 0,
         arg1: out_ptr,
@@ -6540,6 +6613,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_button_test(out_ptr: u32) -> u
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: in_ptr,
         arg1: out_ptr,
@@ -6554,6 +6628,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr:
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rng_config(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: 0,
         arg1: out_ptr,
@@ -6569,6 +6644,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rng_config(out_ptr: u32) -> u3
 #[cfg(feature = "prodtest")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_osd(in_ptr: u32, out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: in_ptr,
         arg1: out_ptr,
@@ -6588,6 +6664,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_osd(in_ptr: u32, out_ptr: 
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_fw_begin(manifest_ptr: u32, manifest_len: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: manifest_ptr,
         arg1: 0,
@@ -6600,6 +6677,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_begin(manifest_ptr: u32, manifest_le
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_fw_chunk(chunk_ptr: u32, chunk_len: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs {
         arg0: chunk_ptr,
         arg1: 0,
@@ -6612,6 +6690,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_chunk(chunk_ptr: u32, chunk_len: u32
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_fw_commit() -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs { arg0: 0, arg1: 0, arg2: 0 };
     unsafe { cmd_fw_commit::run(&args) }
 }
@@ -6620,6 +6699,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_commit() -> u32 {
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_fw_status(out_ptr: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs { arg0: 0, arg1: out_ptr, arg2: 0 };
     unsafe { cmd_fw_status::run(&args) }
 }
@@ -6628,6 +6708,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_status(out_ptr: u32) -> u32 {
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_fw_abort() -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     unsafe { cmd_fw_abort::run() }
 }
 
@@ -6643,6 +6724,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_wallet_address(
     account_index: u32,
     show: u32,
 ) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] get_wallet_address (acct={})", account_index);
     let args = GatewayArgs { arg0: out_ptr, arg1: account_index, arg2: show };
     let r = unsafe { cmd_get_wallet_address::run(&args) };
@@ -6662,6 +6744,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_init_code(
     out_ptr: u32,
     in_len: u32,
 ) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] get_init_code (len={})", in_len);
     let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
     let r = unsafe { cmd_get_init_code::run(&args) };
@@ -6677,6 +6760,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_offchain(
     out_ptr: u32,
     in_len: u32,
 ) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] sign_offchain (len={})", in_len);
     let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
     let r = unsafe { cmd_sign_offchain::run(&args) };
@@ -6692,6 +6776,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_offchain_status(
     out_ptr: u32,
     in_len: u32,
 ) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
     unsafe { cmd_offchain_status::run(&args) }
 }
@@ -6702,6 +6787,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_offchain_status(
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_offchain_sync(in_ptr: u32, in_len: u32) -> u32 {
+    gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs { arg0: in_ptr, arg1: 0, arg2: in_len };
     unsafe { cmd_offchain_sync::run(&args) }
 }

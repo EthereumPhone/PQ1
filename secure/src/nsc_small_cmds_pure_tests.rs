@@ -1872,12 +1872,19 @@ fn the_gate_macro_refuses_and_the_emulator_dispatcher_uses_it() {
     ));
     // The macro is defined before its first use (macro_rules is textual).
     assert!(macro_at < NSC_MOD_SRC.find("gateway_enter!(").expect("used"));
-    // QEMU path: the mailbox dispatcher takes the same gate, so the e2e run
-    // exercises release-on-return for every handler.
-    let dispatch_at = NSC_MOD_SRC.find("unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {").expect("dispatch exists");
-    let after = &NSC_MOD_SRC[dispatch_at..];
-    let gate_at = after.find("gateway_enter!(GATEWAY_REFUSED);").expect("dispatch takes the gate");
-    assert!(gate_at < after.find("match cmd {").expect("dispatch matches on cmd"));
+    // QEMU path: the mailbox takes the same gate around the dispatch call, so
+    // the e2e run exercises release-on-return for every handler.
+    let poll_at = NSC_MOD_SRC.find("pub fn poll_gateway() {").expect("poll_gateway exists");
+    let poll_body = &NSC_MOD_SRC[poll_at..];
+    let gated = "let result = match GATEWAY_GATE.try_enter() {\n            Some(_token) => dispatch(cmd, &args),\n            None => GATEWAY_REFUSED,\n        };";
+    assert!(poll_body.contains(gated), "poll_gateway must hold the gate across dispatch");
+    // ...and NOT inside `dispatch`: a token held there turned its handler
+    // calls into non-tail calls, the handlers were merged into it, and the
+    // summed frames overflowed the QEMU `ui-px` stack into static data.
+    assert!(
+        NSC_MOD_SRC.contains("unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {\n    match cmd {"),
+        "dispatch must go straight to its match so every handler stays a tail call"
+    );
     // `HandlerGuard` keeps its own meaning and its unconditional increment:
     // the gate is a separate token, not a change to the idle-wipe guard.
     assert!(NSC_MOD_SRC.contains("HANDLER_DEPTH.fetch_add(1, core::sync::atomic::Ordering::SeqCst);"));
@@ -1900,13 +1907,13 @@ fn single_sign_binds_signed_calldata_to_the_pre_display_commitment() {
     const SRC: &str = include_str!("nsc/cmd_sign_userop.rs");
     let at = |needle: &str| SRC.find(needle).unwrap_or_else(|| panic!("missing: {needle}"));
     let snapshot = at("let inner_data: &[u8] = &snap[SIGN_USEROP_HEADER_LEN..SIGN_USEROP_HEADER_LEN + data_len];");
-    let reference = at("let calldata_ref_digest = pqsigner_tx_core::erc8213::calldata_digest(inner_data);");
+    let reference = at("let calldata_ref_digest = calldata_commitment(inner_data);");
     let first_page_use = at("let tx_for_display = Eip1559Tx {");
     let fingerprint = at("let calldata_fingerprint = pqsigner_tx_core::erc8213::calldata_digest(inner_data);");
     let unchanged = at("calldata_fingerprint.ct_eq(&calldata_ref_digest)");
     let confirm = at("None => confirm_checked(pages.as_slice()),");
     let encode = at("let t2_exec = match reconstruct_execute_calldata(");
-    let bind = at("crate::aa::execute_bind::execute_calldata_binds(");
+    let bind = at("let verdict = calldata_bind_sentinel(");
     let digest = at("let t2_call_digest = sha256_bytes(t2_exec.as_slice());");
 
     // The reference is taken straight after the snapshot slice exists and
@@ -1924,6 +1931,17 @@ fn single_sign_binds_signed_calldata_to_the_pre_display_commitment() {
     assert!(bind_call.contains("t2_exec.as_slice(),"));
     assert!(bind_call.contains("&calldata_ref_digest,"));
     assert!(!bind_call.contains("inner_data"));
+
+    // Both helpers keep their Keccak state and decoder locals out of the
+    // handler's own frame, which stays live under key generation and both
+    // signing passes; the verdict helper is the only caller of the decoder.
+    for helper in [
+        "#[inline(never)]\nfn calldata_commitment(data: &[u8]) -> [u8; 32] {",
+        "#[inline(never)]\nfn calldata_bind_sentinel(",
+    ] {
+        assert!(SRC.contains(helper), "missing or inlinable helper: {helper}");
+    }
+    assert_eq!(SRC.matches("crate::aa::execute_bind::execute_calldata_binds(").count(), 1);
 
     // The receipt is fail-initialised and read twice: once after the
     // comparison and once immediately before the digest that is signed.

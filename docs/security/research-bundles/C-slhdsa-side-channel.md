@@ -843,6 +843,44 @@ use zeroize::{Zeroize, Zeroizing};
 /// MUST match `PQSmartWalletFactory.FACTORY_ADD_SLOT_DOMAIN`.
 const FACTORY_ADD_SLOT_DOMAIN: &[u8] = b"pqwallet-factory-add-slot";
 
+/// #846 backstop, the reference commitment over the inner calldata.
+///
+/// `#[inline(never)]` on purpose, here and on [`calldata_bind_sentinel`]:
+/// the Keccak state and the decoder locals must live in short frames of
+/// their own. Inlined into `run` they extend ITS frame, which stays live
+/// under slot keygen and both C10 signing passes, and that was enough to
+/// run the stack into static data on the 128 KB QEMU map with `ui-px`
+/// (the first Type-2 signature then failed its own verify). Same rule as
+/// `batch_call_digest::checked_digest`: the frame ends before signing.
+#[inline(never)]
+fn calldata_commitment(data: &[u8]) -> [u8; 32] {
+    pqsigner_tx_core::erc8213::calldata_digest(data)
+}
+
+/// #846 backstop, the verdict: `OK_SENTINEL` only when the private encoded
+/// copy decodes back to exactly these head fields and to a `data` whose
+/// commitment equals `reference`. Reads the copy, never the shared snapshot.
+#[inline(never)]
+fn calldata_bind_sentinel(
+    encoded: &[u8],
+    owner_index: u64,
+    offchain_count: u64,
+    target: &[u8; 20],
+    value: &[u8; 32],
+    reference: &[u8; 32],
+) -> u32 {
+    let bound = crate::aa::execute_bind::execute_calldata_binds(
+        encoded,
+        owner_index,
+        offchain_count,
+        target,
+        value,
+        reference,
+    );
+    crate::fi::scrub_sentinel_register();
+    crate::fi::check_true_into_sentinel(|| core::hint::black_box(bound))
+}
+
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
@@ -1168,6 +1206,20 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     let inner_data: &[u8] = &snap[SIGN_USEROP_HEADER_LEN..SIGN_USEROP_HEADER_LEN + data_len];
+
+    // #846 backstop, step 1 of 3. `inner_data` is a slice into the SHARED
+    // snapshot buffer, and it is read again after the confirm dialog. Commit
+    // to it here, before any page is built, so the two later checks have a
+    // reference that predates every display read: the fingerprint the user
+    // is shown must equal it, and the calldata actually signed must decode
+    // back to it. The gateway gate (`gateway_enter!`) is what stops a nested
+    // call from rewriting the buffer at all; this chain is for the case where
+    // that gate is skipped by a fault. It covers the CALLDATA only. Under
+    // `ui-px` the screen transcript the dialog paints from also lives in the
+    // tail of the shared buffer and is NOT covered here: with the gate
+    // skipped, a nested call could replace the screens and leave the
+    // calldata alone. Only the gate protects that.
+    let calldata_ref_digest = calldata_commitment(inner_data);
 
     // ── 5. Parse optional trailers ─────────────────────────────────
     //
@@ -2496,6 +2548,22 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // signed calldata, so dropping it silently and signing anyway breaks that
     // binding.
     let calldata_fingerprint = pqsigner_tx_core::erc8213::calldata_digest(inner_data);
+    // #846 backstop, step 2 of 3: the buffer must not have changed between
+    // the reference commitment and this second read of it, which brackets
+    // every page built above. A mismatch means the pages may describe bytes
+    // other than the ones committed to: refuse before the transaction
+    // dialog is shown.
+    {
+        let unchanged = calldata_fingerprint.ct_eq(&calldata_ref_digest).unwrap_u8() == 1;
+        crate::fi::scrub_sentinel_register();
+        if crate::fi::check_true_into_sentinel(|| core::hint::black_box(unchanged))
+            != crate::fi::OK_SENTINEL
+        {
+            ui::show_status("Sign refused", "calldata moved");
+            return NscStatus::InternalError as u32;
+        }
+        crate::fi::scrub_sentinel_register();
+    }
     let fingerprint_pages_before = pages.len;
     let fingerprint_kind = crate::tx::display::erc8213::Kind::CalldataDigest(calldata_fingerprint);
     let mut fingerprint_cfi = crate::fi::CfiCounter::new();
@@ -2926,6 +2994,43 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     };
 
+    // #846 backstop, step 3 of 3. `t2_exec` is a PRIVATE copy: the encoder
+    // above read the shared snapshot once, and every byte signed below is
+    // derived from this copy (`t2_call_digest`). Decode the copy and require
+    // it to be exactly the confirmed owner index, count, target and value,
+    // with `data` hashing to the pre-display reference commitment. Because
+    // the check reads the copy and not the shared buffer, no later write to
+    // that buffer can pass it. Fail-initialised receipt, as in the batch
+    // handler's `checked_digest`: a skipped call leaves FAIL in place.
+    let mut calldata_bind_verdict = crate::fi::FAIL_SENTINEL;
+    // SAFETY: unique live local; the volatile store keeps the fail
+    // initialisation from being folded into the assignment below.
+    unsafe {
+        core::ptr::write_volatile(&mut calldata_bind_verdict, crate::fi::FAIL_SENTINEL);
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    {
+        let verdict = calldata_bind_sentinel(
+            t2_exec.as_slice(),
+            t2_owner_index,
+            new_offchain_count,
+            &tx_for_display.to.unwrap_or([0u8; 20]),
+            &tx_for_display.value.0,
+            &calldata_ref_digest,
+        );
+        // SAFETY: unique live local, published only after the comparison.
+        unsafe {
+            core::ptr::write_volatile(&mut calldata_bind_verdict, verdict);
+        }
+    }
+    // SAFETY: reads the receipt written just above.
+    if unsafe { core::ptr::read_volatile(&calldata_bind_verdict) } != crate::fi::OK_SENTINEL {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        ui::show_status("Sign refused", "calldata changed");
+        return NscStatus::InternalError as u32;
+    }
+
     // ── 11. Type 2 nonce ───────────────────────────────────────────
     // `type2_nonce` was derived before trusted-display rendering so the
     // sequence/lane shown to the user is byte-identical to this signed nonce.
@@ -3268,6 +3373,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 14. Type 2: slot C10 signs the user's UserOp sphincs digest ──
+    // #846: second read of the calldata-binding receipt, spatially separate
+    // from the first and immediately before the digest that gets signed.
+    crate::fi::scrub_sentinel_register();
+    // SAFETY: `calldata_bind_verdict` is a live local written once above.
+    if unsafe { core::ptr::read_volatile(&calldata_bind_verdict) } != crate::fi::OK_SENTINEL {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        ui::show_status("Sign refused", "calldata changed");
+        return NscStatus::InternalError as u32;
+    }
     let t2_call_digest = sha256_bytes(t2_exec.as_slice());
     let t2_init_code_digest = if include_init_code {
         t1_init_code_digest

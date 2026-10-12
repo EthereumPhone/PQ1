@@ -1331,8 +1331,9 @@ pub fn handler_is_busy() -> bool {
 }
 
 /// #846: the one-at-a-time gate for the NS→S gateway. Every
-/// `cmse-nonsecure-entry` function (and the QEMU mailbox `dispatch`) takes
-/// it as its FIRST statement through [`gateway_enter!`], so a second
+/// `cmse-nonsecure-entry` function takes it as its FIRST statement through
+/// [`gateway_enter!`] (the QEMU mailbox takes it in `poll_gateway`, around
+/// the `dispatch` call), so a second
 /// gateway call made from a non-secure exception handler while a handler
 /// is in flight is refused before it reads an argument or touches the
 /// shared `static mut` state. Separate from [`HANDLER_DEPTH`] on purpose:
@@ -1843,7 +1844,23 @@ pub fn poll_gateway() {
             arg2: core::ptr::read_volatile(SHARED_ARG2),
         };
 
-        let result = dispatch(cmd, &args);
+        // Same gate as the hardware veneers (#846). The mailbox cannot nest,
+        // so this never refuses on QEMU; it is here so `make e2e` proves the
+        // token is released on every handler return path (a leak fails the
+        // next command).
+        //
+        // Taken HERE and not inside `dispatch`, deliberately. A token held
+        // across `dispatch`'s `match` turns its handler calls from tail
+        // calls into ordinary calls; the optimiser then merged several of
+        // the large sign handlers into `dispatch`, their frames added up,
+        // and the `ui-px` QEMU build ran its stack 1.7 KB into static data
+        // (measured under gdb: the sign-rate counter was overwritten and
+        // the first signature failed). With the token in this caller,
+        // `dispatch` is byte-for-byte what it was.
+        let result = match GATEWAY_GATE.try_enter() {
+            Some(_token) => dispatch(cmd, &args),
+            None => GATEWAY_REFUSED,
+        };
 
         core::ptr::write_volatile(SHARED_RESULT, result);
         // Order matters: write RESULT before DONE so NS can't see DONE=1
@@ -1866,10 +1883,6 @@ pub fn poll_gateway() {
 /// docs.
 #[cfg(not(feature = "stm32u585"))]
 unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
-    // Same gate as the hardware veneers (#846). The mailbox cannot nest, so
-    // this never refuses on QEMU; it is here so `make e2e` proves the token
-    // is released on every handler return path (a leak fails the next call).
-    gateway_enter!(GATEWAY_REFUSED);
     match cmd {
         CMD_GET_REMAINING => cmd_get_remaining::run(),
         CMD_REQUEST_UNLOCK => cmd_request_unlock::run(),
