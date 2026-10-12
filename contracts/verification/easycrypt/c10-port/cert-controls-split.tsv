@@ -838,6 +838,7 @@ scratch/CanonicalAssignmentWitness.ec	MUST-PASS	-
 # Paired representation: unchanged positive, typed changes, unchanged proof rejections.
 scratch/_scope_neg_op_C10RepresentationBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10HashInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_C10AddressInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/c10_rep_positive.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_typed.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_reject.ec	MUST-FAIL	nothing to rewrite
@@ -881,3 +882,25 @@ scratch/c10_rep_randomizer_tag_typed.ec	MUST-PASS	-
 scratch/c10_rep_randomizer_tag_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_rep_randomizer_random_typed.ec	MUST-PASS	-
 scratch/c10_rep_randomizer_random_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_u64_width_typed.ec	MUST-PASS	-
+scratch/c10_rep_u64_width_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_rep_u64_high_typed.ec	MUST-PASS	-
+scratch/c10_rep_u64_high_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_address_kind_typed.ec	MUST-PASS	-
+scratch/c10_rep_address_kind_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_address_tail_typed.ec	MUST-PASS	-
+scratch/c10_rep_address_tail_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_chain_index_window_typed.ec	MUST-PASS	-
+scratch/c10_rep_chain_index_window_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_chain_position_window_typed.ec	MUST-PASS	-
+scratch/c10_rep_chain_position_window_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_wots_private_tag_typed.ec	MUST-PASS	-
+scratch/c10_rep_wots_private_tag_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_wots_tree_padding_typed.ec	MUST-PASS	-
+scratch/c10_rep_wots_tree_padding_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_wots_private_kp_typed.ec	MUST-PASS	-
+scratch/c10_rep_wots_private_kp_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_fors_private_tag_typed.ec	MUST-PASS	-
+scratch/c10_rep_fors_private_tag_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_rep_fors_private_ht_typed.ec	MUST-PASS	-
+scratch/c10_rep_fors_private_ht_reject.ec	MUST-FAIL	[by]: cannot close goals

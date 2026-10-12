@@ -14,7 +14,7 @@ from c10_representation_controls import CHANGES, changed
 
 def fixture(definitions):
     proofs = [(ROOT / ("Extracted/" + name + ".lean")).read_text()
-              for name in ("C10RepresentationBridge", "C10HashInputBridge")]
+              for name in ("C10RepresentationBridge", "C10HashInputBridge", "C10AddressInputBridge")]
     imported = "import Extracted.C10Representation\n"
     if any(proof.count(imported) != 1 for proof in proofs):
         raise ValueError("representation proof anchors changed")
@@ -23,6 +23,7 @@ def fixture(definitions):
         body = []
         for line in proof.replace(imported, "").splitlines():
             if line.startswith("import "):
+                if line == "import Extracted.C10HashInputBridge": continue
                 if line not in imports: imports.append(line)
             else: body.append(line)
         bodies.append("\n".join(body))

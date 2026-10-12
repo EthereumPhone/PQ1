@@ -33,6 +33,17 @@ CHANGES = [
     ("wots-padding", "wots_preimage", "List.replicate 28 0", "List.replicate 27 0", "nseq 28 0", "nseq 27 0"),
     ("randomizer-tag", "r_preimage", "[82,", "[83,", "[82;", "[83;"),
     ("randomizer-random", "r_preimage", " ++ random", " ++ []", " ++ random", " ++ []"),
+    ('u64-width', 'u64_bytes', 'List.range 8', 'List.range 7', ') 8)', ') 7)'),
+    ('u64-high', 'u64_bytes', '(nonce /', '((nonce % 4294967296) /', '(nonce %/', '((nonce %% 4294967296) %/'),
+    ('address-kind', 'address_words', '(u32_bytes kind) ++ (u32_bytes kp)', '(u32_bytes kp) ++ (u32_bytes kind)', '(u32_bytes kind) ++ (u32_bytes kp)', '(u32_bytes kp) ++ (u32_bytes kind)'),
+    ('address-tail', 'address_words', '(u32_bytes ha)', '(u32_bytes cp)', '(u32_bytes ha)', '(u32_bytes cp)'),
+    ('chain-index-window', 'chain_index_words', 'List.take 20', 'List.take 19', 'take 20', 'take 19'),
+    ('chain-position-window', 'chain_position_words', 'List.take 24', 'List.take 23', 'take 24', 'take 23'),
+    ('wots-private-tag', 'wots_private_preimage', '[119,', '[118,', '[119;', '[118;'),
+    ('wots-tree-padding', 'wots_private_preimage', 'List.replicate 24 0', 'List.replicate 23 0', 'nseq 24 0', 'nseq 23 0'),
+    ('wots-private-kp', 'wots_private_preimage', '(u32_bytes kp) ++ (u32_bytes ci)', '(u32_bytes ci) ++ (u32_bytes kp)', '(u32_bytes kp) ++ (u32_bytes ci)', '(u32_bytes ci) ++ (u32_bytes kp)'),
+    ('fors-private-tag', 'fors_private_preimage', '[102,', '[103,', '[102;', '[103;'),
+    ('fors-private-ht', 'fors_private_preimage', '(u32_bytes ht)', '(u32_bytes tree)', '(u32_bytes ht)', '(u32_bytes tree)'),
 ]
 
 def changed(text, name, before, after, lean):
@@ -47,6 +58,7 @@ def changed(text, name, before, after, lean):
 REASONS = {'word-endian': 'nothing to rewrite', 'word-base': '[by]: cannot close goals', 'ht-bit': '[by]: cannot close goals', 'fors-width': '[by]: cannot close goals', 'wots-stride': '[by]: cannot close goals', 'counter-width': 'cannot save an incomplete proof', 'counter-high-bits': 'cannot save an incomplete proof', 'auth-last-node': 'cannot save an incomplete proof', 'layer-stride': 'the given proof-term proves:', 'forest-last-tree': 'the given proof-term proves:'}
 REASONS.update({row[0]: '[by]: cannot close goals' for row in CHANGES[10:]})
 REASONS["u32-endian"] = "not a congruence"
+REASONS["u64-width"] = "the given proof-term proves:"
 
 def control_outputs(port):
     proof=(port/"cdrafts-split/C10RepresentationBridge.ec").read_text()
@@ -55,6 +67,9 @@ def control_outputs(port):
     hash_proof=(port/"cdrafts-split/C10HashInputBridge.ec").read_text()
     if hash_proof.count(anchor)!=1: raise ValueError("hash-input proof import drift")
     proof += "\n" + hash_proof.replace(anchor, "")
+    address_proof=(port/"cdrafts-split/C10AddressInputBridge.ec").read_text()
+    if address_proof.count(anchor)!=1: raise ValueError("address-input proof import drift")
+    proof += "\n" + address_proof.replace(anchor, "")
     generated=source(False)
     result={port/"scratch/c10_rep_positive.ec":proof.replace(anchor,generated)}
     for name,func,lb,la,eb,ea in CHANGES:
