@@ -300,7 +300,7 @@
   {
    "item": "Hardware-assumption ledger rows for SE: PUTKEY-ATOMIC, PUTKEY-KCV-RESP, PUTKEY-REPUT-IDEMPOTENT, SE050-CERT-VERSION = bare-tcb; DHUK-UNIQUE, SE-INTERNALS = silicon-tested; DHUK-RDP12 = bare-tcb",
    "evidence": [
-    "contracts/verification/docs/HW_ASSUMPTIONS.json (ids HW-ASSUME-PUTKEY-*, HW-ASSUME-SE050-CERT-VERSION, HW-ASSUME-SE-INTERNALS)"
+    "contracts/verification/docs/HW_ASSUMPTIONS.json (ids HW-ASSUME-PUTKEY-ATOMIC, HW-ASSUME-PUTKEY-KCV-RESP, HW-ASSUME-PUTKEY-REPUT-IDEMPOTENT, HW-ASSUME-SE050-CERT-VERSION, HW-ASSUME-SE-INTERNALS)"
    ],
    "status": "implemented",
    "notes": "Bench procedures #386/#398/#400 open."
@@ -402,7 +402,7 @@
   },
   {
    "gap": "SE050 PUT KEY atomicity / KCV-response / re-PUT idempotence are bare-TCB assumptions with no falsifying bench test; SE050 provisioned-policy readback stress test missing",
-   "tracked_in": "issues #386, #398, #207; contracts/verification/docs/HW_ASSUMPTIONS.json (HW-ASSUME-PUTKEY-*)"
+   "tracked_in": "issues #386, #398, #207; contracts/verification/docs/HW_ASSUMPTIONS.json (HW-ASSUME-PUTKEY-ATOMIC, HW-ASSUME-PUTKEY-KCV-RESP, HW-ASSUME-PUTKEY-REPUT-IDEMPOTENT)"
   },
   {
    "gap": "Post-lockout-wipe SE050 USERID_OBJ is orphaned-locked \u2192 device is a permanent brick ('restore from seed' undeliverable without an OID-range bump); wipe atomicity/verification and legacy-OID wipe-list completeness gaps; duress objects survive wipes",

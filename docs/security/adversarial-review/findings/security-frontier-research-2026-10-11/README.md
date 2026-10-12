@@ -45,3 +45,12 @@ The issues cite master `0feea78a` line numbers. The report body cites `c75b0d9c`
 | `issues-filed/filed.json` | Now also holds the second pass, under keys that start with `r2:` |
 
 The second-pass issues and comments cite master `c2fab970`. Report section 16 has the item-to-issue map and the corrections this pass made to the report.
+
+## Edits to the raw data (2026-10-12)
+
+Two reviewer outputs were edited after they were first committed, because `make -C contracts/verification verify-hw-assumptions` treats every `HW-ASSUME-<ID>` string in the tree as a reference to a ledger row and failed CI on these two:
+
+- `inv_se.json`: a wildcard over the three PUTKEY rows (the ledger prefix followed by `PUTKEY-*`, twice) now names them: `HW-ASSUME-PUTKEY-ATOMIC`, `HW-ASSUME-PUTKEY-KCV-RESP`, `HW-ASSUME-PUTKEY-REPUT-IDEMPOTENT`.
+- `verify/FI-01.json`: an identifier that does not exist (the ledger prefix followed by `U585-REV`) now reads `HW-ASSUME-REV-U`, the ledger row for the die revision.
+
+Nothing else in the raw data was changed.
