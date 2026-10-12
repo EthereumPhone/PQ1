@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	d7c8071703400ab2f8f6050122278fb0
+split	6a5c1e4e6fa9c6df59391b48f952626b
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1580,3 +1580,9 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Includes the shared expression generator, endpoint controls and source pins.
 # Split identity 01b6d821baae24efe8b63a52ded33d9a -> d7c8071703400ab2f8f6050122278fb0.
 # Fresh full pinned-image replay required; focused passes are insufficient.
+
+# 2026-10-12: make the 512 <= 2^256 side condition explicit in
+# ObservedValueOpening.valid_chain_key_unique. The previous broad SMT step
+# failed the mandatory CLI replay even alone; the power rewrites pass both
+# drivers at their unchanged budgets. Statements and assumptions unchanged.
+# Split identity d7c8071703400ab2f8f6050122278fb0 -> 6a5c1e4e6fa9c6df59391b48f952626b. Fresh full replay required.

@@ -12,6 +12,8 @@ lemma valid_chain_key_unique layer tree kp index layer' tree' kp' index' :
   (layer,tree,kp,index)=(layer',tree',kp',index').
 proof.
   rewrite /valid_chain_address; move=> hv hv' he.
+  have htree_width : 512 <= 2^256
+    by rewrite (_ : 256=2*2*2*2*2*2*2*2) 1:// !Ring.IntID.exprM !Ring.IntID.expr2.
   have h:=wots_key_injective layer tree kp index layer' tree' kp' index' _ _ _ _ _ _ _ _ he;
     smt().
 qed.
